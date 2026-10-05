@@ -20,7 +20,7 @@ OIDC/OAuth) has no signup, no login, and no logout.
 ## Decision
 
 - **`EnsureUser` links `member_of` and bootstraps the first admin.** On first sight of a subject, it links
-  the new `User` to `domain.DefaultOrg` (`ORG-DEFAULT`) and, when no other `User` node exists yet in the
+  the new `User` to `ORG-DEFAULT` (the root of the organisation structure) and, when no other `User` node exists yet in the
   `organisation` namespace, grants `Roles: ["admin"]`. The default org is resolved *before* the node is
   created — `SeedDefaults` can still be seeding at startup (it waits on the registry to publish the type
   catalogue), and creating the node first would leave a permanently broken `User` behind on that race: one
@@ -44,7 +44,7 @@ OIDC/OAuth) has no signup, no login, and no logout.
   `member_of` links instead of being told to reload and retry.
 - **`OrgUnit`/`ProjectUnit` require a parent, except the two seeded roots.** The same kind of commit-time
   check requires exactly one outgoing `part_of` (`OrgUnit`) or `project_part_of` (`ProjectUnit`) on write,
-  except `domain.DefaultOrg`/`domain.DefaultProject` — created once, only by `SeedDefaults`/`seedRootProject`,
+  except `ORG-DEFAULT`/`PROJ-ROOT` (the roots of the structure tags, ADR 0069) — created once, only by `SeedDefaults`/`seedRootProject`,
   which stay privileged and unaffected. This mirrors the existing "root is special-cased, not
   generically exempted" precedent already set for `PROJ-ROOT`'s self-link (ADR 0039).
 - **A new `move` action reassigns membership/parentage.** One administrative action (this namespace's own

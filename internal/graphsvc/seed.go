@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 )
@@ -27,7 +28,7 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 	}
 	// the organisation first, under the root unit of the bootstrap (ADR 0054): the nodes below are owned by its units.
 	// All the units are one change; a unit links to its parent, created by the same change (ToKey) or the root.
-	root, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, domain.OrgOf(""))
+	root, err := g.NodeByKey(ctx, access.NamespaceOrganisation, g.Structure(domain.StructureOrganisation).Root)
 	if err != nil {
 		return false, err
 	}
@@ -37,15 +38,15 @@ func SeedDemo(ctx context.Context, g *graph.Graph) (bool, error) {
 		{"ORG-CHECKOUT", "Team Checkout", "team", "ORG-DIGITAL"}, {"ORG-CRM", "Team CRM", "team", "ORG-DIGITAL"},
 		{"ORG-FINANCE", "Team Finance", "team", "ORG-DIGITAL"}, {"ORG-SECURITY", "Team Security", "team", "ORG-DIGITAL"},
 	} {
-		e := createNode(u[0], domain.TypeOrgUnit, map[string]any{"name": u[1], "kind": u[2]})
+		e := createNode(u[0], access.NodeTypeOrgUnit, map[string]any{"name": u[1], "kind": u[2]})
 		if u[3] == "" {
-			e = linkTo(e, domain.LinkPartOf, root.Ref())
+			e = linkTo(e, access.LinkPartOf, root.Ref())
 		} else {
-			e.Links = append(e.Links, graph.LinkEdit{Type: domain.LinkPartOf, ToKey: u[3]})
+			e.Links = append(e.Links, graph.LinkEdit{Type: access.LinkPartOf, ToKey: u[3]})
 		}
 		units = append(units, e)
 	}
-	if err := applyOn(ctx, g, domain.NamespaceOrganisation, "Import demo organisation", units); err != nil {
+	if err := applyOn(ctx, g, access.NamespaceOrganisation, "Import demo organisation", units); err != nil {
 		return false, err
 	}
 	// ownership: a node of one namespace is owned by a unit of the organisation (the owner of its versions)

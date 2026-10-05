@@ -586,11 +586,15 @@ message Structure {
   bool self_parent = 6;
   // the tagged type and its subtypes
   repeated string types = 7;
+  // the property flagging the default member of the hierarchy
+  string default_property = 8;
+  // the initial properties of the root node
+  google.protobuf.Struct bootstrap = 9;
 }
 
+// Every structure in force, one per kind.
 message GetStructuresResponse {
-  Structure organisation = 1;
-  Structure project = 2;
+  repeated Structure structures = 1;
 }
 
 message CreateChangeRequest {

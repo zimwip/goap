@@ -20,8 +20,8 @@ type requirement struct {
 // except the root of it, and the links its node type requires. Nil for any other node.
 func (g *Graph) requirementsOf(typ, key string) []requirement {
 	var out []requirement
-	for _, kind := range domain.StructureKinds {
-		if st := g.Structure(kind); typ == st.Type && key != st.Root {
+	for _, st := range g.structures() {
+		if typ == st.Type && key != st.Root {
 			out = append(out, requirement{st.Parent, 1, fmt.Sprintf("a parent %s (%s)", st.Type, st.Parent)})
 		}
 	}
@@ -32,7 +32,7 @@ func (g *Graph) requirementsOf(typ, key string) []requirement {
 }
 
 // checkRequiredParent enforces that a created node names the links its type requires: exactly one parent link for a
-// node of a structure (ADR 0054: an OrgUnit, a ProjectUnit), the links a node type declares through `requires`
+// node of a structure (ADR 0054: a unit of the organisation, a project), the links a node type declares through `requires`
 // (ADR 0065: a User needs one member_of, ADR 0040) — except the roots of the structures, created by the bootstrap.
 // Only creation is checked here: an edit that modifies an existing node's membership (the move action) is
 // responsible for its own atomicity (removing the old link and adding the new one in the same edit).
@@ -55,7 +55,7 @@ func (g *Graph) checkRequiredParent(e NodeEdit) error {
 }
 
 // checkParentInvariant re-verifies, after a write lands a node version, that a node still has the links its type
-// requires (the parent of an OrgUnit/ProjectUnit, the membership of a User). Unlike checkRequiredParent (creation
+// requires (the parent of a node of a structure, the membership of a User). Unlike checkRequiredParent (creation
 // only, checked against the edit's own declared links before anything is written), this reads the node's
 // actual links back from the version just written: a client that built its edit from a stale read (e.g. a
 // baseline snapshot older than an import write outside of any change, see EnsureUser/ADR 0040) would

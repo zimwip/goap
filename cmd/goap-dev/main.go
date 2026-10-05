@@ -229,8 +229,8 @@ func main() {
 		// demo: the default organisation implements document-repository with a directory
 		if snap, err := hub.Directory.Snapshot(ctx); err != nil {
 			platform.Fatal(log, "mcp", err)
-		} else if _, _, ok := snap.Resolve(domain.DefaultOrg, "document-repository"); !ok {
-			if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(domain.DefaultOrg, root)); err != nil {
+		} else if _, _, ok := snap.Resolve(g.Structure(domain.StructureOrganisation).Root, "document-repository"); !ok {
+			if err := graphsvc.SeedAdapter(ctx, g, graphsvc.LocalFSAdapter(g.Structure(domain.StructureOrganisation).Root, root)); err != nil {
 				platform.Fatal(log, "mcp adapter", err)
 			}
 		}

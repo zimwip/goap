@@ -29,32 +29,6 @@ func (r NodeRef) String() string { return fmt.Sprintf("%s@v%d", r.ID, r.Version)
 // IsZero reports whether the reference is unset.
 func (r NodeRef) IsZero() bool { return r.ID == "" }
 
-// DefaultOrg is the key of the default organisation: the OrgUnit of the "organisation"
-// namespace created at the first start. A change that names no owner unit belongs to it,
-// and it is the root of the resolution of the MCP adapters of every unit.
-const DefaultOrg = "ORG-DEFAULT"
-
-// OrgOf returns the unit key org, or DefaultOrg when empty.
-func OrgOf(org string) string {
-	if org == "" {
-		return DefaultOrg
-	}
-	return org
-}
-
-// DefaultProject is the key of the root project: the ProjectUnit of the "organisation" namespace created
-// at the first start (ADR 0039), linked project_part_of to itself. A non-administrative change belongs to
-// a project (Change.ProjectID); empty resolves to it the same way an unset OwnerOrg resolves to DefaultOrg.
-const DefaultProject = "PROJ-ROOT"
-
-// ProjectOf returns the project key project, or DefaultProject when empty.
-func ProjectOf(project string) string {
-	if project == "" {
-		return DefaultProject
-	}
-	return project
-}
-
 // DefaultNamespace is the namespace of nodes and changes that name none (an untyped graph, in tests). With a type
 // catalogue (ADR 0012) no node lives there: a node lives in the namespace of its type, and a change names the
 // namespace it acts on.

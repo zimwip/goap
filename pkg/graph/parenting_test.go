@@ -21,7 +21,7 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	org, err := g.NodeByKey(ctx, ns, domain.DefaultOrg)
+	org, err := g.NodeByKey(ctx, ns, rootOrg(g))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,7 +60,7 @@ func testCommitRequiresAParent(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	if _, err := g.Commit(ctx, Commit{Namespace: ns, Title: "user", Baseline: head.ID, By: "t",
-		Edits: []NodeEdit{{Key: "USR:alice", Type: domain.TypeUser, Props: map[string]any{"subject": "alice"}}}}); !errors.Is(err, ErrInvalid) {
+		Edits: []NodeEdit{{Key: "USR:alice", Type: NodeTypeUser, Props: map[string]any{"subject": "alice"}}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("User with no member_of = %v, want ErrInvalid", err)
 	}
 }
@@ -86,12 +86,12 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	user, err := g.CreateNode(ctx, NewNode{Namespace: ns, Key: "USR:alice", Type: domain.TypeUser, Properties: map[string]any{"subject": "alice"}})
+	user, err := g.CreateNode(ctx, NewNode{Namespace: ns, Key: "USR:alice", Type: NodeTypeUser, Properties: map[string]any{"subject": "alice"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	// member_of ORG-A, a raw link attributed to a change of its own (no new node version, ADR 0049)
-	if _, err := g.Link(ctx, testChange(t, g, ns), domain.LinkMemberOf, user.Ref(), orgA.Ref(), nil); err != nil {
+	if _, err := g.Link(ctx, testChange(t, g, ns), LinkMemberOf, user.Ref(), orgA.Ref(), nil); err != nil {
 		t.Fatal(err)
 	}
 	base, err := g.BranchHead(ctx, ns, domain.MainBranch)
@@ -104,7 +104,7 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	userRef := user.Ref()
 	orgBRef := orgB.Ref()
 	if _, err := g.Commit(ctx, Commit{Namespace: ns, Title: "move", Baseline: base.ID, By: "t",
-		Edits: []NodeEdit{{Pre: &userRef, Links: []LinkEdit{{Type: domain.LinkMemberOf, To: &orgBRef}}}}}); !errors.Is(err, ErrInvalid) {
+		Edits: []NodeEdit{{Pre: &userRef, Links: []LinkEdit{{Type: LinkMemberOf, To: &orgBRef}}}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("adding a second member_of = %v, want ErrInvalid", err)
 	}
 
@@ -115,7 +115,7 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 	}
 	var oldLink domain.LinkID
 	for _, l := range links {
-		if l.Type == domain.LinkMemberOf {
+		if l.Type == LinkMemberOf {
 			oldLink = l.ID
 		}
 	}
@@ -123,7 +123,7 @@ func testCommitRejectsASecondMembership(t *testing.T, repo Repo) {
 		t.Fatal("alice must already be member_of ORG-A")
 	}
 	if _, err := g.Commit(ctx, Commit{Namespace: ns, Title: "move", Baseline: base.ID, By: "t",
-		Edits: []NodeEdit{{Pre: &userRef, RemoveLinks: []domain.LinkID{oldLink}, Links: []LinkEdit{{Type: domain.LinkMemberOf, To: &orgBRef}}}}}); err != nil {
+		Edits: []NodeEdit{{Pre: &userRef, RemoveLinks: []domain.LinkID{oldLink}, Links: []LinkEdit{{Type: LinkMemberOf, To: &orgBRef}}}}}); err != nil {
 		t.Fatalf("move (remove old, add new): %v", err)
 	}
 }

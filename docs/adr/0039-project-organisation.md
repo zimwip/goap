@@ -27,7 +27,7 @@ different applicable roles depending on which project the work belongs to.
   the project hierarchy link `part_of` too would have silently erased `part_of`'s OrgUnit-only constraint;
   it is `project_part_of` instead.
 - **The root project is seeded self-linked, not rootless.** `ORG-DEFAULT` is the root of the organisation
-  chain by *omitting* its `part_of` link; `PROJ-ROOT` (`domain.DefaultProject`) is instead seeded with a
+  chain by *omitting* its `part_of` link; `PROJ-ROOT` (the `root` of its structure tag, ADR 0069) is instead seeded with a
   `project_part_of` link to itself. A self-link cannot be made in the same commit as the node it targets
   (the commit orderer refuses a cycle among created nodes, `pkg/graph/commit.go`), so seeding is two
   commits: create, then link the new version to itself (`graphsvc.seedRootProject`). Every walk that

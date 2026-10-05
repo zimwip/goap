@@ -10,13 +10,14 @@ import (
 )
 
 // ProcessRef is what the Scope needs to know of a process: who started it and where it runs. A snapshot, so
-// the port does not depend on *Process. Org and Project are resolved (the default ones when the process names none).
+// the port does not depend on *Process. Org and Project are the scope of its change; empty (a process with no change), the services behind the
+// scope resolve them to the roots of the structures (the engine names none, ADR 0054).
 type ProcessRef struct {
 	ID          string
 	Methodology string
 	ChangeID    domain.ChangeID
 	Initiator   authz.Principal
-	// Org is the organisation holding the change (an OrgUnit key): its adapters decide which MCPs are bound.
+	// Org is the organisation holding the change (a unit key): its adapters decide which MCPs are bound.
 	Org string
 	// Project is the project of the change: the roles its Assignments grant are the ones that count (ADR 0043).
 	Project string
@@ -153,7 +154,7 @@ func (e *Engine) scope() Scope {
 // ref is the snapshot of p the scope works with.
 func (e *Engine) ref(p *Process) ProcessRef {
 	return ProcessRef{ID: p.ID, Methodology: p.Methodology, ChangeID: p.ChangeID, Initiator: p.Initiator,
-		Org: domain.OrgOf(p.Org), Project: domain.ProjectOf(p.Project)}
+		Org: p.Org, Project: p.Project}
 }
 
 // as is ctx acting as the actor of p.

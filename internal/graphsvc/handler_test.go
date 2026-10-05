@@ -280,7 +280,7 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 	// regression: organisation/project structure and Assignment must be gated too (a platform Assignment
 	// grants the "admin" platform role, ADR 0046/0047 — an ungated Assignment write is privilege escalation
 	// to full administrator, not just a stray node)
-	for _, typ := range []string{access.NodeTypeAssignment, access.NodeTypeProjectUnit, domain.TypeOrgUnit, domain.TypeAdapter} {
+	for _, typ := range []string{access.NodeTypeAssignment, access.NodeTypeProjectUnit, access.NodeTypeOrgUnit, domain.TypeAdapter} {
 		if _, err := commit("contributor", typ); connect.CodeOf(err) != connect.CodePermissionDenied {
 			t.Fatalf("a contributor must not commit a %s node: %v", typ, err)
 		}

@@ -22,17 +22,28 @@ import (
 
 // Types and links of the graph objects.
 const (
-	NodeTypeUser   = "organisation@User"
-	NodeTypePolicy = "organisation@Policy"
-	LinkMemberOf   = "organisation@member_of"
-	LinkPartOf     = domain.LinkPartOf
+	// NamespaceOrganisation is the namespace of the built-in organisation domain (domains/builtin/organisation.yaml):
+	// the one place its names are written in Go besides the yaml. The graph core names none of them: it learns the
+	// structures from the type catalogue.
+	NamespaceOrganisation = "organisation"
+	NodeTypeOrgUnit       = "organisation@OrgUnit"
+	NodeTypeUser          = "organisation@User"
+	NodeTypePolicy        = "organisation@Policy"
+	LinkMemberOf          = "organisation@member_of"
+	LinkPartOf            = "organisation@part_of"
+
+	// DefaultOrg is the key of the root unit the built-in organisation domain tags (`structure.root`): created by
+	// the bootstrap of the graph, it holds the changes that name no unit and is the root of the resolution of the
+	// adapters of every unit. Code that reads the structures takes the root from them (domain.Structures); these
+	// constants are for the seeds and tests of the built-in organisation.
+	DefaultOrg = "ORG-DEFAULT"
 
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"
 
 	// PropWaitingUnit is the OrgUnit property that flags the waiting unit (ADR 0042): a unit an administrator
 	// creates, at their discretion, for users signing in for the first time — they are linked member_of it
-	// until an administrator moves them. Without one, new users join domain.DefaultOrg.
+	// until an administrator moves them. Without one, new users join DefaultOrg.
 	PropWaitingUnit = "waiting"
 )
 
@@ -224,7 +235,7 @@ func (s *Snapshot) SubjectChain(p authz.Principal) []string {
 		unit = u.Unit
 	}
 	if unit == "" {
-		unit = s.structures.Organisation.Root
+		unit = s.structures.Organisation().Root
 	}
 	return append([]string{UserKey(p.Subject)}, s.Chain(unit)...)
 }
@@ -366,7 +377,7 @@ func (d *Directory) snapshots(ctx context.Context) (*graphsnap.Cache[*Snapshot],
 		if err != nil {
 			return nil, err
 		}
-		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation.Namespace, TTL: d.TTL,
+		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation().Namespace, TTL: d.TTL,
 			Build: func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 				return BuildSnapshot(st, id, nodes, links)
 			}}
@@ -467,7 +478,7 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 		}
 		project := req.Resource.ProjectID
 		if project == "" {
-			project = snap.structures.Project.Root
+			project = snap.structures.Project().Root
 		}
 		projectChain := snap.ProjectChain(project)
 		subjectChain := snap.SubjectChain(req.Subject)

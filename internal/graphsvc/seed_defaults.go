@@ -107,16 +107,19 @@ func SeedDefaults(ctx context.Context, g *graph.Graph) (bool, error) {
 
 func ptr[T any](v T) *T { return &v }
 
-// SeedUnit creates an OrgUnit, part_of parent (domain.DefaultOrg when parent is empty: every unit but the
+// SeedUnit creates a unit of the organisation, a child of parent (the root unit when parent is empty: every unit but the
 // root itself needs one, ADR 0040).
 func SeedUnit(ctx context.Context, g *graph.Graph, key, name, kind, parent string) error {
-	unit := createNode(key, domain.TypeOrgUnit, map[string]any{"name": name, "kind": kind})
-	p, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, domain.OrgOf(parent))
+	unit := createNode(key, access.NodeTypeOrgUnit, map[string]any{"name": name, "kind": kind})
+	if parent == "" {
+		parent = g.Structure(domain.StructureOrganisation).Root
+	}
+	p, err := g.NodeByKey(ctx, access.NamespaceOrganisation, parent)
 	if err != nil {
 		return err
 	}
-	unit = linkTo(unit, domain.LinkPartOf, p.Ref())
-	return applyOn(ctx, g, domain.NamespaceOrganisation, "Unit "+key, []graph.NodeEdit{unit})
+	unit = linkTo(unit, access.LinkPartOf, p.Ref())
+	return applyOn(ctx, g, access.NamespaceOrganisation, "Unit "+key, []graph.NodeEdit{unit})
 }
 
 // LocalFSAdapter is the instance of the localfs adapter of the platform library for a unit, exposing a
@@ -127,7 +130,7 @@ func LocalFSAdapter(unit, root string) adapter.Instance {
 
 // SeedAdapter creates the Adapter node of a unit, owned by it (ADR 0054: the owner of its versions).
 func SeedAdapter(ctx context.Context, g *graph.Graph, a adapter.Instance) error {
-	return applyOn(ctx, g, domain.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{ownedBy(createNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit)})
+	return applyOn(ctx, g, access.NamespaceOrganisation, "Adapter "+a.MCP+" of "+a.Unit, []graph.NodeEdit{ownedBy(createNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit)})
 }
 
 // ownedBy makes the unit with key unit the owner of a node an edit creates or modifies (ADR 0054).
@@ -144,7 +147,7 @@ func SeedAdapterDef(ctx context.Context, g *graph.Graph, d adapter.Def) error {
 // SeedAccess makes sure the default policies exist as Policy nodes of the organisation namespace. It is
 // idempotent: once the floor policy exists nothing is touched, so that edited or deleted policies stay so.
 func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
-	if _, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, access.PolicyKey(authz.FloorPolicies[0])); err == nil {
+	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.PolicyKey(authz.FloorPolicies[0])); err == nil {
 		return false, nil
 	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
@@ -153,7 +156,7 @@ func SeedAccess(ctx context.Context, g *graph.Graph) (bool, error) {
 	for i, p := range authz.DefaultPolicies {
 		items[i] = createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))
 	}
-	return true, applyOn(ctx, g, domain.NamespaceOrganisation, "Default policies", items)
+	return true, applyOn(ctx, g, access.NamespaceOrganisation, "Default policies", items)
 }
 
 // SeedUser creates the User node of a subject, member of a unit (NewUserUnit when u.Unit is empty:
@@ -169,18 +172,18 @@ func SeedUser(ctx context.Context, g *graph.Graph, u access.User) error {
 	if u.Unit == "" {
 		unit, err = NewUserUnit(ctx, g)
 	} else {
-		unit, err = g.NodeByKey(ctx, domain.NamespaceOrganisation, u.Unit)
+		unit, err = g.NodeByKey(ctx, access.NamespaceOrganisation, u.Unit)
 	}
 	if err != nil {
 		return err
 	}
 	user = linkTo(user, access.LinkMemberOf, unit.Ref())
-	return applyOn(ctx, g, domain.NamespaceOrganisation, "User "+u.Subject, []graph.NodeEdit{user})
+	return applyOn(ctx, g, access.NamespaceOrganisation, "User "+u.Subject, []graph.NodeEdit{user})
 }
 
 // SeedPolicy creates a Policy node.
 func SeedPolicy(ctx context.Context, g *graph.Graph, p authz.Policy) error {
-	return applyOn(ctx, g, domain.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []graph.NodeEdit{
+	return applyOn(ctx, g, access.NamespaceOrganisation, "Policy "+p.Resource+"/"+p.Action, []graph.NodeEdit{
 		createNode(access.PolicyKey(p), access.NodeTypePolicy, access.PolicyProps(p))})
 }
 
@@ -279,8 +282,8 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 	}
 	var instances []graph.NodeEdit
 	for _, name := range fresh {
-		a := mcpbuiltin.Adapter(domain.DefaultOrg, name)
-		if _, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, adapter.Key(a.Unit, a.MCP)); err == nil {
+		a := mcpbuiltin.Adapter(g.Structure(domain.StructureOrganisation).Root, name)
+		if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, adapter.Key(a.Unit, a.MCP)); err == nil {
 			continue
 		} else if !errors.Is(err, graph.ErrNotFound) {
 			return false, err
@@ -288,7 +291,7 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 		instances = append(instances, ownedBy(createNode(adapter.Key(a.Unit, a.MCP), domain.TypeAdapter, a.Props()), a.Unit))
 	}
 	if len(instances) > 0 {
-		if err := applyOn(ctx, g, domain.NamespaceOrganisation, "Built-in adapters of the default organisation", instances); err != nil {
+		if err := applyOn(ctx, g, access.NamespaceOrganisation, "Built-in adapters of the default organisation", instances); err != nil {
 			return false, err
 		}
 	}

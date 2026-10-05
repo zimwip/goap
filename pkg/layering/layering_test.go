@@ -82,6 +82,33 @@ func TestCoreNamesNoEnginePolicy(t *testing.T) {
 	}
 }
 
+// The graph core and the domain model name no structure of the organisation (ADR 0054, ADR 0069): the node type that
+// builds each structure, its parent link, its root and its default flag come from the type catalogue (a domain tags
+// them, domains/builtin/organisation.yaml for the built-in one), and an untyped graph falls back to the catalogue of
+// the built-in domains, never to names written in Go.
+func TestCoreNamesNoStructure(t *testing.T) {
+	for _, dir := range []string{"../graph", "../domain"} {
+		files, err := filepath.Glob(dir + "/*.go")
+		if err != nil || len(files) == 0 {
+			t.Fatalf("glob %s: %v, %d files", dir, err, len(files))
+		}
+		for _, f := range files {
+			if strings.HasSuffix(f, "_test.go") {
+				continue
+			}
+			b, err := os.ReadFile(f)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, word := range []string{"ORG-DEFAULT", "PROJ-ROOT", "OrgUnit", "ProjectUnit", "part_of", "project_part_of"} {
+				if strings.Contains(string(b), word) {
+					t.Errorf("%s names %q", f, word)
+				}
+			}
+		}
+	}
+}
+
 func TestLayering(t *testing.T) {
 	for pkg, banned := range forbidden {
 		out, err := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", mod+pkg).Output()

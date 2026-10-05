@@ -30,7 +30,7 @@ type TypeCatalog interface {
 	// subtype of base.
 	Structure(kind string) (domain.Structure, bool)
 	IsA(typ, base string) bool
-	// Structures is both structures with the types belonging to each.
+	// Structures is the structures declared with the types belonging to each.
 	Structures() domain.Structures
 	// Requires are the links a node of a type must carry (`requires:` on a node type, ADR 0065).
 	Requires(typ string) []domain.RequiredLink
@@ -365,9 +365,9 @@ type NewChange struct {
 	BranchIntent domain.OptionIntent
 	// ParentID makes the change a sub-change of another one (see prepareSubChange).
 	ParentID domain.ChangeID
-	// OwnerOrg is the key of the OrgUnit responsible for the change (empty: the default organisation).
+	// OwnerOrg is the key of the unit responsible for the change (empty: the default organisation).
 	OwnerOrg string
-	// ProjectID is the key of the ProjectUnit this change's nodes belong to (ADR 0039; empty: the root
+	// ProjectID is the key of the project this change's nodes belong to (ADR 0039; empty: the root
 	// project). A sub-change inherits it from its parent when unset, and must stay within the parent's
 	// project when set. Selecting one before acting is a UX-level gate (ADR 0039), not enforced here.
 	ProjectID string

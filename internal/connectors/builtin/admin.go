@@ -72,7 +72,14 @@ func (c Admin) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 	case "units", "users":
 		return c.organisation(ctx, op, a.str("unit"))
 	case "mcps":
-		unit := domain.OrgOf(a.unit(ctx, who))
+		unit := a.unit(ctx, who)
+		if unit == "" { // the root of the organisation, as the structures name it
+			st, err := c.p.Graph.Structures(ctx)
+			if err != nil {
+				return nil, err
+			}
+			unit = st.Organisation().Root
+		}
 		chain, eff, err := c.p.Hub.Effective(ctx, unit)
 		if err != nil {
 			return nil, err
@@ -143,7 +150,7 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 	if err != nil {
 		return nil, err
 	}
-	head, err := c.p.Graph.BranchHead(ctx, st.Organisation.Namespace, domain.MainBranch)
+	head, err := c.p.Graph.BranchHead(ctx, st.Organisation().Namespace, domain.MainBranch)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +175,7 @@ func (c Admin) organisation(ctx context.Context, op, unit string) (map[string]an
 			continue
 		}
 		switch {
-		case op == "units" && n.Type == st.Organisation.Type:
+		case op == "units" && n.Type == st.Organisation().Type:
 			u := map[string]any{"key": n.Key, "name": n.Properties["name"], "kind": n.Properties["kind"]}
 			if p := units.Parent(n.Key); p != "" {
 				u["parent"] = p

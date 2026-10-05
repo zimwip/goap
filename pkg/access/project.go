@@ -2,17 +2,19 @@ package access
 
 import (
 	"fmt"
-
-	"github.com/zimwip/goap/pkg/domain"
 )
+
+// DefaultProject is the key of the root project the built-in organisation domain tags (`structure.root`, ADR 0039),
+// created by the bootstrap of the graph; like DefaultOrg, for the seeds and tests of the built-in organisation.
+const DefaultProject = "PROJ-ROOT"
 
 // Types and links of the project graph objects (ADR 0039): a project mirrors OrgUnit's hierarchy, and
 // Assignment is the meeting point of organisation and project (same shape as adapter.Instance, the meeting point
 // of organisation, MCP and connector): the roles an org unit or user locally holds on a project.
 const (
-	NodeTypeProjectUnit = domain.TypeProjectUnit
+	NodeTypeProjectUnit = "organisation@ProjectUnit"
 	NodeTypeAssignment  = "organisation@Assignment"
-	LinkProjectPartOf   = domain.LinkProjectPartOf
+	LinkProjectPartOf   = "organisation@project_part_of"
 	LinkAssignsOrg      = "organisation@assigns_org"
 	LinkAssignsProject  = "organisation@assigns_project"
 )

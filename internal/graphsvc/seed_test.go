@@ -53,7 +53,7 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 		t.Fatal(err)
 	}
 	unit, err := g.NodeByKey(ctx, "organisation", "ORG-CHECKOUT")
-	if err != nil || unit.Type != domain.TypeOrgUnit {
+	if err != nil || unit.Type != access.NodeTypeOrgUnit {
 		t.Fatalf("unit = %+v, %v", unit, err)
 	}
 	app, err := g.NodeByKey(ctx, "alm", "APP-1")
@@ -64,7 +64,7 @@ func TestSeedsFollowTheDomains(t *testing.T) {
 		t.Fatalf("APP-1 must be owned by ORG-CHECKOUT across namespaces: %+v", app)
 	}
 	uv, _ := g.View(ctx, unit.Ref())
-	if len(uv.Out) != 1 || uv.Out[0].Type != domain.LinkPartOf {
+	if len(uv.Out) != 1 || uv.Out[0].Type != access.LinkPartOf {
 		t.Fatalf("unit hierarchy: %+v", uv.Out)
 	}
 }
@@ -77,7 +77,7 @@ func TestSeedDemoHangsUnderTheRoot(t *testing.T) {
 	if _, err := graphsvc.SeedDemo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	def, err := g.NodeByKey(ctx, "organisation", domain.DefaultOrg)
+	def, err := g.NodeByKey(ctx, "organisation", access.DefaultOrg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestSeedDemoHangsUnderTheRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(v.Out) != 1 || v.Out[0].Type != domain.LinkPartOf || v.Out[0].To.ID != def.ID {
+	if len(v.Out) != 1 || v.Out[0].Type != access.LinkPartOf || v.Out[0].To.ID != def.ID {
 		t.Fatalf("ORG-ACME must be part_of ORG-DEFAULT: %+v", v.Out)
 	}
 	if acme.Owner != def.ID || acme.ChangeID == "" || acme.Project == "" {
@@ -138,12 +138,12 @@ func TestSeedBuiltins(t *testing.T) {
 	pre := n.Ref()
 	commit(domain.NamespacePlatform, graph.NodeEdit{Pre: &pre, Props: map[string]any{"description": "old", "tools": []any{}}, Rationale: "older"})
 	// an administrator removes the admin MCP from the default organisation
-	a, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, adapter.Key(domain.DefaultOrg, mcpbuiltin.Admin))
+	a, err := g.NodeByKey(ctx, access.NamespaceOrganisation, adapter.Key(access.DefaultOrg, mcpbuiltin.Admin))
 	if err != nil {
 		t.Fatal(err)
 	}
 	apre := a.Ref()
-	commit(domain.NamespaceOrganisation, graph.NodeEdit{Pre: &apre, Retire: true, Rationale: "no admin tools"})
+	commit(access.NamespaceOrganisation, graph.NodeEdit{Pre: &apre, Retire: true, Rationale: "no admin tools"})
 
 	if seeded, err := graphsvc.SeedBuiltins(ctx, g); err != nil || !seeded {
 		t.Fatalf("resync = %v, %v", seeded, err)
@@ -161,10 +161,10 @@ func TestSeedBuiltins(t *testing.T) {
 			}
 		}
 	}
-	orgHead, _ := g.BranchHead(ctx, domain.NamespaceOrganisation, domain.MainBranch)
+	orgHead, _ := g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
 	orgNodes, _, _ := g.BaselineGraph(ctx, orgHead.ID)
 	for _, n := range orgNodes {
-		if n.Key == adapter.Key(domain.DefaultOrg, mcpbuiltin.Admin) && !n.Deleted {
+		if n.Key == adapter.Key(access.DefaultOrg, mcpbuiltin.Admin) && !n.Deleted {
 			t.Fatal("the removed instance was seeded again")
 		}
 	}
@@ -177,7 +177,7 @@ func TestRootProjectSeeded(t *testing.T) {
 	if _, err := graphsvc.SeedDefaults(ctx, g); err != nil {
 		t.Fatal(err)
 	}
-	root, err := g.NodeByKey(ctx, domain.NamespaceOrganisation, domain.DefaultProject)
+	root, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.DefaultProject)
 	if err != nil || root.Type != access.NodeTypeProjectUnit {
 		t.Fatalf("root project = %+v, %v", root, err)
 	}
@@ -206,7 +206,7 @@ func TestStructuresThroughTheService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(got, domain.BuiltinStructureSet()) {
+	if !reflect.DeepEqual(got, typecat.Builtin().Structures()) {
 		t.Fatalf("structures = %+v", got)
 	}
 }

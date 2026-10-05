@@ -18,18 +18,18 @@ func testBootstrap(t *testing.T, repo Repo) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultOrg))
-	proj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultProject))
+	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
+	proj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	for _, n := range []domain.Node{org, proj} {
 		if n.Owner != org.ID || n.Project != proj.ID || n.ChangeID == "" {
 			t.Fatalf("%s: owner %s project %s change %s", n.Key, n.Owner, n.Project, n.ChangeID)
 		}
 	}
-	if org.Type != NodeTypeOrgUnit || proj.Type != NodeTypeProjectUnit || proj.Properties[domain.PropDefaultProject] != true {
+	if org.Type != NodeTypeOrgUnit || proj.Type != NodeTypeProjectUnit || proj.Properties[propDefault] != true {
 		t.Fatalf("roots: %+v %+v", org, proj)
 	}
 	c := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
-	if c.Status != domain.ChangeApplied || c.OwnerOrg != domain.DefaultOrg || c.ProjectID != domain.DefaultProject || c.ResultBaselineID == "" {
+	if c.Status != domain.ChangeApplied || c.OwnerOrg != rootOrg(g) || c.ProjectID != rootProject(g) || c.ResultBaselineID == "" {
 		t.Fatalf("bootstrap change: %+v", c)
 	}
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, NamespaceOrganisation, domain.MainBranch))
@@ -66,8 +66,8 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultOrg))
-	proj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultProject))
+	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
+	proj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	write := func(fn func(tx Tx) error) error { return g.repo.InTx(ctx, fn) }
 	boot := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
 	boot.Items, boot.Nodes = nil, nil
@@ -86,16 +86,16 @@ func testGuardRefusesWritesOutsideAChange(t *testing.T, repo Repo) {
 		},
 		"a branch membership without a change": func(tx Tx) error { return tx.JoinBranch(ctx, org.Ref(), "elsewhere", "") },
 		"a change without a unit": func(tx Tx) error {
-			return tx.PutChange(ctx, domain.Change{ID: domain.ChangeID(g.newID()), Title: "x", Status: domain.ChangeDraft, ProjectID: domain.DefaultProject})
+			return tx.PutChange(ctx, domain.Change{ID: domain.ChangeID(g.newID()), Title: "x", Status: domain.ChangeDraft, ProjectID: rootProject(g)})
 		},
 		"a change held by a project": func(tx Tx) error {
 			c := boot
-			c.ID, c.OwnerOrg = domain.ChangeID(g.newID()), domain.DefaultProject
+			c.ID, c.OwnerOrg = domain.ChangeID(g.newID()), rootProject(g)
 			return tx.PutChange(ctx, c)
 		},
 		"a change acting in a unit": func(tx Tx) error {
 			c := boot
-			c.ID, c.ProjectID = domain.ChangeID(g.newID()), domain.DefaultOrg
+			c.ID, c.ProjectID = domain.ChangeID(g.newID()), rootOrg(g)
 			return tx.PutChange(ctx, c)
 		},
 		"a version owned by a project": func(tx Tx) error {
@@ -130,8 +130,8 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	root := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultOrg))
-	rootProj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultProject))
+	root := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
+	rootProj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	ns := NamespaceOrganisation
 	commit := func(c Commit) CommitResult {
 		t.Helper()
@@ -163,7 +163,7 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 		t.Fatalf("the next version keeps owner and project: %+v", note)
 	}
 	// transferred to the root unit
-	commit(Commit{Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: domain.DefaultOrg}}})
+	commit(Commit{Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: rootOrg(g)}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
 	if note.Version != 3 || note.Owner != root.ID || note.Project != pa.ID {
 		t.Fatalf("transferred to the root unit: %+v", note)
@@ -187,13 +187,13 @@ func testDefaultProject(t *testing.T, repo Repo) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if p := must[string](t)(g.DefaultProject(ctx)); p != domain.DefaultProject {
+	if p := must[string](t)(g.DefaultProject(ctx)); p != rootProject(g) {
 		t.Fatalf("default project = %s", p)
 	}
-	rootProj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultProject))
+	rootProj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
 	must[CommitResult](t)(g.Commit(ctx, Commit{Namespace: NamespaceOrganisation, Title: "default B", By: "t", Edits: []NodeEdit{
-		{Key: "PROJ-B", Type: NodeTypeProjectUnit, Props: map[string]any{"name": "B", domain.PropDefaultProject: true}, Links: []LinkEdit{{Type: LinkProjectPartOf, To: refPtr(rootProj.Ref())}}},
-		{Pre: refPtr(rootProj.Ref()), Props: map[string]any{domain.PropDefaultProject: nil}},
+		{Key: "PROJ-B", Type: NodeTypeProjectUnit, Props: map[string]any{"name": "B", propDefault: true}, Links: []LinkEdit{{Type: LinkProjectPartOf, To: refPtr(rootProj.Ref())}}},
+		{Pre: refPtr(rootProj.Ref()), Props: map[string]any{propDefault: nil}},
 	}}))
 	if p := must[string](t)(g.DefaultProject(ctx)); p != "PROJ-B" {
 		t.Fatalf("default project = %s", p)
@@ -214,7 +214,7 @@ func testStorageRequiresAChange(t *testing.T, repo Repo) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultOrg))
+	org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
 	var exec func(q string, args ...any) error
 	switch r := repo.(type) {
 	case *SQLite:
@@ -260,7 +260,7 @@ func TestGuardBaselineNeedsAChange(t *testing.T) {
 		if err := g.Bootstrap(ctx); err != nil {
 			t.Fatal(err)
 		}
-		org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, domain.DefaultOrg))
+		org := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootOrg(g)))
 		put := func(b domain.Baseline) error {
 			b.ID, b.Namespace, b.Branch, b.CreatedAt = domain.BaselineID(g.newID()), "scratch", domain.MainBranch, g.now()
 			return g.repo.InTx(ctx, func(tx Tx) error { return tx.PutBaseline(ctx, b) })

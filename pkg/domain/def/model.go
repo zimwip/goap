@@ -68,7 +68,7 @@ type NodeType struct {
 
 // StructureTag tags a node type as a structure of the graph (ADR 0054, domain.Structure).
 type StructureTag struct {
-	// Kind is domain.StructureOrganisation or domain.StructureProject.
+	// Kind names the axis (domain.StructureOrganisation, domain.StructureProject), tagged once across the domains.
 	Kind string `yaml:"kind" json:"kind"`
 	// Parent is the link type (of the same domain) from a child to its parent, from and to the type.
 	Parent string `yaml:"parent" json:"parent"`
@@ -76,6 +76,11 @@ type StructureTag struct {
 	Root string `yaml:"root" json:"root"`
 	// SelfParent: the root links to itself through Parent (a project root) rather than being rootless.
 	SelfParent bool `yaml:"selfParent,omitempty" json:"selfParent,omitempty"`
+	// Default names the boolean property of the type that flags the default member of the hierarchy (the one a
+	// change naming none resolves to); empty: the root is.
+	Default string `yaml:"default,omitempty" json:"default,omitempty"`
+	// Bootstrap are the initial properties of the root node (name, status, the Default flag...).
+	Bootstrap map[string]any `yaml:"bootstrap,omitempty" json:"bootstrap,omitempty"`
 }
 
 // SearchProperty declares how the node index uses a property of a node type.

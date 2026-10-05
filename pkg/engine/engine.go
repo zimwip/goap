@@ -1129,8 +1129,8 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 			return bb, err
 		}
 		bb.Vars = p.Vars
-		p.Org = domain.OrgOf(bb.Change.OwnerOrg)
-		p.Project = domain.ProjectOf(bb.Change.ProjectID)
+		p.Org = bb.Change.OwnerOrg
+		p.Project = bb.Change.ProjectID
 	}
 	bb.Supertypes = e.supertypesOf(m)
 	res := m.Conditions.Evaluate(bb)

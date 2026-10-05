@@ -69,7 +69,7 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 	}
 	for _, n := range nodes {
 		switch {
-		case n.Namespace == st.Organisation.Namespace && st.In(org, n.Type):
+		case n.Namespace == st.Organisation().Namespace && st.In(org, n.Type):
 			s.units[n.Key] = true
 		case n.Namespace == domain.NamespacePlatform && n.Type == mcp.NodeTypeMCP:
 			d, err := mcp.DefFromProps(n.Properties)
@@ -95,7 +95,7 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 	}
 	// an adapter instance is the unit's that owns it (ADR 0054: the owner of the version)
 	for _, n := range nodes {
-		if n.Deleted || n.Namespace != domain.NamespaceOrganisation || n.Type != domain.TypeAdapter {
+		if n.Deleted || n.Namespace != st.Organisation().Namespace || n.Type != domain.TypeAdapter {
 			continue
 		}
 		unit, ok := byID[n.Owner]
@@ -118,6 +118,14 @@ func BuildSnapshot(st domain.Structures, baselines Baselines, nodes []domain.Nod
 		s.adapters[unit.Key][a.MCP] = a
 	}
 	return s
+}
+
+// Unit returns the unit key, or the root of the organisation when empty.
+func (s *Snapshot) Unit(unit string) string {
+	if unit == "" {
+		return s.org.Root()
+	}
+	return unit
 }
 
 // Chain returns the unit, its ancestors (part_of, nearest first) and, last, the default
@@ -238,7 +246,7 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	orgHead, err := d.Graph.BranchHead(ctx, st.Organisation.Namespace, domain.MainBranch)
+	orgHead, err := d.Graph.BranchHead(ctx, st.Organisation().Namespace, domain.MainBranch)
 	if err != nil && !errors.Is(err, graph.ErrNotFound) {
 		return nil, err
 	}

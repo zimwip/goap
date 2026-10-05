@@ -73,7 +73,7 @@ type CommitResult struct {
 // (the rationale is the comment) and applies the change. When the branch
 // cannot be merged without conflict (another change moved a node meanwhile) the
 // change is abandoned and ErrConflict returned: the producer reads again and
-// rebuilds its edits. A created OrgUnit/ProjectUnit/User must name its required
+// rebuilds its edits. A created node of a structure or a User must name its required
 // parent (checkRequiredParent, ADR 0040) — the producer-level guarantee
 // CreateNode/UpdateNode do not make (commitEdits' parenting param), since they
 // stand in for the single-node writes the engine itself makes while landing an

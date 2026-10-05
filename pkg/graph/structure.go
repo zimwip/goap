@@ -7,12 +7,17 @@ import (
 	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // This file places every change and every node version in the two structures of the graph (ADR 0054): the
 // organisation (who is responsible) and the project (where the work happens). They are the node types the type
-// catalogue tags (`structure:` on a node type of a domain); an untyped graph uses the built-in ones
-// (domain.BuiltinStructures).
+// catalogue tags (`structure:` on a node type of a domain), with their parent link, root and default flag; an
+// untyped graph uses the catalogue of the built-in domains.
+
+// builtinTypes is the catalogue of the built-in domains alone: what an untyped graph (tests, tools) and a catalogue
+// that does not resolve a question fall back to, so that the built-in definitions have one source (their yaml).
+func builtinTypes() TypeCatalog { return typecat.Builtin() }
 
 // Structure returns the hierarchy of a kind (domain.StructureOrganisation, domain.StructureProject) in force.
 func (g *Graph) Structure(kind string) domain.Structure {
@@ -23,10 +28,11 @@ func (g *Graph) Structure(kind string) domain.Structure {
 			}
 		}
 	}
-	return domain.BuiltinStructures[kind]
+	s, _ := builtinTypes().Structure(kind)
+	return s
 }
 
-// Structures returns both structures in force with the types belonging to each (ADR 0054): what the services reading
+// Structures returns the structures in force with the types belonging to each (ADR 0054): what the services reading
 // the organisation learn from the graph service (GetStructures) instead of naming the types themselves.
 func (g *Graph) Structures(context.Context) (domain.Structures, error) {
 	if g.Types != nil {
@@ -34,7 +40,20 @@ func (g *Graph) Structures(context.Context) (domain.Structures, error) {
 			return c.Structures(), nil
 		}
 	}
-	return domain.BuiltinStructureSet(), nil
+	return builtinTypes().Structures(), nil
+}
+
+// structures returns the structures in force, in bootstrap order: the organisation first, the project next, any
+// other declared structure after.
+func (g *Graph) structures() []domain.Structure {
+	all, _ := g.Structures(context.Background())
+	out := []domain.Structure{g.Structure(domain.StructureOrganisation), g.Structure(domain.StructureProject)}
+	for _, x := range all {
+		if x.Kind != domain.StructureOrganisation && x.Kind != domain.StructureProject {
+			out = append(out, x.Structure)
+		}
+	}
+	return out
 }
 
 // requires returns the links a node of the type must carry (ADR 0065), in force: the type catalogue's, the built-in
@@ -47,11 +66,11 @@ func (g *Graph) requires(typ string) []domain.RequiredLink {
 			}
 		}
 	}
-	return domain.BuiltinRequires[typ]
+	return builtinTypes().Requires(typ)
 }
 
 // AdminOnlyType reports a node type whose nodes only platform administrators write (ADR 0068): the type
-// catalogue's `adminOnly:` flag, plus the built-in ones for an untyped graph (domain.BuiltinAdminOnly). The one
+// catalogue's `adminOnly:` flag, plus the built-in ones for an untyped graph. The one
 // question every write path asks.
 func (g *Graph) AdminOnlyType(_ context.Context, typ string) (bool, error) {
 	if g.Types != nil {
@@ -59,10 +78,10 @@ func (g *Graph) AdminOnlyType(_ context.Context, typ string) (bool, error) {
 			return true, nil
 		}
 	}
-	return domain.BuiltinAdminOnly[typ], nil
+	return builtinTypes().AdminOnly(typ), nil
 }
 
-// isA reports whether the node type typ is base or a subtype of it (an untyped graph knows no subtyping).
+// isA reports whether the node type typ is base or a subtype of it.
 func (g *Graph) isA(typ, base string) bool {
 	if typ == base {
 		return true
@@ -72,7 +91,7 @@ func (g *Graph) isA(typ, base string) bool {
 			return c.IsA(typ, base)
 		}
 	}
-	return false
+	return builtinTypes().IsA(typ, base)
 }
 
 // inStructure reports whether a node belongs to a structure: of its namespace and of its type or a subtype.
@@ -145,8 +164,8 @@ func (g *Graph) within(ctx context.Context, tx Tx, kind, key, ancestor string) (
 	return false, nil
 }
 
-// DefaultProject returns the key of the default project: the project flagged domain.PropDefaultProject (the smallest
-// key when several are), else the root project.
+// DefaultProject returns the key of the default project: the project flagged by the property its structure names
+// (Structure.Default; the smallest key when several are flagged), else the root project.
 func (g *Graph) DefaultProject(ctx context.Context) (key string, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { key, err = g.defaultProject(ctx, tx); return err })
 	return
@@ -154,13 +173,16 @@ func (g *Graph) DefaultProject(ctx context.Context) (key string, err error) {
 
 func (g *Graph) defaultProject(ctx context.Context, tx Tx) (string, error) {
 	st := g.Structure(domain.StructureProject)
+	if st.Default == "" {
+		return st.Root, nil
+	}
 	nodes, err := tx.LatestNodes(ctx, st.Namespace, domain.MainBranch)
 	if err != nil {
 		return "", err
 	}
 	var flagged []string
 	for _, n := range nodes {
-		if !n.Deleted && g.inStructure(n, st) && n.Properties[domain.PropDefaultProject] == true {
+		if !n.Deleted && g.inStructure(n, st) && n.Properties[st.Default] == true {
 			flagged = append(flagged, n.Key)
 		}
 	}

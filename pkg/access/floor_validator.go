@@ -8,6 +8,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/typecat"
 )
 
 // AdminFloorValidator refuses a change that would leave the graph with no active administrator (ADR 0020's
@@ -30,8 +31,9 @@ func (AdminFloorValidator) Types() []string {
 func (AdminFloorValidator) Validate(ctx context.Context, q graph.ValidatorQuery, impacted []graph.ValidatedNode) error {
 	var nodes []domain.Node
 	var links []domain.Link
-	for _, typ := range []string{NodeTypeUser, NodeTypeAssignment, domain.TypeOrgUnit} {
-		ns, err := q.NodesOfType(ctx, domain.NamespaceOrganisation, typ)
+	st := typecat.Builtin().Structures()
+	for _, typ := range []string{NodeTypeUser, NodeTypeAssignment, st.Organisation().Type} {
+		ns, err := q.NodesOfType(ctx, st.Organisation().Namespace, typ)
 		if err != nil {
 			return err
 		}
@@ -43,7 +45,7 @@ func (AdminFloorValidator) Validate(ctx context.Context, q graph.ValidatorQuery,
 			nodes, links = append(nodes, n), append(links, ls...)
 		}
 	}
-	snap := BuildSnapshot(domain.BuiltinStructureSet(), "", nodes, links)
+	snap := BuildSnapshot(st, "", nodes, links)
 	for _, n := range nodes {
 		if n.Type != NodeTypeUser || n.State != "active" {
 			continue

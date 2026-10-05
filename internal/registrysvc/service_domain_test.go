@@ -397,8 +397,8 @@ func TestDomainStructures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, kind := range domain.StructureKinds {
-		if st, ok := cat.Structure(kind); !ok || st != domain.BuiltinStructures[kind] {
+	for _, kind := range []string{domain.StructureOrganisation, domain.StructureProject} {
+		if st, ok := cat.Structure(kind); !ok || st.Root == "" || st.Type == "" {
 			t.Fatalf("structure %s = %+v %v", kind, st, ok)
 		}
 	}
