@@ -128,3 +128,40 @@ linkTypes:
 	}
 	must[domain.Link](t)(g.UpdateLink(ctx, c.ID, l.ID, map[string]any{"strength": "strong"}, "", ""))
 }
+
+// A node no parent holds is retired by its lifecycle, never deleted (ADR 0076 §4c); restoring it moves it back to an
+// editable state before the edits of the same commit.
+func TestRetireAndRestoreByCommit(t *testing.T) { forEachRepo(t, testRetireAndRestoreByCommit) }
+
+func testRetireAndRestoreByCommit(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	g.Types = builtinTypes
+	commit := func(edits ...NodeEdit) {
+		t.Helper()
+		head := must[domain.Baseline](t)(g.BranchHead(ctx, "organisation", domain.MainBranch))
+		if _, err := g.Commit(ctx, Commit{Namespace: "organisation", Title: "policy", Baseline: head.ID, By: "t", Edits: edits}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	commit(NodeEdit{Key: "POL:x", Type: "organisation@Policy", Props: map[string]any{"rule": "true", "resource": "x", "action": "read"}})
+	pol := must[domain.Node](t)(g.NodeByKey(ctx, "organisation", "POL:x"))
+	if pol.State != "active" {
+		t.Fatalf("created in force: %+v", pol)
+	}
+	ref := pol.Ref()
+	commit(NodeEdit{Pre: &ref, State: "retired"})
+	pol = must[domain.Node](t)(g.NodeByKey(ctx, "organisation", "POL:x"))
+	if pol.State != "retired" {
+		t.Fatalf("retired: %+v", pol)
+	}
+	ref = pol.Ref()
+	commit(NodeEdit{Pre: &ref, State: "active", Props: map[string]any{"action": "write"}})
+	pol = must[domain.Node](t)(g.NodeByKey(ctx, "organisation", "POL:x"))
+	if pol.State != "active" || pol.Properties["action"] != "write" {
+		t.Fatalf("restored and edited: %+v", pol)
+	}
+}

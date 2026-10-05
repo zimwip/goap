@@ -5,7 +5,7 @@
   import { types as nodeTypes, links as linkTypes, ns, userKey, newUserUnit } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import { errorMessage, type GraphNode, type Policy } from '../../api';
-  import { headGraph, applyOnMain, createNodeItem, deleteNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
+  import { headGraph, applyOnMain, createNodeItem, retireNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { newPolicyKey, policiesOf, policyProps, userProps, usersOf, type User } from '../../access';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -50,7 +50,7 @@
     removing = i;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `Delete policy ${p.resource}/${p.action}`, 'Delete an access policy', baselineId, [deleteNodeItem(n)]);
+      await applyOnMain(ns.organisation, `Retire policy ${p.resource}/${p.action}`, 'Retire an access policy', baselineId, [retireNodeItem(n)]);
       await load();
     } catch (e) {
       error = errorMessage(e);
@@ -103,10 +103,11 @@
   }
 
   async function removeUser(n: GraphNode, u: User) {
-    if (!(await confirmDialog({ message: `Delete the user "${u.subject}"?`, danger: true }))) return;
+    if (!(await confirmDialog({ message: `Deactivate the user "${u.subject}"? The account is read-only until an administrator reactivates it.`, danger: true }))) return;
     error = '';
     try {
-      await applyOnMain(ns.organisation, `Delete user ${u.subject}`, 'Delete a user', baselineId, [deleteNodeItem(n)]);
+      // a user is never deleted: the account is deactivated (lifecycle user, ADR 0076)
+      await applyOnMain(ns.organisation, `Deactivate user ${u.subject}`, 'Deactivate a user', baselineId, [{ pre: refOf(n), state: 'deactivated', rationale: `Deactivate ${n.key}` }]);
       await load();
     } catch (e) {
       error = errorMessage(e);

@@ -5,7 +5,7 @@
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import { errorMessage, type Mcp, type McpScope, type Struct } from '../../api';
-  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem } from '../../graphEdit';
+  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, retireNodeItem } from '../../graphEdit';
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import { openTab, closeTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
@@ -89,12 +89,12 @@
   }
 
   async function remove() {
-    if (!(await confirmDialog({ message: `Delete the MCP ${name}? Adapters that implement it stop working.`, danger: true }))) return;
+    if (!(await confirmDialog({ message: `Retire the MCP ${name}? Adapters that implement it stop working; it can be restored by saving it again.`, danger: true }))) return;
     try {
       const h = await headGraph(ns.platform);
       const existing = findNode(h, ns.platform, nodeTypes.mcp, keyOf(name));
       if (!existing) throw new Error(`MCP ${name} is not on the graph`);
-      await applyOnMain(ns.platform, `Delete MCP ${name}`, `Delete MCP ${name}`, h.baselineId, [deleteNodeItem(existing)]);
+      await applyOnMain(ns.platform, `Retire MCP ${name}`, `Retire MCP ${name}`, h.baselineId, [retireNodeItem(existing)]);
       await refreshTools();
       closeTab(tab.id, { force: true });
     } catch (e) {

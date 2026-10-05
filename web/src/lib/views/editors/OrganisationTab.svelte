@@ -19,7 +19,7 @@
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import type { AdapterDef } from '../../adapterDef';
   import { defaultToText, type ParamForm } from '../../algorithmForm';
-  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, deleteNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
+  import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, retireNodeItem, moveNodeItem, currentLink, refOf, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
@@ -296,7 +296,7 @@
       const h = await headGraph(ns.organisation);
       const existing = findNode(h, ns.organisation, nodeTypes.adapter, `ADP:${key}/${m}`);
       if (!existing) throw new Error('adapter node not found');
-      await applyOnMain(ns.organisation, `Detach ${m} from ${key}`, `Delete the adapter of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
+      await applyOnMain(ns.organisation, `Detach ${m} from ${key}`, `Retire the adapter of ${m} for ${key}`, h.baselineId, [retireNodeItem(existing)]);
       notify(`${m} detached from ${key}.`, 'ok');
       await load();
     } catch (e) {
@@ -361,7 +361,7 @@
       const title = `Restrictions of ${m} for ${key}`;
       if (existing && !restricts && !existing.props?.['adapter']) {
         // a restriction-only node with nothing left to restrict
-        await applyOnMain(ns.organisation, title, `Lift the restrictions of ${m} for ${key}`, h.baselineId, [deleteNodeItem(existing)]);
+        await applyOnMain(ns.organisation, title, `Lift the restrictions of ${m} for ${key}`, h.baselineId, [retireNodeItem(existing)]);
       } else if (existing) {
         await applyOnMain(ns.organisation, title, `Restrict ${m} for ${key}`, h.baselineId, [updateNodeItem(existing, props)]);
       } else if (restricts) {

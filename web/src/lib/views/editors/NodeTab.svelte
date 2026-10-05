@@ -36,7 +36,7 @@
   import { namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { orderedAttributes, shownValue } from '../../attributes';
-import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
+import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
   import NotFound from '../../shell/NotFound.svelte';
 
@@ -160,7 +160,6 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
   const storedProps = $derived((stored?.props ?? {}) as Record<string, unknown>);
   const nodeState = $derived(row?.effective ?? stored?.state ?? '');
   const editable = $derived(row ? row.editable : true);
-  const removed = $derived(!!row?.removal);
   const reopens = $derived((row?.transitions ?? []).filter((t) => row && isReopen(row, t)));
 
   const openChanges = $derived(changes.items.filter((c) => (c.status === 'draft' || c.status === 'active') && (!stored?.namespace || c.namespace === stored.namespace)));
@@ -194,7 +193,7 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
   /** Runs a modification: creates the working change if needed, writes the node on its branch, reloads. */
   async function propose(
     label: string,
-    w: { props?: Record<string, unknown>; state?: string; retire?: boolean; addLinks?: LinkWrite[]; removeLinks?: string[] },
+    w: { props?: Record<string, unknown>; state?: string; addLinks?: LinkWrite[]; removeLinks?: string[] },
     rationale: string,
   ): Promise<boolean> {
     busy = label;
@@ -253,19 +252,17 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
 
   const saveProps = (patch: Record<string, unknown>) => propose('edit', { props: patch }, `Edit ${stored?.key}`);
 
-  async function remove() {
-    if (!(await confirmDialog({ message: `Delete ${stored?.key} (${typeName}) when the change is applied? Links pointing to it become suspect.`, danger: true }))) return;
-    await propose('delete', { retire: true }, `Delete ${stored?.key}`);
-  }
-
-  async function undoDelete() {
-    const rid = row?.removal?.id;
-    if (!rid || !workId) return;
-    busy = 'delete';
+  /** Takes the node out of the working change: its working version is dropped; refused once a version of it is
+   * checked in (reject it instead). A node is never deleted (ADR 0076). */
+  async function removeFromWork() {
+    const imp = row?.impact;
+    if (!imp?.id || !workId) return;
+    if (!(await confirmDialog({ message: `Take ${stored?.key ?? row?.node.key} out of the working change? Its working version is dropped.`, danger: true }))) return;
+    busy = 'remove';
     error = '';
     try {
-      await graph.reviewChangeImpact(workId, rid, false, 'keep the node', workFlow);
-      await loadWork();
+      await removeFromChange(workId, imp, workFlow);
+      await Promise.all([loadWork(), loadNode()]);
       reload++;
     } catch (e) {
       error = errorMessage(e);
@@ -313,7 +310,6 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
       <span class="hint" title="the version the working change wrote; the released one is v{stored?.version ?? '—'}">v{row.impact.post.version} in the change</span>
     {:else if stored?.version}<span class="hint">v{stored.version}</span>{/if}
     {#if stored?.deleted}<span class="tag bad">deleted</span>{/if}
-    {#if removed}<span class="tag bad" title="Deletion proposed in the working change">deleted when applied</span>{/if}
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
 
@@ -345,14 +341,12 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
               <h3>Properties</h3>
               <span class="grow"></span>
               {#if !editing}
-                <button type="button" class="small primary" disabled={!editable || removed || busy !== '' || stored.deleted} onclick={() => (editing = true)} title={editable ? 'Edit in the working change' : 'Reopen the node to edit it'}>Edit</button>
+                <button type="button" class="small primary" disabled={!editable || busy !== '' || stored.deleted} onclick={() => (editing = true)} title={editable ? 'Edit in the working change' : 'Reopen the node to edit it'}>Edit</button>
                 {#each reopens as t (t.name)}
                   <button type="button" class="small" disabled={busy !== ''} title={`${t.name}: ${t.from} → ${t.to}`} onclick={() => transition(t)}>Reopen → {t.to}</button>
                 {/each}
-                {#if removed}
-                  <button type="button" class="small" disabled={busy !== ''} onclick={undoDelete}>Undo delete</button>
-                {:else if !stored.deleted}
-                  <button type="button" class="small danger" disabled={!editable || busy !== ''} title={editable ? 'Delete when the change is applied' : 'Reopen the node to delete it'} onclick={remove}>Delete</button>
+                {#if inChange && row?.impact?.id && !row.impact.superseded}
+                  <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change (refused once a version of it is checked in: reject it instead)" onclick={removeFromWork}>Remove from change</button>
                 {/if}
               {/if}
             </div>
@@ -397,8 +391,8 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
             node={stored}
             links={outLinks}
             index={work?.index ?? head}
-            readonly={!editable || removed || !!stored.deleted}
-            why={stored.deleted || removed ? 'The node is deleted.' : `${stored.key} is ${nodeState}, not an editable state: reopen it (Details) to change its links.`}
+            readonly={!editable || !!stored.deleted}
+            why={stored.deleted ? 'The node is deleted.' : `${stored.key} is ${nodeState}, not an editable state: reopen it (Details) to change its links.`}
             busy={busy !== ''}
             onadd={addLink}
             onremove={removeLink}
@@ -434,7 +428,7 @@ import { declaredProperties, isReopen, lifecycleResolver, lifecycleRows, loadPos
                 {nodeState ? `${stored.key} is ${nodeState}${row?.moves.length ? ` in the working change (stored: ${stored.state || 'none'})` : ''}.` : `${stored.key} has no state yet.`}
                 Moving a node happens in a change: the transitions below are proposed in the working change.
               </p>
-              <LifecycleDiagram {lifecycle} current={nodeState || lifecycle.initial || ''} stored={stored.state ?? ''} busy={busy !== ''} disabled={removed || !!stored.deleted} onmove={transition} />
+              <LifecycleDiagram {lifecycle} current={nodeState || lifecycle.initial || ''} stored={stored.state ?? ''} busy={busy !== ''} disabled={!!stored.deleted} onmove={transition} />
             </section>
           {/if}
         {:else if active === 'history'}

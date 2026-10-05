@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
-import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, ImpactWrite, MergePlan, OptionComparison, Resolution } from './types/engine';
+import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, LinkWrite, MergePlan, OptionComparison, Resolution } from './types/engine';
 import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
@@ -179,10 +179,55 @@ export const graph = {
   /** Declare the nodes a change acts on (an impact: pre, intent, rationale). */
   addChangeImpacts: (changeId: string, nodes: ChangeImpact[]) =>
     rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'AddChangeImpacts', { changeId, nodes }),
-  /** Write the next version of a change impact's node on the change branch. */
-  /** addLinks / removeLinks: links of the new version (removeLinks by link id, from the version written before). */
-  writeChangeImpact: (changeId: string, changeImpactId: string, w: ImpactWrite, flow = '') =>
-    rpc<ImpactWrite & { changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'WriteChangeImpact', { changeId, changeImpactId, ...w, flow }),
+  // The node operations of a change (ADR 0076): a node is created or checked out in a change (a working version),
+  // edited in place (properties, owner, outgoing links), checked in once its review is accepted (frozen), moved along
+  // its lifecycle from a checked-in version (a version of its own). flow: the flow or option written on ('main' names
+  // the main flow, '' is the active option).
+  /** Creates a node in a change: the impact (intent created) and its first version, checked out. */
+  createNode: (changeId: string, n: { key: string; type: string; props?: Struct; owner?: string; rationale: string; links?: LinkWrite[] }, flow = '') =>
+    rpc<typeof n & { changeId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'CreateNode', { changeId, ...n, flow }),
+  /** Checks out a node (by its impact, or by the node: the impact is declared) for editing: a new working version. */
+  checkoutNode: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, rationale = '', flow = '') =>
+    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'CheckoutNode', { changeId, ...target, rationale, flow }),
+  /** Merges properties into (and transfers the owner of) a checked-out working version, in place. */
+  updateNode: (changeId: string, changeImpactId: string, u: { props?: Struct; owner?: string }, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; props?: Struct; owner?: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'UpdateNode', { changeId, changeImpactId, ...u, flow }),
+  /** Adds an outgoing link to a checked-out working version, in place. */
+  createLink: (changeId: string, changeImpactId: string, l: LinkWrite, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; type: string; to: NodeRef; props?: Struct; flow: string }, { link?: Link }>(GRAPH, 'CreateLink', {
+      changeId,
+      changeImpactId,
+      type: l.type,
+      to: l.to,
+      props: l.props,
+      flow,
+    }),
+  updateLink: (changeId: string, linkId: string, props: Struct, flow = '') =>
+    rpc<{ changeId: string; linkId: string; props: Struct; flow: string }, { link?: Link }>(GRAPH, 'UpdateLink', { changeId, linkId, props, flow }),
+  /** Removes an outgoing link of a checked-out working version (removing a child is a modification of its parent). */
+  deleteLink: (changeId: string, linkId: string, flow = '') =>
+    rpc<{ changeId: string; linkId: string; flow: string }, Empty>(GRAPH, 'DeleteLink', { changeId, linkId, flow }),
+  /** Freezes the working version of an impact: its accepted review authorizes it. */
+  checkinNode: (changeId: string, changeImpactId: string, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'CheckinNode', { changeId, changeImpactId, flow }),
+  /** Moves a checked-in node along its lifecycle (by its impact, or by the node: the impact is declared). */
+  transitionNode: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, state: string, rationale = '', flow = '') =>
+    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; state: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'TransitionNode', {
+      changeId,
+      ...target,
+      state,
+      rationale,
+      flow,
+    }),
+  /** Drops the working version of an impact (a creation never checked in leaves no node). */
+  cancelCheckout: (changeId: string, changeImpactId: string, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'CancelCheckout', { changeId, changeImpactId, flow }),
+  /** Takes an impact out of the change (its working version is dropped); refused once a version of it is checked in. */
+  removeChangeImpact: (changeId: string, changeImpactId: string, flow = '') =>
+    rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'RemoveChangeImpact', { changeId, changeImpactId, flow }),
+  /** Sends accepted or rejected impacts back to proposed (a rejected one is reworked); the comment is mandatory. */
+  reopenChangeImpacts: (changeId: string, changeImpactIds: string[], comment: string) =>
+    rpc<{ changeId: string; changeImpactIds: string[]; comment: string }, { reopened?: string[] }>(GRAPH, 'ReopenChangeImpacts', { changeId, changeImpactIds, comment }),
   /** Accept or reject a change impact; the comment is mandatory. */
   /** flow: the flow or option the review is made on ('main' names the main flow; '' is the active option). */
   reviewChangeImpact: (changeId: string, changeImpactId: string, accept: boolean, comment: string, flow = '') =>
@@ -190,8 +235,8 @@ export const graph = {
   /** The change as a flow or an option sees it: its change impacts (with the post versions of that flow) and items. */
   getBlackboard: (changeId: string, flow: string, signal?: AbortSignal) =>
     rpc<{ changeId: string; flow: string }, { change?: Change; options?: Flow[]; activeOption?: string; decisionPoints?: DecisionPoint[] }>(GRAPH, 'GetBlackboard', { changeId, flow }, signal),
-  /** Create a change, write the edits on its branch, accept them and apply it (one call). */
-  commitEdits: (req: { namespace: string; title: string; intent: string; baselineId: string; edits: NodeEdit[] }) =>
+  /** Create a change, write the edits on its branch, accept and check them in and apply it (one call). */
+  commitEdits: (req: { namespace: string; title: string; intent: string; baselineId: string; methodology?: string; edits: NodeEdit[] }) =>
     rpc<typeof req, { changeId?: string }>(GRAPH, 'CommitEdits', req),
   addItems: (changeId: string, items: ChangeItem[]) =>
     rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(GRAPH, 'AddItems', { changeId, items }),
@@ -203,12 +248,6 @@ export const graph = {
       processIds.length ? { changeId, processIds } : { changeId },
       signal,
     ),
-  /** Creates a data node typed by a NodeType of the methodology (published, synced on the graph). */
-  createObject: (methodology: string, nodeType: string, key: string, props: Struct) =>
-    rpc<
-      { methodology: string; nodeType: string; key: string; props: Struct },
-      { node?: GraphNode; baseline?: Baseline }
-    >(GRAPH, 'CreateObject', { methodology, nodeType, key, props }),
   /** Removes a change that landed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
   deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DeleteChange', { changeId }),
   applyChange: (changeId: string, baselineName: string) =>

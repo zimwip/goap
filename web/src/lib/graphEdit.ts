@@ -4,9 +4,16 @@ import { MAIN_BRANCH } from './namespace';
 
 export interface HeadGraph {
   baselineId: string;
+  /** the nodes in force, and the links between them */
   nodes: GraphNode[];
   links: Link[];
+  /** the nodes their lifecycle retired (never deleted, ADR 0076): an edit of one restores it */
+  retired: GraphNode[];
 }
+
+/** The state a node no parent holds is retired in, and the one it is restored to (lifecycle config, ADR 0076). */
+export const RETIRED = 'retired';
+export const ACTIVE = 'active';
 
 /** The graph at the head of a namespace's main (the base of every change applied on it). */
 export async function headGraph(namespace: string): Promise<HeadGraph> {
@@ -14,13 +21,22 @@ export async function headGraph(namespace: string): Promise<HeadGraph> {
   const id = b.head?.id ?? b.branch?.head;
   if (!id) throw new Error(`${namespace} main has no baseline yet`);
   const g = await graph.getBaselineGraph(id);
-  return { baselineId: id, nodes: g.nodes ?? [], links: g.links ?? [] };
+  const all = g.nodes ?? [];
+  const retired = all.filter((n) => n.state === RETIRED);
+  const gone = new Set(retired.map((n) => n.id));
+  return {
+    baselineId: id,
+    nodes: all.filter((n) => !gone.has(n.id)),
+    links: (g.links ?? []).filter((l) => !gone.has(l.from?.id) && !gone.has(l.to?.id)),
+    retired,
+  };
 }
 
 export const refOf = (n: GraphNode): NodeRef => ({ id: n.id, version: n.version });
 
+/** The node of a key, in force or retired (an edit of a retired node restores it). */
 export const findNode = (h: HeadGraph, namespace: string, type: string, key: string): GraphNode | undefined =>
-  h.nodes.find((n) => n.namespace === namespace && n.type === type && n.key === key);
+  [...h.nodes, ...h.retired].find((n) => n.namespace === namespace && n.type === type && n.key === key);
 
 /** Commits node edits on main as one change of `namespace`; returns the id of the applied change. */
 export async function applyOnMain(namespace: string, title: string, intent: string, baselineId: string, edits: NodeEdit[]): Promise<string> {
@@ -37,16 +53,20 @@ export const createNodeItem = (key: string, type: string, props: Struct, links: 
   ...(links.length ? { links } : {}),
 });
 
+/** Updates a node; a retired one is restored first (ADR 0076). */
 export const updateNodeItem = (n: GraphNode, props: Struct): NodeEdit => ({
   pre: refOf(n),
   props,
   rationale: `Update ${n.key}`,
+  ...(n.state === RETIRED ? { state: ACTIVE } : {}),
 });
 
-export const deleteNodeItem = (n: GraphNode): NodeEdit => ({
+/** Retires a node no parent holds (an adapter, a policy, an assignment, an MCP...): it is never deleted, its
+ * lifecycle takes it out of force (ADR 0076 §4c). */
+export const retireNodeItem = (n: GraphNode): NodeEdit => ({
   pre: refOf(n),
-  retire: true,
-  rationale: `Delete ${n.key}`,
+  state: RETIRED,
+  rationale: `Retire ${n.key}`,
 });
 
 /** The current outgoing link of `type` from `n`, if any (its single parent/membership link, ADR 0040). */

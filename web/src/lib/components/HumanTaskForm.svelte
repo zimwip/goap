@@ -21,6 +21,7 @@
     nodeTypeNames,
     reopenable,
     writeNodeInChange,
+    removeFromChange,
     type LifecycleRow,
     type PostVersions,
   } from '../lifecycle';
@@ -111,7 +112,7 @@
   ]);
 
   /** Writes a node of this change through its change impact (mirrors ChangeTab's own `write`). */
-  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string; retire?: boolean }, rationale: string): Promise<boolean> {
+  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string }, rationale: string): Promise<boolean> {
     if (!changeId) return false;
     moving = label;
     error = '';
@@ -141,31 +142,14 @@
     return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
   }
 
+  /** Takes a node out of the change: its working version is dropped (a node the change creates goes away); refused
+   * once a version of it is checked in (reject it instead, ADR 0076). */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
-    if (!changeId) return false;
-    if (row.created?.id) {
-      moving = `${row.node.id}:delete`;
-      error = '';
-      try {
-        await graph.reviewChangeImpact(changeId, row.created.id, false, `discarded ${row.node.key}`);
-        await reload(changeId);
-        return true;
-      } catch (e) {
-        error = errorMessage(e);
-        return false;
-      } finally {
-        moving = '';
-      }
-    }
-    return write(`${row.node.id}:delete`, { pre: { id: row.node.id, version: row.node.version } }, { retire: true }, `delete ${row.node.key}`);
-  }
-
-  async function undoDelete(row: LifecycleRow): Promise<boolean> {
-    if (!changeId || !row.removal?.id) return false;
-    moving = `${row.node.id}:delete`;
+    if (!changeId || !row.impact?.id) return false;
+    moving = `${row.node.id}:remove`;
     error = '';
     try {
-      await graph.reviewChangeImpact(changeId, row.removal.id, false, `keep ${row.node.key}`);
+      await removeFromChange(changeId, row.impact);
       await reload(changeId);
       return true;
     } catch (e) {
@@ -175,6 +159,7 @@
       moving = '';
     }
   }
+
 
   /** a change impact awaiting a decision: written directly, on the main flow, not replaced */
   const isPending = (n: ChangeImpact) => n.review === 'proposed' && !n.flow && !n.superseded;
@@ -331,7 +316,6 @@
       keys={takenKeys}
       oncreate={createNode}
       onremove={removeNode}
-      onundo={undoDelete}
       onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
       onopennode={(r) => openNode(r.node, { pin: true, change: changeId })}
       onadd={(id) => (extraNodes = [...extraNodes, id])}

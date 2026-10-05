@@ -1,5 +1,5 @@
 name: organisation
-version: 1.12.0
+version: 1.13.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
@@ -45,6 +45,7 @@ nodeTypes:
   - name: Adapter
     description: "Instance, by an organisational unit, of an adapter definition, or a restriction of an MCP"
     adminOnly: true
+    lifecycle: config
     editor: unit
     attributes:
       - {name: mcp, label: MCP, description: "MCP the adapter implements or restricts", type: string, section: Identity, order: 1, asName: true}
@@ -83,6 +84,7 @@ nodeTypes:
   - name: Policy
     description: "ABAC rule"
     adminOnly: true
+    lifecycle: config
     editor: access
     attributes:
       - {name: rule, label: Rule, description: "Expression over the subject, object and action", type: string, widget: textarea, section: Identity, order: 1}
@@ -98,6 +100,7 @@ nodeTypes:
   - name: CriticalityPolicy
     description: "What a criticality level requires of the changes of a unit"
     adminOnly: true
+    lifecycle: config
     attributes:
       - {name: level, label: Level, description: "Criticality level the policy is about", type: enum, enum: criticality-level, section: Identity, order: 1, asName: true}
       - {name: oracles, label: "Accepted oracles", description: "Kinds of oracle accepted to verify an effect (tool, human, model); empty: any", type: json, widget: textarea, section: Verification, order: 2}
@@ -145,11 +148,24 @@ nodeTypes:
   - name: Assignment
     description: "Roles an organisational unit or user locally holds on a project, or platform-wide when it names no project"
     adminOnly: true
+    lifecycle: config
     editor: assignment
     attributes:
       - {name: roles, label: Roles, description: "Roles the unit or user holds on the project (platform roles when no project)", type: json, widget: textarea, section: Identity, order: 1}
       - {name: description, label: Description, description: "Why the assignment exists", type: string, widget: textarea, section: Identity, order: 2}
 lifecycles:
+  # A node no parent holds (an adapter instance, a policy, an assignment) is never deleted (ADR 0076 §4c): it is
+  # retired, and its readers leave it out (pkg/access, the MCP hub); an active one stays editable at rest.
+  - name: config
+    description: Whether an access or adapter entry is in force
+    initial: active
+    restInEditable: true
+    states:
+      - {name: active, editable: true, description: "In force"}
+      - {name: retired, description: "Taken out of force; read-only until restored"}
+    transitions:
+      - {name: retire, description: Take the entry out of force, from: active, to: retired}
+      - {name: restore, description: Put a retired entry back in force, from: retired, to: active}
   # ADR 0048: active and deactivated are both ordinary resting statuses (restInEditable), not a review draft —
   # a User's profile stays freely editable while active, the way it always has; only a deactivated account is
   # frozen (not editable) until an admin reactivates it. proposed exists only to carry a brand-new account

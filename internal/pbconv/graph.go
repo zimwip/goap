@@ -85,7 +85,7 @@ func NodeToPB(n domain.Node) *graphv1.Node {
 		Deleted: n.Deleted, ChangeId: string(n.ChangeID), CreatedAt: Time(n.CreatedAt),
 		Branch: domain.BranchOf(n.Branch), Parents: versionsToPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: string(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: string(n.Owner), Project: string(n.Project)}
+		Owner: string(n.Owner), Project: string(n.Project), CheckedOut: n.CheckedOut}
 }
 
 func versionsToPB(vs []domain.Version) []int32 {
@@ -104,7 +104,7 @@ func NodeFromPB(n *graphv1.Node) domain.Node {
 		Deleted: n.Deleted, ChangeID: domain.ChangeID(n.ChangeId), CreatedAt: FromTime(n.CreatedAt),
 		Branch: n.Branch, Parents: versionsFromPB(n.Parents), Reason: n.Reason, State: n.State,
 		ChangeImpact: domain.ChangeImpactID(n.ChangeImpact), Comment: n.Comment, Execution: n.Execution, Joined: n.Joined,
-		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project)}
+		Owner: domain.NodeID(n.Owner), Project: domain.NodeID(n.Project), CheckedOut: n.CheckedOut}
 }
 
 func versionsFromPB(vs []int32) []domain.Version {
@@ -332,7 +332,7 @@ func ChangeImpactsFromPB(cns []*graphv1.ChangeImpact) []domain.ChangeImpact {
 func EditsToPB(edits []graph.NodeEdit) []*graphv1.NodeEdit {
 	out := make([]*graphv1.NodeEdit, len(edits))
 	for i, e := range edits {
-		pe := &graphv1.NodeEdit{Key: e.Key, Type: e.Type, Pre: RefPtrToPB(e.Pre), Props: Struct(e.Props), Rationale: e.Rationale, Owner: e.Owner}
+		pe := &graphv1.NodeEdit{Key: e.Key, Type: e.Type, Pre: RefPtrToPB(e.Pre), Props: Struct(e.Props), Rationale: e.Rationale, Owner: e.Owner, State: e.State}
 		for _, l := range e.Links {
 			pe.Links = append(pe.Links, &graphv1.LinkEdit{Type: l.Type, To: RefPtrToPB(l.To), ToKey: l.ToKey, Props: Struct(l.Props)})
 		}
@@ -347,7 +347,7 @@ func EditsToPB(edits []graph.NodeEdit) []*graphv1.NodeEdit {
 func EditsFromPB(edits []*graphv1.NodeEdit) []graph.NodeEdit {
 	out := make([]graph.NodeEdit, len(edits))
 	for i, pe := range edits {
-		e := graph.NodeEdit{Key: pe.Key, Type: pe.Type, Pre: RefPtrFromPB(pe.Pre), Props: Map(pe.Props), Rationale: pe.Rationale, Owner: pe.Owner}
+		e := graph.NodeEdit{Key: pe.Key, Type: pe.Type, Pre: RefPtrFromPB(pe.Pre), Props: Map(pe.Props), Rationale: pe.Rationale, Owner: pe.Owner, State: pe.State}
 		for _, l := range pe.Links {
 			e.Links = append(e.Links, graph.LinkEdit{Type: l.Type, To: RefPtrFromPB(l.To), ToKey: l.ToKey, Props: Map(l.Props)})
 		}

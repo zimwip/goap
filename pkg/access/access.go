@@ -160,6 +160,7 @@ type assignment struct {
 // BuildSnapshot reads the users and policies of a baseline graph of the namespace of the structures st: the units and
 // projects are the nodes of their types (and subtypes), their hierarchies the parent links st names (ADR 0054).
 func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+	nodes, links = InForce(nodes, links)
 	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links)}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
