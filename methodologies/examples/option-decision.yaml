@@ -5,10 +5,12 @@ description: >
   the decider rules it; when it cannot decide it says why and asks questions, an analyst sub-agent investigates
   each question (identification picks it from the question), and the decider comes back to the decision. A ruling
   below the confidence threshold waits for a person's ratification. The decider here is a script standing in for
-  an LLM action; the platform conditions (decision_ready, open_questions, no_decision_pending...) need no
-  declaration.
+  an LLM action; the conditions of the `decisions` library (decision_ready, open_questions,
+  no_decision_pending...) are imported, not declared.
 
 namespace: alm
+
+imports: [decisions]
 
 conditions:
   - name: decision_opened

@@ -79,7 +79,7 @@ open | blocked | decided, decider, justification}`.
 
 - The decider (human, or agent with human ratification depending on the methodology) can answer
   **"undecidable"** with a **why**: this creates `question` items (open) on the blackboard.
-- Platform conditions: `open_questions` / `no_open_questions`. The decision action requires
+- Conditions of the `decisions` library (ADR 0064): `open_questions` / `no_open_questions`. The decision action requires
   `no_open_questions`; a generic `investigate` action has the effect of answering questions: it
   launches a **sub-agent** whose intent is the question — identification picks the suitable analysis
   agent, in this methodology or another (multi-methodology axis).
@@ -144,9 +144,10 @@ The change then continues toward its application or its release.
   person's ratification (refusing it counts as a round); after `maxRounds` rulings that did not settle the point,
   or past its deadline, it is escalated and only a person rules it. A decided point selects its option (§5);
   `Apply` refuses a change with a pending decision. The CEL variables `options`, `activeOption`, `decisionPoints`,
-  `questions`, and the platform conditions `open_questions` / `no_open_questions` (with `decision_ready`,
+  `questions`, and the conditions `open_questions` / `no_open_questions` (with `decision_ready`,
   `decision_pending`, `no_decision_pending`, `ratification_pending`, `decision_escalated`, `options_open`,
-  `options_evaluated`, `option_selected`) known to every methodology without a declaration. The generic
+  `options_evaluated`, `option_selected`) of the `decisions` library, which a methodology imports (ADR 0064, it was
+  first known to every methodology). The generic
   `investigate` action is the builtin `decision.investigate`: one sub-agent per open question, whose intent is the
   question, identified among every methodology (the multi-methodology axis); its outcome answers the question.
   Actions rule through items of kind `decisionPoint`; a human task's ruling is a person's.

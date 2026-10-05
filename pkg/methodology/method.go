@@ -326,7 +326,6 @@ type Subscription struct {
 var DefaultSubscriptions = []Subscription{
 	{Event: events.ProcessAttached},
 	{Event: events.StepCompleted},
-	{Event: events.ChangeItemAdded, Filter: `event.items.exists(i, i.kind == "risk" || i.kind == "action")`},
 }
 
 // Subscriptions returns the events the methodology reacts to (its own, or the default ones).

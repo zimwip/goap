@@ -2074,10 +2074,12 @@ type Methodology struct {
 	Roles []*Role `protobuf:"bytes,20,rep,name=roles,proto3" json:"roles,omitempty"`
 	// transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3)
 	AppliesTo []string `protobuf:"bytes,21,rep,name=applies_to,json=appliesTo,proto3" json:"applies_to,omitempty"`
-	// the events of those changes it reacts to (default: a process attached, a step completed, a risk or an action added)
+	// the events of those changes it reacts to (default: a process attached, a step completed)
 	On []*Subscription `protobuf:"bytes,22,rep,name=on,proto3" json:"on,omitempty"`
 	// the lifecycle of the domain its changes follow (ADR 0058); empty: none
-	Lifecycle     string `protobuf:"bytes,23,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	Lifecycle string `protobuf:"bytes,23,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	// the condition libraries it imports (ADR 0064): decisions, risks
+	Imports       []string `protobuf:"bytes,24,rep,name=imports,proto3" json:"imports,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2243,6 +2245,13 @@ func (x *Methodology) GetLifecycle() string {
 		return x.Lifecycle
 	}
 	return ""
+}
+
+func (x *Methodology) GetImports() []string {
+	if x != nil {
+		return x.Imports
+	}
+	return nil
 }
 
 // An event a transverse methodology reacts to, with a CEL filter over event ({type, change, process, step, items}).
@@ -7378,7 +7387,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x05 \x01(\x01R\x05value\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x87\a\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xa1\a\n" +
 	"\vMethodology\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -7405,7 +7414,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"applies_to\x18\x15 \x03(\tR\tappliesTo\x12.\n" +
 	"\x02on\x18\x16 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x12\x1c\n" +
-	"\tlifecycle\x18\x17 \x01(\tR\tlifecycleJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
+	"\tlifecycle\x18\x17 \x01(\tR\tlifecycle\x12\x18\n" +
+	"\aimports\x18\x18 \x03(\tR\aimportsJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
 	"node_typesR\n" +
 	"link_typesR\n" +
 	"domain_refR\n" +

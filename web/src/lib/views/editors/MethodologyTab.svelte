@@ -176,6 +176,10 @@
           <textarea id="m-desc" rows="3" bind:value={f.description} class:bad={d.bad('description')} data-path="description"
           ></textarea>
         </div>
+        <div class="field">
+          <label for="m-imports">Condition libraries <span class="opt">(imported, comma separated: decisions, risks)</span></label>
+          <input id="m-imports" type="text" class="mono" bind:value={f.imports} disabled={d.readonly} class:bad={d.bad('imports')} data-path="imports" placeholder="risks" />
+        </div>
         {#if d.meta.updatedAt || d.meta.publishedAt}
           <p class="hint">
             {#if d.meta.createdAt}Created on {formatDate(d.meta.createdAt)}.{/if}
@@ -253,7 +257,7 @@
               <input id="m-applies" type="text" class="mono" bind:value={f.appliesTo} class:bad={d.bad('appliesTo')} data-path="appliesTo" placeholder="sdlc" />
             </div>
             {#if f.appliesTo.trim()}
-              <div class="label">Reacts to <span class="opt">(empty: a run attached, a step completed, a risk or an action added)</span></div>
+              <div class="label">Reacts to <span class="opt">(empty: a run attached, a step completed)</span></div>
               {#each f.on as sub, i (i)}
                 <div class="role-row" class:bad={d.bad(`on[${i}]`)}>
                   <select bind:value={sub.event} aria-label="Event" data-path="on[{i}].event">

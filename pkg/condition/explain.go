@@ -78,7 +78,7 @@ func (s *Set) Explain(name string, bb domain.Blackboard) (Explanation, bool) {
 	ex.Root = term(native.Expr(), native.SourceInfo(), det)
 	for _, v := range exprVariables(native.Expr()) {
 		if val, ok := act[v]; ok {
-			ex.Inputs[v] = text(val)
+			ex.Inputs[v] = text(Resolve(val))
 		}
 	}
 	return ex, true

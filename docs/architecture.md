@@ -226,11 +226,14 @@ Variables exposed to the expression:
 
 | `risks`, `actions` | the risk register and the actions of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): `{key, title, description, probability, impact, score, status, live, owner, actions, step, versions}` and `{key, title, status, owner, due, for, result, versions}`, the last version of each key |
 
-**Platform conditions**: every methodology knows `open_questions`, `no_open_questions`, `decision_ready` (a point
-can be ruled now), `decision_pending`, `no_decision_pending`, `ratification_pending`, `decision_escalated`,
-`options_open`, `options_evaluated`, `option_selected`, `open_risks`, `unmitigated_risks` (a live risk of score ≥ 9
-without an action), `risks_under_control`, `open_actions` and `no_open_actions` without declaring them (`condition.Platform`); a condition
-it declares under the same name replaces the platform one.
+**Condition libraries** ([ADR 0064](adr/0064-condition-libraries.md)): a methodology gets no condition it did not
+declare, except those of the libraries it imports (`imports: [decisions, risks]`, `condition.Library`). `decisions`:
+`open_questions`, `no_open_questions`, `decision_ready` (a point can be ruled now), `decision_pending`,
+`no_decision_pending`, `ratification_pending`, `decision_escalated`, `options_open`, `options_evaluated`,
+`option_selected`. `risks`: `open_risks`, `unmitigated_risks` (a live risk of score ≥ `condition.HighRisk`, 9, without
+an action), `risks_under_control`, `open_actions`, `no_open_actions`. A condition the methodology declares under the
+same name replaces the library one. The variables of the decision and risk concepts (`options`, `decisionPoints`,
+`questions`, `risks`, `actions`) are always in the environment, and computed only when an expression reads them.
 
 Each node reference of a change impact (`pre`, `post`, `landed`, link endpoints) is **hydrated**:
 `{id, version, key, type, props, out: [{type, to}], in: [{type, from}], latest}`. A condition can thus
@@ -524,7 +527,7 @@ every step of a process; a transverse methodology declares the events it reacts 
 companion run per change and process (`Trigger` = `companion:<methodology>/<process>`) runs again in place for each
 matching event, with the event in `vars.event` (items carry `at` to compare with `vars.event.at`), the events arriving
 while it works waiting in its inbox. Back the other way, through the state: a step may need what the transverse process
-establishes (`risks_under_control`): the process then **waits** for those conditions (`waiting`, task `condition`),
+establishes (`risks_under_control`, a condition of the `risks` library): the process then **waits** for those conditions (`waiting`, task `condition`),
 told from a genuinely **stuck** one (nothing established outside would unblock it, `Engine.awaited`); both are tried
 again when the change moves (`Engine.Accompany`, fed by the trigger manager's events). Neither is an end: a person who
 answers for the run (its initiator, the accountable role of its step, a member of its organisation) can always unblock

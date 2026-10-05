@@ -13,7 +13,7 @@ func TestOptionsAndDecisionsInConditions(t *testing.T) {
 		{Name: "on_b", Expr: `activeOption == "b" && options.exists(o, o.active && o.name == "adyen")`},
 		{Name: "fees_asked", Expr: `questions.exists(q, q.text.contains("fees") && q.status == "open")`},
 		{Name: "two_rounds_left", Expr: `decisionPoints.all(d, d.maxRounds - d.rounds == 2)`},
-	}, Platform...)
+	}, MustLibrary(LibraryDecisions)...)
 	s, err := Compile(defs)
 	if err != nil {
 		t.Fatal(err)

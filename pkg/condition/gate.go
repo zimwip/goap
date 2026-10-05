@@ -18,8 +18,8 @@ func CheckGuard(expr string, bb domain.Blackboard, world map[string]bool, transi
 	change, _ := act["change"].(map[string]any)
 	change["transition"], change["decision"] = transition, decision
 	f := guard.Facts{}
-	f.DecisionPoints, _ = act["decisionPoints"].([]any)
-	f.Actions, _ = act["actions"].([]any)
-	f.Risks, _ = act["risks"].([]any)
+	f.DecisionPoints, _ = Resolve(act["decisionPoints"]).([]any)
+	f.Actions, _ = Resolve(act["actions"]).([]any)
+	f.Risks, _ = Resolve(act["risks"]).([]any)
 	return gd.CheckChange(change, f, world)
 }

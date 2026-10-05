@@ -56,9 +56,12 @@ type Methodology struct {
 	// AppliesTo makes the methodology transverse (ADR 0036 §3): its processes run alongside the changes of these
 	// methodologies, on the same change. A transverse methodology acts in the namespace of the change.
 	AppliesTo []string `yaml:"appliesTo,omitempty" json:"appliesTo,omitempty"`
+	// Imports names the built-in condition libraries (condition.LibraryNames, ADR 0064) whose conditions the
+	// methodology uses without declaring them; a condition it declares under the same name wins. Nothing else is
+	// added to its conditions.
+	Imports []string `yaml:"imports,omitempty" json:"imports,omitempty"`
 	// On are the events of those changes a transverse methodology reacts to (ADR 0036 §3): each matching event runs its
-	// processes again, with the event in vars.event. Default: a process attached to the change, a step completed, a
-	// risk or an action added by someone else.
+	// processes again, with the event in vars.event. Default: a process attached to the change, a step completed.
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
@@ -361,11 +364,24 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 		}
 		defs = append(defs, d)
 	}
-	// the platform conditions (decision loops, options: ADR 0009 §4), unless the methodology declares its own
-	for _, d := range condition.Platform {
-		if !known[d.Name] {
-			known[d.Name] = true
-			defs = append(defs, d)
+	// the conditions of the libraries it imports (ADR 0064), unless the methodology declares its own
+	seenLib := map[string]bool{}
+	for i, name := range m.Imports {
+		lib, ok := condition.Library(name)
+		switch {
+		case !ok:
+			add(fmt.Sprintf("imports[%d]", i), "unknown condition library %q (one of %s)", name, strings.Join(condition.LibraryNames, ", "))
+			continue
+		case seenLib[name]:
+			add(fmt.Sprintf("imports[%d]", i), "library %s imported twice", name)
+			continue
+		}
+		seenLib[name] = true
+		for _, d := range lib {
+			if !known[d.Name] {
+				known[d.Name] = true
+				defs = append(defs, d)
+			}
 		}
 	}
 

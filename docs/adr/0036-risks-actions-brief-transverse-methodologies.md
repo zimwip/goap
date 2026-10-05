@@ -32,7 +32,7 @@ and in which run (ADR 0030).
 | risk | `key`, `title`, `description`, `probability` and `impact` (1–5), `score` (their product), `status` (`open`, `mitigating`, `accepted`, `occurred`, `closed`), `owner` (a role), `actions` (keys), `step` (where it was raised) |
 | action | `key`, `title`, `status` (`open`, `done`, `cancelled`), `owner` (a role), `due`, `for` (a risk key or a decision point id), `result` |
 
-- CEL sees `risks` and `actions` (the register); platform conditions `open_risks`, `unmitigated_risks` (an open risk of
+- CEL sees `risks` and `actions` (the register); the conditions of the `risks` library (ADR 0064) `open_risks`, `unmitigated_risks` (an open risk of
   score ≥ 9 with no open or done action), `risks_under_control`, `open_actions`, `no_open_actions`.
 - `goap-change` serves `risks`, `risk` (raise or update), `actions`, `action`; actions and people write them as items
   (`{"kind":"risk","data":{...}}`).
@@ -58,8 +58,9 @@ events of the change they share, and by its state.
 - **Events.** Besides the change and process events, the engine publishes `step.completed` when a step of a process
   completes (`{path, process, name, action, method}`), so another methodology can react to each step, asynchronously.
 - **Subscriptions.** A transverse methodology declares what it reacts to: `on: [{event, filter}]` (a CEL filter over
-  `event`: `{type, change, process, step, items}`); default: a process attached to the change, a step completed, a
-  risk or an action added by someone else. Its own productions never wake it.
+  `event`: `{type, change, process, step, items}`); default: a process attached to the change, a step completed (a
+  methodology that wants the risk register's events declares them, as `risk-management.yaml` does: `change.item_added`
+  filtered on the kind of the items; ADR 0064). Its own productions never wake it.
 - **One companion run per change and process**, run again in place for each matching event, with the event in
   `vars.event` (`id`, `at` in milliseconds, and what the event carries): its conditions and prompts work on *this*
   event — `risks_reviewed` holds when a review was written after it (`a.at >= vars.event.at`: items carry `at`), the

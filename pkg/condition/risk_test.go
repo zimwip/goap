@@ -7,7 +7,7 @@ import (
 )
 
 func TestRiskConditions(t *testing.T) {
-	set, err := Compile(Platform)
+	set, err := Compile(MustLibrary(LibraryRisks))
 	if err != nil {
 		t.Fatal(err)
 	}

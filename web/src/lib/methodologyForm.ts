@@ -356,6 +356,8 @@ export interface MethodologyForm {
   roles: RoleForm[];
   /** transverse: the methodologies it applies to, comma separated (ADR 0036 §3) */
   appliesTo: string;
+  /** the condition libraries it imports, comma separated (ADR 0064) */
+  imports: string;
   /** the events of their changes it reacts to */
   on: { event: string; filter: string }[];
 }
@@ -503,6 +505,7 @@ export function emptyForm(): MethodologyForm {
     methods: [],
     roles: [],
     appliesTo: '',
+    imports: '',
     on: [],
   };
 }
@@ -860,6 +863,7 @@ export function toForm(m: Methodology): MethodologyForm {
     })),
     roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '' })),
     appliesTo: (m.appliesTo ?? []).join(', '),
+    imports: (m.imports ?? []).join(', '),
     on: (m.on ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '' })),
   };
 }
@@ -1186,6 +1190,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
     }),
   );
   put(m, 'appliesTo', csv(f.appliesTo));
+  put(m, 'imports', csv(f.imports));
   put(
     m,
     'on',
