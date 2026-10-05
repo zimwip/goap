@@ -67,8 +67,6 @@ func sqliteErr(err error, what string) error {
 	return err
 }
 
-const sqliteNodeCols = `n.id, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact, v.comment, v.execution, v.owner_id, n.project_id`
-
 type scanner interface{ Scan(dest ...any) error }
 
 func sqliteScanNode(row scanner) (domain.Node, error) {
@@ -112,26 +110,28 @@ func (t *sqliteTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, e
 	if ref.Version == 0 {
 		return t.LatestOn(ctx, ref.ID, domain.MainBranch)
 	}
-	q := `SELECT ` + sqliteNodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = ?`
-	n, err := sqliteScanNode(t.tx.QueryRowContext(ctx, q, string(ref.ID), int(ref.Version)))
+	q, args := dialectSQLite.sqlNode(ref)
+	n, err := sqliteScanNode(t.tx.QueryRowContext(ctx, q, args...))
 	return n, sqliteErr(err, "node "+ref.String())
 }
 
 func (t *sqliteTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error) {
-	q := `SELECT ` + sqliteNodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND ` + sqliteOnBranch + ` ORDER BY v.version DESC LIMIT 1`
-	n, err := sqliteScanNode(t.tx.QueryRowContext(ctx, q, string(id), domain.BranchOf(branch), domain.BranchOf(branch)))
+	q, args := dialectSQLite.sqlLatestOn(id, branch)
+	n, err := sqliteScanNode(t.tx.QueryRowContext(ctx, q, args...))
 	return n, sqliteErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
 }
 
 func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error) {
-	out, err := t.nodes(ctx, `SELECT `+sqliteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? ORDER BY v.version`, string(id))
+	q, args := dialectSQLite.sqlVersions(id)
+	out, err := t.nodes(ctx, q, args...)
 	if err == nil && len(out) == 0 {
 		err = fmt.Errorf("node %s: %w", id, ErrNotFound)
 	}
 	if err != nil {
 		return out, err
 	}
-	rows, err := t.tx.QueryContext(ctx, `SELECT version, branch FROM node_branch WHERE node_id = ? ORDER BY branch`, string(id))
+	q, args = dialectSQLite.sqlVersionBranches(id)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return out, err
 	}
@@ -149,12 +149,6 @@ func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Nod
 	return out, rows.Err()
 }
 
-// sqliteOnBranch selects the versions v that are part of a branch (two parameters, the branch twice): written
-// there, or joined (ADR 0032).
-const sqliteOnBranch = `(v.branch = ? OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = ?))`
-
-const sqliteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description, intent`
-
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
@@ -164,12 +158,14 @@ func sqliteScanBranch(row scanner) (domain.Branch, error) {
 }
 
 func (t *sqliteTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
-	b, err := sqliteScanBranch(t.tx.QueryRowContext(ctx, `SELECT `+sqliteBranchCols+` FROM branch WHERE namespace = ? AND name = ?`, domain.NamespaceOf(namespace), name))
+	q, args := dialectSQLite.sqlBranch(namespace, name)
+	b, err := sqliteScanBranch(t.tx.QueryRowContext(ctx, q, args...))
 	return b, sqliteErr(err, "branch "+name)
 }
 
 func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Branch, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT `+sqliteBranchCols+` FROM branch WHERE namespace = ? ORDER BY created_at, rowid`, domain.NamespaceOf(namespace))
+	q, args := dialectSQLite.sqlBranches(namespace)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +191,8 @@ func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 
 func (t *sqliteTx) NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error) {
 	var id string
-	if err := t.tx.QueryRowContext(ctx, `SELECT id FROM node WHERE namespace = ? AND key = ?`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
+	q, args := dialectSQLite.sqlNodeIDByKey(namespace, key)
+	if err := t.tx.QueryRowContext(ctx, q, args...).Scan(&id); err != nil {
 		return "", sqliteErr(err, "node key "+key)
 	}
 	return domain.NodeID(id), nil
@@ -203,7 +200,8 @@ func (t *sqliteTx) NodeIDByKey(ctx context.Context, namespace, key string) (doma
 
 func (t *sqliteTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
 	var id string
-	if err := t.tx.QueryRowContext(ctx, `SELECT id FROM node WHERE namespace = ? AND key = ?`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
+	q, args := dialectSQLite.sqlNodeIDByKey(namespace, key)
+	if err := t.tx.QueryRowContext(ctx, q, args...).Scan(&id); err != nil {
 		return domain.Node{}, sqliteErr(err, "node key "+key)
 	}
 	return t.LatestOn(ctx, domain.NodeID(id), domain.MainBranch)
@@ -213,14 +211,13 @@ func (t *sqliteTx) NodesIn(ctx context.Context, baseline domain.BaselineID, node
 	if _, err := t.Baseline(ctx, baseline); err != nil {
 		return nil, err
 	}
-	return t.nodes(ctx, baselineEntriesSQL("?")+` SELECT `+sqliteNodeCols+` FROM eff e JOIN node n ON n.id = e.node_id
-	      JOIN node_version v ON v.node_id = e.node_id AND v.version = e.version
-	      WHERE e.rn = 1 AND NOT e.removed AND (? = '' OR n.type = ?) ORDER BY n.key`, string(baseline), nodeType, nodeType)
+	q, args := dialectSQLite.sqlNodesIn(baseline, nodeType)
+	return t.nodes(ctx, q, args...)
 }
 
 func (t *sqliteTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
 	ns, br := domain.NamespaceOf(namespace), domain.BranchOf(branch)
-	return t.nodes(ctx, `SELECT `+sqliteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id
+	return t.nodes(ctx, `SELECT `+dialectSQLite.nodeCols()+nodeFrom+`
 		WHERE n.namespace = ? AND v.version = (SELECT max(version) FROM (
 		  SELECT version FROM node_version WHERE node_id = n.id AND branch = ?
 		  UNION ALL SELECT version FROM node_branch WHERE node_id = n.id AND branch = ?))
@@ -231,9 +228,9 @@ func (t *sqliteTx) Namespaces(ctx context.Context) ([]string, error) {
 	return t.ids(ctx, `SELECT DISTINCT namespace FROM node ORDER BY namespace`)
 }
 
-func (t *sqliteTx) links(ctx context.Context, where string, ref domain.NodeRef) ([]domain.Link, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE `+where+` ORDER BY id`,
-		string(ref.ID), int(ref.Version))
+func (t *sqliteTx) links(ctx context.Context, leaving bool, ref domain.NodeRef) ([]domain.Link, error) {
+	q, args := dialectSQLite.sqlLinks(leaving, ref)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, sqliteErr(err, "links")
 	}
@@ -256,11 +253,11 @@ func (t *sqliteTx) links(ctx context.Context, where string, ref domain.NodeRef) 
 }
 
 func (t *sqliteTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, "from_id = ? AND from_version = ?", ref)
+	return t.links(ctx, true, ref)
 }
 
 func (t *sqliteTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, "to_id = ? AND to_version = ?", ref)
+	return t.links(ctx, false, ref)
 }
 
 func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
@@ -277,7 +274,8 @@ func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.B
 	if b.Gap > 0 {
 		return b, nil // only the header is stored
 	}
-	rows, err := t.tx.QueryContext(ctx, baselineEntriesSQL("?")+` SELECT node_id, version FROM eff WHERE rn = 1 AND NOT removed`, string(id))
+	q, args := dialectSQLite.sqlBaselineEntries(id)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return b, err
 	}
@@ -311,7 +309,8 @@ func (t *sqliteTx) ids(ctx context.Context, q string, args ...any) ([]string, er
 }
 
 func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
-	ids, err := t.ids(ctx, `SELECT id FROM baseline WHERE namespace = ? ORDER BY created_at, rowid`, domain.NamespaceOf(namespace))
+	q, args := dialectSQLite.sqlBaselineIDs(namespace)
+	ids, err := t.ids(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +348,7 @@ func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Chang
 }
 
 func (t *sqliteTx) Changes(ctx context.Context) ([]domain.Change, error) {
-	ids, err := t.ids(ctx, `SELECT id FROM change ORDER BY created_at, rowid`)
+	ids, err := t.ids(ctx, dialectSQLite.sqlChangeIDs())
 	if err != nil {
 		return nil, err
 	}
@@ -383,15 +382,14 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents = []domain.Version{}
 	}
 	pj, _ := json.Marshal(parents)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
 		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)))
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
 func (t *sqliteTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
-	res, err := t.tx.ExecContext(ctx, `UPDATE node_version SET props = ? WHERE node_id = ? AND version = ?`, string(jsonb(props)), string(ref.ID), int(ref.Version))
+	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeProps(), string(ref.ID), int(ref.Version), string(jsonb(props)))
 	if err != nil {
 		return sqliteErr(err, "node "+ref.String())
 	}
@@ -402,7 +400,7 @@ func (t *sqliteTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props m
 }
 
 func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("link", linkColumns, ""),
 		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)))
 	return sqliteErr(err, "link")
 }
@@ -429,7 +427,7 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	if b.Gap > 0 {
 		depth, entries = 0, nil
 	}
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("baseline", baselineColumns, ""),
 		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b))
 	if err != nil {
 		return sqliteErr(err, "baseline")
@@ -448,8 +446,8 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *sqliteTx) BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT j.node_id, j.version FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = ?1 AND j.branch = ?2 AND j.change_id = ?3`,
-		domain.NamespaceOf(namespace), domain.BranchOf(branch), string(change))
+	q, args := dialectSQLite.sqlBranchJoins(namespace, branch, change)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -500,8 +498,7 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
-	res, err := t.tx.ExecContext(ctx, `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, tsText(e.At), string(e.Payload))
 	if err != nil {
 		return e, sqliteErr(err, "log entry "+e.Type)
@@ -511,9 +508,8 @@ func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.Log
 }
 
 func (t *sqliteTx) LogCounts(ctx context.Context, f domain.LogFilter) (map[string]int, error) {
-	f.AfterSeq = 0
-	where, args := logWhere(f, func(int) string { return "?" })
-	rows, err := t.tx.QueryContext(ctx, `SELECT type, count(*) FROM change_log`+where+` GROUP BY type`, args...)
+	q, args := dialectSQLite.sqlLogCounts(f)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, sqliteErr(err, "log counts")
 	}
@@ -531,11 +527,7 @@ func (t *sqliteTx) LogCounts(ctx context.Context, f domain.LogFilter) (map[strin
 }
 
 func (t *sqliteTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error) {
-	where, args := logWhere(f, func(int) string { return "?" })
-	q := `SELECT seq, id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload FROM change_log` + where + ` ORDER BY seq`
-	if f.Limit > 0 {
-		q += fmt.Sprintf(" LIMIT %d", f.Limit)
-	}
+	q, args := dialectSQLite.sqlLog(f)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, sqliteErr(err, "log")
@@ -555,7 +547,7 @@ func (t *sqliteTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEnt
 }
 
 func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`)
+	rows, err := t.tx.QueryContext(ctx, dialectSQLite.sqlOpenChangeIDs())
 	if err != nil {
 		return nil, err
 	}
@@ -586,8 +578,8 @@ func (t *sqliteTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, 
 }
 
 func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT id, node_id, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded
-		FROM change_impact WHERE change_id = ? ORDER BY seq`, string(change))
+	q, args := dialectSQLite.sqlChangeImpacts(change)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -625,7 +617,8 @@ func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([
 }
 
 func (t *sqliteTx) NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT change_id FROM change_impact WHERE node_id = ? ORDER BY seq`, string(node))
+	q, args := dialectSQLite.sqlNodeChangeImpacts(node)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -642,7 +635,7 @@ func (t *sqliteTx) NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([
 }
 
 func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
-	res, err := t.tx.ExecContext(ctx, `UPDATE node_version SET change_id = ?, change_impact = ?, comment = ? WHERE node_id = ? AND version = ?`, nullUUID(string(change)), nullUUID(string(cn)), comment, string(ref.ID), int(ref.Version))
+	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
 	if err != nil {
 		return sqliteErr(err, "node "+ref.String())
 	}
@@ -653,13 +646,12 @@ func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change
 }
 
 func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO node_branch (node_id, version, branch, change_id) SELECT node_id, version, ?, ? FROM node_version
-		WHERE node_id = ? AND version = ? AND branch <> ? ON CONFLICT DO NOTHING`, domain.BranchOf(branch), nullUUID(string(change)), string(ref.ID), int(ref.Version), domain.BranchOf(branch))
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)))
 	return sqliteErr(err, "node "+ref.String())
 }
 
 func (t *sqliteTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT id, coalesce(parent_id, ''), depth FROM baseline WHERE gap = 0 ORDER BY created_at, rowid`)
+	rows, err := t.tx.QueryContext(ctx, dialectSQLite.sqlBaselineHeaders())
 	if err != nil {
 		return nil, err
 	}
@@ -703,7 +695,8 @@ func (t *sqliteTx) PutTag(ctx context.Context, tag domain.Tag) error {
 }
 
 func (t *sqliteTx) DeleteTag(ctx context.Context, id domain.TagID) error {
-	res, err := t.tx.ExecContext(ctx, `DELETE FROM tag WHERE id = ?`, string(id))
+	q, args := dialectSQLite.sqlDeleteTag(id)
+	res, err := t.tx.ExecContext(ctx, q, args...)
 	if err != nil {
 		return sqliteErr(err, "tag "+string(id))
 	}
@@ -714,17 +707,8 @@ func (t *sqliteTx) DeleteTag(ctx context.Context, id domain.TagID) error {
 }
 
 func (t *sqliteTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error) {
-	q, args := `SELECT id, name, namespace, change_id, COALESCE(baseline_id, ''), by, created_at FROM tag WHERE 1 = 1`, []any{}
-	if f.Namespace != "" {
-		q, args = q+` AND namespace = ?`, append(args, domain.NamespaceOf(f.Namespace))
-	}
-	if f.Name != "" {
-		q, args = q+` AND name = ?`, append(args, f.Name)
-	}
-	if f.Change != "" {
-		q, args = q+` AND change_id = ?`, append(args, string(f.Change))
-	}
-	rows, err := t.tx.QueryContext(ctx, q+` ORDER BY created_at, rowid`, args...)
+	q, args := dialectSQLite.sqlTags(f)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -743,12 +727,8 @@ func (t *sqliteTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, 
 }
 
 func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
-	for _, q := range []string{
-		`SELECT count(*) FROM baseline_entry e JOIN node_version v ON e.node_id = v.node_id AND e.version = v.version WHERE v.change_id = ?1`,
-		`SELECT count(*) FROM baseline WHERE change_id = ?1`,
-		`SELECT count(*) FROM link l JOIN node_version v ON l.to_id = v.node_id AND l.to_version = v.version WHERE v.change_id = ?1 AND (l.change_id IS NULL OR l.change_id != ?1)`,
-		`SELECT count(*) FROM node_version o JOIN node_version v ON o.node_id = v.node_id AND o.version > v.version WHERE v.change_id = ?1 AND (o.change_id IS NULL OR o.change_id != ?1)`,
-	} {
+	d := dialectSQLite
+	for _, q := range d.deleteChangeUsed() {
 		var used int
 		if err := t.tx.QueryRowContext(ctx, q, string(id)).Scan(&used); err != nil {
 			return err
@@ -757,7 +737,7 @@ func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespa
 			return fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
 		}
 	}
-	rows, err := t.tx.QueryContext(ctx, `SELECT DISTINCT node_id FROM node_version WHERE change_id = ?`, string(id))
+	rows, err := t.tx.QueryContext(ctx, d.sqlChangeNodes(), string(id))
 	if err != nil {
 		return err
 	}
@@ -774,33 +754,25 @@ func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespa
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	const mine = `(SELECT node_id, version FROM node_version WHERE change_id = ?1)`
-	for _, q := range []string{
-		`DELETE FROM link WHERE change_id = ?1 OR (from_id, from_version) IN ` + mine,
-		`DELETE FROM node_branch WHERE change_id = ?1 OR (node_id, version) IN ` + mine,
-		`DELETE FROM node_version WHERE change_id = ?1`,
-		`DELETE FROM change_impact WHERE change_id = ?1`,
-		`DELETE FROM change_log WHERE change_id = ?1`,
-		`DELETE FROM tag WHERE change_id = ?1`,
-	} {
+	for _, q := range d.deleteChangeRows() {
 		if _, err := t.tx.ExecContext(ctx, q, string(id)); err != nil {
 			return sqliteErr(err, "change "+string(id))
 		}
 	}
 	for _, n := range nodes {
-		if _, err := t.tx.ExecContext(ctx, `DELETE FROM node WHERE id = ?1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = ?1)`, n); err != nil {
+		if _, err := t.tx.ExecContext(ctx, d.sqlDeleteOrphanNode(), n); err != nil {
 			return sqliteErr(err, "node "+n)
 		}
-		if _, err := t.tx.ExecContext(ctx, `UPDATE node SET latest = (SELECT max(version) FROM node_version WHERE node_id = ?1) WHERE id = ?1`, n); err != nil {
+		if _, err := t.tx.ExecContext(ctx, d.sqlRefreshLatest(), n); err != nil {
 			return sqliteErr(err, "node "+n)
 		}
 	}
 	if branch != "" {
-		if _, err := t.tx.ExecContext(ctx, `DELETE FROM branch WHERE namespace = ? AND name = ?`, namespace, branch); err != nil {
+		if _, err := t.tx.ExecContext(ctx, d.sqlDeleteBranch(), namespace, branch); err != nil {
 			return sqliteErr(err, "branch "+branch)
 		}
 	}
-	res, err := t.tx.ExecContext(ctx, `DELETE FROM change WHERE id = ?`, string(id))
+	res, err := t.tx.ExecContext(ctx, d.sqlDeleteChange(), string(id))
 	if err != nil {
 		return sqliteErr(err, "change "+string(id))
 	}

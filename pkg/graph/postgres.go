@@ -80,8 +80,6 @@ func str(s *string) string {
 	return *s
 }
 
-const nodeCols = `n.id::text, v.version, n.namespace, n.key, n.type, v.props, v.deleted, v.change_id::text, v.created_at, v.branch, v.parents, v.reason, v.state, v.change_impact::text, v.comment, v.execution, v.owner_id::text, n.project_id::text`
-
 func scanNode(row pgx.Row) (domain.Node, error) {
 	var n domain.Node
 	var id string
@@ -119,19 +117,20 @@ func (t *pgTx) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error
 	if ref.Version == 0 {
 		return t.LatestOn(ctx, ref.ID, domain.MainBranch)
 	}
-	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = $2`
-	n, err := scanNode(t.tx.QueryRow(ctx, q, string(ref.ID), int(ref.Version)))
+	q, args := dialectPG.sqlNode(ref)
+	n, err := scanNode(t.tx.QueryRow(ctx, q, args...))
 	return n, mapErr(err, "node "+ref.String())
 }
 
 func (t *pgTx) LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error) {
-	q := `SELECT ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND ` + pgOnBranch + ` ORDER BY v.version DESC LIMIT 1`
-	n, err := scanNode(t.tx.QueryRow(ctx, q, string(id), domain.BranchOf(branch)))
+	q, args := dialectPG.sqlLatestOn(id, branch)
+	n, err := scanNode(t.tx.QueryRow(ctx, q, args...))
 	return n, mapErr(err, "node "+string(id)+" on "+domain.BranchOf(branch))
 }
 
 func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error) {
-	rows, err := t.tx.Query(ctx, `SELECT `+nodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 ORDER BY v.version`, string(id))
+	q, args := dialectPG.sqlVersions(id)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +141,8 @@ func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, e
 	if err != nil {
 		return out, err
 	}
-	rows, err = t.tx.Query(ctx, `SELECT version, branch FROM node_branch WHERE node_id = $1 ORDER BY branch`, string(id))
+	q, args = dialectPG.sqlVersionBranches(id)
+	rows, err = t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return out, err
 	}
@@ -160,18 +160,17 @@ func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, e
 	return out, rows.Err()
 }
 
-// pgOnBranch selects the versions v that are part of branch $2: written there, or joined (ADR 0032).
-const pgOnBranch = `(v.branch = $2 OR EXISTS (SELECT 1 FROM node_branch j WHERE j.node_id = v.node_id AND j.version = v.version AND j.branch = $2))`
-
 func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	var b domain.Branch
-	err := t.tx.QueryRow(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent FROM branch WHERE namespace = $1 AND name = $2`, domain.NamespaceOf(namespace), name).
+	q, args := dialectPG.sqlBranch(namespace, name)
+	err := t.tx.QueryRow(ctx, q, args...).
 		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent))
 	return b, mapErr(err, "branch "+name)
 }
 
 func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch, error) {
-	rows, err := t.tx.Query(ctx, `SELECT namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent FROM branch WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
+	q, args := dialectPG.sqlBranches(namespace)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +191,8 @@ func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 
 func (t *pgTx) NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error) {
 	var id string
-	if err := t.tx.QueryRow(ctx, `SELECT id::text FROM node WHERE namespace = $1 AND key = $2`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
+	q, args := dialectPG.sqlNodeIDByKey(namespace, key)
+	if err := t.tx.QueryRow(ctx, q, args...).Scan(&id); err != nil {
 		return "", mapErr(err, "node key "+key)
 	}
 	return domain.NodeID(id), nil
@@ -200,7 +200,8 @@ func (t *pgTx) NodeIDByKey(ctx context.Context, namespace, key string) (domain.N
 
 func (t *pgTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error) {
 	var id string
-	if err := t.tx.QueryRow(ctx, `SELECT id::text FROM node WHERE namespace = $1 AND key = $2`, domain.NamespaceOf(namespace), key).Scan(&id); err != nil {
+	q, args := dialectPG.sqlNodeIDByKey(namespace, key)
+	if err := t.tx.QueryRow(ctx, q, args...).Scan(&id); err != nil {
 		return domain.Node{}, mapErr(err, "node key "+key)
 	}
 	return t.LatestOn(ctx, domain.NodeID(id), domain.MainBranch)
@@ -210,10 +211,8 @@ func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType
 	if _, err := t.Baseline(ctx, baseline); err != nil {
 		return nil, err
 	}
-	q := baselineEntriesSQL("$1") + ` SELECT ` + nodeCols + ` FROM eff e JOIN node n ON n.id = e.node_id
-	      JOIN node_version v ON v.node_id = e.node_id AND v.version = e.version
-	      WHERE e.rn = 1 AND NOT e.removed AND ($2 = '' OR n.type = $2) ORDER BY n.key`
-	rows, err := t.tx.Query(ctx, q, string(baseline), nodeType)
+	q, args := dialectPG.sqlNodesIn(baseline, nodeType)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "baseline nodes")
 	}
@@ -221,8 +220,8 @@ func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType
 }
 
 func (t *pgTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
-	q := `SELECT DISTINCT ON (n.key) ` + nodeCols + ` FROM node n JOIN node_version v ON v.node_id = n.id
-	      WHERE n.namespace = $1 AND ` + pgOnBranch + ` ORDER BY n.key, v.version DESC`
+	q := `SELECT DISTINCT ON (n.key) ` + dialectPG.nodeCols() + nodeFrom + `
+	      WHERE n.namespace = $1 AND ` + onBranchSQL("$2") + ` ORDER BY n.key, v.version DESC`
 	rows, err := t.tx.Query(ctx, q, domain.NamespaceOf(namespace), domain.BranchOf(branch))
 	if err != nil {
 		return nil, err
@@ -238,9 +237,9 @@ func (t *pgTx) Namespaces(ctx context.Context) ([]string, error) {
 	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
-func (t *pgTx) links(ctx context.Context, where string, ref domain.NodeRef) ([]domain.Link, error) {
-	q := `SELECT id::text, type, from_id::text, from_version, to_id::text, to_version, props, change_id::text FROM link WHERE ` + where + ` ORDER BY id`
-	rows, err := t.tx.Query(ctx, q, string(ref.ID), int(ref.Version))
+func (t *pgTx) links(ctx context.Context, leaving bool, ref domain.NodeRef) ([]domain.Link, error) {
+	q, args := dialectPG.sqlLinks(leaving, ref)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "links")
 	}
@@ -264,11 +263,11 @@ func (t *pgTx) links(ctx context.Context, where string, ref domain.NodeRef) ([]d
 }
 
 func (t *pgTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, "from_id = $1 AND from_version = $2", ref)
+	return t.links(ctx, true, ref)
 }
 
 func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, "to_id = $1 AND to_version = $2", ref)
+	return t.links(ctx, false, ref)
 }
 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
@@ -284,7 +283,8 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 	if b.Gap > 0 {
 		return b, nil // only the header is stored
 	}
-	rows, err := t.tx.Query(ctx, baselineEntriesSQL("$1")+` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, string(id))
+	q, args := dialectPG.sqlBaselineEntries(id)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return b, err
 	}
@@ -301,7 +301,8 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 }
 
 func (t *pgTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
-	rows, err := t.tx.Query(ctx, `SELECT id::text FROM baseline WHERE namespace = $1 ORDER BY created_at`, domain.NamespaceOf(namespace))
+	q, args := dialectPG.sqlBaselineIDs(namespace)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +344,7 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, e
 }
 
 func (t *pgTx) Changes(ctx context.Context) ([]domain.Change, error) {
-	rows, err := t.tx.Query(ctx, `SELECT id::text FROM change ORDER BY created_at`)
+	rows, err := t.tx.Query(ctx, dialectPG.sqlChangeIDs())
 	if err != nil {
 		return nil, err
 	}
@@ -380,14 +381,13 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	for i, pv := range n.Parents {
 		parents[i] = int32(pv)
 	}
-	_, err := t.tx.Exec(ctx, `INSERT INTO node_version (node_id, version, props, deleted, change_id, created_at, branch, parents, reason, state, change_impact, comment, execution, owner_id)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)))
 	return mapErr(err, "node "+n.Ref().String())
 }
 
 func (t *pgTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[string]any) error {
-	tag, err := t.tx.Exec(ctx, `UPDATE node_version SET props = $3 WHERE node_id = $1 AND version = $2`, string(ref.ID), int(ref.Version), jsonb(props))
+	tag, err := t.tx.Exec(ctx, dialectPG.sqlSetNodeProps(), string(ref.ID), int(ref.Version), jsonb(props))
 	if err != nil {
 		return mapErr(err, "node "+ref.String())
 	}
@@ -398,7 +398,7 @@ func (t *pgTx) SetNodeProps(ctx context.Context, ref domain.NodeRef, props map[s
 }
 
 func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO link (id, type, from_id, from_version, to_id, to_version, props, change_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
 		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)))
 	return mapErr(err, "link")
 }
@@ -425,7 +425,7 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	if b.Gap > 0 {
 		depth, entries = 0, nil
 	}
-	_, err := t.tx.Exec(ctx, `INSERT INTO baseline (id, name, parent_id, merged_from, change_id, created_at, branch, namespace, depth, gap, kind) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("baseline", baselineColumns, ""),
 		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b))
 	if err != nil {
 		return mapErr(err, "baseline")
@@ -439,8 +439,8 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 }
 
 func (t *pgTx) BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
-	rows, err := t.tx.Query(ctx, `SELECT j.node_id::text, j.version FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = $1 AND j.branch = $2 AND j.change_id = $3`,
-		domain.NamespaceOf(namespace), domain.BranchOf(branch), string(change))
+	q, args := dialectPG.sqlBranchJoins(namespace, branch, change)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -481,16 +481,14 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
-	err := t.tx.QueryRow(ctx, `INSERT INTO change_log (id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING seq`,
+	err := t.tx.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
 		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.At, []byte(e.Payload)).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
 func (t *pgTx) LogCounts(ctx context.Context, f domain.LogFilter) (map[string]int, error) {
-	f.AfterSeq = 0
-	where, args := logWhere(f, func(n int) string { return fmt.Sprintf("$%d", n) })
-	rows, err := t.tx.Query(ctx, `SELECT type, count(*) FROM change_log`+where+` GROUP BY type`, args...)
+	q, args := dialectPG.sqlLogCounts(f)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "log counts")
 	}
@@ -508,11 +506,7 @@ func (t *pgTx) LogCounts(ctx context.Context, f domain.LogFilter) (map[string]in
 }
 
 func (t *pgTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error) {
-	where, args := logWhere(f, func(n int) string { return fmt.Sprintf("$%d", n) })
-	q := `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, at, payload FROM change_log` + where + ` ORDER BY seq`
-	if f.Limit > 0 {
-		q += fmt.Sprintf(" LIMIT %d", f.Limit)
-	}
+	q, args := dialectPG.sqlLog(f)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, mapErr(err, "log")
@@ -533,7 +527,7 @@ func (t *pgTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, 
 }
 
 func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
-	rows, err := t.tx.Query(ctx, `SELECT id::text FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at`)
+	rows, err := t.tx.Query(ctx, dialectPG.sqlOpenChangeIDs())
 	if err != nil {
 		return nil, err
 	}
@@ -547,8 +541,6 @@ func (t *pgTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
 	}
 	return out, nil
 }
-
-const pgChangeImpactCols = `id::text, node_id::text, key, type, intent, rationale, pre_version, post_version, landed_version, review, reviews, COALESCE(via::text, ''), recheck, produced_by, derived_from, items, execution, created_at, flow, superseded`
 
 func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
 	r, err := toCNRow(cn)
@@ -564,7 +556,8 @@ func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn d
 }
 
 func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
-	rows, err := t.tx.Query(ctx, `SELECT `+pgChangeImpactCols+` FROM change_impact WHERE change_id = $1 ORDER BY seq`, string(change))
+	q, args := dialectPG.sqlChangeImpacts(change)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -587,7 +580,8 @@ func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]dom
 }
 
 func (t *pgTx) NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	rows, err := t.tx.Query(ctx, `SELECT change_id::text FROM change_impact WHERE node_id = $1 ORDER BY seq`, string(node))
+	q, args := dialectPG.sqlNodeChangeImpacts(node)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -603,7 +597,7 @@ func (t *pgTx) NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]dom
 }
 
 func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
-	tag, err := t.tx.Exec(ctx, `UPDATE node_version SET change_id = $3, change_impact = $4, comment = $5 WHERE node_id = $1 AND version = $2`, string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
+	tag, err := t.tx.Exec(ctx, dialectPG.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
 	if err != nil {
 		return mapErr(err, "node "+ref.String())
 	}
@@ -614,13 +608,12 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 }
 
 func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
-	_, err := t.tx.Exec(ctx, `INSERT INTO node_branch (node_id, version, branch, change_id) SELECT node_id, version, $3, $4 FROM node_version
-		WHERE node_id = $1 AND version = $2 AND branch <> $3 ON CONFLICT DO NOTHING`, string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)))
+	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)))
 	return mapErr(err, "node "+ref.String())
 }
 
 func (t *pgTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
-	rows, err := t.tx.Query(ctx, `SELECT id::text, coalesce(parent_id::text, ''), depth FROM baseline WHERE gap = 0 ORDER BY created_at, id`)
+	rows, err := t.tx.Query(ctx, dialectPG.sqlBaselineHeaders())
 	if err != nil {
 		return nil, err
 	}
@@ -654,7 +647,8 @@ func (t *pgTx) PutTag(ctx context.Context, tag domain.Tag) error {
 }
 
 func (t *pgTx) DeleteTag(ctx context.Context, id domain.TagID) error {
-	res, err := t.tx.Exec(ctx, `DELETE FROM tag WHERE id = $1`, string(id))
+	q, args := dialectPG.sqlDeleteTag(id)
+	res, err := t.tx.Exec(ctx, q, args...)
 	if err != nil {
 		return mapErr(err, "tag "+string(id))
 	}
@@ -665,21 +659,8 @@ func (t *pgTx) DeleteTag(ctx context.Context, id domain.TagID) error {
 }
 
 func (t *pgTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, error) {
-	q, args := `SELECT id::text, name, namespace, change_id::text, COALESCE(baseline_id::text, ''), by, created_at FROM tag WHERE true`, []any{}
-	add := func(cond string, v any) {
-		args = append(args, v)
-		q += fmt.Sprintf(" AND "+cond, len(args))
-	}
-	if f.Namespace != "" {
-		add("namespace = $%d", domain.NamespaceOf(f.Namespace))
-	}
-	if f.Name != "" {
-		add("name = $%d", f.Name)
-	}
-	if f.Change != "" {
-		add("change_id = $%d", string(f.Change))
-	}
-	rows, err := t.tx.Query(ctx, q+` ORDER BY created_at, id`, args...)
+	q, args := dialectPG.sqlTags(f)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -697,12 +678,8 @@ func (t *pgTx) Tags(ctx context.Context, f domain.TagFilter) ([]domain.Tag, erro
 
 func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
 	var used int
-	for _, q := range []string{
-		`SELECT count(*) FROM baseline_entry e JOIN node_version v ON e.node_id = v.node_id AND e.version = v.version WHERE v.change_id = $1`,
-		`SELECT count(*) FROM baseline WHERE change_id = $1`,
-		`SELECT count(*) FROM link l JOIN node_version v ON l.to_id = v.node_id AND l.to_version = v.version WHERE v.change_id = $1 AND l.change_id IS DISTINCT FROM $1::uuid`,
-		`SELECT count(*) FROM node_version o JOIN node_version v ON o.node_id = v.node_id AND o.version > v.version WHERE v.change_id = $1 AND o.change_id IS DISTINCT FROM $1::uuid`,
-	} {
+	d := dialectPG
+	for _, q := range d.deleteChangeUsed() {
 		if err := t.tx.QueryRow(ctx, q, string(id)).Scan(&used); err != nil {
 			return err
 		}
@@ -710,7 +687,7 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 			return fmt.Errorf("change %s: what it wrote is used by the graph: %w", id, ErrConflict)
 		}
 	}
-	rows, err := t.tx.Query(ctx, `SELECT DISTINCT node_id::text FROM node_version WHERE change_id = $1`, string(id))
+	rows, err := t.tx.Query(ctx, d.sqlChangeNodes(), string(id))
 	if err != nil {
 		return err
 	}
@@ -727,33 +704,25 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 	if err := rows.Err(); err != nil {
 		return err
 	}
-	const mine = `(SELECT node_id, version FROM node_version WHERE change_id = $1)`
-	for _, q := range []string{
-		`DELETE FROM link WHERE change_id = $1 OR (from_id, from_version) IN ` + mine,
-		`DELETE FROM node_branch WHERE change_id = $1 OR (node_id, version) IN ` + mine,
-		`DELETE FROM node_version WHERE change_id = $1`,
-		`DELETE FROM change_impact WHERE change_id = $1`,
-		`DELETE FROM change_log WHERE change_id = $1`,
-		`DELETE FROM tag WHERE change_id = $1`,
-	} {
+	for _, q := range d.deleteChangeRows() {
 		if _, err := t.tx.Exec(ctx, q, string(id)); err != nil {
 			return mapErr(err, "change "+string(id))
 		}
 	}
 	for _, n := range nodes {
-		if _, err := t.tx.Exec(ctx, `DELETE FROM node WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = $1)`, n); err != nil {
+		if _, err := t.tx.Exec(ctx, d.sqlDeleteOrphanNode(), n); err != nil {
 			return mapErr(err, "node "+n)
 		}
-		if _, err := t.tx.Exec(ctx, `UPDATE node SET latest = (SELECT max(version) FROM node_version WHERE node_id = $1) WHERE id = $1`, n); err != nil {
+		if _, err := t.tx.Exec(ctx, d.sqlRefreshLatest(), n); err != nil {
 			return mapErr(err, "node "+n)
 		}
 	}
 	if branch != "" {
-		if _, err := t.tx.Exec(ctx, `DELETE FROM branch WHERE namespace = $1 AND name = $2`, namespace, branch); err != nil {
+		if _, err := t.tx.Exec(ctx, d.sqlDeleteBranch(), namespace, branch); err != nil {
 			return mapErr(err, "branch "+branch)
 		}
 	}
-	tag, err := t.tx.Exec(ctx, `DELETE FROM change WHERE id = $1`, string(id))
+	tag, err := t.tx.Exec(ctx, d.sqlDeleteChange(), string(id))
 	if err != nil {
 		return mapErr(err, "change "+string(id))
 	}

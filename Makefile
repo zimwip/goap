@@ -26,8 +26,15 @@ test:
 web-test: ## unit tests of the web (needs npm install in web/)
 	cd web && npm test
 
-test-pg: ## tests against PostgreSQL (graph)
-	GOAP_TEST_PG_DSN=$${GOAP_TEST_PG_DSN:-postgres://goap:goap@localhost:5432/goap?sslmode=disable} go test ./pkg/graph/... ./internal/...
+PGTEST_IMAGE ?= pgvector/pgvector:pg17
+PGTEST_PORT  ?= 55432
+
+test-pg: ## every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away pgvector container on $(PGTEST_PORT))
+	@if [ -n "$$GOAP_TEST_PG_DSN" ]; then go test -count=1 ./...; else \
+	  c=$$(docker run -d --rm -e POSTGRES_USER=goap -e POSTGRES_PASSWORD=goap -e POSTGRES_DB=goap -p $(PGTEST_PORT):5432 $(PGTEST_IMAGE)) || exit 1; \
+	  trap "docker stop $$c >/dev/null" EXIT; \
+	  until [ "$$(docker logs $$c 2>&1 | grep -c 'ready to accept connections')" -ge 2 ]; do sleep 1; done; \
+	  GOAP_TEST_PG_DSN="postgres://goap:goap@localhost:$(PGTEST_PORT)/goap?sslmode=disable" go test -count=1 ./...; fi
 
 lint:
 	go vet ./...
