@@ -59,7 +59,7 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 	if _, own, err := ownBranch(ctx, tx, c); err != nil {
 		return domain.Baseline{}, err
 	} else if own {
-		// the head of the change branch: what its sub-changes merged into it since the fork
+		// the head of the change branch (its sub-changes land in its log, not on it: ADR 0081)
 		head, err := branchHead(ctx, tx, c.Namespace, c.Branch)
 		if err != nil {
 			return domain.Baseline{}, err
@@ -71,6 +71,16 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 		return base, err
 	}
 	nodes := maps.Clone(base.Nodes)
+	// a sub-change sees the drafts its parents hold (ADR 0081), under its own
+	inh, err := g.inheritedDrafts(ctx, tx, c)
+	if err != nil {
+		return base, err
+	}
+	for node, x := range inh {
+		if level != ViewAccepted || x.impact.Review == domain.ReviewAccepted {
+			nodes[node] = 0
+		}
+	}
 	impacts, err := g.newFlowNodes(tx, c, flow).nodes(ctx)
 	if err != nil {
 		return base, err

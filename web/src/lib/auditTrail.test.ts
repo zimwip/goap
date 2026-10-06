@@ -74,3 +74,18 @@ describe('review objects in the trail', () => {
     expect(groups.get('REV-1')!.map((e) => e.seq)).toEqual([1, 3, 4, 5]);
   });
 });
+
+// ADR 0081: a sub-change hands its draft to its parent change; a node a resolution left out is said so.
+describe('a sub-change integrated into its parent', () => {
+  const log = [
+    entry(1, { op: 'integrated', into: { changeId: 'parent-change-id', impactId: 'p1' } }),
+    entry(2, { op: 'integrated', into: { changeId: 'parent-change-id' } }),
+  ];
+  const trail = buildTrail({ nodes: [{ id: 'i1', key: 'REQ-A' }] }, log, new Map(), false);
+
+  it('names the parent', () => {
+    expect(trail[0].summary).toBe('draft integrated into parent change parent-c');
+    expect(trail[0].tone).toBe('ok');
+    expect(trail[1].summary).toBe('left out of parent change parent-c (conflict resolved)');
+  });
+});

@@ -8,8 +8,8 @@ import (
 
 // Drafts and versions at landing (ADR 0079). During a change a node has no version: its working state in the change is a
 // Draft, one per change impact and flow, the fold (ADR 0029, 0030) of the impact events that carry it (not stored): `created`
-// and `checkedOut` carry the initial state, `updated` and `transitioned` patches, `cancelled`, `withdrawn` and `landed`
-// drop it. Landing (CommitChange) writes the node version from the draft and the draft goes.
+// and `checkedOut` carry the initial state, `updated` and `transitioned` patches, `cancelled`, `withdrawn`, `landed` and
+// `integrated` (ADR 0081) drop it. Landing (CommitChange) writes the node version from the draft and the draft goes.
 
 // IsDraft reports a reference to the draft of a node in a change: the node, no version (Version 0). Outside a change a
 // reference with Version 0 means the latest version of the node on main.
@@ -48,6 +48,17 @@ type Draft struct {
 	// Execution is the action run that checked the node out (what a relaunch of a step marks stale, ADR 0025).
 	Execution string      `json:"execution,omitempty"`
 	Links     []DraftLink `json:"links,omitempty"`
+	// Inherited is, for the draft of a sub-change copied from a draft of a parent change (ADR 0081), where it was copied
+	// from: what its integration into the parent checks for a conflict.
+	Inherited *DraftOrigin `json:"inherited,omitempty"`
+}
+
+// DraftOrigin is the draft of a parent change a draft of a sub-change was copied from: the change, its change impact and
+// the seq of the last event of that impact in the change's log when it was copied (ADR 0081).
+type DraftOrigin struct {
+	Change ChangeID       `json:"changeId"`
+	Impact ChangeImpactID `json:"impactId"`
+	Seq    int            `json:"seq"`
 }
 
 // Ref is the draft reference of the node.
@@ -60,6 +71,10 @@ func (d Draft) Clone() Draft {
 	if d.Base != nil {
 		b := *d.Base
 		d.Base = &b
+	}
+	if d.Inherited != nil {
+		o := *d.Inherited
+		d.Inherited = &o
 	}
 	d.Links = slices.Clone(d.Links)
 	for i := range d.Links {
@@ -219,7 +234,7 @@ func ApplyDraftEvent(drafts []Draft, e ImpactEvent, impacts []ChangeImpact) []Dr
 		case next != nil:
 			out = append(out, *next)
 		}
-	case ImpactWithdrawn, ImpactLanded:
+	case ImpactWithdrawn, ImpactLanded, ImpactIntegrated:
 		out = slices.DeleteFunc(out, func(d Draft) bool { return d.Impact == e.Impact })
 	case ImpactAdopted:
 		// the adopted flow's drafts were installed on the main flow by the events that follow (see the adoption)
@@ -249,11 +264,12 @@ func DraftSeenBy(events []ImpactEvent, impact ChangeImpactID, chain []string, st
 	order := append(slices.Clone(chain), "")
 	rows := map[string]*Draft{}
 	for _, e := range events {
-		if e.Impact != impact || !slices.Contains(order, e.Flow) || (stale(e.Execution) && e.Op != ImpactLanded && e.Op != ImpactWithdrawn) {
+		gone := e.Op == ImpactLanded || e.Op == ImpactWithdrawn || e.Op == ImpactIntegrated
+		if e.Impact != impact || !slices.Contains(order, e.Flow) || (stale(e.Execution) && !gone) {
 			continue
 		}
 		switch e.Op {
-		case ImpactWithdrawn, ImpactLanded:
+		case ImpactWithdrawn, ImpactLanded, ImpactIntegrated:
 			clear(rows)
 		case ImpactCreated, ImpactCheckedOut, ImpactTransitioned, ImpactUpdated, ImpactCancelled:
 			rows[e.Flow] = applyDraft(rows[e.Flow], e)

@@ -605,6 +605,14 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 			add(bl, "prov:wasGeneratedBy", ref(changeIRI(c.ID)))
 			add(bl, "prov:hadMember", ref(versionIRI(*ev.Landed)))
 		}
+	case domain.ImpactIntegrated:
+		// a sub-change's impact went into its parent change (ADR 0081): the parent's impact carries the work on
+		if ev.Into != nil {
+			add(n, "goap:integratedInto", ref(changeIRI(ev.Into.Change)))
+			if ev.Into.Impact != "" {
+				add(n, "goap:integratedInto", ref(impactIRI(ev.Into.Impact)))
+			}
+		}
 	case domain.ImpactRebased:
 		if ev.Pre != nil {
 			add(n, "goap:rebasedOn", ref(b.version(*ev.Pre, typ, key)))

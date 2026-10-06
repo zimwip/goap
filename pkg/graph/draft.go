@@ -97,27 +97,84 @@ func (g *Graph) seenDraft(ctx context.Context, tx Tx, c domain.Change, flow stri
 	return nil, nil
 }
 
-// draftReader reads nodes as a flow of a change sees them: a draft reference (a node the flow holds a draft of) is the
-// draft, any other reference a stored version.
+// inherited is a draft a parent change holds of a node on its main flow, as a sub-change sees it (ADR 0081).
+type inherited struct {
+	draft domain.Draft
+	// from is the parent change holding the draft and impact its change impact of the node.
+	from   domain.Change
+	impact domain.ChangeImpact
+}
+
+// inheritedDrafts are the drafts the parents of a sub-change hold on their main flow, by node: the parent's, else the
+// grandparent's, up the chain of parents (ADR 0081). Empty for a change that is not a sub-change.
+func (g *Graph) inheritedDrafts(ctx context.Context, tx Tx, c domain.Change) (map[domain.NodeID]inherited, error) {
+	out := map[domain.NodeID]inherited{}
+	for id, hops := c.ParentID, 0; id != "" && hops < 64; hops++ {
+		p, err := tx.Change(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		seen, err := g.seenDrafts(ctx, tx, p, "")
+		if err != nil {
+			return nil, err
+		}
+		for _, cn := range p.Nodes {
+			if cn.Flow != "" || cn.Superseded {
+				continue
+			}
+			d, ok := seen[cn.ID]
+			if !ok {
+				continue
+			}
+			if _, have := out[d.Node]; !have {
+				out[d.Node] = inherited{draft: d, from: p, impact: cn}
+			}
+		}
+		id = p.ParentID
+	}
+	return out, nil
+}
+
+// draftReader reads nodes as a flow of a change sees them: a draft reference (a node the flow holds a draft of, or, for a
+// sub-change, a node a parent holds a draft of) is the draft, any other reference a stored version.
 type draftReader struct {
 	c      domain.Change
 	byNode map[domain.NodeID]domain.Draft
+	// holder is, for a draft inherited from a parent change (ADR 0081), that change: the draft is its, not the reader's.
+	holder map[domain.NodeID]domain.Change
 }
 
 // newDraftReader reads the drafts a flow sees, for the change impacts it sees (visible: stale or foreign impacts leave
-// their drafts out).
+// their drafts out), then the drafts the parents of a sub-change hold of the other nodes.
 func (g *Graph) newDraftReader(ctx context.Context, tx Tx, c domain.Change, flow string, visible []domain.ChangeImpact) (*draftReader, error) {
 	seen, err := g.seenDrafts(ctx, tx, c, flow)
 	if err != nil {
 		return nil, err
 	}
-	r := &draftReader{c: c, byNode: map[domain.NodeID]domain.Draft{}}
+	r := &draftReader{c: c, byNode: map[domain.NodeID]domain.Draft{}, holder: map[domain.NodeID]domain.Change{}}
 	for _, cn := range visible {
 		if d, ok := seen[cn.ID]; ok {
 			r.byNode[d.Node] = d
 		}
 	}
+	inh, err := g.inheritedDrafts(ctx, tx, c)
+	if err != nil {
+		return nil, err
+	}
+	for node, x := range inh {
+		if _, own := r.byNode[node]; !own {
+			r.byNode[node], r.holder[node] = x.draft, x.from
+		}
+	}
 	return r, nil
+}
+
+// draftNode is the node of a draft the reader holds: a draft of a parent change reads as that change's.
+func (r *draftReader) draftNode(d domain.Draft) domain.Node {
+	if p, ok := r.holder[d.Node]; ok {
+		return draftNode(p, d)
+	}
+	return draftNode(r.c, d)
 }
 
 // draft is the draft a reference designates: a draft reference, or an exact version the draft was checked out from.
@@ -141,7 +198,7 @@ func (r *draftReader) normalize(ref domain.NodeRef) domain.NodeRef {
 func (r *draftReader) node(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.Node, error) {
 	if ref.IsDraft() {
 		if d, ok := r.byNode[ref.ID]; ok {
-			return draftNode(r.c, d), nil
+			return r.draftNode(d), nil
 		}
 	}
 	return tx.Node(ctx, ref)
@@ -336,6 +393,9 @@ func (g *Graph) draftLinkTargetType(ctx context.Context, tx Tx, w *work, to doma
 				return cn.Type, nil
 			}
 		}
+		if x, ok := w.inh[to.ID]; ok {
+			return x.draft.Type, nil // the draft of a parent change (ADR 0081)
+		}
 		return "", invalidf("a link targets the draft of node %s, which the change holds no draft of on this flow", to.ID)
 	}
 	n, err := tx.Node(ctx, to)
@@ -367,12 +427,16 @@ func (g *Graph) newDraftLink(ctx context.Context, tx Tx, w *work, from domain.Dr
 	return domain.DraftLink{ID: domain.LinkID(g.newID()), Type: l.Type, To: w.normalizeTo(l.To), Properties: l.Properties}, nil
 }
 
-// normalizeTo points the version a node of the flow was checked out from at its draft.
+// normalizeTo points the version a node of the flow was checked out from at its draft (for a sub-change, at the draft a
+// parent holds of it, ADR 0081).
 func (w *work) normalizeTo(to domain.NodeRef) domain.NodeRef {
 	for _, cn := range w.seen {
 		if cn.Post != nil && cn.Post.IsDraft() && cn.Post.ID == to.ID && cn.Pre != nil && *cn.Pre == to {
 			return *cn.Post
 		}
+	}
+	if x, ok := w.inh[to.ID]; ok && x.draft.Base != nil && *x.draft.Base == to {
+		return x.draft.Ref()
 	}
 	return to
 }
@@ -397,6 +461,25 @@ func (g *Graph) forkDraft(w *work, parent domain.Draft, execution string) domain
 		d.Links[i].ID = domain.LinkID(g.newID())
 	}
 	return d
+}
+
+// inheritDraft is the draft a sub-change starts from when it checks out a node a parent change holds a draft of (ADR
+// 0081): a copy, the links with ids of their own, that remembers the draft it was copied from and the last event of it
+// in the parent's log.
+func (g *Graph) inheritDraft(ctx context.Context, tx Tx, w *work, x inherited, execution string) (domain.Draft, error) {
+	events, err := impactEvents(ctx, tx, x.from.ID)
+	if err != nil {
+		return domain.Draft{}, err
+	}
+	seq := 0
+	for _, e := range events {
+		if e.Impact == x.impact.ID && e.Flow == "" && e.Seq > seq {
+			seq = e.Seq
+		}
+	}
+	d := g.forkDraft(w, x.draft, execution)
+	d.Inherited = &domain.DraftOrigin{Change: x.from.ID, Impact: x.impact.ID, Seq: seq}
+	return d, nil
 }
 
 func cloneMap(m map[string]any) map[string]any { return maps.Clone(m) }

@@ -1,6 +1,7 @@
 # ADR 0016 — Organisation namespace and sub-changes
 
-**Status**: accepted, implemented · **Date**: 2026-09 · Builds on ADR 0015 (namespaces, change branches).
+**Status**: accepted, implemented · **Date**: 2026-09 · Builds on ADR 0015 (namespaces, change branches). §3 (merged into the parent branch) and §4 (the parent starts from the head of its branch) superseded by ADR 0081: a
+sub-change lands in its parent change's log.
 
 ## Context
 Work on a change crosses organisational boundaries: the nodes it impacts belong to different teams.

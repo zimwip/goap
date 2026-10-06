@@ -448,5 +448,12 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	if err != nil {
 		return ActionResult{}, err
 	}
+	if c.ParentID != "" {
+		// a sub-change leaves no baseline: it is integrated into its parent's log (ADR 0081), or waits on a conflict
+		if got, err := ac.Graph.Change(ctx, c.ID); err == nil && got.Status != domain.ChangeApplied {
+			return ActionResult{Output: fmt.Sprintf("committed; its integration into parent change %s waits for its conflicts to be resolved", c.ParentID)}, nil
+		}
+		return ActionResult{Output: fmt.Sprintf("integrated into parent change %s", c.ParentID)}, nil
+	}
 	return ActionResult{Output: fmt.Sprintf("baseline %s (%s) created", b.Name, b.ID)}, nil
 }
