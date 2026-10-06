@@ -189,7 +189,14 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
       break;
     case 'transitioned': {
       // a transition is always taken on the draft (a node with none is checked out first) and writes no version (ADR 0079)
-      const st = (e.patch as { state?: { from?: string; to?: string } } | undefined)?.state;
+      const p = e.patch as { state?: { from?: string; to?: string }; rebased?: { change?: string }; conflicts?: string[] | null } | undefined;
+      const st = p?.state;
+      if (p?.rebased) {
+        // a sub-change brought up to date with its parent's draft (ADR 0082)
+        const conflicts = p.conflicts ?? [];
+        summary = `${v(e.post)} rebased onto parent change ${shortId(p.rebased.change)}${conflicts.length ? ` — conflicts: ${conflicts.join(', ')}` : ''}`;
+        break;
+      }
       summary = st ? `${v(e.post)} moved from ${st.from || '?'} to ${st.to || '?'}` : `${v(e.post)} moved`;
       break;
     }
@@ -226,7 +233,7 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
     by: e.by ?? '',
     execution: e.execution ?? '',
     processId: '',
-    tone: e.op === 'discarded' || e.op === 'rebased' || e.review?.status === 'rejected' ? 'warn' : e.op === 'landed' || e.op === 'integrated' ? 'ok' : 'neutral',
+    tone: e.op === 'discarded' || e.op === 'rebased' || e.review?.status === 'rejected' || ((e.patch?.['conflicts'] as unknown[] | undefined)?.length ?? 0) > 0 ? 'warn' : e.op === 'landed' || e.op === 'integrated' ? 'ok' : 'neutral',
     event: e,
     reviewId: e.review?.reviewId || undefined,
   };

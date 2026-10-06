@@ -1,6 +1,7 @@
 # ADR 0081 — A sub-change lands in its parent change, not on its branch
 
-**Status**: accepted, implemented (graph) · **Date**: 2026-10 · Supersedes ADR 0016 §3 and §4 (a sub-change forks its own
+**Status**: accepted, implemented (graph); §5 (resolution at integration) amended by ADR 0082 (rebase, fast-forward
+integration) · **Date**: 2026-10 · Supersedes ADR 0016 §3 and §4 (a sub-change forks its own
 branch from the parent branch and is merged into it; the parent starts from the head of its own branch) and the sentence of
 ADR 0079 §4 "a node that changed on the change's branch since the draft was checked out (a sub-change merged a version) is a
 conflict"; builds on ADR 0029 / 0030 (one event-sourced log per change), ADR 0079 (drafts, versions at landing) and the

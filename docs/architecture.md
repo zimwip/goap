@@ -81,8 +81,11 @@ unit across namespaces, and a change is split into sub-changes along unit bounda
 ([ADR 0016](adr/0016-organisation-and-sub-changes.md)). A sub-change sees its parent's drafts and lands in its parent's
 log, not on a branch ([ADR 0081](adr/0081-sub-changes-land-in-their-parent.md)): its checkout of a node the parent holds a
 draft of copies it, remembering the parent's log position; its integration installs each accepted draft in the parent's main
-flow (accepted with the sub-change's review, an `integrated` event in its own log) and conflicts when the parent changed the
-node meanwhile; it writes no version, the parent lands the work.
+flow (accepted with the sub-change's review, an `integrated` event in its own log); it writes no version, the parent lands
+the work. The integration is a fast-forward: a sub-change whose parent changed a node meanwhile is first **rebased**
+([ADR 0082](adr/0082-rebase-a-sub-change-onto-its-parent.md), `RebaseChange`, done by `Apply`): a three-way merge per
+property, owner, state and link against the parent's draft as it was copied (folded from the parent's log), the fields changed
+on both sides named as conflicts the sub-change settles by editing its draft, the changed impacts reviewed again.
 
 **Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)) are the `OrgUnit` nodes above. A
 change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEFAULT`, created at the first start

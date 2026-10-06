@@ -119,7 +119,8 @@ func testSubChangeBuildsOnTheParentDraft(t *testing.T, repo Repo) {
 	}
 }
 
-// The parent edits a node after its sub-change took it: the integration conflicts and waits for a resolution (ADR 0081 §5).
+// The parent edits the property its sub-change edits after the sub-change took the node: Apply rebases the sub-change,
+// names the conflict and stops; the sub-change settles it, reviews it again and Apply fast-forwards (ADR 0082).
 func TestSubChangeConflictsWithTheParent(t *testing.T) {
 	forEachRepo(t, testSubChangeConflictsWithTheParent)
 }
@@ -130,55 +131,145 @@ func testSubChangeConflictsWithTheParent(t *testing.T, repo Repo) {
 	g := w.g
 	pcn := w.write(t, w.parent, "CMP-3", "parent v1")
 	sub := w.sub(t, "sub")
-	w.write(t, sub, "CMP-3", "sub")
+	scn := w.write(t, sub, "CMP-3", "sub")
 	w.retitle(t, w.parent, pcn.ID, "parent v2") // the parent moves on
 
-	if _, err := g.Apply(ctx, sub.ID, ""); err != nil {
-		t.Fatal(err)
+	if _, err := g.IntegrateChange(ctx, sub.ID, nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a sub-change behind its parent does not integrate: %v", err)
 	}
-	if got := must[domain.Change](t)(g.Change(ctx, sub.ID)); got.Status != domain.ChangeCommitted {
-		t.Fatalf("a conflicting sub-change stays committed, got %s", got.Status)
+	if _, err := g.Apply(ctx, sub.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("apply rebases and stops on the conflict: %v", err)
 	}
 	if got := w.title(t, w.parent, "CMP-3"); got != "parent v2" {
 		t.Fatalf("a conflict writes nothing in the parent: %q", got)
 	}
-	if _, err := g.IntegrateChange(ctx, sub.ID, nil); !errors.Is(err, ErrConflict) {
-		t.Fatalf("integrating without a resolution: %v", err)
+	got := must[domain.Change](t)(g.Change(ctx, sub.ID))
+	if got.Status == domain.ChangeApplied || got.Nodes[0].Review != domain.ReviewProposed {
+		t.Fatalf("the rebased impact is to be reviewed again: %s, %s", got.Status, got.Nodes[0].Review)
 	}
-	if _, err := g.IntegrateChange(ctx, sub.ID, map[domain.NodeID]Resolution{w.cmp3.ID: {Skip: true}}); err != nil {
+	if _, err := g.accept(ctx, sub.ID, scn.ID, "reviewer", "ok"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a conflict not settled cannot be accepted: %v", err)
+	}
+	ev := eventsOp(t, g, sub.ID, domain.ImpactTransitioned)
+	if last := ev[len(ev)-1]; last.Patch["rebased"] == nil || last.Draft == nil || last.Draft.Inherited.Seq == 0 {
+		t.Fatalf("the rebase installs the merged draft with the parent's position: %+v", last)
+	}
+	// the sub-change settles the conflict by editing the property, reviews it again, and Apply integrates
+	w.retitle(t, sub, scn.ID, "parent v2 and sub")
+	if _, err := g.Apply(ctx, sub.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := w.title(t, w.parent, "CMP-3"); got != "parent v2" {
-		t.Fatalf("a skipped node keeps the parent's draft: %q", got)
-	}
-	ev := eventsOp(t, g, sub.ID, domain.ImpactIntegrated)
-	if len(ev) != 1 || ev[0].Into.Change != w.parent.ID || ev[0].Into.Impact != "" {
-		t.Fatalf("a skipped node is integrated with no install: %+v", ev)
+	if got := w.title(t, w.parent, "CMP-3"); got != "parent v2 and sub" {
+		t.Fatalf("parent = %q", got)
 	}
 
-	// a sub-change that took the stored version conflicts with a parent that drafted the node meanwhile
+	// keeping the sub-change's value as it is: ImpactNodeResolve
+	keep := w.sub(t, "keep")
+	kcn := w.write(t, keep, "CMP-3", "keep")
+	pc := must[domain.Change](t)(g.Change(ctx, w.parent.ID))
+	w.retitle(t, w.parent, pc.Nodes[0].ID, "parent v3")
+	if _, err := g.Apply(ctx, keep.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("apply: %v", err)
+	}
+	must[domain.ChangeImpact](t)(g.ImpactNodeResolve(ctx, keep.ID, kcn.ID, ""))
+	must[domain.ChangeImpact](t)(g.accept(ctx, keep.ID, kcn.ID, "reviewer", "ours"))
+	if _, err := g.Apply(ctx, keep.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if got := w.title(t, w.parent, "CMP-3"); got != "keep" {
+		t.Fatalf("parent = %q", got)
+	}
+
+	// taking the parent's: the sub-change cancels its draft, its impact is a confirmation, nothing goes into the parent
 	late := w.sub(t, "late")
-	w.write(t, late, "CMP-2", "late")
+	lcn := w.write(t, late, "CMP-2", "late")
 	w.write(t, w.parent, "CMP-2", "parent")
+	if _, err := g.Apply(ctx, late.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("the late sub-change took the stored version the parent then drafted: %v", err)
+	}
+	must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, late.ID, lcn.ID, "", ""))
+	must[domain.ChangeImpact](t)(g.accept(ctx, late.ID, lcn.ID, "reviewer", "take the parent's"))
 	if _, err := g.Apply(ctx, late.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := must[domain.Change](t)(g.Change(ctx, late.ID)); got.Status != domain.ChangeCommitted {
-		t.Fatalf("the late sub-change conflicts, got %s", got.Status)
-	}
-	if _, err := g.IntegrateChange(ctx, late.ID, map[domain.NodeID]Resolution{w.cmp2.ID: {Props: map[string]any{"title": "both"}}}); err != nil {
-		t.Fatal(err)
-	}
-	if got := w.title(t, w.parent, "CMP-2"); got != "both" {
-		t.Fatalf("a resolution installs its properties: %q", got)
+	if got := w.title(t, w.parent, "CMP-2"); got != "parent" {
+		t.Fatalf("parent CMP-2 = %q", got)
 	}
 	if _, err := g.Apply(ctx, w.parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	for key, want := range map[string]string{"CMP-2": "both", "CMP-3": "parent v2"} {
+	for key, want := range map[string]string{"CMP-2": "parent", "CMP-3": "keep"} {
 		if n := must[domain.Node](t)(g.NodeByKey(ctx, "", key)); n.Properties["title"] != want {
 			t.Fatalf("%s on main = %v", key, n.Properties)
 		}
+	}
+}
+
+// The parent and its sub-change change different properties of a node: the rebase merges them without a conflict, the
+// review goes back to proposed, and the parent receives both (ADR 0082 §1).
+func TestSubChangeRebaseMerges(t *testing.T) { forEachRepo(t, testSubChangeRebaseMerges) }
+
+func testSubChangeRebaseMerges(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newSubWorld(t, repo)
+	g := w.g
+	pcn := w.write(t, w.parent, "CMP-3", "p")
+	sub := w.sub(t, "sub")
+	scn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, sub.ID, NodeCheckout{Key: "CMP-3", Rationale: "note"}))
+	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, sub.ID, scn.ID, NodeUpdate{Properties: map[string]any{"note": "from sub"}}))
+	must[domain.ChangeImpact](t)(g.accept(ctx, sub.ID, scn.ID, "reviewer", "ok"))
+	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, w.parent.ID, pcn.ID, NodeUpdate{Properties: map[string]any{"size": "L"}}))
+
+	res := must[RebaseResult](t)(g.RebaseChange(ctx, sub.ID))
+	if len(res.Impacts) != 1 || !res.Impacts[0].Changed || len(res.Impacts[0].Conflicts) != 0 {
+		t.Fatalf("rebase = %+v", res)
+	}
+	if again := must[RebaseResult](t)(g.RebaseChange(ctx, sub.ID)); len(again.Impacts) != 0 {
+		t.Fatalf("a rebased sub-change is up to date: %+v", again)
+	}
+	v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, sub.ID, "", "", "CMP-3"))
+	if v.Properties["title"] != "p" || v.Properties["note"] != "from sub" || v.Properties["size"] != "L" {
+		t.Fatalf("merged draft = %v", v.Properties)
+	}
+	if _, err := g.Apply(ctx, sub.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("the merged impact awaits its review again: %v", err)
+	}
+	must[domain.ChangeImpact](t)(g.accept(ctx, sub.ID, scn.ID, "reviewer", "merged"))
+	if _, err := g.Apply(ctx, sub.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	pv := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, w.parent.ID, "", "", "CMP-3"))
+	if pv.Properties["title"] != "p" || pv.Properties["note"] != "from sub" || pv.Properties["size"] != "L" {
+		t.Fatalf("parent = %v", pv.Properties)
+	}
+}
+
+// The parent rejects the impact its sub-change works on: a conflict on the whole node, and the integration refuses
+// until the sub-change withdraws it.
+func TestSubChangeRejectedByTheParent(t *testing.T) { forEachRepo(t, testSubChangeRejectedByTheParent) }
+
+func testSubChangeRejectedByTheParent(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newSubWorld(t, repo)
+	g := w.g
+	pcn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, w.parent.ID, NodeCheckout{Key: "CMP-3", Rationale: "maybe"}))
+	sub := w.sub(t, "sub")
+	scn := w.write(t, sub, "CMP-3", "sub")
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, w.parent.ID, pcn.ID, domain.ReviewRejected, "parent", "no"))
+	res := must[RebaseResult](t)(g.RebaseChange(ctx, sub.ID))
+	if len(res.Impacts) != 1 || len(res.Impacts[0].Conflicts) != 1 || res.Impacts[0].Conflicts[0] != domain.ConflictNode {
+		t.Fatalf("rebase = %+v", res)
+	}
+	must[domain.ChangeImpact](t)(g.ImpactNodeResolve(ctx, sub.ID, scn.ID, ""))
+	must[domain.ChangeImpact](t)(g.accept(ctx, sub.ID, scn.ID, "reviewer", "ours"))
+	if _, err := g.IntegrateChange(ctx, sub.ID, nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a node the parent rejected does not integrate: %v", err)
+	}
+	if err := g.WithdrawImpact(ctx, sub.ID, scn.ID, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Apply(ctx, sub.ID, ""); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -238,7 +329,8 @@ func draftsOf(ctx context.Context, g *Graph, id domain.ChangeID) (out []domain.D
 	return out, err
 }
 
-// Two sub-changes copy the same draft of their parent: the first to integrate changes it, the second conflicts.
+// Two sub-changes copy the same draft of their parent: the first to integrate changes it, the second is rebased onto it
+// and settles the conflict.
 func TestSiblingSubChangesOnOneParentDraft(t *testing.T) {
 	forEachRepo(t, testSiblingSubChangesOnOneParentDraft)
 }
@@ -250,17 +342,21 @@ func testSiblingSubChangesOnOneParentDraft(t *testing.T, repo Repo) {
 	w.write(t, w.parent, "CMP-3", "parent")
 	a, b := w.sub(t, "a"), w.sub(t, "b")
 	w.write(t, a, "CMP-3", "a")
-	w.write(t, b, "CMP-3", "b")
+	bcn := w.write(t, b, "CMP-3", "b")
 	if _, err := g.Apply(ctx, a.ID, ""); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("the second sibling is rebased onto the first: %v", err)
+	}
+	if got := w.title(t, w.parent, "CMP-3"); got != "a" {
+		t.Fatalf("parent = %q", got)
+	}
+	w.retitle(t, b, bcn.ID, "a then b")
 	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if got := must[domain.Change](t)(g.Change(ctx, b.ID)); got.Status != domain.ChangeCommitted {
-		t.Fatalf("the second sibling conflicts, got %s", got.Status)
-	}
-	if got := w.title(t, w.parent, "CMP-3"); got != "a" {
+	if got := w.title(t, w.parent, "CMP-3"); got != "a then b" {
 		t.Fatalf("parent = %q", got)
 	}
 }
@@ -296,5 +392,27 @@ func testSubChangeLandingGate(t *testing.T, repo Repo) {
 	}
 	if got := must[domain.Change](t)(g.Change(ctx, sub.ID)); got.Status != domain.ChangeApplied {
 		t.Fatalf("sub-change = %s", got.Status)
+	}
+}
+
+// The parent cancels the draft its sub-change copied: what the parent sees again is the stored version, so the rebase takes
+// back the parent's fields the sub-change did not change (ADR 0082 §1).
+func TestSubChangeRebaseOnACancelledParentDraft(t *testing.T) {
+	forEachRepo(t, testSubChangeRebaseOnACancelledParentDraft)
+}
+
+func testSubChangeRebaseOnACancelledParentDraft(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newSubWorld(t, repo)
+	g := w.g
+	pcn := w.write(t, w.parent, "CMP-3", "parent title")
+	sub := w.sub(t, "sub")
+	scn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, sub.ID, NodeCheckout{Key: "CMP-3", Rationale: "note"}))
+	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, sub.ID, scn.ID, NodeUpdate{Properties: map[string]any{"note": "n"}}))
+	must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, w.parent.ID, pcn.ID, "", ""))
+	must[RebaseResult](t)(g.RebaseChange(ctx, sub.ID))
+	v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, sub.ID, "", "", "CMP-3"))
+	if v.Properties["title"] != "three" || v.Properties["note"] != "n" {
+		t.Fatalf("the parent's cancelled title goes, the sub-change's note stays: %v", v.Properties)
 	}
 }

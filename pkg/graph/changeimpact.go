@@ -270,6 +270,11 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, e
 	// an accepted review is gated by what a version must satisfy (ADR 0079): validators, required links, link
 	// attributes, the origins gate, checked on the draft; a refusal leaves the review proposed. Nothing is
 	// written: the version is written when the change lands
+	if status == domain.ReviewAccepted {
+		if err := g.checkSettled(ctx, tx, c, node); err != nil {
+			return cn, err
+		}
+	}
 	if status == domain.ReviewAccepted && seen.Post != nil {
 		if err := g.checkAccepted(ctx, tx, id, flow, node); err != nil {
 			return cn, err

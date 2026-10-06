@@ -23,10 +23,14 @@ import (
 // committed (a change that wrote a node has it already).
 
 // Apply commits a change and integrates it into the branch it was forked from; it returns the baseline the change
-// left on the target branch, or its commit baseline when the integration waits for a resolution. A sub-change is
-// integrated into its parent change and leaves no baseline (ADR 0081): the result is empty.
+// left on the target branch, or its commit baseline when the integration waits for a resolution. A sub-change is first
+// rebased onto its parent, then integrated into it as a fast-forward and leaves no baseline (ADR 0081, 0082): the result
+// is empty.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
+	if err := g.rebaseFirst(ctx, id); err != nil {
+		return result, err
+	}
 	if err := g.checkFinalState(ctx, id); err != nil {
 		return result, err
 	}
@@ -57,6 +61,23 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		return err
 	})
 	return result, err
+}
+
+// rebaseFirst rebases a sub-change onto its parent before Apply (ADR 0082 §3), in a transaction of its own: a rebase that
+// changed a draft stays, and Apply stops on it (ErrConflict), naming what is to be reviewed again and settled.
+func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID) error {
+	c, err := g.Change(ctx, id)
+	if err != nil || c.ParentID == "" {
+		return err
+	}
+	res, err := g.RebaseChange(ctx, id)
+	if err != nil {
+		return err
+	}
+	if res.Changed() {
+		return fmt.Errorf("change %s %s: %w", id, res.summary(), ErrConflict)
+	}
+	return nil
 }
 
 // CommitChange validates a change and records the state it leaves on its own branch: the change is committed, not

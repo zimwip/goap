@@ -573,7 +573,7 @@ func (g *Graph) emitAddLink(ctx context.Context, tx Tx, w *work, d domain.Draft,
 }
 
 func (g *Graph) emitRemoveLink(ctx context.Context, tx Tx, w *work, d domain.Draft, l domain.DraftLink, execution string) error {
-	return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"removeLink": map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String()}})
+	return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"removeLink": map[string]any{"id": string(l.ID), "type": l.Type, "to": l.To.String(), "toId": string(l.To.ID)}})
 }
 
 // linkWork finds the draft of the flow holding a link, and the link: by its id, or by the id of the stored link of the
@@ -639,7 +639,7 @@ func (g *Graph) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link d
 			return err
 		}
 		l = domain.Link{ID: cur.ID, Type: cur.Type, From: d.Ref(), To: cur.To, Properties: props, ChangeID: id}
-		return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"updateLink": map[string]any{"id": string(cur.ID), "props": props}})
+		return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"updateLink": map[string]any{"id": string(cur.ID), "type": cur.Type, "toId": string(cur.To.ID), "props": props}})
 	})
 	return
 }

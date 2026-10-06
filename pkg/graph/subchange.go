@@ -393,35 +393,25 @@ func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing
 // subInstall is a draft of a sub-change its integration installs in the parent change.
 type subInstall struct {
 	cn     domain.ChangeImpact  // the change impact of the sub-change
-	d      domain.Draft         // its draft (the properties of a resolution)
+	d      domain.Draft         // its draft
 	parent *domain.ChangeImpact // the change impact the parent holds of the node, if any
-	skip   bool                 // a conflict resolved by leaving the node out
 }
 
-// integrateSub integrates a committed sub-change into its parent change (ADR 0081): every accepted draft of its main
-// flow is installed in the parent's main flow by events of the parent's log, accepted there with the review the
-// sub-change made, and recorded integrated in the sub-change's log. A node the parent changed since the sub-change took
-// it is a conflict; without a resolution for each, nothing is written and the keys are returned (the change stays
-// committed).
-func (g *Graph) integrateSub(ctx context.Context, tx Tx, c domain.Change, resolutions map[domain.NodeID]Resolution) (domain.Change, []string, error) {
-	parent, err := changeOpen(ctx, tx, c.ParentID)
+// integrateSub integrates a committed sub-change into its parent change (ADR 0081 §4, ADR 0082 §3): every accepted draft
+// of its main flow is installed in the parent's main flow by events of the parent's log, accepted there with the review
+// the sub-change made, and recorded integrated in the sub-change's log. It is a fast-forward: a draft the parent changed
+// since the sub-change took it is refused (rebase the sub-change first), and nothing is written.
+func (g *Graph) integrateSub(ctx context.Context, tx Tx, c domain.Change) (domain.Change, error) {
+	p, err := g.parentOf(ctx, tx, c)
 	if err != nil {
-		return c, nil, err
+		return c, err
 	}
 	rows, err := g.drafts(ctx, tx, c.ID)
 	if err != nil {
-		return c, nil, err
-	}
-	prows, err := g.drafts(ctx, tx, parent.ID)
-	if err != nil {
-		return c, nil, err
-	}
-	pevents, err := impactEvents(ctx, tx, parent.ID)
-	if err != nil {
-		return c, nil, err
+		return c, err
 	}
 	var plan []subInstall
-	var conflicts []string
+	var behind, rejected []string
 	for _, cn := range c.Nodes {
 		if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded || cn.Review != domain.ReviewAccepted {
 			continue
@@ -430,73 +420,43 @@ func (g *Graph) integrateSub(ctx context.Context, tx Tx, c domain.Change, resolu
 		if d == nil {
 			continue // confirmed, nothing written
 		}
-		in := subInstall{cn: cn, d: *d}
-		for i, p := range parent.Nodes {
-			if p.Flow == "" && !p.Superseded && nodeOf(p) == d.Node {
-				in.parent = &parent.Nodes[i]
-			}
-		}
-		if subConflicts(in, parent.ID, prows, pevents) {
-			r, ok := resolutions[d.Node]
-			if !ok {
-				conflicts = append(conflicts, d.Key)
-				continue
-			}
-			if r.Skip {
-				in.skip = true
-			} else if r.Props != nil {
-				in.d.Properties = cloneMap(r.Props)
-			}
+		in := subInstall{cn: cn, d: *d, parent: p.impactOf(d.Node)}
+		switch {
+		case in.parent != nil && in.parent.Review == domain.ReviewRejected:
+			rejected = append(rejected, d.Key)
+		case p.behind(*d, in.parent):
+			behind = append(behind, d.Key)
 		}
 		plan = append(plan, in)
 	}
-	if len(conflicts) > 0 {
-		slices.Sort(conflicts)
-		return c, conflicts, nil
+	if len(rejected) > 0 {
+		slices.Sort(rejected)
+		return c, fmt.Errorf("parent change %s rejected %v: withdraw them from sub-change %s, or have the parent reopen them: %w", p.c.ID, rejected, c.ID, ErrConflict)
+	}
+	if len(behind) > 0 {
+		slices.Sort(behind)
+		return c, fmt.Errorf("parent change %s changed %v since sub-change %s took them: rebase it onto the parent first: %w", p.c.ID, behind, c.ID, ErrConflict)
 	}
 	for _, in := range plan {
-		into := domain.ImpactRef{Change: parent.ID}
-		if !in.skip {
-			if into.Impact, err = g.installSub(ctx, tx, c, parent.ID, in); err != nil {
-				return c, nil, err
-			}
+		into := domain.ImpactRef{Change: p.c.ID}
+		if into.Impact, err = g.installSub(ctx, tx, c, p.c.ID, in); err != nil {
+			return c, err
 		}
 		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: in.cn.ID, Op: domain.ImpactIntegrated, Into: &into}); err != nil {
-			return c, nil, err
+			return c, err
 		}
 	}
 	// its branch received nothing: it is closed with the change
 	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
-		return c, nil, err
+		return c, err
 	} else if ok {
 		own.Status = domain.BranchMerged
 		if err := tx.PutBranch(ctx, own); err != nil {
-			return c, nil, err
+			return c, err
 		}
 	}
 	c.Status = domain.ChangeApplied
-	return c, nil, tx.PutChange(ctx, c)
-}
-
-// subConflicts reports whether the parent changed a node since the sub-change took it (ADR 0081 §5): the draft was copied
-// from the parent's and an event changed that draft after, or it was taken from the stored version and the parent holds a
-// draft of the node now; or the parent rejected its impact of the node.
-func subConflicts(in subInstall, parent domain.ChangeID, prows []domain.Draft, pevents []domain.ImpactEvent) bool {
-	if in.parent != nil && in.parent.Review == domain.ReviewRejected {
-		return true
-	}
-	if o := in.d.Inherited; o != nil && o.Change == parent {
-		if in.parent == nil || in.parent.ID != o.Impact {
-			return true // the parent withdrew the impact the sub-change built on
-		}
-		for _, e := range pevents {
-			if e.Impact == o.Impact && e.Flow == "" && e.Seq > o.Seq && changesDraft(e) {
-				return true
-			}
-		}
-		return false
-	}
-	return in.parent != nil && ownDraft(prows, in.parent.ID, "") != nil
+	return c, tx.PutChange(ctx, c)
 }
 
 // installSub installs a draft of a sub-change in its parent's main flow (ADR 0081 §4) and accepts it there with the
