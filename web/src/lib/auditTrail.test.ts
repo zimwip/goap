@@ -89,3 +89,14 @@ describe('a sub-change integrated into its parent', () => {
     expect(trail[1].summary).toBe('left out of parent change parent-c (conflict resolved)');
   });
 });
+
+// ADR 0082: a rebase onto the parent names its conflicts.
+describe('a sub-change rebased onto its parent', () => {
+  const log = [entry(1, { op: 'transitioned', post: { id: 'n1', version: 0 }, patch: { rebased: { change: 'parent-change-id', seq: 4 }, conflicts: ['props.title'] } })];
+  const trail = buildTrail({ nodes: [{ id: 'i1', key: 'REQ-A' }] }, log, new Map(), false);
+
+  it('names the parent and the conflicts', () => {
+    expect(trail[0].summary).toBe('draft rebased onto parent change parent-c — conflicts: props.title');
+    expect(trail[0].tone).toBe('warn');
+  });
+});

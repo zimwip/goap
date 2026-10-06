@@ -442,20 +442,26 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 		t.Fatalf("parent after A: %q", got)
 	}
 
-	// B, taken from the same version as A, now conflicts: committed (integration waits), not a silent clobber
-	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
+	// B, taken from the same version as A, is rebased onto it: a conflict on the title, not a silent clobber
+	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("sub B apply: %v", err)
 	}
-	if got, _ := g.Change(ctx, b.ID); got.Status != domain.ChangeCommitted {
-		t.Fatalf("sub B must be committed after A landed first, got %s", got.Status)
+	if got := inParent(); got != "from A" {
+		t.Fatalf("parent after B's rebase: %q", got)
 	}
-
-	// B's author adapts: resolve and complete the merge
-	if _, err := g.IntegrateChange(ctx, b.ID, map[domain.NodeID]Resolution{w.cmp3.ID: {Props: map[string]any{"title": "from A and B"}}}); err != nil {
+	// B's author settles it in B, reviews it again; B fast-forwards into the parent
+	bcn := must[domain.Change](t)(g.Change(ctx, b.ID)).Nodes[0]
+	if _, err := g.edit(ctx, b.ID, bcn.ID, edit{Properties: map[string]any{"title": "from A and B"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.accept(ctx, b.ID, bcn.ID, "u", "settled"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := inParent(); got != "from A and B" {
-		t.Fatalf("parent after B's resolved integration: %q", got)
+		t.Fatalf("parent after B's integration: %q", got)
 	}
 	// the parent lands what both brought in
 	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
