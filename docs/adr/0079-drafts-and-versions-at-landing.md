@@ -118,7 +118,8 @@ review comment, else the rationale), state and properties of the draft; `Project
 then the outgoing links, with their targets resolved to exact versions: a draft reference, or the version a draft was
 checked out from, of a node the change lands, becomes the version this landing writes for it (what `retarget` and
 `followVersion` did, now one rule); a link to the draft of a node that does not land is an error. A node that changed on the
-change's branch since the draft was checked out (a sub-change merged a version) is a conflict. The `landed` events then
+change's branch since the draft was checked out (a sub-change merged a version) is a conflict (ADR 0081: a sub-change no
+longer merges a version, it lands in its parent's log). The `landed` events then
 name the versions (the impact's post becomes the landed ref, `ImpactEvent` `landed` drops the drafts), the node index events
 are published for them. Branches, `IntegrateChange` (fast-forward, 3-way merge when a node changed on both sides,
 `Tx.JoinBranch`), baselines and `Apply` = commit + integrate are unchanged: **the commit step is where versions appear on

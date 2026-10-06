@@ -87,6 +87,11 @@ type work struct {
 	seen   []domain.ChangeImpact
 	cn     domain.ChangeImpact // the stored change impact
 	vcn    domain.ChangeImpact // as the flow sees it
+	// inh are, for a sub-change, the drafts its parents hold, by node (ADR 0081).
+	inh map[domain.NodeID]inherited
+	// takes is set when the operation takes a node a parent creates (ADR 0081): the change impact (intent created) is not
+	// recorded yet, the created event of the checkout adds it with the copy of the parent's draft.
+	takes *inherited
 }
 
 // workOn opens an operation on a change, on a flow: the change gets its branch (where its versions are written when it
@@ -117,6 +122,9 @@ func (g *Graph) workOn(ctx context.Context, tx Tx, id domain.ChangeID, flow stri
 		return nil, err
 	}
 	if w.seen, err = g.newFlowNodes(tx, c, w.flow).nodes(ctx); err != nil {
+		return nil, err
+	}
+	if w.inh, err = g.inheritedDrafts(ctx, tx, c); err != nil {
 		return nil, err
 	}
 	return w, nil
@@ -211,6 +219,28 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		}
 		return w, g.impact(ctx, tx, w, found.ID)
 	}
+	// a sub-change takes a node its parent holds a draft of (ADR 0081): one the parent creates is in no baseline
+	for node, x := range w.inh {
+		if !((t.Node != "" && node == t.Node) || (t.Node == "" && x.draft.Key == t.Key && (t.Type == "" || x.draft.Type == t.Type))) {
+			continue
+		}
+		if t.create {
+			return nil, fmt.Errorf("cannot create %s (%s): parent change %s holds it as change impact %s (%s): %w", t.Key, t.Type, x.from.ID, x.impact.ID, x.impact.Intent, ErrConflict)
+		}
+		if x.draft.Base != nil {
+			break // an existing node: declared from the baseline below, its checkout copies the parent's draft
+		}
+		decl := domain.ChangeImpact{Intent: domain.IntentCreated, Key: x.draft.Key, Type: x.draft.Type, Rationale: firstNonEmpty(t.Rationale, x.impact.Rationale),
+			Flow: t.Flow, Execution: t.Execution, ProducedBy: t.ProducedBy, DerivedFrom: []domain.ItemID{domain.ItemID(x.impact.ID)}}
+		out, err := g.declareTx(ctx, tx, id, []domain.ChangeImpact{decl}, false)
+		if err != nil {
+			return nil, err
+		}
+		x := x
+		w.cn, w.vcn, w.takes = out[0], out[0], &x
+		w.seen = append(w.seen, out[0])
+		return w, nil
+	}
 	b, err := tx.Baseline(ctx, w.c.BaselineID)
 	if err != nil {
 		return nil, err
@@ -258,7 +288,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 }
 
 // base is the stored version a draft of the impact starts from: its pre version (on the main flow, the latest of the
-// node on the change branch, where a sub-change may have merged one); nil for a creation.
+// node on the change branch); nil for a creation. A sub-change copies the draft its parent holds first (ADR 0081).
 func (w *work) base(ctx context.Context, tx Tx) (*domain.Node, error) {
 	if w.cn.Pre == nil {
 		return nil, nil
@@ -406,10 +436,24 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 		return domain.NodeRef{}, fmt.Errorf("%s is already checked out: %w", draftOf(w.cn), ErrConflict)
 	}
 	var d domain.Draft
+	if w.takes != nil {
+		// a node a parent creates: one created event adds the impact with the copy of the parent's draft (ADR 0081)
+		d, err := g.inheritDraft(ctx, tx, w, *w.takes, execution)
+		if err != nil {
+			return domain.NodeRef{}, err
+		}
+		ref, st := d.Ref(), w.cn
+		return ref, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactCreated, Flow: w.flow, Execution: execution, State: &st, Post: &ref, Draft: &d})
+	}
 	if parent, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
 		return domain.NodeRef{}, err
 	} else if parent != nil {
 		d = g.forkDraft(w, *parent, execution)
+	} else if x, ok := w.inh[nodeOf(w.cn)]; ok {
+		// the draft a parent change holds of the node (ADR 0081)
+		if d, err = g.inheritDraft(ctx, tx, w, x, execution); err != nil {
+			return domain.NodeRef{}, err
+		}
 	} else {
 		base, err := w.base(ctx, tx)
 		if err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -110,8 +111,8 @@ func (g *Graph) checkDraft(ctx context.Context, ix *typeIndex, c domain.Change, 
 
 // prepareSubChange applies the rules of a sub-change to c: its parent must be
 // open and have a branch of its own, the namespace is the parent's, and the
-// change forks from (and is merged into) the parent branch. Its organisational
-// unit must be inside the unit of the parent.
+// change starts from the head of the parent branch; it lands in the parent's log
+// (ADR 0081). Its organisational unit must be inside the unit of the parent.
 func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, in *NewChange) error {
 	if c.ParentID == "" {
 		return nil
@@ -340,4 +341,242 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 		return nil
 	})
 	return
+}
+
+// commitSubTx commits a sub-change (ADR 0081): the rules of a landing are checked on its drafts, as the versions written
+// from them would be, and nothing is written to a branch: the sub-change hands its drafts to its parent when it is
+// integrated. The states its nodes are left in are the parent's to land.
+func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing *landingDecision) error {
+	if g.LandingGate != nil && landing == nil {
+		return fmt.Errorf("change %s: the landing gate was not asked before this transaction: %w", c.ID, ErrInvalid)
+	}
+	if landing != nil && landing.decided && !landing.ok {
+		return invalidf("the change does not satisfy the goal of its landing gate")
+	}
+	ix, err := g.typesAt(ctx, tx, c.BaselineID)
+	if err != nil {
+		return err
+	}
+	rows, err := g.drafts(ctx, tx, c.ID)
+	if err != nil {
+		return err
+	}
+	impacts := slices.DeleteFunc(slices.Clone(c.Nodes), func(cn domain.ChangeImpact) bool { return cn.Flow != "" || cn.Superseded })
+	for _, cn := range impacts {
+		if len(cn.Items) > 0 {
+			continue
+		}
+		switch cn.Review {
+		case domain.ReviewRejected:
+			continue
+		case domain.ReviewProposed:
+			return fmt.Errorf("change impact %s (%s) awaits its review: %w", cn.Key, cn.ID, ErrConflict)
+		}
+		d := ownDraft(rows, cn.ID, "")
+		if d == nil {
+			if cn.Intent == domain.IntentModified {
+				continue // an impact confirmed, with nothing written
+			}
+			return invalidf("change impact %s (%s) is accepted but its node is not written: write it or reject it", cn.Key, cn.ID)
+		}
+		if err := g.checkOrigins(impacts, cn, d); err != nil {
+			return err
+		}
+		if err := g.checkDraft(ctx, ix, c, *d); err != nil {
+			return err
+		}
+	}
+	c.Status = domain.ChangeCommitted
+	return tx.PutChange(ctx, c)
+}
+
+// subInstall is a draft of a sub-change its integration installs in the parent change.
+type subInstall struct {
+	cn     domain.ChangeImpact  // the change impact of the sub-change
+	d      domain.Draft         // its draft (the properties of a resolution)
+	parent *domain.ChangeImpact // the change impact the parent holds of the node, if any
+	skip   bool                 // a conflict resolved by leaving the node out
+}
+
+// integrateSub integrates a committed sub-change into its parent change (ADR 0081): every accepted draft of its main
+// flow is installed in the parent's main flow by events of the parent's log, accepted there with the review the
+// sub-change made, and recorded integrated in the sub-change's log. A node the parent changed since the sub-change took
+// it is a conflict; without a resolution for each, nothing is written and the keys are returned (the change stays
+// committed).
+func (g *Graph) integrateSub(ctx context.Context, tx Tx, c domain.Change, resolutions map[domain.NodeID]Resolution) (domain.Change, []string, error) {
+	parent, err := changeOpen(ctx, tx, c.ParentID)
+	if err != nil {
+		return c, nil, err
+	}
+	rows, err := g.drafts(ctx, tx, c.ID)
+	if err != nil {
+		return c, nil, err
+	}
+	prows, err := g.drafts(ctx, tx, parent.ID)
+	if err != nil {
+		return c, nil, err
+	}
+	pevents, err := impactEvents(ctx, tx, parent.ID)
+	if err != nil {
+		return c, nil, err
+	}
+	var plan []subInstall
+	var conflicts []string
+	for _, cn := range c.Nodes {
+		if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded || cn.Review != domain.ReviewAccepted {
+			continue
+		}
+		d := ownDraft(rows, cn.ID, "")
+		if d == nil {
+			continue // confirmed, nothing written
+		}
+		in := subInstall{cn: cn, d: *d}
+		for i, p := range parent.Nodes {
+			if p.Flow == "" && !p.Superseded && nodeOf(p) == d.Node {
+				in.parent = &parent.Nodes[i]
+			}
+		}
+		if subConflicts(in, parent.ID, prows, pevents) {
+			r, ok := resolutions[d.Node]
+			if !ok {
+				conflicts = append(conflicts, d.Key)
+				continue
+			}
+			if r.Skip {
+				in.skip = true
+			} else if r.Props != nil {
+				in.d.Properties = cloneMap(r.Props)
+			}
+		}
+		plan = append(plan, in)
+	}
+	if len(conflicts) > 0 {
+		slices.Sort(conflicts)
+		return c, conflicts, nil
+	}
+	for _, in := range plan {
+		into := domain.ImpactRef{Change: parent.ID}
+		if !in.skip {
+			if into.Impact, err = g.installSub(ctx, tx, c, parent.ID, in); err != nil {
+				return c, nil, err
+			}
+		}
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: in.cn.ID, Op: domain.ImpactIntegrated, Into: &into}); err != nil {
+			return c, nil, err
+		}
+	}
+	// its branch received nothing: it is closed with the change
+	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
+		return c, nil, err
+	} else if ok {
+		own.Status = domain.BranchMerged
+		if err := tx.PutBranch(ctx, own); err != nil {
+			return c, nil, err
+		}
+	}
+	c.Status = domain.ChangeApplied
+	return c, nil, tx.PutChange(ctx, c)
+}
+
+// subConflicts reports whether the parent changed a node since the sub-change took it (ADR 0081 §5): the draft was copied
+// from the parent's and an event changed that draft after, or it was taken from the stored version and the parent holds a
+// draft of the node now; or the parent rejected its impact of the node.
+func subConflicts(in subInstall, parent domain.ChangeID, prows []domain.Draft, pevents []domain.ImpactEvent) bool {
+	if in.parent != nil && in.parent.Review == domain.ReviewRejected {
+		return true
+	}
+	if o := in.d.Inherited; o != nil && o.Change == parent {
+		if in.parent == nil || in.parent.ID != o.Impact {
+			return true // the parent withdrew the impact the sub-change built on
+		}
+		for _, e := range pevents {
+			if e.Impact == o.Impact && e.Flow == "" && e.Seq > o.Seq && changesDraft(e) {
+				return true
+			}
+		}
+		return false
+	}
+	return in.parent != nil && ownDraft(prows, in.parent.ID, "") != nil
+}
+
+// installSub installs a draft of a sub-change in its parent's main flow (ADR 0081 §4) and accepts it there with the
+// review of the sub-change; it returns the parent's change impact.
+func (g *Graph) installSub(ctx context.Context, tx Tx, c domain.Change, parent domain.ChangeID, in subInstall) (domain.ChangeImpactID, error) {
+	d := in.d.Clone()
+	if d.Inherited != nil && d.Inherited.Change == parent {
+		d.Inherited = nil // the parent's own draft now; one copied from a grandparent keeps its origin
+	}
+	ref := d.Ref()
+	patch := map[string]any{"integrated": map[string]any{"change": string(c.ID), "impact": string(in.cn.ID)}}
+	var id domain.ChangeImpactID
+	if in.parent != nil {
+		id = in.parent.ID
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactTransitioned, Execution: d.Execution, Post: &ref, Draft: &d, Patch: patch}); err != nil {
+			return "", err
+		}
+	} else {
+		id = domain.ChangeImpactID(g.newID())
+		st := domain.ChangeImpact{ID: id, Key: in.cn.Key, Type: in.cn.Type, Intent: in.cn.Intent, Rationale: in.cn.Rationale, Review: domain.ReviewProposed,
+			ProducedBy: "graph.integrate", DerivedFrom: []domain.ItemID{domain.ItemID(in.cn.ID)}, Execution: in.cn.Execution, CreatedAt: g.now()}
+		if in.cn.Pre != nil {
+			p := *in.cn.Pre
+			st.Pre = &p
+		}
+		var events []domain.ImpactEvent
+		if st.Intent == domain.IntentCreated {
+			events = append(events, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactCreated, Execution: d.Execution, State: &st, Post: &ref, Draft: &d, Patch: patch})
+		} else {
+			events = append(events, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactProposed, Execution: st.Execution, State: &st},
+				domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactCheckedOut, Execution: d.Execution, Post: &ref, Draft: &d, Patch: patch})
+		}
+		if err := g.emit(ctx, tx, events...); err != nil {
+			return "", err
+		}
+	}
+	last := lastReview(in.cn)
+	r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(), ReviewID: last.ReviewID,
+		Comment: strings.TrimSpace(fmt.Sprintf("integrated from sub-change %s (%s): %s", c.Title, c.ID, last.Comment))}
+	return id, g.emit(ctx, tx, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactReviewed, By: r.By, Review: &r})
+}
+
+// lastReview is the review that decides a change impact on the main flow.
+func lastReview(cn domain.ChangeImpact) domain.Review {
+	var out domain.Review
+	for _, r := range cn.Reviews {
+		if r.Flow == "" && !r.Superseded {
+			out = r
+		}
+	}
+	return out
+}
+
+// subLandingBlackboard is the blackboard the landing gate decides a sub-change against (ADR 0081): the change with its
+// impacts, the pre version and the draft of each, as the change sees them (no version is written for a sub-change).
+func (g *Graph) subLandingBlackboard(ctx context.Context, tx Tx, c domain.Change) (domain.Blackboard, error) {
+	bb := domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}}
+	ix, err := g.typesAt(ctx, tx, c.BaselineID)
+	if err != nil {
+		return bb, err
+	}
+	impacts := slices.DeleteFunc(slices.Clone(c.Nodes), func(cn domain.ChangeImpact) bool { return cn.Flow != "" || cn.Superseded })
+	r, err := g.newDraftReader(ctx, tx, c, "", impacts)
+	if err != nil {
+		return bb, err
+	}
+	for _, cn := range impacts {
+		for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post} {
+			if ref == nil {
+				continue
+			}
+			v, err := viewIn(ctx, tx, r, *ref)
+			if err != nil {
+				return bb, err
+			}
+			if lc := ix.lifecycleOf(v.Type); lc != nil && v.State != "" {
+				v.NotLandable = !lc.Landable(v.State)
+			}
+			bb.Nodes[*ref] = v
+		}
+	}
+	return bb, nil
 }

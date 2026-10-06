@@ -110,8 +110,8 @@ func (a *applier) prepareChangeImpacts() error {
 
 // writeVersion writes the version of a draft on the branch of the change: the next version number of the node, the
 // version the draft was checked out from as its parent, the origin of the change impact (its last review comment, else
-// its rationale). The node changing on the change branch since the draft was checked out is a conflict: a sub-change
-// merged a version of it meanwhile.
+// its rationale). The node changing on the change branch since the draft was checked out is a conflict (the branch moved
+// by other means: a sub-change lands in its parent's log, ADR 0081).
 func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.Node, error) {
 	comment := cn.Rationale
 	if len(cn.Reviews) > 0 {

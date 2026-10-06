@@ -100,7 +100,7 @@ export interface ImpactEvent {
   /** empty for a change-level event (adopted) */
   impactId?: string;
   /** proposed: the impact of an existing node; created: a new node, its impact and draft in one event; checkedOut: the draft of an existing node (ADR 0079) */
-  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'landed' | 'rebased' | string;
+  op?: 'proposed' | 'created' | 'checkedOut' | 'transitioned' | 'updated' | 'reviewed' | 'discarded' | 'cancelled' | 'withdrawn' | 'adopted' | 'landed' | 'rebased' | 'integrated' | string;
   /** the caller: flow branch ('' = main flow), journal record of the action run, principal or component */
   flow?: string;
   execution?: string;
@@ -114,6 +114,8 @@ export interface ImpactEvent {
   stale?: string[];
   /** landed: the branch the version landed on (the change's own at commit, the target at integration) */
   branch?: string;
+  /** integrated: the parent change (and its impact) a sub-change's impact went into (ADR 0081); no impact: skipped by a resolution */
+  into?: { changeId?: string; impactId?: string };
   /** updated: what changed in place ({props, owner, addLink, ...}); created: {origins: [{id, version, key}]} for the successor of a merge or a split (ADR 0077) */
   patch?: Record<string, unknown>;
 }

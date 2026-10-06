@@ -23,7 +23,8 @@ import (
 // committed (a change that wrote a node has it already).
 
 // Apply commits a change and integrates it into the branch it was forked from; it returns the baseline the change
-// left on the target branch, or its commit baseline when the integration waits for a resolution.
+// left on the target branch, or its commit baseline when the integration waits for a resolution. A sub-change is
+// integrated into its parent change and leaves no baseline (ADR 0081): the result is empty.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
 	if err := g.checkFinalState(ctx, id); err != nil {
@@ -44,7 +45,7 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		if c, err = g.integrateTx(ctx, tx, c, nil); err != nil {
 			return err
 		}
-		if c.Status == domain.ChangeApplied {
+		if c.Status == domain.ChangeApplied && c.ResultBaselineID != "" { // a sub-change leaves no baseline (ADR 0081)
 			if result, err = tx.Baseline(ctx, c.ResultBaselineID); err != nil {
 				return err
 			}
@@ -95,6 +96,10 @@ func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselin
 	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
 		return domain.Baseline{}, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
+	if c.ParentID != "" {
+		// a sub-change lands in its parent's log, it writes no version (ADR 0081)
+		return domain.Baseline{}, g.commitSubTx(ctx, tx, c, landing)
+	}
 	// the change is its branch: one that wrote nothing has none yet
 	if _, own, err := ownBranch(ctx, tx, c); err != nil {
 		return domain.Baseline{}, err
@@ -124,8 +129,17 @@ func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing
 	var change domain.Change
 	var bb domain.Blackboard
 	var haveBB bool
+	var subErr error
 	// An error other than errCollected is met again by the apply in its own transaction.
 	_ = g.repo.InTx(ctx, func(tx Tx) error {
+		if c, err := tx.Change(ctx, id); err == nil && c.ParentID != "" {
+			// a sub-change writes no version (ADR 0081): the gate decides on its drafts
+			change = c
+			if bb, subErr = g.subLandingBlackboard(ctx, tx, c); subErr == nil {
+				haveBB = true
+			}
+			return errCollected
+		}
 		a, _, err := g.newApplier(ctx, tx, id)
 		if err != nil {
 			return err
@@ -140,6 +154,9 @@ func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing
 		change, bb, haveBB = a.change, a.landingBlackboard(), true
 		return errCollected
 	})
+	if subErr != nil {
+		return nil, subErr
+	}
 	if !haveBB {
 		return nil, nil
 	}
@@ -178,8 +195,8 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 		return nil, "", err
 	}
 	target, parentBaseline := maps.Clone(base.Nodes), base.ID
-	// A change on its own branch starts from the head of that branch: what its
-	// sub-changes merged into it since the fork is part of the result.
+	// A change on its own branch starts from the head of that branch (its sub-changes land in its log, ADR 0081: the
+	// head moves only by other means).
 	if _, isOwn, err := ownBranch(ctx, tx, c); err != nil {
 		return nil, "", err
 	} else if isOwn {

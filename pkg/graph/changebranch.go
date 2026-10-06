@@ -29,8 +29,13 @@ func ownBranch(ctx context.Context, tx Tx, c domain.Change) (domain.Branch, bool
 	return b, b.Origin == domain.ChangeBranchOrigin(c.ID), nil
 }
 
-// integrateTx integrates a committed change into the branch it was forked from (its own branch is the one to merge).
+// integrateTx integrates a committed change into the branch it was forked from (its own branch is the one to merge),
+// a sub-change into its parent change (ADR 0081). Unresolved conflicts leave it committed.
 func (g *Graph) integrateTx(ctx context.Context, tx Tx, c domain.Change, resolutions map[domain.NodeID]Resolution) (domain.Change, error) {
+	if c.ParentID != "" {
+		c, _, err := g.integrateSub(ctx, tx, c, resolutions)
+		return c, err
+	}
 	own, ok, err := ownBranch(ctx, tx, c)
 	if err != nil {
 		return c, err
@@ -74,7 +79,8 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 }
 
 // IntegrateChange completes the integration of a committed change that waited for a resolution: its branch is
-// merged into the branch it was forked from, with the given resolutions of the conflicts.
+// merged into the branch it was forked from, a sub-change into its parent change (ADR 0081), with the given
+// resolutions of the conflicts.
 func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
@@ -82,6 +88,15 @@ func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolut
 		}
 		if c.Status != domain.ChangeCommitted {
 			return fmt.Errorf("change %s is %s, not committed: %w", id, c.Status, ErrConflict)
+		}
+		if c.ParentID != "" {
+			var un []string
+			if c, un, err = g.integrateSub(ctx, tx, c, resolutions); err != nil {
+				return err
+			} else if len(un) > 0 {
+				return fmt.Errorf("integrate %s into its parent %s: unresolved conflicts on %v: %w", id, c.ParentID, un, ErrConflict)
+			}
+			return nil
 		}
 		own, ok, err := ownBranch(ctx, tx, c)
 		if err != nil {

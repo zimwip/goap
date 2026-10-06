@@ -146,14 +146,24 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 			t.Fatalf("%s = %s", s.OwnerOrg, got.Status)
 		}
 	}
-	// merged into the parent branch only, main is untouched
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: w.cmp1.ID}); n.Properties["title"] != "one" {
-		t.Fatalf("sub-change leaked on main: %v", n.Properties)
+	// integrated into the parent's log (ADR 0081): no version written, main and the parent branch are untouched
+	if n, _ := g.Node(ctx, domain.NodeRef{ID: w.cmp1.ID}); n.Properties["title"] != "one" || n.Version != w.cmp1.Version {
+		t.Fatalf("sub-change leaked on main: %+v", n)
 	}
-	if n, err := g.NodeByKeyOn(ctx, "", parent.Branch, "CMP-1"); err != nil || n.Properties["title"] != "one v2" {
+	if n, err := g.NodeByKeyOn(ctx, "", parent.Branch, "CMP-1"); err != nil || n.Properties["title"] != "one" {
 		t.Fatalf("parent branch = %v, %v", n.Properties, err)
 	}
-	// the parent applies on top of what its sub-changes merged, then merges into main
+	if v, err := g.ChangeNodeViewByKey(ctx, parent.ID, "", "", "CMP-1"); err != nil || v.Properties["title"] != "one v2" || v.Version != 0 {
+		t.Fatalf("the parent holds the draft of its sub-change: %+v, %v", v.Node, err)
+	}
+	// the parent's delegated impact holds the work and is accepted with the sub-change's review
+	pc, _ := g.Change(ctx, parent.ID)
+	for _, cn := range pc.Nodes {
+		if cn.Key == "CMP-1" && (cn.Review != domain.ReviewAccepted || !cn.Drafted() || !strings.Contains(cn.Reviews[len(cn.Reviews)-1].Comment, "integrated from sub-change")) {
+			t.Fatalf("parent impact of CMP-1 = %+v", cn)
+		}
+	}
+	// the parent applies with what its sub-changes brought in, then merges into main
 	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -415,15 +425,24 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	writeTitle(a, "from A")
 	writeTitle(b, "from B")
 
-	// A applies first: fast-forwards cleanly into the parent branch
+	inParent := func() string {
+		t.Helper()
+		v, err := g.ChangeNodeViewByKey(ctx, parent.ID, "", domain.DefaultNamespace, "CMP-3")
+		if err != nil {
+			t.Fatal(err)
+		}
+		title, _ := v.Properties["title"].(string)
+		return title
+	}
+	// A applies first: integrated cleanly into the parent's log (ADR 0081)
 	if _, err := g.Apply(ctx, a.ID, ""); err != nil {
 		t.Fatalf("sub A applies first: %v", err)
 	}
-	if head, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, parent.Branch, "CMP-3"); err != nil || head.Properties["title"] != "from A" {
-		t.Fatalf("parent branch after A: %+v, %v", head, err)
+	if got := inParent(); got != "from A" {
+		t.Fatalf("parent after A: %q", got)
 	}
 
-	// B, forked from the same base as A, now conflicts: committed (integration waits), not a silent clobber
+	// B, taken from the same version as A, now conflicts: committed (integration waits), not a silent clobber
 	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
 		t.Fatalf("sub B apply: %v", err)
 	}
@@ -435,7 +454,14 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	if _, err := g.IntegrateChange(ctx, b.ID, map[domain.NodeID]Resolution{w.cmp3.ID: {Props: map[string]any{"title": "from A and B"}}}); err != nil {
 		t.Fatal(err)
 	}
-	if head, err := g.NodeByKeyOn(ctx, domain.DefaultNamespace, parent.Branch, "CMP-3"); err != nil || head.Properties["title"] != "from A and B" {
-		t.Fatalf("parent branch after B's resolved merge: %+v, %v", head, err)
+	if got := inParent(); got != "from A and B" {
+		t.Fatalf("parent after B's resolved integration: %q", got)
+	}
+	// the parent lands what both brought in
+	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"); err != nil || n.Properties["title"] != "from A and B" || n.Version != w.cmp3.Version+1 {
+		t.Fatalf("CMP-3 on main = %+v, %v", n, err)
 	}
 }

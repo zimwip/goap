@@ -314,8 +314,8 @@ type NewChange struct {
 }
 
 // CreateChange opens a change on a reference baseline. A sub-change
-// (ParentID) belongs to the namespace of its parent, forks its own branch from
-// the branch of the parent (which must have one) and is merged into it.
+// (ParentID) belongs to the namespace of its parent (which must have a branch of
+// its own), sees its parent's drafts and lands in its parent's log (ADR 0081).
 func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, error) {
 	if err := g.Bootstrap(ctx); err != nil {
 		return domain.Change{}, fmt.Errorf("bootstrap: %w", err)

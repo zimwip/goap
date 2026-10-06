@@ -10,7 +10,7 @@ import (
 )
 
 // A change lands on its own branch when applied, and again on the branch it was forked from when merged into it: the
-// last landing is the version on the target. A sub-change does the same on the branch of its parent.
+// last landing is the version on the target. A sub-change lands nothing: its parent does (ADR 0081).
 func TestLandedOnEveryBranchTheChangeLeavesItsState(t *testing.T) { forEachRepo(t, testLanded) }
 
 func testLanded(t *testing.T, repo Repo) {
@@ -49,7 +49,7 @@ func testLanded(t *testing.T, repo Repo) {
 		t.Fatalf("the change impact holds the last landing: %+v", c.Nodes)
 	}
 
-	// a sub-change has a branch of its own too, forked from its parent's: it lands there, then on the parent's branch
+	// a sub-change lands nothing on a branch: it is integrated into its parent's log, and the parent lands its work (ADR 0081)
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
 	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "parent", BaselineID: head.ID, OwnBranch: true}))
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub", ParentID: parent.ID}))
@@ -64,13 +64,27 @@ func testLanded(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ev = landings(sub.ID)
-	own := must[domain.Change](t)(g.Change(ctx, parent.ID)).Branch
-	if len(ev) != 2 || ev[1].Baseline != b.ID || b.Branch != own {
-		t.Fatalf("a sub-change lands on its branch, then on the branch %s of its parent (baseline %s): %+v", own, b.ID, ev)
+	if ev = landings(sub.ID); len(ev) != 0 || b.ID != "" {
+		t.Fatalf("a sub-change lands nothing (baseline %q): %+v", b.ID, ev)
 	}
-	if first := must[domain.Baseline](t)(g.Baseline(ctx, ev[0].Baseline)); first.Branch == own || first.Branch == domain.MainBranch {
-		t.Fatalf("the first landing of a sub-change is on its own branch, not %q", first.Branch)
+	var into *domain.ImpactRef
+	for _, e := range must[[]domain.ImpactEvent](t)(impactEventsOf(ctx, g, sub.ID)) {
+		if e.Op == domain.ImpactIntegrated {
+			into = e.Into
+		}
+	}
+	if into == nil || into.Change != parent.ID || into.Impact == "" {
+		t.Fatalf("the sub-change records where its impact went: %+v", into)
+	}
+	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	ev = landings(parent.ID)
+	if len(ev) != 2 || ev[0].Impact != into.Impact {
+		t.Fatalf("the parent lands the integrated impact on its branch, then on main: %+v", ev)
+	}
+	if n, err := g.NodeByKey(ctx, "", "L-2"); err != nil || n.Properties["title"] != "t" || n.ChangeID != parent.ID {
+		t.Fatalf("L-2 on main = %+v, %v", n, err)
 	}
 }
 
