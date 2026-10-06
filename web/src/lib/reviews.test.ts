@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { awaitingImpacts, canSubmit, effectiveComment, foldReviews, mayEdit, overlay, reviewOrder, submitProblems, tally } from './reviews';
+import { awaitingImpacts, canSubmit, reviewRows, staleEntries, effectiveComment, foldReviews, mayEdit, overlay, reviewOrder, submitProblems, tally } from './reviews';
 import type { ChangeImpact, ChangeItem, ReviewRecord } from './api';
 
 const item = (id: string, data: Record<string, unknown>, extra: Partial<ChangeItem> = {}): ChangeItem => ({ id, kind: 'review', status: 'proposed', producedBy: 'alice', data: data as ChangeItem['data'], ...extra });
@@ -96,8 +96,43 @@ describe('overlay and order', () => {
     expect(overlay(folded, { R1: rec({ key: 'R1', versions: 2, comment: 'same' }) })[0].comment).toBe('old');
     expect(overlay(folded, { R9: rec({ key: 'R9', versions: 1 }) }).map((r) => r.key)).toEqual(['R1', 'R9']);
   });
-  it('lists open reviews first', () => {
+  it('lists open reviews first and leaves a discarded one out', () => {
     const order = reviewOrder([rec({ key: 'a', status: 'submitted' }), rec({ key: 'b', status: 'discarded' }), rec({ key: 'c' }), rec({ key: 'd' })]);
-    expect(order.map((r) => r.key)).toEqual(['c', 'd', 'a', 'b']);
+    expect(order.map((r) => r.key)).toEqual(['c', 'd', 'a']);
+  });
+});
+
+describe('the table of a review', () => {
+  const nodes: ChangeImpact[] = [
+    { id: 'a', key: 'A', review: 'proposed' },
+    { id: 'b', key: 'B', review: 'accepted' },
+    { id: 'c', key: 'C', review: 'proposed' },
+    { id: 'd', key: 'D', review: 'proposed' },
+  ];
+  const open = rec({ key: 'R1', entries: [{ changeImpactId: 'a', comment: 'x', outcome: 'accept' }, { changeImpactId: 'b', outcome: 'reject' }] });
+  const other = rec({ key: 'R2', entries: [{ changeImpactId: 'd' }] });
+
+  it('shows the entries still proposed, then the proposed impacts out of the review', () => {
+    const rows = reviewRows(nodes, [open, other], open);
+    expect(rows.map((r) => [r.id, r.included, r.comment, r.outcome])).toEqual([
+      ['a', true, 'x', 'accept'],
+      ['c', false, '', ''],
+    ]);
+  });
+  it('finds the stale entries', () => {
+    expect(staleEntries(nodes, open)).toEqual(['b']);
+    expect(staleEntries(nodes, rec({ status: 'submitted', entries: [{ changeImpactId: 'b' }] }))).toEqual([]);
+  });
+  it('ignores the stale entries when it counts what stops a submit', () => {
+    expect(canSubmit(open)).toBe(false);
+    expect(canSubmit(open, new Set(['b']))).toBe(true);
+    const bad = rec({ comment: 'g', entries: [{ changeImpactId: 'a', outcome: 'accept' }, { changeImpactId: 'b' }] });
+    expect(canSubmit(bad)).toBe(false);
+    expect(canSubmit(bad, new Set(['b']))).toBe(true);
+    expect(canSubmit(rec({ comment: 'g', entries: [{ changeImpactId: 'b', outcome: 'accept' }] }), new Set(['b']))).toBe(false);
+  });
+  it('shows a final review as it was reviewed', () => {
+    const done = rec({ status: 'submitted', entries: [{ changeImpactId: 'b', outcome: 'reject', comment: 'no' }] });
+    expect(reviewRows(nodes, [done], done).map((r) => [r.id, r.included, r.outcome])).toEqual([['b', true, 'reject']]);
   });
 });

@@ -199,7 +199,7 @@ makes for the person.
 | Edit its links | Node editor → Relations → *Links*: the outgoing links of the draft (add: a link type the node type allows and a target; remove) | `ImpactLinkCreate`, `ImpactLinkDelete` |
 | Retire an entry | An MCP, adapter, policy, assignment or model entry is never deleted: *Retire* moves it to `retired` (its readers leave it out), saving it again restores it | `CommitEdits` (`state`) |
 | Review | Change → Impacts: *Review…* (comment mandatory), a shortcut for one impact | `ImpactNodeReview` |
-| Review several impacts | Change → Reviews: *New review*, a global comment, a select box of the impacts awaiting review, a comment and an accept / reject per impact, *Submit review* (all or none) or *Discard* | `ReviewOpen`, `ReviewUpdate`, `ReviewSubmit`, `ReviewDiscard` (over `ImpactNodeReviewBatch`) |
+| Review several impacts | Change → Reviews: *New review* (prefilled with every proposed impact), a global comment, one table of the proposed impacts (include / remove box, inline comment, accept / reject per row, Accept all / Reject all), *Submit review* (all or none) or *Discard* | `ReviewOpen`, `ReviewUpdate`, `ReviewSubmit`, `ReviewDiscard` (over `ImpactNodeReviewBatch`) |
 | Options, decisions | Scope bar, Compare, Decisions panes (a ruling made there is a person's) | `OpenOption` … `SelectOption`, `OpenDecision` … `RuleDecision` |
 | Adopt or discard a flow | Change → Overview (a flow no run works on is adopted straight on the graph) | `AdoptFlow`, `DiscardFlow` |
 | Apply | Change → Overview: *Apply* | `ApplyChange` |

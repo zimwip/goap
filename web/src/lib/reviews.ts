@@ -69,10 +69,11 @@ export function overlay(folded: ReviewRecord[], local: Record<string, ReviewReco
   return out;
 }
 
-/** Open reviews first, then submitted, then discarded; the order of opening within each. */
+/** The reviews to list: open ones first, then submitted ones, in the order of opening within each. A discarded review
+ * is gone from the list: it changed no impact, and only the audit trail (the change log) keeps it. */
 export function reviewOrder(reviews: ReviewRecord[]): ReviewRecord[] {
-  const rank = (r: ReviewRecord) => (r.status === 'open' ? 0 : r.status === 'submitted' ? 1 : 2);
-  return reviews.map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map((x) => x.r);
+  const rank = (r: ReviewRecord) => (r.status === 'open' ? 0 : 1);
+  return reviews.filter((r) => r.status !== 'discarded').map((r, i) => ({ r, i })).sort((a, b) => rank(a.r) - rank(b.r) || a.i - b.i).map((x) => x.r);
 }
 
 const flowOf = (flow: string | undefined) => (!flow || flow === 'main' ? '' : flow);
@@ -99,9 +100,10 @@ export function effectiveComment(global: string, entry: string): string {
   return `${e}\n\nReview: ${g}`;
 }
 
-/** What stops an open review from being submitted, in words; empty when it may be. */
-export function submitProblems(r: ReviewRecord): string[] {
-  const entries = r.entries ?? [];
+/** What stops an open review from being submitted, in words; empty when it may be. ignore: entries left out (the stale
+ * ones, which the panel removes before it submits). */
+export function submitProblems(r: ReviewRecord, ignore: Set<string> = new Set()): string[] {
+  const entries = (r.entries ?? []).filter((e) => !ignore.has(e.changeImpactId));
   const out: string[] = [];
   if (r.status !== 'open') return ['the review is final'];
   if (!entries.length) out.push('add at least one impact');
@@ -114,7 +116,44 @@ export function submitProblems(r: ReviewRecord): string[] {
 
 /** Whether an open review may be submitted: an entry at least and an outcome on every one (a comment on each, its own
  * or the global one). */
-export const canSubmit = (r: ReviewRecord): boolean => submitProblems(r).length === 0;
+export const canSubmit = (r: ReviewRecord, ignore?: Set<string>): boolean => submitProblems(r, ignore).length === 0;
+
+/** A line of the table of a review: a change impact, in the review (included) or only awaiting one. */
+export interface ReviewRow {
+  id: string;
+  /** the impact as the scope sees it (absent for an entry of a final review whose impact is not in the scope) */
+  node?: ChangeImpact;
+  included: boolean;
+  comment: string;
+  outcome: string;
+}
+
+const proposed = (n: ChangeImpact | undefined): n is ChangeImpact => !!n && !!n.id && !n.superseded && (n.review === 'proposed' || !n.review);
+
+/** The entries of an open review whose impact no longer awaits a review (accepted or rejected elsewhere, replaced): the
+ * table hides them and Submit removes them first. */
+export function staleEntries(nodes: ChangeImpact[], r: ReviewRecord): string[] {
+  if (r.status !== 'open') return [];
+  const byId = new Map(nodes.map((n) => [n.id ?? '', n]));
+  return (r.entries ?? []).filter((e) => !proposed(byId.get(e.changeImpactId))).map((e) => e.changeImpactId);
+}
+
+/** The table of a review. Open: every proposed impact of the scope, the entries of the review first (included), then the
+ * impacts that await a review and no other open review holds (not included: the box to tick); stale entries are left
+ * out. Final: the entries as they were reviewed. reviews: all the reviews of the change (the ones of other flows are
+ * ignored). */
+export function reviewRows(nodes: ChangeImpact[], reviews: ReviewRecord[], r: ReviewRecord): ReviewRow[] {
+  const byId = new Map(nodes.map((n) => [n.id ?? '', n]));
+  const entryRow = (e: ReviewEntry): ReviewRow => ({ id: e.changeImpactId, node: byId.get(e.changeImpactId), included: true, comment: e.comment ?? '', outcome: e.outcome ?? '' });
+  if (r.status !== 'open') return (r.entries ?? []).map(entryRow);
+  const stale = new Set(staleEntries(nodes, r));
+  const rows = (r.entries ?? []).filter((e) => !stale.has(e.changeImpactId)).map(entryRow);
+  const have = new Set(rows.map((x) => x.id));
+  for (const n of awaitingImpacts(nodes, reviews, r.flow ?? '', r.key)) {
+    if (!have.has(n.id!)) rows.push({ id: n.id!, node: n, included: false, comment: '', outcome: '' });
+  }
+  return rows;
+}
 
 /** How many entries accept, reject or are still undecided. */
 export function tally(r: ReviewRecord): { accept: number; reject: number; undecided: number } {

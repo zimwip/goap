@@ -28,7 +28,7 @@ author), `submittedAt`.
 - **Entry**: names one change impact, has its own comment and its own outcome `accept` / `reject` (empty while undecided: an open
   review may hold undecided entries; a submitted one has none).
 - An impact is in **at most one open review per flow** and an entry takes only an impact of the review's change and flow whose
-  review is `proposed` as the flow sees it (`review.Awaiting`: what the web's select box lists). A discarded review frees its
+  review is `proposed` as the flow sees it (`review.Awaiting`: what the web's table lists). A discarded review frees its
   impacts.
 
 ### 2. Operations
@@ -88,11 +88,16 @@ the item versions are `goap:ReviewRecord` entities (`goap:reviewOf`).
 ### 5. Web
 
 A **Reviews** pane in the change editor (`ReviewPanel.svelte`, scoped like the impacts pane): the reviews of the scope, open first,
-`New review`; for an open review of the caller (or an administrator) a global comment, a select box of the impacts awaiting review
-(one, or all) with `Add`, a table of the entries (impact linked to the Impacts pane, comment input, accept / reject radios,
-`Remove`), `Submit review` (disabled until there is an entry, an outcome on each and a comment, its own or the global one; the title
-says what is missing) and `Discard` (confirmed). A submitted or discarded review is read-only, with the comments and what each
-impact is now. The per-row Accept / Reject of the impacts stay as the shortcut for one impact. Following the one-stream rule
+`New review`. A new review is **prefilled** by the web: `ReviewOpen`, then one `ReviewUpdate` adding every impact awaiting review
+(two calls, not atomic: if the second fails the review stays open and empty, its rows unchecked; no backend change). An open review
+of the caller (or an administrator) is a global comment above **one table** of the proposed impacts (`reviewRows`): a checkbox
+(unchecking removes the entry, `ReviewUpdate remove`; the row stays, greyed, and checking it adds it back), the impact (linked to
+the Impacts pane, type, intent), an inline comment input saved on change / enter, accept / reject radios, and `Accept all` /
+`Reject all` in the header. An entry whose impact is no longer proposed (reviewed elsewhere, replaced) is hidden and `Submit review`
+removes it first (`staleEntries`). `Submit review` is disabled until an included row exists, each has an outcome and a comment (its
+own or the global one; the title says what is missing); `Discard` is confirmed. A submitted review is the same table
+read-only, with what each impact is now; a discarded review leaves the list (it changed no impact; the audit trail keeps its
+record versions, the log is never rewritten). Following the one-stream rule
 (ADR 0053) nothing is read again after a write: the answer of the write is put over what the change shows (`overlay`, by version)
 until the `change.updated` event brings the new one; the pure rules (`foldReviews`, `awaitingImpacts`, `submitProblems`,
 `effectiveComment`) are in `web/src/lib/reviews.ts`.
