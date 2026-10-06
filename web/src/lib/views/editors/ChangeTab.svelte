@@ -277,6 +277,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   // applied, or applied on its own branch and waiting for its merge: nothing to apply any more
   const isApplied = $derived(change?.status === 'applied' || change?.status === 'committed');
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
+  // a sub-change leaves no baseline: it is integrated into its parent (ADR 0081), so it has no baseline to name
+  const isSub = $derived(!!change?.parentId);
+  const unnamed = $derived(!isSub && !baselineName.trim());
   void loadTypes();
   const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, view?.nodes ?? [], posts, extraNodes, true));
   // the scope: what it shows, whether it can be edited, its colour
@@ -543,8 +546,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         label: applying ? 'Applying…' : 'Apply',
         icon: 'check',
         primary: true,
-        disabled: !change || isApplied || applying || !baselineName.trim() || stuckNotLandable,
-        title: stuckNotLandable ? 'Move the nodes to a landable state first' : 'Create a new baseline from the change',
+        disabled: !change || isApplied || applying || unnamed || stuckNotLandable,
+        title: stuckNotLandable ? 'Move the nodes to a landable state first' : isSub ? 'Integrate the change into its parent change' : 'Create a new baseline from the change',
         run: apply,
       },
     ],
@@ -688,12 +691,16 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
         <SubChangeSync change={ch} {closed} onchange={() => load(selected)} />
         <div class="apply row">
-          <div class="grow">
-            <label for="bname">Name of the new baseline</label>
-            <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
-          </div>
-          <button class="primary" onclick={apply} disabled={isApplied || applying || !baselineName.trim() || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : ''}>
-            {applying ? 'Applying…' : 'Apply'}
+          {#if isSub}
+            <p class="grow hint">Applying integrates this sub-change into its parent change, which lands it: no baseline of its own.</p>
+          {:else}
+            <div class="grow">
+              <label for="bname">Name of the new baseline</label>
+              <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
+            </div>
+          {/if}
+          <button class="primary" onclick={apply} disabled={isApplied || applying || unnamed || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : ''}>
+            {applying ? 'Applying…' : isSub ? 'Integrate into parent' : 'Apply'}
           </button>
         </div>
         {#if awaiting.length}
