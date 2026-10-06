@@ -50,6 +50,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import ChangeDerogations from '../../components/ChangeDerogations.svelte';
   import ReviewPanel from '../../components/ReviewPanel.svelte';
   import SubChangeSync from '../../components/SubChangeSync.svelte';
+  import SubChangeHistory from '../../components/SubChangeHistory.svelte';
   import { foldReviews } from '../../reviews';
   import { riskRegister, liveRisk } from '../../risks';
   import { verifications, derogationRegister, openDerogation } from '../../verification';
@@ -848,6 +849,13 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           {/if}
           {#if openSubs.length}<p class="hint">Apply or abandon the {openSubs.length} open sub-change(s) before applying this change.</p>{/if}
       </section>
+
+      {#if ancestors.length || subs.length}
+        <section class="card">
+          <h3>History with {ancestors.length ? 'the parent' : ''}{ancestors.length && subs.length ? ' and ' : ''}{subs.length ? 'the sub-changes' : ''}</h3>
+          <SubChangeHistory change={ch} parent={ancestors.at(-1)} {subs} />
+        </section>
+      {/if}
       {/if}
     {/snippet}
   </EditorPanes>

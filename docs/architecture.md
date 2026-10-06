@@ -87,7 +87,9 @@ the work. The integration is a fast-forward: a sub-change whose parent changed a
 property, owner, state and link against the parent's draft as it was copied (folded from the parent's log), the fields changed
 on both sides named as conflicts the sub-change settles by editing its draft, the changed impacts reviewed again. The
 change's overview shows a sub-change's impacts behind its parent and its conflicts (`GetRebaseState`), with a Rebase
-action and "Keep mine" (`ImpactNodeResolve`).
+action and "Keep mine" (`ImpactNodeResolve`); its Changes pane draws the history of the change with its parent and sub-changes as a branch
+graph (`SubChangeHistory.svelte` over `HistoryGraph`, `web/src/lib/subChangeHistory.ts`: a lane per change, a row per impact
+event of its main flow, the edges of a copy of the parent's draft, a rebase and an integration; a node filter).
 
 **Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)) are the `OrgUnit` nodes above. A
 change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEFAULT`, created at the first start
