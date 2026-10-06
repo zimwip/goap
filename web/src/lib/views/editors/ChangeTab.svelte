@@ -49,6 +49,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import ChangeVerification from '../../components/ChangeVerification.svelte';
   import ChangeDerogations from '../../components/ChangeDerogations.svelte';
   import ReviewPanel from '../../components/ReviewPanel.svelte';
+  import SubChangeSync from '../../components/SubChangeSync.svelte';
   import { foldReviews } from '../../reviews';
   import { riskRegister, liveRisk } from '../../risks';
   import { verifications, derogationRegister, openDerogation } from '../../verification';
@@ -485,9 +486,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     applying = true;
     error = '';
     try {
+      const parent = change.parentId;
       applied = (await graph.applyChange(change.id, baselineName.trim())).baseline;
       await load(change.id);
-      notify(`Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
+      // a sub-change leaves no baseline: it is integrated into its parent (ADR 0081, 0082)
+      if (parent) applied = undefined;
+      notify(parent ? `Integrated into parent change ${shortId(parent)}.` : `Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -681,6 +685,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           </ul>
         {/if}
 
+        <SubChangeSync change={ch} {closed} onchange={() => load(selected)} />
         <div class="apply row">
           <div class="grow">
             <label for="bname">Name of the new baseline</label>

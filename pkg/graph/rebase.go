@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -322,4 +323,63 @@ func (g *Graph) checkSettled(ctx context.Context, tx Tx, c domain.Change, impact
 			impact, strings.Join(pending, ", "), ErrConflict)
 	}
 	return nil
+}
+
+// ImpactConflicts are the conflicts a rebase left on a change impact, not settled yet.
+type ImpactConflicts struct {
+	Impact    domain.ChangeImpactID `json:"impactId"`
+	Key       string                `json:"key"`
+	Conflicts []string              `json:"conflicts"`
+}
+
+// RebaseState is where a sub-change stands against its parent (ADR 0082): the change impacts whose draft the parent
+// changed since the sub-change took it (a rebase brings them up to date), and the conflicts left to settle.
+type RebaseState struct {
+	Parent    domain.ChangeID         `json:"parentId"`
+	Behind    []domain.ChangeImpactID `json:"behind,omitempty"`
+	Conflicts []ImpactConflicts       `json:"conflicts,omitempty"`
+}
+
+// RebaseState reads where a sub-change stands against its parent. A change that is not a sub-change, or whose parent is
+// no longer open, has nothing behind.
+func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseState, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
+		}
+		st.Parent = c.ParentID
+		events, err := impactEvents(ctx, tx, c.ID)
+		if err != nil {
+			return err
+		}
+		for _, cn := range c.Nodes {
+			if pending := domain.PendingConflicts(events, cn.ID); len(pending) > 0 {
+				st.Conflicts = append(st.Conflicts, ImpactConflicts{Impact: cn.ID, Key: cn.Key, Conflicts: pending})
+			}
+		}
+		if c.ParentID == "" || c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned {
+			return nil
+		}
+		p, err := g.parentOf(ctx, tx, c)
+		if errors.Is(err, ErrConflict) {
+			return nil // the parent is no longer open
+		} else if err != nil {
+			return err
+		}
+		rows, err := g.drafts(ctx, tx, c.ID)
+		if err != nil {
+			return err
+		}
+		for _, cn := range c.Nodes {
+			if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded {
+				continue
+			}
+			if d := ownDraft(rows, cn.ID, ""); d != nil && p.behind(*d, p.impactOf(d.Node)) {
+				st.Behind = append(st.Behind, cn.ID)
+			}
+		}
+		return nil
+	})
+	return
 }

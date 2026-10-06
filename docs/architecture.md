@@ -85,7 +85,9 @@ flow (accepted with the sub-change's review, an `integrated` event in its own lo
 the work. The integration is a fast-forward: a sub-change whose parent changed a node meanwhile is first **rebased**
 ([ADR 0082](adr/0082-rebase-a-sub-change-onto-its-parent.md), `RebaseChange`, done by `Apply`): a three-way merge per
 property, owner, state and link against the parent's draft as it was copied (folded from the parent's log), the fields changed
-on both sides named as conflicts the sub-change settles by editing its draft, the changed impacts reviewed again.
+on both sides named as conflicts the sub-change settles by editing its draft, the changed impacts reviewed again. The
+change's overview shows a sub-change's impacts behind its parent and its conflicts (`GetRebaseState`), with a Rebase
+action and "Keep mine" (`ImpactNodeResolve`).
 
 **Organisations** ([ADR 0019](adr/0019-organisations-mcp-connectors.md)) are the `OrgUnit` nodes above. A
 change is held by one unit (`ownerOrg`; empty: the default organisation `ORG-DEFAULT`, created at the first start

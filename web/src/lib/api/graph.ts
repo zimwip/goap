@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, LinkWrite, MergePlan, NodeCreateSpec, NodeName, OptionComparison, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -262,6 +262,15 @@ export const graph = {
   /** Takes an impact out of the change (its draft is dropped); refused once its version has landed. */
   withdrawImpact: (changeId: string, changeImpactId: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
+  /** Brings a sub-change up to date with its parent (ADR 0082): a three-way merge of the drafts the parent changed; the fields changed on both sides are conflicts. */
+  rebaseChange: (changeId: string) =>
+    rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[] }>(GRAPH, 'RebaseChange', { changeId }),
+  /** Keeps the sub-change's values for the conflicts a rebase left on an impact (an edit of a field settles its own). */
+  impactNodeResolve: (changeId: string, changeImpactId: string) =>
+    rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeResolve', { changeId, changeImpactId }),
+  /** Where a sub-change stands against its parent: the impacts behind it, the conflicts to settle. */
+  getRebaseState: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, RebaseState>(GRAPH, 'GetRebaseState', { changeId }, signal),
   /** Sends accepted or rejected impacts back to proposed (a rejected one is reworked); the comment is mandatory. */
   reopenChangeImpacts: (changeId: string, changeImpactIds: string[], comment: string) =>
     rpc<{ changeId: string; changeImpactIds: string[]; comment: string }, { reopened?: string[] }>(GRAPH, 'ReopenChangeImpacts', { changeId, changeImpactIds, comment }),
