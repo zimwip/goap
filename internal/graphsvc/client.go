@@ -223,6 +223,44 @@ func (c *Client) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impac
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
+// RebaseChange brings a sub-change up to date with its parent (ADR 0082).
+func (c *Client) RebaseChange(ctx context.Context, id domain.ChangeID) (graph.RebaseResult, error) {
+	r, err := c.rpc.RebaseChange(ctx, connect.NewRequest(&graphv1.RebaseChangeRequest{ChangeId: string(id)}))
+	if err != nil {
+		return graph.RebaseResult{}, rpcerr.FromConnect(err)
+	}
+	out := graph.RebaseResult{Parent: domain.ChangeID(r.Msg.ParentId)}
+	for _, i := range r.Msg.Impacts {
+		out.Impacts = append(out.Impacts, graph.RebasedImpact{Impact: domain.ChangeImpactID(i.ChangeImpactId), Key: i.Key, Changed: i.Changed, Conflicts: i.Conflicts})
+	}
+	return out, nil
+}
+
+// ImpactNodeResolve keeps the sub-change's values for the conflicts a rebase left on a change impact (ADR 0082).
+func (c *Client) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, execution string) (domain.ChangeImpact, error) {
+	r, err := c.rpc.ImpactNodeResolve(ctx, connect.NewRequest(&graphv1.ImpactNodeResolveRequest{ChangeId: string(id), ChangeImpactId: string(impact), Execution: execution}))
+	if err != nil {
+		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
+}
+
+// RebaseState tells where a sub-change stands against its parent (ADR 0082).
+func (c *Client) RebaseState(ctx context.Context, id domain.ChangeID) (graph.RebaseState, error) {
+	r, err := c.rpc.GetRebaseState(ctx, connect.NewRequest(&graphv1.GetRebaseStateRequest{ChangeId: string(id)}))
+	if err != nil {
+		return graph.RebaseState{}, rpcerr.FromConnect(err)
+	}
+	out := graph.RebaseState{Parent: domain.ChangeID(r.Msg.ParentId)}
+	for _, id := range r.Msg.BehindImpactIds {
+		out.Behind = append(out.Behind, domain.ChangeImpactID(id))
+	}
+	for _, x := range r.Msg.Conflicts {
+		out.Conflicts = append(out.Conflicts, graph.ImpactConflicts{Impact: domain.ChangeImpactID(x.ChangeImpactId), Key: x.Key, Conflicts: x.Conflicts})
+	}
+	return out, nil
+}
+
 // WithdrawImpact implements engine.GraphPort.
 func (c *Client) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
 	_, err := c.rpc.WithdrawImpact(ctx, connect.NewRequest(&graphv1.WithdrawImpactRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))

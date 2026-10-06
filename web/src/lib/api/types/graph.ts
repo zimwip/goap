@@ -92,6 +92,32 @@ export interface ChangeLogQuery {
   limit?: number;
 }
 
+/** What a rebase did to an impact of a sub-change (ADR 0082). */
+export interface RebasedImpact {
+  changeImpactId?: string;
+  key?: string;
+  /** the merged draft differs from the sub-change's: its review went back to proposed */
+  changed?: boolean;
+  /** the fields changed on both sides: props.<key>, owner, state, link:<type>:<node>, node */
+  conflicts?: string[];
+}
+
+/** The conflicts a rebase left on an impact, not settled yet. */
+export interface ImpactConflicts {
+  changeImpactId?: string;
+  key?: string;
+  conflicts?: string[];
+}
+
+/** Where a sub-change stands against its parent (ADR 0082). */
+export interface RebaseState {
+  /** the parent change ('' when the change is not a sub-change) */
+  parentId?: string;
+  /** the impacts whose draft the parent changed since the sub-change took it */
+  behindImpactIds?: string[];
+  conflicts?: ImpactConflicts[];
+}
+
 /** An operation on the change impacts of a change (ADR 0029). */
 export interface ImpactEvent {
   id?: string;

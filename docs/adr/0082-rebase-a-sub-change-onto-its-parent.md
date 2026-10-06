@@ -73,6 +73,8 @@ integration refuse; `Apply` again rebases again.
   they were settled.
 - The `removeLink` and `updateLink` patches of the `updated` event name the target node (`toId`, and the type for
   `updateLink`), so a link edit can settle a link conflict.
-- Not done: the RPC, `goap-change` tool and web action for `RebaseChange` and `ImpactNodeResolve` (the proto is regenerated with
-  `buf`, absent here); `Apply` reaches the rebase through the existing `ApplyChange`, and an edit settles a conflict through the
-  existing operations. Merging the values of a property (text, lists) is not attempted: a property is one value.
+- Exposed by the RPCs `RebaseChange`, `ImpactNodeResolve` and `GetRebaseState` (`Graph.RebaseState`: the impacts behind the
+  parent, the conflicts left), `graphsvc.Client` and the web (`SubChangeSync.svelte` on the change's overview: Rebase, the
+  conflicts with "Keep mine"; `ApplyChange` rebases by itself).
+- Not done: a `goap-change` tool for the rebase and the resolution (an agent reaches them through `apply` and its edits).
+  Merging the values of a property (text, lists) is not attempted: a property is one value.

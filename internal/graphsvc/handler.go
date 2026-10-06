@@ -697,6 +697,41 @@ func (h *Handler) WithdrawImpact(ctx context.Context, r *connect.Request[graphv1
 	return res(&graphv1.WithdrawImpactResponse{}, err)
 }
 
+// RebaseChange brings a sub-change up to date with its parent (ADR 0082).
+func (h *Handler) RebaseChange(ctx context.Context, r *connect.Request[graphv1.RebaseChangeRequest]) (*connect.Response[graphv1.RebaseChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	rb, err := h.Graph.RebaseChange(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.RebaseChangeResponse{ParentId: string(rb.Parent)}
+	for _, i := range rb.Impacts {
+		out.Impacts = append(out.Impacts, &graphv1.RebasedImpact{ChangeImpactId: string(i.Impact), Key: i.Key, Changed: i.Changed, Conflicts: i.Conflicts})
+	}
+	return res(out, err)
+}
+
+// ImpactNodeResolve keeps the sub-change's values for the conflicts a rebase left on a change impact (ADR 0082 §2).
+func (h *Handler) ImpactNodeResolve(ctx context.Context, r *connect.Request[graphv1.ImpactNodeResolveRequest]) (*connect.Response[graphv1.ImpactNodeResolveResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	if err := h.gateImpact(ctx, m.ChangeId, m.ChangeImpactId, ""); err != nil {
+		return nil, err
+	}
+	cn, err := h.Graph.ImpactNodeResolve(ctx, domain.ChangeID(m.ChangeId), domain.ChangeImpactID(m.ChangeImpactId), m.Execution)
+	return res(&graphv1.ImpactNodeResolveResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
+}
+
+// GetRebaseState tells where a sub-change stands against its parent (ADR 0082).
+func (h *Handler) GetRebaseState(ctx context.Context, r *connect.Request[graphv1.GetRebaseStateRequest]) (*connect.Response[graphv1.GetRebaseStateResponse], error) {
+	st, err := h.Graph.RebaseState(ctx, domain.ChangeID(r.Msg.ChangeId))
+	out := &graphv1.GetRebaseStateResponse{ParentId: string(st.Parent)}
+	for _, id := range st.Behind {
+		out.BehindImpactIds = append(out.BehindImpactIds, string(id))
+	}
+	for _, c := range st.Conflicts {
+		out.Conflicts = append(out.Conflicts, &graphv1.ImpactConflicts{ChangeImpactId: string(c.Impact), Key: c.Key, Conflicts: c.Conflicts})
+	}
+	return res(out, err)
+}
+
 func (h *Handler) ImpactNodeReview(ctx context.Context, r *connect.Request[graphv1.ImpactNodeReviewRequest]) (*connect.Response[graphv1.ImpactNodeReviewResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	status := domain.ReviewRejected

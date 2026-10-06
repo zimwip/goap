@@ -68,6 +68,14 @@ service GraphService {
   rpc ImpactNodeSplit(ImpactNodeSplitRequest) returns (ImpactNodeRestructureResponse);
   // Take a change impact out of the change, explicitly: its draft is dropped.
   rpc WithdrawImpact(WithdrawImpactRequest) returns (WithdrawImpactResponse);
+  // Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
+  // the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
+  // conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
+  // ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
+  // own); GetRebaseState tells the impacts behind the parent and the conflicts to settle.
+  rpc RebaseChange(RebaseChangeRequest) returns (RebaseChangeResponse);
+  rpc ImpactNodeResolve(ImpactNodeResolveRequest) returns (ImpactNodeResolveResponse);
+  rpc GetRebaseState(GetRebaseStateRequest) returns (GetRebaseStateResponse);
   rpc ImpactNodeReview(ImpactNodeReviewRequest) returns (ImpactNodeReviewResponse);
   // The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
   // own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
@@ -1180,6 +1188,55 @@ message WithdrawImpactRequest {
 }
 
 message WithdrawImpactResponse {}
+
+message RebaseChangeRequest {
+  string change_id = 1;
+}
+
+// What a rebase did to a change impact of the sub-change (ADR 0082).
+message RebasedImpact {
+  string change_impact_id = 1;
+  string key = 2;
+  // the merged draft differs from the sub-change's: its review went back to proposed
+  bool changed = 3;
+  // the fields changed on both sides: props.<key>, owner, state, link:<type>:<node>, node (the parent rejected or
+  // withdrew its impact)
+  repeated string conflicts = 4;
+}
+
+message RebaseChangeResponse {
+  string parent_id = 1;
+  repeated RebasedImpact impacts = 2;
+}
+
+message ImpactNodeResolveRequest {
+  string change_id = 1;
+  string change_impact_id = 2;
+  string execution = 3;
+}
+
+message ImpactNodeResolveResponse {
+  ChangeImpact node = 1;
+}
+
+message GetRebaseStateRequest {
+  string change_id = 1;
+}
+
+// The conflicts a rebase left on a change impact, not settled yet.
+message ImpactConflicts {
+  string change_impact_id = 1;
+  string key = 2;
+  repeated string conflicts = 3;
+}
+
+message GetRebaseStateResponse {
+  // the parent change ("" when the change is not a sub-change)
+  string parent_id = 1;
+  // the change impacts whose draft the parent changed since the sub-change took it
+  repeated string behind_impact_ids = 2;
+  repeated ImpactConflicts conflicts = 3;
+}
 
 message ImpactNodeReviewRequest {
   string change_id = 1;
