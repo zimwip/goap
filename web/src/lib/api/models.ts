@@ -1,6 +1,6 @@
 import { rpc } from './transport';
-import type { Empty, Struct } from './types/common';
-import type { AvailableModel, CatalogModel, DiscoveredModel, ListUsageResponse, LlmProvider, ModelAlias, ProviderKind, SuggestRequest, SuggestResponse, UsageFilter, UsageGroup, UsageSummaryRow } from './types/models';
+import type { Empty, Int64, Struct } from './types/common';
+import type { AvailableModel, CallExchange, CatalogModel, DiscoveredModel, ListUsageResponse, LlmProvider, ModelAlias, ProviderKind, SuggestRequest, SuggestResponse, UsageFilter, UsageGroup, UsageSummaryRow } from './types/models';
 
 const MODEL = 'goap.model.v1.ModelService';
 const PREFERENCES = 'goap.preferences.v1.PreferencesService';
@@ -30,6 +30,8 @@ export const models = {
   /** The ledger of LLM calls (ADR 0089): a caller reads its own calls, an administrator any subject or the whole platform. */
   listUsage: (filter: UsageFilter, signal?: AbortSignal) =>
     rpc<{ filter: UsageFilter }, ListUsageResponse>(MODEL, 'ListUsage', { filter }, signal),
+  /** The stored exchange of a call of the ledger (`LLMCall.hasExchange`): own calls, any for an administrator; not_found when purged or not stored. */
+  getCallExchange: (seq: Int64, signal?: AbortSignal) => rpc<{ seq: Int64 }, CallExchange>(MODEL, 'GetCallExchange', { seq }, signal),
   usageSummary: (filter: UsageFilter, groupBy: UsageGroup, signal?: AbortSignal) =>
     rpc<{ filter: UsageFilter; groupBy: UsageGroup }, { rows?: UsageSummaryRow[] }>(MODEL, 'UsageSummary', { filter, groupBy }, signal),
 };

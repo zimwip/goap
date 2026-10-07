@@ -26,6 +26,14 @@ func EnvInt(key string, def int) int {
 	return def
 }
 
+// EnvBool returns a boolean environment variable (strconv.ParseBool) or a default.
+func EnvBool(key string, def bool) bool {
+	if v, err := strconv.ParseBool(os.Getenv(key)); err == nil {
+		return v
+	}
+	return def
+}
+
 // EnvDuration returns a duration environment variable or a default.
 func EnvDuration(key string, def time.Duration) time.Duration {
 	if v, err := time.ParseDuration(os.Getenv(key)); err == nil {

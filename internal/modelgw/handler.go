@@ -350,7 +350,7 @@ func callToPB(c Call) *modelv1.LLMCall {
 	return &modelv1.LLMCall{Seq: c.Seq, At: timestamppb.New(c.At), DurationMs: c.DurationMs, Subject: c.Subject, Project: c.Project, Org: c.Org,
 		Alias: c.Alias, Provider: c.Provider, Model: c.Model, Kind: c.Kind, InputTokens: c.InputTokens, OutputTokens: c.OutputTokens, Error: c.Error,
 		Source: c.Source, ConversationId: c.ConversationID, ProcessId: c.ProcessID, ChangeId: c.ChangeID, Step: int32(c.Step), Action: c.Action,
-		Agent: c.Agent, Call: int32(c.CallIndex)}
+		Agent: c.Agent, Call: int32(c.CallIndex), HasExchange: c.HasExchange}
 }
 
 // ListUsage reads the ledger: the caller's own calls, any subject's for an administrator.
@@ -377,6 +377,20 @@ func (h *Handler) UsageSummary(ctx context.Context, r *connect.Request[modelv1.U
 	out := &modelv1.UsageSummaryResponse{}
 	for _, x := range rows {
 		out.Rows = append(out.Rows, &modelv1.UsageSummaryRow{Key: x.Key, Calls: x.Calls, InputTokens: x.Input, OutputTokens: x.Output, Errors: x.Errors, DurationMs: x.DurationMs})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// GetCallExchange reads the stored exchange of a call: the caller's own, any for an administrator.
+func (h *Handler) GetCallExchange(ctx context.Context, r *connect.Request[modelv1.GetCallExchangeRequest]) (*connect.Response[modelv1.GetCallExchangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, x, err := h.Service.CallExchange(ctx, r.Msg.Seq, h.isAdmin(ctx))
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	out := &modelv1.GetCallExchangeResponse{Call: callToPB(c), System: x.System, Response: x.Response, Truncated: x.Truncated, Error: c.Error}
+	for _, m := range x.Messages {
+		out.Messages = append(out.Messages, &modelv1.ExchangeMessage{Role: m.Role, Content: m.Content})
 	}
 	return connect.NewResponse(out), nil
 }

@@ -2,6 +2,7 @@ package modelgw
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -9,11 +10,12 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
 )
 
-// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused. It stores no prompt and no
-// answer; the exchange of an engine call stays in the change log (ADR 0059).
+// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused. The exchange (request and answer)
+// of an engine call of a change stays in the change log (ADR 0059); every other call has it stored next to its row.
 
 // Call kinds.
 const (
@@ -42,7 +44,41 @@ type Call struct {
 	Action    string
 	Agent     string
 	CallIndex int
+	// HasExchange says the gateway stores the exchange of this row (read only: set by the store, ignored on write).
+	HasExchange bool
 }
+
+// Exchange is the request and the answer of a call the gateway stores (ADR 0089); Seq is the row's.
+type Exchange struct {
+	Seq      int64
+	System   string
+	Messages []llm.Message
+	Response string
+	// Truncated says a text was cut to journal.MaxExchangeText.
+	Truncated bool
+}
+
+// capped returns the exchange with every text cut to journal.MaxExchangeText.
+func (x Exchange) capped() Exchange {
+	cut := func(s string) string {
+		if len(s) <= journal.MaxExchangeText {
+			return s
+		}
+		x.Truncated = true
+		return strings.ToValidUTF8(s[:journal.MaxExchangeText], "")
+	}
+	x.System, x.Response = cut(x.System), cut(x.Response)
+	msgs := make([]llm.Message, len(x.Messages))
+	for i, m := range x.Messages {
+		msgs[i] = llm.Message{Role: m.Role, Content: cut(m.Content)}
+	}
+	x.Messages = msgs
+	return x
+}
+
+// inChangeLog reports whether the exchange of a call is kept by the change log (ADR 0059): an engine call of a change.
+// The ledger stores the exchange of every other call.
+func inChangeLog(m llm.CallMeta) bool { return m.Source == llm.SourceEngine && m.ChangeID != "" }
 
 // UsageFilter selects calls; empty fields match everything.
 type UsageFilter struct {
@@ -184,6 +220,8 @@ type pending struct {
 	s     *Service
 	call  Call
 	start time.Time
+	// x is the exchange to store, nil when the call's is kept elsewhere or the storage is off.
+	x *Exchange
 }
 
 // begin opens the ledger row of a call: the principal is the context's, the declaration the meta of the context.
@@ -201,8 +239,52 @@ func (s *Service) begin(ctx context.Context, kind, requested string) *pending {
 		alias = "" // a literal provider/model
 	}
 	now := s.now()
-	return &pending{s: s, start: now, call: Call{At: now.UTC(), Subject: p.Subject, Project: p.Project, Org: p.Org, Alias: alias, Kind: kind,
+	p0 := &pending{s: s, start: now, call: Call{At: now.UTC(), Subject: p.Subject, Project: p.Project, Org: p.Org, Alias: alias, Kind: kind,
 		Source: m.Source, ConversationID: m.ConversationID, ProcessID: m.ProcessID, ChangeID: m.ChangeID, Step: m.Step, Action: m.Action, Agent: m.Agent, CallIndex: m.Call}}
+	if s.CallPrompts && !inChangeLog(m) {
+		p0.x = &Exchange{}
+	}
+	return p0
+}
+
+// request notes what is sent, for the exchange.
+func (p *pending) request(system string, msgs []llm.Message) {
+	if p.x != nil {
+		p.x.System, p.x.Messages = system, msgs
+	}
+}
+
+// answer notes what came back, for the exchange.
+func (p *pending) answer(text string) {
+	if p.x != nil {
+		p.x.Response = text
+	}
+}
+
+// maxPreviewTexts and maxPreviewText bound what the exchange of an embedding keeps of its texts.
+const (
+	maxPreviewTexts = 5
+	maxPreviewText  = 300
+)
+
+// requestEmbed notes the texts of an embedding: their number and a short preview (never the vectors).
+func (p *pending) requestEmbed(texts []string) {
+	if p.x == nil {
+		return
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d texts", len(texts))
+	for i, t := range texts {
+		if i == maxPreviewTexts {
+			fmt.Fprintf(&b, "\n... %d more", len(texts)-i)
+			break
+		}
+		if len(t) > maxPreviewText {
+			t = strings.ToValidUTF8(t[:maxPreviewText], "") + "..."
+		}
+		b.WriteString("\n- " + t)
+	}
+	p.x.Messages = []llm.Message{{Role: "texts", Content: b.String()}}
 }
 
 // finish writes the row: the provider and model that served (or were resolved), the tokens and the error. It never
@@ -217,7 +299,12 @@ func (p *pending) finish(ctx context.Context, provider, model string, in, out in
 			c.Error = strings.ToValidUTF8(c.Error[:MaxCallError], "")
 		}
 	}
-	if _, e := p.s.Store.AppendCall(context.WithoutCancel(ctx), c); e != nil {
+	var x *Exchange
+	if p.x != nil {
+		cx := p.x.capped()
+		x = &cx
+	}
+	if _, e := p.s.Store.AppendCall(context.WithoutCancel(ctx), c, x); e != nil {
 		p.s.Log.Error("call not recorded", "source", c.Source, "model", provider+"/"+model, "err", e)
 	}
 }
@@ -257,6 +344,31 @@ func (s *Service) ListCalls(ctx context.Context, f UsageFilter, admin bool) (cal
 		next = calls[n-1].Seq
 	}
 	return calls, next, more, nil
+}
+
+// CallExchange returns a call and the exchange the gateway stores for it. A caller reads its own calls, an
+// administrator any; a call of someone else is ErrNotFound for the others (its existence is not told), as is a call
+// with no stored exchange (kept by a change log, not stored, or purged).
+func (s *Service) CallExchange(ctx context.Context, seq int64, admin bool) (Call, Exchange, error) {
+	p := authz.From(ctx)
+	if !admin && p.Anonymous() {
+		return Call{}, Exchange{}, fmt.Errorf("%w: the ledger is read by an identified caller", ErrForbidden)
+	}
+	c, err := s.Store.Call(ctx, seq)
+	if err != nil {
+		return Call{}, Exchange{}, err
+	}
+	if !admin && c.Subject != p.Subject {
+		return Call{}, Exchange{}, fmt.Errorf("%w: call %d", ErrNotFound, seq)
+	}
+	x, err := s.Store.Exchange(ctx, seq)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return Call{}, Exchange{}, err
+	}
+	if err != nil {
+		return Call{}, Exchange{}, fmt.Errorf("%w: no exchange stored for call %d (not kept, or purged)", ErrNotFound, seq)
+	}
+	return c, x, nil
 }
 
 // Summary groups the calls of the filter (AfterSeq and Limit are ignored).

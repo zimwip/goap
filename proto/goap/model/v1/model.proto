@@ -32,6 +32,10 @@ service ModelService {
   // assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
   rpc ListUsage(ListUsageRequest) returns (ListUsageResponse);
   rpc UsageSummary(UsageSummaryRequest) returns (UsageSummaryResponse);
+  // The request and the answer of a call the gateway stores (LLMCall.has_exchange): every call but an engine call of a
+  // change, whose exchange is in the change log (ADR 0059). The caller's own calls, any for platform administrators;
+  // NOT_FOUND for a call of someone else, a purged one and one with no stored exchange.
+  rpc GetCallExchange(GetCallExchangeRequest) returns (GetCallExchangeResponse);
 }
 
 message Message {
@@ -260,8 +264,8 @@ message SuggestResponse {
 
 // ---- the ledger of LLM calls (ADR 0089) --------------------------------------
 
-// One LLM call. The ledger stores no prompt: the exchange of an engine call stays in the change log (ADR 0059, the
-// model.call entry of change_id / process_id with this step and call).
+// One LLM call. The exchange of an engine call of a change stays in the change log (ADR 0059, the model.call entry of
+// change_id / process_id with this step and call); the gateway stores the exchange of every other call (has_exchange).
 message LLMCall {
   int64 seq = 1;
   google.protobuf.Timestamp at = 2;
@@ -290,6 +294,28 @@ message LLMCall {
   string action = 19;
   string agent = 20;
   int32 call = 21;
+  // the gateway stores the request and the answer of this call (read them with GetCallExchange)
+  bool has_exchange = 22;
+}
+
+message GetCallExchangeRequest {
+  int64 seq = 1;
+}
+
+message ExchangeMessage {
+  string role = 1;
+  string content = 2;
+}
+
+message GetCallExchangeResponse {
+  LLMCall call = 1;
+  string system = 2;
+  repeated ExchangeMessage messages = 3;
+  string response = 4;
+  // a text was cut to the cap of the exchanges
+  bool truncated = 5;
+  // the failure of the call, "" when it succeeded (also in call.error)
+  string error = 6;
 }
 
 // What to select. Every field narrows; empty matches everything. A caller who is not an administrator sees its own

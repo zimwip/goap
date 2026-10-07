@@ -41,6 +41,9 @@ type Service struct {
 	// Authz resolves the roles a caller holds on its project (ADR 0043) for the models restricted to some
 	// roles; nil checks the roles the caller's principal carries.
 	Authz authz.Authorizer
+	// CallPrompts stores the exchange of the calls whose prompt no change log keeps (ADR 0089, GOAP_LLM_CALL_PROMPTS);
+	// false keeps counters only. NewService sets it.
+	CallPrompts bool
 
 	mu     sync.RWMutex
 	snap   *llmcfg.Snapshot
@@ -52,7 +55,7 @@ func NewService(config *llmcfg.Directory, store Store, secrets func(ctx context.
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Service{Config: config, Store: store, Router: NewRouter(), Secrets: secrets, Log: log, HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now, active: map[string]string{}}
+	return &Service{Config: config, Store: store, Router: NewRouter(), Secrets: secrets, Log: log, HTTP: &http.Client{Timeout: 20 * time.Second}, Now: time.Now, CallPrompts: true, active: map[string]string{}}
 }
 
 func (s *Service) now() time.Time {
@@ -169,12 +172,14 @@ func (s *Service) build(ctx context.Context, p ProviderRecord, overrideKey strin
 // Every call, refused ones included, is a row of the ledger (ADR 0089).
 func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
 	rec := s.begin(ctx, KindComplete, req.Model)
+	rec.request(req.System, req.Messages)
 	t, m, period, err := s.admit(ctx, req.Model)
 	if err != nil {
 		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
 		return llm.Response{}, err
 	}
 	resp, err := s.Router.Complete(ctx, req)
+	rec.answer(resp.Text)
 	s.recordUsage(ctx, t, m, period, int64(resp.Usage.InputTokens+resp.Usage.OutputTokens))
 	rec.finish(ctx, t.Provider, t.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens, err)
 	return resp, err
@@ -187,12 +192,16 @@ func (s *Service) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedRes
 		req.Model = llm.EmbedAlias
 	}
 	rec := s.begin(ctx, KindEmbed, req.Model)
+	rec.requestEmbed(req.Texts)
 	t, m, period, err := s.admit(ctx, req.Model)
 	if err != nil {
 		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
 		return llm.EmbedResponse{}, err
 	}
 	resp, err := s.Router.Embed(ctx, req)
+	if len(resp.Vectors) > 0 {
+		rec.answer(fmt.Sprintf("%d vectors of %d dimensions", len(resp.Vectors), len(resp.Vectors[0])))
+	}
 	s.recordUsage(ctx, t, m, period, int64(resp.Tokens))
 	rec.finish(ctx, t.Provider, t.Model, resp.Tokens, 0, err)
 	return resp, err

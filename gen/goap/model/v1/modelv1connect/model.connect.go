@@ -58,6 +58,9 @@ const (
 	// ModelServiceUsageSummaryProcedure is the fully-qualified name of the ModelService's UsageSummary
 	// RPC.
 	ModelServiceUsageSummaryProcedure = "/goap.model.v1.ModelService/UsageSummary"
+	// ModelServiceGetCallExchangeProcedure is the fully-qualified name of the ModelService's
+	// GetCallExchange RPC.
+	ModelServiceGetCallExchangeProcedure = "/goap.model.v1.ModelService/GetCallExchange"
 )
 
 // ModelServiceClient is a client for the goap.model.v1.ModelService service.
@@ -85,6 +88,10 @@ type ModelServiceClient interface {
 	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
 	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
 	UsageSummary(context.Context, *connect.Request[v1.UsageSummaryRequest]) (*connect.Response[v1.UsageSummaryResponse], error)
+	// The request and the answer of a call the gateway stores (LLMCall.has_exchange): every call but an engine call of a
+	// change, whose exchange is in the change log (ADR 0059). The caller's own calls, any for platform administrators;
+	// NOT_FOUND for a call of someone else, a purged one and one with no stored exchange.
+	GetCallExchange(context.Context, *connect.Request[v1.GetCallExchangeRequest]) (*connect.Response[v1.GetCallExchangeResponse], error)
 }
 
 // NewModelServiceClient constructs a client for the goap.model.v1.ModelService service. By default,
@@ -158,6 +165,12 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("UsageSummary")),
 			connect.WithClientOptions(opts...),
 		),
+		getCallExchange: connect.NewClient[v1.GetCallExchangeRequest, v1.GetCallExchangeResponse](
+			httpClient,
+			baseURL+ModelServiceGetCallExchangeProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("GetCallExchange")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -173,6 +186,7 @@ type modelServiceClient struct {
 	listCatalog       *connect.Client[v1.ListCatalogRequest, v1.ListCatalogResponse]
 	listUsage         *connect.Client[v1.ListUsageRequest, v1.ListUsageResponse]
 	usageSummary      *connect.Client[v1.UsageSummaryRequest, v1.UsageSummaryResponse]
+	getCallExchange   *connect.Client[v1.GetCallExchangeRequest, v1.GetCallExchangeResponse]
 }
 
 // Complete calls goap.model.v1.ModelService.Complete.
@@ -225,6 +239,11 @@ func (c *modelServiceClient) UsageSummary(ctx context.Context, req *connect.Requ
 	return c.usageSummary.CallUnary(ctx, req)
 }
 
+// GetCallExchange calls goap.model.v1.ModelService.GetCallExchange.
+func (c *modelServiceClient) GetCallExchange(ctx context.Context, req *connect.Request[v1.GetCallExchangeRequest]) (*connect.Response[v1.GetCallExchangeResponse], error) {
+	return c.getCallExchange.CallUnary(ctx, req)
+}
+
 // ModelServiceHandler is an implementation of the goap.model.v1.ModelService service.
 type ModelServiceHandler interface {
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
@@ -250,6 +269,10 @@ type ModelServiceHandler interface {
 	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
 	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
 	UsageSummary(context.Context, *connect.Request[v1.UsageSummaryRequest]) (*connect.Response[v1.UsageSummaryResponse], error)
+	// The request and the answer of a call the gateway stores (LLMCall.has_exchange): every call but an engine call of a
+	// change, whose exchange is in the change log (ADR 0059). The caller's own calls, any for platform administrators;
+	// NOT_FOUND for a call of someone else, a purged one and one with no stored exchange.
+	GetCallExchange(context.Context, *connect.Request[v1.GetCallExchangeRequest]) (*connect.Response[v1.GetCallExchangeResponse], error)
 }
 
 // NewModelServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -319,6 +342,12 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("UsageSummary")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceGetCallExchangeHandler := connect.NewUnaryHandler(
+		ModelServiceGetCallExchangeProcedure,
+		svc.GetCallExchange,
+		connect.WithSchema(modelServiceMethods.ByName("GetCallExchange")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.model.v1.ModelService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ModelServiceCompleteProcedure:
@@ -341,6 +370,8 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 			modelServiceListUsageHandler.ServeHTTP(w, r)
 		case ModelServiceUsageSummaryProcedure:
 			modelServiceUsageSummaryHandler.ServeHTTP(w, r)
+		case ModelServiceGetCallExchangeProcedure:
+			modelServiceGetCallExchangeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -388,4 +419,8 @@ func (UnimplementedModelServiceHandler) ListUsage(context.Context, *connect.Requ
 
 func (UnimplementedModelServiceHandler) UsageSummary(context.Context, *connect.Request[v1.UsageSummaryRequest]) (*connect.Response[v1.UsageSummaryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.UsageSummary is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) GetCallExchange(context.Context, *connect.Request[v1.GetCallExchangeRequest]) (*connect.Response[v1.GetCallExchangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.GetCallExchange is not implemented"))
 }

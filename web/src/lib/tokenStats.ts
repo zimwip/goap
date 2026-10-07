@@ -1,6 +1,7 @@
 // Token consumption views over the gateway's ledger of LLM calls (ADR 0089): the pure side (source labels, the
 // mapping of `UsageSummary` rows to slices and time buckets, the rule of the prompt link). No process data here.
 import { int, type LLMCall, type UsageSummaryRow } from './api';
+import type { ModelExchangeRequest } from './shell/modelExchangeState.svelte';
 
 const SOURCES: Record<string, string> = {
   assistant: 'Assistant',
@@ -20,9 +21,21 @@ export function sourceLabel(source: string | undefined): string {
 /** The sources the console filters by. */
 export const SOURCE_IDS = Object.keys(SOURCES);
 
-/** Only an engine call of a process has a stored exchange (the `model.call` entry of the change log, ADR 0059). */
-export function hasExchange(c: Pick<LLMCall, 'source' | 'processId' | 'changeId'>): boolean {
+/** An engine call of a process and a change has its exchange in the change log (the `model.call` entry, ADR 0059). */
+export function inChangeLog(c: Pick<LLMCall, 'source' | 'processId' | 'changeId'>): boolean {
   return c.source === 'engine' && !!c.processId && !!c.changeId;
+}
+
+/** Whether the prompt of a call can be shown: in the log of its change, or stored by the gateway (`hasExchange`, ADR 0089). */
+export function hasExchange(c: Pick<LLMCall, 'source' | 'processId' | 'changeId' | 'hasExchange'>): boolean {
+  return inChangeLog(c) || !!c.hasExchange;
+}
+
+/** The request that opens the prompt of a call: the log of its change for an engine call of a change, else the gateway by seq; undefined when there is none to read. */
+export function exchangeRequestOf(c: LLMCall, label: string): ModelExchangeRequest | undefined {
+  if (inChangeLog(c)) return { label, meta: c, changeId: c.changeId ?? '', processId: c.processId ?? '', step: stepOf(c), call: callOf(c) };
+  if (c.hasExchange) return { label, meta: c, seq: c.seq };
+  return undefined;
 }
 
 /** The step of a call, -1 when it belongs to none (proto3 omits a 0). */

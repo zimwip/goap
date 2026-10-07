@@ -1,35 +1,57 @@
 <script lang="ts">
-  // The prompt of an LLM call: the system text, the messages sent and the answer, read from the log of the change
-  // (ADR 0030, entries model.call). Mounted once at the shell root.
-  import { decodeLogEntry, errorMessage, graph, type ModelExchange } from '../api';
+  // The prompt of an LLM call: the system text, the messages sent and the answer. An engine call of a change is read from
+  // the log of the change (ADR 0030, entries model.call); every other call from the gateway, which stores it (ADR 0089).
+  // Mounted once at the shell root.
+  import { decodeLogEntry, errorMessage, formatDuration, graph, int, isNotFound, models, type LLMCall, type ModelExchange } from '../api';
+  import { sourceLabel } from '../tokenStats';
   import { modelExchangeState, closeModelExchange } from './modelExchangeState.svelte';
 
   let dialog = $state<HTMLDivElement>();
   let ex = $state<ModelExchange>();
   let failure = $state('');
   let loading = $state(false);
+  // the ledger row the exchange belongs to: the gateway's answer carries it, the console's row stands for a log read
+  let meta = $state<LLMCall>();
 
   $effect(() => {
     const req = modelExchangeState.current;
     ex = undefined;
     failure = '';
+    meta = req?.meta;
     if (!req) return;
     queueMicrotask(() => dialog?.focus());
     const ctl = new AbortController();
     loading = true;
-    graph
-      .listChangeLog({ changeId: req.changeId, types: ['model.call'], processIds: [req.processId] }, ctl.signal)
-      .then((r) => {
-        const found = (r.entries ?? []).map((l) => decodeLogEntry<ModelExchange>(l)).find((x) => x.step === req.step && x.call === req.call);
-        if (found) ex = found;
-        else failure = 'The prompt of this call was not recorded (the call predates prompt recording).';
-      })
-      .catch((e) => {
-        if (!ctl.signal.aborted) failure = errorMessage(e);
-      })
-      .finally(() => {
-        if (!ctl.signal.aborted) loading = false;
-      });
+    const done = () => {
+      if (!ctl.signal.aborted) loading = false;
+    };
+    if ('seq' in req) {
+      models
+        .getCallExchange(req.seq, ctl.signal)
+        .then((r) => {
+          meta = r.call ?? meta;
+          ex = { system: r.system, messages: r.messages, response: r.response, truncated: r.truncated };
+        })
+        .catch((e) => {
+          if (ctl.signal.aborted) return;
+          failure = isNotFound(e)
+            ? 'The prompt of this call is no longer available: it was not stored (storage is off, or the call predates it) or it was purged with the ledger.'
+            : errorMessage(e);
+        })
+        .finally(done);
+    } else {
+      graph
+        .listChangeLog({ changeId: req.changeId, types: ['model.call'], processIds: [req.processId] }, ctl.signal)
+        .then((r) => {
+          const found = (r.entries ?? []).map((l) => decodeLogEntry<ModelExchange>(l)).find((x) => x.step === req.step && x.call === req.call);
+          if (found) ex = found;
+          else failure = 'The prompt of this call was not recorded (the call predates prompt recording).';
+        })
+        .catch((e) => {
+          if (!ctl.signal.aborted) failure = errorMessage(e);
+        })
+        .finally(done);
+    }
     return () => ctl.abort();
   });
 
@@ -60,12 +82,19 @@
         <h3>Prompt · {req.label}</h3>
         <button type="button" class="ghost" aria-label="Close" onclick={closeModelExchange}>✕</button>
       </header>
+      {#if meta}
+        <p class="meta">
+          {sourceLabel(meta.source)}{#if meta.subject} · {meta.subject}{/if} · {meta.alias ? `${meta.alias} → ` : ''}{meta.provider ? `${meta.provider}/` : ''}{meta.model ?? ''}
+          · {int(meta.inputTokens)} in / {int(meta.outputTokens)} out{#if meta.durationMs} · {formatDuration(int(meta.durationMs))}{/if}
+        </p>
+        {#if meta.error}<p class="error">Call failed: {meta.error}</p>{/if}
+      {/if}
       {#if loading}
         <p class="muted">Loading…</p>
       {:else if failure}
         <p class="error">{failure}</p>
       {:else if ex}
-        {#if ex.truncated}<p class="note">A text was longer than the log keeps and is cut.</p>{/if}
+        {#if ex.truncated}<p class="note">A text was longer than what is kept and is cut.</p>{/if}
         {#if ex.system}{@render block('System', ex.system)}{/if}
         {#each ex.messages ?? [] as m, i (i)}
           {@render block(m.role ?? 'message', m.content ?? '')}
@@ -113,6 +142,11 @@
     font-size: 0.8rem;
     text-transform: uppercase;
     color: var(--muted);
+  }
+  .meta {
+    margin: 0.3rem 0 0;
+    color: var(--muted);
+    font-size: 0.85rem;
   }
   .muted,
   .note {

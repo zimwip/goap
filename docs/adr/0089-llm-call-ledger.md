@@ -24,7 +24,7 @@ wrong by construction.
   both dialects), `duration_ms`, `subject` / `project` / `org` (the principal's, **never declared**), `alias` (the name
   requested, `""` for a literal `provider/model`), `provider`, `model`, `kind` (`complete` | `embed`), `input_tokens`,
   `output_tokens` (an embedding's tokens are input), `error` (capped at 500 bytes), `source` and the correlation ids.
-  Indexes: subject+at, source+at, model+at, process, at. The ledger **stores no prompt and no answer**.
+  Indexes: subject+at, source+at, model+at, process, at. The row holds counters; the exchange has its own table (see "Exchanges").
 - **Declared meta** (`llm.CallMeta`, pure, `pkg/llm`): `Source` (free-form, lower case `[a-z0-9._:-]`, at most 40 bytes,
   else `other`), `ConversationID`, `ProcessID`, `ChangeID`, `Step`, `Call`, `Action`, `Agent`. In process it travels in
   the context (`llm.WithMeta` / `MetaFrom`); over RPC as `CallMeta` on `CompleteRequest` / `EmbedRequest`, which
@@ -57,12 +57,45 @@ wrong by construction.
 - **Retention**: `GOAP_LLM_CALL_RETENTION_DAYS` (default 90, 0 keeps everything); purged at start and every 24 hours by
   `Service.KeepCalls` (`cmd/modelgw`, `goap-dev`).
 
+## Exchanges: the prompt of every call
+
+The first version stored no prompt, so only the engine rows of a change (ADR 0059) had a viewable one: the calls of the
+assistant, the helper, the indexer, the intent ranker and an engine process without a change had counters and nothing to
+look at. Every call listed with tokens must be inspectable.
+
+- **Where the exchange lives**: an **engine call of a change** keeps it in the change log (`model.call`, ADR 0059,
+  unchanged, never duplicated). **Every other call** has it in `llm_call_exchange` (migration `0004`, both dialects):
+  `seq` (the row's; no foreign key, the purge deletes both in one transaction), `system`, `messages` (JSON
+  `[{role, content}]`), `response`, `truncated`. The rule is `inChangeLog(meta)`: `source == engine && change_id != ""`.
+  The gateway writes it with the row (`Store.AppendCall(call, exchange)`, one transaction in SQL), for refused and failed
+  calls too (the request is kept, the error is in the row). A write that fails is logged and never fails the call.
+- **Caps**: each text at `journal.MaxExchangeText` (256 KiB), `truncated` set. An embedding stores its number of texts
+  and a preview (5 texts of 300 bytes) as one `texts` message, and the dimension count as its answer, never the vectors.
+- **Setting**: `GOAP_LLM_CALL_PROMPTS` (default on, `Service.CallPrompts`); off keeps counters only.
+  Retention is the ledger's (`GOAP_LLM_CALL_RETENTION_DAYS`): an exchange is deleted with its row.
+- **Reading**: `GetCallExchange(seq) -> {call, system, messages, response, truncated, error}` in `model.v1`, and
+  `LLMCall.has_exchange` (true when the gateway stores one: an `EXISTS` on the primary key) so that the web offers the link
+  without a round trip. The caller's own calls; platform administrators any; an anonymous caller is refused; the call of
+  someone else, an unknown seq, a purged row and a row with no stored exchange are all `NOT_FOUND` (existence is not
+  leaked). The engine rows of a change keep `has_exchange = false` and the web reads the change log for them.
+- **Privacy**: the prompts of the assistant and the helper hold the user's context and the values of the fields they
+  look at. They are visible only to their owner and to platform administrators, are purged with the retention window, and
+  the setting turns the storage off. The exchange of an engine call is as visible as the change log (`prompt:inspect`).
+- **Verified, not assumed**: `TestEngineRowsFindTheirExchangeInTheChangeLog` runs a process with llm actions through the
+  real gateway service and checks that every `engine` row finds exactly one `model.call` entry by (process, step, call),
+  failed calls included, with no duplicate in the ledger. The planner path is covered by the engine's own stamp tests
+  (`TestPlannerCallsAreNumberedInTheirStep`); the example methodology plans without the model. No defect was found there.
+- **Web**: `tokenStats.exchangeRequestOf` picks the source (change log for an engine call of a change, else
+  `GetCallExchange(seq)` when `hasExchange`; no link otherwise). `ModelExchangeDialog` handles both requests and shows
+  the source, subject, alias / model, tokens, duration and error of the call; a `NOT_FOUND` reads "not stored or purged",
+  other errors are shown as such.
+
 ## Consequences
 
 - The per-call views (Tokens console, Token usage pane) are rebuilt on the ledger by the web (see "Web"); the engine's own record
   (`Process.Usage`, step `LLMCalls`, journal `ModelCalls`) stays for its purposes (totals, budgets, the exchange link),
   but is no longer a source of the views.
-- Schema: `0003_llm_call.sql` in both dialects (`TestSchemasAligned`); a PostgreSQL variant of the ledger tests runs with
+- Schema: `0003_llm_call.sql` and `0004_llm_call_exchange.sql` in both dialects (`TestSchemasAligned`); a PostgreSQL variant of the ledger tests runs with
   `GOAP_TEST_PG_DSN`.
 
 ## Web
@@ -76,8 +109,8 @@ more (`live.tokens`, `TokenRow`, `ingestProcess`'s derivation and `computeStats`
   the rows seen (a local floor on the seq). One scope for all views: the caller's own calls (`subject` = the caller) or,
   for administrators, the whole platform (no subject).
 - Tokens console: one call per line with source and (platform scope) subject, filters by source / process / model /
-  alias, totals of the visible rows; the prompt link (`ModelExchangeDialog`) only for `source === 'engine'` rows with a
-  process and a change (`hasExchange`). Token usage pane: `UsageSummary` by model, alias, source, agent, action,
+  alias, totals of the visible rows; the prompt link (`ModelExchangeDialog`) for every row with a readable exchange
+  (`hasExchange`, see "Exchanges"). Token usage pane: `UsageSummary` by model, alias, source, agent, action,
   process, subject (platform) and day / hour, `ListUsage` for the most expensive calls; it reloads when the feed brings
   new calls. Pure mapping in `web/src/lib/tokenStats.ts` (source labels, slices, buckets).
 - Consequences of the single source: the time chart shows input / output per period (a summary has one grouping, so the

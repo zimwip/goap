@@ -10,7 +10,7 @@
   import { formatDuration, formatTime, int, shortId, type LLMCall } from '../../api';
   import { rowClick } from '../../actions';
   import { openModelExchange } from '../../shell/modelExchangeState.svelte';
-  import { callOf, hasExchange, sourceLabel, stepOf } from '../../tokenStats';
+  import { exchangeRequestOf, hasExchange, sourceLabel, stepOf } from '../../tokenStats';
 
   let source = $state('');
   let processId = $state('');
@@ -70,7 +70,8 @@
       title="Show the prompt and the answer"
       onclick={(e) => {
         e.stopPropagation();
-        openModelExchange({ changeId: r.changeId ?? '', processId: r.processId ?? '', step: stepOf(r), call: callOf(r), label: label(r) });
+        const req = exchangeRequestOf(r, label(r));
+        if (req) openModelExchange(req);
       }}>{value}</button
     >
   {:else}{value}{/if}

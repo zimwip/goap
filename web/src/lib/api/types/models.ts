@@ -104,7 +104,7 @@ export interface SuggestResponse {
 
 // ---- the ledger of LLM calls (ADR 0089) ------------------------------------------
 
-/** One LLM call the gateway served or refused, whoever asked. No prompt: only engine calls have a stored exchange. */
+/** One LLM call the gateway served or refused, whoever asked. The exchange of an engine call of a change is in the change log; the gateway stores the others (`hasExchange`). */
 export interface LLMCall {
   seq: Int64;
   /** RFC 3339 */
@@ -131,6 +131,18 @@ export interface LLMCall {
   action?: string;
   agent?: string;
   call?: number;
+  /** the gateway stores the request and the answer of this call (`getCallExchange`) */
+  hasExchange?: boolean;
+}
+
+/** The exchange the gateway stores for a call (ADR 0089). */
+export interface CallExchange {
+  call?: LLMCall;
+  system?: string;
+  messages?: { role?: string; content?: string }[];
+  response?: string;
+  truncated?: boolean;
+  error?: string;
 }
 
 /** Every field narrows; empty matches everything. A caller who is not an administrator sees its own calls only. */

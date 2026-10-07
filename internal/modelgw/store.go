@@ -40,12 +40,16 @@ func PeriodKey(period string, t time.Time) string {
 type Store interface {
 	Usage(ctx context.Context, model, period string) (int64, error)
 	AddUsage(ctx context.Context, model, period string, tokens int64) error
-	// AppendCall writes a row of the ledger and returns its seq (monotonic).
-	AppendCall(ctx context.Context, c Call) (int64, error)
+	// AppendCall writes a row of the ledger and returns its seq (monotonic); x, when not nil, is stored with it (one step).
+	AppendCall(ctx context.Context, c Call, x *Exchange) (int64, error)
+	// Call returns the row of a seq, ErrNotFound when there is none (purged or never written).
+	Call(ctx context.Context, seq int64) (Call, error)
+	// Exchange returns the stored exchange of a seq, ErrNotFound when there is none.
+	Exchange(ctx context.Context, seq int64) (Exchange, error)
 	// Calls lists the calls of the filter ascending by seq (see Service.ListCalls) and whether more match.
 	Calls(ctx context.Context, f UsageFilter) ([]Call, bool, error)
 	Summary(ctx context.Context, f UsageFilter, group string) ([]SummaryRow, error)
-	// PurgeCalls deletes the calls before t and returns how many.
+	// PurgeCalls deletes the calls before t, with their exchanges, and returns how many calls.
 	PurgeCalls(ctx context.Context, before time.Time) (int64, error)
 }
 
@@ -54,13 +58,16 @@ type MemoryStore struct {
 	mu    sync.Mutex
 	usage map[[2]string]int64
 	calls []Call
+	xs    map[int64]Exchange
 	seq   int64
 }
 
 var _ Store = (*MemoryStore)(nil)
 
 // NewMemoryStore returns an empty in-memory store.
-func NewMemoryStore() *MemoryStore { return &MemoryStore{usage: map[[2]string]int64{}} }
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{usage: map[[2]string]int64{}, xs: map[int64]Exchange{}}
+}
 
 func (s *MemoryStore) Usage(_ context.Context, model, period string) (int64, error) {
 	s.mu.Lock()
@@ -75,13 +82,39 @@ func (s *MemoryStore) AddUsage(_ context.Context, model, period string, tokens i
 	return nil
 }
 
-func (s *MemoryStore) AppendCall(_ context.Context, c Call) (int64, error) {
+func (s *MemoryStore) AppendCall(_ context.Context, c Call, x *Exchange) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seq++
 	c.Seq = s.seq
+	c.HasExchange = x != nil
+	if x != nil {
+		xc := *x
+		xc.Seq = c.Seq
+		s.xs[c.Seq] = xc
+	}
 	s.calls = append(s.calls, c)
 	return c.Seq, nil
+}
+
+func (s *MemoryStore) Call(_ context.Context, seq int64) (Call, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.calls {
+		if c.Seq == seq {
+			return c, nil
+		}
+	}
+	return Call{}, ErrNotFound
+}
+
+func (s *MemoryStore) Exchange(_ context.Context, seq int64) (Exchange, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if x, ok := s.xs[seq]; ok {
+		return x, nil
+	}
+	return Exchange{}, ErrNotFound
 }
 
 func (s *MemoryStore) selected(f UsageFilter) []Call {
@@ -122,6 +155,7 @@ func (s *MemoryStore) PurgeCalls(_ context.Context, before time.Time) (int64, er
 	for _, c := range s.calls {
 		if c.At.Before(before) {
 			n++
+			delete(s.xs, c.Seq)
 			continue
 		}
 		kept = append(kept, c)

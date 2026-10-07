@@ -248,7 +248,7 @@ func TestLedgerCursorAndSummary(t *testing.T) {
 					c.Source = "engine"
 				}
 				c.Step, c.CallIndex = -1, -1
-				if _, err := st.AppendCall(ctx, c); err != nil {
+				if _, err := st.AppendCall(ctx, c, nil); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -334,7 +334,7 @@ func TestLedgerRetention(t *testing.T) {
 			now := time.Date(2026, 9, 23, 10, 0, 0, 0, time.UTC)
 			svc.Now = func() time.Time { return now }
 			for _, age := range []int{200, 91, 89, 1} {
-				if _, err := st.AppendCall(ctx, Call{At: now.AddDate(0, 0, -age), Source: "engine", Step: -1, CallIndex: -1}); err != nil {
+				if _, err := st.AppendCall(ctx, Call{At: now.AddDate(0, 0, -age), Source: "engine", Step: -1, CallIndex: -1}, nil); err != nil {
 					t.Fatal(err)
 				}
 			}

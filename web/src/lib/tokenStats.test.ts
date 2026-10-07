@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketsOf, bucketTime, callOf, hasExchange, keyLabel, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf } from './tokenStats';
+import { bucketsOf, bucketTime, callOf, exchangeRequestOf, hasExchange, inChangeLog, keyLabel, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf } from './tokenStats';
 
 describe('source labels', () => {
   it('names every source and falls back to Other', () => {
@@ -20,12 +20,26 @@ describe('source labels', () => {
 });
 
 describe('prompt link', () => {
-  it('is offered for engine calls of a process only', () => {
+  it('is offered for engine calls of a process and a change (change log) and for the calls the gateway stores', () => {
     expect(hasExchange({ source: 'engine', processId: 'P1', changeId: 'C1' })).toBe(true);
     expect(hasExchange({ source: 'engine', processId: '', changeId: 'C1' })).toBe(false);
     expect(hasExchange({ source: 'engine', processId: 'P1', changeId: '' })).toBe(false);
+    expect(hasExchange({ source: 'engine', processId: 'P1', changeId: '', hasExchange: true })).toBe(true);
     expect(hasExchange({ source: 'assistant', processId: 'P1', changeId: 'C1' })).toBe(false);
+    expect(hasExchange({ source: 'assistant', hasExchange: true })).toBe(true);
     expect(hasExchange({ source: 'helper' })).toBe(false);
+  });
+  it('looks an exchange up in the change log only for an engine call of a change', () => {
+    expect(inChangeLog({ source: 'engine', processId: 'P1', changeId: 'C1' })).toBe(true);
+    expect(inChangeLog({ source: 'engine', processId: 'P1', changeId: '' })).toBe(false);
+    expect(inChangeLog({ source: 'assistant', processId: 'P1', changeId: 'C1' })).toBe(false);
+  });
+  it('chooses the change log or the gateway to read the prompt', () => {
+    const engine = { seq: 7, source: 'engine', processId: 'P1', changeId: 'C1', step: 2, call: 1, hasExchange: false };
+    expect(exchangeRequestOf(engine, 'x')).toMatchObject({ changeId: 'C1', processId: 'P1', step: 2, call: 1 });
+    expect(exchangeRequestOf({ seq: 8, source: 'assistant', hasExchange: true }, 'x')).toMatchObject({ seq: 8 });
+    expect(exchangeRequestOf({ seq: 9, source: 'engine', processId: 'P1', changeId: '', hasExchange: true }, 'x')).toMatchObject({ seq: 9 });
+    expect(exchangeRequestOf({ seq: 10, source: 'helper' }, 'x')).toBeUndefined();
   });
   it('reads the step and call of a process call, -1 without one (proto3 omits a 0)', () => {
     expect(stepOf({ processId: 'P1' })).toBe(0);
