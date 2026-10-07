@@ -1,6 +1,8 @@
 package llmcfg
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"slices"
 	"sort"
@@ -166,10 +168,31 @@ type Applied struct {
 	Skipped []string
 	// Bytes is the length of the text added (separators included).
 	Bytes int
+	// Uses details Names: the instruction each behaviour added, to price it (ADR 0093, "Measured cost").
+	Uses []Use
+}
+
+// Use is one behaviour applied to a call.
+type Use struct {
+	Name string
+	// Instruction is the trimmed instruction (without the JSON notice), which InstructionHash fingerprints.
+	Instruction string
+	// Bytes is the text it added (notice and separator included).
+	Bytes int
+}
+
+// EstimateTokens estimates the tokens of n bytes of text (four bytes a token, rounded up): the fallback when no measure
+// exists.
+func EstimateTokens(n int) int { return (n + 3) / 4 }
+
+// InstructionHash fingerprints an instruction (sha256, hex): a measured cost is valid for one text only.
+func InstructionHash(instruction string) string {
+	h := sha256.Sum256([]byte(strings.TrimSpace(instruction)))
+	return hex.EncodeToString(h[:])
 }
 
 // Tokens estimates the tokens the behaviours added (four bytes a token): an estimate for the ledger, not a measure.
-func (a Applied) Tokens() int { return (a.Bytes + 3) / 4 }
+func (a Applied) Tokens() int { return EstimateTokens(a.Bytes) }
 
 // Apply returns the system text of a call with the enabled behaviours that match it: sorted by order then name,
 // prepended ones before the system text, appended ones after, separated by blank lines. A call that requires JSON gets
@@ -203,6 +226,7 @@ func (s *Snapshot) Apply(system string, c CallInfo) Applied {
 		}
 		out.Bytes += len(text) + 2
 		out.Names = append(out.Names, b.Name)
+		out.Uses = append(out.Uses, Use{Name: b.Name, Instruction: strings.TrimSpace(b.Instruction), Bytes: len(text) + 2})
 		if b.Position == PositionPrepend {
 			pre = append(pre, text)
 		} else {

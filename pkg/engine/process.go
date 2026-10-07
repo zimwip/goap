@@ -205,7 +205,7 @@ type LLMCall struct {
 
 // exchangeOf is the request and the answer of a call.
 func exchangeOf(req llm.Request, resp llm.Response) *journal.ModelExchange {
-	x := &journal.ModelExchange{System: req.System, Response: resp.Text, Behaviors: resp.Behaviors, BehaviorTokens: resp.BehaviorTokens}
+	x := &journal.ModelExchange{System: req.System, Response: resp.Text, Behaviors: resp.Behaviors, BehaviorTokens: resp.BehaviorTokens, BehaviorsEstimated: resp.BehaviorsEstimated}
 	for _, m := range req.Messages {
 		x.Messages = append(x.Messages, journal.ModelMessage{Role: m.Role, Content: m.Content})
 	}

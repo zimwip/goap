@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty, Int64, Struct } from './types/common';
-import type { ListBehaviorsResponse, PreviewBehaviorsRequest, PreviewBehaviorsResponse, AvailableModel, CallExchange, CatalogModel, DiscoveredModel, ListUsageResponse, LlmProvider, ModelAlias, ProviderKind, SuggestRequest, SuggestResponse, UsageFilter, UsageGroup, UsageSummaryRow } from './types/models';
+import type { BehaviorCost, ListBehaviorsResponse, MeasureBehaviorsRequest, PreviewBehaviorsRequest, PreviewBehaviorsResponse, AvailableModel, CallExchange, CatalogModel, DiscoveredModel, ListUsageResponse, LlmProvider, ModelAlias, ProviderKind, SuggestRequest, SuggestResponse, UsageFilter, UsageGroup, UsageSummaryRow } from './types/models';
 
 const MODEL = 'goap.model.v1.ModelService';
 const PREFERENCES = 'goap.preferences.v1.PreferencesService';
@@ -29,6 +29,8 @@ export const models = {
   listBehaviors: (signal?: AbortSignal) => rpc<Empty, ListBehaviorsResponse>(MODEL, 'ListBehaviors', {}, signal),
   /** The system text a call would be sent with, without calling any model (pure). */
   previewBehaviors: (req: PreviewBehaviorsRequest, signal?: AbortSignal) => rpc<PreviewBehaviorsRequest, PreviewBehaviorsResponse>(MODEL, 'PreviewBehaviors', req, signal),
+  /** Measure now, on the real models, what behaviours cost in input tokens (ADR 0093, "Measured cost"); administrators only. */
+  measureBehaviors: (req: MeasureBehaviorsRequest, signal?: AbortSignal) => rpc<MeasureBehaviorsRequest, { costs?: BehaviorCost[] }>(MODEL, 'MeasureBehaviors', req, signal),
   /** The contextual helper (ADR 0086): proposes values for the fields of a form. Stateless, nothing is stored. */
   suggest: (req: SuggestRequest, signal?: AbortSignal) => rpc<SuggestRequest, SuggestResponse>(MODEL, 'Suggest', req, signal),
   /** The ledger of LLM calls (ADR 0089): a caller reads its own calls, an administrator any subject or the whole platform. */

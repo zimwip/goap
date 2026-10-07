@@ -142,6 +142,8 @@ type ModelExchange struct {
 	// addition is not repeated in the log, the ledger row of the call holds the same names.
 	Behaviors      []string `json:"behaviors,omitempty"`
 	BehaviorTokens int      `json:"behaviorTokens,omitempty"`
+	// BehaviorsEstimated: BehaviorTokens is an estimate, not a measure (ADR 0093).
+	BehaviorsEstimated bool `json:"behaviorsEstimated,omitempty"`
 	// Truncated says a text was cut to MaxExchangeText.
 	Truncated bool `json:"truncated,omitempty"`
 }

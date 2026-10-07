@@ -1510,6 +1510,11 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   system text as sent, the engine's `model.call` log entry the text it built plus `behaviors` / `behaviorTokens`
   (`llm.Response.Behaviors`). `ListBehaviors` / `PreviewBehaviors` (admin, like `ListCatalog`); web: settings "LLM behaviours".
   `graphsvc.SeedBehaviors` seeds `terse`, enabled by default.
+  **Measured cost** (ADR 0093): `behavior_tokens` is the cost measured on the model when known (two minimal calibration calls per model and
+  behaviour through the gateway, ledger source `calibration`, subject `system:modelgw`, no behaviour applied; stored in `llm_behavior_cost` /
+  `llm_model_baseline`, migration 0006, keyed by instruction hash + provider + model; lazy, background, deduplicated, backed off on failure;
+  measured again after `GOAP_LLM_BEHAVIOR_COST_TTL_DAYS`, default 30), else the four-bytes estimate (`behavior_tokens_estimated`). `ListBehaviors`
+  carries `costs`, `MeasureBehaviors` (admin) measures now.
 - **Protected aliases** (ADR 0084): `assistant` (the conversational assistant) and `helper` (the contextual field helper)
   are `LlmAlias` nodes flagged `protected`, present on every install (`graphsvc.SeedProtectedAliases`, from `Boot`; no
   model configured: the alias exists with no target, resolves to nothing and is not in `ListModels`, i.e. not available).

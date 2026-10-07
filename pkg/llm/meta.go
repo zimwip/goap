@@ -43,6 +43,10 @@ const (
 	SourceIntent    = "intent"
 )
 
+// SourceCalibration is the source of the gateway's own calls that measure what a behaviour costs on a model (ADR 0093,
+// "Measured cost"): set by the gateway only, and never a scope of a behaviour.
+const SourceCalibration = "calibration"
+
 // SourceOther is the source of a call that declares none, or an invalid one.
 const SourceOther = "other"
 

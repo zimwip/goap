@@ -21,7 +21,9 @@ func behaviorService(t *testing.T, st Store) (*Service, *graph.Graph, *[]llm.Req
 	sent := &[]llm.Request{}
 	inner := svc.Router.Instrument
 	svc.Router.Instrument = func(ctx context.Context, p, m string, req llm.Request, call func(context.Context) (llm.Response, error)) (llm.Response, error) {
-		*sent = append(*sent, req)
+		if llm.MetaFrom(ctx).Source != llm.SourceCalibration { // the calibration calls have their own tests
+			*sent = append(*sent, req)
+		}
 		return inner(ctx, p, m, req, call)
 	}
 	return svc, svc.Config.Graph.(*graph.Graph), sent
@@ -81,7 +83,7 @@ func TestBehaviorsApplyToCompletions(t *testing.T) {
 				t.Fatalf("json system = %q want %q", got, want)
 			}
 			// the ledger: names, an estimate of the tokens, and the system as sent in the stored exchange
-			cs := calls(t, svc, UsageFilter{})
+			cs := userCalls(t, svc)
 			if len(cs) != 3 || strings.Join(cs[0].Behaviors, ",") != "a-head,b-tail,json-ok" || cs[0].BehaviorTokens <= 0 {
 				t.Fatalf("ledger: %+v", cs)
 			}
@@ -128,7 +130,7 @@ func TestBehaviorsNeverApplyToEmbeddings(t *testing.T) {
 	if len(*sent) != 0 {
 		t.Fatalf("completions sent: %+v", *sent)
 	}
-	cs := calls(t, svc, UsageFilter{})
+	cs := userCalls(t, svc)
 	if len(cs) != 1 || len(cs[0].Behaviors) != 0 || cs[0].BehaviorTokens != 0 {
 		t.Fatalf("%+v", cs)
 	}
@@ -151,7 +153,7 @@ func TestBehaviorCap(t *testing.T) {
 	if got := (*sent)[0].System; len(got) > len("S")+llmcfg.MaxBehaviorBytes+2 {
 		t.Fatalf("the cap is exceeded: %d bytes", len(got))
 	}
-	cs := calls(t, svc, UsageFilter{})
+	cs := userCalls(t, svc)
 	if strings.Join(cs[0].Behaviors, ",") != "one,two,!three" {
 		t.Fatalf("ledger: %v", cs[0].Behaviors)
 	}
@@ -201,7 +203,7 @@ func TestBehaviorRPC(t *testing.T) {
 		t.Fatalf("unknown alias: %v", err)
 	}
 	// the preview calls no model: nothing is in the ledger
-	if cs := calls(t, svc, UsageFilter{}); len(cs) != 0 {
+	if cs := userCalls(t, svc); len(cs) != 0 {
 		t.Fatalf("%+v", cs)
 	}
 }
@@ -215,4 +217,17 @@ func TestBehaviorsOverRPCResponse(t *testing.T) {
 	if err != nil || len(r.Behaviors) != 1 || r.Behaviors[0] != "x" || r.BehaviorTokens == 0 {
 		t.Fatalf("%v %+v", err, r)
 	}
+}
+
+// userCalls is the ledger without the gateway's own calibration calls (they have their own tests).
+func userCalls(t *testing.T, s *Service) []Call {
+	t.Helper()
+	s.WaitCosts()
+	var out []Call
+	for _, c := range calls(t, s, UsageFilter{}) {
+		if c.Source != llm.SourceCalibration {
+			out = append(out, c)
+		}
+	}
+	return out
 }

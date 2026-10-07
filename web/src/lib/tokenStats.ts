@@ -10,6 +10,7 @@ const SOURCES: Record<string, string> = {
   indexer: 'Indexer',
   intent: 'Intent',
   embed: 'Embeddings',
+  calibration: 'Calibration',
   other: 'Other',
 };
 

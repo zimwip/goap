@@ -14,7 +14,7 @@
   // the ledger row the exchange belongs to: the gateway's answer carries it, the console's row stands for a log read
   let meta = $state<LLMCall>();
   // the global behaviours the gateway added to the instructions (ADR 0093): the ledger row's, or the log entry's
-  const applied = $derived(behaviorsLine(ex?.behaviors ?? meta?.behaviors, ex?.behaviorTokens ?? meta?.behaviorTokens));
+  const applied = $derived(behaviorsLine(ex?.behaviors ?? meta?.behaviors, ex?.behaviorTokens ?? meta?.behaviorTokens, ex?.behaviorsEstimated ?? meta?.behaviorTokensEstimated));
   // an engine call's log keeps the system text the engine built; the gateway's addition is named, not repeated
   const fromLog = $derived(modelExchangeState.current ? !('seq' in modelExchangeState.current) : false);
 
@@ -35,7 +35,7 @@
         .getCallExchange(req.seq, ctl.signal)
         .then((r) => {
           meta = r.call ?? meta;
-          ex = { system: r.system, messages: r.messages, response: r.response, truncated: r.truncated, behaviors: r.call?.behaviors, behaviorTokens: Number(r.call?.behaviorTokens ?? 0) };
+          ex = { system: r.system, messages: r.messages, response: r.response, truncated: r.truncated, behaviors: r.call?.behaviors, behaviorTokens: Number(r.call?.behaviorTokens ?? 0), behaviorsEstimated: !!r.call?.behaviorTokensEstimated };
         })
         .catch((e) => {
           if (ctl.signal.aborted) return;

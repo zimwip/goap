@@ -304,7 +304,7 @@
                 <td>{#if c.processId}<button type="button" class="link" onclick={() => open(c.processId ?? '')}>{title(c.processId)}</button>{/if}</td>
                 <td>{c.action ?? ''}{c.processId ? ` #${stepOf(c) + 1}` : ''}</td>
                 <td><code>{c.model ?? ''}</code></td>
-                <td class="hint" title={behaviorsLine(c.behaviors, c.behaviorTokens)}>{#if c.behaviors?.length}{c.behaviors.join(', ')} · +{n(int(c.behaviorTokens))}{/if}</td>
+                <td class="hint" title={behaviorsLine(c.behaviors, c.behaviorTokens, c.behaviorTokensEstimated)}>{#if c.behaviors?.length}{c.behaviors.join(', ')} · +{c.behaviorTokensEstimated ? '≈ ' : ''}{n(int(c.behaviorTokens))}{/if}</td>
                 <td class="num">{n(int(c.inputTokens))}</td>
                 <td class="num">{n(int(c.outputTokens))}</td>
                 <td class="num"><strong>{n(int(c.inputTokens) + int(c.outputTokens))}</strong></td>

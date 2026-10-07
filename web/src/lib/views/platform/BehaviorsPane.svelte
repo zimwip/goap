@@ -6,7 +6,7 @@
   import { errorMessage, models, type CatalogModel, type LlmBehavior, type ModelAlias, type PreviewBehaviorsResponse } from '../../api';
   import { saveBehavior, setBehaviorEnabled, retireBehavior, type Unsaved } from '../../llmEdit';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { SOURCES, DEFAULT_MAX_INSTRUCTION, DEFAULT_MAX_TOTAL, counter, emptyForm, formOf, scopeSummary, toggled, validateForm, type BehaviorForm } from '../../behaviors';
+  import { SOURCES, DEFAULT_MAX_INSTRUCTION, DEFAULT_MAX_TOTAL, addedLine, costLine, counter, emptyForm, formOf, scopeSummary, toggled, validateForm, type BehaviorForm } from '../../behaviors';
 
   let {
     behaviors,
@@ -30,6 +30,8 @@
   let editing = $state(false); // an existing behaviour: its name is fixed
   let error = $state('');
   let busy = $state(false);
+  let measuring = $state(false);
+  let measureError = $state('');
 
   const modelId = (m: { provider: string; model: string }) => `${m.provider}/${m.model}`;
   const cnt = $derived(counter(form?.instruction ?? '', maxInstruction));
@@ -77,6 +79,25 @@
     await run(() => retireBehavior(b.name));
   }
 
+  // --- measured cost (ADR 0093, "Measured cost") ---------------------------------------------
+
+  // Two minimal calls per model through the gateway (ledger source "calibration"); the costs of the other behaviours are
+  // estimates until a first call measures them in the background.
+  async function measure(names?: string[]) {
+    measuring = true;
+    measureError = '';
+    try {
+      const r = await models.measureBehaviors({ names });
+      const failed = (r.costs ?? []).filter((c) => c.error);
+      if (failed.length) measureError = failed.map((c) => `${c.behavior} on ${c.model}: ${c.error}`).join(' · ');
+      await onchange();
+    } catch (e) {
+      measureError = errorMessage(e);
+    } finally {
+      measuring = false;
+    }
+  }
+
   // --- preview ---------------------------------------------------------------------------
 
   let pAlias = $state('default');
@@ -98,16 +119,22 @@
 </script>
 
 {#if error}<div class="alert">{error}</div>{/if}
+{#if measureError}<div class="alert">{measureError}</div>{/if}
 
 <section class="card">
   <div class="row head">
     <h3 class="grow">Global behaviours</h3>
+    <button type="button" class="small" disabled={measuring || busy} onclick={() => measure()} title="Ask each model how many input tokens every instruction costs (two tiny calls per model and behaviour, counted in the ledger as Calibration)">
+      {measuring ? 'Measuring…' : 'Measure costs now'}
+    </button>
     <button type="button" class="small" onclick={add}>New behaviour</button>
   </div>
   <p class="hint">
     A behaviour is an instruction added to the system text of every completion that matches its scope, whoever asks (runs, assistant, helper…). Disabled by
     default; turn one on to apply it to the whole platform. <strong>Cost:</strong> its text is sent with every matching call, so it adds input tokens to each
-    (a behaviour that shortens the answers can still save more than it adds). <strong>JSON calls:</strong> calls that require a structured answer (the
+    (a behaviour that shortens the answers can still save more than it adds). The cost per model is an estimate (<em>≈</em>, four
+    bytes a token) until the model has been asked: the first call that applies a behaviour measures it in the background, and "Measure costs now" does it on demand;
+    the result is kept and measured again when the instruction or the model behind an alias changes, or after a month. <strong>JSON calls:</strong> calls that require a structured answer (the
     items of a run, the planners, the assistant, the helper) are skipped unless the behaviour is flagged to apply to them; it is then wrapped so that it
     cannot change the format. Embeddings never get a behaviour. At most {maxTotal} bytes are added to one call; the ones that do not fit are dropped and
     shown as such in the call's prompt.
@@ -124,6 +151,9 @@
               <td>
                 <code>{b.name}</code> <span class="hint">{b.position === 'prepend' ? 'before' : 'after'} the system text</span>
                 {#if b.description}<div class="hint">{b.description}</div>{/if}
+                {#each b.costs ?? [] as c (c.model)}
+                  <div class="hint cost" title={c.error ? c.error : (c.aliases?.length ? `aliases: ${c.aliases.join(', ')}` : c.model)}>{costLine(c)}{#if c.aliases?.length} <span class="faint">({c.aliases.join(', ')})</span>{/if}{#if c.error} · <span class="over">not measured: {c.error}</span>{/if}</div>
+                {/each}
               </td>
               <td><input type="checkbox" checked={!!b.enabled} disabled={busy} onchange={(e) => toggle(b, e.currentTarget.checked)} aria-label={`Enable ${b.name}`} /></td>
               <td class="num">{b.order ?? 0}</td>
@@ -224,7 +254,7 @@
   {#if previewError}<div class="alert">{previewError}</div>{/if}
   {#if preview}
     <p class="hint">
-      {#if preview.applied?.length}Applied: {preview.applied.join(', ')} · about {preview.addedTokens ?? 0} tokens added{:else}No behaviour applies to this call.{/if}
+      {#if preview.applied?.length}Applied: {preview.applied.join(', ')} · {addedLine(preview.addedTokens, preview.addedTokensEstimated)}{:else}No behaviour applies to this call.{/if}
       {#if preview.skipped?.length} · dropped by the size cap: {preview.skipped.join(', ')}{/if}
     </p>
     <pre class="text">{preview.system}</pre>
@@ -312,6 +342,9 @@
   }
   .over {
     color: var(--warn);
+  }
+  .faint {
+    opacity: 0.7;
   }
   .text {
     margin: 0.4rem 0 0;

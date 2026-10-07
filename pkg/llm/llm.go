@@ -43,6 +43,8 @@ type Response struct {
 	// never changed: the gateway reports what it added here.
 	Behaviors      []string `json:"behaviors,omitempty"`
 	BehaviorTokens int      `json:"behaviorTokens,omitempty"`
+	// BehaviorsEstimated says BehaviorTokens is the byte estimate, not a cost measured on the model.
+	BehaviorsEstimated bool `json:"behaviorsEstimated,omitempty"`
 }
 
 // Client completes prompts.

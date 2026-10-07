@@ -66,6 +66,47 @@ talks to its models*, so it is platform configuration, next to the aliases and t
   cost and JSON calls. Edits are staged like the catalog's (`llmEdit.ts`: `saveBehavior`, `setBehaviorEnabled`,
   `retireBehavior`, `overlayBehaviors`); the pure logic is `web/src/lib/behaviors.ts`.
 
+## Measured cost
+
+The estimate of the tokens a behaviour adds (four bytes a token) is replaced by a measure on the real model, kept and refreshed.
+
+- **Measure** (`internal/modelgw/behaviorcost.go`). The cost of an instruction on a model is the input tokens the provider reports for a
+  minimal request carrying the instruction as its system text, minus those it reports for the same request with no system text (the
+  baseline of the model): one user message `.`, `MaxTokens` 1, no JSON, never negative (`costOf`). When the provider reports no usage
+  (zero), or no difference between the two requests, there is no measure: the byte estimate is stored with source `estimated`, so it
+  is not asked again at every call (the UI says so). The instruction measured is the trimmed text; the JSON notice of a JSON call
+  and the separators are left to the estimate (a few tokens).
+- **The calibration call goes through the gateway** (`Service.complete(..., calibration=true)`): admission, quota and ledger as any call,
+  with three exceptions: no behaviour applies to it (it must measure the bare instruction), the roles of the model are not checked
+  (the call is the gateway's own, not a caller's), and the source is `calibration` (`llm.SourceCalibration`, set by the gateway,
+  never a scope of a behaviour; "Calibration" in the Tokens console). **Subject**: `authz.System("modelgw")` (`system:modelgw`) for
+  the lazy and the explicit trigger alike, so a calibration is never attributed to the user whose call or click caused it and the
+  meta cannot forge it. **Quota**: it is admitted and counted like any call (a few dozen tokens per measure), but it never fails a
+  quota-less install, and a model whose quota is exhausted refuses it (`ErrQuotaExceeded`): nothing is stored, the estimate keeps
+  serving, the failure backs off.
+- **Store** (`llm_behavior_cost`, `llm_model_baseline`, `llm_call.behavior_tokens_estimated`: migration 0006, both dialects, `Store`
+  interface, memory and SQL). Key: behaviour name, `instruction_hash` (sha256 of the trimmed instruction), provider, model; columns
+  `tokens`, `baseline_tokens`, `measured_at`, `source` (`measured` | `estimated`). A changed instruction or an alias retargeted to
+  another model is simply an absent key, measured on its first use; the rows of an old text, of a retired behaviour or of a model
+  that left the catalog are purged lazily after each measure (`pruneCosts`). Entries older than `GOAP_LLM_BEHAVIOR_COST_TTL_DAYS`
+  (default 30) are measured again, and meanwhile still price the calls. No automatic drift detection. The service reads the table
+  into a cache, reloaded every minute.
+- **When**: lazily and asynchronously. `Complete` prices the behaviours it applied (`Service.price`): the stored cost where there is one
+  (`llm.Response.BehaviorTokens`, ledger `behavior_tokens`, flag `BehaviorsEstimated` / `behavior_tokens_estimated` false unless one
+  cost is an estimate), the byte estimate otherwise (flag true), and enqueues a calibration for each key without a fresh cost:
+  deduplicated per key (many concurrent calls, one calibration), at most two in flight, in the background with its own context (the
+  caller neither waits nor sees an error), and after a failure the key waits `CostBackoff` (10 minutes) before another attempt. Not
+  at start-up (it would spend tokens on models that may never be used): the first application, or the explicit trigger.
+- **API**. `ListBehaviors` gives each behaviour `costs` (`BehaviorCost`: model, the aliases reaching it that the behaviour applies to,
+  tokens, baseline, source, `measured_at_ms`; the estimate with `measured_at_ms` 0 when none is stored, disabled behaviours included
+  so the cost is known before enabling). `PreviewBehaviors` returns `added_tokens` for the previewed alias with
+  `added_tokens_estimated`. `MeasureBehaviors {names, models}` (admin, same guard as `ListBehaviors`) measures now, whatever the age
+  of the stored costs and the backoff, and returns the costs, a failed one with its `error` (the estimate kept). The ledger row, the
+  `CompleteResponse` (`behaviors_estimated`) and `journal.ModelExchange` (`behaviorsEstimated`) carry the flag.
+- **Web**. `BehaviorsPane.svelte`: per behaviour and model "≈ 23 tokens on claude-x" (estimate) or "23 tokens on claude-x, measured
+  2026-10-07", a "Measure costs now" button (progress, errors), the preview line marks estimate or measure; the prompt dialog and the
+  Tokens console mark an estimate with "≈" (`behaviors.ts`: `costLine`, `behaviorsLine`, `addedLine`).
+
 ## Consequences
 
 - A style costs input tokens on every matching call (the instruction) and saves output tokens; the preview and the ledger
@@ -76,4 +117,4 @@ talks to its models*, so it is platform configuration, next to the aliases and t
 ## Not done
 
 Per-organisation or per-project behaviours (resolved along the unit chain like the adapters, ADR 0054); behaviours on a
-call-by-call basis from a methodology; a measured (not estimated) count of the added tokens.
+call-by-call basis from a methodology.

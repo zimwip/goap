@@ -49,6 +49,8 @@ type Call struct {
 	// BehaviorTokens the tokens they added (an estimate).
 	Behaviors      []string
 	BehaviorTokens int64
+	// BehaviorTokensEstimated: BehaviorTokens is the byte estimate, not a cost measured on the model.
+	BehaviorTokensEstimated bool
 	// HasExchange says the gateway stores the exchange of this row (read only: set by the store, ignored on write).
 	HasExchange bool
 }
@@ -260,8 +262,8 @@ func (p *pending) request(system string, msgs []llm.Message) {
 }
 
 // behaved notes the behaviours added to the instructions of the call.
-func (p *pending) behaved(ap llmcfg.Applied) {
-	p.call.Behaviors, p.call.BehaviorTokens = behaviorNames(ap), int64(ap.Tokens())
+func (p *pending) behaved(ap llmcfg.Applied, tokens int, estimated bool) {
+	p.call.Behaviors, p.call.BehaviorTokens, p.call.BehaviorTokensEstimated = behaviorNames(ap), int64(tokens), estimated
 }
 
 // answer notes what came back, for the exchange.

@@ -59,6 +59,9 @@ const (
 	// ModelServicePreviewBehaviorsProcedure is the fully-qualified name of the ModelService's
 	// PreviewBehaviors RPC.
 	ModelServicePreviewBehaviorsProcedure = "/goap.model.v1.ModelService/PreviewBehaviors"
+	// ModelServiceMeasureBehaviorsProcedure is the fully-qualified name of the ModelService's
+	// MeasureBehaviors RPC.
+	ModelServiceMeasureBehaviorsProcedure = "/goap.model.v1.ModelService/MeasureBehaviors"
 	// ModelServiceListUsageProcedure is the fully-qualified name of the ModelService's ListUsage RPC.
 	ModelServiceListUsageProcedure = "/goap.model.v1.ModelService/ListUsage"
 	// ModelServiceUsageSummaryProcedure is the fully-qualified name of the ModelService's UsageSummary
@@ -96,6 +99,9 @@ type ModelServiceClient interface {
 	ListBehaviors(context.Context, *connect.Request[v1.ListBehaviorsRequest]) (*connect.Response[v1.ListBehaviorsResponse], error)
 	// What a call would be sent with, without calling any model (pure): the system text with the behaviours that apply.
 	PreviewBehaviors(context.Context, *connect.Request[v1.PreviewBehaviorsRequest]) (*connect.Response[v1.PreviewBehaviorsResponse], error)
+	// Measure now, on the real models, what behaviours cost in input tokens (ADR 0093, "Measured cost"): two minimal calls
+	// per model through the gateway (ledger source "calibration"). Platform administrators only.
+	MeasureBehaviors(context.Context, *connect.Request[v1.MeasureBehaviorsRequest]) (*connect.Response[v1.MeasureBehaviorsResponse], error)
 	// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
 	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
 	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
@@ -177,6 +183,12 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("PreviewBehaviors")),
 			connect.WithClientOptions(opts...),
 		),
+		measureBehaviors: connect.NewClient[v1.MeasureBehaviorsRequest, v1.MeasureBehaviorsResponse](
+			httpClient,
+			baseURL+ModelServiceMeasureBehaviorsProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("MeasureBehaviors")),
+			connect.WithClientOptions(opts...),
+		),
 		listUsage: connect.NewClient[v1.ListUsageRequest, v1.ListUsageResponse](
 			httpClient,
 			baseURL+ModelServiceListUsageProcedure,
@@ -210,6 +222,7 @@ type modelServiceClient struct {
 	listCatalog       *connect.Client[v1.ListCatalogRequest, v1.ListCatalogResponse]
 	listBehaviors     *connect.Client[v1.ListBehaviorsRequest, v1.ListBehaviorsResponse]
 	previewBehaviors  *connect.Client[v1.PreviewBehaviorsRequest, v1.PreviewBehaviorsResponse]
+	measureBehaviors  *connect.Client[v1.MeasureBehaviorsRequest, v1.MeasureBehaviorsResponse]
 	listUsage         *connect.Client[v1.ListUsageRequest, v1.ListUsageResponse]
 	usageSummary      *connect.Client[v1.UsageSummaryRequest, v1.UsageSummaryResponse]
 	getCallExchange   *connect.Client[v1.GetCallExchangeRequest, v1.GetCallExchangeResponse]
@@ -265,6 +278,11 @@ func (c *modelServiceClient) PreviewBehaviors(ctx context.Context, req *connect.
 	return c.previewBehaviors.CallUnary(ctx, req)
 }
 
+// MeasureBehaviors calls goap.model.v1.ModelService.MeasureBehaviors.
+func (c *modelServiceClient) MeasureBehaviors(ctx context.Context, req *connect.Request[v1.MeasureBehaviorsRequest]) (*connect.Response[v1.MeasureBehaviorsResponse], error) {
+	return c.measureBehaviors.CallUnary(ctx, req)
+}
+
 // ListUsage calls goap.model.v1.ModelService.ListUsage.
 func (c *modelServiceClient) ListUsage(ctx context.Context, req *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error) {
 	return c.listUsage.CallUnary(ctx, req)
@@ -307,6 +325,9 @@ type ModelServiceHandler interface {
 	ListBehaviors(context.Context, *connect.Request[v1.ListBehaviorsRequest]) (*connect.Response[v1.ListBehaviorsResponse], error)
 	// What a call would be sent with, without calling any model (pure): the system text with the behaviours that apply.
 	PreviewBehaviors(context.Context, *connect.Request[v1.PreviewBehaviorsRequest]) (*connect.Response[v1.PreviewBehaviorsResponse], error)
+	// Measure now, on the real models, what behaviours cost in input tokens (ADR 0093, "Measured cost"): two minimal calls
+	// per model through the gateway (ledger source "calibration"). Platform administrators only.
+	MeasureBehaviors(context.Context, *connect.Request[v1.MeasureBehaviorsRequest]) (*connect.Response[v1.MeasureBehaviorsResponse], error)
 	// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
 	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
 	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
@@ -384,6 +405,12 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("PreviewBehaviors")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceMeasureBehaviorsHandler := connect.NewUnaryHandler(
+		ModelServiceMeasureBehaviorsProcedure,
+		svc.MeasureBehaviors,
+		connect.WithSchema(modelServiceMethods.ByName("MeasureBehaviors")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelServiceListUsageHandler := connect.NewUnaryHandler(
 		ModelServiceListUsageProcedure,
 		svc.ListUsage,
@@ -424,6 +451,8 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 			modelServiceListBehaviorsHandler.ServeHTTP(w, r)
 		case ModelServicePreviewBehaviorsProcedure:
 			modelServicePreviewBehaviorsHandler.ServeHTTP(w, r)
+		case ModelServiceMeasureBehaviorsProcedure:
+			modelServiceMeasureBehaviorsHandler.ServeHTTP(w, r)
 		case ModelServiceListUsageProcedure:
 			modelServiceListUsageHandler.ServeHTTP(w, r)
 		case ModelServiceUsageSummaryProcedure:
@@ -477,6 +506,10 @@ func (UnimplementedModelServiceHandler) ListBehaviors(context.Context, *connect.
 
 func (UnimplementedModelServiceHandler) PreviewBehaviors(context.Context, *connect.Request[v1.PreviewBehaviorsRequest]) (*connect.Response[v1.PreviewBehaviorsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.PreviewBehaviors is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) MeasureBehaviors(context.Context, *connect.Request[v1.MeasureBehaviorsRequest]) (*connect.Response[v1.MeasureBehaviorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.MeasureBehaviors is not implemented"))
 }
 
 func (UnimplementedModelServiceHandler) ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error) {

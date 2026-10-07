@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { behaviorsLine, byteLength, counter, emptyForm, formOf, scopeSummary, toggled, validateForm } from './behaviors';
+import { addedLine, behaviorsLine, costLine, isEstimated, measuredDate, tokensText, byteLength, counter, emptyForm, formOf, scopeSummary, toggled, validateForm } from './behaviors';
 
 describe('behaviours form', () => {
   const ok = { ...emptyForm(), name: 'terse', instruction: 'Be brief.' };
@@ -36,8 +36,29 @@ describe('behaviours summaries', () => {
 
   it('describes what a call got', () => {
     expect(behaviorsLine(undefined, 0)).toBe('');
-    expect(behaviorsLine(['terse'], '42')).toBe('terse · about 42 tokens added');
-    expect(behaviorsLine(['terse', '!big'], 10)).toBe('terse · about 10 tokens added · dropped by the size cap: big');
+    expect(behaviorsLine(['terse'], '42', true)).toBe('terse · about 42 tokens added (estimate)');
+    expect(behaviorsLine(['terse', '!big'], 10, true)).toBe('terse · about 10 tokens added (estimate) · dropped by the size cap: big');
     expect(behaviorsLine(['!big'], 0)).toBe('dropped by the size cap: big');
+  });
+});
+
+describe('behaviour costs', () => {
+  it('marks an estimate and a measure', () => {
+    expect(tokensText(23, true)).toBe('≈ 23');
+    expect(tokensText('23')).toBe('23');
+    expect(behaviorsLine(['terse'], 42, false)).toBe('terse · 42 tokens added (measured)');
+  });
+
+  it('describes the cost on a model', () => {
+    expect(costLine({ behavior: 't', model: 'anthropic/claude-x', tokens: 23, source: 'estimated', measuredAtMs: 0 })).toBe('≈ 23 tokens on claude-x');
+    expect(costLine({ behavior: 't', model: 'anthropic/claude-x', tokens: 23, source: 'measured', measuredAtMs: Date.UTC(2026, 9, 7, 12) })).toBe('23 tokens on claude-x, measured 2026-10-07');
+    expect(costLine({ behavior: 't', model: 'fake/echo', tokens: 9, source: 'estimated', measuredAtMs: 1000 })).toContain('no usable count');
+    expect(isEstimated({ source: undefined })).toBe(true);
+    expect(measuredDate(0)).toBe('');
+  });
+
+  it('describes the preview', () => {
+    expect(addedLine(12, true)).toMatch(/about 12 tokens added \(estimate/);
+    expect(addedLine(12, false)).toBe('12 tokens added (measured)');
   });
 });

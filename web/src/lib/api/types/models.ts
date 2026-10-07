@@ -135,8 +135,9 @@ export interface LLMCall {
   hasExchange?: boolean;
   /** the global behaviours the gateway added to the instructions (ADR 0093); a leading `!` marks one dropped by the cap */
   behaviors?: string[];
-  /** estimated tokens the behaviours added */
+  /** tokens the behaviours added: measured on the model, or the byte estimate when `behaviorTokensEstimated` */
   behaviorTokens?: Int64;
+  behaviorTokensEstimated?: boolean;
 }
 
 /** The exchange the gateway stores for a call (ADR 0089). */
@@ -209,6 +210,30 @@ export interface LlmBehavior {
   kinds?: string[];
   /** also apply to calls that require a JSON answer */
   appliesToJson?: boolean;
+  /** the cost on each model it can apply to (the listing only) */
+  costs?: BehaviorCost[];
+}
+
+/** What an instruction costs in input tokens on a model (ADR 0093, "Measured cost"). */
+export interface BehaviorCost {
+  behavior: string;
+  /** provider/model */
+  model: string;
+  /** the aliases resolving to it that the behaviour applies to */
+  aliases?: string[];
+  tokens?: Int64;
+  baselineTokens?: Int64;
+  /** `measured` (the provider's own count) | `estimated` (four bytes a token: not measured yet, or no usage reported) */
+  source?: 'measured' | 'estimated' | string;
+  /** Unix milliseconds; 0: never measured */
+  measuredAtMs?: Int64;
+  /** why a requested measure failed (the estimate is kept) */
+  error?: string;
+}
+
+export interface MeasureBehaviorsRequest {
+  names?: string[];
+  models?: string[];
 }
 
 export interface ListBehaviorsResponse {
@@ -230,4 +255,6 @@ export interface PreviewBehaviorsResponse {
   applied?: string[];
   skipped?: string[];
   addedTokens?: number;
+  /** `addedTokens` is the byte estimate, not a measured cost */
+  addedTokensEstimated?: boolean;
 }

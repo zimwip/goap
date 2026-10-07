@@ -187,6 +187,8 @@ export const overlayBehaviors = (applied: LlmBehavior[]): Unsaved<LlmBehavior>[]
       sources: strs(p.sources, old?.sources),
       kinds: strs(p.kinds, old?.kinds),
       appliesToJson: typeof p.appliesToJSON === 'boolean' ? p.appliesToJSON : !!old?.appliesToJson,
+      // a measured cost is valid for the instruction it was measured on
+      costs: typeof p.instruction === 'string' && p.instruction !== old?.instruction ? undefined : old?.costs,
     };
   });
 

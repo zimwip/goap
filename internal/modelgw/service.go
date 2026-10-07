@@ -44,7 +44,11 @@ type Service struct {
 	// CallPrompts stores the exchange of the calls whose prompt no change log keeps (ADR 0089, GOAP_LLM_CALL_PROMPTS);
 	// false keeps counters only. NewService sets it.
 	CallPrompts bool
+	// CostTTL is how long a measured cost of a behaviour is trusted (ADR 0093, "Measured cost"; GOAP_LLM_BEHAVIOR_COST_TTL_DAYS);
+	// zero: DefaultCostTTL. CostBackoff is the wait after a failed calibration, zero: DefaultCostBackoff.
+	CostTTL, CostBackoff time.Duration
 
+	cost   costBook
 	mu     sync.RWMutex
 	snap   *llmcfg.Snapshot
 	active map[string]string // provider -> "" (loaded) | reason it is not
@@ -171,21 +175,33 @@ func (s *Service) build(ctx context.Context, p ProviderRecord, overrideKey strin
 // identity are trusted internal services and bypass the role check only.
 // Every call, refused ones included, is a row of the ledger (ADR 0089).
 func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
+	return s.complete(ctx, req, false)
+}
+
+// complete is Complete; calibration marks the gateway's own call measuring a behaviour (ADR 0093, "Measured cost"):
+// no behaviour applies to it and the roles of the model are not checked, everything else (admission, quota, ledger) is
+// the normal path.
+func (s *Service) complete(ctx context.Context, req llm.Request, calibration bool) (llm.Response, error) {
 	rec := s.begin(ctx, KindComplete, req.Model)
 	rec.request(req.System, req.Messages)
-	t, m, period, err := s.admit(ctx, req.Model)
+	t, m, period, err := s.admit(ctx, req.Model, calibration)
 	if err != nil {
 		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
 		return llm.Response{}, err
 	}
 	// the global behaviours join the instructions here, after the admission and before the provider (ADR 0093); req is
 	// the gateway's own copy, the caller's request is never changed
-	ap := s.behave(ctx, req, t)
+	ap := llmcfg.Applied{System: req.System}
+	var price Price
+	if !calibration {
+		ap = s.behave(ctx, req, t)
+		price = s.price(ctx, ap, t)
+	}
 	req.System = ap.System
 	rec.request(req.System, req.Messages)
-	rec.behaved(ap)
+	rec.behaved(ap, price.Tokens, price.Estimated)
 	resp, err := s.Router.Complete(ctx, req)
-	resp.Behaviors, resp.BehaviorTokens = behaviorNames(ap), ap.Tokens()
+	resp.Behaviors, resp.BehaviorTokens, resp.BehaviorsEstimated = behaviorNames(ap), price.Tokens, price.Estimated
 	rec.answer(resp.Text)
 	s.recordUsage(ctx, t, m, period, int64(resp.Usage.InputTokens+resp.Usage.OutputTokens))
 	rec.finish(ctx, t.Provider, t.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens, err)
@@ -200,7 +216,7 @@ func (s *Service) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedRes
 	}
 	rec := s.begin(ctx, KindEmbed, req.Model)
 	rec.requestEmbed(req.Texts)
-	t, m, period, err := s.admit(ctx, req.Model)
+	t, m, period, err := s.admit(ctx, req.Model, false)
 	if err != nil {
 		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
 		return llm.EmbedResponse{}, err
@@ -214,8 +230,9 @@ func (s *Service) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedRes
 	return resp, err
 }
 
-// admit resolves a model and applies the catalog policy (availability, required roles, global quota).
-func (s *Service) admit(ctx context.Context, model string) (Target, ModelEntry, string, error) {
+// admit resolves a model and applies the catalog policy (availability, required roles, global quota); internal skips the
+// roles only (the gateway's own calibration calls).
+func (s *Service) admit(ctx context.Context, model string, internal bool) (Target, ModelEntry, string, error) {
 	snap, err := s.sync(ctx)
 	if err != nil {
 		return Target{}, ModelEntry{}, "", err
@@ -228,7 +245,7 @@ func (s *Service) admit(ctx context.Context, model string) (Target, ModelEntry, 
 	if !ok || !m.Enabled {
 		return t, m, "", fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
 	}
-	if !s.allowed(ctx, authz.From(ctx), m) {
+	if !internal && !s.allowed(ctx, authz.From(ctx), m) {
 		return t, m, "", fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
 	}
 	period := PeriodKey(m.QuotaPeriod, s.now())
@@ -469,14 +486,26 @@ func (s *Service) Behaviors(ctx context.Context) ([]llmcfg.Behavior, error) {
 
 // PreviewBehaviors returns the system text a completion of the given alias, source and mode would be sent with, and which
 // behaviours made it, without calling any model. An alias that resolves to nothing is ErrInvalid.
-func (s *Service) PreviewBehaviors(ctx context.Context, alias, source string, json bool, system string) (llmcfg.Applied, error) {
+func (s *Service) PreviewBehaviors(ctx context.Context, alias, source string, json bool, system string) (llmcfg.Applied, Price, error) {
 	snap, err := s.sync(ctx)
 	if err != nil {
-		return llmcfg.Applied{}, err
+		return llmcfg.Applied{}, Price{}, err
 	}
 	t, _, err := s.Router.Resolve(alias)
 	if err != nil {
-		return llmcfg.Applied{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+		return llmcfg.Applied{}, Price{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	return snap.Apply(system, callInfo(llm.CallMeta{Source: source}.Clean().Source, alias, t, json)), nil
+	ap := snap.Apply(system, callInfo(llm.CallMeta{Source: source}.Clean().Source, alias, t, json))
+	// the preview reads the costs, it never asks for a calibration
+	p := Price{}
+	for _, u := range ap.Uses {
+		if c, ok := s.cachedCost(ctx, costKeyOf(u, t)); ok {
+			p.Tokens += int(c.Tokens)
+			p.Estimated = p.Estimated || c.Source != CostMeasured
+		} else {
+			p.Tokens += llmcfg.EstimateTokens(u.Bytes)
+			p.Estimated = true
+		}
+	}
+	return ap, p, nil
 }

@@ -79,7 +79,7 @@ func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.Compl
 	}
 	return connect.NewResponse(&modelv1.CompleteResponse{Text: resp.Text, Provider: resp.Provider, Model: resp.Model,
 		Usage:     &modelv1.Usage{InputTokens: int32(resp.Usage.InputTokens), OutputTokens: int32(resp.Usage.OutputTokens)},
-		Behaviors: resp.Behaviors, BehaviorTokens: int32(resp.BehaviorTokens)}), nil
+		Behaviors: resp.Behaviors, BehaviorTokens: int32(resp.BehaviorTokens), BehaviorsEstimated: resp.BehaviorsEstimated}), nil
 }
 
 func (h *Handler) ListModels(ctx context.Context, r *connect.Request[modelv1.ListModelsRequest]) (*connect.Response[modelv1.ListModelsResponse], error) {
@@ -205,15 +205,44 @@ func (h *Handler) ListBehaviors(ctx context.Context, r *connect.Request[modelv1.
 	if err != nil {
 		return nil, err
 	}
-	list, err := h.Service.Behaviors(ctx)
+	list, err := h.Service.BehaviorViews(ctx)
 	if err != nil {
 		return nil, rpcErr(err)
 	}
 	out := &modelv1.ListBehaviorsResponse{MaxInstructionBytes: llmcfg.MaxInstruction, MaxTotalBytes: llmcfg.MaxBehaviorBytes, Sources: llmcfg.Sources()}
 	for _, b := range list {
-		out.Behaviors = append(out.Behaviors, behaviorToPB(b))
+		pb := behaviorToPB(b.Behavior)
+		pb.Costs = costsToPB(b.Costs)
+		out.Behaviors = append(out.Behaviors, pb)
 	}
 	return connect.NewResponse(out), nil
+}
+
+func costsToPB(cs []CostView) []*modelv1.BehaviorCost {
+	out := make([]*modelv1.BehaviorCost, len(cs))
+	for i, c := range cs {
+		var ms int64
+		if !c.MeasuredAt.IsZero() {
+			ms = c.MeasuredAt.UnixMilli()
+		}
+		out[i] = &modelv1.BehaviorCost{Behavior: c.Behavior, Model: c.Provider + "/" + c.Model, Aliases: c.Aliases, Tokens: c.Tokens,
+			BaselineTokens: c.Baseline, Source: c.Source, MeasuredAtMs: ms, Error: c.Error}
+	}
+	return out
+}
+
+// MeasureBehaviors measures the cost of behaviours on the real models now (ADR 0093, "Measured cost"); platform
+// administrators only, like ListBehaviors. The calls are the gateway's own (source calibration, subject system:modelgw).
+func (h *Handler) MeasureBehaviors(ctx context.Context, r *connect.Request[modelv1.MeasureBehaviorsRequest]) (*connect.Response[modelv1.MeasureBehaviorsResponse], error) {
+	ctx, err := h.guard(ctx, r.Header())
+	if err != nil {
+		return nil, err
+	}
+	costs, err := h.Service.MeasureBehaviors(ctx, r.Msg.Names, r.Msg.Models)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&modelv1.MeasureBehaviorsResponse{Costs: costsToPB(costs)}), nil
 }
 
 // PreviewBehaviors computes the system text a call would be sent with; pure, no model is called. Administrators only.
@@ -222,11 +251,11 @@ func (h *Handler) PreviewBehaviors(ctx context.Context, r *connect.Request[model
 	if err != nil {
 		return nil, err
 	}
-	ap, err := h.Service.PreviewBehaviors(ctx, r.Msg.Alias, r.Msg.Source, r.Msg.Json, r.Msg.System)
+	ap, price, err := h.Service.PreviewBehaviors(ctx, r.Msg.Alias, r.Msg.Source, r.Msg.Json, r.Msg.System)
 	if err != nil {
 		return nil, rpcErr(err)
 	}
-	return connect.NewResponse(&modelv1.PreviewBehaviorsResponse{System: ap.System, Applied: ap.Names, Skipped: ap.Skipped, AddedTokens: int32(ap.Tokens())}), nil
+	return connect.NewResponse(&modelv1.PreviewBehaviorsResponse{System: ap.System, Applied: ap.Names, Skipped: ap.Skipped, AddedTokens: int32(price.Tokens), AddedTokensEstimated: price.Estimated}), nil
 }
 
 // metaToPB is the declaration of the calls made with ctx, for the ledger of the gateway (ADR 0089).
@@ -271,7 +300,7 @@ func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 	if err != nil {
 		return llm.Response{}, err
 	}
-	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model, Behaviors: r.Msg.Behaviors, BehaviorTokens: int(r.Msg.BehaviorTokens)}
+	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model, Behaviors: r.Msg.Behaviors, BehaviorTokens: int(r.Msg.BehaviorTokens), BehaviorsEstimated: r.Msg.BehaviorsEstimated}
 	if u := r.Msg.Usage; u != nil {
 		out.Usage = llm.Usage{InputTokens: int(u.InputTokens), OutputTokens: int(u.OutputTokens)}
 	}
@@ -387,7 +416,7 @@ func callToPB(c Call) *modelv1.LLMCall {
 	return &modelv1.LLMCall{Seq: c.Seq, At: timestamppb.New(c.At), DurationMs: c.DurationMs, Subject: c.Subject, Project: c.Project, Org: c.Org,
 		Alias: c.Alias, Provider: c.Provider, Model: c.Model, Kind: c.Kind, InputTokens: c.InputTokens, OutputTokens: c.OutputTokens, Error: c.Error,
 		Source: c.Source, ConversationId: c.ConversationID, ProcessId: c.ProcessID, ChangeId: c.ChangeID, Step: int32(c.Step), Action: c.Action,
-		Agent: c.Agent, Call: int32(c.CallIndex), HasExchange: c.HasExchange, Behaviors: c.Behaviors, BehaviorTokens: c.BehaviorTokens}
+		Agent: c.Agent, Call: int32(c.CallIndex), HasExchange: c.HasExchange, Behaviors: c.Behaviors, BehaviorTokens: c.BehaviorTokens, BehaviorTokensEstimated: c.BehaviorTokensEstimated}
 }
 
 // ListUsage reads the ledger: the caller's own calls, any subject's for an administrator.

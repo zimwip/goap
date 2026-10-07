@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/stdlib"
 
@@ -45,9 +46,10 @@ func main() {
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
-	svc.CallPrompts = platform.EnvBool("GOAP_LLM_CALL_PROMPTS", true)                                        // the exchange of the calls no change log keeps (ADR 0089)
-	go svc.KeepCalls(ctx, platform.EnvInt("GOAP_LLM_CALL_RETENTION_DAYS", modelgw.DefaultCallRetentionDays)) // the ledger of calls (ADR 0089)
-	svc.Authz = iam                                                                                          // the roles a model requires are held on the caller's project (ADR 0043)
+	svc.CostTTL = time.Duration(platform.EnvInt("GOAP_LLM_BEHAVIOR_COST_TTL_DAYS", int(modelgw.DefaultCostTTL/(24*time.Hour)))) * 24 * time.Hour // a measured behaviour cost is measured again after this (ADR 0093)
+	svc.CallPrompts = platform.EnvBool("GOAP_LLM_CALL_PROMPTS", true)                                                                            // the exchange of the calls no change log keeps (ADR 0089)
+	go svc.KeepCalls(ctx, platform.EnvInt("GOAP_LLM_CALL_RETENTION_DAYS", modelgw.DefaultCallRetentionDays))                                     // the ledger of calls (ADR 0089)
+	svc.Authz = iam                                                                                                                              // the roles a model requires are held on the caller's project (ADR 0043)
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: svc, Authz: iam}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

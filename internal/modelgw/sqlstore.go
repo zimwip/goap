@@ -63,7 +63,7 @@ func (s SQLStore) AddUsage(ctx context.Context, model, period string, tokens int
 }
 
 const callColumns = `seq, at_ms, duration_ms, subject, project, org, alias, provider, model, kind, input_tokens, output_tokens, error,
-	source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens,
+	source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens, behavior_tokens_estimated,
 	CASE WHEN EXISTS (SELECT 1 FROM llm_call_exchange x WHERE x.seq = llm_call.seq) THEN 1 ELSE 0 END`
 
 // scanCall reads a row of callColumns.
@@ -73,7 +73,7 @@ func scanCall(sc interface{ Scan(...any) error }) (Call, error) {
 	var has int
 	var behaviors string
 	if err := sc.Scan(&c.Seq, &ms, &c.DurationMs, &c.Subject, &c.Project, &c.Org, &c.Alias, &c.Provider, &c.Model, &c.Kind, &c.InputTokens,
-		&c.OutputTokens, &c.Error, &c.Source, &c.ConversationID, &c.ProcessID, &c.ChangeID, &c.Step, &c.Action, &c.Agent, &c.CallIndex, &behaviors, &c.BehaviorTokens, &has); err != nil {
+		&c.OutputTokens, &c.Error, &c.Source, &c.ConversationID, &c.ProcessID, &c.ChangeID, &c.Step, &c.Action, &c.Agent, &c.CallIndex, &behaviors, &c.BehaviorTokens, &c.BehaviorTokensEstimated, &has); err != nil {
 		return c, err
 	}
 	c.At, c.HasExchange = time.UnixMilli(ms).UTC(), has == 1
@@ -117,10 +117,10 @@ func (s SQLStore) AppendCall(ctx context.Context, c Call, x *Exchange) (int64, e
 	defer tx.Rollback()
 	var seq int64
 	err = tx.QueryRowContext(ctx, s.q(`INSERT INTO llm_call (at_ms, duration_ms, subject, project, org, alias, provider, model, kind,
-		input_tokens, output_tokens, error, source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`),
+		input_tokens, output_tokens, error, source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens, behavior_tokens_estimated)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`),
 		c.At.UnixMilli(), c.DurationMs, c.Subject, c.Project, c.Org, c.Alias, c.Provider, c.Model, c.Kind, c.InputTokens, c.OutputTokens,
-		c.Error, c.Source, c.ConversationID, c.ProcessID, c.ChangeID, c.Step, c.Action, c.Agent, c.CallIndex, strings.Join(c.Behaviors, ","), c.BehaviorTokens).Scan(&seq)
+		c.Error, c.Source, c.ConversationID, c.ProcessID, c.ChangeID, c.Step, c.Action, c.Agent, c.CallIndex, strings.Join(c.Behaviors, ","), c.BehaviorTokens, c.BehaviorTokensEstimated).Scan(&seq)
 	if err != nil {
 		return 0, err
 	}
@@ -266,4 +266,79 @@ func (s SQLStore) PurgeCalls(ctx context.Context, before time.Time) (int64, erro
 		return 0, err
 	}
 	return n, tx.Commit()
+}
+
+// ---- measured cost of the behaviours (ADR 0093) ---------------------------------
+
+func (s SQLStore) BehaviorCosts(ctx context.Context) ([]BehaviorCost, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT behavior, instruction_hash, provider, model, tokens, baseline_tokens, measured_at, source FROM llm_behavior_cost`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []BehaviorCost
+	for rows.Next() {
+		var c BehaviorCost
+		var ms int64
+		if err := rows.Scan(&c.Behavior, &c.Hash, &c.Provider, &c.Model, &c.Tokens, &c.Baseline, &ms, &c.Source); err != nil {
+			return nil, err
+		}
+		c.MeasuredAt = time.UnixMilli(ms).UTC()
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (s SQLStore) PutBehaviorCost(ctx context.Context, c BehaviorCost) error {
+	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO llm_behavior_cost (behavior, instruction_hash, provider, model, tokens, baseline_tokens, measured_at, source)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (behavior, instruction_hash, provider, model) DO UPDATE SET tokens = excluded.tokens, baseline_tokens = excluded.baseline_tokens,
+		measured_at = excluded.measured_at, source = excluded.source`),
+		c.Behavior, c.Hash, c.Provider, c.Model, c.Tokens, c.Baseline, c.MeasuredAt.UnixMilli(), c.Source)
+	return err
+}
+
+func (s SQLStore) DeleteBehaviorCosts(ctx context.Context, keys []CostKey) error {
+	for _, k := range keys {
+		if _, err := s.DB.ExecContext(ctx, s.q(`DELETE FROM llm_behavior_cost WHERE behavior = ? AND instruction_hash = ? AND provider = ? AND model = ?`),
+			k.Behavior, k.Hash, k.Provider, k.Model); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s SQLStore) ModelBaselines(ctx context.Context) ([]ModelBaseline, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT provider, model, tokens, measured_at FROM llm_model_baseline`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []ModelBaseline
+	for rows.Next() {
+		var b ModelBaseline
+		var ms int64
+		if err := rows.Scan(&b.Provider, &b.Model, &b.Tokens, &ms); err != nil {
+			return nil, err
+		}
+		b.MeasuredAt = time.UnixMilli(ms).UTC()
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (s SQLStore) PutModelBaseline(ctx context.Context, b ModelBaseline) error {
+	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO llm_model_baseline (provider, model, tokens, measured_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT (provider, model) DO UPDATE SET tokens = excluded.tokens, measured_at = excluded.measured_at`),
+		b.Provider, b.Model, b.Tokens, b.MeasuredAt.UnixMilli())
+	return err
+}
+
+func (s SQLStore) DeleteModelBaselines(ctx context.Context, keys [][2]string) error {
+	for _, k := range keys {
+		if _, err := s.DB.ExecContext(ctx, s.q(`DELETE FROM llm_model_baseline WHERE provider = ? AND model = ?`), k[0], k[1]); err != nil {
+			return err
+		}
+	}
+	return nil
 }

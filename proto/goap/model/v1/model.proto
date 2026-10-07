@@ -33,6 +33,9 @@ service ModelService {
   rpc ListBehaviors(ListBehaviorsRequest) returns (ListBehaviorsResponse);
   // What a call would be sent with, without calling any model (pure): the system text with the behaviours that apply.
   rpc PreviewBehaviors(PreviewBehaviorsRequest) returns (PreviewBehaviorsResponse);
+  // Measure now, on the real models, what behaviours cost in input tokens (ADR 0093, "Measured cost"): two minimal calls
+  // per model through the gateway (ledger source "calibration"). Platform administrators only.
+  rpc MeasureBehaviors(MeasureBehaviorsRequest) returns (MeasureBehaviorsResponse);
 
   // The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
   // assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
@@ -87,6 +90,8 @@ message CompleteResponse {
   // they added (an estimate)
   repeated string behaviors = 5;
   int32 behavior_tokens = 6;
+  // behavior_tokens is the byte estimate, not a measured cost
+  bool behaviors_estimated = 7;
 }
 
 message EmbedRequest {
@@ -229,6 +234,38 @@ message Behavior {
   repeated string sources = 9;
   repeated string kinds = 10;
   bool applies_to_json = 11;
+  // the cost on each model it can apply to (ListBehaviors only)
+  repeated BehaviorCost costs = 12;
+}
+
+// What an instruction costs in input tokens on a model (ADR 0093, "Measured cost").
+message BehaviorCost {
+  string behavior = 1;
+  // provider/model
+  string model = 2;
+  // the aliases resolving to it that the behaviour applies to
+  repeated string aliases = 3;
+  int64 tokens = 4;
+  // the input tokens of the same request with no instruction
+  int64 baseline_tokens = 5;
+  // "measured" (the provider's own count) | "estimated" (four bytes a token: not measured yet, or the provider reports
+  // no usage)
+  string source = 6;
+  // Unix milliseconds; 0: never measured
+  int64 measured_at_ms = 7;
+  // why a requested measure failed (the estimate is kept)
+  string error = 8;
+}
+
+message MeasureBehaviorsRequest {
+  // the behaviours to measure ([]: all, disabled ones included)
+  repeated string names = 1;
+  // provider/model to measure on ([]: every model they apply to)
+  repeated string models = 2;
+}
+
+message MeasureBehaviorsResponse {
+  repeated BehaviorCost costs = 1;
 }
 
 message ListBehaviorsRequest {}
@@ -259,6 +296,8 @@ message PreviewBehaviorsResponse {
   // dropped by the cap on the text added to a call
   repeated string skipped = 3;
   int32 added_tokens = 4;
+  // added_tokens is the byte estimate, not a cost measured on the model
+  bool added_tokens_estimated = 5;
 }
 
 // ---- the contextual helper (ADR 0086) ---------------------------------------
@@ -357,6 +396,8 @@ message LLMCall {
   // estimate). The stored exchange holds the system text as sent, behaviours included.
   repeated string behaviors = 23;
   int64 behavior_tokens = 24;
+  // behavior_tokens is the byte estimate, not a measured cost
+  bool behavior_tokens_estimated = 25;
 }
 
 message GetCallExchangeRequest {

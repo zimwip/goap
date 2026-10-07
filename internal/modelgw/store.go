@@ -51,6 +51,15 @@ type Store interface {
 	Summary(ctx context.Context, f UsageFilter, group string) ([]SummaryRow, error)
 	// PurgeCalls deletes the calls before t, with their exchanges, and returns how many calls.
 	PurgeCalls(ctx context.Context, before time.Time) (int64, error)
+
+	// The measured cost of the behaviours (ADR 0093, "Measured cost"); the tables are small (a behaviour by a model).
+	BehaviorCosts(ctx context.Context) ([]BehaviorCost, error)
+	// PutBehaviorCost inserts or replaces the cost of its key.
+	PutBehaviorCost(ctx context.Context, c BehaviorCost) error
+	DeleteBehaviorCosts(ctx context.Context, keys []CostKey) error
+	ModelBaselines(ctx context.Context) ([]ModelBaseline, error)
+	PutModelBaseline(ctx context.Context, b ModelBaseline) error
+	DeleteModelBaselines(ctx context.Context, keys [][2]string) error
 }
 
 // MemoryStore is an in-memory Store (tests, GOAP_STORE=memory).
@@ -60,13 +69,15 @@ type MemoryStore struct {
 	calls []Call
 	xs    map[int64]Exchange
 	seq   int64
+	costs map[CostKey]BehaviorCost
+	bases map[[2]string]ModelBaseline
 }
 
 var _ Store = (*MemoryStore)(nil)
 
 // NewMemoryStore returns an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{usage: map[[2]string]int64{}, xs: map[int64]Exchange{}}
+	return &MemoryStore{usage: map[[2]string]int64{}, xs: map[int64]Exchange{}, costs: map[CostKey]BehaviorCost{}, bases: map[[2]string]ModelBaseline{}}
 }
 
 func (s *MemoryStore) Usage(_ context.Context, model, period string) (int64, error) {
@@ -162,4 +173,56 @@ func (s *MemoryStore) PurgeCalls(_ context.Context, before time.Time) (int64, er
 	}
 	s.calls = kept
 	return n, nil
+}
+
+func (s *MemoryStore) BehaviorCosts(context.Context) ([]BehaviorCost, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]BehaviorCost, 0, len(s.costs))
+	for _, c := range s.costs {
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func (s *MemoryStore) PutBehaviorCost(_ context.Context, c BehaviorCost) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.costs[c.CostKey] = c
+	return nil
+}
+
+func (s *MemoryStore) DeleteBehaviorCosts(_ context.Context, keys []CostKey) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, k := range keys {
+		delete(s.costs, k)
+	}
+	return nil
+}
+
+func (s *MemoryStore) ModelBaselines(context.Context) ([]ModelBaseline, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]ModelBaseline, 0, len(s.bases))
+	for _, b := range s.bases {
+		out = append(out, b)
+	}
+	return out, nil
+}
+
+func (s *MemoryStore) PutModelBaseline(_ context.Context, b ModelBaseline) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.bases[[2]string{b.Provider, b.Model}] = b
+	return nil
+}
+
+func (s *MemoryStore) DeleteModelBaselines(_ context.Context, keys [][2]string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, k := range keys {
+		delete(s.bases, k)
+	}
+	return nil
 }

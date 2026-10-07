@@ -1,5 +1,5 @@
 // Global behaviours of the LLM calls (ADR 0093): the pure logic of the settings pane and the prompt dialog.
-import type { LlmBehavior } from './api';
+import type { BehaviorCost, LlmBehavior } from './api';
 
 /** The sources a behaviour may be scoped to, as the ledger names them (the server sends its own list). */
 export const SOURCES = ['engine', 'assistant', 'helper', 'indexer', 'intent', 'other'];
@@ -69,15 +69,39 @@ export function scopeSummary(b: Pick<LlmBehavior, 'aliases' | 'models' | 'source
 /** Toggles a value of a list. */
 export const toggled = (list: string[], v: string): string[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);
 
+/** Tokens added by behaviours: "≈ 23" for an estimate, "23" for a measure. */
+export const tokensText = (tokens: number | string | undefined, estimated?: boolean): string => `${estimated ? '≈ ' : ''}${Number(tokens ?? 0) || 0}`;
+
 /** The behaviours of a call, for the prompt dialog and the Tokens console: applied ones, then the ones the cap dropped. */
-export function behaviorsLine(names: string[] | undefined, tokens: number | string | undefined): string {
+export function behaviorsLine(names: string[] | undefined, tokens: number | string | undefined, estimated?: boolean): string {
   const applied = (names ?? []).filter((n) => !n.startsWith('!'));
   const dropped = (names ?? []).filter((n) => n.startsWith('!')).map((n) => n.slice(1));
   if (!applied.length && !dropped.length) return '';
   const parts: string[] = [];
   if (applied.length) parts.push(applied.join(', '));
   const t = Number(tokens ?? 0) || 0;
-  if (applied.length && t > 0) parts.push(`about ${t} tokens added`);
+  if (applied.length && t > 0) parts.push(estimated ? `about ${t} tokens added (estimate)` : `${t} tokens added (measured)`);
   if (dropped.length) parts.push(`dropped by the size cap: ${dropped.join(', ')}`);
   return parts.join(' · ');
 }
+
+/** The date of a measure, `2026-10-07`. */
+export const measuredDate = (ms: number | string | undefined): string => {
+  const n = Number(ms ?? 0) || 0;
+  return n > 0 ? new Date(n).toISOString().slice(0, 10) : '';
+};
+
+/** Whether a cost is the byte estimate (never measured, or the provider reports no usage). */
+export const isEstimated = (c: Pick<BehaviorCost, 'source'>): boolean => c.source !== 'measured';
+
+/** The cost of a behaviour on a model, in a few words: "≈ 23 tokens on claude-x" or "23 tokens on claude-x, measured 2026-10-07". */
+export function costLine(c: BehaviorCost): string {
+  const model = c.model.includes('/') ? c.model.slice(c.model.indexOf('/') + 1) : c.model;
+  const t = Number(c.tokens ?? 0) || 0;
+  if (isEstimated(c)) return `≈ ${t} tokens on ${model}${measuredDate(c.measuredAtMs) ? ' (the provider reports no usable count)' : ''}`;
+  return `${t} tokens on ${model}, measured ${measuredDate(c.measuredAtMs)}`;
+}
+
+/** The cost shown for a previewed alias. */
+export const addedLine = (tokens: number | undefined, estimated: boolean | undefined): string =>
+  estimated ? `about ${tokens ?? 0} tokens added (estimate; measure the behaviours for a real count)` : `${tokens ?? 0} tokens added (measured)`;

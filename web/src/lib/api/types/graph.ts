@@ -82,6 +82,8 @@ export interface ModelExchange {
   behaviors?: string[];
   /** estimated tokens they added */
   behaviorTokens?: number;
+  /** `behaviorTokens` is the byte estimate, not a measured cost */
+  behaviorsEstimated?: boolean;
 }
 
 export interface ChangeLogQuery {
