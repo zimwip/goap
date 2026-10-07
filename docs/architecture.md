@@ -892,7 +892,11 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
   agent, and the action via **baggage** propagated from the engine to the model gateway; metrics
   `gen_ai.client.token.usage` and `gen_ai.client.operation.duration`;
 - **tools**: span `execute_tool <name>` (`gen_ai.tool.name`);
-- metrics `goap.actions`, `goap.action.duration`, `goap.tokens` (by agent / action / result).
+- metrics `goap.actions`, `goap.action.duration`, `goap.tokens` (by agent / action / result);
+- **timing logs** (`GOAP_LOG_LEVEL=debug`): every unary Connect call logs `rpc` with `procedure`, `duration_ms`, `code`
+  (warn from `telemetry.SlowRPC`, 1 s); the assistant logs `assistant phase` lines (`send`, `send.available`,
+  `send.history`, `turn`, `turn.model` per round with `system_bytes` / `history_bytes`, `turn.tools`, `turn.tool`):
+  the model call is the whole of a turn but a few milliseconds.
 
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.
@@ -1208,8 +1212,8 @@ panel** opened by a round launcher (`assistant/Launcher.svelte`, mounted once in
 command "Ask the assistant"). The state is `stores/assistant.svelte.ts`: conversations of the caller (newest first), the
 current one and its messages, the draft; `send` collects the layered context (`assistant/context.ts`, ADR 0092: focus, screen, app, zoomed on the focused element, capped
 as the server caps it; never a form value) and the tools the open screen offers (`assist/registry.svelte.ts` `describeTools`,
-descriptors in `assist/catalog.ts`) and calls `assistant.v1.Send`, then polls `GetConversation` every 1.5 s
-(backing off on errors, not while the page is hidden, only while a view is shown) until the answer is `done` or `error`.
+descriptors in `assist/catalog.ts`) and calls `assistant.v1.Send`, then polls `GetConversation` (every 0.5 s for the first 12
+polls, then every 1.5 s, `pollDelay`; backing off on errors, not while the page is hidden, only while a view is shown) until the answer is `done` or `error`.
 The actions of an answer (`select_project`, `open_change`, `create_change`, and the `effect` screen tools: `assistant/actions.ts`)
 run once, only for a message seen pending in this page, and a screen tool reports its outcome (`ReportAction`); a reloaded
 conversation replays nothing; each shows as a chip that repeats it. A proposal (`start_agent`, a `write` screen tool) is a card

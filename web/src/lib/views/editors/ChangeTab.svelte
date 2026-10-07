@@ -43,7 +43,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
   import { provideActions, notify } from '../../shell/workbench.svelte';
-  import { stamp, keyOf } from '../../flux/signals.svelte';
+  import { stamp, keyOf, throttled } from '../../flux/signals.svelte';
   import { viewBaseline } from '../../stores/baselineTool.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
@@ -269,14 +269,25 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   });
 
   // what the platform stream says touched this change (by anyone: another user, an agent, a process): read it again
+  // (a running agent journals many entries a second, each an event: at most one reload per second)
+  let reloading: AbortController | undefined;
+  const reloadSoon = throttled(() => {
+    const id = selected;
+    if (!id || change?.id !== id) return;
+    reloading?.abort();
+    reloading = new AbortController();
+    void load(id, reloading.signal);
+  }, 1000);
   $effect(() => {
     const id = selected;
     if (!id || !stamp(keyOf.change(id))) return;
-    const ctrl = new AbortController();
-    untrack(() => {
-      if (change?.id === id) void load(id, ctrl.signal);
-    });
-    return () => ctrl.abort();
+    untrack(reloadSoon.call);
+    return reloadSoon.cancel;
+  });
+  // another change, or leaving: what was being read is dropped
+  $effect(() => {
+    void selected;
+    return () => reloading?.abort();
   });
 
   // the definition of the lifecycle the change follows (re-read when the lifecycle or the namespace changes)

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { isOwnCommand, newCommandId } from './commands';
 import { onKind, onPlatformEvent, onPresence, onResync, receive, resetStream, stream, type PlatformEvent } from './events.svelte';
 import { keysOf } from './keys';
-import { keyOf, stamp, touch, touchAll, touchSoon } from './signals.svelte';
+import { keyOf, stamp, throttled, touch, touchAll, touchSoon } from './signals.svelte';
 
 const ev = (p: Partial<PlatformEvent>): PlatformEvent => ({
   type: '', kind: '', id: '', namespace: '', branch: '', project: '', changeId: '', version: 0, actor: '', commandId: '', time: '', label: '', presence: [], ...p,
@@ -112,5 +112,41 @@ describe('event stream', () => {
     expect(generic).not.toHaveBeenCalled();
     offP();
     offE();
+  });
+});
+
+describe('throttled', () => {
+  it('runs at once, then at most once per interval, the calls in between collapsing into one', () => {
+    vi.useFakeTimers();
+    let t = 0;
+    const fn = vi.fn();
+    const th = throttled(fn, 1000, () => t);
+    th.call();
+    expect(fn).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 20; i++) {
+      t += 40;
+      th.call();
+    }
+    expect(fn).toHaveBeenCalledTimes(1);
+    t = 1000;
+    vi.advanceTimersByTime(1000);
+    expect(fn).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(5000);
+    expect(fn).toHaveBeenCalledTimes(2);
+    t = 5000;
+    th.call();
+    expect(fn).toHaveBeenCalledTimes(3);
+  });
+  it('can be cancelled', () => {
+    vi.useFakeTimers();
+    let t = 0;
+    const fn = vi.fn();
+    const th = throttled(fn, 1000, () => t);
+    th.call();
+    t = 10;
+    th.call();
+    th.cancel();
+    vi.advanceTimersByTime(5000);
+    expect(fn).toHaveBeenCalledTimes(1);
   });
 });

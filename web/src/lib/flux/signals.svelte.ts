@@ -52,3 +52,30 @@ export const keyOf = {
   domain: (name: string) => `domain:${name}`,
   domains: 'domains',
 };
+
+/**
+ * Runs `fn` at most once per `ms`: at once when the last run is old enough, else once more when the interval ends (the
+ * calls in between collapse into that one). For a read that is large and that an event stream asks for again and again
+ * (the list of every change while an agent journals dozens of entries a second).
+ */
+export function throttled(fn: () => void, ms: number, now: () => number = Date.now): { call: () => void; cancel: () => void } {
+  let last = -Infinity;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const run = () => {
+    timer = undefined;
+    last = now();
+    fn();
+  };
+  return {
+    call() {
+      if (timer) return;
+      const wait = last + ms - now();
+      if (wait <= 0) run();
+      else timer = setTimeout(run, wait);
+    },
+    cancel() {
+      if (timer) clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}

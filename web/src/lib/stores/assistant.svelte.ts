@@ -13,7 +13,17 @@ import { project } from './project.svelte';
 /** The server accepts a message of at most 4 KiB (assistantsvc `MaxTextBytes`). */
 export const MAX_TEXT_BYTES = 4 << 10;
 export const POLL_MS = 1500;
+/** a turn takes a few seconds: right after the send the answer is looked for faster, then at POLL_MS */
+export const POLL_FAST_MS = 500;
+/** how many polls of one answer run at POLL_FAST_MS */
+export const POLL_FAST_COUNT = 12;
 const POLL_MAX_MS = 15000;
+
+/** The wait before the next poll: fast at first, POLL_MS after, doubled by every consecutive failure (capped). */
+export function pollDelay(polled: number, failed: number): number {
+  const base = polled < POLL_FAST_COUNT ? POLL_FAST_MS : POLL_MS;
+  return Math.min(base * 2 ** failed, POLL_MAX_MS);
+}
 /** consecutive failed polls after which polling stops and the error is shown */
 const POLL_GIVE_UP = 6;
 const TITLE_MAX = 60;
@@ -38,6 +48,8 @@ export const assistant = $state({
 let viewers = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let fails = 0;
+/** polls made since the answer being waited for was sent (or the conversation opened) */
+let polled = 0;
 let inflight: AbortController | undefined;
 /** one token per load / switch: an answer that comes back for an older one is dropped */
 let epoch = 0;
@@ -60,7 +72,7 @@ function stopPolling(): void {
 
 function schedulePoll(): void {
   if (timer || viewers <= 0 || !assistant.currentId || !isPending()) return;
-  const delay = Math.min(POLL_MS * 2 ** fails, POLL_MAX_MS);
+  const delay = pollDelay(polled, fails);
   timer = setTimeout(() => {
     timer = undefined;
     void poll();
@@ -75,6 +87,7 @@ async function poll(): Promise<void> {
   const id = assistant.currentId;
   const ctrl = new AbortController();
   inflight = ctrl;
+  polled++;
   try {
     const r = await conversationsApi.get(id, ctrl.signal);
     if (mine !== epoch) return;
@@ -179,6 +192,7 @@ export async function openConversation(id: string, keep = false): Promise<void> 
     stopPolling();
     epoch++;
     fails = 0;
+    polled = 0;
     assistant.currentId = id;
     assistant.messages = [];
   }
@@ -242,6 +256,7 @@ export async function send(text: string): Promise<boolean> {
     forgetSelection();
     if (mine !== epoch) return true;
     watching.add(r.assistantMessage.id);
+    polled = 0;
     assistant.messages = [...assistant.messages.filter((m) => m.id !== r.userMessage.id && m.id !== r.assistantMessage.id), r.userMessage, r.assistantMessage].sort(
       (a, b) => a.seq - b.seq,
     );
@@ -306,6 +321,7 @@ export function resetAssistant(): void {
   epoch++;
   viewers = 0;
   fails = 0;
+  polled = 0;
   watching.clear();
   Object.assign(assistant, { conversations: [], currentId: '', messages: [], draft: '', loaded: false, loading: false, sending: false, error: '', panelOpen: false, focus: 0 });
 }

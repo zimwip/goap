@@ -46,7 +46,7 @@ and ask it to start a change or to take them to one. The conversation is stored 
   (`conversationId`, `status`, `error`, `createdAt`). `Message.processId` stays empty for the assistant.
 - **The model protocol.** One JSON object per answer, `{"message": "...", "tool_calls": [{"name", "arguments"}]}`, parsed
   defensively (`llm.DecodeJSON`; an answer that is no JSON is the final text). With tool calls, each is run and all the
-  results go back as one user turn (marked as data); at most **4 model calls** per turn (`MaxRounds`): the tools asked for
+  results go back as one user turn (marked as data), except when every call only hands something to the person (`start_agent`, `open_change`, a `ui.*` tool), all succeeded and the answer has a message: that message is final (`settling`, a model call saved, the latency of a turn being its model calls); at most **4 model calls** per turn (`MaxRounds`): the tools asked for
   in the last one are not run, its message is the answer, or the turn fails with `error` when it has none. At most 4 tool
   calls per round (the others get an error result). An unknown tool name is an error fed back, **never run**. The prompt
   (`prompt.go`, a Go constant) says what the assistant is for, lists the four tools, asks it to take keys and ids from the

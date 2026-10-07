@@ -602,3 +602,65 @@ func TestCreateChangeWithNoActiveProjectActsInTheRoot(t *testing.T) {
 		t.Fatalf("created %+v", e.graph.created)
 	}
 }
+
+// A round whose tools only hand something to the person (open a change) and all succeeded, with a message, is the final
+// answer: no second model call. Anything that returns data to build on, or fails, or comes without a message, goes on.
+func TestSettlingToolsWithAMessageSaveTheLastModelCall(t *testing.T) {
+	withMsg := func(name, args string) string {
+		return fmt.Sprintf(`{"message":"On it.","tool_calls":[{"name":%q,"arguments":%s}]}`, name, args)
+	}
+	cases := []struct {
+		name   string
+		first  string
+		calls  int
+		answer string
+	}{
+		{"settling tool and message", withMsg(ToolOpenChange, `{"changeId":"CHG-1"}`), 1, "On it."},
+		{"no message", call(ToolOpenChange, `{"changeId":"CHG-1"}`), 2, "after"},
+		{"data tool", withMsg(ToolListMethodologies, `{}`), 2, "after"},
+		{"failed settling tool", withMsg(ToolOpenChange, `{"changeId":"CHG-NOPE"}`), 2, "after"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t, c.first, `{"message":"after"}`)
+			if _, _, err := e.send("open it", inProject("PROJ-A")); err != nil {
+				t.Fatal(err)
+			}
+			if got := len(e.model.got); got != c.calls {
+				t.Fatalf("%d model calls, want %d", got, c.calls)
+			}
+			if a := e.answer(t); a.Status != convsvc.StatusDone || a.Text != c.answer {
+				t.Fatalf("answer %+v, want %q", a, c.answer)
+			}
+		})
+	}
+}
+
+// The part of a turn that is ours (context sanitising, prompt, tools, conversation writes) must stay negligible next to
+// the model call (about a second): measured with a model answering at once, a 40-entity context and the tools of a
+// real turn. `go test -run TurnOverhead -v` prints the figures.
+func TestTurnOverheadIsNegligible(t *testing.T) {
+	const turns = 50
+	ent := make([]Entity, 40)
+	for i := range ent {
+		ent[i] = Entity{Type: "impact", ID: fmt.Sprintf("IMP-%d", i), Label: fmt.Sprintf("key-%d", i), State: "proposed", Props: map[string]string{"type": "alm@Requirement", "intent": "created"}}
+	}
+	c := Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "change", Params: map[string]string{"id": "CHG-D"}}}, Screen: Screen{Kind: "change", Title: "t", Summary: "s", Entities: ent}}
+	e := newEnv(t, call(ToolListAgents, `{}`), call(ToolListMethodologies, `{}`), `{"message":"done"}`)
+	var sendMs, total time.Duration
+	for i := 0; i < turns; i++ {
+		e.model.got = nil
+		start := time.Now()
+		s0 := time.Now()
+		if _, _, err := e.send(fmt.Sprintf("message %d", i), c); err != nil { // the turn runs inline (Go: f())
+			t.Fatal(err)
+		}
+		sendMs += time.Since(s0)
+		total += time.Since(start)
+	}
+	per := total / turns
+	t.Logf("a turn (Send + 3 model rounds with tools, model excluded): %v; system prompt %d bytes", per, len(e.model.got[0].System))
+	if per > 20*time.Millisecond {
+		t.Fatalf("a turn costs %v of our own time", per)
+	}
+}

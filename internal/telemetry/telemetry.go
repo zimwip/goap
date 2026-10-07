@@ -75,9 +75,36 @@ func interceptor() connect.Interceptor {
 	return i
 }
 
+// SlowRPC is the duration from which a unary call is logged at warn level instead of debug.
+const SlowRPC = time.Second
+
+// timing logs the duration of every unary call: debug (GOAP_LOG_LEVEL=debug) for all of them, warn above SlowRPC.
+// Streaming calls are not timed (their duration is the connection's).
+func timing() connect.UnaryInterceptorFunc {
+	return func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			start := time.Now()
+			resp, err := next(ctx, req)
+			d := time.Since(start)
+			level := slog.LevelDebug
+			if d >= SlowRPC {
+				level = slog.LevelWarn
+			}
+			if l := slog.Default(); l.Enabled(ctx, level) {
+				code := "ok"
+				if err != nil {
+					code = connect.CodeOf(err).String()
+				}
+				l.Log(ctx, level, "rpc", "procedure", req.Spec().Procedure, "duration_ms", d.Milliseconds(), "code", code)
+			}
+			return resp, err
+		}
+	}
+}
+
 // HandlerOptions instruments Connect handlers.
 func HandlerOptions() []connect.HandlerOption {
-	return []connect.HandlerOption{connect.WithInterceptors(interceptor())}
+	return []connect.HandlerOption{connect.WithInterceptors(interceptor(), timing())}
 }
 
 // ClientOptions instruments Connect clients.

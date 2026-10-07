@@ -158,6 +158,14 @@ func (s *Service) now() time.Time {
 	return time.Now()
 }
 
+// timed logs, at debug level, the duration of a phase of the assistant (GOAP_LOG_LEVEL=debug): the measure of where a
+// turn spends its time. Use as `defer s.timed(ctx, "phase", time.Now())`.
+func (s *Service) timed(ctx context.Context, phase string, start time.Time, kv ...any) {
+	if l := s.log(); l.Enabled(ctx, slog.LevelDebug) {
+		l.Debug("assistant phase", append([]any{"phase", phase, "duration_ms", float64(time.Since(start).Microseconds()) / 1000}, kv...)...)
+	}
+}
+
 func (s *Service) log() *slog.Logger {
 	if s.Log != nil {
 		return s.Log
@@ -198,6 +206,7 @@ func (s *Service) release(id string) {
 // (ErrUnavailable), when the previous message is still being answered (ErrBusy) and when the active project is one the
 // caller may not work on (ErrForbidden).
 func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc.Message, err error) {
+	defer s.timed(ctx, "send", time.Now())
 	p := authz.From(ctx)
 	if p.Anonymous() {
 		return user, pending, convsvc.ErrAnonymous
@@ -214,7 +223,9 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 	if in.UITools, err = checkTools(in.UITools); err != nil {
 		return user, pending, err
 	}
+	t0 := time.Now()
 	_, aliases, err := s.Model.Available(ctx)
+	s.timed(ctx, "send.available", t0)
 	if err != nil {
 		return user, pending, err
 	}
@@ -236,7 +247,9 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 		}
 	}()
 
+	t0 = time.Now()
 	_, msgs, err := s.Convs.Get(ctx, p, in.ConversationID)
+	s.timed(ctx, "send.history", t0, "messages", len(msgs))
 	if err != nil {
 		return user, pending, err
 	}

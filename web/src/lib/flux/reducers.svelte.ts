@@ -4,7 +4,7 @@
 import { ns } from '../stores/session.svelte';
 import { untrack } from 'svelte';
 import { onKind, onResync } from './events.svelte';
-import { stamp, touchAll, touchSoon } from './signals.svelte';
+import { stamp, throttled, touchAll, touchSoon } from './signals.svelte';
 import { keysOf } from './keys';
 import { keyOf } from './signals.svelte';
 import { baselines, changes, methodologies, refreshBaselines, refreshChanges, refreshMethodologies, baselinesNamespace } from '../stores/catalog.svelte';
@@ -16,6 +16,9 @@ import { loadTypes } from '../stores/types.svelte';
 import { tools, refreshTools } from '../stores/tools.svelte';
 import { refreshProjects } from '../stores/project.svelte';
 import { modelChoices, refreshModelChoices } from '../stores/modelChoices.svelte';
+
+/** the shortest interval between two reads of the list of changes */
+export const CHANGES_REFRESH_MS = 2000;
 
 /** Starts the reducers; returns the stop function. */
 export function startReducers(): () => void {
@@ -36,9 +39,13 @@ export function startReducers(): () => void {
   ];
   // the shared catalogs read again, once loaded, when what they list moves
   const stop = $effect.root(() => {
+    // the list of every change is the heaviest read of the shell: at most once per CHANGES_REFRESH_MS, whatever the
+    // events a running agent sends
+    const changesList = throttled(() => void (changes.loaded && refreshChanges()), CHANGES_REFRESH_MS);
     $effect(() => {
       void stamp(keyOf.changes);
-      untrack(() => changes.loaded && void refreshChanges());
+      untrack(changesList.call);
+      return changesList.cancel;
     });
     $effect(() => {
       void stamp(keyOf.baselines);

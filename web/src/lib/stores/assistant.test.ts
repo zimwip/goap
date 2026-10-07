@@ -19,7 +19,7 @@ vi.mock('../shell/tabs.svelte', () => ({ activeTab: () => ({ id: 'change:C1', ki
 vi.mock('./project.svelte', () => ({ project: { current: 'PROJ-A' } }));
 vi.mock('../assistant/actions', () => ({ runActions }));
 
-import { assistant, attachView, deleteConversation, isPending, newConversation, openConversation, POLL_MS, resetAssistant, retry, send } from './assistant.svelte';
+import { assistant, attachView, deleteConversation, isPending, newConversation, openConversation, pollDelay, POLL_FAST_COUNT, POLL_FAST_MS, POLL_MS, resetAssistant, retry, send } from './assistant.svelte';
 
 const user = (seq: number, text = 'hi') => ({ id: `U${seq}`, conversationId: 'C1', seq, role: 'user' as const, text, status: 'done' as const });
 const bot = (seq: number, status: 'pending' | 'done' | 'error', extra = {}) => ({ id: `A${seq}`, conversationId: 'C1', seq, role: 'assistant' as const, status, ...extra });
@@ -84,10 +84,10 @@ describe('assistant store', () => {
       .mockResolvedValueOnce({ conversation: conv, messages: [user(1), bot(2, 'done', { text: 'there', actions: [act] })] });
     const detach = attachView();
     await send('open it');
-    await tick();
+    await tick(POLL_FAST_MS);
     expect(api.get).toHaveBeenCalledTimes(1);
     expect(runActions).not.toHaveBeenCalled();
-    await tick();
+    await tick(POLL_FAST_MS);
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(runActions).toHaveBeenCalledTimes(1);
     expect(runActions).toHaveBeenCalledWith(expect.objectContaining({ id: 'A2', actions: [act] }), expect.any(Function));
@@ -186,9 +186,9 @@ describe('assistant store', () => {
     const detach = attachView();
     await flush();
     api.get.mockClear();
-    await tick();
+    await tick(POLL_FAST_MS);
     expect(api.get).toHaveBeenCalledTimes(1);
-    await tick(2 * POLL_MS);
+    await tick(2 * POLL_FAST_MS);
     expect(api.get).toHaveBeenCalledTimes(2);
     await tick(10 * 60 * 1000);
     expect(assistant.error).toContain('down');
@@ -235,5 +235,14 @@ describe('assistant store', () => {
     expect(assistant.conversations).toEqual([]);
     expect(assistant.currentId).toBe('');
     expect(assistant.messages).toEqual([]);
+  });
+
+  it('looks for the answer faster at first, then at the normal cadence, backing off on failures', () => {
+    expect(pollDelay(0, 0)).toBe(POLL_FAST_MS);
+    expect(pollDelay(POLL_FAST_COUNT - 1, 0)).toBe(POLL_FAST_MS);
+    expect(pollDelay(POLL_FAST_COUNT, 0)).toBe(POLL_MS);
+    expect(pollDelay(0, 2)).toBe(POLL_FAST_MS * 4);
+    expect(pollDelay(100, 10)).toBe(15000);
+    expect(POLL_FAST_MS).toBeLessThan(POLL_MS);
   });
 });
