@@ -72,9 +72,9 @@ func TestApply(t *testing.T) {
 	}
 }
 
-func TestTerseBehaviorIsValidAndOff(t *testing.T) {
+func TestTerseBehaviorIsValidAndOn(t *testing.T) {
 	b := TerseBehavior()
-	if err := b.Validate(); err != nil || b.Enabled {
+	if err := b.Validate(); err != nil || !b.Enabled {
 		t.Fatalf("%v %+v", err, b)
 	}
 }

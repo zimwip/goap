@@ -152,7 +152,7 @@ func TestProtectedAliasGuard(t *testing.T) {
 	}
 }
 
-// Boot gives every install the built-in terse behaviour, disabled; an administrator's edit or retirement of it is kept
+// Boot gives every install the built-in terse behaviour, enabled; an administrator's edit or retirement of it is kept
 // (the seed never overrides an existing node), and a second boot writes nothing (ADR 0093).
 func TestBootSeedsTerseBehaviorOnce(t *testing.T) {
 	ctx := context.Background()
@@ -166,7 +166,7 @@ func TestBootSeedsTerseBehaviorOnce(t *testing.T) {
 		t.Fatal(err)
 	}
 	b, err := llmcfg.BehaviorFromProps(n.Properties)
-	if err != nil || b.Enabled || !strings.Contains(b.Instruction, "Answer tersely") {
+	if err != nil || !b.Enabled || !strings.Contains(b.Instruction, "Answer tersely") {
 		t.Fatalf("%+v %v", b, err)
 	}
 	pre := n.Ref()

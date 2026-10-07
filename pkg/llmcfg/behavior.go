@@ -117,13 +117,14 @@ func BehaviorFromProps(props map[string]any) (b Behavior, err error) {
 	return b, b.Validate()
 }
 
-// TerseBehavior is the built-in example, disabled until an administrator turns it on: the ultra-terse answer style.
+// TerseBehavior is the built-in default behaviour, enabled when it is seeded: the ultra-terse answer style (an administrator
+// can turn it off or retire it; it does not reach calls that require JSON until flagged appliesToJSON).
 func TerseBehavior() Behavior {
 	return Behavior{
 		Name:        "terse",
 		Description: "Ultra-terse answers (\"caveman\" style): fewer output tokens, same technical content",
 		Instruction: "Answer tersely: drop articles, filler, pleasantries and hedging; fragments are fine; keep technical terms, code, identifiers and errors exact; never shorten security warnings or irreversible-action confirmations.",
-		Enabled:     false,
+		Enabled:     true,
 		Position:    PositionAppend,
 		Order:       100,
 	}

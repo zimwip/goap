@@ -1500,7 +1500,7 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   The ledger row records `behaviors` and an estimated `behavior_tokens` (`llm_call`, migration 0005), the stored exchange holds the
   system text as sent, the engine's `model.call` log entry the text it built plus `behaviors` / `behaviorTokens`
   (`llm.Response.Behaviors`). `ListBehaviors` / `PreviewBehaviors` (admin, like `ListCatalog`); web: settings "LLM behaviours".
-  `graphsvc.SeedBehaviors` seeds one disabled example, `terse`.
+  `graphsvc.SeedBehaviors` seeds `terse`, enabled by default.
 - **Protected aliases** (ADR 0084): `assistant` (the conversational assistant) and `helper` (the contextual field helper)
   are `LlmAlias` nodes flagged `protected`, present on every install (`graphsvc.SeedProtectedAliases`, from `Boot`; no
   model configured: the alias exists with no target, resolves to nothing and is not in `ListModels`, i.e. not available).

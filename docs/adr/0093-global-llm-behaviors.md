@@ -22,10 +22,11 @@ talks to its models*, so it is platform configuration, next to the aliases and t
   `llm.CallMeta` source), `kinds` (`complete` only; `embed` is refused by validation) and `appliesToJSON` (default false).
   Go model `llmcfg.Behavior` (`Props` / `BehaviorFromProps` / `Validate`); `Snapshot.Behaviors` holds the ones in force
   (enabled, not retired), `Snapshot.Off` the disabled ones for the administrators' listing; malformed ones are `Problems`.
-- **One built-in example, off.** `graphsvc.SeedBehaviors` (a step of `Boot` after `SeedProtectedAliases`) creates `terse`
+- **One built-in default, on.** `graphsvc.SeedBehaviors` (a step of `Boot` after `SeedProtectedAliases`) creates `terse`
   (`llmcfg.TerseBehavior`: "Answer tersely: drop articles, filler, pleasantries and hedging; fragments are fine; keep technical
   terms, code, identifiers and errors exact; never shorten security warnings or irreversible-action confirmations.")
-  disabled, only when no node of that key exists: an edited, enabled or retired `terse` is never touched again. Nothing else
+  enabled (the platform answers tersely by default; it still skips every call that requires JSON), only when no node of that
+  key exists: an edited, disabled or retired `terse` is never touched again. Nothing else
   is hardcoded; a behaviour is an ordinary retirable node.
 - **Applied at the gateway, as close to the call as possible.** `modelgw.Service.Complete`, after `admit` and before
   `Router.Complete`: `Snapshot.Apply(system, CallInfo)` (pure, in `pkg/llmcfg`) selects the enabled behaviours matching the alias
