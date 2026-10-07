@@ -5,6 +5,7 @@ import { SvelteMap } from 'svelte/reactivity';
 import { engine, registry, errorMessage, type Agent, type Methodology } from '../api';
 import { loadRaw, save } from '../shell/storage';
 import { ingestProcess } from './live.svelte';
+import { applicable } from './project.svelte';
 import { latestPublished, methodologies, refreshMethodologies } from './catalog.svelte';
 
 export interface Thread {
@@ -82,6 +83,8 @@ export interface AgentCard {
 export function agentCards(): AgentCard[] {
   const out: AgentCard[] = [];
   for (const s of latestPublished()) {
+    // only the methodologies attached to the active project (while unknown: none filtered out)
+    if (applicable.names && !applicable.names.includes(s.name ?? '')) continue;
     const m = published.get(s.name ?? '');
     if (!m) continue;
     const goalExamples = (m.goals ?? []).flatMap((g) => g.examples ?? []);

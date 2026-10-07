@@ -6,6 +6,7 @@
   import StatusBadge from '../../components/StatusBadge.svelte';
   import NewChangeForm from '../../components/NewChangeForm.svelte';
   import { toggle, isOpen } from './expanded.svelte';
+  import { project, inActiveProject } from '../../stores/project.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { live, processes, refreshProcesses } from '../../stores/live.svelte';
   import { showTool } from '../../shell/layout.svelte';
@@ -18,6 +19,8 @@
   let creating = $state(false);
   // Sub-changes nested under their parent change (tree) or listed on their own (flat).
   let tree = $state(true);
+  // Only the changes of the active project, unless the whole list is asked for; a search looks at all of them.
+  let allProjects = $state(false);
 
   $effect(() => {
     if (!changes.loaded) void refreshChanges();
@@ -116,10 +119,11 @@
   const shown = $derived(
     changes.items.filter(
       (c) =>
-        !q ||
+        (q || allProjects || inActiveProject(c.projectId)) &&
+        (!q ||
         `${c.id} ${c.title ?? ''} ${c.intent ?? ''} ${c.methodology ?? ''} ${c.namespace ?? ''} ${(byChange.get(c.id ?? '') ?? []).map((p) => `${p.agent ?? ''} ${p.goal ?? ''}`).join(' ')}`
           .toLowerCase()
-          .includes(q),
+          .includes(q)),
     ),
   );
 
@@ -252,6 +256,14 @@
     <button
       type="button"
       class="ghost small"
+      title={allProjects ? `Changes of every project (click for the active project: ${project.current || 'root'})` : `Changes of the active project ${project.current || 'root'} (click for every project; a search always covers all)`}
+      aria-label="Show the changes of every project"
+      aria-pressed={allProjects}
+      onclick={() => (allProjects = !allProjects)}><Icon name="folder" size={14} /></button
+    >
+    <button
+      type="button"
+      class="ghost small"
       title="Refresh"
       aria-label="Refresh"
       disabled={changes.loading || live.processesLoading}
@@ -293,8 +305,8 @@
       {/if}
     </div>
   {/if}
-  {#if changes.loaded && !changes.items.length && !orphans.length}
-    <p class="empty pad">No changes listed.</p>
+  {#if changes.loaded && !shown.length && !orphans.length}
+    <p class="empty pad">{changes.items.length ? 'No change in this project (search, or show every project).' : 'No changes listed.'}</p>
   {/if}
   <form class="manual" onsubmit={openManual}>
     <label for="chg-id">Open by id</label>

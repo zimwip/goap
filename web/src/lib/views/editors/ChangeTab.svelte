@@ -18,6 +18,7 @@
     type Resolution,
   } from '../../api';
   import { untrack } from 'svelte';
+  import { followChangeProject } from '../../stores/project.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import ChangeAudit from '../../components/ChangeAudit.svelte';
@@ -149,6 +150,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     try {
       const c = (await graph.getChange(id, signal)).change;
       change = c;
+      void followChangeProject(c);
       if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
       nodes = c?.baselineId ? ((await graph.getBaselineGraph(c.baselineId, signal)).nodes ?? []) : [];
       subs = (await graph.listSubChanges(id, signal)).changes ?? [];

@@ -4,8 +4,9 @@
 // (AuthMode "none", e.g. goap-dev with GOAP_AUTH_MODE=none) has nothing to reissue, so the selection stays local-display only there.
 import { headGraph } from '../graphEdit';
 import { errorMessage, getToken, nodeTitle, switchProject as reissueToken, type GraphNode } from '../api';
+import { applicableMethodologies } from '../projectRoles';
 import { notify } from '../shell/workbench.svelte';
-import { refreshIdentity, session, types as nodeTypes, ns } from './session.svelte';
+import { refreshIdentity, session, types as nodeTypes, ns, rootProject } from './session.svelte';
 
 export interface ProjectOption {
   key: string;
@@ -53,6 +54,37 @@ export async function selectProject(key: string): Promise<void> {
   } catch (e) {
     notify(errorMessage(e), 'error');
   }
+}
+
+/**
+ * The methodologies attached to the active project, its own and its ancestors' (ADR 0039); undefined until
+ * read. Loaded on demand by `loadApplicable`, which the assistant calls when it opens and on a project switch.
+ */
+export const applicable = $state({ names: undefined as string[] | undefined });
+
+export async function loadApplicable(): Promise<void> {
+  const key = project.current || rootProject();
+  try {
+    const h = await headGraph(ns.organisation);
+    if (key === (project.current || rootProject())) applicable.names = applicableMethodologies(h, key);
+  } catch {
+    applicable.names = undefined;
+  }
+}
+
+/** Whether a change belongs to the active project (the claim '' being the root project). */
+export const inActiveProject = (projectId?: string): boolean => !projectId || projectId === (project.current || rootProject());
+
+const followed = new Set<string>();
+
+/**
+ * Makes the active project the one of a change opened from elsewhere. The token reissue is refused for a
+ * project the caller may not access (the selection then stays, the refusal is notified); tried once per change.
+ */
+export async function followChangeProject(c?: { id?: string; projectId?: string }): Promise<void> {
+  if (!c?.id || !c.projectId || inActiveProject(c.projectId) || followed.has(c.id)) return;
+  followed.add(c.id);
+  await selectProject(c.projectId);
 }
 
 // the project is the identity's claim ('' for the root project): follows every token the identity comes from

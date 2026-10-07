@@ -19,6 +19,7 @@
   import { baselinesByNamespace, methodologies } from '../../stores/catalog.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { formatDate, shortId, type Baseline } from '../../api';
+  import { project, applicable, loadApplicable } from '../../stores/project.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { mode = 'tab' }: { mode?: 'panel' | 'tab' } = $props();
@@ -27,6 +28,12 @@
   let scroller = $state<HTMLDivElement>();
   let settingsOpen = $state(false);
   let loadingCatalog = $state(true);
+
+  // the methodologies of the active project: read again when it changes
+  $effect(() => {
+    void project.current;
+    void loadApplicable();
+  });
 
   $effect(() => {
     loadingCatalog = true;
@@ -150,7 +157,7 @@
         {:else if methodologies.error}
           <div class="alert">{methodologies.error}</div>
         {:else if !cards.length}
-          <p class="muted">No agent is available at the moment.</p>
+          <p class="muted">{applicable.names ? `No agent for the project ${project.current || 'root'}: no methodology is attached to it.` : 'No agent is available at the moment.'}</p>
         {/if}
         <div class="cards">
           {#each cards as c (`${c.methodology}/${c.agent.name}`)}

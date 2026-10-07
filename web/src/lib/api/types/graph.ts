@@ -252,6 +252,8 @@ export interface Change {
   /** sub-change: parent change and responsible OrgUnit key */
   parentId?: string;
   ownerOrg?: string;
+  /** key of the project the change acts in (ADR 0054) */
+  projectId?: string;
   title?: string;
   intent?: string;
   methodology?: string;
