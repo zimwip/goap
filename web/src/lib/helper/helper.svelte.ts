@@ -3,7 +3,7 @@
 import { models, type SuggestMessage, type SuggestProposal } from '../api';
 import { activeTab } from '../shell/tabs.svelte';
 import { collectContext } from './context';
-import { fieldOf, hasFields } from './fields.svelte';
+import { fieldOf, hasFields } from '../assist/registry.svelte';
 import { helperEnabled } from './enabled';
 
 /** The discussion is resent each time: the server accepts at most 12 turns, the helper keeps the last ones. */

@@ -1,7 +1,7 @@
 # ADR 0092 — A contextual assistant: layered context and screen tools
 
-**Status**: accepted, implemented (server side and TS types; the collector and the tool registry of the web are a later
-task) · **Date**: 2026-10 · Builds on ADR 0085 (conversations), 0086 (helper), 0087 (assistant), 0089 (ledger),
+**Status**: accepted, implemented (server side, TS types, and the web phase: collector, registry, executor, proposal card,
+see ADR 0088) · **Date**: 2026-10 · Builds on ADR 0085 (conversations), 0086 (helper), 0087 (assistant), 0089 (ledger),
 0090 (proposals, `ConfirmAction`).
 
 ## Context
@@ -72,6 +72,5 @@ describing the whole page evenly.
 
 ## Not done
 
-The web collector (zoom on the action in progress, entities of each view), the registry of screen tools and the
-proposal card with Accept / Reject for `ui_tool`; expiry of unanswered proposals; reconciling the helper's field registry
-with the descriptors.
+Expiry of unanswered proposals; screen tools for the other screens (nodes' lifecycle transitions, organisation, methodology
+editors); a change-level `transition_change` (no UI for it yet). The web phase is described in ADR 0088.

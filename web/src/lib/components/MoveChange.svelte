@@ -3,14 +3,10 @@
   // offered are those whose methodologies include the change's; the server stays the authority (the caller's access to
   // both projects, the methodology rule). The nodes the change already acts on keep their project; the ones it creates
   // take the new one when it lands.
-  import { graph, errorMessage, type Change } from '../api';
-  import { headGraph } from '../graphEdit';
-  import { applicableMethodologies } from '../projectRoles';
-  import { moveChoices, type MoveChoices } from '../changeProject';
-  import { project, refreshProjects, selectProject } from '../stores/project.svelte';
-  import { ns, rootProject } from '../stores/session.svelte';
-  import { refreshChanges } from '../stores/catalog.svelte';
-  import { notify } from '../shell/workbench.svelte';
+  import { errorMessage, type Change } from '../api';
+  import type { MoveChoices } from '../changeProject';
+  import { loadMoveOffer, moveChangeTo } from '../changeMove';
+  import { rootProject } from '../stores/session.svelte';
 
   let { change, onmoved, oncancel }: { change: Change; onmoved: () => void; oncancel: () => void } = $props();
 
@@ -25,14 +21,7 @@
     const ch = change;
     void (async () => {
       try {
-        if (!project.options.length) await refreshProjects();
-        const head = await headGraph(ns.organisation);
-        offer = moveChoices({
-          methodology: ch.methodology,
-          current: ch.projectId || rootProject(),
-          projects: project.options,
-          applicable: (key) => applicableMethodologies(head, key),
-        });
+        offer = await loadMoveOffer(ch);
         if (!offer.choices.some((c) => c.key === target)) target = offer.choices[0]?.key ?? '';
       } catch (e) {
         error = errorMessage(e);
@@ -46,11 +35,7 @@
     busy = true;
     error = '';
     try {
-      await graph.moveChange(change.id, target);
-      // the active project follows the change, the catalog is read again (the explorer filters by project)
-      await selectProject(target);
-      await refreshChanges();
-      notify(`Change moved to project ${target}.`, 'ok');
+      await moveChangeTo(change.id, target);
       onmoved();
     } catch (err) {
       error = errorMessage(err);

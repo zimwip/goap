@@ -11,6 +11,7 @@
   import { can, me } from '../stores/session.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
   import StatusBadge from './StatusBadge.svelte';
+  import { assistField } from '../assist/registry.svelte';
 
   let {
     change,
@@ -126,7 +127,13 @@
       {#if mine}
         <label class="field">
           <span>Review comment</span>
-          <textarea rows="2" value={r.comment ?? ''} placeholder="Global comment, kept on the review of every impact" onchange={(e) => setComment(r, (e.currentTarget as HTMLTextAreaElement).value)}></textarea>
+          <textarea
+            rows="2"
+            value={r.comment ?? ''}
+            placeholder="Global comment, kept on the review of every impact"
+            onchange={(e) => setComment(r, (e.currentTarget as HTMLTextAreaElement).value)}
+            use:assistField={{ id: `review_global_comment:${r.key}`, label: `Comment of review ${r.key}`, type: 'string', get: () => r.comment ?? '', set: (v) => void setComment(r, String(v)) }}
+          ></textarea>
         </label>
       {:else if r.comment}
         <p class="global">{r.comment}</p>
@@ -167,7 +174,9 @@
                 </td>
                 <td>
                   {#if mine}
-                    <input type="text" value={x.comment} disabled={!x.included} placeholder="Comment on this impact" aria-label="Comment on {label(x.id)}" onchange={(ev) => setEntryComment(r, x.id, (ev.currentTarget as HTMLInputElement).value, x.comment)} />
+                    <input type="text" value={x.comment} disabled={!x.included} placeholder="Comment on this impact" aria-label="Comment on {label(x.id)}" onchange={(ev) => setEntryComment(r, x.id, (ev.currentTarget as HTMLInputElement).value, x.comment)}
+                      use:assistField={{ id: `review_entry_comment:${r.key}:${x.id}`, label: `Comment on ${label(x.id)}`, type: 'string', readOnly: !x.included, get: () => x.comment, set: (v) => void setEntryComment(r, x.id, String(v), x.comment) }}
+                    />
                   {:else}
                     {x.comment || '—'}
                   {/if}

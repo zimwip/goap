@@ -10,6 +10,7 @@
   import { project, refreshProjects } from '../stores/project.svelte';
   import { rootProject } from '../stores/session.svelte';
   import { defaultChangeProject } from '../changeProject';
+  import { assistField, registerAssist, type FieldSpec, type ToolImpl } from '../assist/registry.svelte';
 
   let { oncreated, oncancel }: { oncreated: (id: string) => void; oncancel?: () => void } = $props();
 
@@ -77,8 +78,10 @@
 
   const parents = $derived(changes.items.filter((c) => c.namespace === namespace && (c.status === 'draft' || c.status === 'active') && c.branch?.startsWith('change-')));
 
-  async function create(e: SubmitEvent) {
-    e.preventDefault();
+  const canCreate = $derived(!busy && !!title.trim() && !!namespace && (!!parentId || !!projectKey));
+
+  /** Creates the change; true when it was (the error is shown otherwise). */
+  async function create(): Promise<boolean> {
     busy = true;
     error = '';
     try {
@@ -97,19 +100,71 @@
       if (!c?.id) throw new Error('The change could not be created.');
       await refreshChanges();
       oncreated(c.id);
+      return true;
     } catch (e) {
       error = errorMessage(e);
+      return false;
     } finally {
       busy = false;
     }
   }
+
+  // what the assistant sees and may do here (ADR 0092): the fields that fill the form take no confirmation (the person
+  // still creates the change), `create` does
+  const titleField: FieldSpec = { id: 'title', label: 'Title', type: 'string', tool: 'set_title', get: () => title, set: (v) => (title = String(v)) };
+  const intentField: FieldSpec = { id: 'intent', label: 'Intent', type: 'string', tool: 'set_intent', get: () => intent, set: (v) => (intent = String(v)) };
+  const projectField: FieldSpec = {
+    id: 'project',
+    label: 'Project',
+    type: 'enum',
+    tool: 'set_project',
+    get enum() {
+      return project.options.map((o) => o.key);
+    },
+    get: () => projectKey,
+    set: (v) => (projectKey = String(v)),
+  };
+  const tools: ToolImpl[] = [
+    { name: 'set_title', targetOf: () => 'field:title', run: (a) => void (title = String(a.title ?? '')) },
+    { name: 'set_intent', targetOf: () => 'field:intent', run: (a) => void (intent = String(a.intent ?? '')) },
+    {
+      name: 'set_project',
+      enabled: () => !parentId,
+      targetOf: () => 'field:project',
+      describe: (base) => {
+        const keys = project.options.map((o) => o.key);
+        const p = keys.length && keys.length <= 30 ? { type: 'enum' as const, enum: keys, description: 'the project key' } : { type: 'string' as const, description: 'the project key' };
+        return { ...base, args: { ...base.args, properties: { project: p } } };
+      },
+      run: (a) => {
+        if (project.options.length && !project.options.some((o) => o.key === a.project)) return `The project ${String(a.project)} is not one of: ${project.options.map((o) => o.key).join(', ')}.`;
+        projectKey = String(a.project);
+      },
+    },
+    {
+      name: 'create',
+      enabled: () => canCreate,
+      run: async () => ((await create()) ? undefined : error || 'The change could not be created.'),
+    },
+  ];
+  $effect(() =>
+    registerAssist({
+      screen: () => ({
+        kind: 'new_change',
+        title: 'New change',
+        summary: `A form creates a change in namespace ${namespace || 'none'}, project ${projectKey || 'none'}${parentId ? ', as a sub-change' : ''}; the title ${title.trim() ? 'is filled' : 'is empty'}, the intent ${intent.trim() ? 'is filled' : 'is empty'}.`,
+      }),
+      focus: () => ({ dialogKind: 'new change', pendingAction: 'creating a change', errors: error ? [error] : [] }),
+      tools,
+    }),
+  );
 </script>
 
-<form class="new-change" onsubmit={create}>
+<form class="new-change" onsubmit={(e) => (e.preventDefault(), void create())}>
   <label for="nc-title">Title</label>
-  <input id="nc-title" type="text" bind:value={title} placeholder="What the change does" data-no-pin />
+  <input id="nc-title" type="text" bind:value={title} placeholder="What the change does" data-no-pin use:assistField={titleField} />
   <label for="nc-intent">Intent</label>
-  <textarea id="nc-intent" rows="2" bind:value={intent} placeholder="Why: the need it answers"></textarea>
+  <textarea id="nc-intent" rows="2" bind:value={intent} placeholder="Why: the need it answers" use:assistField={intentField}></textarea>
   <label for="nc-ns">Namespace</label>
   <select id="nc-ns" bind:value={namespace}>
     {#each choices as n (n)}<option value={n}>{n}</option>{/each}
@@ -121,7 +176,7 @@
   </select>
   {#if !parentId}
     <label for="nc-project">Project</label>
-    <select id="nc-project" bind:value={projectKey} title="The project the change acts in: the nodes it creates belong to it">
+    <select id="nc-project" bind:value={projectKey} use:assistField={projectField} title="The project the change acts in: the nodes it creates belong to it">
       {#each project.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
       {#if !project.options.some((o) => o.key === projectKey)}<option value={projectKey}>{projectKey}</option>{/if}
     </select>
@@ -143,7 +198,7 @@
   {/if}
   {#if error}<div class="alert small">{error}</div>{/if}
   <div class="row">
-    <button type="submit" class="primary small" disabled={busy || !title.trim() || !namespace || (!parentId && !projectKey)}>Create the change</button>
+    <button type="submit" class="primary small" disabled={!canCreate}>Create the change</button>
     {#if oncancel}<button type="button" class="small" onclick={oncancel}>Cancel</button>{/if}
   </div>
 </form>

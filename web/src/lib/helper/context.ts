@@ -4,7 +4,7 @@
 import type { SuggestContext, SuggestField } from '../api';
 import type { Tab } from '../shell/types';
 import { valueText } from '../attributes';
-import { fieldsOfTab } from './fields.svelte';
+import { fieldsOfTab } from '../assist/registry.svelte';
 
 export const MAX_FIELDS = 60;
 export const MAX_SELECTION = 2000;

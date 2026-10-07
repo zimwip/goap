@@ -16,9 +16,14 @@
     type LifecycleTransition,
     type NodeRef,
     type Resolution,
+    type UiTool,
   } from '../../api';
-  import { untrack } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import { followChangeProject } from '../../stores/project.svelte';
+  import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
+  import { changeSummary, impactEntities, type ImpactFacts } from '../../assist/changeScreen';
+  import { recordAction } from '../../assist/recorder';
+  import { loadMoveOffer, moveChangeTo } from '../../changeMove';
   import MoveChange from '../../components/MoveChange.svelte';
   import { movable } from '../../changeProject';
   import type { Tab } from '../../shell/types';
@@ -360,6 +365,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     error = '';
     try {
       await graph.impactNodeReview(change.id, row.impact.id, accept, comment, scope || MAIN_SCOPE);
+      recordAction(`${accept ? 'accepted' : 'rejected'} the impact of ${row.node.key}`);
       await load(change.id);
       return true;
     } catch (e) {
@@ -459,8 +465,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     defining = true;
   }
 
-  async function define(patch: { title?: string; intent?: string; status?: string }, done: string) {
-    if (!change?.id) return;
+  async function define(patch: { title?: string; intent?: string; status?: string }, done: string): Promise<boolean> {
+    if (!change?.id) return false;
     defBusy = true;
     error = '';
     try {
@@ -468,8 +474,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       defining = false;
       await load(change.id);
       notify(done, 'ok');
+      recordAction(patch.status === 'abandoned' ? 'abandoned the change' : 'edited the title or intent of the change');
+      return true;
     } catch (e) {
       error = errorMessage(e);
+      return false;
     } finally {
       defBusy = false;
     }
@@ -528,6 +537,144 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   function openBaseline(id: string | undefined) {
     if (id) void viewBaseline(id, change?.namespace ?? '');
   }
+
+
+  // --- what the assistant sees and may do on this screen (ADR 0092) -----------------------------------------------
+  /** the impact pointed at (by the person or the assistant), outlined in the Impacts pane */
+  let selectedImpact = $state('');
+  /** the review status the Impacts pane shows: all | proposed | accepted | rejected */
+  let impactFilter = $state('all');
+  const shownRows = $derived(impactFilter === 'all' ? lcRows : lcRows.filter((r) => (r.impact?.review || 'proposed') === impactFilter));
+  const impactFacts = $derived<ImpactFacts[]>(
+    lcRows.flatMap((r) =>
+      r.impact?.id && !r.impact.superseded
+        ? [{ id: r.impact.id, key: r.node.key ?? '', type: r.node.type, intent: r.impact.intent, review: r.impact.review, state: r.effective || undefined, landable: r.landable, created: !!r.created }]
+        : [],
+    ),
+  );
+  const rowOfImpact = (id: unknown) => lcRows.find((r) => r.impact?.id === id && !r.impact?.superseded);
+  /** the ids offered as an enum when they fit the server's cap of 30, else a plain string */
+  const withIds = (name: string, ids: () => string[]) => (base: UiTool): UiTool => {
+    const list = ids();
+    const impactId = list.length && list.length <= 30 ? { type: 'enum' as const, enum: list, description: 'the impact id' } : { type: 'string' as const, description: 'the impact id' };
+    return { ...base, name, args: { ...base.args, properties: { ...base.args?.properties, impactId } } };
+  };
+  const awaitingIds = () => impactFacts.filter((i) => !i.review || i.review === 'proposed').map((i) => i.id);
+  const reviewable = (r: ReturnType<typeof rowOfImpact>) => !!r?.impact && (r.impact.review === 'proposed' || !r.impact.review);
+
+  const assistTools: ToolImpl[] = [
+    {
+      name: 'select_impact',
+      enabled: () => !!change && impactFacts.length > 0,
+      describe: withIds('select_impact', () => impactFacts.map((i) => i.id)),
+      targetOf: (a) => `impact:${a.impactId}`,
+      run: async (a) => {
+        const r = rowOfImpact(a.impactId);
+        if (!r) return `The impact ${String(a.impactId)} is not in this change.`;
+        pane = 'impacts';
+        if (impactFilter !== 'all' && (r.impact?.review || 'proposed') !== impactFilter) impactFilter = 'all';
+        selectedImpact = String(a.impactId);
+        await tick();
+        revealTarget(`impact:${selectedImpact}`);
+      },
+    },
+    {
+      name: 'open_impact',
+      enabled: () => !!change && impactFacts.some((i) => !i.created || !!rowOfImpact(i.id)?.impact?.post?.id),
+      describe: withIds('open_impact', () => impactFacts.map((i) => i.id)),
+      targetOf: (a) => `impact:${a.impactId}`,
+      run: (a) => {
+        const r = rowOfImpact(a.impactId);
+        if (!r) return `The impact ${String(a.impactId)} is not in this change.`;
+        if (r.created && !r.impact?.post?.id) return 'This node has no draft to open yet.';
+        selectedImpact = String(a.impactId);
+        void openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: change?.id ?? '', flow: scope || MAIN_SCOPE });
+      },
+    },
+    {
+      name: 'filter_impacts',
+      enabled: () => !!change,
+      run: (a) => {
+        pane = 'impacts';
+        impactFilter = String(a.review);
+      },
+    },
+    {
+      name: 'review_impact',
+      enabled: () => !!change && writable && !closed && awaitingIds().length > 0,
+      describe: withIds('review_impact', awaitingIds),
+      targetOf: (a) => `impact:${a.impactId}`,
+      run: async (a) => {
+        const r = rowOfImpact(a.impactId);
+        if (!reviewable(r) || !r) return `The impact ${String(a.impactId)} is not awaiting its review.`;
+        const comment = String(a.comment ?? '').trim();
+        if (!comment) return 'A review comment is mandatory.';
+        return (await reviewRow(r, a.outcome === 'accept', comment)) ? undefined : error || 'The review failed.';
+      },
+    },
+    {
+      name: 'rename_change',
+      enabled: () => !!change && !closed && !defining,
+      run: async (a) => {
+        const t = String(a.title ?? '').trim();
+        if (!t) return 'The title cannot be empty.';
+        return (await define({ title: t }, 'Change updated.')) ? undefined : error || 'The change could not be renamed.';
+      },
+    },
+    {
+      name: 'update_intent',
+      enabled: () => !!change && !closed && !defining,
+      run: async (a) => {
+        const t = String(a.intent ?? '').trim();
+        if (!t) return 'The intent cannot be empty.';
+        return (await define({ intent: t }, 'Change updated.')) ? undefined : error || 'The intent could not be updated.';
+      },
+    },
+    {
+      name: 'move_change',
+      enabled: () => !!change && !closed && movable(change),
+      run: async (a) => {
+        if (!change?.id) return 'No change is open.';
+        const offer = await loadMoveOffer(change);
+        if (offer.blocked) return offer.blocked;
+        if (!offer.choices.some((c) => c.key === a.project)) return `The project ${String(a.project)} is not offered: ${offer.choices.map((c) => c.key).join(', ')}.`;
+        await moveChangeTo(change.id, String(a.project));
+        recordAction('moved the change to another project');
+        moveOpen = false;
+        await load(change.id);
+      },
+    },
+  ];
+
+  $effect(() =>
+    registerAssist({
+      tab: tab.id,
+      screen: () =>
+        change
+          ? {
+              kind: 'change',
+              title: change.title || 'Untitled change',
+              summary: changeSummary(
+                { title: change.title, status: change.status, lifecycle: change.lifecycle, state: change.state, project: change.projectId, methodology: change.methodology, namespace: change.namespace, parentId: change.parentId },
+                impactFacts,
+                { pane, scope, filter: impactFilter },
+              ),
+              entities: impactEntities(impactFacts),
+            }
+          : undefined,
+      focus: () => {
+        const sel = impactFacts.find((i) => i.id === selectedImpact);
+        return {
+          element: sel ? { type: 'impact', id: sel.id, label: sel.key } : undefined,
+          dialogKind: compareOpen ? 'compare' : defining ? 'edit' : moveOpen ? 'move' : undefined,
+          dialogTitle: compareOpen ? 'Compare and decide options' : defining ? 'Edit the title and intent of the change' : moveOpen ? 'Move the change to another project' : undefined,
+          pendingAction: defining ? 'editing the title and intent of the change' : moveOpen ? 'choosing the project to move the change to' : applying ? 'applying the change' : undefined,
+          errors: [error, checkError].filter(Boolean),
+        };
+      },
+      tools: assistTools,
+    }),
+  );
 
   provideActions(
     () => tab.id,
@@ -746,10 +893,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       {:else if active === 'impacts'}
       <div class="scoped" style="--scope: {scopeTint}">
       {@render scopeHead('Change impacts', lcRows.length)}
+      <div class="row filter">
+        <label for="impact-filter">Show</label>
+        <select id="impact-filter" bind:value={impactFilter}>
+          <option value="all">all impacts</option>
+          <option value="proposed">awaiting review</option>
+          <option value="accepted">accepted</option>
+          <option value="rejected">rejected</option>
+        </select>
+      </div>
       <ChangeLifecycle
         impacts
+        selected={selectedImpact}
         scope={scope || MAIN_SCOPE}
-        rows={lcRows}
+        rows={shownRows}
         candidates={lcCandidates}
         disabled={!writable}
         busy={moving}
@@ -864,6 +1021,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 </div>
 
 <style>
+  .filter {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+    margin: 0.3rem 0;
+  }
   .item-decision {
     margin: 0.4rem 0 0;
     font-size: 0.85em;

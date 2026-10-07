@@ -7,7 +7,7 @@ vi.mock('../shell/tabs.svelte', () => ({ activeTab: () => ({ id: tab.id, kind: '
 vi.mock('../api', () => ({ models: { suggest } }));
 vi.mock('./enabled', () => ({ helperEnabled: () => enabled.on }));
 
-import { registerField } from './fields.svelte';
+import { registerField } from '../assist/registry.svelte';
 import { accept, canOpenHelper, closeHelper, comment, currentProposal, helper, openHelper } from './helper.svelte';
 
 const el = () => ({ isConnected: true }) as unknown as HTMLElement;

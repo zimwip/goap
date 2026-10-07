@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../shell/tabs.svelte', () => ({ activeTab: () => undefined }));
 
 import { collectContext, MAX_FIELDS, subjectOf } from './context';
-import { registerField, type FieldSpec } from './fields.svelte';
+import { registerField, type FieldSpec } from '../assist/registry.svelte';
 
 const el = () => ({ isConnected: true }) as unknown as HTMLElement;
 const tab = { id: 'node:A', kind: 'node', params: { key: 'REQ-1', ns: 'alm' }, pinned: true };

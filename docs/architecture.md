@@ -1191,11 +1191,20 @@ provider, or gateway WebSocket) are analyzed in the ADR but not built.
 One conversation view (`views/assistant/Assistant.svelte`) is shown as the **assistant tab** and as the **floating
 panel** opened by a round launcher (`assistant/Launcher.svelte`, mounted once in `Shell.svelte`; `Ctrl+Shift+A`, the
 command "Ask the assistant"). The state is `stores/assistant.svelte.ts`: conversations of the caller (newest first), the
-current one and its messages, the draft; `send` collects the context (`assistant/context.ts`: layered context, ADR 0092: focus, screen,
-app; never a form value) and calls `assistant.v1.Send`, then polls `GetConversation` every 1.5 s
+current one and its messages, the draft; `send` collects the layered context (`assistant/context.ts`, ADR 0092: focus, screen, app, zoomed on the focused element, capped
+as the server caps it; never a form value) and the tools the open screen offers (`assist/registry.svelte.ts` `describeTools`,
+descriptors in `assist/catalog.ts`) and calls `assistant.v1.Send`, then polls `GetConversation` every 1.5 s
 (backing off on errors, not while the page is hidden, only while a view is shown) until the answer is `done` or `error`.
-The actions of an answer (`select_project`, `open_change`, `create_change`: `assistant/actions.ts`) run once, only for a
-message seen pending in this page; a reloaded conversation replays nothing; each shows as a chip that repeats it. The
+The actions of an answer (`select_project`, `open_change`, `create_change`, and the `effect` screen tools: `assistant/actions.ts`)
+run once, only for a message seen pending in this page, and a screen tool reports its outcome (`ReportAction`); a reloaded
+conversation replays nothing; each shows as a chip that repeats it. A proposal (`start_agent`, a `write` screen tool) is a card
+(`views/assistant/ProposalCard.svelte`, decisions in `stores/proposals.svelte.ts`): Accept / Reject through `ConfirmAction`, an
+accepted write runs through the screen's registered tool and is reported, an accepted write never reported shows "accepted, not
+applied" with a Retry while the tool is registered, a started agent shows the status of its run read from the process.
+**Screens register themselves** (`assist/registry.svelte.ts`): per tab and for as long as a view is mounted, a screen and a
+focus provider, tools (implementations of the catalog, run through the screen's own edit path, never when not registered) and
+fields (`use:assistField`, shared with the helper of ADR 0086); `assist/capture.ts` keeps the selection and focus from before
+the person went to the assistant, `assist/recorder.ts` the last action. The
 current conversation is kept in memory only (ADR 0052): a new page opens the most recent one. The whole interface depends
 on `aliasFlags.assistantEnabled`: without a model for the `assistant` alias the launcher is not rendered, the commands
 are hidden and the tab explains it with a link to the model catalog. The launcher stays clear of the right activity bar,

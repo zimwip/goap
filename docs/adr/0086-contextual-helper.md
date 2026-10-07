@@ -34,7 +34,7 @@ title be here". The helper is the light counterpart: hidden, ephemeral, tied to 
   `MaxSuggestContextBytes` 32 KiB, `MaxSuggestMessageBytes` 4 KiB (a message and the instruction); field ids are set and
   unique.
 - **Web** (`web/src/lib/helper/`): forms register their fields with the Svelte action `use:assistField={{id, label,
-  type, enum, get, set, readOnly}}` (`fields.svelte.ts`: element, metadata and setter, per tab, removed on destroy);
+  type, enum, get, set, readOnly}}` (the registry is `assist/registry.svelte.ts` since ADR 0092, shared with the assistant's screen tools: element, metadata and setter, per tab, removed on destroy);
   `context.ts` collects the active tab, its subject, the selection and the registered fields within the same limits;
   `helper.svelte.ts` holds the state in memory only (open, messages, proposals, loading, error; never `localStorage`);
   `HelperBubble.svelte` is the popup anchored to the field of the proposal (position recomputed on scroll and resize,
@@ -48,5 +48,5 @@ title be here". The helper is the light counterpart: hidden, ephemeral, tied to 
 
 ## Not done
 
-Other forms (change creation, definition editors) register no field yet; `helperEnabled` of the web reads the available
+Definition editors register no field yet (the change creation form and the review comments do, ADR 0092); `helperEnabled` of the web reads the available
 aliases of the caller.

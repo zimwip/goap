@@ -9,6 +9,7 @@
   import type { Lifecycle } from '../api';
   import StatusBadge from './StatusBadge.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
+  import { assistField, assistTarget } from '../assist/registry.svelte';
 
   let {
     rows,
@@ -28,6 +29,7 @@
     impacts = false,
     scope = '',
     onreview,
+    selected = '',
     onacceptall,
   }: {
     rows: LifecycleRow[];
@@ -59,6 +61,8 @@
     scope?: string;
     /** accepts or rejects the change impact of a row; the comment is mandatory */
     onreview?: (row: LifecycleRow, accept: boolean, comment: string) => Promise<boolean> | boolean;
+    /** the impact the assistant (or the person) points at: outlined in the table */
+    selected?: string;
     /** accepts every impact still awaiting its review: an explicit action, the comment is mandatory */
     onacceptall?: (comment: string) => Promise<boolean> | boolean;
   } = $props();
@@ -226,7 +230,7 @@
       <thead><tr><th>Node</th>{#if impacts}<th>Why</th><th>Versions</th>{/if}<th>State</th>{#if impacts}<th>Review</th>{/if}<th>Actions</th></tr></thead>
       <tbody>
         {#each rows as r (r.node.id)}
-          <tr>
+          <tr use:assistTarget={`impact:${r.impact?.id ?? ''}`} class:selected={!!selected && r.impact?.id === selected} data-impact={r.impact?.id}>
             <td>
               {#if !openable(r)}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor, as this change has it" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
@@ -313,7 +317,14 @@
             <tr class="editrow">
               <td colspan="6">
                 <div class="row review">
-                  <input type="text" class="grow" placeholder="Comment (mandatory)" aria-label="Review comment" bind:value={reviewComment} />
+                  <input
+                    type="text"
+                    class="grow"
+                    placeholder="Comment (mandatory)"
+                    aria-label="Review comment"
+                    bind:value={reviewComment}
+                    use:assistField={{ id: 'review_comment', label: 'Review comment', type: 'string', required: true, get: () => reviewComment, set: (v) => (reviewComment = String(v)) }}
+                  />
                   <button type="button" class="small primary" disabled={!reviewComment.trim() || busy !== ''} onclick={() => review(r, true)}>Accept</button>
                   <button type="button" class="small danger" disabled={!reviewComment.trim() || busy !== ''} onclick={() => review(r, false)}>Reject</button>
                   <button type="button" class="small" onclick={() => (reviewing = '')}>Cancel</button>
@@ -414,6 +425,9 @@
 </section>
 
 <style>
+  tr.selected td {
+    background: var(--accent-soft);
+  }
   .actions {
     display: flex;
     flex-wrap: wrap;

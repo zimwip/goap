@@ -6,7 +6,10 @@
   import { openSettings } from '../../shell/settingsState.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { assistantEnabled, ASSISTANT_OFF } from '../../assistant/enabled';
-  import { actionLabel, runAction } from '../../assistant/actions';
+  import { actionChipLabel, repeatable, runAction } from '../../assistant/actions';
+  import { isCard } from '../../assistant/proposal';
+  import { captureSelectionNow } from '../../assist/capture';
+  import ProposalCard from './ProposalCard.svelte';
   import { examplePrompts, loadExamples } from '../../assistant/examples';
   import {
     assistant,
@@ -104,7 +107,7 @@
   }
 </script>
 
-<div class="assistant {mode}">
+<div class="assistant {mode}" data-assistant>
   <div class="bar">
     <strong class="title"><Icon name="chat" size={15} /> Assistant</strong>
     <span class="grow"></span>
@@ -193,11 +196,18 @@
                 {#if m.actions?.length}
                   <div class="chips">
                     {#each m.actions as a, i (i)}
-                      {#if actionLabel(a)}
-                        <button type="button" class="chip" title="Do it again" onclick={() => void runAction(a)}>{actionLabel(a)}</button>
+                      {#if !isCard(a) && actionChipLabel(a)}
+                        {#if repeatable(a)}
+                          <button type="button" class="chip" title="Do it again" onclick={() => void runAction(a)}>{actionChipLabel(a)}</button>
+                        {:else}
+                          <span class="chip passive">{actionChipLabel(a)}</span>
+                        {/if}
                       {/if}
                     {/each}
                   </div>
+                  {#each m.actions as a, i (i)}
+                    {#if isCard(a)}<ProposalCard message={m} index={i} />{/if}
+                  {/each}
                 {/if}
               </div>
             {/if}
@@ -222,6 +232,7 @@
         aria-label="Your message"
         maxlength={MAX_TEXT_BYTES}
         onkeydown={keydown}
+        onfocus={captureSelectionNow}
         data-no-pin
       ></textarea>
       <VoiceButton ontranscript={appendTranscript} />
@@ -370,6 +381,11 @@
     color: var(--accent);
     border-radius: 999px;
     padding: 0.1rem 0.6rem;
+  }
+  .chip.passive {
+    background: var(--neutral-soft);
+    color: var(--muted);
+    cursor: default;
   }
   .dots {
     display: inline-flex;

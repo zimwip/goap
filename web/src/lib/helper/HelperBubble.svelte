@@ -5,7 +5,7 @@
   import { activeTab } from '../shell/tabs.svelte';
   import { valueText } from '../attributes';
   import { accept, closeHelper, comment, currentProposal, helper } from './helper.svelte';
-  import { fieldOf } from './fields.svelte';
+  import { fieldOf } from '../assist/registry.svelte';
   import { place, type Placement } from './placement';
 
   let bubble = $state<HTMLDivElement>();

@@ -21,8 +21,8 @@ vi.mock('../stores/modelChoices.svelte', () => ({
   },
 }));
 
-import { actionLabel, runActions } from './actions';
-import { assistantContext, clipBytes } from './context';
+import { actionChipLabel, actionLabel, repeatable, runActions } from './actions';
+import { registerAssist, resetRegistry } from '../assist/registry.svelte';
 import { assistantEnabled } from './enabled';
 import { COMMANDS } from '../shell/commands';
 
@@ -38,10 +38,12 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('assistant actions', () => {
   it('switches project, then opens the change after refreshing the catalog', async () => {
-    await runActions([
-      { type: 'select_project', args: { project: 'PROJ-B' } },
-      { type: 'create_change', args: { title: 'T', intent: 'i' }, result: { changeId: 'CHG-9', project: 'PROJ-B' } },
-    ]);
+    await runActions({
+      actions: [
+        { type: 'select_project', args: { project: 'PROJ-B' } },
+        { type: 'create_change', args: { title: 'T', intent: 'i' }, result: { changeId: 'CHG-9', project: 'PROJ-B' } },
+      ],
+    });
     expect(selectProject).toHaveBeenCalledWith('PROJ-B');
     expect(refreshChanges).toHaveBeenCalled();
     expect(openTab).toHaveBeenCalledWith({ kind: 'change', params: { id: 'CHG-9' } }, { pin: true });
@@ -49,11 +51,14 @@ describe('assistant actions', () => {
 
   it('opens a known change without refreshing and ignores unknown types', async () => {
     cat.changes.items = [{ id: 'CHG-1', projectId: 'PROJ-A' }];
-    await runActions([{ type: 'open_change', args: { changeId: 'CHG-1' } }, { type: 'mystery' }]);
+    await runActions({ actions: [{ type: 'open_change', args: { changeId: 'CHG-1' } }, { type: 'mystery' }] });
     expect(refreshChanges).not.toHaveBeenCalled();
     expect(followChangeProject).toHaveBeenCalledWith({ id: 'CHG-1', projectId: 'PROJ-A' });
     expect(openTab).toHaveBeenCalledTimes(1);
     expect(actionLabel({ type: 'mystery' })).toBe('');
+    // the chip of a type this web does not know still says what happened
+    expect(actionChipLabel({ type: 'methodology_query' })).toBe('methodology query');
+    expect(actionChipLabel({ type: 'x', args: { label: 'Asked the catalog' } })).toBe('Asked the catalog');
   });
 
   it('labels the chips', () => {
@@ -64,27 +69,69 @@ describe('assistant actions', () => {
 
   it('notifies a failure instead of throwing', async () => {
     selectProject.mockRejectedValueOnce(new Error('denied'));
-    await runActions([{ type: 'select_project', args: { project: 'X' } }]);
+    await runActions({ actions: [{ type: 'select_project', args: { project: 'X' } }] });
     expect(notify).toHaveBeenCalledWith('denied', 'error');
   });
 });
 
-describe('assistant context', () => {
-  const tab = { id: 'change:C1', kind: 'change', params: { id: 'C1' }, pinned: true };
+describe('screen tool executor', () => {
+  const effect = (over: Record<string, unknown> = {}) => ({ type: 'ui_tool', status: 'requested', level: 'effect', tool: 'filter_impacts', args: { review: 'proposed' }, label: 'Show proposed', ...over });
+  const write = (over: Record<string, unknown> = {}) => ({ type: 'ui_tool', status: 'proposed', level: 'write', tool: 'rename_change', args: { title: 'New' }, label: 'Rename', project: 'P', ...over });
+  beforeEach(() => resetRegistry());
 
-  it('has the tab, selection and project, and nothing else', () => {
-    const c = assistantContext(tab, 'PROJ-A', 'chosen text');
-    expect(c).toEqual({ app: { tab: { kind: 'change', params: { id: 'C1' } }, project: 'PROJ-A' }, focus: { selection: 'chosen text' } });
+  it('runs an effect through the registry and reports done', async () => {
+    const run = vi.fn();
+    const off = registerAssist({ tools: [{ name: 'filter_impacts', run }] });
+    const report = vi.fn(async () => {});
+    await runActions({ actions: [effect()] }, report);
+    expect(run).toHaveBeenCalledWith({ review: 'proposed' });
+    expect(report).toHaveBeenCalledWith(0, 'done', undefined);
+    off();
   });
 
-  it('leaves out what is empty', () => {
-    expect(assistantContext(undefined, '', '')).toEqual({});
+  it('reports failed with a clear error when the tool is not on the screen any more', async () => {
+    const report = vi.fn(async () => {});
+    await runActions({ actions: [effect()] }, report);
+    expect(report).toHaveBeenCalledWith(0, 'failed', expect.stringContaining('no longer offers'));
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining('no longer offers'), 'error');
   });
 
-  it('caps the selection in bytes', () => {
-    const c = assistantContext(tab, '', 'é'.repeat(3000));
-    expect(new TextEncoder().encode(c.focus?.selection ?? '').length).toBeLessThanOrEqual(2000);
-    expect(clipBytes('abc', 2)).toBe('ab');
+  it('reports a failure of the tool itself, and ignores a refused report', async () => {
+    const off = registerAssist({ tools: [{ name: 'filter_impacts', run: () => 'nope' }] });
+    const report = vi.fn(async () => {
+      throw new Error('already reported');
+    });
+    await runActions({ actions: [effect()] }, report);
+    expect(report).toHaveBeenCalledWith(0, 'failed', 'nope');
+    off();
+  });
+
+  it('never runs a write proposal, nor an effect that is not "requested"', async () => {
+    const run = vi.fn();
+    const off = registerAssist({ tools: [{ name: 'rename_change', run }, { name: 'filter_impacts', run }] });
+    const report = vi.fn(async () => {});
+    await runActions({ actions: [write(), write({ status: 'accepted' }), effect({ status: 'done' }), { type: 'start_agent', args: {}, status: 'proposed' } as never] }, report);
+    expect(run).not.toHaveBeenCalled();
+    expect(report).not.toHaveBeenCalled();
+    off();
+  });
+
+  it('a click on an effect chip runs it again, a write chip never does', async () => {
+    const run = vi.fn();
+    const off = registerAssist({ tools: [{ name: 'filter_impacts', run }, { name: 'rename_change', run }] });
+    expect(repeatable(effect())).toBe(true);
+    expect(repeatable(write())).toBe(false);
+    const { runAction } = await import('./actions');
+    await runAction(write());
+    expect(run).not.toHaveBeenCalled();
+    await runAction(effect());
+    expect(run).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it('labels a screen action by its label, else its tool', () => {
+    expect(actionLabel(effect())).toBe('Show proposed');
+    expect(actionLabel(effect({ label: '' }))).toBe('Screen action filter_impacts');
   });
 });
 

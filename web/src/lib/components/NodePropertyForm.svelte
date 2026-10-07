@@ -2,7 +2,7 @@
   import { untrack } from 'svelte';
   import { orderedAttributes, parseValue as parseAttr, valueText, type AttributeView } from '../attributes';
   import type { AttributeInfo } from '../api';
-  import { assistField, type FieldSpec } from '../helper/fields.svelte';
+  import { assistField, registerAssist, type FieldSpec } from '../assist/registry.svelte';
   // Edition of the properties of a node: the attributes its type defines (laid out by section, edited with
   // their widget), the other properties it has, and new ones. Only the changed values are returned.
   let {
@@ -46,7 +46,15 @@
   let newValue = $state('');
   let error = $state('');
 
-  /** What the contextual helper (ADR 0086) may fill: the attribute, read and set through the form's draft like a typed value. */
+  // the form is on screen: the assistant knows what is being edited, and its fields are the entities it may fill (ADR 0092)
+  $effect(() =>
+    registerAssist({
+      screen: () => ({ summary: `A form edits the properties of a node of type ${typeName}; the person still saves it.` }),
+      focus: () => ({ dialogKind: 'edit properties', dialogTitle: `Properties of a ${typeName}`, pendingAction: `editing the properties of a ${typeName} node`, errors: error ? [error] : [] }),
+    }),
+  );
+
+  /** What the contextual helper (ADR 0086) and the assistant's `set_field` may fill: the attribute, read and set through the form's draft like a typed value. */
   function helperField(a: AttributeView): FieldSpec {
     return {
       id: a.name,

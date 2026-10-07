@@ -7,11 +7,12 @@ const api = vi.hoisted(() => ({
   rename: vi.fn(),
   remove: vi.fn(),
   send: vi.fn(),
+  report: vi.fn(),
 }));
 const runActions = vi.hoisted(() => vi.fn());
 vi.mock('../api', () => ({
   conversationsApi: { create: api.create, list: api.list, get: api.get, rename: api.rename, remove: api.remove },
-  assistantApi: { send: api.send },
+  assistantApi: { send: api.send, reportAction: api.report },
   errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
 vi.mock('../shell/tabs.svelte', () => ({ activeTab: () => ({ id: 'change:C1', kind: 'change', params: { id: 'C1' }, pinned: true }) }));
@@ -63,9 +64,13 @@ describe('assistant store', () => {
     const detach = attachView();
     expect(await send('  hello  ')).toBe(true);
     expect(api.create).toHaveBeenCalledWith('hello');
-    expect(api.send).toHaveBeenCalledWith('C1', 'hello', {
-      app: { tab: { kind: 'change', params: { id: 'C1' } }, project: 'PROJ-A' },
-    });
+    // the layers of the page and the tools the screen offers (none registered here)
+    expect(api.send).toHaveBeenCalledWith(
+      'C1',
+      'hello',
+      { app: { tab: { kind: 'change', params: { id: 'C1' } }, project: 'PROJ-A' }, screen: { kind: 'change' } },
+      [],
+    );
     expect(isPending()).toBe(true);
     expect(assistant.conversations[0].id).toBe('C1');
     detach();
@@ -85,7 +90,7 @@ describe('assistant store', () => {
     await tick();
     expect(api.get).toHaveBeenCalledTimes(2);
     expect(runActions).toHaveBeenCalledTimes(1);
-    expect(runActions).toHaveBeenCalledWith([act]);
+    expect(runActions).toHaveBeenCalledWith(expect.objectContaining({ id: 'A2', actions: [act] }), expect.any(Function));
     await tick(10 * POLL_MS);
     expect(api.get).toHaveBeenCalledTimes(2);
     detach();
@@ -119,6 +124,25 @@ describe('assistant store', () => {
     await openConversation('C1');
     await tick();
     expect(runActions).toHaveBeenCalledTimes(1);
+    detach();
+  });
+
+  it('reports the outcome of an effect screen tool and takes the updated message', async () => {
+    const effect = { type: 'ui_tool', status: 'requested', level: 'effect', tool: 'select_impact', args: { impactId: 'I1' }, label: 'Select I1' };
+    runActions.mockImplementation(async (m: { actions?: unknown[] }, report: (i: number, s: string, e?: string) => Promise<void>) => {
+      await report(0, 'done');
+      expect(m.actions).toHaveLength(1);
+    });
+    api.report.mockResolvedValue({ message: bot(2, 'done', { actions: [{ ...effect, status: 'done' }] }) });
+    api.get
+      .mockResolvedValueOnce({ conversation: conv, messages: [user(1), bot(2, 'pending')] })
+      .mockResolvedValueOnce({ conversation: conv, messages: [user(1), bot(2, 'done', { actions: [effect] })] });
+    const detach = attachView();
+    await openConversation('C1');
+    await tick();
+    await flush();
+    expect(api.report).toHaveBeenCalledWith({ conversationId: 'C1', messageId: 'A2', actionIndex: 0, status: 'done' });
+    expect((assistant.messages[1].actions?.[0] as unknown as { status: string }).status).toBe('done');
     detach();
   });
 
@@ -197,7 +221,7 @@ describe('assistant store', () => {
     assistant.messages = [user(1, 'start it'), bot(2, 'error', { error: 'boom' })];
     api.send.mockResolvedValue({ userMessage: user(3, 'start it'), assistantMessage: bot(4, 'pending') });
     expect(await retry('A2')).toBe(true);
-    expect(api.send).toHaveBeenCalledWith('C1', 'start it', expect.anything());
+    expect(api.send).toHaveBeenCalledWith('C1', 'start it', expect.anything(), expect.anything());
     expect(assistant.messages.map((m) => m.id)).toEqual(['U1', 'A2', 'U3', 'A4']);
     resetAssistant();
   });

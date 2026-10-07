@@ -1,10 +1,12 @@
 // The conversational assistant (ADR 0087): conversations of the caller from the conversation service (ADR 0085), the
 // messages of the current one, and the polling of an answer being written. Memory only: the current conversation is not
 // kept in the browser (ADR 0052), a new page opens the most recent one.
-import { assistantApi, conversationsApi, errorMessage, type Conversation, type ConversationAction, type ConversationMessage } from '../api';
+import { assistantApi, conversationsApi, errorMessage, type Conversation, type ConversationMessage } from '../api';
 import { activeTab } from '../shell/tabs.svelte';
 import { assistantContext, clipBytes } from '../assistant/context';
 import { runActions } from '../assistant/actions';
+import { describeTools } from '../assist/registry.svelte';
+import { forgetSelection } from '../assist/capture';
 import { project } from './project.svelte';
 
 /** The server accepts a message of at most 4 KiB (assistantsvc `MaxTextBytes`). */
@@ -95,18 +97,32 @@ async function poll(): Promise<void> {
 /** Takes the messages of the server; runs the actions of the ones that turned done since they were seen pending. */
 function apply(c: Conversation | undefined, msgs: ConversationMessage[]): void {
   const sorted = [...msgs].sort((a, b) => a.seq - b.seq);
-  const ready: ConversationAction[][] = [];
+  const ready: ConversationMessage[] = [];
   for (const m of sorted) {
     if (m.role !== 'assistant') continue;
     if (m.status === 'pending') watching.add(m.id);
-    else if (watching.delete(m.id) && m.status === 'done' && m.actions?.length) ready.push(m.actions);
+    else if (watching.delete(m.id) && m.status === 'done' && m.actions?.length) ready.push(m);
   }
   assistant.messages = sorted;
   if (c?.id) assistant.conversations = assistant.conversations.map((x) => (x.id === c.id ? { ...x, ...c } : x));
-  // the actions of different messages run in order, none of them twice
+  // the actions of different messages run in order, none of them twice: an effect screen tool runs and reports, a
+  // proposal waits for its card
   void (async () => {
-    for (const acts of ready) await runActions(acts);
+    for (const m of ready) await runActions(m, (i, status, error) => reportOutcome(m, i, status, error));
   })();
+}
+
+/** Puts a message the server returned (an action decided or reported) in the conversation, in its place. */
+export function applyMessage(m: ConversationMessage): void {
+  if (m.conversationId !== assistant.currentId) return;
+  const i = assistant.messages.findIndex((x) => x.id === m.id);
+  if (i >= 0) assistant.messages[i] = m;
+}
+
+/** Records the outcome of a screen tool the web ran (ADR 0092) and takes the updated message. */
+export async function reportOutcome(m: Pick<ConversationMessage, 'conversationId' | 'id'>, index: number, status: 'done' | 'failed', error?: string): Promise<void> {
+  const r = await assistantApi.reportAction({ conversationId: m.conversationId, messageId: m.id, actionIndex: index, status, ...(error ? { error } : {}) });
+  if (r.message) applyMessage(r.message);
 }
 
 /** A view of the conversation (the tab, the floating panel) is shown: polling runs while there is at least one. */
@@ -216,7 +232,9 @@ export async function send(text: string): Promise<boolean> {
       assistant.currentId = id;
       assistant.conversations = [created, ...assistant.conversations.filter((c) => c.id !== id)];
     }
-    const r = await assistantApi.send(id, t, assistantContext(activeTab(), project.current));
+    const tab = activeTab();
+    const r = await assistantApi.send(id, t, assistantContext(tab, project.current), describeTools(tab?.id ?? ''));
+    forgetSelection();
     if (mine !== epoch) return true;
     watching.add(r.assistantMessage.id);
     assistant.messages = [...assistant.messages.filter((m) => m.id !== r.userMessage.id && m.id !== r.assistantMessage.id), r.userMessage, r.assistantMessage].sort(

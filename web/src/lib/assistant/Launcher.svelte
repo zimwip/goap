@@ -10,6 +10,11 @@
   import { helper } from '../helper/helper.svelte';
   import { assistant, closePanel, openPanel } from '../stores/assistant.svelte';
   import { assistantEnabled } from './enabled';
+  import { startCapture } from '../assist/capture';
+  import { entityOfElement } from '../assist/registry.svelte';
+
+  // what is selected or focused on the page is remembered, for the assistant to use (ADR 0092)
+  $effect(() => startCapture((el) => !!entityOfElement(el)));
 
   const enabled = $derived(assistantEnabled());
   let button = $state<HTMLButtonElement>();
@@ -77,6 +82,7 @@
   {/if}
   <button
     type="button"
+    data-assistant
     class="launcher"
     class:active={assistant.panelOpen}
     bind:this={button}

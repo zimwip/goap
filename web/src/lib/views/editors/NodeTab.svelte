@@ -36,6 +36,8 @@
   import { loadGraph, loadHead, type GraphIndex } from '../../graphIndex';
   import { namespaceOf } from '../../namespace';
   import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { assistField, registerAssist } from '../../assist/registry.svelte';
+  import { diffSummary } from '../../assist/changeScreen';
   import { orderedAttributes, shownValue } from '../../attributes';
 import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeNodeInChange, removeFromChange, type LifecycleRow, type PostVersions } from '../../lifecycle';
 
@@ -268,6 +270,23 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let reviewing = $state(false);
   let reviewComment = $state('');
   const canReview = $derived(!!row?.impact?.id && !row.impact.superseded && !!row.impact.post?.id && (row.impact.review === 'proposed' || !row.impact.review));
+  // the impact on screen, with what it edits (names only): context for a review (ADR 0092)
+  $effect(() =>
+    registerAssist({
+      tab: tab.id,
+      screen: () => {
+        const imp = row?.impact;
+        if (!stored || !imp?.id) return { kind: 'node', title: stored?.key };
+        return {
+          kind: 'node',
+          title: stored.key,
+          summary: `Node ${stored.key} (${typeName}), state ${nodeState || 'none'}, in change ${workId}: its impact is ${imp.review || 'proposed'}${imp.rationale ? `, “${imp.rationale}”` : ''}. ${diffSummary(row?.node.props, row?.props)}`,
+          entities: [{ type: 'impact', id: imp.id, label: stored.key, state: imp.review || 'proposed' }],
+        };
+      },
+      focus: () => ({ element: row?.impact?.id && canReview ? { type: 'impact', id: row.impact.id, label: stored?.key } : undefined, pendingAction: reviewing ? `reviewing the impact of ${stored?.key}` : undefined, errors: error ? [error] : [] }),
+    }),
+  );
   async function reviewImpact(accept: boolean) {
     if (!row?.impact?.id || !workId) return;
     busy = 'review';
@@ -356,7 +375,14 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
       This node's impact awaits its review. An edit never reviews on its own: the change cannot land until someone accepts it.
       {#if reviewing}
         <div class="reviewrow">
-          <input type="text" class="grow" placeholder="Comment (mandatory)" aria-label="Review comment" bind:value={reviewComment} />
+          <input
+            type="text"
+            class="grow"
+            placeholder="Comment (mandatory)"
+            aria-label="Review comment"
+            bind:value={reviewComment}
+            use:assistField={{ id: 'review_comment', label: 'Review comment', type: 'string', required: true, get: () => reviewComment, set: (v) => (reviewComment = String(v)) }}
+          />
           <button type="button" class="small primary" disabled={!reviewComment.trim() || busy !== ''} onclick={() => reviewImpact(true)}>Accept</button>
           <button type="button" class="small danger" disabled={!reviewComment.trim() || busy !== ''} onclick={() => reviewImpact(false)}>Reject</button>
           <button type="button" class="small" onclick={() => (reviewing = false)}>Cancel</button>
