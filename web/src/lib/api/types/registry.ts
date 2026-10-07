@@ -586,6 +586,8 @@ export interface Methodology {
   appliesTo?: string[];
   /** default criticality of its changes: C1, C2 or C3 (ADR 0075 §3); empty: C2 */
   criticality?: string;
+  /** main goal: a goal or a process of the methodology; its changes start with it (ADR 0096); empty: the first goal or process */
+  goal?: string;
   /** the built-in condition libraries it imports (ADR 0064): decisions, risks, verification, derogations */
   imports?: string[];
   /** the events of those changes it reacts to */

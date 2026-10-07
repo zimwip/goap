@@ -6,6 +6,7 @@ description: >
   relying on the engine's eager default.
 
 namespace: alm
+goal: bound
 
 conditions:
   - name: change_bound

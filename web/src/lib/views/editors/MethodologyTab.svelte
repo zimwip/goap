@@ -16,6 +16,7 @@
   import { formatDate, TRIGGER_EVENTS } from '../../api';
   import {
     walkSteps,
+    goalChoices,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
@@ -82,6 +83,7 @@
 
   const cat = $derived(typeCatalog.cat);
   const ns = $derived(f.namespace.trim());
+  const goals = $derived(goalChoices(f));
   const namespaces = $derived(cat.namespaces());
 
   // The panes come from the domain: the element types the methodology version is composed of (its `defines`
@@ -179,6 +181,14 @@
         <div class="field">
           <label for="m-imports">Condition libraries <span class="opt">(imported, comma separated: decisions, risks)</span></label>
           <input id="m-imports" type="text" class="mono" bind:value={f.imports} disabled={d.readonly} class:bad={d.bad('imports')} data-path="imports" placeholder="risks" />
+        </div>
+        <div class="field">
+          <label for="m-goal">Main goal <span class="opt">(the goal its changes start with; empty: the first goal or process)</span></label>
+          <select id="m-goal" bind:value={f.goal} disabled={d.readonly} class:bad={d.bad('goal')} data-path="goal">
+            <option value="">— first goal or process —</option>
+            {#if f.goal.trim() && !goals.includes(f.goal.trim())}<option value={f.goal}>{f.goal} (unknown)</option>{/if}
+            {#each goals as n (n)}<option value={n}>{n}</option>{/each}
+          </select>
         </div>
         {#if d.meta.updatedAt || d.meta.publishedAt}
           <p class="hint">

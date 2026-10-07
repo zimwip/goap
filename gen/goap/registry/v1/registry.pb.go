@@ -2296,7 +2296,9 @@ type Methodology struct {
 	// the condition libraries it imports (ADR 0064): decisions, risks
 	Imports []string `protobuf:"bytes,24,rep,name=imports,proto3" json:"imports,omitempty"`
 	// default criticality of the changes of the methodology: C1, C2 or C3 (ADR 0075 §3); empty: C2
-	Criticality   string `protobuf:"bytes,25,opt,name=criticality,proto3" json:"criticality,omitempty"`
+	Criticality string `protobuf:"bytes,25,opt,name=criticality,proto3" json:"criticality,omitempty"`
+	// the main goal of the methodology: a declared goal or a process; its changes start with it (ADR 0096)
+	Goal          string `protobuf:"bytes,26,opt,name=goal,proto3" json:"goal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2474,6 +2476,13 @@ func (x *Methodology) GetImports() []string {
 func (x *Methodology) GetCriticality() string {
 	if x != nil {
 		return x.Criticality
+	}
+	return ""
+}
+
+func (x *Methodology) GetGoal() string {
+	if x != nil {
+		return x.Goal
 	}
 	return ""
 }
@@ -7639,7 +7648,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x05 \x01(\x01R\x05value\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xc3\a\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xd7\a\n" +
 	"\vMethodology\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -7668,7 +7677,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x02on\x18\x16 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x12\x1c\n" +
 	"\tlifecycle\x18\x17 \x01(\tR\tlifecycle\x12\x18\n" +
 	"\aimports\x18\x18 \x03(\tR\aimports\x12 \n" +
-	"\vcriticality\x18\x19 \x01(\tR\vcriticalityJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
+	"\vcriticality\x18\x19 \x01(\tR\vcriticality\x12\x12\n" +
+	"\x04goal\x18\x1a \x01(\tR\x04goalJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
 	"node_typesR\n" +
 	"link_typesR\n" +
 	"domain_refR\n" +

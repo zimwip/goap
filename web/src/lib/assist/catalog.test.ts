@@ -32,7 +32,7 @@ describe('tool catalog', () => {
 
   it('keeps the writes that change data as writes, and the navigation as effects', () => {
     for (const n of ['review_impact', 'rename_change', 'update_intent', 'move_change', 'transition_change', 'set_field', 'create'] as const) expect(TOOLS[n].level, n).toBe('write');
-    for (const n of ['select_impact', 'open_impact', 'filter_impacts', 'set_title', 'set_intent', 'set_project'] as const) expect(TOOLS[n].level, n).toBe('effect');
+    for (const n of ['select_impact', 'open_impact', 'filter_impacts', 'set_title', 'set_intent', 'set_project', 'set_methodology'] as const) expect(TOOLS[n].level, n).toBe('effect');
   });
 });
 
@@ -53,7 +53,7 @@ describe('field guidance', () => {
   });
 
   it('covers the fields the views register by id', () => {
-    for (const id of ['title', 'intent', 'review_comment', 'review_global_comment', 'review_entry_comment']) expect(FIELD_GUIDANCE[id], id).toBeTruthy();
+    for (const id of ['title', 'intent', 'methodology', 'review_comment', 'review_global_comment', 'review_entry_comment']) expect(FIELD_GUIDANCE[id], id).toBeTruthy();
   });
 
   it('tells a reviewer to name what was checked', () => {

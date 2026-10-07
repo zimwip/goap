@@ -9,6 +9,7 @@ description: >
   no_decision_pending...) are imported, not declared.
 
 namespace: alm
+goal: decide_option
 
 imports: [decisions]
 

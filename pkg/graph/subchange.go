@@ -148,6 +148,11 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	if c.Methodology == "" {
 		c.Methodology = parent.Methodology
 	}
+	// a sub-change works towards its parent's goal unless it names one of its own, or a methodology other than the
+	// parent's (whose default goal CreateChange has set, ADR 0096)
+	if in.Goal == "" && (in.Methodology == "" || in.Methodology == parent.Methodology) {
+		c.Goal = parent.Goal
+	}
 	if c.OwnerOrg == "" {
 		c.OwnerOrg = parent.OwnerOrg
 	} else if c.OwnerOrg != parent.OwnerOrg {

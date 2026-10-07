@@ -6,6 +6,7 @@ description: >
   (JavaScript and Go) and delegation to sub-agents.
 
 namespace: alm
+goal: delivered
 
 # who may run what (ADR 0043): a project member holding one of these roles, granted by an Assignment
 roles:

@@ -18,9 +18,11 @@ import (
 type lifecycles struct {
 	lc    domain.Lifecycle
 	world map[string]bool
+	goal  string
 }
 
 func (l *lifecycles) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return &l.lc, nil }
+func (l *lifecycles) DefaultGoal(context.Context, string) (string, error)          { return l.goal, nil }
 func (l *lifecycles) Gate(_ context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
 	return condition.CheckGate(t, bb, l.world, decision)
 }
@@ -228,5 +230,63 @@ func TestGateObjectiveMet(t *testing.T) {
 	res, err := condition.CheckGate(domain.Transition{Name: "t", Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}, bb, map[string]bool{"docs": true}, "")
 	if err != nil || !res.Passed() || res.WithReserve() {
 		t.Fatalf("%+v %v", res, err)
+	}
+}
+
+// A change starts with the main goal of its methodology, unless it names one; a sub-change works towards its parent's
+// goal (ADR 0096). The creation default is not a header edit: nothing is logged.
+func TestChangeDefaultGoal(t *testing.T) { forEachRepo(t, testChangeDefaultGoal) }
+
+func testChangeDefaultGoal(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newOrgWorld(t, repo)
+	g := w.g
+	lcs := &lifecycles{goal: "deliver"}
+	new := func(in NewChange) domain.Change {
+		t.Helper()
+		in.ProjectID, in.BaselineID = "PROJ-ROOT", w.base.ID
+		c, err := g.CreateChange(ctx, in)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	// no registry: no default
+	if c := new(NewChange{Title: "a", Methodology: "m"}); c.Goal != "" {
+		t.Fatalf("without a registry: %q", c.Goal)
+	}
+	g.Lifecycles = lcs
+	lcs.lc = domain.Lifecycle{}
+	c := new(NewChange{Title: "b", Methodology: "m", OwnBranch: true, OwnerOrg: "ORG-DIGITAL"})
+	if c.Goal != "deliver" {
+		t.Fatalf("default goal: %q", c.Goal)
+	}
+	if got, _ := g.Change(ctx, c.ID); got.Goal != "deliver" {
+		t.Fatalf("stored goal: %q", got.Goal)
+	}
+	if c := new(NewChange{Title: "c", Methodology: "m", Goal: "other"}); c.Goal != "other" {
+		t.Fatalf("override: %q", c.Goal)
+	}
+	if c := new(NewChange{Title: "d"}); c.Goal != "" {
+		t.Fatalf("no methodology: %q", c.Goal)
+	}
+	sub, err := g.CreateChange(ctx, NewChange{Title: "s", ParentID: c.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sub.Goal != "deliver" {
+		t.Fatalf("sub-change goal: %q", sub.Goal)
+	}
+	g2 := "edited"
+	if _, err := g.UpdateChange(ctx, c.ID, ChangePatch{Goal: &g2}); err != nil {
+		t.Fatal(err)
+	}
+	sub2, err := g.CreateChange(ctx, NewChange{Title: "s2", ParentID: c.ID})
+	if err != nil || sub2.Goal != "edited" {
+		t.Fatalf("sub-change of an edited parent: %q %v", sub2.Goal, err)
+	}
+	sub3, err := g.CreateChange(ctx, NewChange{Title: "s3", ParentID: c.ID, Goal: "own"})
+	if err != nil || sub3.Goal != "own" {
+		t.Fatalf("sub-change override: %q %v", sub3.Goal, err)
 	}
 }

@@ -64,6 +64,10 @@ func TestChangeLifecycleGate(t *testing.T) {
 	if ch.Lifecycle != "maturity" || ch.State != "proposed" {
 		t.Fatalf("a change starts in the initial state: %q %q", ch.Lifecycle, ch.State)
 	}
+	// the change starts with the main goal of its methodology: its first process here (ADR 0096)
+	if ch.Goal != "deliver" {
+		t.Fatalf("default goal %q", ch.Goal)
+	}
 	if other, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "free", Methodology: "no-such", Namespace: "alm"}); err != nil || other.Lifecycle != "" {
 		t.Fatalf("a methodology without lifecycle leaves the change without state: %+v %v", other, err)
 	}

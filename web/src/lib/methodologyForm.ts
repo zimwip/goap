@@ -347,6 +347,8 @@ export interface MethodologyForm {
   description: string;
   /** namespace (domain) the changes act on: the node types it uses are "<namespace>@<NodeType>" */
   namespace: string;
+  /** main goal (ADR 0096): a goal or a process of the methodology; "" : the first goal or process */
+  goal: string;
   conditions: ConditionForm[];
   actions: ActionForm[];
   goals: GoalForm[];
@@ -497,6 +499,7 @@ export function emptyForm(): MethodologyForm {
     version: '0.1.0',
     description: '',
     namespace: '',
+    goal: '',
     conditions: [],
     actions: [],
     goals: [],
@@ -817,6 +820,7 @@ export function toForm(m: Methodology): MethodologyForm {
     version: m.version ?? '',
     description: m.description ?? '',
     namespace: m.namespace ?? '',
+    goal: m.goal ?? '',
     conditions: (m.conditions ?? []).map((c, i) => ({
       uid: cu[i],
       name: c.name ?? '',
@@ -1012,6 +1016,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   put(m, 'description', f.description.trim());
 
   put(m, 'namespace', f.namespace.trim());
+  put(m, 'goal', f.goal.trim());
   put(
     m,
     'conditions',
@@ -1304,4 +1309,14 @@ export function moveItem<T>(list: T[], i: number, delta: number): void {
   if (j < 0 || j >= list.length) return;
   const [x] = list.splice(i, 1);
   list.splice(j, 0, x);
+}
+
+/** The names a methodology can take as its main goal (ADR 0096): its goals, then its processes (each reaches the goal of its name). */
+export function goalChoices(f: Pick<MethodologyForm, 'goals' | 'processes'>): string[] {
+  const out: string[] = [];
+  for (const n of [...f.goals.map((g) => g.name), ...f.processes.map((p) => p.name)]) {
+    const name = n.trim();
+    if (name && !out.includes(name)) out.push(name);
+  }
+  return out;
 }

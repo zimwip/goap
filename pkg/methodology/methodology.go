@@ -38,10 +38,14 @@ type Methodology struct {
 	// Criticality is the default criticality of the changes of the methodology (ADR 0075 §3): C1, C2 or C3, empty for
 	// the platform default (C2). The requester may raise it; lowering it asks the permission change:lower-criticality.
 	// What each level requires is the policy of the organisation, not of the methodology.
-	Criticality string      `yaml:"criticality,omitempty" json:"criticality,omitempty"`
-	Conditions  []Condition `yaml:"conditions" json:"conditions"`
-	Actions     []Action    `yaml:"actions" json:"actions"`
-	Goals       []Goal      `yaml:"goals" json:"goals"`
+	Criticality string `yaml:"criticality,omitempty" json:"criticality,omitempty"`
+	// Goal names the main goal of the methodology (ADR 0096): a declared goal or a process (a process reaches the goal
+	// of its name). The changes of the methodology start with it as their goal; empty: Compiled.MainGoal falls back
+	// on the first declared goal, else the first process.
+	Goal       string      `yaml:"goal,omitempty" json:"goal,omitempty"`
+	Conditions []Condition `yaml:"conditions" json:"conditions"`
+	Actions    []Action    `yaml:"actions" json:"actions"`
+	Goals      []Goal      `yaml:"goals" json:"goals"`
 	// Agents run the methodology; without agents an implicit "default" agent
 	// has every action and goal and the goap planner.
 	Agents []Agent `yaml:"agents,omitempty" json:"agents,omitempty"`
@@ -330,6 +334,21 @@ func (c *Compiled) Goal(name string) (Goal, bool) {
 		}
 	}
 	return Goal{}, false
+}
+
+// MainGoal is the goal the changes of the methodology start with (ADR 0096): the declared Goal, else the first declared
+// goal, else the first process (which reaches the goal of its name), else "". It reads the definition only, so a
+// Compiled has it too.
+func (m *Methodology) MainGoal() string {
+	switch {
+	case m.Goal != "":
+		return m.Goal
+	case len(m.Goals) > 0:
+		return m.Goals[0].Name
+	case len(m.Processes) > 0:
+		return m.Processes[0].Name
+	}
+	return ""
 }
 
 // StepActions returns the actions generated for the steps of a process, in step order.

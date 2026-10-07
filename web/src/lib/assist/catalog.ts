@@ -95,9 +95,15 @@ export const TOOLS = {
     level: 'effect',
     args: { properties: { project: str('the project key') }, required: ['project'] },
   },
+  set_methodology: {
+    description: 'Pick the methodology of the change being created.',
+    guidance: 'methodology: a name offered by the form (those of the project); it sets the namespace and the starting goal.',
+    level: 'effect',
+    args: { properties: { methodology: str('the methodology name') }, required: ['methodology'] },
+  },
   create: {
     description: 'Create the change described by the form on screen.',
-    guidance: 'Needs a title (and a project and a namespace); fill the form first.',
+    guidance: 'Needs a title, a project and its methodology; fill the form first.',
     level: 'write',
   },
 } satisfies Record<string, ToolDef>;
@@ -119,6 +125,7 @@ export function descriptor(name: ToolName): UiTool {
 export const FIELD_GUIDANCE: Record<string, string> = {
   title: 'A short title saying what the change does.',
   intent: 'Why: the need the change answers, one or two sentences.',
+  methodology: 'The methodology of the change: how it is performed, one of those of its project.',
   review_comment: 'Why you accept or reject this impact: name what you checked, 1-3 sentences.',
   review_global_comment: 'The general comment of the review, kept on every impact it reviews: what was checked, 1-3 sentences.',
   review_entry_comment: 'Why you accept or reject this impact: name what you checked, 1-3 sentences.',

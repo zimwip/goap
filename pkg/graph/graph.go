@@ -294,6 +294,9 @@ type NewChange struct {
 	Title       string
 	Intent      string
 	Methodology string
+	// Goal the change works towards (the goal of a methodology or a process of it). Empty: the main goal of the
+	// methodology (ChangeLifecycles.DefaultGoal, ADR 0096), a sub-change's parent goal.
+	Goal string
 	// Namespace the change acts on (default: domain.DefaultNamespace).
 	Namespace  string
 	BaselineID domain.BaselineID
@@ -327,8 +330,16 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 	}
 	// a change whose methodology names a lifecycle starts in its initial state (ADR 0058); the registry is asked
 	// before the transaction, it reads the graph
-	var lifecycle, initial string
+	var lifecycle, initial, goal string
+	goal = in.Goal
 	if g.Lifecycles != nil && in.Methodology != "" {
+		if goal == "" {
+			dg, err := g.Lifecycles.DefaultGoal(ctx, in.Methodology)
+			if err != nil {
+				return domain.Change{}, err
+			}
+			goal = dg
+		}
 		lc, err := g.Lifecycles.Lifecycle(ctx, in.Methodology)
 		if err != nil {
 			return domain.Change{}, err
@@ -356,7 +367,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID,
 		}
-		c.Lifecycle, c.State = lifecycle, initial
+		c.Lifecycle, c.State, c.Goal = lifecycle, initial, goal
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}

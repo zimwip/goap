@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { defaultChangeProject, moveChoices, movable } from './changeProject';
+import { defaultChangeProject, methodologyOffer, moveChoices, movable } from './changeProject';
 
 const projects = [
   { key: 'PROJ-ROOT', label: 'Root' },
@@ -42,5 +42,22 @@ describe('moving a change to another project', () => {
     expect(defaultChangeProject('', 'PROJ-ROOT', projects)).toBe('PROJ-ROOT');
     expect(defaultChangeProject('GONE', 'PROJ-ROOT', projects)).toBe('PROJ-ROOT');
     expect(defaultChangeProject('', 'PROJ-ROOT', [])).toBe('PROJ-ROOT');
+  });
+});
+
+describe('the methodology of a new change', () => {
+  it('preselects the only methodology of the project', () => {
+    expect(methodologyOffer(['sdlc'], '', 'A')).toEqual({ options: ['sdlc'], selected: 'sdlc', blocked: '' });
+  });
+  it('asks to choose among several, and keeps a pick still offered', () => {
+    expect(methodologyOffer(['sdlc', 'risk'], '', 'A').selected).toBe('');
+    expect(methodologyOffer(['sdlc', 'risk'], 'risk', 'A').selected).toBe('risk');
+    expect(methodologyOffer(['sdlc', 'risk'], 'gone', 'A').selected).toBe('');
+    expect(methodologyOffer(['sdlc'], 'gone', 'A').selected).toBe('sdlc');
+  });
+  it('refuses a project that names none', () => {
+    const o = methodologyOffer([], 'sdlc', 'A');
+    expect(o.selected).toBe('');
+    expect(o.blocked).toMatch(/Project A names no methodology/);
   });
 });

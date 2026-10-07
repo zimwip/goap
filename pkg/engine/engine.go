@@ -373,12 +373,9 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 			return err
 		}
 	}
-	if p.ChangeID == "" || p.ParentID != "" {
-		// deferred (the agent's own action will bind it later), or the change goal belongs to the parent process
-		return nil
-	}
-	_, err := e.Graph.UpdateChange(ctx, p.ChangeID, graph.ChangePatch{Goal: &goal})
-	return err
+	// the run's goal lives in the process; the goal of the change is its own (ADR 0096): the main goal of its
+	// methodology at creation, then only an explicit edit
+	return nil
 }
 
 // agentBindsOwnChange reports whether the agent declares its own action to

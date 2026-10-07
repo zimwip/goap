@@ -326,10 +326,12 @@ Before any planning:
 2. the **Ranker** (LLM via the Model Gateway, or lexical in dev) ranks the **(agent, goal)** pairs of
    the methodology — or of **all published methodologies** if none is specified — with a
    confidence score (agent and goal description and examples);
-3. if `confidence(top) ≥ threshold` and sufficient margin over the second → goal selected, `change.goal` set;
+3. if `confidence(top) ≥ threshold` and sufficient margin over the second → goal selected for the process (the goal of the change is its methodology's main goal, [ADR 0096](adr/0096-goal-of-a-methodology-default-goal-of-a-change.md), and does not follow the runs);
 4. otherwise → **clarification question** (generated from the candidate goals), process moves to `clarifying`;
    the answer is added to the history and the loop repeats (max N rounds);
 5. the selected goal may require **parameters** (e.g. the starting node): these are extracted into `vars`.
+
+**Goal of a change** ([ADR 0096](adr/0096-goal-of-a-methodology-default-goal-of-a-change.md)): a methodology names its main goal (`goal:`, a goal or a process); `CreateChange` gives it to the change through the registry seam `ChangeLifecycles.DefaultGoal` (an explicit `NewChange.Goal` wins, a sub-change keeps its parent's), and it changes afterwards only by an explicit edit, never by a run.
 
 ### 2.6 Execution loop (Process)
 

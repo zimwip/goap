@@ -69,3 +69,10 @@ func TestCriticalityAndGateCriteriaRoundTripThroughPB(t *testing.T) {
 		t.Fatalf("lifecycle changed through PB:\n%+v\n%+v", ls, back)
 	}
 }
+
+func TestGoalRoundTripsThroughPB(t *testing.T) {
+	in := methodology.Methodology{Name: "m", Version: "1", Goal: "deliver"}
+	if out := FromPB(ToPB(Record{Methodology: in})); out.Goal != "deliver" {
+		t.Fatalf("goal: %q", out.Goal)
+	}
+}

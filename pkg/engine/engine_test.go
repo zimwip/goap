@@ -45,6 +45,23 @@ func scripted(t *testing.T) llm.Client {
 // testProject is the key of the project these tests start their (non-administrative) processes in (ADR 0039).
 const testProject = "PROJ-TEST"
 
+// mainGoals is the registry's part of ChangeLifecycles the engine tests need: the default goal of a change (ADR 0096).
+type mainGoals struct{ c *methodology.Compiled }
+
+func (m mainGoals) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
+func (m mainGoals) DefaultGoal(_ context.Context, name string) (string, error) {
+	if name == m.c.Name {
+		return m.c.MainGoal(), nil
+	}
+	return "", nil
+}
+func (m mainGoals) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {
+	return true, nil
+}
+func (m mainGoals) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
+	return domain.GateResult{}, nil
+}
+
 func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	t.Helper()
 	ctx := context.Background()
@@ -57,6 +74,7 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 		t.Fatal(err)
 	}
 	g := graph.New(graph.NewMemory())
+	g.Lifecycles = mainGoals{cm}
 	// a project every test starts its (non-administrative) processes in (ADR 0039)
 	if _, err := graphtest.Project(ctx, g, testProject, "Test"); err != nil {
 		t.Fatal(err)
@@ -142,8 +160,9 @@ func TestAssessImpact(t *testing.T) {
 			t.Fatalf("an impact is a planned change impact with a rationale: %+v", n)
 		}
 	}
-	if c.Goal != "assess_impact" {
-		t.Fatalf("goal not recorded on the change")
+	// the run's goal lives in the process; the change keeps the main goal of its methodology (ADR 0096)
+	if c.Goal != "deliver_change" {
+		t.Fatalf("change goal %q, want the main goal of the methodology", c.Goal)
 	}
 }
 

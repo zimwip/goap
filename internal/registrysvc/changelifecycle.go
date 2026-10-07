@@ -40,6 +40,20 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 	return found, nil
 }
 
+// DefaultGoal implements pkg/graph.ChangeLifecycles (ADR 0096): the main goal of a methodology, the goal its changes
+// start with; "" for a methodology the registry does not know. It reads the definition, a methodology that does not
+// compile still gives its goal.
+func (s *Service) DefaultGoal(ctx context.Context, name string) (string, error) {
+	r, err := s.Store.Get(ctx, name, "")
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return "", nil
+		}
+		return "", err
+	}
+	return r.Methodology.MainGoal(), nil
+}
+
 // Guard implements pkg/graph.ChangeLifecycles: the guard of a transition of the lifecycle of a change, in the
 // environment of the conditions of its methodology, whose values are the world state the guard reads.
 func (s *Service) Guard(ctx context.Context, bb domain.Blackboard, expr, transition, decision string) (bool, error) {

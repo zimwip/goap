@@ -104,6 +104,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.compileAgents()
 	s.checkTransverse()
 	s.mergeRolesMethodsProcesses()
+	s.checkMainGoal()
 	return s.finish(lenient)
 }
 
@@ -123,6 +124,20 @@ func (s *compileState) checkHeader() {
 	}
 	s.checkCriticality()
 	m.lintTypeRefs(s.add)
+}
+
+// checkMainGoal checks the main goal of the methodology (ADR 0096): a declared goal or a process.
+func (s *compileState) checkMainGoal() {
+	g := s.m.Goal
+	if g == "" || s.goals[g] {
+		return
+	}
+	for _, p := range s.m.Processes {
+		if p.Name == g {
+			return
+		}
+	}
+	s.add("goal", "unknown goal %q: name a goal or a process of the methodology", g)
 }
 
 // compileConditions compiles each expression on its own to report every error.

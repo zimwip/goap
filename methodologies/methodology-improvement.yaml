@@ -1,6 +1,7 @@
 name: methodology-improvement
 version: 1.4.0
 namespace: methodology
+goal: improve_methodology
 description: >
   Platform self-observation: at the end of each process, an agent analyzes the
   execution journal (planning ticks, actions, LLM and tool calls) and the

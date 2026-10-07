@@ -411,6 +411,8 @@ message Methodology {
   repeated string imports = 24;
   // default criticality of the changes of the methodology: C1, C2 or C3 (ADR 0075 §3); empty: C2
   string criticality = 25;
+  // the main goal of the methodology: a declared goal or a process; its changes start with it (ADR 0096)
+  string goal = 26;
 }
 
 // An event a transverse methodology reacts to, with a CEL filter over event ({type, change, process, step, items}).

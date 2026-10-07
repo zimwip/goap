@@ -6,6 +6,7 @@ description: >
   and the return to proposed are written as an ordinary Change operation by the platform.
 
 namespace: alm
+goal: expired_derogations_closed
 
 # the derogations are swept across the live changes (the builtin sets vars.swept): the process needs no change of its own
 conditions:

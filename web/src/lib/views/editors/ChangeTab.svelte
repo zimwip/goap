@@ -72,10 +72,17 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeTabTitle, scopeWritable } from '../../changeScope';
 
   import NotFound from '../../shell/NotFound.svelte';
+  import { loadMethodology, published } from '../../stores/catalog.svelte';
+  import { goalInfo } from '../../changeGoal';
 
   let { tab }: { tab: Tab } = $props();
 
   let change = $state<Change | undefined>();
+  // what its methodology says of the goal of the change (ADR 0096); a goal the methodology no longer declares is shown
+  const goalNote = $derived(goalInfo(published.get(change?.methodology ?? ''), change?.goal ?? ''));
+  $effect(() => {
+    if (change?.goal && change.methodology) void loadMethodology(change.methodology);
+  });
   let nodes = $state<GraphNode[]>([]);
   let attached = $state<NodeRef[]>([]);
   let posts = $state<PostVersions>(new Map());
@@ -164,6 +171,21 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   const selected = $derived(tab.params.id ?? '');
 
+  /** the baseline `nodes` was read from */
+  let nodesOf = '';
+
+  /** The parents of a sub-change, the root first. */
+  async function loadAncestors(c: Change | undefined, signal?: AbortSignal): Promise<Change[]> {
+    const chain: Change[] = [];
+    for (let p = c?.parentId; p && chain.length < 16; ) {
+      const parent = (await graph.getChange(p, signal)).change;
+      if (!parent) break;
+      chain.unshift(parent);
+      p = parent.parentId;
+    }
+    return chain;
+  }
+
   async function load(id: string, signal?: AbortSignal) {
     loading = true;
     error = '';
@@ -172,17 +194,19 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       change = c;
       void followChangeProject(c);
       if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
-      nodes = c?.baselineId ? ((await graph.getBaselineGraph(c.baselineId, signal)).nodes ?? []) : [];
-      subs = (await graph.listSubChanges(id, signal)).changes ?? [];
-      const chain: Change[] = [];
-      for (let p = c?.parentId; p && chain.length < 16; ) {
-        const parent = (await graph.getChange(p, signal)).change;
-        if (!parent) break;
-        chain.unshift(parent);
-        p = parent.parentId;
-      }
+      // independent reads go out together; a baseline never changes, so the one already read is kept (every event of the
+      // change loads again: re-reading its whole graph each time was the heaviest call of the screen)
+      const baselineId = c?.baselineId ?? '';
+      const [baseNodes, subList, chain] = await Promise.all([
+        !baselineId ? Promise.resolve([] as typeof nodes) : baselineId === nodesOf && nodes.length ? Promise.resolve(nodes) : graph.getBaselineGraph(baselineId, signal).then((g) => g.nodes ?? []),
+        graph.listSubChanges(id, signal).then((r) => r.changes ?? []),
+        loadAncestors(c, signal),
+        graph.listFlows(id, signal).then((r) => (flows = r.flows ?? [])),
+      ]);
+      nodes = baseNodes;
+      nodesOf = baselineId;
+      subs = subList;
       ancestors = chain;
-      flows = (await graph.listFlows(id, signal)).flows ?? [];
       // no scope yet, or one decided since: the option agents work on, else the main flow
       const opts = flows.filter((f) => f.option);
       if (!scope || (scope !== MAIN_SCOPE && !opts.some((o) => o.id === scope))) scope = opts.find((o) => o.active)?.id ?? MAIN_SCOPE;
@@ -869,7 +893,14 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: ch.parentId ?? '' } })}>{shortId(ch.parentId)}</button></dd>
           {/if}
           {#if ch.methodology}<dt>Methodology</dt><dd>{ch.methodology}</dd>{/if}
-          {#if ch.goal}<dt>Goal</dt><dd><code>{ch.goal}</code></dd>{/if}
+          {#if ch.goal}
+            <dt>Goal</dt>
+            <dd>
+              <code>{ch.goal}</code>
+              {#if goalNote.state === 'unknown'}<span class="hint"> unknown goal: the methodology {ch.methodology} no longer declares it</span>
+              {:else if goalNote.description}<span class="hint"> {goalNote.description}</span>{/if}
+            </dd>
+          {/if}
           {#if ch.baselineId}
             <dt>Starting baseline</dt>
             <dd><button type="button" class="link mono" onclick={() => openBaseline(ch.baselineId)}>{shortId(ch.baselineId)}</button></dd>

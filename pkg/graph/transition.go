@@ -20,6 +20,9 @@ import (
 type ChangeLifecycles interface {
 	// Lifecycle returns the lifecycle the changes of a methodology follow; nil when it names none.
 	Lifecycle(ctx context.Context, methodology string) (*domain.Lifecycle, error)
+	// DefaultGoal returns the main goal the changes of a methodology start with (ADR 0096); "" when the methodology is
+	// unknown or has none.
+	DefaultGoal(ctx context.Context, methodology string) (string, error)
 	// Guard evaluates the guard of a transition for the change on bb (condition.CheckGuard, the world state being the
 	// one of the conditions of the methodology of the change).
 	Guard(ctx context.Context, bb domain.Blackboard, expr, transition, decision string) (bool, error)

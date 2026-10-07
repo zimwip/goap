@@ -6,6 +6,7 @@ description: >
   and human review.
 
 namespace: alm
+goal: deliver_change
 
 conditions:
   - name: has_impacts

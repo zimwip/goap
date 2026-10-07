@@ -44,3 +44,23 @@ export const defaultChangeProject = (active: string, root: string, options: Proj
   const key = active || root;
   return options.some((o) => o.key === key) || !options.length ? key : (options[0]?.key ?? key);
 };
+
+/** What the form of a new change offers as methodology (ADR 0096): those of the project, one preselected. */
+export interface MethodologyOffer {
+  options: string[];
+  /** the methodology to hold: the one already picked when still offered, the only one when there is just one, else none */
+  selected: string;
+  /** why a change cannot be created ('' when it can) */
+  blocked: string;
+}
+
+/**
+ * Every change has a methodology: a new one picks among the methodologies that apply to its project (its own and its
+ * ancestors'). A project that names none cannot hold a change created by hand; the person adds one to the project.
+ */
+export function methodologyOffer(applicable: readonly string[], current: string, project: string): MethodologyOffer {
+  const options = [...applicable];
+  if (!options.length) return { options, selected: '', blocked: `Project ${project} names no methodology: add one to the project before creating a change in it.` };
+  const selected = options.includes(current) ? current : options.length === 1 ? options[0] : '';
+  return { options, selected, blocked: '' };
+}

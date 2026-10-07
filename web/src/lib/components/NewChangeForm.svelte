@@ -1,15 +1,19 @@
 <script lang="ts">
   import { stamp, keyOf } from '../flux/signals.svelte';
-  // Creating a change by hand (ADR 0024): what it is for (title, intent), what it acts on (namespace, the branch it
-  // lands on, the baseline it starts from) and how it is held (its own branch, a parent change). No methodology is
-  // needed: the change is then operated from the IDE alone. A namespace no change landed in has no baseline: its first
-  // change starts from the empty state (ADR 0056).
+  // Creating a change by hand (ADR 0024): what it is for (title, intent), how it is performed (its methodology, one of
+  // those of the project, ADR 0096), what it acts on (namespace, the branch it lands on, the baseline it starts from)
+  // and how it is held (its own branch, a parent change). The methodology gives the namespace and the goal the change
+  // starts with; a sub-change keeps its parent's. A namespace no change landed in has no baseline: its first change
+  // starts from the empty state (ADR 0056).
   import { graph, errorMessage, shortId, type Baseline, type Branch } from '../api';
-  import { changes, refreshChanges } from '../stores/catalog.svelte';
+  import { changes, refreshChanges, loadMethodology, published } from '../stores/catalog.svelte';
+  import { headGraph } from '../graphEdit';
+  import { applicableMethodologies } from '../projectRoles';
+  import { openTab } from '../shell/tabs.svelte';
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
   import { project, refreshProjects } from '../stores/project.svelte';
-  import { rootProject } from '../stores/session.svelte';
-  import { defaultChangeProject } from '../changeProject';
+  import { rootProject, ns as sessionNs } from '../stores/session.svelte';
+  import { defaultChangeProject, methodologyOffer } from '../changeProject';
   import { assistField, registerAssist, type FieldSpec, type ToolImpl } from '../assist/registry.svelte';
 
   let { oncreated, oncancel }: { oncreated: (id: string) => void; oncancel?: () => void } = $props();
@@ -23,6 +27,9 @@
   let parentId = $state('');
   // a change is created in a project (ADR 0091): the active one unless another is picked; a sub-change has its parent's
   let projectKey = $state('');
+  let methodology = $state('');
+  // the methodologies of the project (its own and its ancestors'); undefined while read
+  let applicableNames = $state<string[] | undefined>(undefined);
   let namespaces = $state<string[]>([]);
   let branches = $state<Branch[]>([]);
   let baselines = $state<Baseline[]>([]);
@@ -35,6 +42,28 @@
   });
   $effect(() => {
     if (!projectKey) projectKey = defaultChangeProject(project.current, rootProject(), project.options);
+  });
+  $effect(() => {
+    const key = projectKey;
+    if (!key || parentId) return;
+    applicableNames = undefined;
+    headGraph(sessionNs.organisation)
+      .then((h) => {
+        if (key === projectKey) applicableNames = applicableMethodologies(h, key);
+      })
+      .catch((e) => (error = errorMessage(e)));
+  });
+  const offer = $derived(applicableNames ? methodologyOffer(applicableNames, methodology, projectKey) : undefined);
+  $effect(() => {
+    if (offer && methodology !== offer.selected) methodology = offer.selected;
+  });
+  // the methodology gives the namespace its changes act on
+  const methodNamespace = $derived(methodology && !parentId ? (published.get(methodology)?.namespace ?? '') : '');
+  $effect(() => {
+    if (methodology) void loadMethodology(methodology);
+  });
+  $effect(() => {
+    if (methodNamespace) namespace = methodNamespace;
   });
   $effect(() => {
     graph
@@ -78,7 +107,7 @@
 
   const parents = $derived(changes.items.filter((c) => c.namespace === namespace && (c.status === 'draft' || c.status === 'active') && c.branch?.startsWith('change-')));
 
-  const canCreate = $derived(!busy && !!title.trim() && !!namespace && (!!parentId || !!projectKey));
+  const canCreate = $derived(!busy && !!title.trim() && !!namespace && (!!parentId || (!!projectKey && !!offer && !offer.blocked && !!methodology)));
 
   /** Creates the change; true when it was (the error is shown otherwise). */
   async function create(): Promise<boolean> {
@@ -90,6 +119,7 @@
           title: title.trim(),
           intent: intent.trim() || title.trim(),
           namespace,
+          methodology: parentId ? undefined : methodology,
           baselineId: parentId ? undefined : baselineId || undefined,
           branch: parentId ? undefined : branch,
           ownBranch: parentId ? undefined : ownBranch,
@@ -124,6 +154,17 @@
     get: () => projectKey,
     set: (v) => (projectKey = String(v)),
   };
+  const methodologyField: FieldSpec = {
+    id: 'methodology',
+    label: 'Methodology',
+    type: 'enum',
+    tool: 'set_methodology',
+    get enum() {
+      return offer?.options ?? [];
+    },
+    get: () => methodology,
+    set: (v) => (methodology = String(v)),
+  };
   const tools: ToolImpl[] = [
     { name: 'set_title', targetOf: () => 'field:title', run: (a) => void (title = String(a.title ?? '')) },
     { name: 'set_intent', targetOf: () => 'field:intent', run: (a) => void (intent = String(a.intent ?? '')) },
@@ -142,6 +183,21 @@
       },
     },
     {
+      name: 'set_methodology',
+      enabled: () => !parentId && !!offer?.options.length,
+      targetOf: () => 'field:methodology',
+      describe: (base) => {
+        const names = offer?.options ?? [];
+        const p = names.length <= 30 ? { type: 'enum' as const, enum: names, description: 'the methodology name' } : { type: 'string' as const, description: 'the methodology name' };
+        return { ...base, args: { ...base.args, properties: { methodology: p } } };
+      },
+      run: (a) => {
+        const names = offer?.options ?? [];
+        if (!names.includes(String(a.methodology))) return `The methodology ${String(a.methodology)} is not one of: ${names.join(', ')}.`;
+        methodology = String(a.methodology);
+      },
+    },
+    {
       name: 'create',
       enabled: () => canCreate,
       run: async () => ((await create()) ? undefined : error || 'The change could not be created.'),
@@ -152,7 +208,7 @@
       screen: () => ({
         kind: 'new_change',
         title: 'New change',
-        summary: `A form creates a change in namespace ${namespace || 'none'}, project ${projectKey || 'none'}${parentId ? ', as a sub-change' : ''}; the title ${title.trim() ? 'is filled' : 'is empty'}, the intent ${intent.trim() ? 'is filled' : 'is empty'}.`,
+        summary: `A form creates a change in namespace ${namespace || 'none'}, project ${projectKey || 'none'}, methodology ${methodology || 'none'}${offer?.blocked ? ` (${offer.blocked})` : ''}${parentId ? ', as a sub-change' : ''}; the title ${title.trim() ? 'is filled' : 'is empty'}, the intent ${intent.trim() ? 'is filled' : 'is empty'}.`,
       }),
       focus: () => ({ dialogKind: 'new change', pendingAction: 'creating a change', errors: error ? [error] : [] }),
       tools,
@@ -165,8 +221,22 @@
   <input id="nc-title" type="text" bind:value={title} placeholder="What the change does" data-no-pin use:assistField={titleField} />
   <label for="nc-intent">Intent</label>
   <textarea id="nc-intent" rows="2" bind:value={intent} placeholder="Why: the need it answers" use:assistField={intentField}></textarea>
+  {#if !parentId}
+    <label for="nc-method">Methodology</label>
+    {#if offer?.blocked}
+      <div class="alert small">
+        {offer.blocked}
+        <button type="button" class="link" onclick={() => openTab({ kind: 'project', params: { key: projectKey } })}>Open the project</button>
+      </div>
+    {:else}
+      <select id="nc-method" bind:value={methodology} use:assistField={methodologyField} title="How the change is performed: one of the methodologies of its project; it gives the namespace and the goal the change starts with" disabled={!offer}>
+        {#if !methodology}<option value="">— choose a methodology —</option>{/if}
+        {#each offer?.options ?? [] as m (m)}<option value={m}>{m}</option>{/each}
+      </select>
+    {/if}
+  {/if}
   <label for="nc-ns">Namespace</label>
-  <select id="nc-ns" bind:value={namespace}>
+  <select id="nc-ns" bind:value={namespace} disabled={!!methodNamespace} title={methodNamespace ? `The namespace of the methodology ${methodology}` : ''}>
     {#each choices as n (n)}<option value={n}>{n}</option>{/each}
   </select>
   <label for="nc-parent">Parent change</label>

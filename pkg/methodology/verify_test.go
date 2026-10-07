@@ -84,3 +84,42 @@ goals: [{name: g, pre: {c: true}}]`
 		t.Fatalf("none: %v", is)
 	}
 }
+
+// The main goal of a methodology is a declared goal or a process; unset, the first goal, else the first process
+// (ADR 0096).
+func TestMethodologyMainGoal(t *testing.T) {
+	const head = `
+name: m
+conditions: [{name: c, expr: "true"}, {name: d, expr: "true"}]
+actions: [{name: a, kind: human, instructions: x, effects: {c: true, d: true}}]
+`
+	parse := func(src string) *Methodology {
+		m, err := Parse([]byte(head + src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	compile := func(src string) (*Compiled, error) { return parse(src).Compile() }
+	c, err := compile("goals: [{name: g1, pre: {c: true}}, {name: g2, pre: {d: true}}]\ngoal: g2")
+	if err != nil || c.MainGoal() != "g2" {
+		t.Fatalf("declared: %v %v", c.MainGoal(), err)
+	}
+	c, err = compile("goals: [{name: g1, pre: {c: true}}, {name: g2, pre: {d: true}}]")
+	if err != nil || c.MainGoal() != "g1" {
+		t.Fatalf("first goal: %v %v", c.MainGoal(), err)
+	}
+	if is := parse("goals: [{name: g1, pre: {c: true}}]\ngoal: nope").Validate(); len(is) != 1 || is[0].Path != "goal" {
+		t.Fatalf("unknown goal: %v", is)
+	}
+	m := &Methodology{Processes: []Process{{Name: "p1"}}}
+	if m.MainGoal() != "p1" {
+		t.Fatalf("first process: %q", m.MainGoal())
+	}
+	if (&Methodology{}).MainGoal() != "" {
+		t.Fatal("none")
+	}
+	if c, err := compile("processes: [{name: p1, steps: [{name: s, action: a}]}]\ngoal: p1"); err != nil || c.MainGoal() != "p1" {
+		t.Fatalf("process goal: %v %v", c, err)
+	}
+}
