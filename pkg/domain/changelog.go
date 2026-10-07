@@ -17,7 +17,31 @@ import (
 const (
 	LogFact   = "fact"   // fact.<item kind>: fact.artifact, fact.decision, fact.flow…
 	LogImpact = "impact" // impact.<op>: impact.proposed, impact.transitioned…
+	LogChange = "change" // change.updated: an edit of the header of the change (title, intent, goal, status, data)
 )
+
+// HeaderEdit is the payload of a change.updated entry: for each field of the header the edit set, the value it left
+// and the one it wrote (Data: per key).
+type HeaderEdit struct {
+	Fields map[string]HeaderValue `json:"fields"`
+}
+
+// HeaderValue is one field of a HeaderEdit.
+type HeaderValue struct {
+	From any `json:"from,omitempty"`
+	To   any `json:"to"`
+}
+
+// HeaderEntry is the log entry of an edit of the header of a change; Subject lists the fields it changed.
+func HeaderEntry(id string, change ChangeID, by string, at time.Time, edit HeaderEdit) (LogEntry, error) {
+	raw, err := json.Marshal(edit)
+	fields := make([]string, 0, len(edit.Fields))
+	for f := range edit.Fields {
+		fields = append(fields, f)
+	}
+	slices.Sort(fields)
+	return LogEntry{ID: id, Change: change, Type: LogChange + ".updated", Subject: strings.Join(fields, ","), By: by, At: at, Payload: raw}, err
+}
 
 // LogEntry is one entry of a change's log. Payload is the whole fact, journal record or impact event (JSON).
 type LogEntry struct {

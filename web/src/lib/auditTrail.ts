@@ -22,7 +22,8 @@ export const AUDIT_SOURCES: { id: AuditSource; label: string }[] = [
 ];
 
 /** The types of the log each source reads (the server filters on them). */
-export const SOURCE_TYPES: Record<Exclude<AuditSource, 'change'>, string[]> = {
+export const SOURCE_TYPES: Record<AuditSource, string[]> = {
+  change: ['change.'],
   process: ['journal.process.started', 'journal.process.ended'],
   schedule: ['journal.schedule'],
   plan: ['journal.tick'],
@@ -239,6 +240,30 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
   };
 }
 
+/** An edit of the header of the change (title, intent, goal, status, data): what each field went from and to. */
+function fromHeader(l: LogEntry): Entry {
+  const fields = decodeLogEntry<{ fields?: Record<string, { from?: JsonValue; to?: JsonValue }> }>(l).fields ?? {};
+  const show = (x: JsonValue | undefined) => {
+    const t = typeof x === 'string' ? x : JSON.stringify(x ?? '');
+    return t.length > 60 ? `${t.slice(0, 57)}…` : t;
+  };
+  return {
+    key: `h:${l.id}`,
+    at: l.at ?? '',
+    source: 'change',
+    label: 'edited',
+    subject: Object.keys(fields).join(', '),
+    summary: Object.entries(fields)
+      .map(([k, f]) => `${k}: ${f.from === undefined || f.from === '' ? '' : `${show(f.from)} → `}${show(f.to)}`)
+      .join(' · '),
+    flow: '',
+    by: l.by ?? '',
+    execution: '',
+    processId: '',
+    tone: 'neutral',
+  };
+}
+
 function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
   const base = { key: `i:${it.id}`, at: it.createdAt ?? '', flow: it.flow ?? '', by: it.producedBy ?? '', execution: it.execution ?? '', processId: '', item: it };
   if (it.kind === 'flow' && it.flowEvent) {
@@ -333,6 +358,7 @@ export function buildTrail(change: Change, log: LogEntry[], parents: Map<string,
   for (const l of log) {
     let e: Entry;
     if (l.type?.startsWith('journal.')) e = fromRecord(decodeLogEntry<ExecutionRecord>(l));
+    else if (l.type?.startsWith('change.')) e = fromHeader(l);
     else if (l.type?.startsWith('impact.')) {
       const ev = decodeLogEntry<ImpactEvent>(l);
       if (ev.state?.key) keys.set(ev.impactId ?? '', ev.state.key);

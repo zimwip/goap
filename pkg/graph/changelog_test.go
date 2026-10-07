@@ -104,3 +104,38 @@ func testChangeLog(t *testing.T, repo Repo) {
 		t.Fatalf("following the log: %+v", got)
 	}
 }
+
+func TestUpdateChangeIsLogged(t *testing.T) { forEachRepo(t, testUpdateChangeIsLogged) }
+
+// An edit of the header of a change (title, intent, goal, status, data) is an entry of its log, in the same
+// transaction; an edit that changes nothing writes none, and the stream is the graph's own.
+func testUpdateChangeIsLogged(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newFlowWorld(t, repo)
+	g, c := w.g, w.change
+	headers := func() []domain.LogEntry {
+		out, _, err := g.ChangeLog(ctx, domain.LogFilter{Change: c.ID, Types: []string{domain.LogChange + "."}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	before := len(headers())
+	title := "A new title"
+	if _, err := g.UpdateChange(ctx, c.ID, ChangePatch{Title: &title, Data: map[string]any{"criticality": "high"}}); err != nil {
+		t.Fatal(err)
+	}
+	got := headers()
+	if len(got) != before+1 || got[len(got)-1].Type != "change.updated" || got[len(got)-1].Subject != "data.criticality,title" {
+		t.Fatalf("header entries = %+v", got)
+	}
+	if _, err := g.UpdateChange(ctx, c.ID, ChangePatch{Title: &title}); err != nil {
+		t.Fatal(err)
+	}
+	if len(headers()) != before+1 {
+		t.Fatal("an edit that changes nothing is logged")
+	}
+	if err := g.AppendLog(ctx, []domain.LogEntry{{Change: c.ID, Type: domain.LogChange + ".updated", Payload: []byte(`{}`)}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("forged header entry: %v", err)
+	}
+}

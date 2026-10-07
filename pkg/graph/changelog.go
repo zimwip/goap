@@ -152,7 +152,7 @@ func (g *Graph) AppendLog(ctx context.Context, entries []domain.LogEntry) error 
 		if e.Change == "" || !strings.Contains(e.Type, ".") {
 			return fmt.Errorf("a log entry needs a change and a type <stream>.<kind>: %w", ErrInvalid)
 		}
-		if s := e.Stream(); s == domain.LogFact || s == domain.LogImpact {
+		if s := e.Stream(); s == domain.LogFact || s == domain.LogImpact || s == domain.LogChange {
 			return fmt.Errorf("the %s stream of a log is written by the graph only: %w", s, ErrInvalid)
 		}
 	}

@@ -77,7 +77,7 @@
   let loading = $state(false);
 
   const query = $derived.by(() => {
-    const types = sources.flatMap((s) => (s === 'change' ? [] : SOURCE_TYPES[s]));
+    const types = sources.flatMap((s) => SOURCE_TYPES[s]);
     return {
       changeId: change.id ?? '',
       types: types.length ? types : ['none.'],
@@ -139,7 +139,7 @@
     return newestFirst ? out.reverse() : out;
   });
   const count = (s: AuditSource) =>
-    s === 'change' ? 1 : Object.entries(counts).reduce((n, [t, c]) => n + (sourceOfType(t) === s ? c : 0), 0);
+    (s === 'change' ? 1 : 0) + Object.entries(counts).reduce((n, [t, c]) => n + (sourceOfType(t) === s ? c : 0), 0);
   const flows = $derived([...parents.keys()]);
 
   // ---- the flow of events: one lane per flow branch -------------------------------------------------------

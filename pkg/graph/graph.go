@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"reflect"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -478,19 +479,24 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 		if err != nil {
 			return err
 		}
-		if p.Title != nil {
+		edit := domain.HeaderEdit{Fields: map[string]domain.HeaderValue{}}
+		if p.Title != nil && *p.Title != c.Title {
+			edit.Fields["title"] = domain.HeaderValue{From: c.Title, To: *p.Title}
 			c.Title = *p.Title
 		}
-		if p.Intent != nil {
+		if p.Intent != nil && *p.Intent != c.Intent {
+			edit.Fields["intent"] = domain.HeaderValue{From: c.Intent, To: *p.Intent}
 			c.Intent = *p.Intent
 		}
-		if p.Goal != nil {
+		if p.Goal != nil && *p.Goal != c.Goal {
+			edit.Fields["goal"] = domain.HeaderValue{From: c.Goal, To: *p.Goal}
 			c.Goal = *p.Goal
 		}
 		if p.Status != nil && *p.Status != c.Status {
 			if !validStatusMove(c.Status, *p.Status) {
 				return fmt.Errorf("change %s cannot go from %s to %s: %w", id, c.Status, *p.Status, ErrConflict)
 			}
+			edit.Fields["status"] = domain.HeaderValue{From: string(c.Status), To: string(*p.Status)}
 			c.Status = *p.Status
 			if c.Status == domain.ChangeAbandoned {
 				if err := g.abandonSubChanges(ctx, tx, c.ID); err != nil {
@@ -510,7 +516,21 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 			if c.Data == nil {
 				c.Data = map[string]any{}
 			}
+			for k, v := range p.Data {
+				if old, ok := c.Data[k]; !ok || !reflect.DeepEqual(old, v) {
+					edit.Fields["data."+k] = domain.HeaderValue{From: old, To: v}
+				}
+			}
 			maps.Copy(c.Data, p.Data)
+		}
+		if len(edit.Fields) > 0 {
+			e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(), edit)
+			if err != nil {
+				return err
+			}
+			if _, err := tx.AppendLog(ctx, e); err != nil {
+				return err
+			}
 		}
 		return tx.PutChange(ctx, c)
 	})

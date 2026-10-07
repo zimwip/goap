@@ -67,6 +67,8 @@ func Export(c domain.Change, entries []domain.LogEntry) (Document, error) {
 			if err = json.Unmarshal(e.Payload, &ex); err == nil {
 				b.exchange(c, e, ex)
 			}
+		case domain.LogChange:
+			b.header(c, e)
 		case domain.LogImpact:
 			var ev domain.ImpactEvent
 			if err = json.Unmarshal(e.Payload, &ev); err == nil {
@@ -326,6 +328,18 @@ func (b *builder) exchange(c domain.Change, e domain.LogEntry, ex journal.ModelE
 	add(n, "prov:wasGeneratedBy", ref(by(c, e.Execution)))
 	if p := b.principal(e.By); p != "" {
 		add(n, "prov:wasAttributedTo", ref(p))
+	}
+}
+
+// header is an edit of the header of the change (title, intent, goal, status, data): an activity on the change.
+func (b *builder) header(c domain.Change, e domain.LogEntry) {
+	n := b.node(iri("header", e.ID), "prov:Activity", "goap:HeaderEdit")
+	entry(n, e)
+	set(n, "label", "edit "+e.Subject)
+	setTime(n, "prov:startedAtTime", e.At)
+	add(n, "prov:used", ref(changeIRI(c.ID)))
+	if p := b.principal(e.By); p != "" {
+		add(n, "prov:wasAssociatedWith", ref(p))
 	}
 }
 
