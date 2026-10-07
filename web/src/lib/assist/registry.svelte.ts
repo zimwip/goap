@@ -100,8 +100,11 @@ const targets = new Map<symbol, Target>();
 
 /** Bumped on each change, so that a reader inside an effect re-runs. */
 const stamp = $state({ n: 0 });
+// write-only: `stamp.n++` would read the state too, so a view registering from inside an `$effect` would depend on
+// what it writes and re-run without end (effect_update_depth_exceeded)
+let counter = 0;
 const bump = (): void => {
-  stamp.n++;
+  stamp.n = ++counter;
 };
 
 const currentTab = (): string => activeTab()?.id ?? '';
