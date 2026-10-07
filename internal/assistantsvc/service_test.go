@@ -33,10 +33,12 @@ type fakeModel struct {
 	aliases []modelgw.AliasEntry
 	got     []llm.Request
 	who     []authz.Principal
+	metas   []llm.CallMeta
 }
 
 func (m *fakeModel) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
 	m.got = append(m.got, req)
+	m.metas = append(m.metas, llm.MetaFrom(ctx))
 	m.who = append(m.who, authz.From(ctx))
 	if m.err != nil {
 		return llm.Response{}, m.err
@@ -200,6 +202,11 @@ func TestSendAnswersAndStoresTheTurn(t *testing.T) {
 	first, second := e.model.got[0], e.model.got[1]
 	if first.Model != "assistant" || !first.JSON || !strings.Contains(first.System, `"subject":"CHG-1"`) || !strings.Contains(first.System, `"activeProject":"PROJ-A"`) {
 		t.Fatalf("request %+v", first)
+	}
+	for _, m := range e.model.metas { // the ledger of the gateway names the assistant and its conversation (ADR 0089)
+		if m.Source != llm.SourceAssistant || m.ConversationID != e.conv.ID {
+			t.Fatalf("meta of a model call: %+v", m)
+		}
 	}
 	if e.model.who[0].Subject != "u1" {
 		t.Fatalf("the model was called as %+v", e.model.who[0])

@@ -159,3 +159,24 @@ func TestEmbeddingUnavailableDegradesToText(t *testing.T) {
 		t.Fatal("status must report no semantic search")
 	}
 }
+
+// The embeddings of the index declare themselves to the ledger of the gateway (ADR 0089).
+func TestEmbedderStampsItsSource(t *testing.T) {
+	var got llm.CallMeta
+	emb := &Embedder{Client: embedFunc(func(ctx context.Context, req llm.EmbedRequest) (llm.EmbedResponse, error) {
+		got = llm.MetaFrom(ctx)
+		return (&bagEmbedder{}).Embed(ctx, req)
+	}), Store: index.NewMemory()}
+	if _, err := emb.Embed(context.Background(), []string{"hello"}); err != nil {
+		t.Fatal(err)
+	}
+	if got.Source != llm.SourceIndexer {
+		t.Fatalf("%+v", got)
+	}
+}
+
+type embedFunc func(context.Context, llm.EmbedRequest) (llm.EmbedResponse, error)
+
+func (f embedFunc) Embed(ctx context.Context, r llm.EmbedRequest) (llm.EmbedResponse, error) {
+	return f(ctx, r)
+}

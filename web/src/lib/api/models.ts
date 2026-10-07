@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
-import type { AvailableModel, CatalogModel, DiscoveredModel, LlmProvider, ModelAlias, ProviderKind, SuggestRequest, SuggestResponse } from './types/models';
+import type { AvailableModel, CatalogModel, DiscoveredModel, ListUsageResponse, LlmProvider, ModelAlias, ProviderKind, SuggestRequest, SuggestResponse, UsageFilter, UsageGroup, UsageSummaryRow } from './types/models';
 
 const MODEL = 'goap.model.v1.ModelService';
 const PREFERENCES = 'goap.preferences.v1.PreferencesService';
@@ -27,4 +27,9 @@ export const models = {
     rpc<Empty, { models?: CatalogModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListCatalog', {}, signal),
   /** The contextual helper (ADR 0086): proposes values for the fields of a form. Stateless, nothing is stored. */
   suggest: (req: SuggestRequest, signal?: AbortSignal) => rpc<SuggestRequest, SuggestResponse>(MODEL, 'Suggest', req, signal),
+  /** The ledger of LLM calls (ADR 0089): a caller reads its own calls, an administrator any subject or the whole platform. */
+  listUsage: (filter: UsageFilter, signal?: AbortSignal) =>
+    rpc<{ filter: UsageFilter }, ListUsageResponse>(MODEL, 'ListUsage', { filter }, signal),
+  usageSummary: (filter: UsageFilter, groupBy: UsageGroup, signal?: AbortSignal) =>
+    rpc<{ filter: UsageFilter; groupBy: UsageGroup }, { rows?: UsageSummaryRow[] }>(MODEL, 'UsageSummary', { filter, groupBy }, signal),
 };

@@ -104,6 +104,7 @@ func Suggest(ctx context.Context, m SuggestModel, in SuggestInput) (SuggestResul
 	if !slices.ContainsFunc(aliases, func(a AliasEntry) bool { return a.Alias == HelperAlias }) {
 		return SuggestResult{}, fmt.Errorf("%w: the %q model alias is not available", ErrModelDisabled, HelperAlias)
 	}
+	ctx = llm.WithMeta(ctx, llm.CallMeta{Source: llm.SourceHelper})
 	resp, err := m.Complete(ctx, llm.Request{Model: HelperAlias, System: suggestSystem(in.Context), Messages: suggestMessages(in), JSON: true, MaxTokens: 2048})
 	if err != nil {
 		return SuggestResult{}, err

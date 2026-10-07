@@ -1,236 +1,151 @@
-// Token consumption statistics computed from the processes (steps and LLM calls).
-import type { Int64, Process } from './api';
+// Token consumption views over the gateway's ledger of LLM calls (ADR 0089): the pure side (source labels, the
+// mapping of `UsageSummary` rows to slices and time buckets, the rule of the prompt link). No process data here.
+import { int, type LLMCall, type UsageSummaryRow } from './api';
 
-const num = (v: Int64 | undefined | null) => Number(v ?? 0) || 0;
+const SOURCES: Record<string, string> = {
+  assistant: 'Assistant',
+  helper: 'Helper',
+  engine: 'Engine',
+  indexer: 'Indexer',
+  intent: 'Intent',
+  embed: 'Embeddings',
+  other: 'Other',
+};
 
-/** One LLM call (or the usage of a step that did not detail its calls). */
-export interface TokenEvent {
-  time: number;
-  processId: string;
-  action: string;
-  step: number;
-  model: string;
-  input: number;
-  output: number;
-  error: boolean;
+/** Readable name of the `source` of a call; an unknown or empty source reads as "Other". */
+export function sourceLabel(source: string | undefined): string {
+  return SOURCES[source ?? ''] ?? 'Other';
 }
 
-/** Aggregation axes of the consumption over time. */
-export type Dim = 'model' | 'agent' | 'action';
+/** The sources the console filters by. */
+export const SOURCE_IDS = Object.keys(SOURCES);
+
+/** Only an engine call of a process has a stored exchange (the `model.call` entry of the change log, ADR 0059). */
+export function hasExchange(c: Pick<LLMCall, 'source' | 'processId' | 'changeId'>): boolean {
+  return c.source === 'engine' && !!c.processId && !!c.changeId;
+}
+
+/** The step of a call, -1 when it belongs to none (proto3 omits a 0). */
+export function stepOf(c: Pick<LLMCall, 'processId' | 'step'>): number {
+  return c.processId ? (c.step ?? 0) : -1;
+}
+
+/** The position of the call in its step. */
+export function callOf(c: Pick<LLMCall, 'processId' | 'call'>): number {
+  return c.processId ? (c.call ?? 0) : -1;
+}
+
+export type Dim = 'model' | 'alias' | 'source' | 'agent' | 'action' | 'subject' | 'process';
+
+export interface Slice {
+  key: string;
+  label: string;
+  input: number;
+  output: number;
+  calls: number;
+  errors: number;
+  total: number;
+}
+
+/** The label of a group value: sources read as names, an empty value as a dash. */
+export function keyLabel(dim: Dim, key: string): string {
+  if (dim === 'source') return sourceLabel(key);
+  return key || '—';
+}
+
+export function sliceOf(dim: Dim, r: UsageSummaryRow): Slice {
+  const input = int(r.inputTokens);
+  const output = int(r.outputTokens);
+  const key = r.key ?? '';
+  return { key, label: keyLabel(dim, key), input, output, calls: int(r.calls), errors: int(r.errors), total: input + output };
+}
+
+/** Rows to slices, the biggest first. */
+export function slicesOf(dim: Dim, rows: UsageSummaryRow[] | undefined): Slice[] {
+  return (rows ?? []).map((r) => sliceOf(dim, r)).sort((a, b) => b.total - a.total);
+}
+
+export interface Totals {
+  input: number;
+  output: number;
+  total: number;
+  calls: number;
+  errors: number;
+  durationMs: number;
+}
+
+/** The grand total of any grouping (every call is in exactly one group). */
+export function totalsOf(rows: UsageSummaryRow[] | undefined): Totals {
+  const t: Totals = { input: 0, output: 0, total: 0, calls: 0, errors: 0, durationMs: 0 };
+  for (const r of rows ?? []) {
+    t.input += int(r.inputTokens);
+    t.output += int(r.outputTokens);
+    t.calls += int(r.calls);
+    t.errors += int(r.errors);
+    t.durationMs += int(r.durationMs);
+  }
+  t.total = t.input + t.output;
+  return t;
+}
 
 export interface Bucket {
   key: string;
   label: string;
   input: number;
   output: number;
-  /** input / output tokens of the bucket per value of each axis */
-  by: Record<Dim, Record<string, { input: number; output: number }>>;
+  calls: number;
 }
 
-export interface Slice {
-  key: string;
-  input: number;
-  output: number;
-  calls: number;
-  total: number;
+const HOUR = 3_600_000;
+const DAY = 86_400_000;
+
+/** Start (UTC ms) of a `day` / `hour` key of the summary. */
+export function bucketTime(key: string): number {
+  return Date.parse(key.length > 10 ? `${key}:00:00Z` : `${key}T00:00:00Z`);
 }
 
-export interface RunStat {
-  id: string;
-  title: string;
-  agent: string;
-  methodology: string;
-  status: string;
-  createdAt: string;
-  input: number;
-  output: number;
-  total: number;
-  /** tokens of the run itself, without its sub-agents */
-  own: number;
-  calls: number;
-  subAgents: number;
+/**
+ * The series of a `day` / `hour` summary, with the empty periods filled in from `fromMs` (0: the first period
+ * with data) to `toMs`. Keys and labels are UTC, as the ledger's.
+ */
+export function bucketsOf(rows: UsageSummaryRow[] | undefined, hourly: boolean, fromMs: number, toMs: number): Bucket[] {
+  const step = hourly ? HOUR : DAY;
+  const byTime = new Map<number, UsageSummaryRow>();
+  for (const r of rows ?? []) if (r.key) byTime.set(bucketTime(r.key), r);
+  if (!byTime.size && !fromMs) return [];
+  const first = Math.floor((fromMs || Math.min(...byTime.keys())) / step) * step;
+  const count = Math.min(400, Math.max(1, Math.floor((toMs - first) / step) + 1));
+  const out: Bucket[] = [];
+  for (let i = 0; i < count; i++) {
+    const t = first + i * step;
+    const r = byTime.get(t);
+    const d = new Date(t);
+    const iso = d.toISOString();
+    out.push({
+      key: hourly ? iso.slice(0, 13) : iso.slice(0, 10),
+      label: hourly ? `${iso.slice(11, 13)}:00` : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', timeZone: 'UTC' }),
+      input: int(r?.inputTokens),
+      output: int(r?.outputTokens),
+      calls: int(r?.calls),
+    });
+  }
+  return out;
+}
+
+export interface RunSlice extends Slice {
   /** total relative to the average run */
   ratio: number;
 }
 
-export interface TokenStats {
-  input: number;
-  output: number;
-  total: number;
-  calls: number;
-  errors: number;
-  runs: number;
-  avgPerRun: number;
-  medianPerRun: number;
-  buckets: Bucket[];
-  byModel: Slice[];
-  byAgent: Slice[];
-  byAction: Slice[];
-  topRuns: RunStat[];
-  topCalls: (TokenEvent & { title: string; total: number })[];
+/** The runs that consume the most: the per-process summary without the calls of no process. */
+export function runsOf(rows: UsageSummaryRow[] | undefined): { runs: RunSlice[]; avg: number } {
+  const list = slicesOf('process', rows).filter((s) => s.key && s.total > 0);
+  const avg = list.length ? list.reduce((a, s) => a + s.total, 0) / list.length : 0;
+  return { runs: list.map((s) => ({ ...s, ratio: avg ? s.total / avg : 0 })), avg };
 }
 
-export function eventsOf(processes: Process[]): TokenEvent[] {
-  const out: TokenEvent[] = [];
-  for (const p of processes) {
-    const id = p.id ?? '';
-    const created = Date.parse(p.createdAt ?? '') || 0;
-    const steps = p.steps ?? [];
-    let detailed = 0;
-    let stepIn = 0;
-    let stepOut = 0;
-    for (const s of steps) {
-      const t = Date.parse(s.startedAt ?? '') || created;
-      const calls = s.llmCalls ?? [];
-      for (const c of calls) {
-        out.push({ time: t, processId: id, action: s.action ?? '', step: s.index ?? 0, model: c.model || 'unknown', input: num(c.inputTokens), output: num(c.outputTokens), error: !!(c as { error?: string }).error });
-        detailed++;
-        stepIn += num(c.inputTokens);
-        stepOut += num(c.outputTokens);
-      }
-      if (!calls.length && (num(s.usage?.inputTokens) || num(s.usage?.outputTokens))) {
-        out.push({ time: t, processId: id, action: s.action ?? '', step: s.index ?? 0, model: 'unknown', input: num(s.usage?.inputTokens), output: num(s.usage?.outputTokens), error: false });
-        detailed++;
-        stepIn += num(s.usage?.inputTokens);
-        stepOut += num(s.usage?.outputTokens);
-      }
-    }
-    // intent / ranking calls are not in a step: what the totals hold beyond the steps
-    const restIn = num(p.usage?.inputTokens) - stepIn;
-    const restOut = num(p.usage?.outputTokens) - stepOut;
-    if (restIn > 0 || restOut > 0) {
-      out.push({ time: created, processId: id, action: detailed ? '(intent)' : '(run)', step: -1, model: 'unknown', input: Math.max(restIn, 0), output: Math.max(restOut, 0), error: false });
-    }
-  }
-  return out;
-}
-
-function slices(events: TokenEvent[], key: (e: TokenEvent) => string): Slice[] {
-  const m = new Map<string, Slice>();
-  for (const e of events) {
-    const k = key(e);
-    const s = m.get(k) ?? { key: k, input: 0, output: 0, calls: 0, total: 0 };
-    s.input += e.input;
-    s.output += e.output;
-    s.calls += 1;
-    s.total += e.input + e.output;
-    m.set(k, s);
-  }
-  return [...m.values()].sort((a, b) => b.total - a.total);
-}
-
-function bucketsOf(events: TokenEvent[], from: number, to: number, hourly: boolean, keys: Record<Dim, (e: TokenEvent) => string>): Bucket[] {
-  const step = hourly ? 3_600_000 : 86_400_000;
-  const start = new Date(from);
-  if (hourly) start.setMinutes(0, 0, 0);
-  else start.setHours(0, 0, 0, 0);
-  const first = start.getTime();
-  const count = Math.min(400, Math.max(1, Math.floor((to - first) / step) + 1));
-  const out: Bucket[] = [];
-  for (let i = 0; i < count; i++) {
-    const d = new Date(first + i * step);
-    out.push({
-      key: String(first + i * step),
-      label: hourly ? d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }),
-      input: 0,
-      output: 0,
-      by: { model: {}, agent: {}, action: {} },
-    });
-  }
-  for (const e of events) {
-    const i = Math.floor((e.time - first) / step);
-    if (i >= 0 && i < out.length) {
-      out[i].input += e.input;
-      out[i].output += e.output;
-      for (const d of ['model', 'agent', 'action'] as Dim[]) {
-        const k = keys[d](e);
-        const c = (out[i].by[d][k] ??= { input: 0, output: 0 });
-        c.input += e.input;
-        c.output += e.output;
-      }
-    }
-  }
-  return out;
-}
-
-/** `sinceMs`: 0 for the whole history. */
-export function computeStats(processes: Process[], sinceMs: number, now = Date.now()): TokenStats {
-  const byId = new Map(processes.map((p) => [p.id ?? '', p]));
-  const rootOf = (id: string): string => {
-    let cur = id;
-    for (let i = 0; i < 50; i++) {
-      const parent = byId.get(cur)?.parentId;
-      if (!parent || !byId.has(parent)) return cur;
-      cur = parent;
-    }
-    return cur;
-  };
-  const events = eventsOf(processes).filter((e) => !sinceMs || e.time >= sinceMs);
-
-  const runs = new Map<string, RunStat>();
-  const subs = new Map<string, Set<string>>();
-  for (const e of events) {
-    const root = rootOf(e.processId);
-    const rp = byId.get(root);
-    const r = runs.get(root) ?? {
-      id: root,
-      title: rp?.title || rp?.goal || rp?.agent || root.slice(0, 8),
-      agent: rp?.agent ?? '',
-      methodology: rp?.methodology ?? '',
-      status: String(rp?.status ?? ''),
-      createdAt: rp?.createdAt ?? '',
-      input: 0,
-      output: 0,
-      total: 0,
-      own: 0,
-      calls: 0,
-      subAgents: 0,
-      ratio: 0,
-    };
-    r.input += e.input;
-    r.output += e.output;
-    r.total += e.input + e.output;
-    r.calls += 1;
-    if (e.processId === root) r.own += e.input + e.output;
-    else subs.set(root, (subs.get(root) ?? new Set()).add(e.processId));
-    runs.set(root, r);
-  }
-  const list = [...runs.values()].filter((r) => r.total > 0);
-  for (const r of list) r.subAgents = subs.get(r.id)?.size ?? 0;
-  const total = list.reduce((a, r) => a + r.total, 0);
-  const avg = list.length ? total / list.length : 0;
-  const sorted = list.map((r) => r.total).sort((a, b) => a - b);
-  const median = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0;
-  for (const r of list) r.ratio = avg ? r.total / avg : 0;
-  list.sort((a, b) => b.total - a.total);
-
-  const input = events.reduce((a, e) => a + e.input, 0);
-  const output = events.reduce((a, e) => a + e.output, 0);
-  const from = sinceMs || (events.length ? Math.min(...events.map((e) => e.time)) : now);
-  const hourly = !!sinceMs && now - sinceMs <= 2 * 86_400_000;
-  const keys: Record<Dim, (e: TokenEvent) => string> = {
-    model: (e) => e.model,
-    agent: (e) => byId.get(e.processId)?.agent || byId.get(e.processId)?.methodology || 'unknown',
-    action: (e) => e.action || 'unknown',
-  };
-  const titleOf = (id: string) => runs.get(rootOf(id))?.title ?? id.slice(0, 8);
-  return {
-    input,
-    output,
-    total: input + output,
-    calls: events.length,
-    errors: events.filter((e) => e.error).length,
-    runs: list.length,
-    avgPerRun: avg,
-    medianPerRun: median,
-    buckets: bucketsOf(events, from, now, hourly, keys),
-    byModel: slices(events, keys.model),
-    byAgent: slices(events, keys.agent),
-    byAction: slices(events, keys.action),
-    topRuns: list,
-    topCalls: events
-      .map((e) => ({ ...e, title: titleOf(e.processId), total: e.input + e.output }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 10),
-  };
+/** The most expensive calls of a list, biggest first. */
+export function topCalls(calls: LLMCall[], n = 10): LLMCall[] {
+  const total = (c: LLMCall) => int(c.inputTokens) + int(c.outputTokens);
+  return [...calls].sort((a, b) => total(b) - total(a)).slice(0, n);
 }

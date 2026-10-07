@@ -88,6 +88,7 @@ func (d *discussion) add(role, text string) {
 // loop is the tool loop: the model answers {"message", "tool_calls"}; the tools it asks for are run and their results
 // go back to it, until it asks for none or MaxRounds model calls were made. It returns the final text.
 func (t *turn) loop(ctx context.Context) (string, error) {
+	ctx = llm.WithMeta(ctx, llm.CallMeta{Source: llm.SourceAssistant, ConversationID: t.conversation}) // the ledger of the gateway (ADR 0089)
 	var d discussion
 	for _, m := range t.history {
 		d.add(m.Role, m.Content)

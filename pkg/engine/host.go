@@ -37,6 +37,11 @@ type Host struct {
 	allTools  []mcp.ToolInfo
 	toolsErr  error
 
+	// step is the step the action runs as and base the number of model calls that step already holds (the planning
+	// calls that chose it): the call of the host at position n of llmCalls is the call base+n of the step, as the
+	// journal numbers them and as the ledger of the gateway records it (ADR 0089).
+	step, base int
+
 	mu        sync.Mutex
 	llmCalls  []LLMCall
 	toolCalls []ToolCall
@@ -117,8 +122,15 @@ func (h *Host) completeLLM(ctx context.Context, client llm.Client, req llm.Reque
 	if client == nil {
 		return llm.Response{}, errors.New("no model gateway configured")
 	}
+	// the slot of the call is reserved before it starts: its position is its number in the step, concurrent calls included
+	h.mu.Lock()
+	slot := len(h.llmCalls)
+	h.llmCalls = append(h.llmCalls, LLMCall{})
+	h.mu.Unlock()
+	ctx = llm.WithMeta(h.ctx(ctx), llm.CallMeta{Source: llm.SourceEngine, ProcessID: h.process.ID, ChangeID: string(h.process.ChangeID),
+		Step: h.step, Call: h.base + slot, Action: h.action, Agent: h.process.Agent})
 	start := time.Now()
-	resp, err := client.Complete(h.ctx(ctx), req)
+	resp, err := client.Complete(ctx, req)
 	call := LLMCall{Provider: resp.Provider, Model: resp.Model, InputTokens: int64(resp.Usage.InputTokens),
 		OutputTokens: int64(resp.Usage.OutputTokens), DurationMs: time.Since(start).Milliseconds(), Exchange: exchangeOf(req, resp)}
 	if call.Model == "" {
@@ -128,7 +140,7 @@ func (h *Host) completeLLM(ctx context.Context, client llm.Client, req llm.Reque
 		call.Error = err.Error()
 	}
 	h.mu.Lock()
-	h.llmCalls = append(h.llmCalls, call)
+	h.llmCalls[slot] = call
 	h.mu.Unlock()
 	return resp, err
 }

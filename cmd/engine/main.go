@@ -7,6 +7,7 @@ import (
 	"fmt"
 	triggerevents "github.com/zimwip/goap/pkg/events"
 	"os"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
@@ -44,7 +46,7 @@ func main() {
 	defer telemetry.Setup(ctx, log, "engine")(ctx)
 	hc := platform.H2CClient()
 	copts := telemetry.ClientOptions()
-	var models llm.Client = telemetry.LLMClient{Next: modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), copts...)}
+	var models llm.Client = telemetry.LLMClient{Next: modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), append(slices.Clone(copts), identity.Forward())...)}
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
 

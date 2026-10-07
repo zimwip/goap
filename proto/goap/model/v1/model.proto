@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package goap.model.v1;
 
+import "google/protobuf/timestamp.proto";
+
 // ModelService is the model gateway: one API over several LLM providers and
 // models, addressed by alias ("default", "fast", …) or "provider/model".
 service ModelService {
@@ -25,11 +27,31 @@ service ModelService {
   rpc DiscoverModels(DiscoverModelsRequest) returns (DiscoverModelsResponse);
   // The catalog: models offered on the platform, with quota and access level.
   rpc ListCatalog(ListCatalogRequest) returns (ListCatalogResponse);
+
+  // The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
+  // assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
+  rpc ListUsage(ListUsageRequest) returns (ListUsageResponse);
+  rpc UsageSummary(UsageSummaryRequest) returns (UsageSummaryResponse);
 }
 
 message Message {
   string role = 1;
   string content = 2;
+}
+
+// What the caller declares about a call, for the ledger (accounting only: never an authorisation input; the subject
+// and the project of a call are the principal's).
+message CallMeta {
+  // who asked: engine | assistant | helper | indexer | intent | ... (lower case, at most 40 characters)
+  string source = 1;
+  string conversation_id = 2;
+  string process_id = 3;
+  string change_id = 4;
+  // the step of the process and the position of the call in that step (meaningful with a process_id only)
+  int32 step = 5;
+  string action = 6;
+  string agent = 7;
+  int32 call = 8;
 }
 
 message CompleteRequest {
@@ -38,6 +60,7 @@ message CompleteRequest {
   repeated Message messages = 3;
   int32 max_tokens = 4;
   bool json = 5;
+  CallMeta meta = 6;
 }
 
 message Usage {
@@ -56,6 +79,7 @@ message EmbedRequest {
   // alias or "provider/model"; empty: the "embed" alias
   string model = 1;
   repeated string texts = 2;
+  CallMeta meta = 3;
 }
 
 message Vector {
@@ -231,4 +255,94 @@ message SuggestResponse {
   string message = 1;
   repeated SuggestProposal proposals = 2;
   Usage usage = 3;
+}
+
+
+// ---- the ledger of LLM calls (ADR 0089) --------------------------------------
+
+// One LLM call. The ledger stores no prompt: the exchange of an engine call stays in the change log (ADR 0059, the
+// model.call entry of change_id / process_id with this step and call).
+message LLMCall {
+  int64 seq = 1;
+  google.protobuf.Timestamp at = 2;
+  int64 duration_ms = 3;
+  // the principal's, "" for a trusted internal caller without identity
+  string subject = 4;
+  string project = 5;
+  string org = 6;
+  // the name requested, "" when a literal provider/model
+  string alias = 7;
+  // empty when the model could not be resolved (a refused call)
+  string provider = 8;
+  string model = 9;
+  // complete | embed
+  string kind = 10;
+  int64 input_tokens = 11;
+  int64 output_tokens = 12;
+  // the failure, refusals included (quota exceeded, forbidden, ...); empty when it succeeded
+  string error = 13;
+  string source = 14;
+  string conversation_id = 15;
+  string process_id = 16;
+  string change_id = 17;
+  // -1 when the call belongs to no process
+  int32 step = 18;
+  string action = 19;
+  string agent = 20;
+  int32 call = 21;
+}
+
+// What to select. Every field narrows; empty matches everything. A caller who is not an administrator sees its own
+// calls only (subject is forced to it; naming another is refused).
+message UsageFilter {
+  google.protobuf.Timestamp from = 1;
+  google.protobuf.Timestamp to = 2;
+  string subject = 3;
+  string project = 4;
+  // the model id, or provider/model
+  string model = 5;
+  string alias = 6;
+  string source = 7;
+  string process_id = 8;
+  string change_id = 9;
+  string conversation_id = 10;
+  // only the calls after this seq (the cursor of a feed)
+  int64 after_seq = 11;
+  // 0: 500; at most 5000
+  int32 limit = 12;
+}
+
+message ListUsageRequest {
+  UsageFilter filter = 1;
+}
+
+// calls are ascending by seq: with after_seq, the first ones after it; without, the latest `limit` ones.
+message ListUsageResponse {
+  repeated LLMCall calls = 1;
+  // the cursor to pass as after_seq to get what follows (after_seq itself when nothing matched)
+  int64 next_seq = 2;
+  // more calls follow next_seq
+  bool has_more = 3;
+}
+
+message UsageSummaryRequest {
+  // after_seq and limit are ignored
+  UsageFilter filter = 1;
+  // model | alias | source | subject | process | action | agent | day | hour
+  string group_by = 2;
+}
+
+message UsageSummaryRow {
+  // the value of the group (day: YYYY-MM-DD, hour: YYYY-MM-DDTHH, UTC; "" for calls with none)
+  string key = 1;
+  int64 calls = 2;
+  int64 input_tokens = 3;
+  int64 output_tokens = 4;
+  int64 errors = 5;
+  int64 duration_ms = 6;
+}
+
+message UsageSummaryResponse {
+  // by decreasing tokens; day and hour ascending
+  repeated UsageSummaryRow rows = 1;
 }

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	modelv1 "github.com/zimwip/goap/gen/goap/model/v1"
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
@@ -63,7 +64,7 @@ func (h *Handler) guard(ctx context.Context, hdr http.Header) (context.Context, 
 
 func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.CompleteRequest]) (*connect.Response[modelv1.CompleteResponse], error) {
 	// callers without identity headers (and no dev default) are trusted internal services
-	ctx = h.Identity.Context(ctx, r.Header())
+	ctx = llm.WithMeta(h.Identity.Context(ctx, r.Header()), metaFromPB(r.Msg.Meta))
 	req := llm.Request{Model: r.Msg.Model, System: r.Msg.System, MaxTokens: int(r.Msg.MaxTokens), JSON: r.Msg.Json}
 	for _, m := range r.Msg.Messages {
 		req.Messages = append(req.Messages, llm.Message{Role: m.Role, Content: m.Content})
@@ -191,6 +192,22 @@ func (h *Handler) ListCatalog(ctx context.Context, r *connect.Request[modelv1.Li
 	return connect.NewResponse(out), nil
 }
 
+// metaToPB is the declaration of the calls made with ctx, for the ledger of the gateway (ADR 0089).
+func metaToPB(ctx context.Context) *modelv1.CallMeta {
+	m := llm.MetaFrom(ctx)
+	return &modelv1.CallMeta{Source: m.Source, ConversationId: m.ConversationID, ProcessId: m.ProcessID, ChangeId: m.ChangeID,
+		Step: int32(m.Step), Action: m.Action, Agent: m.Agent, Call: int32(m.Call)}
+}
+
+// metaFromPB is the declaration of a request, cleaned (the caller is not trusted with it beyond accounting).
+func metaFromPB(m *modelv1.CallMeta) llm.CallMeta {
+	if m == nil {
+		return llm.CallMeta{}.Clean()
+	}
+	return llm.CallMeta{Source: m.Source, ConversationID: m.ConversationId, ProcessID: m.ProcessId, ChangeID: m.ChangeId,
+		Step: int(m.Step), Action: m.Action, Agent: m.Agent, Call: int(m.Call)}.Clean()
+}
+
 // Client adapts the model gateway Connect client to llm.Client.
 type Client struct {
 	rpc modelv1connect.ModelServiceClient
@@ -209,7 +226,7 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 
 // Complete implements llm.Client.
 func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
-	in := &modelv1.CompleteRequest{Model: req.Model, System: req.System, MaxTokens: int32(req.MaxTokens), Json: req.JSON}
+	in := &modelv1.CompleteRequest{Model: req.Model, System: req.System, MaxTokens: int32(req.MaxTokens), Json: req.JSON, Meta: metaToPB(ctx)}
 	for _, m := range req.Messages {
 		in.Messages = append(in.Messages, &modelv1.Message{Role: m.Role, Content: m.Content})
 	}
@@ -225,7 +242,7 @@ func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 }
 
 func (h *Handler) Embed(ctx context.Context, r *connect.Request[modelv1.EmbedRequest]) (*connect.Response[modelv1.EmbedResponse], error) {
-	ctx = h.Identity.Context(ctx, r.Header())
+	ctx = llm.WithMeta(h.Identity.Context(ctx, r.Header()), metaFromPB(r.Msg.Meta))
 	resp, err := h.Service.Embed(ctx, llm.EmbedRequest{Model: r.Msg.Model, Texts: r.Msg.Texts})
 	if err != nil {
 		if errors.Is(err, ErrForbidden) || errors.Is(err, ErrQuotaExceeded) || errors.Is(err, ErrModelDisabled) || errors.Is(err, ErrInvalid) {
@@ -260,7 +277,7 @@ func (c *Client) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, err
 
 // Embed implements llm.Embedder.
 func (c *Client) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedResponse, error) {
-	r, err := c.rpc.Embed(ctx, connect.NewRequest(&modelv1.EmbedRequest{Model: req.Model, Texts: req.Texts}))
+	r, err := c.rpc.Embed(ctx, connect.NewRequest(&modelv1.EmbedRequest{Model: req.Model, Texts: req.Texts, Meta: metaToPB(ctx)}))
 	if err != nil {
 		return llm.EmbedResponse{}, err
 	}
@@ -303,4 +320,63 @@ func suggestFromPB(m *modelv1.SuggestRequest) SuggestInput {
 		in.Messages = append(in.Messages, SuggestMessage{Role: x.Role, Text: x.Text})
 	}
 	return in
+}
+
+// isAdmin reports whether the caller administers the platform and so may read the calls of any subject. Without an
+// authorizer nobody is: the ledger is then readable by its callers for their own calls only.
+func (h *Handler) isAdmin(ctx context.Context) bool {
+	if h.Authz == nil {
+		return false
+	}
+	return authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: AdminAction, Resource: authz.Resource{Type: AdminResource}}) == nil
+}
+
+func filterFromPB(f *modelv1.UsageFilter) UsageFilter {
+	if f == nil {
+		return UsageFilter{}
+	}
+	out := UsageFilter{Subject: f.Subject, Project: f.Project, Model: f.Model, Alias: f.Alias, Source: f.Source, ProcessID: f.ProcessId,
+		ChangeID: f.ChangeId, ConversationID: f.ConversationId, AfterSeq: f.AfterSeq, Limit: int(f.Limit)}
+	if f.From != nil {
+		out.From = f.From.AsTime()
+	}
+	if f.To != nil {
+		out.To = f.To.AsTime()
+	}
+	return out
+}
+
+func callToPB(c Call) *modelv1.LLMCall {
+	return &modelv1.LLMCall{Seq: c.Seq, At: timestamppb.New(c.At), DurationMs: c.DurationMs, Subject: c.Subject, Project: c.Project, Org: c.Org,
+		Alias: c.Alias, Provider: c.Provider, Model: c.Model, Kind: c.Kind, InputTokens: c.InputTokens, OutputTokens: c.OutputTokens, Error: c.Error,
+		Source: c.Source, ConversationId: c.ConversationID, ProcessId: c.ProcessID, ChangeId: c.ChangeID, Step: int32(c.Step), Action: c.Action,
+		Agent: c.Agent, Call: int32(c.CallIndex)}
+}
+
+// ListUsage reads the ledger: the caller's own calls, any subject's for an administrator.
+func (h *Handler) ListUsage(ctx context.Context, r *connect.Request[modelv1.ListUsageRequest]) (*connect.Response[modelv1.ListUsageResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	calls, next, more, err := h.Service.ListCalls(ctx, filterFromPB(r.Msg.Filter), h.isAdmin(ctx))
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	out := &modelv1.ListUsageResponse{NextSeq: next, HasMore: more}
+	for _, c := range calls {
+		out.Calls = append(out.Calls, callToPB(c))
+	}
+	return connect.NewResponse(out), nil
+}
+
+// UsageSummary groups the ledger, with the same visibility as ListUsage.
+func (h *Handler) UsageSummary(ctx context.Context, r *connect.Request[modelv1.UsageSummaryRequest]) (*connect.Response[modelv1.UsageSummaryResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	rows, err := h.Service.Summary(ctx, filterFromPB(r.Msg.Filter), r.Msg.GroupBy, h.isAdmin(ctx))
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	out := &modelv1.UsageSummaryResponse{}
+	for _, x := range rows {
+		out.Rows = append(out.Rows, &modelv1.UsageSummaryRow{Key: x.Key, Calls: x.Calls, InputTokens: x.Input, OutputTokens: x.Output, Errors: x.Errors, DurationMs: x.DurationMs})
+	}
+	return connect.NewResponse(out), nil
 }

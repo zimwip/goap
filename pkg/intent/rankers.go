@@ -137,7 +137,7 @@ func (r LLMRanker) ask(ctx context.Context, turns []Turn, goals []GoalInfo, v an
 	if model == "" {
 		model = "fast"
 	}
-	resp, err := r.Client.Complete(ctx, llm.Request{
+	resp, err := r.Client.Complete(llm.WithMeta(ctx, llm.CallMeta{Source: llm.SourceIntent}), llm.Request{
 		Model: model, System: rankSystem, JSON: true, MaxTokens: 2048,
 		Messages: []llm.Message{{Role: "user", Content: "Goals:\n" + string(g) + "\n\nDialogue:\n" + dialog.String()}},
 	})

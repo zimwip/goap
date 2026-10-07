@@ -166,13 +166,17 @@ func (s *Service) build(ctx context.Context, p ProviderRecord, overrideKey strin
 // Complete resolves the model, applies the catalog policy (availability,
 // required roles, global quota) and calls the provider. Callers without
 // identity are trusted internal services and bypass the role check only.
+// Every call, refused ones included, is a row of the ledger (ADR 0089).
 func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
+	rec := s.begin(ctx, KindComplete, req.Model)
 	t, m, period, err := s.admit(ctx, req.Model)
 	if err != nil {
+		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
 		return llm.Response{}, err
 	}
 	resp, err := s.Router.Complete(ctx, req)
 	s.recordUsage(ctx, t, m, period, int64(resp.Usage.InputTokens+resp.Usage.OutputTokens))
+	rec.finish(ctx, t.Provider, t.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens, err)
 	return resp, err
 }
 
@@ -182,12 +186,15 @@ func (s *Service) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedRes
 	if req.Model == "" {
 		req.Model = llm.EmbedAlias
 	}
+	rec := s.begin(ctx, KindEmbed, req.Model)
 	t, m, period, err := s.admit(ctx, req.Model)
 	if err != nil {
+		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
 		return llm.EmbedResponse{}, err
 	}
 	resp, err := s.Router.Embed(ctx, req)
 	s.recordUsage(ctx, t, m, period, int64(resp.Tokens))
+	rec.finish(ctx, t.Provider, t.Model, resp.Tokens, 0, err)
 	return resp, err
 }
 

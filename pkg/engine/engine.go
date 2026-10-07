@@ -799,6 +799,7 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		agentMCPs = ag.MCPs
 	}
 	host := e.newHost(p, action, agentMCPs)
+	host.step, host.base = i, len(p.Steps[i].LLMCalls)
 	sc := stepContext(m, p, action)
 	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host, Step: sc})
 	step := &p.Steps[i]

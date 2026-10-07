@@ -1,4 +1,5 @@
 // Model gateway administration types (proto3 JSON).
+import type { Int64 } from './common';
 
 export interface ProviderKind {
   id: string;
@@ -99,4 +100,74 @@ export interface SuggestResponse {
   message?: string;
   proposals?: SuggestProposal[];
   usage?: { inputTokens?: number; outputTokens?: number };
+}
+
+// ---- the ledger of LLM calls (ADR 0089) ------------------------------------------
+
+/** One LLM call the gateway served or refused, whoever asked. No prompt: only engine calls have a stored exchange. */
+export interface LLMCall {
+  seq: Int64;
+  /** RFC 3339 */
+  at?: string;
+  durationMs?: Int64;
+  subject?: string;
+  project?: string;
+  org?: string;
+  /** the name requested, empty for a literal provider/model */
+  alias?: string;
+  provider?: string;
+  model?: string;
+  kind?: 'complete' | 'embed' | string;
+  inputTokens?: Int64;
+  outputTokens?: Int64;
+  error?: string;
+  /** engine | assistant | helper | indexer | intent | ... */
+  source?: string;
+  conversationId?: string;
+  processId?: string;
+  changeId?: string;
+  /** -1 (or absent: proto3 omits 0, so test `processId` first) when the call belongs to no process */
+  step?: number;
+  action?: string;
+  agent?: string;
+  call?: number;
+}
+
+/** Every field narrows; empty matches everything. A caller who is not an administrator sees its own calls only. */
+export interface UsageFilter {
+  /** RFC 3339 */
+  from?: string;
+  to?: string;
+  subject?: string;
+  project?: string;
+  /** the model id, or provider/model */
+  model?: string;
+  alias?: string;
+  source?: string;
+  processId?: string;
+  changeId?: string;
+  conversationId?: string;
+  /** only the calls after this seq (the cursor of a feed) */
+  afterSeq?: Int64;
+  /** 0: 500; at most 5000 */
+  limit?: number;
+}
+
+export interface ListUsageResponse {
+  /** ascending by seq */
+  calls?: LLMCall[];
+  nextSeq?: Int64;
+  hasMore?: boolean;
+}
+
+export type UsageGroup = 'model' | 'alias' | 'source' | 'subject' | 'process' | 'action' | 'agent' | 'day' | 'hour';
+
+export interface UsageSummaryRow {
+  /** day: YYYY-MM-DD, hour: YYYY-MM-DDTHH (UTC), empty for calls with none */
+  key?: string;
+  calls?: Int64;
+  inputTokens?: Int64;
+  outputTokens?: Int64;
+  errors?: Int64;
+  durationMs?: Int64;
 }

@@ -53,6 +53,11 @@ const (
 	// ModelServiceListCatalogProcedure is the fully-qualified name of the ModelService's ListCatalog
 	// RPC.
 	ModelServiceListCatalogProcedure = "/goap.model.v1.ModelService/ListCatalog"
+	// ModelServiceListUsageProcedure is the fully-qualified name of the ModelService's ListUsage RPC.
+	ModelServiceListUsageProcedure = "/goap.model.v1.ModelService/ListUsage"
+	// ModelServiceUsageSummaryProcedure is the fully-qualified name of the ModelService's UsageSummary
+	// RPC.
+	ModelServiceUsageSummaryProcedure = "/goap.model.v1.ModelService/UsageSummary"
 )
 
 // ModelServiceClient is a client for the goap.model.v1.ModelService service.
@@ -76,6 +81,10 @@ type ModelServiceClient interface {
 	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
 	// The catalog: models offered on the platform, with quota and access level.
 	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
+	// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
+	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
+	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
+	UsageSummary(context.Context, *connect.Request[v1.UsageSummaryRequest]) (*connect.Response[v1.UsageSummaryResponse], error)
 }
 
 // NewModelServiceClient constructs a client for the goap.model.v1.ModelService service. By default,
@@ -137,6 +146,18 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("ListCatalog")),
 			connect.WithClientOptions(opts...),
 		),
+		listUsage: connect.NewClient[v1.ListUsageRequest, v1.ListUsageResponse](
+			httpClient,
+			baseURL+ModelServiceListUsageProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("ListUsage")),
+			connect.WithClientOptions(opts...),
+		),
+		usageSummary: connect.NewClient[v1.UsageSummaryRequest, v1.UsageSummaryResponse](
+			httpClient,
+			baseURL+ModelServiceUsageSummaryProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("UsageSummary")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -150,6 +171,8 @@ type modelServiceClient struct {
 	listProviders     *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
 	discoverModels    *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
 	listCatalog       *connect.Client[v1.ListCatalogRequest, v1.ListCatalogResponse]
+	listUsage         *connect.Client[v1.ListUsageRequest, v1.ListUsageResponse]
+	usageSummary      *connect.Client[v1.UsageSummaryRequest, v1.UsageSummaryResponse]
 }
 
 // Complete calls goap.model.v1.ModelService.Complete.
@@ -192,6 +215,16 @@ func (c *modelServiceClient) ListCatalog(ctx context.Context, req *connect.Reque
 	return c.listCatalog.CallUnary(ctx, req)
 }
 
+// ListUsage calls goap.model.v1.ModelService.ListUsage.
+func (c *modelServiceClient) ListUsage(ctx context.Context, req *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error) {
+	return c.listUsage.CallUnary(ctx, req)
+}
+
+// UsageSummary calls goap.model.v1.ModelService.UsageSummary.
+func (c *modelServiceClient) UsageSummary(ctx context.Context, req *connect.Request[v1.UsageSummaryRequest]) (*connect.Response[v1.UsageSummaryResponse], error) {
+	return c.usageSummary.CallUnary(ctx, req)
+}
+
 // ModelServiceHandler is an implementation of the goap.model.v1.ModelService service.
 type ModelServiceHandler interface {
 	Complete(context.Context, *connect.Request[v1.CompleteRequest]) (*connect.Response[v1.CompleteResponse], error)
@@ -213,6 +246,10 @@ type ModelServiceHandler interface {
 	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
 	// The catalog: models offered on the platform, with quota and access level.
 	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
+	// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
+	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
+	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
+	UsageSummary(context.Context, *connect.Request[v1.UsageSummaryRequest]) (*connect.Response[v1.UsageSummaryResponse], error)
 }
 
 // NewModelServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -270,6 +307,18 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("ListCatalog")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceListUsageHandler := connect.NewUnaryHandler(
+		ModelServiceListUsageProcedure,
+		svc.ListUsage,
+		connect.WithSchema(modelServiceMethods.ByName("ListUsage")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServiceUsageSummaryHandler := connect.NewUnaryHandler(
+		ModelServiceUsageSummaryProcedure,
+		svc.UsageSummary,
+		connect.WithSchema(modelServiceMethods.ByName("UsageSummary")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.model.v1.ModelService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ModelServiceCompleteProcedure:
@@ -288,6 +337,10 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 			modelServiceDiscoverModelsHandler.ServeHTTP(w, r)
 		case ModelServiceListCatalogProcedure:
 			modelServiceListCatalogHandler.ServeHTTP(w, r)
+		case ModelServiceListUsageProcedure:
+			modelServiceListUsageHandler.ServeHTTP(w, r)
+		case ModelServiceUsageSummaryProcedure:
+			modelServiceUsageSummaryHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -327,4 +380,12 @@ func (UnimplementedModelServiceHandler) DiscoverModels(context.Context, *connect
 
 func (UnimplementedModelServiceHandler) ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListCatalog is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListUsage is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) UsageSummary(context.Context, *connect.Request[v1.UsageSummaryRequest]) (*connect.Response[v1.UsageSummaryResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.UsageSummary is not implemented"))
 }

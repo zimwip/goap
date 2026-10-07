@@ -119,8 +119,10 @@ func (r *planRecorder) complete(ctx context.Context, req llm.Request) (llm.Respo
 	if r.client == nil {
 		return llm.Response{}, errors.New("no model gateway configured")
 	}
+	meta := llm.MetaFrom(ctx) // stamped by planStep: the call is the next of the step it chooses (ADR 0089)
+	meta.Call = len(r.calls)
 	start := time.Now()
-	resp, err := r.client.Complete(ctx, req)
+	resp, err := r.client.Complete(llm.WithMeta(ctx, meta), req)
 	call := LLMCall{Provider: resp.Provider, Model: resp.Model, InputTokens: int64(resp.Usage.InputTokens),
 		OutputTokens: int64(resp.Usage.OutputTokens), DurationMs: time.Since(start).Milliseconds(), Exchange: exchangeOf(req, resp)}
 	if call.Model == "" {

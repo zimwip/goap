@@ -34,17 +34,27 @@ func PeriodKey(period string, t time.Time) string {
 	return PeriodTotal
 }
 
-// Store persists the token usage, the only state of the gateway: what is configured (providers, models,
-// aliases) is read from the graph. Usage is keyed by the key of the model node (llmcfg.ModelKey).
+// Store persists the state of the gateway, which is the quota counters and the ledger of calls (ADR 0089): what is
+// configured (providers, models, aliases) is read from the graph. The counter is keyed by the key of the model node
+// (llmcfg.ModelKey) and period and serves the admission only; it outlives the purge of the ledger.
 type Store interface {
 	Usage(ctx context.Context, model, period string) (int64, error)
 	AddUsage(ctx context.Context, model, period string, tokens int64) error
+	// AppendCall writes a row of the ledger and returns its seq (monotonic).
+	AppendCall(ctx context.Context, c Call) (int64, error)
+	// Calls lists the calls of the filter ascending by seq (see Service.ListCalls) and whether more match.
+	Calls(ctx context.Context, f UsageFilter) ([]Call, bool, error)
+	Summary(ctx context.Context, f UsageFilter, group string) ([]SummaryRow, error)
+	// PurgeCalls deletes the calls before t and returns how many.
+	PurgeCalls(ctx context.Context, before time.Time) (int64, error)
 }
 
 // MemoryStore is an in-memory Store (tests, GOAP_STORE=memory).
 type MemoryStore struct {
 	mu    sync.Mutex
 	usage map[[2]string]int64
+	calls []Call
+	seq   int64
 }
 
 var _ Store = (*MemoryStore)(nil)
@@ -63,4 +73,59 @@ func (s *MemoryStore) AddUsage(_ context.Context, model, period string, tokens i
 	defer s.mu.Unlock()
 	s.usage[[2]string{model, period}] += tokens
 	return nil
+}
+
+func (s *MemoryStore) AppendCall(_ context.Context, c Call) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.seq++
+	c.Seq = s.seq
+	s.calls = append(s.calls, c)
+	return c.Seq, nil
+}
+
+func (s *MemoryStore) selected(f UsageFilter) []Call {
+	var out []Call
+	for _, c := range s.calls {
+		if c.Seq > f.AfterSeq && f.match(c) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func (s *MemoryStore) Calls(_ context.Context, f UsageFilter) ([]Call, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := s.selected(f)
+	n := f.limit()
+	if len(out) <= n {
+		return out, false, nil
+	}
+	if f.AfterSeq > 0 {
+		return out[:n], true, nil
+	}
+	return out[len(out)-n:], true, nil
+}
+
+func (s *MemoryStore) Summary(_ context.Context, f UsageFilter, group string) ([]SummaryRow, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return summarize(s.selected(f), group), nil
+}
+
+func (s *MemoryStore) PurgeCalls(_ context.Context, before time.Time) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	kept := s.calls[:0]
+	var n int64
+	for _, c := range s.calls {
+		if c.At.Before(before) {
+			n++
+			continue
+		}
+		kept = append(kept, c)
+	}
+	s.calls = kept
+	return n, nil
 }

@@ -201,7 +201,7 @@ func (e *Embedder) Embed(ctx context.Context, texts []string) ([][]float32, erro
 		return nil, fmt.Errorf("embedding model unavailable, retrying later")
 	}
 	e.mu.Unlock()
-	r, err := e.Client.Embed(ctx, llm.EmbedRequest{Model: e.Model, Texts: texts})
+	r, err := e.Client.Embed(llm.WithMeta(ctx, llm.CallMeta{Source: llm.SourceIndexer}), llm.EmbedRequest{Model: e.Model, Texts: texts})
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if err != nil {

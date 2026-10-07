@@ -4,7 +4,7 @@ import type { Tab } from '../shell/types';
 import { formatDate, formatInt, shortId } from '../api';
 import { peekDraft, drafts } from '../stores/drafts.svelte';
 import { peekDomainDraft, domainDrafts } from '../stores/domains.svelte';
-import { processes, live } from '../stores/live.svelte';
+import { processes } from '../stores/live.svelte';
 import { changes } from '../stores/catalog.svelte';
 import NodeTab from './editors/NodeTab.svelte';
 import { draftGroup, findStep, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
@@ -112,7 +112,6 @@ registerView({
   icon: 'coins',
   component: TokensConsole,
   order: 4,
-  badge: () => live.tokens.length || undefined,
 });
 
 // --- tools (right) ---------------------------------------------------------------------

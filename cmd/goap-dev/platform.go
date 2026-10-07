@@ -35,6 +35,7 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	if err := gw.Reload(e.ctx); err != nil {
 		return nil, wrap("models", err)
 	}
+	go gw.KeepCalls(e.ctx, platform.EnvInt("GOAP_LLM_CALL_RETENTION_DAYS", modelgw.DefaultCallRetentionDays)) // the ledger of calls (ADR 0089)
 	// the node index follows the graph in-process (ADR 0026); embeddings go through the gateway, semantic search
 	// needs an "embed" alias. The graph is published again at start: an index kept in SQLite catches up, a new one fills.
 	indexer := indexersvc.New(st.index, gw, gp.authorizer, e.log)

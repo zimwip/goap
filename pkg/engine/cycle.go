@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/journal"
+	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -119,6 +120,8 @@ type planned struct {
 func (e *Engine) planStep(ctx context.Context, p *Process, m *methodology.Compiled, ag methodology.Agent, goal methodology.Goal,
 	bb domain.Blackboard, actions []goap.Action) (*planned, error) {
 	tickStart := e.clock()
+	// the planning calls belong to the step this plan opens (ledger of the gateway, ADR 0089)
+	ctx = llm.WithMeta(ctx, llm.CallMeta{Source: llm.SourceEngine, ProcessID: p.ID, ChangeID: string(p.ChangeID), Step: len(p.Steps), Agent: p.Agent})
 	plan, calls, err := e.plan(ctx, m, ag, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
 	if errors.Is(err, goap.ErrNoPlan) {
 		e.settleNoPlan(ctx, p, m, ag, goal, actions, tickStart, calls)

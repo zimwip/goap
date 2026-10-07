@@ -19,11 +19,13 @@ type stubModel struct {
 	text    string
 	aliases []AliasEntry
 	got     []llm.Request
+	metas   []llm.CallMeta
 	err     error
 }
 
-func (m *stubModel) Complete(_ context.Context, req llm.Request) (llm.Response, error) {
+func (m *stubModel) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
 	m.got = append(m.got, req)
+	m.metas = append(m.metas, llm.MetaFrom(ctx))
 	return llm.Response{Text: m.text, Usage: llm.Usage{InputTokens: 7, OutputTokens: 3}}, m.err
 }
 
@@ -191,5 +193,16 @@ func TestSuggestAuthorization(t *testing.T) {
 	user := authz.With(ctx, authz.Principal{Subject: "u", Roles: []string{"contributor"}})
 	if _, err := svc.Complete(user, llm.Request{Model: HelperAlias, Messages: []llm.Message{{Role: "user", Content: "x"}}}); !errors.Is(err, ErrForbidden) {
 		t.Fatalf("%v", err)
+	}
+}
+
+// The helper declares itself to the ledger of the gateway (ADR 0089).
+func TestSuggestStampsItsSource(t *testing.T) {
+	m := &stubModel{text: `{"message":"ok"}`, aliases: helperAliases()}
+	if _, err := Suggest(context.Background(), m, input()); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.metas) != 1 || m.metas[0].Source != llm.SourceHelper {
+		t.Fatalf("%+v", m.metas)
 	}
 }

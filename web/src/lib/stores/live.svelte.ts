@@ -1,11 +1,10 @@
 // Live workbench data: global WatchEvents stream ("Events" console), known
-// processes, log lines and LLM calls ("Tokens" console). Every process
+// processes and log lines. (The LLM calls are the gateway's ledger: `usage.svelte.ts`.) Every process
 // source (stream, GetProcess, ListProcesses) goes through `ingestProcess`.
 import { SvelteMap } from 'svelte/reactivity';
 import {
   engine,
   errorMessage,
-  int,
   type LogLine,
   type Process,
   type WatchEvent,
@@ -35,27 +34,8 @@ export interface LogRow {
   step?: number;
 }
 
-export interface TokenRow {
-  key: string;
-  time: string;
-  processId: string;
-  changeId: string;
-  agent: string;
-  action: string;
-  step: number;
-  /** position of the call in the step */
-  call: number;
-  provider: string;
-  model: string;
-  input: number;
-  output: number;
-  durationMs: number;
-  error: string;
-}
-
 const MAX_EVENTS = 1000;
 const MAX_LOGS = 3000;
-const MAX_TOKENS = 5000;
 
 class Live {
   status = $state<StreamStatus>('stopped');
@@ -64,7 +44,6 @@ class Live {
   paused = $state(false);
   events = $state.raw<EventRow[]>([]);
   logs = $state.raw<LogRow[]>([]);
-  tokens = $state.raw<TokenRow[]>([]);
   processesLoading = $state(false);
   processesError = $state('');
   processesLoaded = $state(false);
@@ -76,7 +55,6 @@ export const live = new Live();
 export const processes = new SvelteMap<string, Process>();
 
 const logKeys = new Set<string>();
-const tokenKeys = new Set<string>();
 let seq = 0;
 
 function cap<T>(list: T[], max: number): T[] {
@@ -107,38 +85,15 @@ function addLogs(lines: LogLine[], fallbackProcess = ''): void {
   live.logs = cap(merged, MAX_LOGS);
 }
 
-/** Records a process state (and its logs / LLM calls). */
+/** Records a process state (and its logs). */
 export function ingestProcess(p: Process | undefined): void {
   if (!p?.id) return;
   processes.set(p.id, p);
-  const fresh: TokenRow[] = [];
   const lines: LogLine[] = [];
   for (const s of p.steps ?? []) {
     const idx = s.index ?? 0;
-    (s.llmCalls ?? []).forEach((c, i) => {
-      const key = `${p.id}|${idx}|${i}`;
-      if (tokenKeys.has(key)) return;
-      tokenKeys.add(key);
-      fresh.push({
-        key,
-        time: s.endedAt || s.startedAt || p.updatedAt || '',
-        processId: p.id ?? '',
-        changeId: p.changeId ?? '',
-        agent: p.agent ?? '',
-        action: s.action ?? '',
-        step: idx,
-        call: i,
-        provider: c.provider ?? '',
-        model: c.model ?? '',
-        input: int(c.inputTokens),
-        output: int(c.outputTokens),
-        durationMs: int(c.durationMs),
-        error: c.error ?? '',
-      });
-    });
     for (const l of s.logs ?? []) lines.push({ ...l, processId: l.processId || p.id, action: l.action || s.action, step: l.step ?? idx });
   }
-  if (fresh.length) live.tokens = cap([...live.tokens, ...fresh], MAX_TOKENS);
   if (lines.length) addLogs(lines, p.id);
 }
 
@@ -208,11 +163,6 @@ export function clearEvents(): void {
 export function clearLogs(): void {
   live.logs = [];
   logKeys.clear();
-}
-
-export function clearTokens(): void {
-  live.tokens = [];
-  tokenKeys.clear();
 }
 
 /**

@@ -6,11 +6,15 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/pgtest"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
@@ -31,7 +35,11 @@ func stores(t *testing.T) map[string]Store {
 	if err := platform.MigrateSQLite(ctx, db, "modelgw", SQLiteMigrations, "migrations_sqlite"); err != nil {
 		t.Fatal(err)
 	}
-	return map[string]Store{"memory": NewMemoryStore(), "sqlite": SQLStore{DB: db}}
+	all := map[string]Store{"memory": NewMemoryStore(), "sqlite": SQLStore{DB: db}}
+	if os.Getenv("GOAP_TEST_PG_DSN") != "" {
+		all["postgres"] = SQLStore{DB: stdlib.OpenDBFromPool(pgtest.Pool(t, Migrations)), Dollar: true}
+	}
+	return all
 }
 
 // newService returns a service reading its configuration from a fresh graph, which the caller edits with change.
