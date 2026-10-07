@@ -14,11 +14,11 @@ import (
 // match ranked by term frequency; vectors are scanned exactly.
 type Memory struct {
 	mu   sync.Mutex
-	docs map[domain.NodeRef]*Doc
+	docs map[Ref]*Doc
 }
 
 // NewMemory returns an empty store.
-func NewMemory() *Memory { return &Memory{docs: map[domain.NodeRef]*Doc{}} }
+func NewMemory() *Memory { return &Memory{docs: map[Ref]*Doc{}} }
 
 func (m *Memory) Upsert(_ context.Context, d Doc) error {
 	m.mu.Lock()
@@ -29,21 +29,63 @@ func (m *Memory) Upsert(_ context.Context, d Doc) error {
 			d.Embedding = old.Embedding
 		}
 	}
+	d.Kind = kindOf(d.Kind)
 	m.docs[d.Ref()] = &d
 	return nil
 }
 
-// Ref is the node version of the document.
-func (d Doc) Ref() domain.NodeRef { return domain.NodeRef{ID: d.ID, Version: d.Version} }
+// Ref identifies the document.
+func (d Doc) Ref() Ref { return Ref{Kind: kindOf(d.Kind), ID: d.ID, Version: d.Version} }
 
-func (m *Memory) Hash(_ context.Context, id domain.NodeID, v domain.Version) (string, bool, bool, error) {
+func (m *Memory) Hash(_ context.Context, kind string, id domain.NodeID, v domain.Version) (string, bool, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	d, ok := m.docs[domain.NodeRef{ID: id, Version: v}]
+	d, ok := m.docs[Ref{Kind: kindOf(kind), ID: id, Version: v}]
 	if !ok {
 		return "", false, false, nil
 	}
 	return d.Hash, d.Embedding != nil, true, nil
+}
+
+func (m *Memory) Delete(_ context.Context, kind string, id domain.NodeID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for ref := range m.docs {
+		if ref.Kind == kindOf(kind) && ref.ID == id {
+			delete(m.docs, ref)
+		}
+	}
+	return nil
+}
+
+func (m *Memory) Texts(_ context.Context, refs []Ref) (map[Ref]string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make(map[Ref]string, len(refs))
+	for _, r := range refs {
+		if d, ok := m.docs[r]; ok {
+			out[r] = d.Text
+		}
+	}
+	return out, nil
+}
+
+func (m *Memory) Vector(_ context.Context, kind string, id domain.NodeID) (Hit, []float32, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var best *Doc
+	for ref, d := range m.docs {
+		if ref.Kind != kindOf(kind) || ref.ID != id {
+			continue
+		}
+		if best == nil || (d.Main && !best.Main) || (d.Main == best.Main && d.Version > best.Version) {
+			best = d
+		}
+	}
+	if best == nil {
+		return Hit{}, nil, false, nil
+	}
+	return best.hit(), best.Embedding, true, nil
 }
 
 func (m *Memory) SetMain(_ context.Context, set map[domain.NodeID]domain.Version, removed []domain.NodeID) error {
@@ -54,6 +96,9 @@ func (m *Memory) SetMain(_ context.Context, set map[domain.NodeID]domain.Version
 		gone[id] = true
 	}
 	for ref, d := range m.docs {
+		if ref.Kind != KindNode {
+			continue
+		}
 		if v, ok := set[ref.ID]; ok {
 			d.Main = v == ref.Version
 		} else if gone[ref.ID] {
@@ -66,12 +111,14 @@ func (m *Memory) SetMain(_ context.Context, set map[domain.NodeID]domain.Version
 func (m *Memory) Reset(context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.docs = map[domain.NodeRef]*Doc{}
+	m.docs = map[Ref]*Doc{}
 	return nil
 }
 
 func (d *Doc) hit() Hit {
-	return Hit{ID: d.ID, Version: d.Version, Namespace: d.Namespace, Type: d.Type, Key: d.Key, State: d.State, Branch: d.Branch, Main: d.Main, Facets: d.Facets}
+	return Hit{Kind: kindOf(d.Kind), ID: d.ID, Version: d.Version, Namespace: d.Namespace, Type: d.Type, Key: d.Key, State: d.State, Branch: d.Branch,
+		Main: d.Main, Deleted: d.Deleted, Project: d.Project, Owner: d.Owner, Status: d.Status, Methodology: d.Methodology, Parent: d.Parent,
+		PersonalTo: d.PersonalTo, Title: d.Title, Facets: d.Facets}
 }
 
 func (m *Memory) scan(f Filter, score func(*Doc) (float64, bool), limit int) []Hit {

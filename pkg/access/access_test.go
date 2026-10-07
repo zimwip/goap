@@ -337,6 +337,16 @@ func TestProjectChainAndRoles(t *testing.T) {
 	if got := s.ProjectChain("PROJ-ROOT"); !slices.Equal(got, []string{"PROJ-ROOT"}) {
 		t.Fatalf("root project chain must not loop on its own self-link: %v", got)
 	}
+	// a project and the ones below it (a search in a project and its sub-projects, ADR 0095)
+	if got := s.SubProjects("PROJ-A"); !slices.Equal(got, []string{"PROJ-A", "PROJ-A1"}) {
+		t.Fatalf("sub-projects %v", got)
+	}
+	if got := s.SubProjects("PROJ-ROOT"); !slices.Equal(got, []string{"PROJ-ROOT", "PROJ-A", "PROJ-A1"}) {
+		t.Fatalf("sub-projects of the root %v", got)
+	}
+	if got := s.SubProjects("PROJ-A1"); !slices.Equal(got, []string{"PROJ-A1"}) || !slices.Equal(s.SubProjects("nope"), []string{"nope"}) {
+		t.Fatalf("a leaf and an unknown project are themselves: %v", got)
+	}
 	// the assignment is on PROJ-A: it holds for PROJ-A and PROJ-A1 (below it), not for PROJ-ROOT alone
 	if got := s.ProjectRoles(s.Chain("DEP-IT"), s.ProjectChain("PROJ-A1")); !slices.Equal(got, []string{"developer"}) {
 		t.Fatalf("roles on a descendant project: %v", got)

@@ -1,5 +1,5 @@
 name: organisation
-version: 1.13.0
+version: 1.14.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
@@ -22,6 +22,7 @@ nodeTypes:
     description: "Organisational unit (company, direction, department, team)"
     adminOnly: true
     editor: unit
+    search: [{property: name, text: true}, {property: description, text: true}]
     structure:
       kind: organisation
       parent: part_of
@@ -117,6 +118,7 @@ nodeTypes:
     description: "Project or sub-project"
     adminOnly: true
     editor: project
+    search: [{property: name, text: true}, {property: description, text: true}]
     structure:
       kind: project
       parent: project_part_of

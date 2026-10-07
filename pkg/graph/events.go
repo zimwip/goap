@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -38,6 +39,27 @@ type observedTx struct {
 	// changes written in the transaction, in order: the header when it was written, else just the id
 	changes []domain.ChangeID
 	headers map[domain.ChangeID]domain.Change
+	// indexed are the changes whose document for the index must be published (ADR 0095): the header or the impacts were
+	// written, in order; purged are the ones deleted.
+	indexed []domain.ChangeID
+	purged  []domain.ChangeID
+}
+
+func (t *observedTx) index(id domain.ChangeID) {
+	if id != "" && !slices.Contains(t.indexed, id) {
+		t.indexed = append(t.indexed, id)
+	}
+}
+
+func (t *observedTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
+	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
+		return err
+	}
+	t.indexed = slices.DeleteFunc(t.indexed, func(x domain.ChangeID) bool { return x == id })
+	if !slices.Contains(t.purged, id) {
+		t.purged = append(t.purged, id)
+	}
+	return nil
 }
 
 func (t *observedTx) touch(id domain.ChangeID) {
@@ -65,6 +87,7 @@ func (t *observedTx) PutChange(ctx context.Context, c domain.Change) error {
 	c.Items, c.Nodes = nil, nil
 	t.headers[c.ID] = c
 	t.touch(c.ID)
+	t.index(c.ID)
 	return nil
 }
 
@@ -73,6 +96,7 @@ func (t *observedTx) PutChangeImpact(ctx context.Context, change domain.ChangeID
 		return err
 	}
 	t.touch(change)
+	t.index(change)
 	return nil
 }
 
@@ -133,6 +157,11 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		c.ID = id
 		out = append(out, published{fmt.Sprintf(domain.SubjectChangeTouched, id), domain.ChangeEvent{Type: "change.updated", Change: c}})
 	}
+	docs, err := g.changeDocs(ctx, tx, ot)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, docs...)
 	if len(ot.nodes) > 0 {
 		// typesAt ignores its baseline argument (the type catalogue is process-global, not
 		// namespace-scoped graph data): no baseline lookup is needed to build it.
@@ -140,13 +169,28 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		if err != nil {
 			return nil, err
 		}
+		keys := map[domain.NodeID]string{}
+		keyOf := func(id domain.NodeID) string { // the project and owner of a version are nodes: the index holds their keys
+			if id == "" {
+				return ""
+			}
+			if k, ok := keys[id]; ok {
+				return k
+			}
+			k := string(id)
+			if u, err := tx.Node(ctx, domain.NodeRef{ID: id}); err == nil {
+				k = u.Key
+			}
+			keys[id] = k
+			return k
+		}
 		for _, ref := range ot.nodes {
 			n, err := tx.Node(ctx, ref)
 			if err != nil {
 				return nil, err
 			}
 			ev := domain.NodeEvent{ID: n.ID, Version: n.Version, Branch: domain.BranchOf(n.Branch), Namespace: domain.NamespaceOf(n.Namespace), Key: n.Key,
-				Type: n.Type, State: n.State, Deleted: n.Deleted, ChangeID: n.ChangeID, Time: n.CreatedAt}
+				Type: n.Type, State: n.State, Deleted: n.Deleted, ChangeID: n.ChangeID, Time: n.CreatedAt, Project: keyOf(n.Project), Owner: keyOf(n.Owner)}
 			ev.Text, ev.Facets = ix.searchable(n)
 			out = append(out, published{fmt.Sprintf(domain.SubjectNodeWritten, subjectToken(ev.Namespace), subjectToken(n.Type), n.ID), ev})
 		}
@@ -172,6 +216,41 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 			}
 		}
 		out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
+	}
+	return out, nil
+}
+
+// maxIndexedImpacts bounds the node keys a change document carries.
+const maxIndexedImpacts = 200
+
+// changeDocs builds the index documents of the changes a transaction wrote or purged (ADR 0095), inside the transaction
+// (it reads the impacts). Only the header and the impacts trigger it: a log entry alone does not change the document.
+func (g *Graph) changeDocs(ctx context.Context, tx Tx, ot *observedTx) ([]published, error) {
+	var out []published
+	for _, id := range ot.indexed {
+		c, ok := ot.headers[id]
+		if !ok { // the impacts alone were written: the header is read (its items are not needed, but the repository has no lighter read)
+			var err error
+			if c, err = tx.Change(ctx, id); err != nil {
+				return nil, err
+			}
+		}
+		ev := domain.ChangeDocEvent{ID: c.ID, Title: c.Title, Intent: c.Intent, Goal: c.Goal, Methodology: c.Methodology, Namespace: c.Namespace,
+			Status: c.Status, State: c.State, ProjectID: c.ProjectID, OwnerOrg: c.OwnerOrg, ParentID: c.ParentID, Branch: c.Branch, CreatedAt: c.CreatedAt}
+		impacts, err := tx.ChangeImpacts(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		for _, cn := range impacts {
+			if len(ev.Impacts) == maxIndexedImpacts {
+				break
+			}
+			ev.Impacts = append(ev.Impacts, domain.ChangeDocRef{Key: cn.Key, Type: cn.Type})
+		}
+		out = append(out, published{fmt.Sprintf(domain.SubjectChangeIndexed, id), ev})
+	}
+	for _, id := range ot.purged {
+		out = append(out, published{fmt.Sprintf(domain.SubjectChangeIndexed, id), domain.ChangeDocEvent{ID: id, Deleted: true}})
 	}
 	return out, nil
 }
@@ -227,13 +306,16 @@ func (ix *typeIndex) searchOf(typ string) []domain.SearchProperty {
 
 // Republish publishes the node event of every node version (all branches, every namespace) and the
 // head of each namespace's main as a baseline event, to rebuild an index (ADR 0026). It returns the
-// number of versions published.
+// number of documents published (node versions and changes).
 func (g *Graph) Republish(ctx context.Context, sink EventSink) (int, error) {
 	var namespaces []string
 	if err := g.repo.InTx(ctx, func(tx Tx) (err error) { namespaces, err = tx.Namespaces(ctx); return }); err != nil {
 		return 0, err
 	}
-	total := 0
+	total, err := g.republishChanges(ctx, sink)
+	if err != nil {
+		return total, err
+	}
 	for _, ns := range namespaces {
 		n, err := g.republishNamespace(ctx, ns, sink)
 		total += n
@@ -242,6 +324,32 @@ func (g *Graph) Republish(ctx context.Context, sink EventSink) (int, error) {
 		}
 	}
 	return total, nil
+}
+
+// republishChanges publishes the index document of every change (ADR 0095); it returns their number.
+func (g *Graph) republishChanges(ctx context.Context, sink EventSink) (int, error) {
+	var events []published
+	err := g.repo.InTx(ctx, func(tx Tx) error {
+		cs, err := tx.Changes(ctx)
+		if err != nil {
+			return err
+		}
+		ot := &observedTx{}
+		for _, c := range cs {
+			ot.index(c.ID)
+		}
+		events, err = g.changeDocs(ctx, tx, ot)
+		return err
+	})
+	if err != nil {
+		return 0, err
+	}
+	for i, p := range events {
+		if err := sink.Publish(ctx, p.subject, p.v); err != nil {
+			return i, err
+		}
+	}
+	return len(events), nil
 }
 
 // republishNamespace is the per-namespace core of Republish.

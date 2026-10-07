@@ -155,7 +155,7 @@ func TestEmbeddingUnavailableDegradesToText(t *testing.T) {
 	if err != nil || res.Total != 1 || res.Semantic {
 		t.Fatalf("text-only search: %v %+v", err, res)
 	}
-	if semantic, _, _, _, _ := svc.Status(); semantic {
+	if semantic, _, _, _, _, _ := svc.Status(); semantic {
 		t.Fatal("status must report no semantic search")
 	}
 }

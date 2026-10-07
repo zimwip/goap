@@ -1,5 +1,5 @@
 name: methodology
-version: 1.7.0
+version: 1.8.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -10,6 +10,7 @@ nodeTypes:
   - name: MethodologyVersion
     description: "A version of a methodology: its scalar fields, status and timestamps"
     editor: methodology
+    search: [{property: name, text: true}, {property: description, text: true}, {property: status, facet: true}]
     attributes:
       - {name: name, label: Name, description: "Name of the methodology", type: string, section: Identity, order: 1, asName: true}
       - {name: version, label: Version, description: "Version of the methodology", type: string, section: Identity, order: 2}
@@ -29,6 +30,7 @@ nodeTypes:
   - name: Agent
     description: "Agent of a methodology version, with its triggers"
     editor: agent
+    search: [{property: name, text: true}, {property: description, text: true}, {property: examples, text: true}, {property: planner, facet: true}]
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
@@ -48,6 +50,7 @@ nodeTypes:
     description: "Action of a methodology version"
     extends: Activity
     editor: action
+    search: [{property: instructions, text: true}, {property: kind, facet: true}]
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
@@ -79,6 +82,7 @@ nodeTypes:
   - name: Condition
     description: "Condition of a methodology version"
     editor: condition
+    search: [{property: name, text: true}, {property: description, text: true}]
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
@@ -88,6 +92,7 @@ nodeTypes:
   - name: Goal
     description: "Goal of a methodology version"
     editor: goal
+    search: [{property: name, text: true}, {property: description, text: true}, {property: examples, text: true}]
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
@@ -101,6 +106,7 @@ nodeTypes:
   - name: Role
     description: "Role of a methodology version: assigned RACI style by its processes and methods, allowed to run its agents and actions, held on a project through an Assignment"
     editor: role
+    search: [{property: name, text: true}, {property: description, text: true}]
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for (assigned RACI style by processes and methods)", type: string, widget: textarea, section: Identity, order: 2}
@@ -113,6 +119,7 @@ nodeTypes:
   - name: Activity
     description: "Common shape of Process/Step/Method/MethodStep: input, goals and output conditions, composed from sub-activities"
     editor: activity
+    search: [{property: name, text: true}, {property: description, text: true}]
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
@@ -127,6 +134,7 @@ nodeTypes:
     description: "Method of a methodology version: the reference of how a capability is carried out in a context"
     extends: Activity
     editor: method
+    search: [{property: for, text: true}, {property: guidance, text: true}]
     attributes:
       - {name: for, label: Capability, description: "Capability the method carries out", type: string, section: Identity, order: 1}
       - {name: when, label: "Applies when", description: "CEL guard of the method; empty: always", type: string, section: Selection, order: 2}
@@ -146,6 +154,7 @@ nodeTypes:
     description: "Process of a methodology version: its steps and sub-steps"
     extends: Activity
     editor: process
+    search: [{property: examples, text: true}]
     attributes:
       - {name: examples, label: Examples, description: "Examples of the process at work", type: json, widget: textarea, section: Identity, order: 1}
       - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 2}
@@ -158,6 +167,7 @@ nodeTypes:
     description: "Step of a Process: its own input/goals/output, done by an action, an agent, a nested process or a person"
     extends: Activity
     editor: step
+    search: [{property: instructions, text: true}, {property: guidance, text: true}]
     attributes:
       - {name: instructions, label: Instructions, description: "What to do in the step", type: string, widget: textarea, section: Identity, order: 1}
       - {name: guidance, label: Guidance, description: "How to do it", type: string, widget: textarea, section: Guidance, order: 2}
@@ -176,6 +186,7 @@ nodeTypes:
     description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person"
     extends: Activity
     editor: step
+    search: [{property: instructions, text: true}, {property: guidance, text: true}]
     attributes:
       - {name: instructions, label: Instructions, description: "What to do in the step", type: string, widget: textarea, section: Identity, order: 1}
       - {name: guidance, label: Guidance, description: "How to do it", type: string, widget: textarea, section: Guidance, order: 2}
@@ -193,6 +204,7 @@ nodeTypes:
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - name: ToolRequest
     description: "MCP tool requested by the self-observation of a methodology"
+    search: [{property: name, text: true}, {property: description, text: true}, {property: motivation, text: true}]
     attributes:
       - {name: name, label: Tool, description: "Name of the requested tool", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the tool should do", type: string, widget: textarea, section: Identity, order: 2}

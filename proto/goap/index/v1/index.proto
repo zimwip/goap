@@ -2,8 +2,9 @@ syntax = "proto3";
 
 package goap.index.v1;
 
-// IndexService is the node index (ADR 0026): hybrid full-text / semantic search over the nodes of the
-// graph, with facets. Fed by the node and baseline events of the graph service.
+// IndexService is the document index (ADR 0026, 0095): lexical, semantic and hybrid search over the nodes and the
+// changes of the graph, filtered by type, project, owner, status and methodology, with facets and nearest-document
+// search. Fed by the node, baseline and change-document events of the graph service.
 service IndexService {
   rpc Search(SearchRequest) returns (SearchResponse);
   // Empties the index and has the graph publish its nodes again (admin on `platform`).
@@ -17,34 +18,100 @@ message FacetFilter {
   repeated string values = 2;
 }
 
+// The document a similar_to search starts from.
+message DocumentRef {
+  // node | change
+  string kind = 1;
+  // node id, or change id
+  string id = 2;
+}
+
 message SearchRequest {
-  // free text; empty: list by key
+  // free text; empty: list by key (or, with similar_to, nothing to embed)
   string text = 1;
-  repeated string namespaces = 2;
+  // node | change; empty: node. Several kinds are searched together.
+  repeated string kinds = 2;
+  // node types, "<namespace>@<NodeType>" (a change has none: setting it leaves no change)
   repeated string types = 3;
-  repeated string states = 4;
-  repeated string branches = 5;
-  // true: heads of main only, false: not on main, absent: all
-  optional bool main = 6;
+  // namespace of the node, or the one the change acts on
+  repeated string namespaces = 4;
+  // lifecycle state of the node, or of the change
+  repeated string states = 5;
+  // branch of the node version, or the one the change is applied to
+  repeated string branches = 6;
+  // true: heads of main only (a change always is), false: not on main, absent: all
+  optional bool main = 7;
   // filters on declared facets
-  repeated FacetFilter facet_filters = 7;
-  // facets to count (built-in: namespace, type, state, branch, main; or declared)
-  repeated string facets = 8;
-  int32 limit = 9;
-  int32 offset = 10;
+  repeated FacetFilter facet_filters = 8;
+  // facets to count (built-in: kind, namespace, type, state, branch, main, project, owner, status, methodology; or declared)
+  repeated string facets = 9;
+  // page size (the k of a nearest-neighbour search); default 20
+  int32 limit = 10;
+  int32 offset = 11;
+  // project keys of the node (the project it was created in) or of the change
+  repeated string projects = 12;
+  // also the projects below the given ones (project_part_of), resolved by the server
+  bool include_subprojects = 13;
+  // unit keys owning the node version, or holding the change
+  repeated string owner_units = 14;
+  // change statuses (open, committed, applied, abandoned...): setting it leaves no node
+  repeated string statuses = 15;
+  // methodology names of changes: setting it leaves no node
+  repeated string methodologies = 16;
+  // changes with no parent: setting it leaves no node
+  bool roots_only = 17;
+  // lexical | semantic | hybrid; empty: hybrid. Semantic fails with FAILED_PRECONDITION without an embedding model;
+  // hybrid degrades to lexical (the response says semantic = false).
+  string mode = 18;
+  // cosine similarity floor of the vector matches, 0..1, replacing the service default for this request
+  optional double min_similarity = 19;
+  // return the best matching passage of each hit (at most 240 characters)
+  bool snippet = 20;
+  // the documents nearest to this one, by its stored embedding (no text query, no embedding call); the document
+  // itself is excluded and every other filter holds. Fails with NOT_FOUND when it does not exist or is not visible.
+  DocumentRef similar_to = 21;
+}
+
+// What a hit of kind change adds.
+message ChangeInfo {
+  string change_id = 1;
+  string title = 2;
+  string status = 3;
+  string project_id = 4;
+  string methodology = 5;
+  string owner_org = 6;
+  string parent_id = 7;
 }
 
 message Hit {
-  string id = 1;
-  int32 version = 2;
-  string namespace = 3;
-  string type = 4;
-  string key = 5;
-  string state = 6;
-  string branch = 7;
-  bool main = 8;
-  map<string, string> facets = 9;
-  double score = 10;
+  // node | change
+  string kind = 1;
+  // node id, or change id
+  string id = 2;
+  // 0 for a change
+  int32 version = 3;
+  string namespace = 4;
+  // empty for a change
+  string type = 5;
+  // the key of the node, the change id for a change
+  string key = 6;
+  string state = 7;
+  string branch = 8;
+  bool main = 9;
+  bool deleted = 10;
+  // key of the project of the node, or of the change
+  string project = 11;
+  // key of the unit owning the node version, or holding the change
+  string owner_unit = 12;
+  map<string, string> facets = 13;
+  // ranking score (fused rank in a hybrid search, cosine in a semantic one or similar_to)
+  double score = 14;
+  // cosine similarity when the hit came out of the vector side, else 0
+  double similarity = 15;
+  // best matching passage, when asked
+  string snippet = 16;
+  // set for a change
+  ChangeInfo change = 17;
 }
 
 message FacetCount {
@@ -82,4 +149,5 @@ message StatusResponse {
   int64 nodes_indexed = 3;
   int64 baselines_followed = 4;
   int64 errors = 5;
+  int64 changes_indexed = 6;
 }

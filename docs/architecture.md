@@ -704,7 +704,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0085-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
 | **assistant** (hosted by `conversations`) | The conversational assistant: answers the messages of a conversation on the `assistant` model alias as the caller, with seven tools (list methodologies, select project, create change, open change, list the agents the caller may run here, propose to start one, and `methodology_query`: read what a methodology declares, filtered by kind / name / text / parent, projected and capped at 6 KiB, [ADR 0094](adr/0094-assistant-methodology-query.md)); the pending message is the run, and an agent starts only when the person confirms the proposal (`ConfirmAction`, [ADR 0087](adr/0087-conversational-assistant.md), [ADR 0090](adr/0090-assistant-runs-agents.md)); it is contextualised to the open screen (layered context focus / screen / app) and may ask the interface to act through the tools the screen offers (`ui.*`: effects run at once, writes only after the person's confirmation and reported with `ReportAction`, [ADR 0092](adr/0092-contextual-assistant-screen-tools.md)) | Connect `assistant.v1` | none (writes through `conversations`) | 🟢 |
-| **indexer** | Node index ([ADR 0026](adr/0026-node-index-and-search.md)): follows the node / baseline events of the graph, embeds through modelgw (alias `embed`), answers hybrid full-text + semantic searches with facets, filtered by ABAC | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
+| **indexer** | Document index ([ADR 0026](adr/0026-node-index-and-search.md), [0095](adr/0095-changes-in-the-index-typed-search.md)): follows the node / baseline / change-document events of the graph, embeds through modelgw (alias `embed`), answers lexical / semantic / hybrid and nearest-document searches over nodes and changes with facets, filtered by ABAC and project | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters and their restrictions (graph) along the organisation hierarchy, tool calls, the built-in connectors of the platform (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
 | **goap-runner** | Sandbox for executing script actions (one per process) | Connect `runtime.v1` (SandboxService) | — | 🟢 |
@@ -813,8 +813,21 @@ and paging. `Reindex` empties the index and has the graph publish everything aga
 | Vectors | pgvector (HNSW created for the model's dimension) | float32 BLOB, exact cosine scan |
 | Facets | `jsonb` | `json_extract` |
 
+**Changes in the index and typed search ([ADR 0095](adr/0095-changes-in-the-index-typed-search.md))**: the same table,
+text index and vector index hold a second kind of document, the **change** (`kind` = `node` | `change`). The graph
+publishes a `ChangeDocEvent` on `goap.changeindex.<id>` whenever a change's header or impacts are written (and a
+`deleted` one when it is purged); its text is title, intent, goal, methodology, namespace and the keys / types of its
+impacts, bounded (4000 runes), never the items, decisions, reviews or drafts. `Search` takes `kinds`, `types`,
+`namespaces`, `states`, `branches`, `main`, `projects` (+ `include_subprojects`), `owner_units`, `statuses`,
+`methodologies`, `roots_only`, a `mode` (`lexical` | `semantic` | `hybrid`), a per-request `min_similarity`, `snippet`
+and `similar_to` (the documents nearest to an existing one by its stored embedding). Results are authorized before
+anything is counted, totalled or quoted: a node needs `read` on its type and access to its project; a personal change
+is for its subject only (administrators included); another change needs access to its project
+(`access.Snapshot.MayAccessProject`; the indexer asks it through the `indexersvc.Access` seam, built from
+`access.Directory`).
+
 In `goap-dev` the indexer runs in process (the graph publishes to it directly) and the graph is published again at
-each start. The compose image is `pgvector/pgvector`; the `index` schema needs `CREATE EXTENSION vector`
+each start (nodes, baselines and changes). The compose image is `pgvector/pgvector`; the `index` schema needs `CREATE EXTENSION vector`
 (`deploy/postgres/init.sql`).
 
 ### 3.5 Deployment
@@ -1428,7 +1441,7 @@ pkg/domain/def/              domain definition model (ADR 0060): Domain, Schema,
 pkg/methodology/             methodology model only (a methodology is a domain-typed definition): validation (localized anomalies), compilation, YAML import/export
 pkg/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
 pkg/llm/                     completion and embedding contracts (implemented by internal/modelgw)
-pkg/index/                   node index: hybrid search, facets, stores (memory, SQLite FTS5, PostgreSQL pgvector)
+pkg/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
 gen/                         generated code (committed)
 methodologies/               example methodologies (active part)

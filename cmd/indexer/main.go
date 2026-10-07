@@ -1,4 +1,4 @@
-// Command indexer is the node index service (ADR 0026): it follows the node and baseline events of the graph
+// Command indexer is the document index service (ADR 0026, 0095): it follows the node, baseline and change events of the graph
 // on NATS, embeds through the model gateway and answers hybrid searches.
 package main
 
@@ -39,13 +39,15 @@ func main() {
 
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, graphURL, telemetry.ClientOptions()...)})
+	directory := &access.Directory{Graph: graphsvc.NewClient(hc, graphURL, telemetry.ClientOptions()...)}
+	iam, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
 	// embeddings: the model gateway, alias "embed"; without one the index is text only
 	var embedder = modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), telemetry.ClientOptions()...)
 	svc := indexersvc.New(store, embedder, iam, log)
+	svc.Access = directory // the projects a caller may see, and a project with its sub-projects (ADR 0095)
 	graphRPC := graphv1connect.NewGraphServiceClient(hc, graphURL, telemetry.ClientOptions()...)
 	svc.Republish = func(ctx context.Context) (int, error) {
 		req := connect.NewRequest(&graphv1.RepublishIndexRequest{})

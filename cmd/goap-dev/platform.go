@@ -42,6 +42,7 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	// the node index follows the graph in-process (ADR 0026); embeddings go through the gateway, semantic search
 	// needs an "embed" alias. The graph is published again at start: an index kept in SQLite catches up, a new one fills.
 	indexer := indexersvc.New(st.index, gw, gp.authorizer, e.log)
+	indexer.Access = gp.directory // the projects a caller may see, and a project with its sub-projects (ADR 0095)
 	indexSink := indexersvc.NewSink(e.ctx, indexer)
 	indexer.Republish = func(ctx context.Context) (int, error) { return g.Republish(ctx, indexSink) }
 	g.Observe(engine.Publishers{indexSink, rp.bus})

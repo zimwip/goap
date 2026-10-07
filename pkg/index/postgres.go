@@ -53,33 +53,91 @@ func (p *Postgres) Upsert(ctx context.Context, d Doc) error {
 	if d.Facets == nil {
 		facets = []byte("{}")
 	}
-	_, err := p.pool.Exec(ctx, `INSERT INTO node_index (node_id, version, namespace, type, key, state, branch, main, deleted, facets, doc, hash, embedding)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13::public.vector)
-		ON CONFLICT (node_id, version) DO UPDATE SET namespace=EXCLUDED.namespace, type=EXCLUDED.type, key=EXCLUDED.key, state=EXCLUDED.state,
-			branch=EXCLUDED.branch, main = node_index.main OR EXCLUDED.main, deleted=EXCLUDED.deleted, facets=EXCLUDED.facets, doc=EXCLUDED.doc,
+	_, err := p.pool.Exec(ctx, `INSERT INTO node_index (kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, status, methodology, parent, personal_to, title, facets, doc, hash, embedding)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21::public.vector)
+		ON CONFLICT (kind, node_id, version) DO UPDATE SET namespace=EXCLUDED.namespace, type=EXCLUDED.type, key=EXCLUDED.key, state=EXCLUDED.state,
+			branch=EXCLUDED.branch, main = node_index.main OR EXCLUDED.main, deleted=EXCLUDED.deleted, project=EXCLUDED.project, owner=EXCLUDED.owner,
+			status=EXCLUDED.status, methodology=EXCLUDED.methodology, parent=EXCLUDED.parent, personal_to=EXCLUDED.personal_to, title=EXCLUDED.title,
+			facets=EXCLUDED.facets, doc=EXCLUDED.doc,
 			embedding = COALESCE(EXCLUDED.embedding, CASE WHEN node_index.hash = EXCLUDED.hash THEN node_index.embedding END),
 			hash=EXCLUDED.hash, updated=now()`,
-		string(d.ID), int(d.Version), d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted, facets, d.Text, d.Hash, vecText(d.Embedding))
+		kindOf(d.Kind), string(d.ID), int(d.Version), d.Namespace, d.Type, d.Key, d.State, d.Branch, d.Main, d.Deleted, d.Project, d.Owner, d.Status,
+		d.Methodology, d.Parent, d.PersonalTo, d.Title, facets, d.Text, d.Hash, vecText(d.Embedding))
 	return err
 }
 
-func (p *Postgres) Hash(ctx context.Context, id domain.NodeID, v domain.Version) (hash string, embedded, found bool, err error) {
-	err = p.pool.QueryRow(ctx, `SELECT hash, embedding IS NOT NULL FROM node_index WHERE node_id = $1 AND version = $2`, string(id), int(v)).Scan(&hash, &embedded)
+func (p *Postgres) Hash(ctx context.Context, kind string, id domain.NodeID, v domain.Version) (hash string, embedded, found bool, err error) {
+	err = p.pool.QueryRow(ctx, `SELECT hash, embedding IS NOT NULL FROM node_index WHERE kind = $1 AND node_id = $2 AND version = $3`, kindOf(kind), string(id), int(v)).Scan(&hash, &embedded)
 	if err == pgx.ErrNoRows {
 		return "", false, false, nil
 	}
 	return hash, embedded, err == nil, err
 }
 
+func (p *Postgres) Delete(ctx context.Context, kind string, id domain.NodeID) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM node_index WHERE kind = $1 AND node_id = $2`, kindOf(kind), string(id))
+	return err
+}
+
+func (p *Postgres) Texts(ctx context.Context, refs []Ref) (map[Ref]string, error) {
+	out := make(map[Ref]string, len(refs))
+	for _, r := range refs {
+		var doc string
+		err := p.pool.QueryRow(ctx, `SELECT doc FROM node_index WHERE kind = $1 AND node_id = $2 AND version = $3`, kindOf(r.Kind), string(r.ID), int(r.Version)).Scan(&doc)
+		if err == pgx.ErrNoRows {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out[r] = doc
+	}
+	return out, nil
+}
+
+func (p *Postgres) Vector(ctx context.Context, kind string, id domain.NodeID) (Hit, []float32, bool, error) {
+	hits, err := p.query(ctx, `SELECT `+pgCols+`, 0::float8 AS score FROM node_index WHERE kind = $1 AND node_id = $2 ORDER BY main DESC, version DESC LIMIT 1`, []any{kindOf(kind), string(id)}, true)
+	if err != nil || len(hits) == 0 {
+		return Hit{}, nil, false, err
+	}
+	var text *string
+	if err := p.pool.QueryRow(ctx, `SELECT embedding::text FROM node_index WHERE kind = $1 AND node_id = $2 AND version = $3`, kindOf(kind), string(id), int(hits[0].Version)).Scan(&text); err != nil {
+		return Hit{}, nil, false, err
+	}
+	if text == nil {
+		return hits[0], nil, true, nil
+	}
+	vec, err := parseVec(*text)
+	return hits[0], vec, err == nil, err
+}
+
+// parseVec reads the text form of a pgvector value, "[1,2,3]".
+func parseVec(s string) ([]float32, error) {
+	s = strings.TrimSuffix(strings.TrimPrefix(s, "["), "]")
+	if s == "" {
+		return nil, nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]float32, len(parts))
+	for i, x := range parts {
+		f, err := strconv.ParseFloat(strings.TrimSpace(x), 32)
+		if err != nil {
+			return nil, err
+		}
+		out[i] = float32(f)
+	}
+	return out, nil
+}
+
 func (p *Postgres) SetMain(ctx context.Context, set map[domain.NodeID]domain.Version, removed []domain.NodeID) error {
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error {
 		for id, v := range set {
-			if _, err := tx.Exec(ctx, `UPDATE node_index SET main = (version = $2) WHERE node_id = $1 AND main <> (version = $2)`, string(id), int(v)); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE node_index SET main = (version = $2) WHERE kind = 'node' AND node_id = $1 AND main <> (version = $2)`, string(id), int(v)); err != nil {
 				return err
 			}
 		}
 		for _, id := range removed {
-			if _, err := tx.Exec(ctx, `UPDATE node_index SET main = false WHERE node_id = $1 AND main`, string(id)); err != nil {
+			if _, err := tx.Exec(ctx, `UPDATE node_index SET main = false WHERE kind = 'node' AND node_id = $1 AND main`, string(id)); err != nil {
 				return err
 			}
 		}
@@ -92,7 +150,7 @@ func (p *Postgres) Reset(ctx context.Context) error {
 	return err
 }
 
-const pgCols = `node_id, version, namespace, type, key, state, branch, main, facets`
+const pgCols = `kind, node_id, version, namespace, type, key, state, branch, main, deleted, project, owner, status, methodology, parent, personal_to, title, facets`
 
 // pgWhere renders the filter with numbered placeholders appended to args.
 func pgWhere(f Filter, args []any) (string, []any) {
@@ -100,6 +158,9 @@ func pgWhere(f Filter, args []any) (string, []any) {
 	add := func(cond string, v any) {
 		args = append(args, v)
 		conds = append(conds, strings.ReplaceAll(cond, "$$", "$"+strconv.Itoa(len(args))))
+	}
+	if len(f.Kind) > 0 {
+		add("kind = ANY($$)", f.Kind)
 	}
 	if len(f.Namespace) > 0 {
 		add("namespace = ANY($$)", f.Namespace)
@@ -115,6 +176,21 @@ func pgWhere(f Filter, args []any) (string, []any) {
 	}
 	if f.Main != nil {
 		add("main = $$", *f.Main)
+	}
+	if len(f.Project) > 0 {
+		add("project = ANY($$)", f.Project)
+	}
+	if len(f.Owner) > 0 {
+		add("owner = ANY($$)", f.Owner)
+	}
+	if len(f.Status) > 0 {
+		add("status = ANY($$)", f.Status)
+	}
+	if len(f.Methodology) > 0 {
+		add("methodology = ANY($$)", f.Methodology)
+	}
+	if f.RootsOnly {
+		conds = append(conds, "kind = 'change' AND parent = ''")
 	}
 	for name, vals := range f.Facets {
 		if len(vals) == 0 {
@@ -140,7 +216,8 @@ func (p *Postgres) query(ctx context.Context, q string, args []any, withScore bo
 		var id string
 		var v int32
 		var facets map[string]string
-		dest := []any{&id, &v, &h.Namespace, &h.Type, &h.Key, &h.State, &h.Branch, &h.Main, &facets}
+		dest := []any{&h.Kind, &id, &v, &h.Namespace, &h.Type, &h.Key, &h.State, &h.Branch, &h.Main, &h.Deleted, &h.Project, &h.Owner, &h.Status,
+			&h.Methodology, &h.Parent, &h.PersonalTo, &h.Title, &facets}
 		if withScore {
 			dest = append(dest, &h.Score)
 		}

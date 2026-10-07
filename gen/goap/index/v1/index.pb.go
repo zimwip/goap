@@ -74,29 +74,113 @@ func (x *FacetFilter) GetValues() []string {
 	return nil
 }
 
+// The document a similar_to search starts from.
+type DocumentRef struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// node | change
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// node id, or change id
+	Id            string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DocumentRef) Reset() {
+	*x = DocumentRef{}
+	mi := &file_goap_index_v1_index_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DocumentRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DocumentRef) ProtoMessage() {}
+
+func (x *DocumentRef) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_index_v1_index_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DocumentRef.ProtoReflect.Descriptor instead.
+func (*DocumentRef) Descriptor() ([]byte, []int) {
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *DocumentRef) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *DocumentRef) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 type SearchRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// free text; empty: list by key
-	Text       string   `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	Namespaces []string `protobuf:"bytes,2,rep,name=namespaces,proto3" json:"namespaces,omitempty"`
-	Types      []string `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
-	States     []string `protobuf:"bytes,4,rep,name=states,proto3" json:"states,omitempty"`
-	Branches   []string `protobuf:"bytes,5,rep,name=branches,proto3" json:"branches,omitempty"`
-	// true: heads of main only, false: not on main, absent: all
-	Main *bool `protobuf:"varint,6,opt,name=main,proto3,oneof" json:"main,omitempty"`
+	// free text; empty: list by key (or, with similar_to, nothing to embed)
+	Text string `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	// node | change; empty: node. Several kinds are searched together.
+	Kinds []string `protobuf:"bytes,2,rep,name=kinds,proto3" json:"kinds,omitempty"`
+	// node types, "<namespace>@<NodeType>" (a change has none: setting it leaves no change)
+	Types []string `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
+	// namespace of the node, or the one the change acts on
+	Namespaces []string `protobuf:"bytes,4,rep,name=namespaces,proto3" json:"namespaces,omitempty"`
+	// lifecycle state of the node, or of the change
+	States []string `protobuf:"bytes,5,rep,name=states,proto3" json:"states,omitempty"`
+	// branch of the node version, or the one the change is applied to
+	Branches []string `protobuf:"bytes,6,rep,name=branches,proto3" json:"branches,omitempty"`
+	// true: heads of main only (a change always is), false: not on main, absent: all
+	Main *bool `protobuf:"varint,7,opt,name=main,proto3,oneof" json:"main,omitempty"`
 	// filters on declared facets
-	FacetFilters []*FacetFilter `protobuf:"bytes,7,rep,name=facet_filters,json=facetFilters,proto3" json:"facet_filters,omitempty"`
-	// facets to count (built-in: namespace, type, state, branch, main; or declared)
-	Facets        []string `protobuf:"bytes,8,rep,name=facets,proto3" json:"facets,omitempty"`
-	Limit         int32    `protobuf:"varint,9,opt,name=limit,proto3" json:"limit,omitempty"`
-	Offset        int32    `protobuf:"varint,10,opt,name=offset,proto3" json:"offset,omitempty"`
+	FacetFilters []*FacetFilter `protobuf:"bytes,8,rep,name=facet_filters,json=facetFilters,proto3" json:"facet_filters,omitempty"`
+	// facets to count (built-in: kind, namespace, type, state, branch, main, project, owner, status, methodology; or declared)
+	Facets []string `protobuf:"bytes,9,rep,name=facets,proto3" json:"facets,omitempty"`
+	// page size (the k of a nearest-neighbour search); default 20
+	Limit  int32 `protobuf:"varint,10,opt,name=limit,proto3" json:"limit,omitempty"`
+	Offset int32 `protobuf:"varint,11,opt,name=offset,proto3" json:"offset,omitempty"`
+	// project keys of the node (the project it was created in) or of the change
+	Projects []string `protobuf:"bytes,12,rep,name=projects,proto3" json:"projects,omitempty"`
+	// also the projects below the given ones (project_part_of), resolved by the server
+	IncludeSubprojects bool `protobuf:"varint,13,opt,name=include_subprojects,json=includeSubprojects,proto3" json:"include_subprojects,omitempty"`
+	// unit keys owning the node version, or holding the change
+	OwnerUnits []string `protobuf:"bytes,14,rep,name=owner_units,json=ownerUnits,proto3" json:"owner_units,omitempty"`
+	// change statuses (open, committed, applied, abandoned...): setting it leaves no node
+	Statuses []string `protobuf:"bytes,15,rep,name=statuses,proto3" json:"statuses,omitempty"`
+	// methodology names of changes: setting it leaves no node
+	Methodologies []string `protobuf:"bytes,16,rep,name=methodologies,proto3" json:"methodologies,omitempty"`
+	// changes with no parent: setting it leaves no node
+	RootsOnly bool `protobuf:"varint,17,opt,name=roots_only,json=rootsOnly,proto3" json:"roots_only,omitempty"`
+	// lexical | semantic | hybrid; empty: hybrid. Semantic fails with FAILED_PRECONDITION without an embedding model;
+	// hybrid degrades to lexical (the response says semantic = false).
+	Mode string `protobuf:"bytes,18,opt,name=mode,proto3" json:"mode,omitempty"`
+	// cosine similarity floor of the vector matches, 0..1, replacing the service default for this request
+	MinSimilarity *float64 `protobuf:"fixed64,19,opt,name=min_similarity,json=minSimilarity,proto3,oneof" json:"min_similarity,omitempty"`
+	// return the best matching passage of each hit (at most 240 characters)
+	Snippet bool `protobuf:"varint,20,opt,name=snippet,proto3" json:"snippet,omitempty"`
+	// the documents nearest to this one, by its stored embedding (no text query, no embedding call); the document
+	// itself is excluded and every other filter holds. Fails with NOT_FOUND when it does not exist or is not visible.
+	SimilarTo     *DocumentRef `protobuf:"bytes,21,opt,name=similar_to,json=similarTo,proto3" json:"similar_to,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SearchRequest) Reset() {
 	*x = SearchRequest{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[1]
+	mi := &file_goap_index_v1_index_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -108,7 +192,7 @@ func (x *SearchRequest) String() string {
 func (*SearchRequest) ProtoMessage() {}
 
 func (x *SearchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[1]
+	mi := &file_goap_index_v1_index_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -121,7 +205,7 @@ func (x *SearchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchRequest.ProtoReflect.Descriptor instead.
 func (*SearchRequest) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{1}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *SearchRequest) GetText() string {
@@ -131,9 +215,9 @@ func (x *SearchRequest) GetText() string {
 	return ""
 }
 
-func (x *SearchRequest) GetNamespaces() []string {
+func (x *SearchRequest) GetKinds() []string {
 	if x != nil {
-		return x.Namespaces
+		return x.Kinds
 	}
 	return nil
 }
@@ -141,6 +225,13 @@ func (x *SearchRequest) GetNamespaces() []string {
 func (x *SearchRequest) GetTypes() []string {
 	if x != nil {
 		return x.Types
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetNamespaces() []string {
+	if x != nil {
+		return x.Namespaces
 	}
 	return nil
 }
@@ -194,25 +285,206 @@ func (x *SearchRequest) GetOffset() int32 {
 	return 0
 }
 
-type Hit struct {
+func (x *SearchRequest) GetProjects() []string {
+	if x != nil {
+		return x.Projects
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetIncludeSubprojects() bool {
+	if x != nil {
+		return x.IncludeSubprojects
+	}
+	return false
+}
+
+func (x *SearchRequest) GetOwnerUnits() []string {
+	if x != nil {
+		return x.OwnerUnits
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetStatuses() []string {
+	if x != nil {
+		return x.Statuses
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetMethodologies() []string {
+	if x != nil {
+		return x.Methodologies
+	}
+	return nil
+}
+
+func (x *SearchRequest) GetRootsOnly() bool {
+	if x != nil {
+		return x.RootsOnly
+	}
+	return false
+}
+
+func (x *SearchRequest) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *SearchRequest) GetMinSimilarity() float64 {
+	if x != nil && x.MinSimilarity != nil {
+		return *x.MinSimilarity
+	}
+	return 0
+}
+
+func (x *SearchRequest) GetSnippet() bool {
+	if x != nil {
+		return x.Snippet
+	}
+	return false
+}
+
+func (x *SearchRequest) GetSimilarTo() *DocumentRef {
+	if x != nil {
+		return x.SimilarTo
+	}
+	return nil
+}
+
+// What a hit of kind change adds.
+type ChangeInfo struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Version       int32                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	Namespace     string                 `protobuf:"bytes,3,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	Type          string                 `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
-	Key           string                 `protobuf:"bytes,5,opt,name=key,proto3" json:"key,omitempty"`
-	State         string                 `protobuf:"bytes,6,opt,name=state,proto3" json:"state,omitempty"`
-	Branch        string                 `protobuf:"bytes,7,opt,name=branch,proto3" json:"branch,omitempty"`
-	Main          bool                   `protobuf:"varint,8,opt,name=main,proto3" json:"main,omitempty"`
-	Facets        map[string]string      `protobuf:"bytes,9,rep,name=facets,proto3" json:"facets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Score         float64                `protobuf:"fixed64,10,opt,name=score,proto3" json:"score,omitempty"`
+	ChangeId      string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	Title         string                 `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	Status        string                 `protobuf:"bytes,3,opt,name=status,proto3" json:"status,omitempty"`
+	ProjectId     string                 `protobuf:"bytes,4,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Methodology   string                 `protobuf:"bytes,5,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	OwnerOrg      string                 `protobuf:"bytes,6,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	ParentId      string                 `protobuf:"bytes,7,opt,name=parent_id,json=parentId,proto3" json:"parent_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangeInfo) Reset() {
+	*x = ChangeInfo{}
+	mi := &file_goap_index_v1_index_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangeInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangeInfo) ProtoMessage() {}
+
+func (x *ChangeInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_index_v1_index_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangeInfo.ProtoReflect.Descriptor instead.
+func (*ChangeInfo) Descriptor() ([]byte, []int) {
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *ChangeInfo) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *ChangeInfo) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *ChangeInfo) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ChangeInfo) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ChangeInfo) GetMethodology() string {
+	if x != nil {
+		return x.Methodology
+	}
+	return ""
+}
+
+func (x *ChangeInfo) GetOwnerOrg() string {
+	if x != nil {
+		return x.OwnerOrg
+	}
+	return ""
+}
+
+func (x *ChangeInfo) GetParentId() string {
+	if x != nil {
+		return x.ParentId
+	}
+	return ""
+}
+
+type Hit struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// node | change
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// node id, or change id
+	Id string `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	// 0 for a change
+	Version   int32  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Namespace string `protobuf:"bytes,4,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// empty for a change
+	Type string `protobuf:"bytes,5,opt,name=type,proto3" json:"type,omitempty"`
+	// the key of the node, the change id for a change
+	Key     string `protobuf:"bytes,6,opt,name=key,proto3" json:"key,omitempty"`
+	State   string `protobuf:"bytes,7,opt,name=state,proto3" json:"state,omitempty"`
+	Branch  string `protobuf:"bytes,8,opt,name=branch,proto3" json:"branch,omitempty"`
+	Main    bool   `protobuf:"varint,9,opt,name=main,proto3" json:"main,omitempty"`
+	Deleted bool   `protobuf:"varint,10,opt,name=deleted,proto3" json:"deleted,omitempty"`
+	// key of the project of the node, or of the change
+	Project string `protobuf:"bytes,11,opt,name=project,proto3" json:"project,omitempty"`
+	// key of the unit owning the node version, or holding the change
+	OwnerUnit string            `protobuf:"bytes,12,opt,name=owner_unit,json=ownerUnit,proto3" json:"owner_unit,omitempty"`
+	Facets    map[string]string `protobuf:"bytes,13,rep,name=facets,proto3" json:"facets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// ranking score (fused rank in a hybrid search, cosine in a semantic one or similar_to)
+	Score float64 `protobuf:"fixed64,14,opt,name=score,proto3" json:"score,omitempty"`
+	// cosine similarity when the hit came out of the vector side, else 0
+	Similarity float64 `protobuf:"fixed64,15,opt,name=similarity,proto3" json:"similarity,omitempty"`
+	// best matching passage, when asked
+	Snippet string `protobuf:"bytes,16,opt,name=snippet,proto3" json:"snippet,omitempty"`
+	// set for a change
+	Change        *ChangeInfo `protobuf:"bytes,17,opt,name=change,proto3" json:"change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Hit) Reset() {
 	*x = Hit{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[2]
+	mi := &file_goap_index_v1_index_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -224,7 +496,7 @@ func (x *Hit) String() string {
 func (*Hit) ProtoMessage() {}
 
 func (x *Hit) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[2]
+	mi := &file_goap_index_v1_index_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -237,7 +509,14 @@ func (x *Hit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Hit.ProtoReflect.Descriptor instead.
 func (*Hit) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{2}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Hit) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
 }
 
 func (x *Hit) GetId() string {
@@ -296,6 +575,27 @@ func (x *Hit) GetMain() bool {
 	return false
 }
 
+func (x *Hit) GetDeleted() bool {
+	if x != nil {
+		return x.Deleted
+	}
+	return false
+}
+
+func (x *Hit) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *Hit) GetOwnerUnit() string {
+	if x != nil {
+		return x.OwnerUnit
+	}
+	return ""
+}
+
 func (x *Hit) GetFacets() map[string]string {
 	if x != nil {
 		return x.Facets
@@ -310,6 +610,27 @@ func (x *Hit) GetScore() float64 {
 	return 0
 }
 
+func (x *Hit) GetSimilarity() float64 {
+	if x != nil {
+		return x.Similarity
+	}
+	return 0
+}
+
+func (x *Hit) GetSnippet() string {
+	if x != nil {
+		return x.Snippet
+	}
+	return ""
+}
+
+func (x *Hit) GetChange() *ChangeInfo {
+	if x != nil {
+		return x.Change
+	}
+	return nil
+}
+
 type FacetCount struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Value         string                 `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
@@ -320,7 +641,7 @@ type FacetCount struct {
 
 func (x *FacetCount) Reset() {
 	*x = FacetCount{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[3]
+	mi := &file_goap_index_v1_index_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -332,7 +653,7 @@ func (x *FacetCount) String() string {
 func (*FacetCount) ProtoMessage() {}
 
 func (x *FacetCount) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[3]
+	mi := &file_goap_index_v1_index_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -345,7 +666,7 @@ func (x *FacetCount) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FacetCount.ProtoReflect.Descriptor instead.
 func (*FacetCount) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{3}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *FacetCount) GetValue() string {
@@ -372,7 +693,7 @@ type FacetResult struct {
 
 func (x *FacetResult) Reset() {
 	*x = FacetResult{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[4]
+	mi := &file_goap_index_v1_index_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -384,7 +705,7 @@ func (x *FacetResult) String() string {
 func (*FacetResult) ProtoMessage() {}
 
 func (x *FacetResult) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[4]
+	mi := &file_goap_index_v1_index_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -397,7 +718,7 @@ func (x *FacetResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FacetResult.ProtoReflect.Descriptor instead.
 func (*FacetResult) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{4}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *FacetResult) GetName() string {
@@ -429,7 +750,7 @@ type SearchResponse struct {
 
 func (x *SearchResponse) Reset() {
 	*x = SearchResponse{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[5]
+	mi := &file_goap_index_v1_index_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +762,7 @@ func (x *SearchResponse) String() string {
 func (*SearchResponse) ProtoMessage() {}
 
 func (x *SearchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[5]
+	mi := &file_goap_index_v1_index_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +775,7 @@ func (x *SearchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResponse.ProtoReflect.Descriptor instead.
 func (*SearchResponse) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{5}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SearchResponse) GetHits() []*Hit {
@@ -500,7 +821,7 @@ type ReindexRequest struct {
 
 func (x *ReindexRequest) Reset() {
 	*x = ReindexRequest{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[6]
+	mi := &file_goap_index_v1_index_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -512,7 +833,7 @@ func (x *ReindexRequest) String() string {
 func (*ReindexRequest) ProtoMessage() {}
 
 func (x *ReindexRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[6]
+	mi := &file_goap_index_v1_index_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -525,7 +846,7 @@ func (x *ReindexRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReindexRequest.ProtoReflect.Descriptor instead.
 func (*ReindexRequest) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{6}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{8}
 }
 
 type ReindexResponse struct {
@@ -537,7 +858,7 @@ type ReindexResponse struct {
 
 func (x *ReindexResponse) Reset() {
 	*x = ReindexResponse{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[7]
+	mi := &file_goap_index_v1_index_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +870,7 @@ func (x *ReindexResponse) String() string {
 func (*ReindexResponse) ProtoMessage() {}
 
 func (x *ReindexResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[7]
+	mi := &file_goap_index_v1_index_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,7 +883,7 @@ func (x *ReindexResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReindexResponse.ProtoReflect.Descriptor instead.
 func (*ReindexResponse) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{7}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ReindexResponse) GetVersions() int32 {
@@ -580,7 +901,7 @@ type StatusRequest struct {
 
 func (x *StatusRequest) Reset() {
 	*x = StatusRequest{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[8]
+	mi := &file_goap_index_v1_index_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -592,7 +913,7 @@ func (x *StatusRequest) String() string {
 func (*StatusRequest) ProtoMessage() {}
 
 func (x *StatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[8]
+	mi := &file_goap_index_v1_index_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -605,7 +926,7 @@ func (x *StatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusRequest.ProtoReflect.Descriptor instead.
 func (*StatusRequest) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{8}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{10}
 }
 
 type StatusResponse struct {
@@ -616,13 +937,14 @@ type StatusResponse struct {
 	NodesIndexed      int64  `protobuf:"varint,3,opt,name=nodes_indexed,json=nodesIndexed,proto3" json:"nodes_indexed,omitempty"`
 	BaselinesFollowed int64  `protobuf:"varint,4,opt,name=baselines_followed,json=baselinesFollowed,proto3" json:"baselines_followed,omitempty"`
 	Errors            int64  `protobuf:"varint,5,opt,name=errors,proto3" json:"errors,omitempty"`
+	ChangesIndexed    int64  `protobuf:"varint,6,opt,name=changes_indexed,json=changesIndexed,proto3" json:"changes_indexed,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
 
 func (x *StatusResponse) Reset() {
 	*x = StatusResponse{}
-	mi := &file_goap_index_v1_index_proto_msgTypes[9]
+	mi := &file_goap_index_v1_index_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -634,7 +956,7 @@ func (x *StatusResponse) String() string {
 func (*StatusResponse) ProtoMessage() {}
 
 func (x *StatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_index_v1_index_proto_msgTypes[9]
+	mi := &file_goap_index_v1_index_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -647,7 +969,7 @@ func (x *StatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatusResponse.ProtoReflect.Descriptor instead.
 func (*StatusResponse) Descriptor() ([]byte, []int) {
-	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{9}
+	return file_goap_index_v1_index_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *StatusResponse) GetSemantic() bool {
@@ -685,6 +1007,13 @@ func (x *StatusResponse) GetErrors() int64 {
 	return 0
 }
 
+func (x *StatusResponse) GetChangesIndexed() int64 {
+	if x != nil {
+		return x.ChangesIndexed
+	}
+	return 0
+}
+
 var File_goap_index_v1_index_proto protoreflect.FileDescriptor
 
 const file_goap_index_v1_index_proto_rawDesc = "" +
@@ -692,34 +1021,72 @@ const file_goap_index_v1_index_proto_rawDesc = "" +
 	"\x19goap/index/v1/index.proto\x12\rgoap.index.v1\"9\n" +
 	"\vFacetFilter\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
-	"\x06values\x18\x02 \x03(\tR\x06values\"\xb6\x02\n" +
+	"\x06values\x18\x02 \x03(\tR\x06values\"1\n" +
+	"\vDocumentRef\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\"\xc3\x05\n" +
 	"\rSearchRequest\x12\x12\n" +
-	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1e\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12\x14\n" +
+	"\x05kinds\x18\x02 \x03(\tR\x05kinds\x12\x14\n" +
+	"\x05types\x18\x03 \x03(\tR\x05types\x12\x1e\n" +
 	"\n" +
-	"namespaces\x18\x02 \x03(\tR\n" +
-	"namespaces\x12\x14\n" +
-	"\x05types\x18\x03 \x03(\tR\x05types\x12\x16\n" +
-	"\x06states\x18\x04 \x03(\tR\x06states\x12\x1a\n" +
-	"\bbranches\x18\x05 \x03(\tR\bbranches\x12\x17\n" +
-	"\x04main\x18\x06 \x01(\bH\x00R\x04main\x88\x01\x01\x12?\n" +
-	"\rfacet_filters\x18\a \x03(\v2\x1a.goap.index.v1.FacetFilterR\ffacetFilters\x12\x16\n" +
-	"\x06facets\x18\b \x03(\tR\x06facets\x12\x14\n" +
-	"\x05limit\x18\t \x01(\x05R\x05limit\x12\x16\n" +
-	"\x06offset\x18\n" +
-	" \x01(\x05R\x06offsetB\a\n" +
-	"\x05_main\"\xbe\x02\n" +
-	"\x03Hit\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x05R\aversion\x12\x1c\n" +
-	"\tnamespace\x18\x03 \x01(\tR\tnamespace\x12\x12\n" +
-	"\x04type\x18\x04 \x01(\tR\x04type\x12\x10\n" +
-	"\x03key\x18\x05 \x01(\tR\x03key\x12\x14\n" +
-	"\x05state\x18\x06 \x01(\tR\x05state\x12\x16\n" +
-	"\x06branch\x18\a \x01(\tR\x06branch\x12\x12\n" +
-	"\x04main\x18\b \x01(\bR\x04main\x126\n" +
-	"\x06facets\x18\t \x03(\v2\x1e.goap.index.v1.Hit.FacetsEntryR\x06facets\x12\x14\n" +
-	"\x05score\x18\n" +
-	" \x01(\x01R\x05score\x1a9\n" +
+	"namespaces\x18\x04 \x03(\tR\n" +
+	"namespaces\x12\x16\n" +
+	"\x06states\x18\x05 \x03(\tR\x06states\x12\x1a\n" +
+	"\bbranches\x18\x06 \x03(\tR\bbranches\x12\x17\n" +
+	"\x04main\x18\a \x01(\bH\x00R\x04main\x88\x01\x01\x12?\n" +
+	"\rfacet_filters\x18\b \x03(\v2\x1a.goap.index.v1.FacetFilterR\ffacetFilters\x12\x16\n" +
+	"\x06facets\x18\t \x03(\tR\x06facets\x12\x14\n" +
+	"\x05limit\x18\n" +
+	" \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06offset\x18\v \x01(\x05R\x06offset\x12\x1a\n" +
+	"\bprojects\x18\f \x03(\tR\bprojects\x12/\n" +
+	"\x13include_subprojects\x18\r \x01(\bR\x12includeSubprojects\x12\x1f\n" +
+	"\vowner_units\x18\x0e \x03(\tR\n" +
+	"ownerUnits\x12\x1a\n" +
+	"\bstatuses\x18\x0f \x03(\tR\bstatuses\x12$\n" +
+	"\rmethodologies\x18\x10 \x03(\tR\rmethodologies\x12\x1d\n" +
+	"\n" +
+	"roots_only\x18\x11 \x01(\bR\trootsOnly\x12\x12\n" +
+	"\x04mode\x18\x12 \x01(\tR\x04mode\x12*\n" +
+	"\x0emin_similarity\x18\x13 \x01(\x01H\x01R\rminSimilarity\x88\x01\x01\x12\x18\n" +
+	"\asnippet\x18\x14 \x01(\bR\asnippet\x129\n" +
+	"\n" +
+	"similar_to\x18\x15 \x01(\v2\x1a.goap.index.v1.DocumentRefR\tsimilarToB\a\n" +
+	"\x05_mainB\x11\n" +
+	"\x0f_min_similarity\"\xd2\x01\n" +
+	"\n" +
+	"ChangeInfo\x12\x1b\n" +
+	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
+	"\x06status\x18\x03 \x01(\tR\x06status\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x04 \x01(\tR\tprojectId\x12 \n" +
+	"\vmethodology\x18\x05 \x01(\tR\vmethodology\x12\x1b\n" +
+	"\towner_org\x18\x06 \x01(\tR\bownerOrg\x12\x1b\n" +
+	"\tparent_id\x18\a \x01(\tR\bparentId\"\x92\x04\n" +
+	"\x03Hit\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\x05R\aversion\x12\x1c\n" +
+	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12\x12\n" +
+	"\x04type\x18\x05 \x01(\tR\x04type\x12\x10\n" +
+	"\x03key\x18\x06 \x01(\tR\x03key\x12\x14\n" +
+	"\x05state\x18\a \x01(\tR\x05state\x12\x16\n" +
+	"\x06branch\x18\b \x01(\tR\x06branch\x12\x12\n" +
+	"\x04main\x18\t \x01(\bR\x04main\x12\x18\n" +
+	"\adeleted\x18\n" +
+	" \x01(\bR\adeleted\x12\x18\n" +
+	"\aproject\x18\v \x01(\tR\aproject\x12\x1d\n" +
+	"\n" +
+	"owner_unit\x18\f \x01(\tR\townerUnit\x126\n" +
+	"\x06facets\x18\r \x03(\v2\x1e.goap.index.v1.Hit.FacetsEntryR\x06facets\x12\x14\n" +
+	"\x05score\x18\x0e \x01(\x01R\x05score\x12\x1e\n" +
+	"\n" +
+	"similarity\x18\x0f \x01(\x01R\n" +
+	"similarity\x12\x18\n" +
+	"\asnippet\x18\x10 \x01(\tR\asnippet\x121\n" +
+	"\x06change\x18\x11 \x01(\v2\x19.goap.index.v1.ChangeInfoR\x06change\x1a9\n" +
 	"\vFacetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"8\n" +
@@ -739,13 +1106,14 @@ const file_goap_index_v1_index_proto_rawDesc = "" +
 	"\x0eReindexRequest\"-\n" +
 	"\x0fReindexResponse\x12\x1a\n" +
 	"\bversions\x18\x01 \x01(\x05R\bversions\"\x0f\n" +
-	"\rStatusRequest\"\xae\x01\n" +
+	"\rStatusRequest\"\xd7\x01\n" +
 	"\x0eStatusResponse\x12\x1a\n" +
 	"\bsemantic\x18\x01 \x01(\bR\bsemantic\x12\x14\n" +
 	"\x05store\x18\x02 \x01(\tR\x05store\x12#\n" +
 	"\rnodes_indexed\x18\x03 \x01(\x03R\fnodesIndexed\x12-\n" +
 	"\x12baselines_followed\x18\x04 \x01(\x03R\x11baselinesFollowed\x12\x16\n" +
-	"\x06errors\x18\x05 \x01(\x03R\x06errors2\xe6\x01\n" +
+	"\x06errors\x18\x05 \x01(\x03R\x06errors\x12'\n" +
+	"\x0fchanges_indexed\x18\x06 \x01(\x03R\x0echangesIndexed2\xe6\x01\n" +
 	"\fIndexService\x12E\n" +
 	"\x06Search\x12\x1c.goap.index.v1.SearchRequest\x1a\x1d.goap.index.v1.SearchResponse\x12H\n" +
 	"\aReindex\x12\x1d.goap.index.v1.ReindexRequest\x1a\x1e.goap.index.v1.ReindexResponse\x12E\n" +
@@ -765,37 +1133,41 @@ func file_goap_index_v1_index_proto_rawDescGZIP() []byte {
 	return file_goap_index_v1_index_proto_rawDescData
 }
 
-var file_goap_index_v1_index_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_goap_index_v1_index_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_goap_index_v1_index_proto_goTypes = []any{
 	(*FacetFilter)(nil),     // 0: goap.index.v1.FacetFilter
-	(*SearchRequest)(nil),   // 1: goap.index.v1.SearchRequest
-	(*Hit)(nil),             // 2: goap.index.v1.Hit
-	(*FacetCount)(nil),      // 3: goap.index.v1.FacetCount
-	(*FacetResult)(nil),     // 4: goap.index.v1.FacetResult
-	(*SearchResponse)(nil),  // 5: goap.index.v1.SearchResponse
-	(*ReindexRequest)(nil),  // 6: goap.index.v1.ReindexRequest
-	(*ReindexResponse)(nil), // 7: goap.index.v1.ReindexResponse
-	(*StatusRequest)(nil),   // 8: goap.index.v1.StatusRequest
-	(*StatusResponse)(nil),  // 9: goap.index.v1.StatusResponse
-	nil,                     // 10: goap.index.v1.Hit.FacetsEntry
+	(*DocumentRef)(nil),     // 1: goap.index.v1.DocumentRef
+	(*SearchRequest)(nil),   // 2: goap.index.v1.SearchRequest
+	(*ChangeInfo)(nil),      // 3: goap.index.v1.ChangeInfo
+	(*Hit)(nil),             // 4: goap.index.v1.Hit
+	(*FacetCount)(nil),      // 5: goap.index.v1.FacetCount
+	(*FacetResult)(nil),     // 6: goap.index.v1.FacetResult
+	(*SearchResponse)(nil),  // 7: goap.index.v1.SearchResponse
+	(*ReindexRequest)(nil),  // 8: goap.index.v1.ReindexRequest
+	(*ReindexResponse)(nil), // 9: goap.index.v1.ReindexResponse
+	(*StatusRequest)(nil),   // 10: goap.index.v1.StatusRequest
+	(*StatusResponse)(nil),  // 11: goap.index.v1.StatusResponse
+	nil,                     // 12: goap.index.v1.Hit.FacetsEntry
 }
 var file_goap_index_v1_index_proto_depIdxs = []int32{
 	0,  // 0: goap.index.v1.SearchRequest.facet_filters:type_name -> goap.index.v1.FacetFilter
-	10, // 1: goap.index.v1.Hit.facets:type_name -> goap.index.v1.Hit.FacetsEntry
-	3,  // 2: goap.index.v1.FacetResult.counts:type_name -> goap.index.v1.FacetCount
-	2,  // 3: goap.index.v1.SearchResponse.hits:type_name -> goap.index.v1.Hit
-	4,  // 4: goap.index.v1.SearchResponse.facets:type_name -> goap.index.v1.FacetResult
-	1,  // 5: goap.index.v1.IndexService.Search:input_type -> goap.index.v1.SearchRequest
-	6,  // 6: goap.index.v1.IndexService.Reindex:input_type -> goap.index.v1.ReindexRequest
-	8,  // 7: goap.index.v1.IndexService.Status:input_type -> goap.index.v1.StatusRequest
-	5,  // 8: goap.index.v1.IndexService.Search:output_type -> goap.index.v1.SearchResponse
-	7,  // 9: goap.index.v1.IndexService.Reindex:output_type -> goap.index.v1.ReindexResponse
-	9,  // 10: goap.index.v1.IndexService.Status:output_type -> goap.index.v1.StatusResponse
-	8,  // [8:11] is the sub-list for method output_type
-	5,  // [5:8] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	1,  // 1: goap.index.v1.SearchRequest.similar_to:type_name -> goap.index.v1.DocumentRef
+	12, // 2: goap.index.v1.Hit.facets:type_name -> goap.index.v1.Hit.FacetsEntry
+	3,  // 3: goap.index.v1.Hit.change:type_name -> goap.index.v1.ChangeInfo
+	5,  // 4: goap.index.v1.FacetResult.counts:type_name -> goap.index.v1.FacetCount
+	4,  // 5: goap.index.v1.SearchResponse.hits:type_name -> goap.index.v1.Hit
+	6,  // 6: goap.index.v1.SearchResponse.facets:type_name -> goap.index.v1.FacetResult
+	2,  // 7: goap.index.v1.IndexService.Search:input_type -> goap.index.v1.SearchRequest
+	8,  // 8: goap.index.v1.IndexService.Reindex:input_type -> goap.index.v1.ReindexRequest
+	10, // 9: goap.index.v1.IndexService.Status:input_type -> goap.index.v1.StatusRequest
+	7,  // 10: goap.index.v1.IndexService.Search:output_type -> goap.index.v1.SearchResponse
+	9,  // 11: goap.index.v1.IndexService.Reindex:output_type -> goap.index.v1.ReindexResponse
+	11, // 12: goap.index.v1.IndexService.Status:output_type -> goap.index.v1.StatusResponse
+	10, // [10:13] is the sub-list for method output_type
+	7,  // [7:10] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_goap_index_v1_index_proto_init() }
@@ -803,14 +1175,14 @@ func file_goap_index_v1_index_proto_init() {
 	if File_goap_index_v1_index_proto != nil {
 		return
 	}
-	file_goap_index_v1_index_proto_msgTypes[1].OneofWrappers = []any{}
+	file_goap_index_v1_index_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_index_v1_index_proto_rawDesc), len(file_goap_index_v1_index_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

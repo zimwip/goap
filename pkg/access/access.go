@@ -241,6 +241,19 @@ func (s *Snapshot) HasProject(key string) bool {
 	return ok
 }
 
+// SubProjects returns a project and every project below it (project_part_of), sorted: the projects a search "in a
+// project and its sub-projects" covers (ADR 0095). An unknown project yields just itself.
+func (s *Snapshot) SubProjects(project string) []string {
+	out := []string{project}
+	for k := range s.projectMethods {
+		if k != project && slices.Contains(s.ProjectChain(k), project) {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out[1:])
+	return out
+}
+
 // ApplicableMethodologies returns the methodologies that apply to a project: its own and those of its ancestors, nearest
 // first, without repeats (ADR 0039; the server-side twin of the web's applicableMethodologies).
 func (s *Snapshot) ApplicableMethodologies(project string) []string {
@@ -458,6 +471,15 @@ func (d *Directory) MayAccessProject(ctx context.Context, p authz.Principal, pro
 		return false, err
 	}
 	return s.MayAccessProject(p, project), nil
+}
+
+// SubProjects returns a project and the projects below it, from the current snapshot (Snapshot.SubProjects).
+func (d *Directory) SubProjects(ctx context.Context, project string) ([]string, error) {
+	s, err := d.Snapshot(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.SubProjects(project), nil
 }
 
 // Authorizer decides access requests from the Policy nodes of the graph, for the principal
