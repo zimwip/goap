@@ -57,6 +57,12 @@ links to the project tab. The assistant has the `set_methodology` effect tool on
 The methodology editor lets the author choose the main goal among its goals and processes (`goalChoices`); the change
 tab shows the goal with the description the methodology gives it.
 
+### The goal is the END point
+
+The goal of a methodology is the end point of its process: it is what pulls the scheduler. The fallback of
+`MainGoal()` (the first declared goal, else the first process) is a convenience for methodologies written without
+`goal:`: an author declares it. What can be started towards it now is the subject of ADR 0097 (starting points).
+
 ## Not done
 
-Starting points (suggestions by the scheduler); the RPC `CreateChange` request has no `goal` field (the Go API has).
+Starting points: see ADR 0097; the RPC `CreateChange` request has no `goal` field (the Go API has).

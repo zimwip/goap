@@ -32,6 +32,7 @@ import (
 // fakeEngine records the requests of goap-scheduler.
 type fakeEngine struct {
 	start  *enginev1.StartProcessRequest
+	points *enginev1.ListStartingPointsRequest
 	header http.Header
 }
 
@@ -59,6 +60,12 @@ func (f *fakeEngine) ListTriggers(context.Context, *connect.Request[enginev1.Lis
 
 func (f *fakeEngine) FireTrigger(_ context.Context, r *connect.Request[enginev1.FireTriggerRequest]) (*connect.Response[enginev1.FireTriggerResponse], error) {
 	return connect.NewResponse(&enginev1.FireTriggerResponse{Process: &enginev1.Process{Id: "P3", Trigger: r.Msg.Methodology + "/" + r.Msg.Agent + "/" + r.Msg.Trigger}}), nil
+}
+
+func (f *fakeEngine) ListStartingPoints(_ context.Context, r *connect.Request[enginev1.ListStartingPointsRequest]) (*connect.Response[enginev1.ListStartingPointsResponse], error) {
+	f.points, f.header = r.Msg, r.Header()
+	return connect.NewResponse(&enginev1.ListStartingPointsResponse{Goal: "deliver", BlockedCount: 2,
+		Points: []*enginev1.StartingPoint{{Id: "p/s", Kind: "step", Launch: &enginev1.StartLaunch{Agent: "p", Goal: "p/s", ChangeId: r.Msg.ChangeId}}}}), nil
 }
 
 type fakeRegistry struct{ domains []*def.Domain }
@@ -652,6 +659,11 @@ func TestSchedulerTools(t *testing.T) {
 	}
 	if got := p.call(t, ctx, "", "goap-scheduler/list", map[string]any{"limit": float64(1)}); len(got["processes"].([]any)) != 1 || got["truncated"] != true {
 		t.Fatalf("list = %v", got)
+	}
+	// the possible steps of the calling change (ADR 0097)
+	sp := p.call(t, ctx, "", "goap-scheduler/starting_points", nil)
+	if p.engine.points.ChangeId != "C1" || sp["goal"] != "deliver" || len(sp["points"].([]any)) != 1 || sp["blockedCount"] != float64(2) {
+		t.Fatalf("starting_points = %v %v", sp, p.engine.points)
 	}
 	if got := p.call(t, ctx, "", "goap-scheduler/fire", map[string]any{"methodology": "m", "agent": "a", "trigger": "t"}); got["process"].(map[string]any)["trigger"] != "m/a/t" {
 		t.Fatalf("fire = %v", got)

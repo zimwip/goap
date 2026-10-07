@@ -64,7 +64,9 @@ type agentEntry struct {
 	Roles       []string    `json:"requiredRoles,omitempty"`
 	NeedsChange bool        `json:"needsChange"`
 	Running     bool        `json:"running"`
-	goals       []string    // every goal name of the agent, whatever the cap of Goals
+	// Ready: with a change in context, a step this agent would carry out is possible now (see possibleSteps).
+	Ready bool     `json:"ready,omitempty"`
+	goals []string // every goal name of the agent, whatever the cap of Goals
 }
 
 type goalEntry struct {
@@ -98,6 +100,36 @@ type candidates struct {
 	change  *changeView
 	note    string
 	agents  []agentEntry
+	// points are the steps possible now on the change of the context (ADR 0097), nil with no change.
+	points *Points
+}
+
+// stepEntry is a possible step as list_agents shows it: the only things the assistant may propose on a change.
+type stepEntry struct {
+	ID          string   `json:"id"`
+	Kind        string   `json:"kind"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Method      string   `json:"method,omitempty"`
+	Why         []string `json:"why,omitempty"`
+	Produces    []string `json:"produces,omitempty"`
+	Responsible string   `json:"responsibleRole,omitempty"`
+	MayRun      bool     `json:"mayRun"`
+	Running     bool     `json:"running,omitempty"`
+}
+
+const maxSteps = 12
+
+func stepEntries(p Points) []stepEntry {
+	out := []stepEntry{}
+	for _, pt := range p.Points {
+		if len(out) == maxSteps {
+			break
+		}
+		out = append(out, stepEntry{ID: pt.ID, Kind: pt.Kind, Name: pt.Name, Description: clip(pt.Description, 200), Method: pt.Method, Why: pt.Why,
+			Produces: pt.Produces, Responsible: pt.Responsible, MayRun: pt.MayRun, Running: pt.Running})
+	}
+	return out
 }
 
 func (c candidates) find(methodologyName, agent string) (agentEntry, bool) {
@@ -150,6 +182,13 @@ func (s *Service) runnable(ctx context.Context, p authz.Principal, project, chan
 			if pr.ChangeID == changeID && len(cv.Processes) < maxRunningShown {
 				cv.Processes = append(cv.Processes, processView{ID: pr.ID, Agent: pr.Agent, Status: pr.Status})
 			}
+		}
+		if startable(ch.Status) && ch.Methodology != "" {
+			pts, err := s.Engine.StartingPoints(authz.With(ctx, p), changeID)
+			if err != nil {
+				return c, fmt.Errorf("the possible steps cannot be read: %w", err)
+			}
+			c.points = &pts
 		}
 		switch {
 		case !startable(ch.Status):
@@ -207,6 +246,9 @@ func (s *Service) runnable(ctx context.Context, p authz.Principal, project, chan
 			if c.change != nil {
 				e.Running = slices.ContainsFunc(c.change.Processes, func(pv processView) bool { return pv.Agent == ag.Name })
 			}
+			if c.points != nil {
+				e.Ready = slices.ContainsFunc(c.points.Points, func(pt Point) bool { return pt.Agent == ag.Name && pt.Possible() })
+			}
 			c.agents = append(c.agents, e)
 		}
 	}
@@ -225,13 +267,45 @@ func (t *turn) listAgents(ctx context.Context) (any, error) {
 	if c.change != nil {
 		res["change"] = c.change
 	}
+	if c.points != nil {
+		// the steps possible now towards the goal of the change, in the same call (ADR 0097): the only ones to propose
+		res["goal"] = c.points.Goal
+		res["possibleSteps"] = stepEntries(*c.points)
+		if c.points.BlockedCount > 0 {
+			res["waitingSteps"] = map[string]any{"count": c.points.BlockedCount, "firstMissing": c.points.Blocked}
+		}
+		if len(c.points.Points) == 0 {
+			res["stepsNote"] = "no step is possible now: " + c.points.Reason + ". Say what is awaited; propose nothing."
+		}
+	}
 	if c.note != "" {
 		res["note"] = c.note
 	}
-	if len(c.agents) == 0 && c.note == "" {
+	if len(c.agents) == 0 && c.note == "" && c.points == nil {
 		res["note"] = "no agent of the methodologies of this project is one you may run here"
 	}
 	return res, nil
+}
+
+// notPossible is the refusal of a step that is not possible now: the reason, and what is.
+func notPossible(step string, p Points) error {
+	var ids []string
+	for _, pt := range p.Points {
+		if pt.Possible() {
+			ids = append(ids, pt.ID)
+		}
+	}
+	if step == "" {
+		step = "(none given)"
+	}
+	why := "its entry conditions do not all hold, or it does not work towards the goal of the change, or it is done"
+	if len(p.Points) == 0 && p.Reason != "" {
+		why = p.Reason
+	}
+	if len(ids) == 0 {
+		return fmt.Errorf("step %q is not possible now on this change (%s); no step is possible now: say what is awaited", step, why)
+	}
+	return fmt.Errorf("step %q is not possible now on this change (%s); on a change propose a step of possibleSteps (\"step\": its id): %s", step, why, strings.Join(ids, ", "))
 }
 
 func nonNil(a []agentEntry) []agentEntry {
@@ -249,7 +323,8 @@ func (t *turn) startAgent(ctx context.Context, a args) (any, error) {
 		}
 	}
 	method, agent, goal, intent := a.str("methodology"), a.str("agent"), a.str("goal"), a.str("intent")
-	if method == "" || agent == "" {
+	step := a.str("step")
+	if step == "" && t.in.Context.change() == "" && (method == "" || agent == "") {
 		return nil, errors.New(`"methodology" and "agent" are required (take them from list_agents)`)
 	}
 	if len(intent) > 4000 {
@@ -287,20 +362,50 @@ func (t *turn) startAgent(ctx context.Context, a args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	entry, ok := c.find(method, agent)
-	if !ok {
-		return nil, fmt.Errorf("agent %q of %q is not one you may run here (see list_agents)", agent, method)
+	if c.change != nil && step == "" {
+		// on a change the only proposals are the steps possible now (ADR 0097)
+		if c.points == nil {
+			return nil, fmt.Errorf("no step can be started: %s", c.note)
+		}
+		return nil, notPossible("", *c.points)
 	}
-	if goal != "" && !slices.Contains(entry.goals, goal) {
+	var entry agentEntry
+	var pt Point
+	if step != "" {
+		// on a change only the steps possible now are proposed, with the launch the engine gives them
+		if c.points == nil {
+			return nil, fmt.Errorf("no step can be started: %s", c.note)
+		}
+		var ok bool
+		if pt, ok = c.points.Find(step); !ok {
+			return nil, notPossible(step, *c.points)
+		}
+		switch {
+		case pt.Running:
+			return nil, fmt.Errorf("step %q is already being carried out on this change", step)
+		case !pt.MayRun:
+			return nil, fmt.Errorf("you may not start step %q: it needs the role %q on this project", step, pt.Responsible)
+		}
+		method, agent, goal = c.change.Methodology, pt.Agent, pt.AgentGoal
+	} else {
+		var ok bool
+		if entry, ok = c.find(method, agent); !ok {
+			return nil, fmt.Errorf("agent %q of %q is not one you may run here (see list_agents)", agent, method)
+		}
+	}
+	if step == "" && goal != "" && !slices.Contains(entry.goals, goal) {
 		return nil, fmt.Errorf("agent %q has no goal %q (its goals: %s)", agent, goal, strings.Join(entry.goals, ", "))
 	}
-	if goal == "" && intent == "" {
+	if step == "" && goal == "" && intent == "" {
 		if len(entry.goals) != 1 {
 			return nil, errors.New(`give a "goal" (one of the agent's) or an "intent" the engine can identify the goal from`)
 		}
 		goal = entry.goals[0]
 	}
 	label := "Start agent " + agent + " (" + method + ")"
+	if step != "" {
+		label = "Start step " + pt.Name + " (" + step + ")"
+	}
 	if newChange != nil {
 		label += " on a new change"
 	} else {
@@ -315,6 +420,9 @@ func (t *turn) startAgent(ctx context.Context, a args) (any, error) {
 	}
 	if newChange != nil {
 		params["newChange"] = newChange
+	}
+	if step != "" {
+		params["step"] = step
 	}
 	act := convsvc.Action{"type": ActionStartAgent, "status": StatusProposed, "label": clip(label, 200), "args": params}
 	if rationale != "" {
@@ -424,7 +532,14 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 	if err != nil {
 		return convsvc.Message{}, fmt.Errorf("%w: %v", ErrStale, err)
 	}
-	if _, ok := c.find(ar.str("methodology"), ar.str("agent")); !ok {
+	if step := ar.str("step"); step != "" {
+		if c.points == nil {
+			return convsvc.Message{}, fmt.Errorf("%w: no step can be started on change %q any more", ErrStale, changeID)
+		}
+		if pt, ok := c.points.Find(step); !ok || !pt.Possible() || pt.Agent != ar.str("agent") || pt.AgentGoal != ar.str("goal") {
+			return convsvc.Message{}, fmt.Errorf("%w: step %q is no longer possible now on change %q", ErrStale, step, changeID)
+		}
+	} else if _, ok := c.find(ar.str("methodology"), ar.str("agent")); !ok {
 		return convsvc.Message{}, fmt.Errorf("%w: agent %q of %q is no longer one you may run here", ErrStale, ar.str("agent"), ar.str("methodology"))
 	}
 
@@ -506,6 +621,9 @@ func describeActions(actions []convsvc.Action) string {
 		}
 		ar := args(mapOf(a["args"]))
 		what := fmt.Sprintf("agent %s of %s", ar.str("agent"), ar.str("methodology"))
+		if st := ar.str("step"); st != "" {
+			what = fmt.Sprintf("step %s of %s", st, ar.str("methodology"))
+		}
 		res := mapOf(a["result"])
 		switch a["status"] {
 		case StatusProposed, StatusStarting:

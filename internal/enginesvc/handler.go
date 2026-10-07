@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
@@ -160,6 +161,58 @@ func (h *Handler) CheckAgents(ctx context.Context, r *connect.Request[enginev1.C
 		out.Agents = append(out.Agents, &enginev1.AgentCheck{Agent: n, MayRun: ok, Roles: roles})
 	}
 	return connect.NewResponse(out), nil
+}
+
+// ListStartingPoints serves the steps of the methodology of a change that are possible now towards its goal (ADR 0097):
+// the checks of StartProcess (the "start" permission on the project of the change, the roles of the agent that would
+// run each point, reported per point as may_run) and the read of the change (a personal change is its subject's only).
+func (h *Handler) ListStartingPoints(ctx context.Context, r *connect.Request[enginev1.ListStartingPointsRequest]) (*connect.Response[enginev1.ListStartingPointsResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = ch.ProjectID
+	}
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
+	who := authz.From(ctx)
+	who.Project = projectID
+	ctx = authz.With(ctx, who)
+	name := r.Msg.Methodology
+	if name == "" {
+		name = ch.Methodology
+	}
+	if name != "" {
+		if err := h.authorize(ctx, "start", name, nil); err != nil {
+			return nil, toConnect(err)
+		}
+	}
+	sp, err := h.Engine.StartingPoints(ctx, ch.ID, engine.StartingPointsOptions{Methodology: r.Msg.Methodology, Project: projectID})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(startingPointsToPB(sp)), nil
+}
+
+func startingPointsToPB(sp *engine.StartingPoints) *enginev1.ListStartingPointsResponse {
+	out := &enginev1.ListStartingPointsResponse{Methodology: sp.Methodology, Goal: sp.Goal, Reason: sp.Reason, BlockedCount: int32(sp.BlockedCount)}
+	for _, p := range sp.Points {
+		out.Points = append(out.Points, &enginev1.StartingPoint{Id: p.ID, Kind: p.Kind, Process: p.Process, Parent: p.Parent, Name: p.Name, Method: p.Method,
+			Capability: p.Capability, Description: p.Description, Guidance: p.Guidance, Why: p.Why, Produces: p.Produces, Responsible: p.Responsible,
+			Accountable: p.Accountable, MayRun: p.MayRun, NeedRoles: p.NeedRoles, Running: p.Running,
+			Launch: &enginev1.StartLaunch{Methodology: p.Launch.Methodology, Agent: p.Launch.Agent, Goal: p.Launch.Goal, ChangeId: string(p.Launch.ChangeID)}})
+	}
+	for _, b := range sp.Blocked {
+		out.Blocked = append(out.Blocked, &enginev1.BlockedStep{Id: b.ID, Name: b.Name, Missing: b.Missing})
+	}
+	return out
 }
 
 func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[enginev1.AttachChangeRequest]) (*connect.Response[enginev1.AttachChangeResponse], error) {

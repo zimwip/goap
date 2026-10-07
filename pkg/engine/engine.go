@@ -194,6 +194,9 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 		if _, ok := m.Goal(req.Goal); !ok {
 			return nil, fmt.Errorf("unknown goal %q", req.Goal)
 		}
+		if si, ok := m.StepByPath(req.Goal); ok && p.Step == nil && strings.Contains(req.Goal, "/") {
+			p.Step = contextOfStep(si) // a run towards the goal of a step carries that step out (ADR 0097)
+		}
 		agent := req.Agent
 		if agent == "" {
 			for _, ag := range m.AgentList() {

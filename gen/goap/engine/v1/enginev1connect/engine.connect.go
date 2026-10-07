@@ -72,6 +72,9 @@ const (
 	// EngineServiceCheckAgentsProcedure is the fully-qualified name of the EngineService's CheckAgents
 	// RPC.
 	EngineServiceCheckAgentsProcedure = "/goap.engine.v1.EngineService/CheckAgents"
+	// EngineServiceListStartingPointsProcedure is the fully-qualified name of the EngineService's
+	// ListStartingPoints RPC.
+	EngineServiceListStartingPointsProcedure = "/goap.engine.v1.EngineService/ListStartingPoints"
 	// EngineServiceAttachChangeProcedure is the fully-qualified name of the EngineService's
 	// AttachChange RPC.
 	EngineServiceAttachChangeProcedure = "/goap.engine.v1.EngineService/AttachChange"
@@ -118,6 +121,10 @@ type EngineServiceClient interface {
 	// the checks StartProcess makes (the "start" permission, the roles of the agent, ADR 0043), answered without
 	// starting anything (ADR 0090).
 	CheckAgents(context.Context, *connect.Request[v1.CheckAgentsRequest]) (*connect.Response[v1.CheckAgentsResponse], error)
+	// The steps of the methodology of a change that are possible now towards its goal, the end point of the process
+	// (ADR 0097): every entry condition holds, nothing carries them out; the steps that wait are only counted.
+	// Nothing is started: StartProcess starts a point with its launch.
+	ListStartingPoints(context.Context, *connect.Request[v1.ListStartingPointsRequest]) (*connect.Response[v1.ListStartingPointsResponse], error)
 	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
 	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
 	AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error)
@@ -222,6 +229,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("CheckAgents")),
 			connect.WithClientOptions(opts...),
 		),
+		listStartingPoints: connect.NewClient[v1.ListStartingPointsRequest, v1.ListStartingPointsResponse](
+			httpClient,
+			baseURL+EngineServiceListStartingPointsProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("ListStartingPoints")),
+			connect.WithClientOptions(opts...),
+		),
 		attachChange: connect.NewClient[v1.AttachChangeRequest, v1.AttachChangeResponse](
 			httpClient,
 			baseURL+EngineServiceAttachChangeProcedure,
@@ -270,6 +283,7 @@ type engineServiceClient struct {
 	explainCondition   *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
 	listProcesses      *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
 	checkAgents        *connect.Client[v1.CheckAgentsRequest, v1.CheckAgentsResponse]
+	listStartingPoints *connect.Client[v1.ListStartingPointsRequest, v1.ListStartingPointsResponse]
 	attachChange       *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
 	getProcessLog      *connect.Client[v1.GetProcessLogRequest, v1.GetProcessLogResponse]
 	watchEvents        *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
@@ -342,6 +356,11 @@ func (c *engineServiceClient) CheckAgents(ctx context.Context, req *connect.Requ
 	return c.checkAgents.CallUnary(ctx, req)
 }
 
+// ListStartingPoints calls goap.engine.v1.EngineService.ListStartingPoints.
+func (c *engineServiceClient) ListStartingPoints(ctx context.Context, req *connect.Request[v1.ListStartingPointsRequest]) (*connect.Response[v1.ListStartingPointsResponse], error) {
+	return c.listStartingPoints.CallUnary(ctx, req)
+}
+
 // AttachChange calls goap.engine.v1.EngineService.AttachChange.
 func (c *engineServiceClient) AttachChange(ctx context.Context, req *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error) {
 	return c.attachChange.CallUnary(ctx, req)
@@ -396,6 +415,10 @@ type EngineServiceHandler interface {
 	// the checks StartProcess makes (the "start" permission, the roles of the agent, ADR 0043), answered without
 	// starting anything (ADR 0090).
 	CheckAgents(context.Context, *connect.Request[v1.CheckAgentsRequest]) (*connect.Response[v1.CheckAgentsResponse], error)
+	// The steps of the methodology of a change that are possible now towards its goal, the end point of the process
+	// (ADR 0097): every entry condition holds, nothing carries them out; the steps that wait are only counted.
+	// Nothing is started: StartProcess starts a point with its launch.
+	ListStartingPoints(context.Context, *connect.Request[v1.ListStartingPointsRequest]) (*connect.Response[v1.ListStartingPointsResponse], error)
 	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
 	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
 	AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error)
@@ -496,6 +519,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("CheckAgents")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceListStartingPointsHandler := connect.NewUnaryHandler(
+		EngineServiceListStartingPointsProcedure,
+		svc.ListStartingPoints,
+		connect.WithSchema(engineServiceMethods.ByName("ListStartingPoints")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceAttachChangeHandler := connect.NewUnaryHandler(
 		EngineServiceAttachChangeProcedure,
 		svc.AttachChange,
@@ -554,6 +583,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceListProcessesHandler.ServeHTTP(w, r)
 		case EngineServiceCheckAgentsProcedure:
 			engineServiceCheckAgentsHandler.ServeHTTP(w, r)
+		case EngineServiceListStartingPointsProcedure:
+			engineServiceListStartingPointsHandler.ServeHTTP(w, r)
 		case EngineServiceAttachChangeProcedure:
 			engineServiceAttachChangeHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessLogProcedure:
@@ -623,6 +654,10 @@ func (UnimplementedEngineServiceHandler) ListProcesses(context.Context, *connect
 
 func (UnimplementedEngineServiceHandler) CheckAgents(context.Context, *connect.Request[v1.CheckAgentsRequest]) (*connect.Response[v1.CheckAgentsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.CheckAgents is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) ListStartingPoints(context.Context, *connect.Request[v1.ListStartingPointsRequest]) (*connect.Response[v1.ListStartingPointsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListStartingPoints is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error) {

@@ -35,6 +35,10 @@ service EngineService {
   // the checks StartProcess makes (the "start" permission, the roles of the agent, ADR 0043), answered without
   // starting anything (ADR 0090).
   rpc CheckAgents(CheckAgentsRequest) returns (CheckAgentsResponse);
+  // The steps of the methodology of a change that are possible now towards its goal, the end point of the process
+  // (ADR 0097): every entry condition holds, nothing carries them out; the steps that wait are only counted.
+  // Nothing is started: StartProcess starts a point with its launch.
+  rpc ListStartingPoints(ListStartingPointsRequest) returns (ListStartingPointsResponse);
   // Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
   // (change_id) or a new one, defaulted the same way StartProcess defaults one.
   rpc AttachChange(AttachChangeRequest) returns (AttachChangeResponse);
@@ -295,6 +299,68 @@ message StartProcessRequest {
   // key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
   // token, else the root project, ADR 0039)
   string project_id = 10;
+}
+
+message ListStartingPointsRequest {
+  string change_id = 1;
+  // methodology to read the steps of (empty: the methodology of the change)
+  string methodology = 2;
+  // project the caller would start on (empty: the project of the change, else the caller's active one)
+  string project_id = 3;
+}
+
+// What StartProcess takes to start exactly one starting point: the agent plans towards the goal (the exit criteria
+// of the step, or the goal of the method) on the change, the scheduler selects and sequences the actions inside it.
+message StartLaunch {
+  string methodology = 1;
+  string agent = 2;
+  string goal = 3;
+  string change_id = 4;
+}
+
+// A step, or a step of a method, that is possible now.
+message StartingPoint {
+  // the step path, unique in the methodology
+  string id = 1;
+  // step | method
+  string kind = 2;
+  string process = 3;
+  // for a step of a method: the step of the process that names the capability
+  string parent = 4;
+  string name = 5;
+  string method = 6;
+  string capability = 7;
+  string description = 8;
+  string guidance = 9;
+  // the entry conditions that hold ("name" / "!name")
+  repeated string why = 10;
+  // the exit criteria it reaches
+  repeated string produces = 11;
+  string responsible = 12;
+  string accountable = 13;
+  StartLaunch launch = 14;
+  // the caller may start it (the rule Start applies to its initiator)
+  bool may_run = 15;
+  repeated string need_roles = 16;
+  // a process already carries it out
+  bool running = 17;
+}
+
+message BlockedStep {
+  string id = 1;
+  string name = 2;
+  repeated string missing = 3;
+}
+
+message ListStartingPointsResponse {
+  string methodology = 1;
+  string goal = 2;
+  // why there is nothing to start (no methodology, no goal, goal reached, change closed...)
+  string reason = 3;
+  repeated StartingPoint points = 4;
+  // the steps that wait for conditions (capped), not proposable
+  repeated BlockedStep blocked = 5;
+  int32 blocked_count = 6;
 }
 
 message CheckAgentsRequest {

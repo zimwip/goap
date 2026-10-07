@@ -92,3 +92,24 @@ export function diffSummary(base: Record<string, unknown> | undefined, after: Re
   ].filter(Boolean);
   return out.length ? `Edits: ${out.join('; ')}.` : 'No edit of the properties.';
 }
+
+export interface StepFacts {
+  id: string;
+  name: string;
+  kind?: string;
+  why?: string[];
+  produces?: string[];
+  mayRun?: boolean;
+  running?: boolean;
+}
+
+/** The steps possible now as entities (names, states and conditions only): the ones to propose, never an action. */
+export function stepEntities(steps: StepFacts[]): AssistantEntity[] {
+  return steps.map((s): AssistantEntity => {
+    const props: Record<string, string> = {};
+    if (s.kind) props.kind = s.kind;
+    if (s.why?.length) props.why = s.why.join(', ');
+    if (s.produces?.length) props.produces = s.produces.join(', ');
+    return { type: 'step', id: s.id, label: s.name, state: s.running ? 'running' : s.mayRun ? 'possible' : 'not allowed', ...(Object.keys(props).length ? { props } : {}) };
+  });
+}

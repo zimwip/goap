@@ -31,6 +31,7 @@ type EngineAPI interface {
 	ListProcesses(context.Context, *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error)
 	ListTriggers(context.Context, *connect.Request[enginev1.ListTriggersRequest]) (*connect.Response[enginev1.ListTriggersResponse], error)
 	FireTrigger(context.Context, *connect.Request[enginev1.FireTriggerRequest]) (*connect.Response[enginev1.FireTriggerResponse], error)
+	ListStartingPoints(context.Context, *connect.Request[enginev1.ListStartingPointsRequest]) (*connect.Response[enginev1.ListStartingPointsResponse], error)
 }
 
 // Scheduler is the goap-scheduler connector: it starts processes (an agent working on a change for an
@@ -44,6 +45,7 @@ var schedulerOps = []op{
 	{"attach", "Bind a process (default: the caller's own) to a change, existing (change) or new: {process}", schema(map[string]string{"process": "string", "change": "string", "title": "string", "intent": "string", "namespace": "string", "unit": "string", "baseline": "string"})},
 	{"list", "List processes, the latest first: {processes, truncated}", schema(map[string]string{"mine": "boolean", "status": "string", "limit": "integer"})},
 	{"get", "Read a process: {process}", schema(map[string]string{"id": "string"}, "id")},
+	{"starting_points", "The steps of the methodology of a change that are possible now towards its goal, with what makes each possible and how to start it; steps that wait are only counted: {methodology, goal, reason, points, blocked, blockedCount}", schema(map[string]string{"changeId": "string", "methodology": "string"})},
 	{"triggers", "List the triggers: {triggers}", schema(map[string]string{})},
 	{"fire", "Fire a trigger: {process}", schema(map[string]string{"methodology": "string", "agent": "string", "trigger": "string"}, "methodology", "agent", "trigger")},
 }
@@ -137,6 +139,19 @@ func (s Scheduler) Invoke(ctx context.Context, op string, raw, _ map[string]any,
 			list = append(list, m)
 		}
 		return map[string]any{"processes": list, "truncated": truncated}, nil
+	case "starting_points":
+		id := a.str("changeId")
+		if id == "" {
+			id = mcp.CallFrom(ctx).Change
+		}
+		if id == "" {
+			return nil, errors.New(`argument "changeId" is required outside a change`)
+		}
+		r, err := s.p.Engine.ListStartingPoints(ctx, request(who, &enginev1.ListStartingPointsRequest{ChangeId: id, Methodology: a.str("methodology")}))
+		if err != nil {
+			return nil, err
+		}
+		return protoResult("", r.Msg)
 	case "triggers":
 		r, err := s.p.Engine.ListTriggers(ctx, request(who, &enginev1.ListTriggersRequest{}))
 		if err != nil {

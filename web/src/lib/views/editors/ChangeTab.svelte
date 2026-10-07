@@ -2,6 +2,7 @@
   // Change tab: change items and applying to the baseline.
   import {
     graph,
+    engine,
     errorMessage,
     isNotFound,
     formatDate,
@@ -19,11 +20,13 @@
     type NodeRef,
     type Resolution,
     type UiTool,
+    type StartingPoint,
+    type StartingPointsResponse,
   } from '../../api';
   import { tick, untrack } from 'svelte';
   import { followChangeProject } from '../../stores/project.svelte';
   import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
-  import { changeSummary, impactEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
+  import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
   import { loadMoveOffer, moveChangeTo } from '../../changeMove';
   import { availableTransitions, decisionLabel, findLifecycle, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
@@ -48,6 +51,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
   import ProcessProgress from '../../components/ProcessProgress.svelte';
+  import PossibleSteps from '../../components/PossibleSteps.svelte';
+  import { confirmText, pointById, showStartingPoints, startable, startableIds, startRequest } from '../../startingPoints';
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
@@ -289,6 +294,62 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     void selected;
     return () => reloading?.abort();
   });
+
+  // the steps possible now towards the goal of the change (ADR 0097): read again when the platform stream says the change
+  // moved (a run journals many entries a second: at most once per second), no polling
+  let startPoints = $state<StartingPointsResponse | undefined>();
+  let pointsError = $state('');
+  let startingId = $state('');
+  const showSteps = $derived(showStartingPoints(change));
+  let readingPoints: AbortController | undefined;
+  const pointsSoon = throttled(() => {
+    const id = selected;
+    if (!id) return;
+    readingPoints?.abort();
+    const ctrl = (readingPoints = new AbortController());
+    engine
+      .listStartingPoints(id, ctrl.signal)
+      .then((r) => {
+        if (ctrl.signal.aborted) return;
+        startPoints = r;
+        pointsError = '';
+      })
+      .catch((e) => {
+        if (!ctrl.signal.aborted) pointsError = errorMessage(e);
+      });
+  }, 1000);
+  $effect(() => {
+    const id = selected;
+    if (!id || !showSteps) {
+      startPoints = undefined;
+      return;
+    }
+    void stamp(keyOf.change(id));
+    untrack(pointsSoon.call);
+    return () => {
+      pointsSoon.cancel();
+      readingPoints?.abort();
+    };
+  });
+
+  /** Starts a possible step with the launch the engine gave it; the scheduler plans its actions. `assisted`: the proposal card was the confirmation. */
+  async function startPoint(p: StartingPoint, assisted = false): Promise<string | undefined> {
+    if (!startable(p)) return `The step ${p.id} cannot be started now.`;
+    if (!assisted && !(await confirmDialog({ title: 'Start step', message: confirmText(p, change?.goal ?? ''), confirmLabel: 'Start' }))) return;
+    startingId = p.id;
+    try {
+      await engine.startProcess(startRequest(p));
+      notify(`Started “${p.name}”.`, 'ok');
+      recordAction(`started the step ${p.id}`);
+      pointsSoon.call();
+    } catch (e) {
+      const m = errorMessage(e);
+      if (!assisted) error = m;
+      return m;
+    } finally {
+      startingId = '';
+    }
+  }
 
   // the definition of the lifecycle the change follows (re-read when the lifecycle or the namespace changes)
   $effect(() => {
@@ -677,6 +738,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       },
     },
     {
+      name: 'start_step',
+      enabled: () => !!change && !closed && startableIds(startPoints).length > 0,
+      describe: (base) => {
+        const ids = startableIds(startPoints);
+        const step = ids.length <= 30 ? { type: 'enum' as const, enum: ids, description: 'the step id' } : { type: 'string' as const, description: 'the step id' };
+        return { ...base, args: { ...base.args, properties: { ...base.args?.properties, step } } };
+      },
+      run: async (a) => {
+        const p = pointById(startPoints, a.step);
+        if (!p) return `The step ${String(a.step)} is not possible now on this change.`;
+        return startPoint(p, true);
+      },
+    },
+    {
       name: 'select_impact',
       enabled: () => !!change && impactFacts.length > 0,
       describe: withIds('select_impact', () => impactFacts.map((i) => i.id)),
@@ -777,6 +852,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
                   offers.map((o) => ({ name: o.name, to: o.to, needsDecision: o.needsDecision })),
                   pickable.map((p) => ({ id: p.id ?? '', label: decisionLabel(p) })),
                 ),
+                ...stepEntities(startPoints?.points ?? []),
                 ...impactEntities(impactFacts),
               ],
             }
@@ -936,6 +1012,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         {#each related.filter((p) => !p.parentId) as p (p.id)}
           <ProcessProgress processId={p.id ?? ''} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
         {/each}
+        {#if showSteps}
+          <PossibleSteps points={startPoints} error={pointsError} busy={startingId} onstart={(p) => void startPoint(p)} />
+        {/if}
 
         {#if ch.status === 'committed'}
           <div class="alert warn" style="margin: 0.75rem 0">

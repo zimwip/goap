@@ -75,6 +75,16 @@ type fakeEngine struct {
 	startWho      []authz.Principal
 	startErr      error
 	checks        int
+	points        map[string]Points
+	pointCalls    int
+}
+
+func (f *fakeEngine) StartingPoints(_ context.Context, changeID string) (Points, error) {
+	f.pointCalls++
+	if p, ok := f.points[changeID]; ok {
+		return p, nil
+	}
+	return Points{Reason: "no step of the methodology works towards the goal"}, nil
 }
 
 func (f *fakeEngine) CheckAgents(ctx context.Context, name, _ string, _ []string) (AgentChecks, error) {
@@ -211,6 +221,8 @@ func TestListAgentsOfTheChangeInContext(t *testing.T) {
 	}
 }
 
+func stepArgs(id string) string { return `{"step":"` + id + `","rationale":"it is possible"}` }
+
 func proposeArgs(extra string) string {
 	return `{"methodology":"delivery","agent":"builder","goal":"built","rationale":"you asked for a build"` + extra + `}`
 }
@@ -250,14 +262,19 @@ func TestStartAgentRefusals(t *testing.T) {
 		ctx  Context
 		want string
 	}{
-		"a role the caller lacks":  {`{"methodology":"delivery","agent":"shipper","goal":"ship","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "not one you may run here"},
-		"another project":          {`{"methodology":"other","agent":"stranger","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "not one you may run here"},
-		"an unknown goal":          {`{"methodology":"delivery","agent":"builder","goal":"nope","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "no goal"},
-		"no change and no new":     {proposeArgs(``), inProject("PROJ-A"), "newChange"},
-		"a change out of context":  {proposeArgs(`,"changeId":"CHG-OTHER"`), changeCtx("CHG-D"), "looking at"},
-		"a new change in a change": {proposeArgs(`,"newChange":{"title":"t","intent":"i"}`), changeCtx("CHG-D"), "no newChange"},
-		"a closed change":          {proposeArgs(``), changeCtx("CHG-DONE"), "not one you may run here"},
-		"a goal to choose":         {`{"methodology":"delivery","agent":"helper","goal":"","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), ""},
+		"a role the caller lacks":   {`{"methodology":"delivery","agent":"shipper","goal":"ship","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "not one you may run here"},
+		"another project":           {`{"methodology":"other","agent":"stranger","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "not one you may run here"},
+		"an unknown goal":           {`{"methodology":"delivery","agent":"builder","goal":"nope","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "no goal"},
+		"no change and no new":      {proposeArgs(``), inProject("PROJ-A"), "newChange"},
+		"a change out of context":   {proposeArgs(`,"changeId":"CHG-OTHER"`), changeCtx("CHG-D"), "looking at"},
+		"a new change in a change":  {proposeArgs(`,"newChange":{"title":"t","intent":"i"}`), changeCtx("CHG-D"), "no newChange"},
+		"a closed change":           {stepArgs("delivery/build"), changeCtx("CHG-DONE"), "no step can be started"},
+		"an agent on a change":      {proposeArgs(``), changeCtx("CHG-D"), "possibleSteps"},
+		"a step that waits":         {stepArgs("delivery/design"), changeCtx("CHG-D"), "not possible now"},
+		"an unknown step":           {stepArgs("delivery/nope"), changeCtx("CHG-D"), "delivery/build"},
+		"a step already running":    {stepArgs("delivery/running"), changeCtx("CHG-D"), "already being carried out"},
+		"a step the caller may not": {stepArgs("delivery/restricted"), changeCtx("CHG-D"), "may not start"},
+		"a goal to choose":          {`{"methodology":"delivery","agent":"helper","goal":"","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t, call(ToolStartAgent, tc.args), `{"message":"no"}`)
@@ -282,13 +299,62 @@ func TestStartAgentRefusals(t *testing.T) {
 }
 
 func TestStartAgentOnTheChangeInContext(t *testing.T) {
-	e := newEnv(t, call(ToolStartAgent, proposeArgs(``)), `{"message":"proposed"}`)
+	e := newEnv(t, call(ToolStartAgent, stepArgs("delivery/build")), `{"message":"proposed"}`)
 	if _, _, err := e.send("build", changeCtx("CHG-D")); err != nil {
 		t.Fatal(err)
 	}
-	args := e.answer(t).Actions[0]["args"].(map[string]any)
-	if args["changeId"] != "CHG-D" || args["newChange"] != nil {
+	// a round that only proposes settles: one model round after the proposal, no more
+	if n := len(e.model.got); n != 2 {
+		t.Fatalf("%d model rounds", n)
+	}
+	act := e.answer(t).Actions[0]
+	args := act["args"].(map[string]any)
+	if args["changeId"] != "CHG-D" || args["newChange"] != nil || args["step"] != "delivery/build" || args["agent"] != "builder" ||
+		args["goal"] != "delivery/build" || args["methodology"] != "delivery" || !strings.Contains(act["label"].(string), "step build") {
 		t.Fatalf("%+v", args)
+	}
+}
+
+// With a change in context list_agents gives the steps possible now in the same call, flags the agents that would carry
+// one out and only counts the steps that wait (ADR 0097).
+func TestListAgentsGivesThePossibleSteps(t *testing.T) {
+	e := newEnv(t, call(ToolListAgents, `{}`), `{"message":"ok"}`)
+	if _, _, err := e.send("what can be done?", changeCtx("CHG-D")); err != nil {
+		t.Fatal(err)
+	}
+	if e.engine.pointCalls != 1 {
+		t.Fatalf("the steps were asked %d times", e.engine.pointCalls)
+	}
+	var rs []struct {
+		Result struct {
+			Goal    string         `json:"goal"`
+			Agents  []agentEntry   `json:"agents"`
+			Steps   []stepEntry    `json:"possibleSteps"`
+			Waiting map[string]any `json:"waitingSteps"`
+		} `json:"result"`
+	}
+	res := e.toolResult(1)
+	if err := json.Unmarshal([]byte(res[strings.Index(res, "[{"):]), &rs); err != nil {
+		t.Fatal(err)
+	}
+	r := rs[0].Result
+	if r.Goal != "ship" || len(r.Steps) != 3 || r.Steps[0].ID != "delivery/build" || !r.Steps[0].MayRun || r.Steps[0].Why[0] != "noted" || r.Waiting["count"] != float64(2) {
+		t.Fatalf("%+v", r)
+	}
+	if !r.Agents[0].Ready || r.Agents[1].Ready { // builder carries the step out, helper none
+		t.Fatalf("agents %+v", r.Agents)
+	}
+	if strings.Contains(res, "build_action") {
+		t.Fatalf("actions are never shown: %s", res)
+	}
+	// none possible: the result says what is awaited
+	e = newEnv(t, call(ToolListAgents, `{}`), `{"message":"ok"}`)
+	e.engine.points["CHG-D"] = Points{Goal: "ship", Reason: "no step is possible yet: the steps towards the goal wait for conditions", BlockedCount: 1, Blocked: []string{"delivery/design: noted"}}
+	if _, _, err := e.send("what can be done?", changeCtx("CHG-D")); err != nil {
+		t.Fatal(err)
+	}
+	if res := e.toolResult(1); !strings.Contains(res, `"possibleSteps":[]`) || !strings.Contains(res, "propose nothing") || !strings.Contains(res, "delivery/design: noted") {
+		t.Fatalf("%s", res)
 	}
 }
 
@@ -307,6 +373,21 @@ func TestOneProposalPerAnswer(t *testing.T) {
 func (e *env) propose(t *testing.T, extra string, c Context) convsvc.Message {
 	t.Helper()
 	e.model.answers = []string{call(ToolStartAgent, proposeArgs(extra)), `{"message":"I propose it."}`}
+	e.model.got = nil
+	if _, _, err := e.send("build", c); err != nil {
+		t.Fatal(err)
+	}
+	m := e.answer(t)
+	if len(m.Actions) != 1 {
+		t.Fatalf("no proposal: %+v", m)
+	}
+	return m
+}
+
+// proposeStep runs a turn that ends with a proposal of a step.
+func (e *env) proposeStep(t *testing.T, id string, c Context) convsvc.Message {
+	t.Helper()
+	e.model.answers = []string{call(ToolStartAgent, stepArgs(id)), `{"message":"I propose it."}`}
 	e.model.got = nil
 	if _, _, err := e.send("build", c); err != nil {
 		t.Fatal(err)
@@ -368,11 +449,12 @@ func TestConfirmAcceptCreatesTheChangeAndStartsAsTheCaller(t *testing.T) {
 
 func TestConfirmAcceptOnAnExistingChange(t *testing.T) {
 	e := newEnv(t)
-	m := e.propose(t, ``, changeCtx("CHG-D"))
+	m := e.proposeStep(t, "delivery/build", changeCtx("CHG-D"))
 	if _, err := e.confirm(m, DecisionAccept); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.graph.created) != 0 || len(e.engine.starts) != 1 || e.engine.starts[0].ChangeID != "CHG-D" || e.engine.starts[0].ProjectID != "PROJ-A" {
+	if len(e.graph.created) != 0 || len(e.engine.starts) != 1 || e.engine.starts[0].ChangeID != "CHG-D" || e.engine.starts[0].ProjectID != "PROJ-A" ||
+		e.engine.starts[0].Agent != "builder" || e.engine.starts[0].Goal != "delivery/build" {
 		t.Fatalf("%+v %+v", e.graph.created, e.engine.starts)
 	}
 }
@@ -437,7 +519,12 @@ func TestConfirmStaleProposalStaysProposed(t *testing.T) {
 	}
 	// a change closed since
 	e = newEnv(t)
-	m = e.propose(t, ``, changeCtx("CHG-D"))
+	m = e.proposeStep(t, "delivery/build", changeCtx("CHG-D"))
+	// the step is no longer possible when the person decides
+	e.engine.points["CHG-D"] = Points{Reason: "the goal is reached"}
+	if _, err := e.confirm(m, DecisionAccept); !errors.Is(err, ErrStale) || !strings.Contains(err.Error(), "no longer possible") {
+		t.Fatalf("%v", err)
+	}
 	ch := e.graph.changes["CHG-D"]
 	ch.Status = "applied"
 	e.graph.changes["CHG-D"] = ch

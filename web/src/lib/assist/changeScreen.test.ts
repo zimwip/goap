@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeSummary, diffSummary, impactEntities, transitionEntities } from './changeScreen';
+import { changeSummary, diffSummary, impactEntities, stepEntities, transitionEntities } from './changeScreen';
 
 describe('change screen facts', () => {
   const impacts = [
@@ -35,5 +35,18 @@ describe('change screen facts', () => {
       { type: 'transition', id: 'back', label: 'back', props: { to: 'draft' } },
       { type: 'decision', id: 'D1', label: 'Which? → A', state: 'decided' },
     ]);
+  });
+});
+
+describe('step entities', () => {
+  it('lists the possible steps with their state and why', () => {
+    const e = stepEntities([
+      { id: 'p/a', name: 'a', kind: 'step', why: ['framed'], produces: ['analysed'], mayRun: true },
+      { id: 'p/b', name: 'b', running: true, mayRun: true },
+      { id: 'p/c', name: 'c' },
+    ]);
+    expect(e.map((x) => [x.type, x.id, x.state])).toEqual([['step', 'p/a', 'possible'], ['step', 'p/b', 'running'], ['step', 'p/c', 'not allowed']]);
+    expect(e[0].props).toEqual({ kind: 'step', why: 'framed', produces: 'analysed' });
+    expect(e[1].props).toBeUndefined();
   });
 });

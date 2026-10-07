@@ -156,7 +156,12 @@ func newEnv(t *testing.T, answers ...string) *env {
 		},
 		Go: func(f func()) { f() },
 	}
-	e.engine = &fakeEngine{held: map[string][]string{"u1": {"developer"}}, methodologies: e.svc.Methodologies.(fakeMethodologies)}
+	e.engine = &fakeEngine{held: map[string][]string{"u1": {"developer"}}, methodologies: e.svc.Methodologies.(fakeMethodologies), points: map[string]Points{
+		"CHG-D": {Goal: "ship", BlockedCount: 2, Blocked: []string{"delivery/design: noted"}, Points: []Point{
+			{ID: "delivery/build", Kind: "step", Name: "build", Description: "Build it", Why: []string{"noted"}, Produces: []string{"built"}, Agent: "builder", AgentGoal: "delivery/build", MayRun: true},
+			{ID: "delivery/running", Kind: "step", Name: "running", Agent: "builder", AgentGoal: "delivery/running", MayRun: true, Running: true},
+			{ID: "delivery/restricted", Kind: "step", Name: "restricted", Responsible: "release_manager", Agent: "shipper", AgentGoal: "delivery/restricted"},
+		}}}}
 	e.svc.Engine = e.engine
 	c, err := e.convs.Create(e.ctx, e.user, "t")
 	if err != nil {

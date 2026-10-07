@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/events"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -333,7 +334,55 @@ func (c *Compiled) Goal(name string) (Goal, bool) {
 			return g, true
 		}
 	}
+	// a step path ("<process-or-method>/<step>") names the goal of that step: its exit criteria (ADR 0097). The
+	// engine starts an agent towards it to carry out that step alone and let the planner sequence its actions.
+	if strings.Contains(name, "/") {
+		if s, ok := c.StepByPath(name); ok && len(s.Exit) > 0 {
+			return Goal{Name: name, Description: s.Description, Pre: maps.Clone(s.Exit)}, true
+		}
+	}
 	return Goal{}, false
+}
+
+// NeededBy returns the conditions a state needs to reach the goal conditions, by backward closure over the actions
+// (declared and generated for steps): the goal's own conditions, then the preconditions of every action that
+// establishes one of them, and so on. It is a static over-approximation (cost and alternatives ignored) that tells
+// which steps work towards a goal (ADR 0097).
+func (c *Compiled) NeededBy(goal map[string]bool) map[string]bool {
+	need := map[string]bool{}
+	for k := range goal {
+		need[k] = true
+	}
+	all := make([]Action, 0, len(c.actions)+len(c.processes.actions))
+	for _, a := range c.actions {
+		all = append(all, a)
+	}
+	all = append(all, c.processes.actions...)
+	for changed := true; changed; {
+		changed = false
+		for _, a := range all {
+			if a.IsSpecialization() {
+				continue
+			}
+			hit := false
+			for k := range a.Effects {
+				if need[k] {
+					hit = true
+					break
+				}
+			}
+			if !hit {
+				continue
+			}
+			for k := range a.Pre {
+				if !need[k] {
+					need[k] = true
+					changed = true
+				}
+			}
+		}
+	}
+	return need
 }
 
 // MainGoal is the goal the changes of the methodology start with (ADR 0096): the declared Goal, else the first declared

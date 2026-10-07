@@ -333,6 +333,8 @@ Before any planning:
 
 **Goal of a change** ([ADR 0096](adr/0096-goal-of-a-methodology-default-goal-of-a-change.md)): a methodology names its main goal (`goal:`, a goal or a process); `CreateChange` gives it to the change through the registry seam `ChangeLifecycles.DefaultGoal` (an explicit `NewChange.Goal` wins, a sub-change keeps its parent's), and it changes afterwards only by an explicit edit, never by a run.
 
+**Starting points** ([ADR 0097](adr/0097-starting-points-possible-steps-towards-the-end-goal.md)): the goal being the end point of the process, `Engine.StartingPoints` lists the steps (and steps of a method) of the change's methodology that are possible now towards it: every entry condition holds, the exit does not, nothing carries them out. A step that waits is only counted, an action is never listed; starting a point hands the selection to the scheduler (`StartProcess` with the agent of the process or method and the step path as goal, which resolves to the exit criteria of the step). RPC `ListStartingPoints`, `goap-scheduler/starting_points`, the "Possible next steps" panel of the change tab, `list_agents` / `start_agent` of the assistant (propose only possible steps), and `Compiled.Hints()` (a methodology that cannot start on an empty change).
+
 ### 2.6 Execution loop (Process)
 
 ```

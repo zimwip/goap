@@ -659,7 +659,10 @@ func (c *Compiled) StepByPath(path string) (StepInfo, bool) {
 		}
 		return StepInfo{}, false
 	}
-	return find(c.ProcessSteps(process))
+	if s, ok := find(c.ProcessSteps(process)); ok {
+		return s, true
+	}
+	return find(c.MethodSteps(process))
 }
 
 // StepCriteria returns the entry and exit criteria of a compiled step or method-step by its full path

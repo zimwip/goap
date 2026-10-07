@@ -3,6 +3,7 @@ package assistantsvc
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -19,6 +20,9 @@ type Engine interface {
 	// agents (all when none is named) they may run there.
 	CheckAgents(ctx context.Context, methodology, project string, agents []string) (AgentChecks, error)
 	StartProcess(ctx context.Context, in StartProcess) (ProcessInfo, error)
+	// StartingPoints lists the steps of the methodology of the change that are possible now towards its goal, as the
+	// caller (ADR 0097): the only steps the assistant may propose.
+	StartingPoints(ctx context.Context, changeID string) (Points, error)
 	// Active lists the processes not finished (clarifying, running, waiting, stuck) the caller may read.
 	Active(ctx context.Context) ([]ProcessInfo, error)
 }
@@ -27,6 +31,37 @@ type Engine interface {
 type AgentChecks struct {
 	MayStart bool
 	MayRun   map[string]bool
+}
+
+// Points is the answer of Engine.StartingPoints.
+type Points struct {
+	Goal, Reason string
+	Points       []Point
+	// BlockedCount counts the steps towards the goal that wait for conditions; they are not proposable.
+	BlockedCount int
+	Blocked      []string // "<step>: <missing conditions>", capped
+}
+
+// Point is a step (or step of a method) that is possible now. Agent and AgentGoal are what starts it.
+type Point struct {
+	ID, Kind, Name, Description, Method, Process string
+	Why, Produces                                []string
+	Responsible                                  string
+	Agent, AgentGoal                             string
+	MayRun, Running                              bool
+}
+
+// Possible reports whether the caller may start the point now.
+func (p Point) Possible() bool { return p.MayRun && !p.Running }
+
+// Find returns the point of an id.
+func (p Points) Find(id string) (Point, bool) {
+	for _, pt := range p.Points {
+		if pt.ID == id {
+			return pt, true
+		}
+	}
+	return Point{}, false
 }
 
 // StartProcess is the start of an agent: its goal, or the intent the engine identifies the goal from.
@@ -47,6 +82,7 @@ type EngineAPI interface {
 	StartProcess(context.Context, *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error)
 	ListProcesses(context.Context, *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error)
 	CheckAgents(context.Context, *connect.Request[enginev1.CheckAgentsRequest]) (*connect.Response[enginev1.CheckAgentsResponse], error)
+	ListStartingPoints(context.Context, *connect.Request[enginev1.ListStartingPointsRequest]) (*connect.Response[enginev1.ListStartingPointsResponse], error)
 }
 
 // EngineClient is the Engine over the engine service, with the identity of the caller of the context on every
@@ -97,6 +133,23 @@ func (c EngineClient) Active(ctx context.Context) ([]ProcessInfo, error) {
 	var out []ProcessInfo
 	for _, p := range r.Msg.GetProcesses() {
 		out = append(out, infoOf(p))
+	}
+	return out, nil
+}
+
+func (c EngineClient) StartingPoints(ctx context.Context, changeID string) (Points, error) {
+	r, err := c.API.ListStartingPoints(ctx, asCaller(ctx, &enginev1.ListStartingPointsRequest{ChangeId: changeID}))
+	if err != nil {
+		return Points{}, err
+	}
+	out := Points{Goal: r.Msg.GetGoal(), Reason: r.Msg.GetReason(), BlockedCount: int(r.Msg.GetBlockedCount())}
+	for _, p := range r.Msg.GetPoints() {
+		out.Points = append(out.Points, Point{ID: p.GetId(), Kind: p.GetKind(), Name: p.GetName(), Description: p.GetDescription(), Method: p.GetMethod(),
+			Process: p.GetProcess(), Why: p.GetWhy(), Produces: p.GetProduces(), Responsible: p.GetResponsible(), Agent: p.GetLaunch().GetAgent(),
+			AgentGoal: p.GetLaunch().GetGoal(), MayRun: p.GetMayRun(), Running: p.GetRunning()})
+	}
+	for _, b := range r.Msg.GetBlocked() {
+		out.Blocked = append(out.Blocked, b.GetId()+": "+strings.Join(b.GetMissing(), ", "))
 	}
 	return out, nil
 }

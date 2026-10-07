@@ -160,6 +160,11 @@ func stepContext(m *methodology.Compiled, p *Process, a methodology.Action) *Ste
 	if !ok {
 		return p.Step
 	}
+	return contextOfStep(s)
+}
+
+// contextOfStep is the context a run gets for a compiled step.
+func contextOfStep(s methodology.StepInfo) *StepContext {
 	process, _, _ := strings.Cut(s.Path, "/")
 	return &StepContext{Process: process, Path: s.Path, Name: s.Name, Description: s.Description, Guidance: s.Guidance,
 		Checklist: s.Checklist, Deliverables: s.Deliverables, References: s.References, Roles: s.Effective}

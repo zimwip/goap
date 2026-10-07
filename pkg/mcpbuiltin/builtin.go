@@ -211,6 +211,8 @@ func Defs() []mcp.Def {
 					"status": str("clarifying, running, waiting, completed, stuck, failed"), "limit": argLimit})},
 			{Name: "get", ReadOnly: true, Description: "Read a process: status, plan, steps, pending question or task, error.",
 				InputSchema: schemaObj(map[string]any{"id": str("process id")}, "id")},
+			{Name: "starting_points", ReadOnly: true, Description: "The steps of the methodology of a change that are possible now towards its goal (the end point of the process): every entry condition holds and nothing carries them out. Each has what makes it possible, what it produces, the roles and how to start it; the steps that wait are only counted. Propose only these (ADR 0097).",
+				InputSchema: schemaObj(map[string]any{"changeId": str("change (default: the calling change)"), "methodology": str("methodology (default: the one of the change)")})},
 			{Name: "triggers", ReadOnly: true, Description: "List the triggers of the published methodologies and their state.",
 				InputSchema: schemaObj(map[string]any{})},
 			{Name: "fire", Description: "Fire a trigger now.",

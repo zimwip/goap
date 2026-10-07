@@ -133,7 +133,7 @@ func stepProgress(p *Process, s methodology.StepInfo) StepProgress {
 	case methodology.MethodCapability:
 		sp.Target = s.Capability
 	}
-	sp.Missing = missing(p, s.Entry, s.Exit)
+	sp.Missing = missing(p.World, s.Entry, s.Exit)
 	done := len(s.Exit) > 0 && p.World.Satisfies(s.Exit)
 	if len(s.Steps) > 0 {
 		ran := false
@@ -210,15 +210,24 @@ func aggregate(steps []StepProgress) string {
 	return StepTodo
 }
 
-// missing lists the entry conditions that do not hold in the world the run last observed, leaving out the step's own
-// "not done yet" guards (traced: false for a step done when traced).
-func missing(p *Process, entry, exit map[string]bool) []string {
+// missing lists the entry conditions that do not hold in a world (the one a run last observed, or the one of a
+// change), leaving out the step's own "not done yet" guards (traced: false for a step done when traced).
+func missing(world map[string]bool, entry, exit map[string]bool) []string {
+	return entryConditions(world, entry, exit, false)
+}
+
+// satisfied lists the entry conditions that hold in the world, the counterpart of missing.
+func satisfied(world map[string]bool, entry, exit map[string]bool) []string {
+	return entryConditions(world, entry, exit, true)
+}
+
+func entryConditions(world map[string]bool, entry, exit map[string]bool, holding bool) []string {
 	var out []string
 	for k, v := range entry {
 		if w, own := exit[k]; own && w != v {
 			continue // the step's own "not done yet" guard
 		}
-		if have, ok := p.World[k]; !ok || have != v {
+		if have, ok := world[k]; (ok && have == v) == holding {
 			if v {
 				out = append(out, k)
 			} else {

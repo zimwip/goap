@@ -600,6 +600,58 @@ export interface ItemInput {
   derivedFrom?: string[];
 }
 
+/** What StartProcess takes to start exactly one starting point (ADR 0097): the agent plans towards the goal on the change, the scheduler selects and sequences the actions inside. */
+export interface StartLaunch {
+  methodology: string;
+  agent: string;
+  goal: string;
+  changeId: string;
+}
+
+/** A step, or a step of a method, that is possible now towards the goal of a change (ADR 0097). Never an action. */
+export interface StartingPoint {
+  /** the step path, unique in the methodology */
+  id: string;
+  kind: 'step' | 'method';
+  process: string;
+  /** for a step of a method: the step of the process that names the capability */
+  parent?: string;
+  name: string;
+  method?: string;
+  capability?: string;
+  description?: string;
+  guidance?: string;
+  /** the entry conditions that hold ("name" / "!name") */
+  why?: string[];
+  /** the exit criteria it reaches */
+  produces?: string[];
+  responsible?: string;
+  accountable?: string;
+  launch: StartLaunch;
+  /** the caller may start it (the rule Start applies to its initiator) */
+  mayRun?: boolean;
+  needRoles?: string[];
+  /** a process already carries it out */
+  running?: boolean;
+}
+
+/** A step towards the goal that waits for conditions: counted, never proposed. */
+export interface BlockedStep {
+  id: string;
+  name: string;
+  missing?: string[];
+}
+
+export interface StartingPointsResponse {
+  methodology?: string;
+  goal?: string;
+  /** why there is nothing to start */
+  reason?: string;
+  points?: StartingPoint[];
+  blocked?: BlockedStep[];
+  blockedCount?: number;
+}
+
 export interface StartProcessRequest {
   /** empty: identify among all published methodologies and their agents */
   methodology?: string;

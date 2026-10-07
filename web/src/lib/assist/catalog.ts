@@ -71,6 +71,12 @@ export const TOOLS = {
     level: 'write',
     args: { properties: { transition: str('the transition name'), decision: str('the decided decision point id, when the transition needs one') }, required: ['transition'] },
   },
+  start_step: {
+    description: 'Start a step that is possible now on this change; the scheduler plans and sequences the actions inside it.',
+    guidance: 'step: the id of an entity of type step (possible now, allowed, not running); never a step that waits, never an action.',
+    level: 'write',
+    args: { properties: { step: str('the step id') }, required: ['step'] },
+  },
   set_field: {
     description: 'Put a value in a field of the form on screen (the person still saves the form).',
     guidance: 'field: an id of the screen entities of type field; value: its value as text, in the type of the field.',
