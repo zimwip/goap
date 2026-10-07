@@ -73,8 +73,6 @@ export interface Structure {
   /** key of the root node */
   root: string;
   selfParent?: boolean;
-  /** property flagging the default member of the hierarchy ('': the root is) */
-  default?: string;
   /** node types belonging to the structure (the tagged type and its subtypes) */
   types?: string[];
 }

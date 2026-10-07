@@ -23,7 +23,8 @@ func SeedChange(ctx context.Context, g *graph.Graph, namespace, title string, ed
 	if authz.From(ctx).Anonymous() { // a seed acts as the graph service itself
 		ctx = System(ctx)
 	}
-	_, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", BaselineName: title, Edits: edits})
+	_, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", BaselineName: title, Edits: edits,
+		ProjectID: g.Structure(domain.StructureProject).Root}) // a seed acts in the root project (ADR 0091)
 	return err
 }
 

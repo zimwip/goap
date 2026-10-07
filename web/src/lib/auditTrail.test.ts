@@ -100,3 +100,28 @@ describe('a sub-change rebased onto its parent', () => {
     expect(trail[0].tone).toBe('warn');
   });
 });
+
+// ADR 0091: a change that moved to another project says so in its trail.
+describe('a move to another project', () => {
+  const header = (fields: Record<string, { from?: string; to?: string }>): LogEntry => ({
+    id: 'h1',
+    seq: '1',
+    type: 'change.updated',
+    by: 'alice',
+    subject: Object.keys(fields).join(','),
+    payload: JSON.stringify({ fields }),
+  });
+
+  it('reads "project: A → B"', () => {
+    const [e] = buildTrail({ nodes: [] }, [header({ projectId: { from: 'PROJ-A', to: 'PROJ-B' } })], new Map(), false);
+    expect(e.label).toBe('moved');
+    expect(e.subject).toBe('project');
+    expect(e.summary).toBe('project: PROJ-A → PROJ-B');
+    expect(e.by).toBe('alice');
+  });
+
+  it('keeps an ordinary edit an edit', () => {
+    const [e] = buildTrail({ nodes: [] }, [header({ title: { from: 'a', to: 'b' } })], new Map(), false);
+    expect(e.label).toBe('edited');
+  });
+});

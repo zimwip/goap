@@ -55,7 +55,7 @@ func testEditAfterAcceptIsOnTheDraft(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "edit", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit", BaselineID: f.base.ID}))
 	pre := f.req.Ref()
 	prop := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "look"}}))
 	co := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: prop[0].ID}))

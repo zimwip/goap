@@ -103,3 +103,6 @@ outside it, stays with the parent), an `organisation@Adapter` belongs to the uni
   acting" remains a choice of the web (the project selector), no longer a refusal of the engine.
 - Baselines follow the same rule: see ADR 0056 (a baseline is the state a change leaves; the empty state before the
   first change is the empty baseline id, which nothing stores).
+
+> Superseded in part by ADR 0091: a change names its project (no default project, no `default` flag on the project
+> structure), and the project of a change moves through `MoveChange`.

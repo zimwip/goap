@@ -28,7 +28,7 @@ func setEdit(ref domain.NodeRef, props map[string]any) NodeEdit {
 // commitOn makes a change of edits that lands on a branch ("" = main) and returns its resulting baseline.
 func commitOn(t *testing.T, g *Graph, branch string, from domain.BaselineID, edits ...NodeEdit) domain.Baseline {
 	t.Helper()
-	res, err := g.Commit(context.Background(), Commit{Title: "c-" + branch, Baseline: from, Branch: branch, By: "test", Edits: edits})
+	res, err := g.Commit(context.Background(), Commit{ProjectID: "PROJ-ROOT", Title: "c-" + branch, Baseline: from, Branch: branch, By: "test", Edits: edits})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 	g := f.g
 	req1 := f.req.Ref()
 
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: f.base.ID, Branch: "opt-a"}); !errors.Is(err, ErrNotFound) {
+	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: f.base.ID, Branch: "opt-a"}); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("change on unknown branch: %v", err)
 	}
 	must[domain.Branch](t)(g.CreateBranch(ctx, NewBranch{Name: "opt-a", From: f.base.ID, Origin: "option:a"}))
@@ -78,7 +78,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 		t.Fatalf("main version: %+v", v3)
 	}
 	// a change that started before and changes the same property conflicts
-	if _, err := g.Commit(ctx, Commit{Title: "stale", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{setEdit(req1, map[string]any{"prio": "low"})}}); !errors.Is(err, ErrConflict) {
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "stale", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{setEdit(req1, map[string]any{"prio": "low"})}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("stale commit: %v", err)
 	}
 
@@ -106,7 +106,7 @@ func testBranchMerge(t *testing.T, repo Repo) {
 		t.Fatalf("DES-1 candidate: %+v", c)
 	}
 
-	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{From: "opt-a", Into: domain.MainBranch}))
+	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "opt-a", Into: domain.MainBranch}))
 	b := res.Baseline
 	v4 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
 	if b.Branch != domain.MainBranch || b.Nodes[f.req.ID] != v4.Version {
@@ -175,10 +175,10 @@ func testBranchMergeConflict(t *testing.T, repo Repo) {
 	if cs := plan.Conflicting(); len(cs) != 1 || !slices.Equal(cs[0].Conflicts, []string{"title"}) || cs[0].Merged["title"] != "Use PSP M" {
 		t.Fatalf("conflicts: %+v", plan)
 	}
-	if _, err := g.MergeBranch(ctx, MergeRequest{From: "opt-b"}); !errors.Is(err, ErrConflict) {
+	if _, err := g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "opt-b"}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("unresolved merge: %v", err)
 	}
-	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{From: "opt-b", Resolutions: map[domain.NodeID]Resolution{
+	res := must[MergeResult](t)(g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "opt-b", Resolutions: map[domain.NodeID]Resolution{
 		f.req.ID: {Props: map[string]any{"title": "Use PSP B+M"}}}}))
 	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Baseline.Nodes[f.req.ID]}))
 	if n.Properties["title"] != "Use PSP B+M" || n.Reason != domain.ReasonMerge {
@@ -210,7 +210,7 @@ func testBranchMergeRecordsChangeImpacts(t *testing.T, repo Repo) {
 	commitOn(t, g, "opt-a", f.base.ID, setEdit(f.req.Ref(), map[string]any{"title": "on the branch"}), NodeEdit{Key: "DES-1", Type: "Design"})
 	// main moves on the same node: a 3-way merge with a conflict, resolved by hand
 	commitOn(t, g, "main", f.base.ID, setEdit(f.req.Ref(), map[string]any{"title": "on main"}))
-	res, err := g.MergeBranch(ctx, MergeRequest{From: "opt-a", Into: "main", Resolutions: map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "both"}}}})
+	res, err := g.MergeBranch(ctx, MergeRequest{ProjectID: "PROJ-ROOT", From: "opt-a", Into: "main", Resolutions: map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "both"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func testFirstChangeStartsFromTheEmptyState(t *testing.T, repo Repo) {
 	if bs := must[[]domain.Baseline](t)(g.Baselines(ctx, "nothing-here-yet")); len(bs) != 0 {
 		t.Fatalf("nothing stores the empty state: %+v", bs)
 	}
-	res, err := g.Commit(ctx, Commit{Namespace: "nothing-here-yet", Title: "First", Edits: []NodeEdit{{Key: "N-1", Type: "Thing"}}})
+	res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "nothing-here-yet", Title: "First", Edits: []NodeEdit{{Key: "N-1", Type: "Thing"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -19,6 +19,8 @@
   } from '../../api';
   import { untrack } from 'svelte';
   import { followChangeProject } from '../../stores/project.svelte';
+  import MoveChange from '../../components/MoveChange.svelte';
+  import { movable } from '../../changeProject';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import ChangeAudit from '../../components/ChangeAudit.svelte';
@@ -141,6 +143,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let baselineName = $state('');
   let applying = $state(false);
   let applied = $state<Baseline | undefined>();
+  let moveOpen = $state(false);
 
   const selected = $derived(tab.params.id ?? '');
 
@@ -600,9 +603,13 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           <span class="grow"></span>
           {#if !closed && !defining}
             <button type="button" class="small" onclick={startDefine}>Edit</button>
+            {#if movable(ch)}<button type="button" class="small" onclick={() => (moveOpen = !moveOpen)}>Move to project…</button>{/if}
             <button type="button" class="small danger" disabled={defBusy} onclick={abandon}>Abandon</button>
           {/if}
         </div>
+        {#if moveOpen && movable(ch)}
+          <MoveChange change={ch} oncancel={() => (moveOpen = false)} onmoved={() => ((moveOpen = false), load(selected))} />
+        {/if}
         {#if defining}
           <form class="define" onsubmit={(e) => (e.preventDefault(), define({ title: defTitle.trim(), intent: defIntent.trim() }, 'Change updated.'))}>
             <label for="def-title">Title</label>
@@ -618,6 +625,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
+          {#if ch.projectId}<dt>Project</dt><dd><code>{ch.projectId}</code></dd>{/if}
           {#if ch.ownerOrg}<dt>Owner unit</dt><dd><code>{ch.ownerOrg}</code></dd>{/if}
           {#if ch.parentId}
             <dt>Parent change</dt>

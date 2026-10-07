@@ -12,8 +12,6 @@ const (
 	LinkMemberOf          = "organisation@member_of"
 	LinkPartOf            = "organisation@part_of"
 	LinkProjectPartOf     = "organisation@project_part_of"
-	// propDefault is the property flagging the default project (`structure.default` of ProjectUnit).
-	propDefault = "default"
 )
 
 // rootOrg and rootProject are the keys of the roots the bootstrap creates, as the structures in force name them.

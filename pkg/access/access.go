@@ -232,6 +232,9 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 	return s
 }
 
+// RootProject is the key of the root project: where a caller with no active project works (ADR 0091).
+func (s *Snapshot) RootProject() string { return s.structures.Project().Root }
+
 // HasProject reports whether a project of that key exists (as of the snapshot).
 func (s *Snapshot) HasProject(key string) bool {
 	_, ok := s.projectMethods[key]

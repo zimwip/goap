@@ -9,7 +9,7 @@ import (
 func TestCommitLinksCreatedNodesInACycle(t *testing.T) {
 	ctx := context.Background()
 	g := New(NewMemory())
-	res, err := g.Commit(ctx, Commit{Title: "cycle", By: "test", Edits: []NodeEdit{
+	res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "cycle", By: "test", Edits: []NodeEdit{
 		{Key: "A", Type: "T", Links: []LinkEdit{{Type: "next", ToKey: "B"}}},
 		{Key: "B", Type: "T", Links: []LinkEdit{{Type: "next", ToKey: "C"}}},
 		{Key: "C", Type: "T", Links: []LinkEdit{{Type: "next", ToKey: "A"}}},
@@ -40,7 +40,7 @@ func TestCommitLinksCreatedNodesInACycle(t *testing.T) {
 	if n != 1 {
 		t.Fatalf("one change for the whole cycle, got %d", n)
 	}
-	if _, err := g.Commit(ctx, Commit{Title: "bad", By: "test", Edits: []NodeEdit{{Key: "X", Type: "T", Links: []LinkEdit{{Type: "next", ToKey: "nope"}}}}}); err == nil {
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "bad", By: "test", Edits: []NodeEdit{{Key: "X", Type: "T", Links: []LinkEdit{{Type: "next", ToKey: "nope"}}}}}); err == nil {
 		t.Fatal("a link to a node the commit does not create is refused")
 	}
 }

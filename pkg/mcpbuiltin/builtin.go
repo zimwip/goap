@@ -92,7 +92,10 @@ func Defs() []mcp.Def {
 		{Name: Change, Description: "Work on a change, the blackboard every modification of the graph goes through (built in).", Tools: []mcp.Tool{
 			{Name: "create", Description: "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how).",
 				InputSchema: schemaObj(map[string]any{"title": str("title"), "intent": str("why the change is made"), "namespace": argNamespace,
-					"methodology": str("methodology performing it"), "unit": str("unit holding the change (default: the unit of the calling change)")}, "title", "intent", "namespace")},
+					"methodology": str("methodology performing it"), "unit": str("unit holding the change (default: the unit of the calling change)"),
+					"project": str("project the change acts in (default: the active project of the caller)")}, "title", "intent", "namespace")},
+			{Name: "move", Description: "Move a root change, draft or active, with its sub-changes, to another project whose methodologies include the change's: the nodes it already acts on keep their project, the nodes it creates take the new one.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "project": str("key of the target project")}, "project")},
 			{Name: "read", ReadOnly: true, Description: "Read a change: status, items, the nodes it acts on and their review.",
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
 			{Name: "list", ReadOnly: true, Description: "List changes, the latest first: find the open change a request continues before opening a new one.",

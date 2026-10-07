@@ -56,9 +56,9 @@ type Change struct {
 	ParentID ChangeID `json:"parentId,omitempty"`
 	OwnerOrg string   `json:"ownerOrg,omitempty"`
 	// ProjectID is the key of the project (project structure, ADR 0039, 0054) the change acts in,
-	// resolved when the change is created (a sub-change inherits its parent's, else the default
-	// project, Graph.DefaultProject) and never empty once stored: the nodes the change creates
-	// are created in it.
+	// named when the change is created (a sub-change inherits its parent's; none is defaulted, ADR 0091)
+	// and never empty once stored: the nodes the change creates are created in it. It changes only through
+	// Graph.MoveChange, before the change lands (existing nodes keep their project).
 	ProjectID string `json:"projectId,omitempty"`
 	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State
 	// is the state it is in; both are empty when the methodology names no lifecycle. State is moved only by

@@ -202,6 +202,7 @@ makes for the person.
 | Name a state | a tag on the change that left it (not unique) | `TagChange`, `ListTags`, `DeleteTag` |
 | Create a change | Changes explorer **+**: title, intent, namespace, the branch it lands on, the baseline it starts from, own branch, or a parent change (a sub-change) | `CreateChange` |
 | Edit or abandon it | Change → Overview: *Edit* (title, intent), *Abandon* (its sub-changes too, its branch closed) | `UpdateChange` |
+| Move it to another project | Change → Overview: *Move to project…* (a root change, draft or active; the projects applying its methodology; its sub-changes follow, [ADR 0091](adr/0091-a-change-names-its-project.md)) | `MoveChange` |
 | Declare impacts | Change → Impacts: pick an existing node with the reason it is impacted (a new node is created, see below) | `ProposeImpact` |
 | Create or edit a node | Node editor bound to the change and its scope: properties (a draft: the version is written when the change lands; the review stays a separate, explicit action), lifecycle moves, *Remove from change* | `ImpactNodeCreate`, `ImpactNodeCheckout`, `ImpactNodeUpdate`, `ImpactNodeTransition`, `WithdrawImpact` |
 | Edit its links | Node editor → Relations → *Links*: the outgoing links of the draft (add: a link type the node type allows and a target; remove) | `ImpactLinkCreate`, `ImpactLinkDelete` |
@@ -997,12 +998,28 @@ unit locally holds there. `organisation@User` is a subtype of `OrgUnit` (`extend
 `assigns_org` the same way a unit or a team does, without folding `User` into the `part_of` unit tree
 (`member_of` still names a user's home unit).
 
-A change acts in a project (`domain.Change.ProjectID`), resolved and stored by `CreateChange` (ADR 0054): a
+A change acts in a project (`domain.Change.ProjectID`), named when `CreateChange` stores it (ADR 0054, 0091): a
 sub-change inherits its parent's project when unset and must stay within it when set (mirroring the `OwnerOrg`
-rules of ADR 0016); a change naming none acts in the **default project**, the `ProjectUnit` flagged `default`
-(the root project when none is; an administrator moves the flag from the Project tab). The nodes a change creates
-are created in its project. Picking a project before acting is the web's project selector; the engine no longer
-refuses a process without one.
+rules of ADR 0016); **a change cannot be created without one** (`graph.ErrInvalid`: there is no default project and
+no `default` flag on `ProjectUnit` any more). The edges resolve the caller's active project, an empty claim meaning
+the root project: the RPC handlers, the engine (`resolveChange`: the request's project, else the run's, else the root of
+`Structures`), `goap-change/create` (`project`, default the caller's active project), the assistant, the seeds; the
+web's new-change form requires a project (default: the active one). The nodes a change creates are created in its
+project at landing.
+
+**Moving a change** (ADR 0091). `Graph.MoveChange(id, project)` (RPC `MoveChange`, `goap-change/move`, web "Move to
+project…" on the change overview) changes the project of a *root* change, `draft` or `active`, and of its open
+sub-changes, in one transaction; a sub-change cannot move alone, a `committed`, `applied` or `abandoned` change stays,
+the target must be another existing project. `Graph.ProjectMoveGate` (plugged by `cmd/graph` and `goap-dev` with
+`graphsvc.ProjectMoveGate(authorizer, directory)`, asked outside the transaction) asks `change:move` on the project
+of each change and on the target, the caller's access to both (`Snapshot.MayAccessProject`) and that the methodology of
+each change of the family applies (own or inherited, `Snapshot.ApplicableMethodologies`) to **both** projects; a change
+with no methodology is only held to the first rules. The nodes keep their projects (the project of a node never
+changes; a draft stores none), the nodes the change creates, before or after the move, take the new one when they
+land. Each moved change logs a `change.updated` entry with a `projectId` `{from, to}` field, by the caller (the audit
+trail reads "project: A → B"); the header write publishes the usual `change.updated` event. A process of the change
+follows it: `Engine.observe` reads the project of the change at every cycle, so no move is refused for a running
+process (roles are checked on the project the change is in now).
 
 **Role resolution.** `pkg/access.Snapshot` resolves `ProjectChain` (mirrors `Chain`) and `ProjectRoles`
 (unions the `roles` of every `Assignment` whose org is in a subject's org chain and whose project is in the

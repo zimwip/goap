@@ -1,6 +1,7 @@
 package builtin
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -32,7 +33,8 @@ type Change struct{ p Ports }
 var _ connectorkit.Connector = Change{}
 
 var changeOps = []op{
-	{"create", "Open a change on the head of main of a namespace: {change}", schema(map[string]string{"title": "string", "intent": "string", "namespace": "string", "methodology": "string", "unit": "string"}, "title", "intent", "namespace")},
+	{"create", "Open a change on the head of main of a namespace: {change}", schema(map[string]string{"title": "string", "intent": "string", "namespace": "string", "methodology": "string", "unit": "string", "project": "string"}, "title", "intent", "namespace")},
+	{"move", "Move a root change, draft or active, with its sub-changes, to another project: {change}", schema(map[string]string{"change": "string", "project": "string"}, "project")},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
 	{"reformulate", "Revise the title/intent of a change, superseding the previous definition (history kept): {change, item}",
@@ -111,6 +113,12 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return nil, err
 	}
 	switch op {
+	case "move":
+		moved, err := c.p.Graph.MoveChange(ctx, id, a.str("project"))
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"change": changeSummary(moved)})
 	case "options", "option", "activate", "evaluate", "compare":
 		return c.options(ctx, who, id, op, a)
 	case "decisions", "decision", "rule", "answer":
@@ -446,8 +454,17 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 	if err != nil {
 		return nil, fmt.Errorf("head of main of %s: %w", ns, err)
 	}
+	// the change acts in the project the call names, else the caller's active project, else the root (ADR 0091)
+	project := cmp.Or(a.str("project"), who.Project)
+	if project == "" {
+		st, err := c.p.Graph.Structures(ctx)
+		if err != nil {
+			return nil, err
+		}
+		project = st.Project().Root
+	}
 	ch, err := c.p.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: ns,
-		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), Data: map[string]any{"createdBy": who.Subject, "via": mcpbuiltin.Change}})
+		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), ProjectID: project, Data: map[string]any{"createdBy": who.Subject, "via": mcpbuiltin.Change}})
 	if err != nil {
 		return nil, err
 	}
@@ -561,7 +578,7 @@ func producer(ctx context.Context) string {
 
 func changeSummary(c domain.Change) map[string]any {
 	return map[string]any{"id": c.ID, "title": c.Title, "intent": c.Intent, "methodology": c.Methodology, "namespace": c.Namespace,
-		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID}
+		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID, "project": c.ProjectID}
 }
 
 // working is one call on the blackboard of a change.

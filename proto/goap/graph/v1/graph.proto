@@ -43,6 +43,7 @@ service GraphService {
   rpc GetChangeImpacts(GetChangeImpactsRequest) returns (GetChangeImpactsResponse);
   rpc ListNodeChanges(ListNodeChangesRequest) returns (ListNodeChangesResponse);
   rpc UpdateChange(UpdateChangeRequest) returns (UpdateChangeResponse);
+  rpc MoveChange(MoveChangeRequest) returns (MoveChangeResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
@@ -593,8 +594,7 @@ message Structure {
   bool self_parent = 6;
   // the tagged type and its subtypes
   repeated string types = 7;
-  // the property flagging the default member of the hierarchy
-  string default_property = 8;
+  reserved 8;
   // the initial properties of the root node
   google.protobuf.Struct bootstrap = 9;
 }
@@ -663,6 +663,16 @@ message UpdateChangeRequest {
 }
 
 message UpdateChangeResponse {
+  Change change = 1;
+}
+
+// MoveChange moves a root change, draft or active, with its open sub-changes, to another project (ADR 0091).
+message MoveChangeRequest {
+  string change_id = 1;
+  string project_id = 2;
+}
+
+message MoveChangeResponse {
   Change change = 1;
 }
 

@@ -524,7 +524,7 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, intent = EXCLUDED.intent, goal = EXCLUDED.goal, status = EXCLUDED.status,
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch,
-		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state`,
+		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state, project_id = EXCLUDED.project_id`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
 		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State)
 	return mapErr(err, "change")

@@ -16,7 +16,7 @@ func testOptions(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
 	pre := f.req.Ref()
 
 	a := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe", Hypothesis: "Stripe covers every market", Activate: true, By: "u"}))
@@ -112,7 +112,7 @@ func testOptionRefine(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", BaselineID: f.base.ID, OwnBranch: true}))
 
 	if _, err := g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "stripe", Intent: "bogus"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unknown intent: %v", err)

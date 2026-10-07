@@ -61,7 +61,16 @@ func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
 	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
-		Methodology: in.Methodology, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, Data: pbconv.Struct(in.Data)}))
+		Methodology: in.Methodology, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Data: pbconv.Struct(in.Data)}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
+// MoveChange moves a root change, with its open sub-changes, to another project (ADR 0091).
+func (c *Client) MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error) {
+	r, err := c.rpc.MoveChange(ctx, connect.NewRequest(&graphv1.MoveChangeRequest{ChangeId: string(id), ProjectId: project}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}

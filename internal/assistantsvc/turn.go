@@ -280,8 +280,16 @@ func (t *turn) createChange(ctx context.Context, a args) (any, error) {
 		}
 		namespace = m.Namespace
 	}
+	// no active project means the root project (ADR 0091)
+	project := t.project
+	if project == "" {
+		var err error
+		if project, err = t.s.Projects.RootProject(ctx); err != nil {
+			return nil, err
+		}
+	}
 	ch, err := t.s.Graph.CreateChange(authz.With(ctx, t.p), graph.NewChange{Title: title, Intent: intent, Methodology: method, Namespace: namespace,
-		ProjectID: t.project, Data: map[string]any{"createdBy": t.p.Subject, "via": "assistant", "conversation": t.conversation}})
+		ProjectID: project, Data: map[string]any{"createdBy": t.p.Subject, "via": "assistant", "conversation": t.conversation}})
 	if err != nil {
 		return nil, fmt.Errorf("the change was not created: %w", err)
 	}

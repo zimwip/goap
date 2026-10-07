@@ -19,7 +19,7 @@ func testBlackboardFacets(t *testing.T, repo Repo) {
 	g.Facets = map[string]BlackboardFacet{
 		"title": func(c domain.Change, _ time.Time) any { return "facet of " + c.Title },
 	}
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "c", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "c", BaselineID: f.base.ID}))
 	bb := must[domain.Blackboard](t)(g.Blackboard(ctx, c.ID))
 	if got := domain.Facet[string](bb, "title"); got != "facet of c" {
 		t.Fatalf("provider facet = %q", got)

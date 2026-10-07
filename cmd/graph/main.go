@@ -119,6 +119,7 @@ func main() {
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
+	g.ProjectMoveGate = graphsvc.ProjectMoveGate(authorizer, directory)
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}

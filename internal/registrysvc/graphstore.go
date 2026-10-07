@@ -32,6 +32,17 @@ type StoreGraph interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
+	// Structures give the root project, where the registry's own changes act (ADR 0091).
+	Structures(ctx context.Context) (domain.Structures, error)
+}
+
+// rootProject is the project the registry's own changes (methodology and domain seeds, alias stubs) act in.
+func rootProject(ctx context.Context, g StoreGraph) (string, error) {
+	st, err := g.Structures(ctx)
+	if err != nil {
+		return "", err
+	}
+	return st.Project().Root, nil
 }
 
 // linkDefines is the link type that ties a methodology version to the elements of its definition.
@@ -274,7 +285,11 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		if err != nil {
 			return err
 		}
-		_, err = s.Graph.Commit(ctx, graph.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits})
+		root, rerr := rootProject(ctx, s.Graph)
+		if rerr != nil {
+			return rerr
+		}
+		_, err = s.Graph.Commit(ctx, graph.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits, ProjectID: root})
 		if errors.Is(err, graph.ErrConflict) && attempt < 3 {
 			continue // main moved: read again and rebuild
 		}

@@ -33,7 +33,7 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "PSP", Intent: "choose a payment provider", Namespace: "alm", BaselineID: b.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "PSP", Intent: "choose a payment provider", Namespace: "alm", BaselineID: b.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestDecisionRatificationIsHuman(t *testing.T) {
 	g.DecisionPolicy = decision.Policy{}
 	_, _ = graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "REQ-1", Type: "alm@Requirement"})
 	b, _ := g.BranchHead(ctx, "alm", domain.MainBranch)
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "x", Namespace: "alm", BaselineID: b.ID})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "x", Namespace: "alm", BaselineID: b.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

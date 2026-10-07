@@ -16,7 +16,7 @@ func reviewWorld(t *testing.T, repo Repo) (fixture, domain.Change, []domain.Chan
 	review.Register()
 	ctx := context.Background()
 	f := newFixture(t, repo)
-	c, err := f.g.CreateChange(ctx, NewChange{Title: "review", BaselineID: f.base.ID})
+	c, err := f.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "review", BaselineID: f.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

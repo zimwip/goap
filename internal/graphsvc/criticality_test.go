@@ -25,7 +25,7 @@ func TestChangeCriticalityHeader(t *testing.T) {
 		t.Fatal(err)
 	}
 	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", Methodology: "m", Data: map[string]any{domain.DataCriticality: "C2"}})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", Methodology: "m", Data: map[string]any{domain.DataCriticality: "C2"}})
 	if err != nil {
 		t.Fatal(err)
 	}

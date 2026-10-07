@@ -28,9 +28,6 @@ type Structure struct {
 	Root string `json:"root"`
 	// SelfParent: the root is its own parent, rather than rootless.
 	SelfParent bool `json:"selfParent,omitempty"`
-	// Default names the boolean property that flags the default member of the hierarchy (the one a change naming
-	// none resolves to; the smallest key when several are flagged, the root when none is); empty: the root is.
-	Default string `json:"default,omitempty"`
 	// Bootstrap are the initial properties of the root node.
 	Bootstrap map[string]any `json:"bootstrap,omitempty"`
 }

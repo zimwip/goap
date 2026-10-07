@@ -112,10 +112,7 @@ nodeTypes:
   # sub-projects through `project_part_of`. The root project (PROJ-ROOT, bootstrapped with ORG-DEFAULT) links
   # `project_part_of` to itself: every project not folded into another one resolves to it. `structure` (ADR 0054)
   # tags the type building the project hierarchy: every node is created in a project and every change acts in one.
-  # `structure.default` names the property (`default`) that flags the default project, the one a change naming none acts in (one at most; with none
-  # flagged, the root project). Selecting a project before non-administrative work (this namespace's own data:
-  # units, projects, assignments, policies, adapters are administrative) is a UX-level gate (the project
-  # selector), not enforced by the graph itself.
+  # A change names its project (ADR 0091): none is defaulted, a caller with no active project works in the root one.
   - name: ProjectUnit
     description: "Project or sub-project"
     adminOnly: true
@@ -125,11 +122,9 @@ nodeTypes:
       parent: project_part_of
       root: PROJ-ROOT
       selfParent: true
-      default: default
       bootstrap:
         name: Root project
         status: active
-        default: true
         description: "The root of the projects: every project not folded into another one resolves to it."
     attributes:
       - {name: name, label: Name, description: "Name of the project", type: string, section: Identity, order: 1, asName: true}
@@ -137,7 +132,6 @@ nodeTypes:
       - {name: kind, label: Kind, description: "Kind of project", type: string, section: Identity, order: 3}
       - {name: status, label: Status, description: "Where the project stands", type: string, section: Identity, order: 4}
       - {name: methodologies, label: Methodologies, description: "Methodologies that apply to the project (they give it their roles)", type: json, widget: textarea, section: Methodology, order: 5}
-      - {name: default, label: "Default project", description: "A change naming no project acts in this one (one at most)", type: boolean, section: Methodology, order: 6}
   # the meeting point of organisation and project (ADR 0039, same shape as Adapter): an organisational unit
   # (or a user, through subtyping) is assigned to a project with the roles it locally holds there — a subset
   # of the roles declared by the project's applicable methodologies. This is how the engine resolves "what

@@ -100,6 +100,12 @@ func toConnect(err error) error {
 func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	projectID := r.Msg.ProjectId
+	if projectID == "" && r.Msg.ChangeId != "" {
+		// a run on an existing change works where the change does (ADR 0091), not where the caller's token points
+		if c, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); err == nil {
+			projectID = c.ProjectID
+		}
+	}
 	if projectID == "" {
 		projectID = authz.From(ctx).Project
 	}

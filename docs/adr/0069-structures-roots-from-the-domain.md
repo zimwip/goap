@@ -49,3 +49,5 @@ comes from the domain.
   replaces the organisation domain would change roots, default flag and bootstrap properties without a line of Go.
 - Not done here (phase P5b): the shape of `Change.OwnerOrg` / `ProjectID` and `Node.Owner` / `Project`, and the SQL
   columns, still name the two axes.
+
+> The `default` property of a structure is gone (ADR 0091): no change is created without a project, so nothing resolves to a default member.

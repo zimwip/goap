@@ -17,7 +17,7 @@ func testCommit(t *testing.T, repo Repo) {
 	g := f.g
 
 	// a header created with the element it defines, in the order that suits the links
-	res, err := g.Commit(ctx, Commit{Title: "Define DOC-1", Baseline: f.base.ID, By: "registry", BaselineName: "def",
+	res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "Define DOC-1", Baseline: f.base.ID, By: "registry", BaselineName: "def",
 		Edits: []NodeEdit{
 			{Key: "DOC-1", Type: "Doc", Props: map[string]any{"status": "draft"}, Rationale: "new document",
 				Links: []LinkEdit{{Type: "defines", ToKey: "DOC-1/el"}, {Type: "about", To: refPtr(f.need.Ref())}}},
@@ -57,7 +57,7 @@ func testCommit(t *testing.T, repo Repo) {
 	// both modified, the header linking to the element: the header follows the element's new version
 	head, _ := g.BranchHead(ctx, "", domain.MainBranch)
 	docRef, elRef := doc.Ref(), el.Ref()
-	if _, err := g.Commit(ctx, Commit{Title: "Edit DOC-1", Baseline: head.ID, By: "registry",
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "Edit DOC-1", Baseline: head.ID, By: "registry",
 		Edits: []NodeEdit{
 			{Pre: &docRef, Props: map[string]any{"status": "published"}},
 			{Pre: &elRef, Props: map[string]any{"n": 2}},
@@ -79,7 +79,7 @@ func testCommit(t *testing.T, repo Repo) {
 	// a link by key may target a node the graph already holds; one the version already carries is not added again
 	head, _ = g.BranchHead(ctx, "", domain.MainBranch)
 	doc2Ref := doc2.Ref()
-	if _, err := g.Commit(ctx, Commit{Title: "Link stored", Baseline: head.ID, By: "registry",
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "Link stored", Baseline: head.ID, By: "registry",
 		Edits: []NodeEdit{
 			{Key: "DOC-2", Type: "Doc", Links: []LinkEdit{{Type: "defines", ToKey: "DOC-1/el"}}},
 			{Pre: &doc2Ref, Links: []LinkEdit{{Type: "defines", ToKey: "DOC-1/el"}}},
@@ -95,7 +95,7 @@ func testCommit(t *testing.T, repo Repo) {
 		t.Fatalf("the link DOC-1 carries must not be added twice: %d links, had %d", len(v.Out), len(v2.Out))
 	}
 	head, _ = g.BranchHead(ctx, "", domain.MainBranch)
-	if _, err := g.Commit(ctx, Commit{Title: "Link nowhere", Baseline: head.ID, By: "registry",
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "Link nowhere", Baseline: head.ID, By: "registry",
 		Edits: []NodeEdit{{Key: "DOC-3", Type: "Doc", Links: []LinkEdit{{Type: "defines", ToKey: "NOPE"}}}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a link to a node nowhere must be invalid, got %v", err)
 	}
@@ -112,7 +112,7 @@ func testCommit(t *testing.T, repo Repo) {
 			}
 		}
 	}
-	if _, err := g.Commit(ctx, Commit{Title: "Remove the element", Baseline: head.ID, By: "registry", Edits: []NodeEdit{{Pre: &doc3Ref, RemoveLinks: []domain.LinkID{definesID}}}}); err != nil {
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "Remove the element", Baseline: head.ID, By: "registry", Edits: []NodeEdit{{Pre: &doc3Ref, RemoveLinks: []domain.LinkID{definesID}}}}); err != nil {
 		t.Fatal(err)
 	}
 	doc4, _ := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1")
@@ -122,7 +122,7 @@ func testCommit(t *testing.T, repo Repo) {
 	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "DOC-1/el"); err != nil || n.Deleted {
 		t.Fatalf("the element keeps its versions: %+v %v", n, err)
 	}
-	if _, err := g.Commit(ctx, Commit{Title: "Stale", Baseline: head.ID, By: "registry",
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "Stale", Baseline: head.ID, By: "registry",
 		Edits: []NodeEdit{{Pre: &docRef, Props: map[string]any{"status": "x"}}}}); !errors.Is(err, ErrConflict) && !errors.Is(err, ErrInvalid) {
 		t.Fatalf("an edit based on a stale version must fail, got %v", err)
 	}

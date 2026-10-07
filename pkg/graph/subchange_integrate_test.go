@@ -17,7 +17,7 @@ type subWorld struct {
 func newSubWorld(t *testing.T, repo Repo) subWorld {
 	t.Helper()
 	w := newOrgWorld(t, repo)
-	parent := must[domain.Change](t)(w.g.CreateChange(context.Background(), NewChange{Title: "parent", BaselineID: w.base.ID, OwnBranch: true}))
+	parent := must[domain.Change](t)(w.g.CreateChange(context.Background(), NewChange{ProjectID: "PROJ-ROOT", Title: "parent", BaselineID: w.base.ID, OwnBranch: true}))
 	return subWorld{orgWorld: w, parent: parent}
 }
 

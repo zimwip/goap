@@ -57,8 +57,8 @@ type Commit struct {
 	By           string
 	BaselineName string
 	Edits        []NodeEdit
-	// OwnerOrg is the unit holding the commit and ProjectID the project it acts in (ADR 0054); empty: the root unit,
-	// the default project.
+	// OwnerOrg is the unit holding the commit and ProjectID the project it acts in (ADR 0054); empty: the root unit.
+	// The project is required (ADR 0091).
 	OwnerOrg, ProjectID string
 }
 

@@ -465,7 +465,7 @@ type MergeRequest struct {
 	Namespace   string
 	Resolutions map[domain.NodeID]Resolution
 	// OwnerOrg is the unit holding the merge change and ProjectID the project it acts in (ADR 0054); empty: the root
-	// unit, the default project.
+	// unit. The project is required (ADR 0091).
 	OwnerOrg, ProjectID string
 }
 

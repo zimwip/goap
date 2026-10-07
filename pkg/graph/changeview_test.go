@@ -14,7 +14,7 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true}))
 	req, need := f.req.Ref(), f.need.Ref()
 	added := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{
 		{Intent: domain.IntentModified, Pre: &req, Rationale: "new PSP"},

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/journal"
 )
 
@@ -114,7 +115,7 @@ func TestAttachChangeReusesExistingChange(t *testing.T) {
 	statics := e.Methodologies.(StaticMethodologies)
 	statics["deferred-bind"] = loadMethodology(t, "deferred-bind.yaml")
 
-	existing, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "existing", Intent: "pre-existing change to reuse", Namespace: "alm", BaselineID: base})
+	existing, err := e.Graph.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "existing", Intent: "pre-existing change to reuse", Namespace: "alm", BaselineID: base})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,5 +139,49 @@ func TestAttachChangeReusesExistingChange(t *testing.T) {
 	}
 	if len(recs) != 1 || recs[0].Kind != journal.KindAttach || recs[0].Data["reused"] != true {
 		t.Fatalf("expected one reused attach record, got %+v", recs)
+	}
+}
+
+// A change is never created without a project (ADR 0091): a run naming none works in the root project (an empty claim
+// means the root), and a run on an existing change works where the change does, also after the change moved.
+func TestStartProjectOfTheChange(t *testing.T) {
+	ctx := context.Background()
+	e, g, base := setup(t)
+	st, err := g.Structures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", BaselineID: base, Intent: "The PSP changes its API, what does this break?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.Change(ctx, p.ChangeID)
+	if err != nil || c.ProjectID != st.Project().Root || p.Project != st.Project().Root {
+		t.Fatalf("no project: change in %q, run in %q, %v", c.ProjectID, p.Project, err)
+	}
+
+	own, err := g.CreateChange(ctx, graph.NewChange{Title: "t", Namespace: c.Namespace, BaselineID: base, ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", ChangeID: own.ID, ProjectID: "PROJ-OTHER", Intent: "what does this break?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.Project != testProject {
+		t.Fatalf("a run on a change works in its project: %q", q.Project)
+	}
+	if _, err := graphtest.Project(ctx, g, "PROJ-MOVED", "Moved"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.MoveChange(ctx, own.ID, "PROJ-MOVED"); err != nil {
+		t.Fatal(err)
+	}
+	m, err := e.Methodologies.Methodology(ctx, "impact-analysis")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.observe(ctx, q, m); err != nil || q.Project != "PROJ-MOVED" {
+		t.Fatalf("a run follows the move of its change: %q, %v", q.Project, err)
 	}
 }

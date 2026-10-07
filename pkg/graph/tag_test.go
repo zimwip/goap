@@ -17,7 +17,7 @@ func testTags(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	commit := func(title, key, name string) landed {
-		res, err := g.Commit(ctx, Commit{Title: title, Baseline: must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID,
+		res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: title, Baseline: must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)).ID,
 			By: "test", BaselineName: name, Edits: []NodeEdit{{Key: key, Type: "Doc", Props: map[string]any{"status": "draft"}}}})
 		if err != nil {
 			t.Fatal(err)
@@ -52,7 +52,7 @@ func testTags(t *testing.T, repo Repo) {
 		t.Fatalf("state after = %s, want %s", s.ID, b.baseline.ID)
 	}
 	// a draft has no state to name
-	draft := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "Draft", BaselineID: b.baseline.ID}))
+	draft := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "Draft", BaselineID: b.baseline.ID}))
 	if _, err := g.TagChange(ctx, draft.ID, "x", ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("tagging a draft: %v", err)
 	}

@@ -43,7 +43,7 @@ func TestReviewRPCs(t *testing.T) {
 		t.Fatal(err)
 	}
 	base, _ := g.BranchHead(ctx, "", domain.MainBranch)
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

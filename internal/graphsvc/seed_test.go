@@ -55,7 +55,7 @@ func TestSeedBuiltins(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Commit(ctx, graph.Commit{Namespace: ns, Title: "edit", Intent: "edit", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{e}}); err != nil {
+		if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "edit", Intent: "edit", Baseline: head.ID, By: "test", Edits: []graph.NodeEdit{e}}); err != nil {
 			t.Fatal(err)
 		}
 	}

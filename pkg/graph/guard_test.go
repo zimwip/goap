@@ -25,7 +25,7 @@ func testBootstrap(t *testing.T, repo Repo) {
 			t.Fatalf("%s: owner %s project %s change %s", n.Key, n.Owner, n.Project, n.ChangeID)
 		}
 	}
-	if org.Type != NodeTypeOrgUnit || proj.Type != NodeTypeProjectUnit || proj.Properties[propDefault] != true {
+	if org.Type != NodeTypeOrgUnit || proj.Type != NodeTypeProjectUnit {
 		t.Fatalf("roots: %+v %+v", org, proj)
 	}
 	c := must[domain.Change](t)(g.Change(ctx, org.ChangeID))
@@ -141,14 +141,14 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 		}
 		return must[CommitResult](t)(g.Commit(ctx, c))
 	}
-	commit(Commit{Edits: []NodeEdit{
+	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{
 		{Key: "TEAM", Type: NodeTypeOrgUnit, Props: map[string]any{"name": "Team"}, Links: []LinkEdit{{Type: LinkPartOf, To: refPtr(root.Ref())}}},
 		{Key: "PROJ-A", Type: NodeTypeProjectUnit, Props: map[string]any{"name": "A"}, Links: []LinkEdit{{Type: LinkProjectPartOf, To: refPtr(rootProj.Ref())}}},
 	}})
 	team := must[domain.Node](t)(g.NodeByKey(ctx, ns, "TEAM"))
 	pa := must[domain.Node](t)(g.NodeByKey(ctx, ns, "PROJ-A"))
 	if team.Owner != root.ID || team.Project != rootProj.ID {
-		t.Fatalf("a change naming nothing: the root unit, the default project: %+v", team)
+		t.Fatalf("a change naming no unit: the root unit; the bootstrap names the root project: %+v", team)
 	}
 
 	commit(Commit{OwnerOrg: "TEAM", ProjectID: "PROJ-A", Edits: []NodeEdit{{Key: "NOTE", Type: "Note", Props: map[string]any{"title": "one"}}}})
@@ -157,13 +157,13 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 		t.Fatalf("created by TEAM in PROJ-A: %+v", note)
 	}
 	// edited by a change of the root unit in the root project: still TEAM's, still created in PROJ-A
-	commit(Commit{Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Props: map[string]any{"title": "two"}}}})
+	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Props: map[string]any{"title": "two"}}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
 	if note.Version != 2 || note.Owner != team.ID || note.Project != pa.ID {
 		t.Fatalf("the next version keeps owner and project: %+v", note)
 	}
 	// transferred to the root unit
-	commit(Commit{Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: rootOrg(g)}}})
+	commit(Commit{ProjectID: "PROJ-ROOT", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: rootOrg(g)}}})
 	note = must[domain.Node](t)(g.NodeByKey(ctx, ns, "NOTE"))
 	if note.Version != 3 || note.Owner != root.ID || note.Project != pa.ID {
 		t.Fatalf("transferred to the root unit: %+v", note)
@@ -172,35 +172,40 @@ func testOwnerAndProjectOfNodes(t *testing.T, repo Repo) {
 		t.Fatalf("the earlier version stays TEAM's: %+v", v2)
 	}
 	// only a unit owns
-	if _, err := g.Commit(ctx, Commit{Namespace: ns, Title: "x", By: "t", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: "PROJ-A"}}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "x", By: "t", Edits: []NodeEdit{{Pre: refPtr(note.Ref()), Owner: "PROJ-A"}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a project as the owner: %v", err)
 	}
 }
 
-// The default project (ADR 0054) is the project flagged `default`, else the root project: a change naming no project
-// acts in it.
-func TestDefaultProject(t *testing.T) { forEachRepo(t, testDefaultProject) }
+// A change names the project it acts in (ADR 0091): none is defaulted, a sub-change inherits its parent's.
+func TestChangeNeedsAProject(t *testing.T) { forEachRepo(t, testChangeNeedsAProject) }
 
-func testDefaultProject(t *testing.T, repo Repo) {
+func testChangeNeedsAProject(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	g := New(repo)
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if p := must[string](t)(g.DefaultProject(ctx)); p != rootProject(g) {
-		t.Fatalf("default project = %s", p)
-	}
-	rootProj := must[domain.Node](t)(g.NodeByKey(ctx, NamespaceOrganisation, rootProject(g)))
-	must[CommitResult](t)(g.Commit(ctx, Commit{Namespace: NamespaceOrganisation, Title: "default B", By: "t", Edits: []NodeEdit{
-		{Key: "PROJ-B", Type: NodeTypeProjectUnit, Props: map[string]any{"name": "B", propDefault: true}, Links: []LinkEdit{{Type: LinkProjectPartOf, To: refPtr(rootProj.Ref())}}},
-		{Pre: refPtr(rootProj.Ref()), Props: map[string]any{propDefault: nil}},
-	}}))
-	if p := must[string](t)(g.DefaultProject(ctx)); p != "PROJ-B" {
-		t.Fatalf("default project = %s", p)
-	}
 	base := must[domain.Baseline](t)(g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch))
-	if c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID})); c.ProjectID != "PROJ-B" {
-		t.Fatalf("a change naming no project acts in the default one: %s", c.ProjectID)
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a change naming no project: %v", err)
+	}
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: "PROJ-NOPE"}); err == nil {
+		t.Fatal("a change naming an unknown project was created")
+	}
+	if _, err := g.Commit(ctx, Commit{Title: "x", By: "t", Edits: []NodeEdit{{Key: "N-X", Type: "Design"}}}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a commit naming no project: %v", err)
+	}
+	if _, err := g.MergeBranch(ctx, MergeRequest{From: "a", Into: "b"}); !errors.Is(err, ErrInvalid) && !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a merge naming no project: %v", err)
+	}
+	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "p", BaselineID: base.ID, ProjectID: rootProject(g), OwnBranch: true}))
+	if parent.ProjectID != rootProject(g) {
+		t.Fatalf("project = %s", parent.ProjectID)
+	}
+	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "s", ParentID: parent.ID}))
+	if sub.ProjectID != parent.ProjectID {
+		t.Fatalf("a sub-change inherits the project of its parent: %s", sub.ProjectID)
 	}
 }
 

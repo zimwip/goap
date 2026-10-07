@@ -33,7 +33,7 @@ func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, NewChange{Namespace: namespace, BaselineID: head.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: namespace, BaselineID: head.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	if err != nil {
 		return n, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{Namespace: n.Namespace, Title: "seed " + n.Key, BaselineID: head.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: n.Namespace, Title: "seed " + n.Key, BaselineID: head.ID})
 	if err != nil {
 		return n, err
 	}

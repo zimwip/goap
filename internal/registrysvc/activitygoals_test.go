@@ -37,7 +37,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "ship it", BaselineID: base.ID, Data: map[string]any{DataActivity: activityRef}})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "ship it", BaselineID: base.ID, Data: map[string]any{DataActivity: activityRef}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "x", BaselineID: base.ID, Data: map[string]any{DataActivity: "MV:no-such@1/process/p"}})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: base.ID, Data: map[string]any{DataActivity: "MV:no-such@1/process/p"}})
 	if err != nil {
 		t.Fatal(err)
 	}

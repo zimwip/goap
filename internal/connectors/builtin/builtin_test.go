@@ -547,7 +547,7 @@ func TestChangeToolsGateEveryAccessType(t *testing.T) {
 		t.Fatal(err)
 	}
 	asgKey := access.PlatformAssignmentKey("ORG-CHECKOUT")
-	_, err := p.g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
+	_, err := p.g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "Assignment", Intent: "Assignment", By: "test", Edits: []graph.NodeEdit{{
 		Key: asgKey, Type: access.NodeTypeAssignment, Props: access.Assignment{Roles: []string{access.RoleReader}}.Props(), Rationale: "seed",
 		Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, ToKey: "ORG-CHECKOUT"}}}}})
 	if err != nil {
@@ -738,5 +738,44 @@ func TestChangeReviewTools(t *testing.T) {
 	d := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/review_open", map[string]any{})["review"].(map[string]any)
 	if got := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/review_discard", map[string]any{"review": d["key"]})["review"].(map[string]any); got["status"] != "discarded" {
 		t.Fatalf("discard = %v", got)
+	}
+}
+
+// A change is created in a project (ADR 0091): the one the call names, else the caller's active project, else the root;
+// move relocates a root change.
+func TestChangeCreateAndMoveProject(t *testing.T) {
+	p := newPlatform(t)
+	ctx := context.Background()
+	root, err := p.g.NodeByKey(ctx, access.NamespaceOrganisation, access.DefaultProject)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootRef := root.Ref()
+	head, err := p.g.BranchHead(ctx, access.NamespaceOrganisation, domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.g.Commit(ctx, graph.Commit{ProjectID: access.DefaultProject, Namespace: access.NamespaceOrganisation, Title: "project", Baseline: head.ID, By: "test",
+		Edits: []graph.NodeEdit{{Key: "PROJ-MV", Type: access.NodeTypeProjectUnit, Props: map[string]any{"name": "MV"}, Rationale: "t",
+			Links: []graph.LinkEdit{{Type: access.LinkProjectPartOf, To: &rootRef}}}}}); err != nil {
+		t.Fatal(err)
+	}
+	args := map[string]any{"title": "t", "intent": "i", "namespace": "alm"}
+	alice := as("alice", "ORG-CHECKOUT", "contributor")
+	c := p.call(t, alice, "ORG-CHECKOUT", "goap-change/create", args)["change"].(map[string]any)
+	if c["project"] != access.DefaultProject {
+		t.Fatalf("no active project: %v", c["project"])
+	}
+	active := authz.With(context.Background(), authz.Principal{Subject: "alice", Org: "ORG-CHECKOUT", Project: "PROJ-MV", Roles: []string{"contributor"}})
+	if c = p.call(t, active, "ORG-CHECKOUT", "goap-change/create", args)["change"].(map[string]any); c["project"] != "PROJ-MV" {
+		t.Fatalf("active project: %v", c["project"])
+	}
+	named := map[string]any{"title": "t", "intent": "i", "namespace": "alm", "project": access.DefaultProject}
+	if c = p.call(t, active, "ORG-CHECKOUT", "goap-change/create", named)["change"].(map[string]any); c["project"] != access.DefaultProject {
+		t.Fatalf("named project: %v", c["project"])
+	}
+	moved := p.call(t, alice, "ORG-CHECKOUT", "goap-change/move", map[string]any{"change": c["id"], "project": "PROJ-MV"})["change"].(map[string]any)
+	if moved["project"] != "PROJ-MV" {
+		t.Fatalf("moved: %v", moved)
 	}
 }

@@ -240,7 +240,10 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
   };
 }
 
-/** An edit of the header of the change (title, intent, goal, status, data): what each field went from and to. */
+/** How a field of a header edit reads in the trail: the project of a change moved reads "project: A → B" (ADR 0091). */
+const fieldName = (k: string): string => (k === 'projectId' ? 'project' : k);
+
+/** An edit of the header of the change (title, intent, goal, status, data, project): what each field went from and to. */
 function fromHeader(l: LogEntry): Entry {
   const fields = decodeLogEntry<{ fields?: Record<string, { from?: JsonValue; to?: JsonValue }> }>(l).fields ?? {};
   const show = (x: JsonValue | undefined) => {
@@ -251,10 +254,10 @@ function fromHeader(l: LogEntry): Entry {
     key: `h:${l.id}`,
     at: l.at ?? '',
     source: 'change',
-    label: 'edited',
-    subject: Object.keys(fields).join(', '),
+    label: Object.keys(fields).length === 1 && fields.projectId ? 'moved' : 'edited',
+    subject: Object.keys(fields).map(fieldName).join(', '),
     summary: Object.entries(fields)
-      .map(([k, f]) => `${k}: ${f.from === undefined || f.from === '' ? '' : `${show(f.from)} → `}${show(f.to)}`)
+      .map(([k, f]) => `${fieldName(k)}: ${f.from === undefined || f.from === '' ? '' : `${show(f.from)} → `}${show(f.to)}`)
       .join(' · '),
     flow: '',
     by: l.by ?? '',

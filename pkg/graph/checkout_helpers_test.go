@@ -32,7 +32,7 @@ func importNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) 
 	if err != nil {
 		return domain.Node{}, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{Namespace: ns, Title: "Import " + in.Key, Intent: "Import " + in.Key, BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Import " + in.Key, Intent: "Import " + in.Key, BaselineID: head.ID, OwnBranch: true})
 	if err != nil {
 		return domain.Node{}, err
 	}
@@ -73,7 +73,7 @@ func importLink(ctx context.Context, g *Graph, typ string, from, to domain.NodeR
 	if err != nil {
 		return domain.Link{}, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{Namespace: ns, Title: "Link " + src.Key, Intent: "Link " + src.Key, BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Link " + src.Key, Intent: "Link " + src.Key, BaselineID: head.ID, OwnBranch: true})
 	if err != nil {
 		return domain.Link{}, err
 	}
@@ -106,7 +106,7 @@ func importProps(ctx context.Context, g *Graph, ref domain.NodeRef, props map[st
 	if err != nil {
 		return src, err
 	}
-	c, err := g.CreateChange(ctx, NewChange{Namespace: ns, Title: "Edit " + src.Key, Intent: "Edit " + src.Key, BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: ns, Title: "Edit " + src.Key, Intent: "Edit " + src.Key, BaselineID: head.ID, OwnBranch: true})
 	if err != nil {
 		return src, err
 	}

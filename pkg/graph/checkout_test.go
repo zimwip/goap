@@ -17,7 +17,7 @@ func testCheckoutEditAccept(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID}))
 	if _, err := g.ImpactNodeUpdate(ctx, c.ID, "nope", NodeUpdate{Properties: map[string]any{"x": 1}}); err == nil {
 		t.Fatal("an update names an impact of the change")
 	}
@@ -112,7 +112,7 @@ func testImpactNodeCancel(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "try", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "try", BaselineID: f.base.ID}))
 	mod := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "try"}))
 	created := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-9", Type: "Requirement", Rationale: "new",
 		Links: []LinkWrite{{Type: "satisfies", To: f.need.Ref()}}}))
@@ -154,7 +154,7 @@ func testAdoptFlowNeedsAccept(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "options", BaselineID: f.base.ID, OwnBranch: true}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "options", BaselineID: f.base.ID, OwnBranch: true}))
 	opt := must[domain.Flow](t)(g.OpenOption(ctx, c.ID, OpenOptionRequest{Name: "A", Hypothesis: "a", By: "u"}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "A", Flow: opt.ID}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "A"}, Flow: opt.ID}))
@@ -203,7 +203,7 @@ func testCreateIsCheckedOut(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "New", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "New", BaselineID: f.base.ID}))
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-NEW", Type: "alm@Requirement", Rationale: "new", Properties: map[string]any{"title": "x"}}))
 	if cn.Post == nil || !cn.Post.IsDraft() || !must[domain.Node](t)(g.ChangeNode(ctx, c.ID, "", *cn.Post)).IsDraft() {
 		t.Fatalf("a created node starts as a draft: %+v", cn)

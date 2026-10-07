@@ -28,7 +28,7 @@ func testResolveCreate(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "create", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "create", BaselineID: f.base.ID}))
 
 	// a key the reference baseline holds
 	_, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-1", Type: "Requirement"})
@@ -89,7 +89,7 @@ func testResolveExistingNode(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "modify", BaselineID: f.base.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "modify", BaselineID: f.base.ID}))
 
 	// unknown nodes are in neither the baseline nor the change
 	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: "nope"}); !errors.Is(err, ErrNotFound) || !strings.Contains(err.Error(), "neither") {

@@ -68,7 +68,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 
 func (w algoWorld) change(t *testing.T) domain.Change {
 	t.Helper()
-	c, err := w.g.CreateChange(context.Background(), NewChange{Title: "chg", BaselineID: w.base.ID})
+	c, err := w.g.CreateChange(context.Background(), NewChange{ProjectID: "PROJ-ROOT", Title: "chg", BaselineID: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

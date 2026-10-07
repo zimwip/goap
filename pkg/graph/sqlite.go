@@ -518,7 +518,7 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch,
-		  lifecycle = excluded.lifecycle, state = excluded.state`,
+		  lifecycle = excluded.lifecycle, state = excluded.state, project_id = excluded.project_id`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
 		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State)
 	return sqliteErr(err, "change")

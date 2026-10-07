@@ -24,7 +24,7 @@ func newFlowWorld(t *testing.T, repo Repo) flowWorld {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, err := g.CreateChange(ctx, NewChange{Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "PSP v2", BaselineID: f.base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

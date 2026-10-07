@@ -13,7 +13,7 @@ func TestChangeBranch(t *testing.T) { forEachRepo(t, testChangeBranch) }
 func setProp(t *testing.T, g *Graph, f fixture, base domain.BaselineID, title string, props map[string]any) domain.Change {
 	t.Helper()
 	ctx := context.Background()
-	c, err := g.CreateChange(ctx, NewChange{Title: title, BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

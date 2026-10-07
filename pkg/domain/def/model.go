@@ -80,10 +80,7 @@ type StructureTag struct {
 	Root string `yaml:"root" json:"root"`
 	// SelfParent: the root links to itself through Parent (a project root) rather than being rootless.
 	SelfParent bool `yaml:"selfParent,omitempty" json:"selfParent,omitempty"`
-	// Default names the boolean property of the type that flags the default member of the hierarchy (the one a
-	// change naming none resolves to); empty: the root is.
-	Default string `yaml:"default,omitempty" json:"default,omitempty"`
-	// Bootstrap are the initial properties of the root node (name, status, the Default flag...).
+	// Bootstrap are the initial properties of the root node (name, status...).
 	Bootstrap map[string]any `yaml:"bootstrap,omitempty" json:"bootstrap,omitempty"`
 }
 

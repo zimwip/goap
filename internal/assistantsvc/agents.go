@@ -453,8 +453,15 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 		if err != nil || m == nil {
 			return fail(fmt.Errorf("methodology %q cannot be read", ar.str("methodology")))
 		}
+		// no active project means the root project (ADR 0091)
+		changeProject := project
+		if changeProject == "" {
+			if changeProject, err = s.Projects.RootProject(ctx); err != nil {
+				return fail(err)
+			}
+		}
 		ch, err := s.Graph.CreateChange(ctx, graph.NewChange{Title: nc.str("title"), Intent: nc.str("intent"), Methodology: m.Name, Namespace: m.Namespace,
-			ProjectID: project, Data: map[string]any{"createdBy": p.Subject, "via": "assistant", "conversation": in.ConversationID}})
+			ProjectID: changeProject, Data: map[string]any{"createdBy": p.Subject, "via": "assistant", "conversation": in.ConversationID}})
 		if err != nil {
 			return fail(fmt.Errorf("the change was not created: %w", err))
 		}

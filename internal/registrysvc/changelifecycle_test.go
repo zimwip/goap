@@ -57,14 +57,14 @@ func TestChangeLifecycleGate(t *testing.T) {
 		t.Fatalf("a step is active in the state it names: %+v", build.Pre)
 	}
 
-	ch, err := g.CreateChange(ctx, graph.NewChange{Title: "ship", Methodology: "delivery", Namespace: "alm"})
+	ch, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "ship", Methodology: "delivery", Namespace: "alm"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if ch.Lifecycle != "maturity" || ch.State != "proposed" {
 		t.Fatalf("a change starts in the initial state: %q %q", ch.Lifecycle, ch.State)
 	}
-	if other, err := g.CreateChange(ctx, graph.NewChange{Title: "free", Methodology: "no-such", Namespace: "alm"}); err != nil || other.Lifecycle != "" {
+	if other, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "free", Methodology: "no-such", Namespace: "alm"}); err != nil || other.Lifecycle != "" {
 		t.Fatalf("a methodology without lifecycle leaves the change without state: %+v %v", other, err)
 	}
 	if _, err := g.TransitionChange(ctx, ch.ID, graph.TransitionRequest{Transition: "analyse"}); err != nil {

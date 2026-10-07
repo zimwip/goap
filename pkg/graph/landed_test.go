@@ -28,7 +28,7 @@ func testLanded(t *testing.T, repo Repo) {
 	}
 
 	// Commit opens a branch of its own: applied on it, then merged into main
-	res, err := g.Commit(ctx, Commit{Title: "own", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{{Key: "L-1", Type: "Design"}}})
+	res, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "own", Baseline: f.base.ID, By: "test", Edits: []NodeEdit{{Key: "L-1", Type: "Design"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +51,7 @@ func testLanded(t *testing.T, repo Repo) {
 
 	// a sub-change lands nothing on a branch: it is integrated into its parent's log, and the parent lands its work (ADR 0081)
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
-	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "parent", BaselineID: head.ID, OwnBranch: true}))
+	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "parent", BaselineID: head.ID, OwnBranch: true}))
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub", ParentID: parent.ID}))
 	added := must[[]domain.ChangeImpact](t)(g.proposeOrCreate(ctx, sub.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "L-2", Type: "Design", Rationale: "sub"}}))
 	if _, err := g.edit(ctx, sub.ID, added[0].ID, edit{Properties: map[string]any{"title": "t"}}); err != nil {
@@ -102,7 +102,7 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "split", BaselineID: head.ID}))
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "split", BaselineID: head.ID}))
 	added := must[[]domain.ChangeImpact](t)(g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-1", Type: "Design", Rationale: "split"}}))
 	if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": "t"}}); err != nil {
 		t.Fatal(err)
@@ -149,7 +149,7 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 	}
 
 	// a change that wrote nothing gets its branch when committed
-	empty := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "nothing", BaselineID: onMain.ID}))
+	empty := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "nothing", BaselineID: onMain.ID}))
 	if empty.Branch != domain.MainBranch {
 		t.Fatalf("a change that wrote nothing has no branch yet: %q", empty.Branch)
 	}

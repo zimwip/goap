@@ -111,6 +111,9 @@ type Graph struct {
 	// ChangeAuthorizer, when set, is asked before every transition of the lifecycle of a change (ADR 0058), like
 	// Authorizer is for the nodes.
 	ChangeAuthorizer ChangeTransitionAuthorizer
+	// ProjectMoveGate, when set, is asked before a change moves to another project (ADR 0091): who may move it and
+	// whether its methodology applies to both projects. Nil: no check beyond the graph's own rules.
+	ProjectMoveGate ProjectMoveGate
 
 	// MaterializeEvery is how many baselines of a chain pass between two that are materialised (their state stored,
 	// ADR 0056); the others are computed from the log. 0: DefaultMaterializeEvery.
@@ -307,9 +310,10 @@ type NewChange struct {
 	ParentID domain.ChangeID
 	// OwnerOrg is the key of the unit responsible for the change (empty: the default organisation).
 	OwnerOrg string
-	// ProjectID is the key of the project this change's nodes belong to (ADR 0039; empty: the root
-	// project). A sub-change inherits it from its parent when unset, and must stay within the parent's
-	// project when set. Selecting one before acting is a UX-level gate (ADR 0039), not enforced here.
+	// ProjectID is the key of the project this change acts in and its new nodes belong to (ADR 0039, 0091). A
+	// change cannot be created without one: a sub-change inherits it from its parent when unset (and must stay
+	// within the parent's project when set), any other change names it, and an empty one is refused with
+	// ErrInvalid. The edges resolve a caller's active project (empty: the root project), the graph does not.
 	ProjectID string
 	Data      map[string]any
 }
@@ -356,10 +360,9 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}
-		// a change is held by a unit and acts in a project (ADR 0054), both resolved here and never left empty: a
-		// sub-change inherits its parent's (prepareSubChange), a change naming none is held by the root unit and acts
-		// in the default project. Requiring a caller to pick a project is a UX-level gate (the project selector, ADR
-		// 0039); that the change has a real one is the graph's.
+		// a change is held by a unit and acts in a project (ADR 0054, 0091), never left empty: a sub-change inherits
+		// its parent's (prepareSubChange), a change naming no unit is held by the root unit, and a change naming no
+		// project is refused.
 		if err := g.scopeChange(ctx, tx, &c); err != nil {
 			return err
 		}

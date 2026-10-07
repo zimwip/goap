@@ -62,7 +62,7 @@ func newLifecycleWorldG(t *testing.T, repo Repo, approveGuard string) lcWorld {
 
 func (w lcWorld) change(t *testing.T, title string) domain.Change {
 	t.Helper()
-	c, err := w.g.CreateChange(context.Background(), NewChange{Title: title, BaselineID: w.base.ID})
+	c, err := w.g.CreateChange(context.Background(), NewChange{ProjectID: "PROJ-ROOT", Title: title, BaselineID: w.base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestActivityGoalsGateReplacesLandableFloor(t *testing.T) {
 func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
-	c, err := w.g.CreateChange(ctx, NewChange{Title: "edit REQ-2", BaselineID: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
+	c, err := w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-2", BaselineID: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
 	if err != nil {
 		t.Fatal(err)
 	}

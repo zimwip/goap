@@ -7,6 +7,9 @@
   import { graph, errorMessage, shortId, type Baseline, type Branch } from '../api';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
+  import { project, refreshProjects } from '../stores/project.svelte';
+  import { rootProject } from '../stores/session.svelte';
+  import { defaultChangeProject } from '../changeProject';
 
   let { oncreated, oncancel }: { oncreated: (id: string) => void; oncancel?: () => void } = $props();
 
@@ -17,6 +20,8 @@
   let baselineId = $state('');
   let ownBranch = $state(true);
   let parentId = $state('');
+  // a change is created in a project (ADR 0091): the active one unless another is picked; a sub-change has its parent's
+  let projectKey = $state('');
   let namespaces = $state<string[]>([]);
   let branches = $state<Branch[]>([]);
   let baselines = $state<Baseline[]>([]);
@@ -24,6 +29,12 @@
   let error = $state('');
 
   void loadTypes();
+  $effect(() => {
+    if (!project.options.length && !project.loading) void refreshProjects();
+  });
+  $effect(() => {
+    if (!projectKey) projectKey = defaultChangeProject(project.current, rootProject(), project.options);
+  });
   $effect(() => {
     graph
       .listNamespaces()
@@ -80,6 +91,7 @@
           branch: parentId ? undefined : branch,
           ownBranch: parentId ? undefined : ownBranch,
           parentId: parentId || undefined,
+          projectId: parentId ? undefined : projectKey,
         })
       ).change;
       if (!c?.id) throw new Error('The change could not be created.');
@@ -108,6 +120,11 @@
     {#each parents as c (c.id)}<option value={c.id}>{c.title || shortId(c.id)}</option>{/each}
   </select>
   {#if !parentId}
+    <label for="nc-project">Project</label>
+    <select id="nc-project" bind:value={projectKey} title="The project the change acts in: the nodes it creates belong to it">
+      {#each project.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
+      {#if !project.options.some((o) => o.key === projectKey)}<option value={projectKey}>{projectKey}</option>{/if}
+    </select>
     <label for="nc-branch">Lands on</label>
     <select id="nc-branch" value={branch} onchange={(e) => pickBranch(e.currentTarget.value)}>
       {#each branches as b (b.name)}<option value={b.name}>{b.name}</option>{/each}
@@ -126,7 +143,7 @@
   {/if}
   {#if error}<div class="alert small">{error}</div>{/if}
   <div class="row">
-    <button type="submit" class="primary small" disabled={busy || !title.trim() || !namespace}>Create the change</button>
+    <button type="submit" class="primary small" disabled={busy || !title.trim() || !namespace || (!parentId && !projectKey)}>Create the change</button>
     {#if oncancel}<button type="button" class="small" onclick={oncancel}>Cancel</button>{/if}
   </div>
 </form>

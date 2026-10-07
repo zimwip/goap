@@ -40,7 +40,7 @@ func testNamespaces(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, NewChange{Title: "t", BaselineID: base.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

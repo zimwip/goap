@@ -57,7 +57,7 @@ func TestAdminFloorRejectsRemovingLastAdmin(t *testing.T) {
 		t.Fatal(err)
 	}
 	ref := alice.Ref()
-	_, err = g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
+	_, err = g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
 		Edits: []graph.NodeEdit{{Pre: &ref, State: "deactivated", Rationale: "test"}}})
 	if !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "no active administrator") {
 		t.Fatalf("expected admin-floor rejection, got %v", err)
@@ -95,7 +95,7 @@ func TestAdminFloorAllowsHandoffInOneCommit(t *testing.T) {
 	}
 	aliceRef, bobRef := alice.Ref(), bob.Ref()
 	asg := access.Assignment{Roles: []string{access.RoleAdmin}, Description: "bob becomes administrator"}
-	_, err = g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "admin handoff", Baseline: head.ID, Edits: []graph.NodeEdit{
+	_, err = g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "admin handoff", Baseline: head.ID, Edits: []graph.NodeEdit{
 		{Key: access.PlatformAssignmentKey(access.UserKey("bob")), Type: access.NodeTypeAssignment, Props: asg.Props(),
 			Links: []graph.LinkEdit{{Type: access.LinkAssignsOrg, To: &bobRef}}, Rationale: "test"},
 		{Pre: &aliceRef, State: "deactivated", Rationale: "test"},
@@ -123,7 +123,7 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 			t.Fatal(err)
 		}
 		ref := alice.Ref()
-		_, err = g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
+		_, err = g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "deactivate alice", Baseline: head.ID,
 			Edits: []graph.NodeEdit{{Pre: &ref, State: "deactivated", Rationale: "test"}}})
 		return err
 	}
@@ -137,7 +137,7 @@ func TestAdminFloorCountsWhatEnrichGrants(t *testing.T) {
 		if err := graphsvc.EnsureUser(ctx, g, "alice"); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.Commit(ctx, graph.Commit{Namespace: access.NamespaceOrganisation, Title: "bob", Intent: "bob", By: "test", Edits: edits}); err != nil {
+		if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: "bob", Intent: "bob", By: "test", Edits: edits}); err != nil {
 			t.Fatal(err)
 		}
 		return g

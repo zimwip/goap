@@ -72,6 +72,8 @@ var DefaultPolicies = []Policy{
 	{Rule: `onProject(r.sub)`, Resource: "tool", Action: "call", Effect: "allow"},
 	// the lifecycle of a change (ADR 0058): its gates are decisions and conditions, the move itself is a member's
 	{Rule: `onProject(r.sub)`, Resource: "change", Action: "transition", Effect: "allow"},
+	// moving a change to another project (ADR 0091): asked on both projects, so a member of both
+	{Rule: `onProject(r.sub)`, Resource: "change", Action: "move", Effect: "allow"},
 	// the prompts and answers of the model calls of a change (its log, stream model) may hold anything the project works
 	// on: its members inspect them (a graph holding stored policies grants it to administrators until a rule is added)
 	{Rule: `onProject(r.sub)`, Resource: "prompt", Action: "inspect", Effect: "allow"},

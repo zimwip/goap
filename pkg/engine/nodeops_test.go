@@ -18,7 +18,7 @@ import (
 func TestScriptChangeImpacts(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "PSP v2", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "PSP v2", BaselineID: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ for (const n of ctx.changeImpacts()) if (n.review === "proposed") { ctx.impactNo
 func TestScriptChangeImpactsOnAFlow(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "PSP v2", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "PSP v2", BaselineID: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -214,7 +214,7 @@ linkTypes: [{name: contains, from: Folder, to: Item, compose: true}]
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "restructure", BaselineID: head.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "restructure", BaselineID: head.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,7 +264,7 @@ ctx.writeNode(parts[1], { props: { title: "second" } });
 func TestScriptDeclaredCreation(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "alm", Title: "late", BaselineID: base, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "late", BaselineID: base, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

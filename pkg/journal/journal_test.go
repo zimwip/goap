@@ -26,7 +26,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, g *graph.Graph, c domain.Cha
 		if err != nil {
 			t.Fatal(err)
 		}
-		c, err := g.CreateChange(ctx, graph.NewChange{Title: "c", BaselineID: base.ID})
+		c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "c", BaselineID: base.ID})
 		if err != nil {
 			t.Fatal(err)
 		}

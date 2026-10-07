@@ -300,6 +300,19 @@ func (h *Handler) ListNamespaces(ctx context.Context, _ *connect.Request[graphv1
 	return res(&graphv1.ListNamespacesResponse{Namespaces: ns}, err)
 }
 
+// projectOf resolves the project a change is created in (ADR 0091): the one the request names, else the caller's active
+// project, else the root project (an empty claim means the root). The graph refuses a change with none, so the edge
+// resolves it.
+func (h *Handler) projectOf(ctx context.Context, requested string) string {
+	if requested != "" {
+		return requested
+	}
+	if p := authz.From(ctx).Project; p != "" {
+		return p
+	}
+	return h.Graph.Structure(domain.StructureProject).Root
+}
+
 func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.CreateChangeRequest]) (*connect.Response[graphv1.CreateChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	owner, err := h.resolveOwner(ctx, r.Msg.OwnerOrg)
@@ -312,10 +325,7 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 			return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("a personal change has no sub-changes"))
 		}
 	}
-	projectID := r.Msg.ProjectId
-	if projectID == "" {
-		projectID = authz.From(ctx).Project
-	}
+	projectID := h.projectOf(ctx, r.Msg.ProjectId)
 	if err := validCriticality(pbconv.Map(r.Msg.Data)); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
@@ -383,6 +393,19 @@ func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.U
 	}
 	c, err := h.Graph.UpdateChange(ctx, domain.ChangeID(r.Msg.Id), p)
 	return res(&graphv1.UpdateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
+}
+
+// MoveChange moves a root change, with its open sub-changes, to another project (ADR 0091). The graph's ProjectMoveGate
+// authorizes it on both projects and checks the methodology; a personal change of someone else is refused by the
+// PersonalScope interceptor (change_id).
+func (h *Handler) MoveChange(ctx context.Context, r *connect.Request[graphv1.MoveChangeRequest]) (*connect.Response[graphv1.MoveChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, err := h.Graph.MoveChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.ProjectId)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items, c.Nodes = nil, nil
+	return connect.NewResponse(&graphv1.MoveChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
@@ -457,10 +480,7 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 	if err != nil {
 		return nil, err
 	}
-	projectID := r.Msg.ProjectId
-	if projectID == "" {
-		projectID = authz.From(ctx).Project
-	}
+	projectID := h.projectOf(ctx, r.Msg.ProjectId)
 	out, err := h.Graph.Commit(ctx, graph.Commit{Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		Data: pbconv.Map(r.Msg.Data), Baseline: domain.BaselineID(r.Msg.BaselineId), By: by, BaselineName: r.Msg.BaselineName, Edits: edits,
 		OwnerOrg: owner, ProjectID: projectID})
@@ -906,7 +926,7 @@ func (h *Handler) PlanMerge(ctx context.Context, r *connect.Request[graphv1.Plan
 }
 
 func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.MergeBranchRequest]) (*connect.Response[graphv1.MergeBranchResponse], error) {
-	req := graph.MergeRequest{From: r.Msg.From, Into: r.Msg.Into, Title: r.Msg.Title, Namespace: r.Msg.Namespace, Resolutions: map[domain.NodeID]graph.Resolution{}}
+	req := graph.MergeRequest{From: r.Msg.From, Into: r.Msg.Into, Title: r.Msg.Title, Namespace: r.Msg.Namespace, ProjectID: h.projectOf(ctx, ""), Resolutions: map[domain.NodeID]graph.Resolution{}}
 	for id, res := range r.Msg.Resolutions {
 		req.Resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(res.GetProps()), Skip: res.GetSkip()}
 	}

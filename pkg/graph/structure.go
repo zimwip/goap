@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/typecat"
@@ -164,47 +163,15 @@ func (g *Graph) within(ctx context.Context, tx Tx, kind, key, ancestor string) (
 	return false, nil
 }
 
-// DefaultProject returns the key of the default project: the project flagged by the property its structure names
-// (Structure.Default; the smallest key when several are flagged), else the root project.
-func (g *Graph) DefaultProject(ctx context.Context) (key string, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { key, err = g.defaultProject(ctx, tx); return err })
-	return
-}
-
-func (g *Graph) defaultProject(ctx context.Context, tx Tx) (string, error) {
-	st := g.Structure(domain.StructureProject)
-	if st.Default == "" {
-		return st.Root, nil
-	}
-	nodes, err := tx.LatestNodes(ctx, st.Namespace, domain.MainBranch)
-	if err != nil {
-		return "", err
-	}
-	var flagged []string
-	for _, n := range nodes {
-		if !n.Deleted && g.inStructure(n, st) && n.Properties[st.Default] == true {
-			flagged = append(flagged, n.Key)
-		}
-	}
-	if len(flagged) == 0 {
-		return st.Root, nil
-	}
-	return slices.Min(flagged), nil
-}
-
-// scopeChange resolves and checks who holds a change and where it acts (ADR 0054): an unset owner is the root unit,
-// an unset project the default project (a sub-change inherited its parent's already). Both must designate live nodes
-// of their structures; nothing is left empty.
+// scopeChange resolves and checks who holds a change and where it acts (ADR 0054, 0091): an unset owner is the root
+// unit; a project is never defaulted (a sub-change inherited its parent's already, a root change names its own, ADR
+// 0091). Both must designate live nodes of their structures; nothing is left empty.
 func (g *Graph) scopeChange(ctx context.Context, tx Tx, c *domain.Change) error {
 	if c.OwnerOrg == "" {
 		c.OwnerOrg = g.Structure(domain.StructureOrganisation).Root
 	}
 	if c.ProjectID == "" {
-		p, err := g.defaultProject(ctx, tx)
-		if err != nil {
-			return err
-		}
-		c.ProjectID = p
+		return fmt.Errorf("a change names the project it acts in: %w", ErrInvalid)
 	}
 	if _, err := g.structureNode(ctx, tx, domain.StructureOrganisation, c.OwnerOrg); err != nil {
 		return fmt.Errorf("owner of the change: %w", err)

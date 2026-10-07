@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import type { Session } from '../api';
 import {
-  adminRole, assignmentKey, can, defaultOrg, defaultProject, isMeta, isUserKey, links, newUserUnit, ns, platformRoles, policyPrefix, rootProject, session, subjectOfKey,
+  adminRole, assignmentKey, can, defaultOrg, isMeta, isUserKey, links, newUserUnit, ns, platformRoles, policyPrefix, rootProject, session, subjectOfKey,
   types, userKey,
 } from './session.svelte';
 
@@ -10,7 +10,7 @@ const fixture: Session = {
   can: { administer: true, approve: true, lowerCriticality: true },
   structures: [
     { kind: 'organisation', type: 'organisation@OrgUnit', namespace: 'organisation', parent: 'organisation@part_of', root: 'ORG-DEFAULT', types: ['organisation@OrgUnit', 'organisation@User'] },
-    { kind: 'project', type: 'organisation@ProjectUnit', namespace: 'organisation', parent: 'organisation@project_part_of', root: 'PROJ-ROOT', selfParent: true, default: 'default' },
+    { kind: 'project', type: 'organisation@ProjectUnit', namespace: 'organisation', parent: 'organisation@project_part_of', root: 'PROJ-ROOT', selfParent: true },
   ],
   names: {
     namespaces: { organisation: 'organisation', platform: 'platform', meta: 'methodology' },
@@ -70,11 +70,9 @@ describe('session accessors', () => {
     expect(assignmentKey('DEP-1', '')).toBe('ASG:DEP-1/PLATFORM');
   });
 
-  it('picks the waiting unit and the default project, else the roots', () => {
+  it('picks the waiting unit, else the root unit', () => {
     session.principal = fixture;
     expect(newUserUnit([{ key: 'A' }])).toBe('ORG-DEFAULT');
     expect(newUserUnit([{ key: 'B', props: { waiting: true } }, { key: 'A', props: { waiting: true } }, { key: 'C' }])).toBe('A');
-    expect(defaultProject([{ key: 'P1' }])).toBe('PROJ-ROOT');
-    expect(defaultProject([{ key: 'P2', props: { default: true } }, { key: 'P1' }])).toBe('P2');
   });
 });

@@ -49,7 +49,7 @@ func TestUserDeactivateReactivateRequireAdmin(t *testing.T) {
 			t.Fatal(err)
 		}
 		ref := carol.Ref()
-		_, err = g.Commit(authz.With(ctx, principal), graph.Commit{Namespace: access.NamespaceOrganisation, Title: title, Baseline: head.ID,
+		_, err = g.Commit(authz.With(ctx, principal), graph.Commit{ProjectID: "PROJ-ROOT", Namespace: access.NamespaceOrganisation, Title: title, Baseline: head.ID,
 			Edits: []graph.NodeEdit{{Pre: &ref, State: state, Rationale: "test"}}})
 		return err
 	}
@@ -114,7 +114,7 @@ nodeTypes:
 		t.Fatal(err)
 	}
 	// reopen, edit, release: "release" needs requirement:release
-	c, err := g.CreateChange(ctx, graph.NewChange{Namespace: "docs", Title: "t", BaselineID: base.ID})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "t", BaselineID: base.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

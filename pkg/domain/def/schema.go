@@ -135,9 +135,6 @@ func (s Schema) checkStructures(prefix string, add func(path, format string, arg
 		if t.Root == "" {
 			add(path+".root", "the key of the root node is required")
 		}
-		if t.Default != "" && !slices.ContainsFunc(n.Attributes, func(a Attribute) bool { return a.Name == t.Default }) {
-			add(path+".default", "unknown attribute %s of %s", t.Default, n.Name)
-		}
 		if n.Lifecycle != "" {
 			add(path, "a structure type has no lifecycle: its root is created by the bootstrap")
 		}

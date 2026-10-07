@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// DefaultProject is the key of the root project the built-in organisation domain tags (`structure.root`, ADR 0039),
+// DefaultProject is the key of the root project (where a caller with no active project works, ADR 0091) the built-in organisation domain tags (`structure.root`, ADR 0039),
 // created by the bootstrap of the graph; like DefaultOrg, for the seeds and tests of the built-in organisation.
 const DefaultProject = "PROJ-ROOT"
 

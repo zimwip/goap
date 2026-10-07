@@ -394,7 +394,7 @@ func StructuresToPB(s domain.Structures) *graphv1.GetStructuresResponse {
 	out := &graphv1.GetStructuresResponse{}
 	for _, x := range s {
 		st := &graphv1.Structure{Kind: x.Kind, Type: x.Type, Namespace: x.Namespace, Parent: x.Parent, Root: x.Root, SelfParent: x.SelfParent,
-			Types: x.Types, DefaultProperty: x.Default}
+			Types: x.Types}
 		if len(x.Bootstrap) > 0 {
 			st.Bootstrap, _ = structpb.NewStruct(x.Bootstrap)
 		}
@@ -408,7 +408,7 @@ func StructuresFromPB(r *graphv1.GetStructuresResponse) domain.Structures {
 	var out domain.Structures
 	for _, st := range r.GetStructures() {
 		x := domain.StructureSet{Structure: domain.Structure{Kind: st.GetKind(), Type: st.GetType(), Namespace: st.GetNamespace(),
-			Parent: st.GetParent(), Root: st.GetRoot(), SelfParent: st.GetSelfParent(), Default: st.GetDefaultProperty()}, Types: st.GetTypes()}
+			Parent: st.GetParent(), Root: st.GetRoot(), SelfParent: st.GetSelfParent()}, Types: st.GetTypes()}
 		if b := st.GetBootstrap(); b != nil {
 			x.Bootstrap = b.AsMap()
 		}

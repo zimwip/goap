@@ -42,7 +42,8 @@ CREATE TABLE branch (
 );
 
 -- owner_org and project_id are the keys of an organisational unit and of a project (ADR 0054): never empty, resolved
--- when the change is created; pkg/graph checks they designate nodes of the tagged structures.
+-- when the change is created (the project is named, never defaulted, and moves only through MoveChange, ADR 0091);
+-- pkg/graph checks they designate nodes of the tagged structures.
 CREATE TABLE change (
     id                 uuid PRIMARY KEY,
     title              text        NOT NULL,

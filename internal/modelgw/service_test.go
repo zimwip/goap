@@ -65,7 +65,7 @@ func change(t *testing.T, g *graph.Graph, edits ...graph.NodeEdit) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Commit(ctx, graph.Commit{Namespace: llmcfg.NamespacePlatform, Title: "t", Intent: "t", Baseline: head.ID, By: "t", Edits: edits}); err != nil {
+	if _, err := g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: llmcfg.NamespacePlatform, Title: "t", Intent: "t", Baseline: head.ID, By: "t", Edits: edits}); err != nil {
 		t.Fatal(err)
 	}
 }

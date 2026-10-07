@@ -83,6 +83,8 @@ type fakeProjects struct {
 	access   map[string][]string
 }
 
+func (f fakeProjects) RootProject(context.Context) (string, error) { return "PROJ-ROOT", nil }
+
 func (f fakeProjects) HasProject(_ context.Context, p string) (bool, error) {
 	_, ok := f.projects[p]
 	return ok, nil
@@ -583,5 +585,18 @@ func TestHandler(t *testing.T) {
 	_, err = cl.Send(context.Background(), connect.NewRequest(&assistantv1.SendRequest{ConversationId: e.conv.ID, Text: "again"}))
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// A change is never created without a project (ADR 0091): with no active project the assistant creates it in the root one.
+func TestCreateChangeWithNoActiveProjectActsInTheRoot(t *testing.T) {
+	e := newEnv(t, call(ToolCreateChange, `{"title":"x","intent":"y"}`), `{"message":"Created."}`)
+	e.user.Project = ""
+	e.ctx = authz.With(context.Background(), e.user)
+	if _, _, err := e.send("go", Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.graph.created) != 1 || e.graph.created[0].ProjectID != "PROJ-ROOT" {
+		t.Fatalf("created %+v", e.graph.created)
 	}
 }

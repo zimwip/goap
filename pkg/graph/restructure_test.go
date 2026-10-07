@@ -61,7 +61,7 @@ func (d docs) link(t *testing.T, typ string, from, to domain.Node) {
 func (d docs) change(t *testing.T) domain.Change {
 	t.Helper()
 	head := must[domain.Baseline](t)(d.g.BranchHead(d.ctx, "docs", domain.MainBranch))
-	return must[domain.Change](t)(d.g.CreateChange(d.ctx, NewChange{Namespace: "docs", Title: "restructure", Intent: "restructure", BaselineID: head.ID, OwnBranch: true}))
+	return must[domain.Change](t)(d.g.CreateChange(d.ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "docs", Title: "restructure", Intent: "restructure", BaselineID: head.ID, OwnBranch: true}))
 }
 
 // outKeys are the keys the latest version of a node on main links to, as "type:key".

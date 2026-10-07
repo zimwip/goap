@@ -25,7 +25,7 @@ func testValidateBoard(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, _ := g.CreateChange(ctx, NewChange{Title: "v", BaselineID: f.base.ID})
+	c, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "v", BaselineID: f.base.ID})
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{note("p1"), note("p2", "p1")}); err != nil {
 		t.Fatal(err)
 	}
@@ -69,8 +69,8 @@ func testValidateBoardOutdatedAndFlowView(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	a, _ := g.CreateChange(ctx, NewChange{Title: "a", BaselineID: f.base.ID})
-	b, _ := g.CreateChange(ctx, NewChange{Title: "b", BaselineID: f.base.ID})
+	a, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "a", BaselineID: f.base.ID})
+	b, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "b", BaselineID: f.base.ID})
 	pre := f.req.Ref()
 	as, err := g.ProposeImpact(ctx, a.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: "from a"}})
 	if err != nil {

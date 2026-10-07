@@ -74,7 +74,7 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newOrgWorld(t, repo)
 	g := w.g
-	parent, err := g.CreateChange(ctx, NewChange{Title: "Upgrade", BaselineID: w.base.ID, OwnBranch: true, OwnerOrg: "ORG-DIGITAL"})
+	parent, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "Upgrade", BaselineID: w.base.ID, OwnBranch: true, OwnerOrg: "ORG-DIGITAL"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -187,15 +187,15 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 	w := newOrgWorld(t, repo)
 	g := w.g
 	// a parent without a branch of its own cannot have sub-changes
-	flat, _ := g.CreateChange(ctx, NewChange{Title: "flat", BaselineID: w.base.ID})
+	flat, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "flat", BaselineID: w.base.ID})
 	if _, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: flat.ID}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("sub-change of a flat change: %v", err)
 	}
 	// unknown owner org
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: w.base.ID, OwnerOrg: "ORG-NOPE"}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: w.base.ID, OwnerOrg: "ORG-NOPE"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unknown org: %v", err)
 	}
-	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: w.base.ID, OwnBranch: true, OwnerOrg: "ORG-T1"})
+	parent, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "p", BaselineID: w.base.ID, OwnBranch: true, OwnerOrg: "ORG-T1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 	if _, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: parent.ID, Namespace: "other"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("other namespace: %v", err)
 	}
-	p2, _ := g.CreateChange(ctx, NewChange{Title: "p2", BaselineID: w.base.ID, OwnBranch: true, OwnerOrg: "ORG-DIGITAL"})
+	p2, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "p2", BaselineID: w.base.ID, OwnBranch: true, OwnerOrg: "ORG-DIGITAL"})
 	sub, err := g.CreateChange(ctx, NewChange{Title: "s", ParentID: p2.ID, OwnerOrg: "ORG-T2"})
 	if err != nil || sub.Branch == p2.Branch || sub.ParentID != p2.ID {
 		t.Fatalf("sub = %+v, %v", sub, err)
@@ -308,15 +308,19 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: "PROJ-NOPE"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("unknown project: %v", err)
 	}
-	// none named: the default project (ADR 0054)
-	if c, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID}); err != nil || c.ProjectID != rootProject(g) || c.OwnerOrg != rootOrg(g) {
-		t.Fatalf("a change naming no project acts in the default one, held by the root unit: %+v %v", c, err)
+	// none named: refused (ADR 0091)
+	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID}); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a change naming no project: %v", err)
+	}
+	// a unit named by none is the root unit
+	if c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: base.ID}); err != nil || c.ProjectID != rootProject(g) || c.OwnerOrg != rootOrg(g) {
+		t.Fatalf("a change naming no unit is held by the root unit: %+v %v", c, err)
 	}
 	// a node of the organisation that is not a project is refused
 	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, ProjectID: rootOrg(g)}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a unit as the project: %v", err)
 	}
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", BaselineID: base.ID, OwnerOrg: "PROJ-A"}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: base.ID, OwnerOrg: "PROJ-A"}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a project as the owner unit: %v", err)
 	}
 	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: base.ID, OwnBranch: true, ProjectID: "PROJ-A"})
@@ -356,7 +360,7 @@ func testSubChangeValidatorHook(t *testing.T, repo Repo) {
 		}
 		return nil
 	}
-	parent, err := g.CreateChange(ctx, NewChange{Title: "p", BaselineID: w.base.ID, OwnBranch: true, Data: map[string]any{"scope": "parent"}})
+	parent, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "p", BaselineID: w.base.ID, OwnBranch: true, Data: map[string]any{"scope": "parent"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +382,7 @@ func testSubChangeValidatorHook(t *testing.T, repo Repo) {
 	}
 	// a change with no parent is not asked
 	gotChild = domain.Change{}
-	if _, err := g.CreateChange(ctx, NewChange{Title: "root", BaselineID: w.base.ID, Data: map[string]any{"scope": "outside"}}); err != nil || gotChild.Title != "" {
+	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", BaselineID: w.base.ID, Data: map[string]any{"scope": "outside"}}); err != nil || gotChild.Title != "" {
 		t.Fatalf("a change with no parent is not validated: %v, %+v", err, gotChild)
 	}
 }
@@ -392,7 +396,7 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newOrgWorld(t, repo)
 	g := w.g
-	parent, err := g.CreateChange(ctx, NewChange{Title: "parent", BaselineID: w.base.ID, OwnBranch: true})
+	parent, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "parent", BaselineID: w.base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

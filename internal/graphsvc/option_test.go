@@ -34,7 +34,7 @@ func TestOptionsThroughTheService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +99,7 @@ func TestDecisionsThroughTheService(t *testing.T) {
 
 	_, _ = graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement"})
 	base, _ := g.BranchHead(ctx, "", domain.MainBranch)
-	c, err := g.CreateChange(ctx, graph.NewChange{Title: "t", BaselineID: base.ID, OwnBranch: true})
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: base.ID, OwnBranch: true})
 	if err != nil {
 		t.Fatal(err)
 	}

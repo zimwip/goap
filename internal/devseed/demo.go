@@ -152,7 +152,8 @@ func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 		}
 		edits[i].Links = append(edits[i].Links, graph.LinkEdit{Type: alm + "@" + l[1], ToKey: l[2]})
 	}
-	_, err = g.Commit(ctx, graph.Commit{Namespace: alm, Title: "Import demo data", Intent: "Seed demo data", By: "devseed", BaselineName: "Initial baseline", Edits: edits})
+	_, err = g.Commit(ctx, graph.Commit{Namespace: alm, Title: "Import demo data", Intent: "Seed demo data", By: "devseed", BaselineName: "Initial baseline", Edits: edits,
+		ProjectID: g.Structure(domain.StructureProject).Root})
 	return err == nil, err
 }
 

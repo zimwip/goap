@@ -87,6 +87,8 @@ type Methodologies interface {
 // and which methodologies apply to it (Directory).
 type Projects interface {
 	HasProject(ctx context.Context, project string) (bool, error)
+	// RootProject is the project of a caller with no active project (ADR 0091).
+	RootProject(ctx context.Context) (string, error)
 	MayAccessProject(ctx context.Context, p authz.Principal, project string) (bool, error)
 	ApplicableMethodologies(ctx context.Context, project string) ([]string, error)
 }
@@ -95,6 +97,14 @@ type Projects interface {
 type Directory struct{ *access.Directory }
 
 var _ Projects = Directory{}
+
+func (d Directory) RootProject(ctx context.Context) (string, error) {
+	s, err := d.Snapshot(ctx)
+	if err != nil || s == nil {
+		return "", fmt.Errorf("the organisation cannot be read: %w", err)
+	}
+	return s.RootProject(), nil
+}
 
 func (d Directory) HasProject(ctx context.Context, project string) (bool, error) {
 	s, err := d.Snapshot(ctx)

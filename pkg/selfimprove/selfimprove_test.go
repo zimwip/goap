@@ -59,7 +59,7 @@ func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID
 	for _, a := range m.Agents {
 		el("agent", "methodology@Agent", a.Name, map[string]any{"actions": a.Actions})
 	}
-	return g.Commit(ctx, graph.Commit{Namespace: "methodology", Title: "Methodology " + m.Name, Baseline: base, By: "test", Edits: append(edits, head)})
+	return g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: "methodology", Title: "Methodology " + m.Name, Baseline: base, By: "test", Edits: append(edits, head)})
 }
 
 const testProject = "PROJ-TEST"

@@ -167,7 +167,7 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 					return nil, fmt.Errorf("type %s: structure parent: %w", ref, err)
 				}
 				c.structures[tag.Kind] = domain.Structure{Kind: tag.Kind, Type: ref.String(), Namespace: d.Name, Parent: parent.String(), Root: tag.Root, SelfParent: tag.SelfParent,
-					Default: tag.Default, Bootstrap: maps.Clone(tag.Bootstrap)}
+					Bootstrap: maps.Clone(tag.Bootstrap)}
 			}
 		}
 		for _, l := range d.LinkTypes {

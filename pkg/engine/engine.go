@@ -174,12 +174,17 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 			return nil, err
 		}
 	}
-	if req.ChangeID != "" && req.BaselineID == "" {
+	if req.ChangeID != "" {
 		bb, err := e.Graph.Blackboard(ctx, req.ChangeID)
 		if err != nil {
 			return nil, err
 		}
-		p.BaselineID = bb.Change.BaselineID
+		if req.BaselineID == "" {
+			p.BaselineID = bb.Change.BaselineID
+		}
+		// a run works where its change does (ADR 0091): the roles it checks are held on the project of the change,
+		// which a move may have changed since the caller's token was issued
+		p.Project = bb.Change.ProjectID
 	}
 	if req.Goal != "" {
 		m, err := e.Methodologies.Methodology(ctx, req.Methodology)
@@ -459,8 +464,16 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	p.Title = title
 	intent := firstNonEmpty(req.Intent, firstUserTurn(p))
 	ownerOrg := firstNonEmpty(req.OwnerOrg, p.Org)
-	// a change always acts in a project (ADR 0054): the graph resolves one naming none to the default project
+	// a change always acts in a project (ADR 0054, 0091): the request's, else the run's (the caller's active project),
+	// else the root project (an empty claim means the root); the graph refuses a change naming none
 	projectID := firstNonEmpty(req.ProjectID, p.Project)
+	if projectID == "" {
+		st, err := e.Graph.Structures(ctx)
+		if err != nil {
+			return "", err
+		}
+		projectID = st.Project().Root
+	}
 	// the change's free-form data carries the use-case marks of its methodology (domain.DataAdministrative)
 	data := map[string]any{}
 	if p.Trigger != "" {

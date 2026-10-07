@@ -81,7 +81,7 @@ func TestCheckAttributesIsStrict(t *testing.T) {
 func TestImpactNodeOperationsAreStrict(t *testing.T) {
 	ctx := context.Background()
 	g, b := strictGraph(t)
-	c, err := g.CreateChange(ctx, NewChange{Namespace: "shop", Title: "t", BaselineID: b.ID})
+	c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Namespace: "shop", Title: "t", BaselineID: b.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

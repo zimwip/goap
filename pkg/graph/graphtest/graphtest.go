@@ -28,7 +28,8 @@ func open(ctx context.Context, g *graph.Graph, ns, title string) (domain.Change,
 	if err != nil {
 		return domain.Change{}, err
 	}
-	return g.CreateChange(ctx, graph.NewChange{Namespace: ns, Title: title, Intent: title, BaselineID: head.ID, OwnBranch: true})
+	return g.CreateChange(ctx, graph.NewChange{Namespace: ns, Title: title, Intent: title, BaselineID: head.ID, OwnBranch: true,
+		ProjectID: g.Structure(domain.StructureProject).Root})
 }
 
 // Import lands a node on main through a change of its own and returns its latest version. It names no required

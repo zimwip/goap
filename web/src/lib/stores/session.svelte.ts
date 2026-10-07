@@ -138,12 +138,6 @@ function flagged(nodes: Flagged[], prop: string, fallback: string): string {
 /** The key of the unit new users join: the waiting unit (smallest key if several carry the flag), else the root unit. */
 export const newUserUnit = (units: Flagged[]): string => flagged(units, waitingProp(), defaultOrg());
 
-/** The property flagging the default project ('' when the root is the default). */
-export const defaultProjectProp = (): string => structureOf(types.projectUnit)?.default ?? none;
-
-/** The key of the default project: the flagged project (smallest key if several carry the flag), else the root project. */
-export const defaultProject = (projects: Flagged[]): string => flagged(projects, defaultProjectProp(), rootProject());
-
 // --- keys -------------------------------------------------------------------------------------------------------
 
 const keys = () => session.principal?.names.keys;

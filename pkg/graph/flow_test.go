@@ -28,7 +28,7 @@ func testFlowRelaunchAdopt(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, _ := g.CreateChange(ctx, NewChange{Title: "flow", BaselineID: f.base.ID})
+	c, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "flow", BaselineID: f.base.ID})
 	// step 1 produced p1; step 2 produced p2 from p1; p3 came from elsewhere
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old"), upd("p2", f.need, "derived from p1", "p1"), upd("p3", f.test, "independent")}); err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func testFlowDiscard(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, _ := g.CreateChange(ctx, NewChange{Title: "flow", BaselineID: f.base.ID})
+	c, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "flow", BaselineID: f.base.ID})
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old")}); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func testFlowDiscard(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	// a new relaunch is possible once the flow is decided
-	c2, _ := g.CreateChange(ctx, NewChange{Title: "flow2", BaselineID: f.base.ID})
+	c2, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "flow2", BaselineID: f.base.ID})
 	if _, err := g.AddItems(ctx, c2.ID, []domain.ChangeItem{upd("q1", f.test, "t")}); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func testParallelFlowsCompete(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, _ := g.CreateChange(ctx, NewChange{Title: "parallel", BaselineID: f.base.ID})
+	c, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "parallel", BaselineID: f.base.ID})
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old"), upd("p2", f.need, "derived", "p1"), upd("p3", f.test, "independent")}); err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +234,7 @@ func testFlowGuidance(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
-	c, _ := g.CreateChange(ctx, NewChange{Title: "guided", BaselineID: f.base.ID})
+	c, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "guided", BaselineID: f.base.ID})
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old")}); err != nil {
 		t.Fatal(err)
 	}

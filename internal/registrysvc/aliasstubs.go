@@ -135,8 +135,13 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 	if err != nil {
 		return err
 	}
+	root, err := rootProject(ctx, g)
+	if err != nil {
+		return err
+	}
 	c, err := g.CreateChange(ctx, graph.NewChange{
 		Namespace:  llmcfg.NamespacePlatform,
+		ProjectID:  root,
 		Title:      fmt.Sprintf("Aliases needed by %s (%s)", methodologyName, strings.Join(aliases, ", ")),
 		Intent:     "configure the model aliases referenced by a methodology",
 		BaselineID: head.ID,

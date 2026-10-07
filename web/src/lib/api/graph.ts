@@ -125,7 +125,15 @@ export const graph = {
     parentId?: string;
     /** key of the responsible unit; '@me': the personal unit of the caller (a personal change, ADR 0037) */
     ownerOrg?: string;
+    /** key of the project the change acts in: required unless a parent change gives it (ADR 0091) */
+    projectId?: string;
   }) => rpc<typeof req, { change?: Change }>(GRAPH, 'CreateChange', req),
+  /**
+   * Moves a root change, draft or active, with its open sub-changes, to another project whose methodologies include the
+   * change's (ADR 0091); the nodes it already acts on keep their project.
+   */
+  moveChange: (changeId: string, projectId: string) =>
+    rpc<{ changeId: string; projectId: string }, { change?: Change }>(GRAPH, 'MoveChange', { changeId, projectId }),
   /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
   splitChange: (changeId: string) =>
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
