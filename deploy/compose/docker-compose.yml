@@ -109,6 +109,7 @@ services:
       GOAP_GRAPH_URL: http://graph:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080
+      GOAP_ENGINE_URL: http://engine:8080
     ports: ["8090:8080"]
 
   credentials:

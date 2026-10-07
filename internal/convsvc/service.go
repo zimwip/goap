@@ -315,3 +315,44 @@ func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id strin
 	})
 	return out, s.storeErr(err)
 }
+
+// ErrActionMissing is returned by UpdateAction when the message has no action at that index.
+var ErrActionMissing = fmt.Errorf("%w: no such action", ErrInvalid)
+
+// UpdateAction changes one action of an assistant message (a platform service only), atomically with the read: fn gets
+// a copy of the action as stored and returns its replacement, or an error that leaves the message as it is. It is the
+// compare-and-set the assistant needs to decide an action once (ADR 0090); the text, status and the other actions are
+// untouched.
+func (s *Service) UpdateAction(ctx context.Context, p authz.Principal, id string, index int, fn func(Action) (Action, error)) (Message, error) {
+	if p.Anonymous() {
+		return Message{}, ErrAnonymous
+	}
+	if !p.System() {
+		return Message{}, ErrForbidden
+	}
+	out, err := s.Store.UpdateMessage(ctx, id, s.now(), func(m Message) (Message, error) {
+		if m.Role != RoleAssistant {
+			return Message{}, fmt.Errorf("%w: only an assistant message is updated", ErrInvalid)
+		}
+		if index < 0 || index >= len(m.Actions) {
+			return Message{}, ErrActionMissing
+		}
+		a := make(Action, len(m.Actions[index]))
+		for k, v := range m.Actions[index] {
+			a[k] = v
+		}
+		a, err := fn(a)
+		if err != nil {
+			return Message{}, err
+		}
+		acts := append([]Action(nil), m.Actions...)
+		acts[index] = a
+		c := Content{Text: m.Text, Actions: acts, Status: m.Status, Error: m.Error}
+		if err := c.check(); err != nil {
+			return Message{}, err
+		}
+		m.Actions = acts
+		return m, nil
+	})
+	return out, s.storeErr(err)
+}

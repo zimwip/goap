@@ -20,7 +20,7 @@ export interface AssistantSendResponse {
 }
 
 /** The UI actions the assistant can ask the web to run (the `type` of a `ConversationAction`). */
-export type AssistantActionType = 'select_project' | 'create_change' | 'open_change';
+export type AssistantActionType = 'select_project' | 'create_change' | 'open_change' | 'start_agent';
 
 export interface SelectProjectAction extends ConversationAction {
   type: 'select_project';
@@ -38,4 +38,46 @@ export interface OpenChangeAction extends ConversationAction {
   type: 'open_change';
   args: { changeId: string };
   result?: { changeId: string; title?: string; project?: string; status?: string };
+}
+
+/** `proposed` waits for the person; `starting` is a transient claim; the others are final (ADR 0090). */
+export type StartAgentStatus = 'proposed' | 'starting' | 'started' | 'rejected' | 'failed';
+
+/**
+ * A proposal to run an agent (ADR 0090). Nothing is started until `confirmAction(..., 'accept')`. `args.changeId` is the
+ * change the agent works on, else `args.newChange` is created first. After the decision `status` is `started` (with
+ * `result.processId`, read the run from the process), `rejected` or `failed` (with `error`).
+ */
+export interface StartAgentAction extends ConversationAction {
+  type: 'start_agent';
+  status: StartAgentStatus;
+  label: string;
+  rationale?: string;
+  args: {
+    methodology: string;
+    agent: string;
+    goal?: string;
+    intent?: string;
+    /** the project the proposal was made in */
+    project: string;
+    changeId?: string;
+    newChange?: { title: string; intent: string };
+  };
+  result?: { processId?: string; changeId?: string };
+  error?: string;
+  decided?: { by: string; at: string; decision: 'accept' | 'reject' };
+}
+
+export interface ConfirmActionRequest {
+  conversationId: string;
+  messageId: string;
+  actionIndex: number;
+  decision: 'accept' | 'reject';
+  /** the active project of the web */
+  project?: string;
+}
+
+/** The assistant message with its action updated. */
+export interface ConfirmActionResponse {
+  message: ConversationMessage;
 }

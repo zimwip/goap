@@ -260,6 +260,131 @@ func (x *SendResponse) GetAssistantMessage() *v1.Message {
 	return nil
 }
 
+type ConfirmActionRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	// the assistant message holding the proposal
+	MessageId string `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// index in the message's actions
+	ActionIndex int32 `protobuf:"varint,3,opt,name=action_index,json=actionIndex,proto3" json:"action_index,omitempty"`
+	// accept | reject
+	Decision string `protobuf:"bytes,4,opt,name=decision,proto3" json:"decision,omitempty"`
+	// the active project of the web (empty: the caller's token project); compared with the proposal's
+	Project       string `protobuf:"bytes,5,opt,name=project,proto3" json:"project,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmActionRequest) Reset() {
+	*x = ConfirmActionRequest{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmActionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmActionRequest) ProtoMessage() {}
+
+func (x *ConfirmActionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmActionRequest.ProtoReflect.Descriptor instead.
+func (*ConfirmActionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ConfirmActionRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *ConfirmActionRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *ConfirmActionRequest) GetActionIndex() int32 {
+	if x != nil {
+		return x.ActionIndex
+	}
+	return 0
+}
+
+func (x *ConfirmActionRequest) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
+func (x *ConfirmActionRequest) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+type ConfirmActionResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the assistant message with the action updated
+	Message       *v1.Message `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConfirmActionResponse) Reset() {
+	*x = ConfirmActionResponse{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConfirmActionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConfirmActionResponse) ProtoMessage() {}
+
+func (x *ConfirmActionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConfirmActionResponse.ProtoReflect.Descriptor instead.
+func (*ConfirmActionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ConfirmActionResponse) GetMessage() *v1.Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
 var File_goap_assistant_v1_assistant_proto protoreflect.FileDescriptor
 
 const file_goap_assistant_v1_assistant_proto_rawDesc = "" +
@@ -282,9 +407,19 @@ const file_goap_assistant_v1_assistant_proto_rawDesc = "" +
 	"\acontext\x18\x03 \x01(\v2\x1e.goap.assistant.v1.PageContextR\acontext\"\x9e\x01\n" +
 	"\fSendResponse\x12A\n" +
 	"\fuser_message\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\vuserMessage\x12K\n" +
-	"\x11assistant_message\x18\x02 \x01(\v2\x1e.goap.conversations.v1.MessageR\x10assistantMessage2[\n" +
+	"\x11assistant_message\x18\x02 \x01(\v2\x1e.goap.conversations.v1.MessageR\x10assistantMessage\"\xb7\x01\n" +
+	"\x14ConfirmActionRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12!\n" +
+	"\faction_index\x18\x03 \x01(\x05R\vactionIndex\x12\x1a\n" +
+	"\bdecision\x18\x04 \x01(\tR\bdecision\x12\x18\n" +
+	"\aproject\x18\x05 \x01(\tR\aproject\"Q\n" +
+	"\x15ConfirmActionResponse\x128\n" +
+	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage2\xbf\x01\n" +
 	"\x10AssistantService\x12G\n" +
-	"\x04Send\x12\x1e.goap.assistant.v1.SendRequest\x1a\x1f.goap.assistant.v1.SendResponseB\xc7\x01\n" +
+	"\x04Send\x12\x1e.goap.assistant.v1.SendRequest\x1a\x1f.goap.assistant.v1.SendResponse\x12b\n" +
+	"\rConfirmAction\x12'.goap.assistant.v1.ConfirmActionRequest\x1a(.goap.assistant.v1.ConfirmActionResponseB\xc7\x01\n" +
 	"\x15com.goap.assistant.v1B\x0eAssistantProtoP\x01Z8github.com/zimwip/goap/gen/goap/assistant/v1;assistantv1\xa2\x02\x03GAX\xaa\x02\x11Goap.Assistant.V1\xca\x02\x11Goap\\Assistant\\V1\xe2\x02\x1dGoap\\Assistant\\V1\\GPBMetadata\xea\x02\x13Goap::Assistant::V1b\x06proto3"
 
 var (
@@ -299,28 +434,33 @@ func file_goap_assistant_v1_assistant_proto_rawDescGZIP() []byte {
 	return file_goap_assistant_v1_assistant_proto_rawDescData
 }
 
-var file_goap_assistant_v1_assistant_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_goap_assistant_v1_assistant_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_goap_assistant_v1_assistant_proto_goTypes = []any{
-	(*PageTab)(nil),      // 0: goap.assistant.v1.PageTab
-	(*PageContext)(nil),  // 1: goap.assistant.v1.PageContext
-	(*SendRequest)(nil),  // 2: goap.assistant.v1.SendRequest
-	(*SendResponse)(nil), // 3: goap.assistant.v1.SendResponse
-	nil,                  // 4: goap.assistant.v1.PageTab.ParamsEntry
-	(*v1.Message)(nil),   // 5: goap.conversations.v1.Message
+	(*PageTab)(nil),               // 0: goap.assistant.v1.PageTab
+	(*PageContext)(nil),           // 1: goap.assistant.v1.PageContext
+	(*SendRequest)(nil),           // 2: goap.assistant.v1.SendRequest
+	(*SendResponse)(nil),          // 3: goap.assistant.v1.SendResponse
+	(*ConfirmActionRequest)(nil),  // 4: goap.assistant.v1.ConfirmActionRequest
+	(*ConfirmActionResponse)(nil), // 5: goap.assistant.v1.ConfirmActionResponse
+	nil,                           // 6: goap.assistant.v1.PageTab.ParamsEntry
+	(*v1.Message)(nil),            // 7: goap.conversations.v1.Message
 }
 var file_goap_assistant_v1_assistant_proto_depIdxs = []int32{
-	4, // 0: goap.assistant.v1.PageTab.params:type_name -> goap.assistant.v1.PageTab.ParamsEntry
+	6, // 0: goap.assistant.v1.PageTab.params:type_name -> goap.assistant.v1.PageTab.ParamsEntry
 	0, // 1: goap.assistant.v1.PageContext.tab:type_name -> goap.assistant.v1.PageTab
 	1, // 2: goap.assistant.v1.SendRequest.context:type_name -> goap.assistant.v1.PageContext
-	5, // 3: goap.assistant.v1.SendResponse.user_message:type_name -> goap.conversations.v1.Message
-	5, // 4: goap.assistant.v1.SendResponse.assistant_message:type_name -> goap.conversations.v1.Message
-	2, // 5: goap.assistant.v1.AssistantService.Send:input_type -> goap.assistant.v1.SendRequest
-	3, // 6: goap.assistant.v1.AssistantService.Send:output_type -> goap.assistant.v1.SendResponse
-	6, // [6:7] is the sub-list for method output_type
-	5, // [5:6] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	7, // 3: goap.assistant.v1.SendResponse.user_message:type_name -> goap.conversations.v1.Message
+	7, // 4: goap.assistant.v1.SendResponse.assistant_message:type_name -> goap.conversations.v1.Message
+	7, // 5: goap.assistant.v1.ConfirmActionResponse.message:type_name -> goap.conversations.v1.Message
+	2, // 6: goap.assistant.v1.AssistantService.Send:input_type -> goap.assistant.v1.SendRequest
+	4, // 7: goap.assistant.v1.AssistantService.ConfirmAction:input_type -> goap.assistant.v1.ConfirmActionRequest
+	3, // 8: goap.assistant.v1.AssistantService.Send:output_type -> goap.assistant.v1.SendResponse
+	5, // 9: goap.assistant.v1.AssistantService.ConfirmAction:output_type -> goap.assistant.v1.ConfirmActionResponse
+	8, // [8:10] is the sub-list for method output_type
+	6, // [6:8] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_goap_assistant_v1_assistant_proto_init() }
@@ -334,7 +474,7 @@ func file_goap_assistant_v1_assistant_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_assistant_v1_assistant_proto_rawDesc), len(file_goap_assistant_v1_assistant_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

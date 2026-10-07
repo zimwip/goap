@@ -10,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/assistant/v1/assistantv1connect"
 	"github.com/zimwip/goap/gen/goap/conversations/v1/conversationsv1connect"
+	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/internal/assistantsvc"
 	"github.com/zimwip/goap/internal/convsvc"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -45,6 +46,7 @@ func main() {
 		Graph:         graphClient,
 		Methodologies: registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...),
 		Projects:      assistantsvc.Directory{Directory: &access.Directory{Graph: graphClient}},
+		Engine:        assistantsvc.EngineClient{API: enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...)},
 		Log:           log,
 	}
 	srv.Mount(assistantv1connect.NewAssistantServiceHandler(&assistantsvc.Handler{Service: assistant}, telemetry.HandlerOptions()...))

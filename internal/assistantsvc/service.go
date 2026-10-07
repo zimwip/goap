@@ -1,6 +1,6 @@
 // Package assistantsvc is the conversational assistant (ADR 0087): it answers the messages a person writes in a
-// conversation (ADR 0085) with the model of the `assistant` alias, and may do four things for them through tools, no
-// more. It is a use case over the graph, the model gateway and the conversation service: `pkg/graph` and `pkg/engine`
+// conversation (ADR 0085) with the model of the `assistant` alias, and may do six things for them through tools, no
+// more (ADR 0090 added the agents). It is a use case over the graph, the model gateway and the conversation service: `pkg/graph` and `pkg/engine`
 // do not import it (`pkg/layering`).
 package assistantsvc
 
@@ -169,7 +169,9 @@ type Service struct {
 	Graph         Graph
 	Methodologies Methodologies
 	Projects      Projects
-	Log           *slog.Logger
+	// Engine runs the agents the person confirms (ADR 0090); nil: the agent tools refuse.
+	Engine Engine
+	Log    *slog.Logger
 	// Now is the clock (time.Now when nil); Go starts the background turn (a goroutine when nil; tests run it inline).
 	Now func() time.Time
 	Go  func(func())
@@ -311,8 +313,8 @@ func historyOf(msgs []convsvc.Message) []llm.Message {
 		}
 		text = clip(text, MaxTextBytes)
 		if m.Role == convsvc.RoleAssistant {
-			if acts := actionTypes(m.Actions); acts != "" {
-				text += "\n(actions run for the person: " + acts + ")"
+			if acts := describeActions(m.Actions); acts != "" {
+				text += "\n" + acts
 			}
 		}
 		if size += len(text); size > MaxHistoryBytes {
@@ -322,16 +324,6 @@ func historyOf(msgs []convsvc.Message) []llm.Message {
 	}
 	slices.Reverse(out)
 	return out
-}
-
-func actionTypes(actions []convsvc.Action) string {
-	var out []string
-	for _, a := range actions {
-		if t, _ := a["type"].(string); t != "" {
-			out = append(out, t)
-		}
-	}
-	return strings.Join(out, ", ")
 }
 
 func clip(s string, n int) string {

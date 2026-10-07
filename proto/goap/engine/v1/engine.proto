@@ -31,6 +31,10 @@ service EngineService {
   // of the blackboard variables it reads, against the change of the run.
   rpc ExplainCondition(ExplainConditionRequest) returns (ExplainConditionResponse);
   rpc ListProcesses(ListProcessesRequest) returns (ListProcessesResponse);
+  // Whether the caller may start a process of a methodology on a project and which agents of it they may run there:
+  // the checks StartProcess makes (the "start" permission, the roles of the agent, ADR 0043), answered without
+  // starting anything (ADR 0090).
+  rpc CheckAgents(CheckAgentsRequest) returns (CheckAgentsResponse);
   // Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
   // (change_id) or a new one, defaulted the same way StartProcess defaults one.
   rpc AttachChange(AttachChangeRequest) returns (AttachChangeResponse);
@@ -291,6 +295,28 @@ message StartProcessRequest {
   // key of the ProjectUnit the new change belongs to (empty: the caller's active project, from its
   // token, else the root project, ADR 0039)
   string project_id = 10;
+}
+
+message CheckAgentsRequest {
+  string methodology = 1;
+  // project the process would work on (empty: the caller's active project)
+  string project_id = 2;
+  // agents to check (empty: every agent of the methodology)
+  repeated string agents = 3;
+}
+
+message AgentCheck {
+  string agent = 1;
+  // the caller holds one of the roles of the agent on the project (or it declares none)
+  bool may_run = 2;
+  // the roles the agent declares
+  repeated string roles = 3;
+}
+
+message CheckAgentsResponse {
+  // the caller may start a process of the methodology on the project
+  bool may_start = 1;
+  repeated AgentCheck agents = 2;
 }
 
 message StartProcessResponse {

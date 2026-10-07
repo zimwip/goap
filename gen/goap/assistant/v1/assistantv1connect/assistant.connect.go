@@ -35,6 +35,9 @@ const (
 const (
 	// AssistantServiceSendProcedure is the fully-qualified name of the AssistantService's Send RPC.
 	AssistantServiceSendProcedure = "/goap.assistant.v1.AssistantService/Send"
+	// AssistantServiceConfirmActionProcedure is the fully-qualified name of the AssistantService's
+	// ConfirmAction RPC.
+	AssistantServiceConfirmActionProcedure = "/goap.assistant.v1.AssistantService/ConfirmAction"
 )
 
 // AssistantServiceClient is a client for the goap.assistant.v1.AssistantService service.
@@ -44,6 +47,13 @@ type AssistantServiceClient interface {
 	// with FAILED_PRECONDITION when the caller has no "assistant" model alias or the previous message is still being
 	// answered.
 	Send(context.Context, *connect.Request[v1.SendRequest]) (*connect.Response[v1.SendResponse], error)
+	// Decides a proposal of the assistant (an action of type "start_agent" with status "proposed", ADR 0090). Only the
+	// owner of the conversation. Accept re-validates everything as the caller, creates the change when the proposal
+	// names a new one, starts the process through the engine as the caller and records the outcome in the action
+	// (status "started" with processId and changeId, or "failed" with an error); reject records "rejected". An action
+	// already decided is ABORTED; a proposal that is stale (the active project is no longer the proposal's, or the
+	// change can no longer be worked on) is FAILED_PRECONDITION and stays proposed.
+	ConfirmAction(context.Context, *connect.Request[v1.ConfirmActionRequest]) (*connect.Response[v1.ConfirmActionResponse], error)
 }
 
 // NewAssistantServiceClient constructs a client for the goap.assistant.v1.AssistantService service.
@@ -63,17 +73,29 @@ func NewAssistantServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(assistantServiceMethods.ByName("Send")),
 			connect.WithClientOptions(opts...),
 		),
+		confirmAction: connect.NewClient[v1.ConfirmActionRequest, v1.ConfirmActionResponse](
+			httpClient,
+			baseURL+AssistantServiceConfirmActionProcedure,
+			connect.WithSchema(assistantServiceMethods.ByName("ConfirmAction")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // assistantServiceClient implements AssistantServiceClient.
 type assistantServiceClient struct {
-	send *connect.Client[v1.SendRequest, v1.SendResponse]
+	send          *connect.Client[v1.SendRequest, v1.SendResponse]
+	confirmAction *connect.Client[v1.ConfirmActionRequest, v1.ConfirmActionResponse]
 }
 
 // Send calls goap.assistant.v1.AssistantService.Send.
 func (c *assistantServiceClient) Send(ctx context.Context, req *connect.Request[v1.SendRequest]) (*connect.Response[v1.SendResponse], error) {
 	return c.send.CallUnary(ctx, req)
+}
+
+// ConfirmAction calls goap.assistant.v1.AssistantService.ConfirmAction.
+func (c *assistantServiceClient) ConfirmAction(ctx context.Context, req *connect.Request[v1.ConfirmActionRequest]) (*connect.Response[v1.ConfirmActionResponse], error) {
+	return c.confirmAction.CallUnary(ctx, req)
 }
 
 // AssistantServiceHandler is an implementation of the goap.assistant.v1.AssistantService service.
@@ -83,6 +105,13 @@ type AssistantServiceHandler interface {
 	// with FAILED_PRECONDITION when the caller has no "assistant" model alias or the previous message is still being
 	// answered.
 	Send(context.Context, *connect.Request[v1.SendRequest]) (*connect.Response[v1.SendResponse], error)
+	// Decides a proposal of the assistant (an action of type "start_agent" with status "proposed", ADR 0090). Only the
+	// owner of the conversation. Accept re-validates everything as the caller, creates the change when the proposal
+	// names a new one, starts the process through the engine as the caller and records the outcome in the action
+	// (status "started" with processId and changeId, or "failed" with an error); reject records "rejected". An action
+	// already decided is ABORTED; a proposal that is stale (the active project is no longer the proposal's, or the
+	// change can no longer be worked on) is FAILED_PRECONDITION and stays proposed.
+	ConfirmAction(context.Context, *connect.Request[v1.ConfirmActionRequest]) (*connect.Response[v1.ConfirmActionResponse], error)
 }
 
 // NewAssistantServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -98,10 +127,18 @@ func NewAssistantServiceHandler(svc AssistantServiceHandler, opts ...connect.Han
 		connect.WithSchema(assistantServiceMethods.ByName("Send")),
 		connect.WithHandlerOptions(opts...),
 	)
+	assistantServiceConfirmActionHandler := connect.NewUnaryHandler(
+		AssistantServiceConfirmActionProcedure,
+		svc.ConfirmAction,
+		connect.WithSchema(assistantServiceMethods.ByName("ConfirmAction")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.assistant.v1.AssistantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AssistantServiceSendProcedure:
 			assistantServiceSendHandler.ServeHTTP(w, r)
+		case AssistantServiceConfirmActionProcedure:
+			assistantServiceConfirmActionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -113,4 +150,8 @@ type UnimplementedAssistantServiceHandler struct{}
 
 func (UnimplementedAssistantServiceHandler) Send(context.Context, *connect.Request[v1.SendRequest]) (*connect.Response[v1.SendResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.assistant.v1.AssistantService.Send is not implemented"))
+}
+
+func (UnimplementedAssistantServiceHandler) ConfirmAction(context.Context, *connect.Request[v1.ConfirmActionRequest]) (*connect.Response[v1.ConfirmActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.assistant.v1.AssistantService.ConfirmAction is not implemented"))
 }

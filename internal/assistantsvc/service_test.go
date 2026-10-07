@@ -113,14 +113,15 @@ func (f fakeMethodologies) Methodology(_ context.Context, n string) (*methodolog
 // ---- environment ----------------------------------------------------------------------------------------------
 
 type env struct {
-	svc   *Service
-	model *fakeModel
-	graph *fakeGraph
-	convs *convsvc.Service
-	user  authz.Principal
-	conv  convsvc.Conversation
-	ctx   context.Context
-	later []func() // turns not run yet, when deferred
+	svc    *Service
+	model  *fakeModel
+	graph  *fakeGraph
+	engine *fakeEngine
+	convs  *convsvc.Service
+	user   authz.Principal
+	conv   convsvc.Conversation
+	ctx    context.Context
+	later  []func() // turns not run yet, when deferred
 }
 
 func newEnv(t *testing.T, answers ...string) *env {
@@ -131,6 +132,8 @@ func newEnv(t *testing.T, answers ...string) *env {
 			"CHG-1":    {ID: "CHG-1", Title: "Existing", ProjectID: "PROJ-A", Status: domain.ChangeDraft},
 			"CHG-MINE": {ID: "CHG-MINE", Title: "Mine", OwnerOrg: access.PersonalUnit("u1")},
 			"CHG-HERS": {ID: "CHG-HERS", Title: "Hers", OwnerOrg: access.PersonalUnit("u2")},
+			"CHG-D":    {ID: "CHG-D", Title: "Delivery", Methodology: "delivery", Namespace: "alm", ProjectID: "PROJ-A", Status: domain.ChangeActive, State: "design"},
+			"CHG-DONE": {ID: "CHG-DONE", Title: "Done", Methodology: "delivery", Namespace: "alm", ProjectID: "PROJ-A", Status: domain.ChangeApplied},
 		}},
 		convs: &convsvc.Service{Store: convsvc.NewMemoryStore()},
 		user:  authz.Principal{Subject: "u1", Project: "PROJ-A"},
@@ -141,14 +144,18 @@ func newEnv(t *testing.T, answers ...string) *env {
 		Methodologies: fakeMethodologies{
 			"sdlc": {Methodology: &methodology.Methodology{Name: "sdlc", Namespace: "alm", Description: "Software lifecycle",
 				Goals: []methodology.Goal{{Name: "release", Examples: []string{"ship v2"}}}}},
-			"risk": {Methodology: &methodology.Methodology{Name: "risk", Namespace: "alm"}},
+			"risk":     {Methodology: &methodology.Methodology{Name: "risk", Namespace: "alm"}},
+			"delivery": compiled(t, deliveryYAML),
+			"other":    compiled(t, otherYAML),
 		},
 		Projects: fakeProjects{
-			projects: map[string][]string{"PROJ-A": {"sdlc"}, "PROJ-B": {"sdlc", "risk"}, "PROJ-SECRET": nil},
+			projects: map[string][]string{"PROJ-A": {"sdlc", "delivery"}, "PROJ-B": {"sdlc", "risk", "other"}, "PROJ-SECRET": nil},
 			access:   map[string][]string{"u1": {"PROJ-A", "PROJ-B"}},
 		},
 		Go: func(f func()) { f() },
 	}
+	e.engine = &fakeEngine{held: map[string][]string{"u1": {"developer"}}, methodologies: e.svc.Methodologies.(fakeMethodologies)}
+	e.svc.Engine = e.engine
 	c, err := e.convs.Create(e.ctx, e.user, "t")
 	if err != nil {
 		t.Fatal(err)

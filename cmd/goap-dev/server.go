@@ -79,7 +79,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	// the assistant (ADR 0087) in process: the real graph (a change it creates starts its triggers like any other), the
 	// gateway, the registry, the access directory and the conversation service, all acting for the caller
 	assistant := &assistantsvc.Service{Convs: convs, Model: pp.gw, Graph: engine.EventingGraph{GraphPort: gp.g, OnEvent: e.triggers.onChange},
-		Methodologies: rp.reg, Projects: assistantsvc.Directory{Directory: gp.directory}, Log: e.log}
+		Methodologies: rp.reg, Projects: assistantsvc.Directory{Directory: gp.directory}, Engine: assistantsvc.EngineClient{API: ep.handler}, Log: e.log}
 	mount(assistantv1connect.NewAssistantServiceHandler(&assistantsvc.Handler{Service: assistant, Identity: ident}, telemetry.HandlerOptions()...))
 	mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: pp.indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	mount(enginev1connect.NewEngineServiceHandler(ep.handler, telemetry.HandlerOptions()...))

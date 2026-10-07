@@ -37,7 +37,9 @@ func rpcErr(err error) error {
 		return connect.NewError(connect.CodeNotFound, err)
 	case errors.Is(err, ErrInvalid), errors.Is(err, convsvc.ErrInvalid):
 		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, ErrUnavailable), errors.Is(err, ErrBusy), errors.Is(err, modelgw.ErrModelDisabled):
+	case errors.Is(err, ErrDecided):
+		return connect.NewError(connect.CodeAborted, err)
+	case errors.Is(err, ErrStale), errors.Is(err, ErrUnavailable), errors.Is(err, ErrBusy), errors.Is(err, modelgw.ErrModelDisabled):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
 	return connect.NewError(connect.CodeUnavailable, err)
@@ -65,4 +67,18 @@ func (h *Handler) Send(ctx context.Context, r *connect.Request[assistantv1.SendR
 		return nil, rpcErr(err)
 	}
 	return connect.NewResponse(&assistantv1.SendResponse{UserMessage: u, AssistantMessage: a}), nil
+}
+
+func (h *Handler) ConfirmAction(ctx context.Context, r *connect.Request[assistantv1.ConfirmActionRequest]) (*connect.Response[assistantv1.ConfirmActionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m, err := h.Service.Confirm(ctx, ConfirmInput{ConversationID: r.Msg.GetConversationId(), MessageID: r.Msg.GetMessageId(),
+		ActionIndex: int(r.Msg.GetActionIndex()), Decision: r.Msg.GetDecision(), Project: r.Msg.GetProject()})
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	pb, err := convsvc.MessageToPB(m)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&assistantv1.ConfirmActionResponse{Message: pb}), nil
 }

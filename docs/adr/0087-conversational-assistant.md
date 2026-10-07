@@ -3,6 +3,8 @@
 **Status**: accepted, implemented (server side, web API client; the web interface is ADR 0088) · **Date**: 2026-10 · Builds on
 ADR 0084 (protected aliases), 0085 (conversations) and 0086 (contextual helper, whose model call it reuses).
 
+> ADR 0090 adds two tools (list the agents the caller may run, propose to start one) and the confirmation `ConfirmAction`; "four tools" below is the original set.
+
 ## Context
 
 A person writes to the assistant in a conversation: they ask what a methodology is for, which change fits their need,

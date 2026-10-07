@@ -120,6 +120,42 @@ func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.
 	return connect.NewResponse(&enginev1.StartProcessResponse{Process: ProcessToPB(p)}), nil
 }
 
+// CheckAgents answers, without starting anything, whether the caller may start a process of a methodology on a project
+// and which of its agents they may run there (ADR 0090): the checks of StartProcess and Engine.Start.
+func (h *Handler) CheckAgents(ctx context.Context, r *connect.Request[enginev1.CheckAgentsRequest]) (*connect.Response[enginev1.CheckAgentsResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
+	who := authz.From(ctx)
+	who.Project = projectID
+	ctx = authz.With(ctx, who)
+	out := &enginev1.CheckAgentsResponse{}
+	if h.authorize(ctx, "start", r.Msg.Methodology, nil) != nil {
+		return connect.NewResponse(out), nil
+	}
+	out.MayStart = true
+	m, err := h.Engine.Methodologies.Methodology(ctx, r.Msg.Methodology)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	names := r.Msg.Agents
+	if len(names) == 0 {
+		for _, ag := range m.AgentList() {
+			names = append(names, ag.Name)
+		}
+	}
+	for _, n := range names {
+		ok, roles, err := h.Engine.MayRunAgent(ctx, r.Msg.Methodology, n, projectID)
+		if err != nil {
+			return nil, toConnect(err)
+		}
+		out.Agents = append(out.Agents, &enginev1.AgentCheck{Agent: n, MayRun: ok, Roles: roles})
+	}
+	return connect.NewResponse(out), nil
+}
+
 func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[enginev1.AttachChangeRequest]) (*connect.Response[enginev1.AttachChangeResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "attach"); err != nil {

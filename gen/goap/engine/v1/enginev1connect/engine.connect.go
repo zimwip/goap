@@ -69,6 +69,9 @@ const (
 	// EngineServiceListProcessesProcedure is the fully-qualified name of the EngineService's
 	// ListProcesses RPC.
 	EngineServiceListProcessesProcedure = "/goap.engine.v1.EngineService/ListProcesses"
+	// EngineServiceCheckAgentsProcedure is the fully-qualified name of the EngineService's CheckAgents
+	// RPC.
+	EngineServiceCheckAgentsProcedure = "/goap.engine.v1.EngineService/CheckAgents"
 	// EngineServiceAttachChangeProcedure is the fully-qualified name of the EngineService's
 	// AttachChange RPC.
 	EngineServiceAttachChangeProcedure = "/goap.engine.v1.EngineService/AttachChange"
@@ -111,6 +114,10 @@ type EngineServiceClient interface {
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
+	// Whether the caller may start a process of a methodology on a project and which agents of it they may run there:
+	// the checks StartProcess makes (the "start" permission, the roles of the agent, ADR 0043), answered without
+	// starting anything (ADR 0090).
+	CheckAgents(context.Context, *connect.Request[v1.CheckAgentsRequest]) (*connect.Response[v1.CheckAgentsResponse], error)
 	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
 	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
 	AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error)
@@ -209,6 +216,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("ListProcesses")),
 			connect.WithClientOptions(opts...),
 		),
+		checkAgents: connect.NewClient[v1.CheckAgentsRequest, v1.CheckAgentsResponse](
+			httpClient,
+			baseURL+EngineServiceCheckAgentsProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("CheckAgents")),
+			connect.WithClientOptions(opts...),
+		),
 		attachChange: connect.NewClient[v1.AttachChangeRequest, v1.AttachChangeResponse](
 			httpClient,
 			baseURL+EngineServiceAttachChangeProcedure,
@@ -256,6 +269,7 @@ type engineServiceClient struct {
 	getProcessProgress *connect.Client[v1.GetProcessProgressRequest, v1.GetProcessProgressResponse]
 	explainCondition   *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
 	listProcesses      *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
+	checkAgents        *connect.Client[v1.CheckAgentsRequest, v1.CheckAgentsResponse]
 	attachChange       *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
 	getProcessLog      *connect.Client[v1.GetProcessLogRequest, v1.GetProcessLogResponse]
 	watchEvents        *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
@@ -323,6 +337,11 @@ func (c *engineServiceClient) ListProcesses(ctx context.Context, req *connect.Re
 	return c.listProcesses.CallUnary(ctx, req)
 }
 
+// CheckAgents calls goap.engine.v1.EngineService.CheckAgents.
+func (c *engineServiceClient) CheckAgents(ctx context.Context, req *connect.Request[v1.CheckAgentsRequest]) (*connect.Response[v1.CheckAgentsResponse], error) {
+	return c.checkAgents.CallUnary(ctx, req)
+}
+
 // AttachChange calls goap.engine.v1.EngineService.AttachChange.
 func (c *engineServiceClient) AttachChange(ctx context.Context, req *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error) {
 	return c.attachChange.CallUnary(ctx, req)
@@ -373,6 +392,10 @@ type EngineServiceHandler interface {
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
 	ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error)
+	// Whether the caller may start a process of a methodology on a project and which agents of it they may run there:
+	// the checks StartProcess makes (the "start" permission, the roles of the agent, ADR 0043), answered without
+	// starting anything (ADR 0090).
+	CheckAgents(context.Context, *connect.Request[v1.CheckAgentsRequest]) (*connect.Response[v1.CheckAgentsResponse], error)
 	// Binds an unbound process (ADR 0031, process_id with no change) to a change: an existing one
 	// (change_id) or a new one, defaulted the same way StartProcess defaults one.
 	AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error)
@@ -467,6 +490,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("ListProcesses")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceCheckAgentsHandler := connect.NewUnaryHandler(
+		EngineServiceCheckAgentsProcedure,
+		svc.CheckAgents,
+		connect.WithSchema(engineServiceMethods.ByName("CheckAgents")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceAttachChangeHandler := connect.NewUnaryHandler(
 		EngineServiceAttachChangeProcedure,
 		svc.AttachChange,
@@ -523,6 +552,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceExplainConditionHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
 			engineServiceListProcessesHandler.ServeHTTP(w, r)
+		case EngineServiceCheckAgentsProcedure:
+			engineServiceCheckAgentsHandler.ServeHTTP(w, r)
 		case EngineServiceAttachChangeProcedure:
 			engineServiceAttachChangeHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessLogProcedure:
@@ -588,6 +619,10 @@ func (UnimplementedEngineServiceHandler) ExplainCondition(context.Context, *conn
 
 func (UnimplementedEngineServiceHandler) ListProcesses(context.Context, *connect.Request[v1.ListProcessesRequest]) (*connect.Response[v1.ListProcessesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ListProcesses is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) CheckAgents(context.Context, *connect.Request[v1.CheckAgentsRequest]) (*connect.Response[v1.CheckAgentsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.CheckAgents is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) AttachChange(context.Context, *connect.Request[v1.AttachChangeRequest]) (*connect.Response[v1.AttachChangeResponse], error) {

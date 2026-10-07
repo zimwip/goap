@@ -127,7 +127,7 @@ func (h *Host) completeLLM(ctx context.Context, client llm.Client, req llm.Reque
 	slot := len(h.llmCalls)
 	h.llmCalls = append(h.llmCalls, LLMCall{})
 	h.mu.Unlock()
-	ctx = llm.WithMeta(h.ctx(ctx), llm.CallMeta{Source: llm.SourceEngine, ProcessID: h.process.ID, ChangeID: string(h.process.ChangeID),
+	ctx = llm.WithMeta(h.ctx(ctx), llm.CallMeta{Source: llm.SourceEngine, ConversationID: conversationOf(h.process), ProcessID: h.process.ID, ChangeID: string(h.process.ChangeID),
 		Step: h.step, Call: h.base + slot, Action: h.action, Agent: h.process.Agent})
 	start := time.Now()
 	resp, err := client.Complete(ctx, req)

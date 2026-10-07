@@ -16,17 +16,18 @@ import (
 	"github.com/zimwip/goap/pkg/llm"
 )
 
-// The four tools, the whole of what the assistant may do.
+// The six tools, the whole of what the assistant may do.
 const (
 	ToolListMethodologies = "list_methodologies"
 	ToolSelectProject     = "select_project"
 	ToolCreateChange      = "create_change"
 	ToolOpenChange        = "open_change"
+	// ToolListAgents and ToolStartAgent are in agents.go
 )
 
 // Tools lists the names of the tools; nothing else is ever run.
 func Tools() []string {
-	return []string{ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange}
+	return []string{ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange, ToolListAgents, ToolStartAgent}
 }
 
 // turn is the answer to one user message.
@@ -180,6 +181,10 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 		return t.createChange(ctx, a)
 	case ToolOpenChange:
 		return t.openChange(ctx, a)
+	case ToolListAgents:
+		return t.listAgents(ctx)
+	case ToolStartAgent:
+		return t.startAgent(ctx, a)
 	}
 	return nil, fmt.Errorf("unknown tool %q: the tools are %s", c.Name, strings.Join(Tools(), ", "))
 }

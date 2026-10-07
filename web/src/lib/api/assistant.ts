@@ -1,5 +1,5 @@
 import { rpc } from './transport';
-import type { AssistantContext, AssistantSendResponse } from './types/assistant';
+import type { AssistantContext, AssistantSendResponse, ConfirmActionRequest, ConfirmActionResponse } from './types/assistant';
 
 const ASSISTANT = 'goap.assistant.v1.AssistantService';
 
@@ -16,4 +16,10 @@ export const assistantApi = {
       text,
       context,
     }),
+  /**
+   * Decides a proposal to run an agent (ADR 0090). ABORTED: already decided; FAILED_PRECONDITION: the proposal is stale
+   * (other project, change closed, agent no longer runnable) and stays proposed. A start that fails is not an error: the
+   * returned action has status `failed`.
+   */
+  confirmAction: (req: ConfirmActionRequest) => rpc<ConfirmActionRequest, ConfirmActionResponse>(ASSISTANT, 'ConfirmAction', req),
 };

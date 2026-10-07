@@ -977,6 +977,36 @@ func (e *Engine) mayRun(ctx context.Context, p *Process, who authz.Principal, ty
 	return e.scope().MayRun(ctx, e.ref(p), who, typ, name, roles)
 }
 
+// MayRunAgent reports whether the caller of ctx holds, on the project, one of the roles the agent of a methodology
+// declares (no roles declared: any member), with the rule Start applies to its initiator (checkAgentRoles), and the
+// roles the agent declares. It starts nothing (ADR 0090).
+func (e *Engine) MayRunAgent(ctx context.Context, methodologyName, agentName, project string) (bool, []string, error) {
+	m, err := e.Methodologies.Methodology(ctx, methodologyName)
+	if err != nil {
+		return false, nil, err
+	}
+	ag, ok := m.Agent(agentName)
+	if !ok {
+		return false, nil, fmt.Errorf("unknown agent %q in %s: %w", agentName, methodologyName, ErrInvalidState)
+	}
+	if len(ag.Roles) == 0 {
+		return true, nil, nil
+	}
+	p := &Process{Methodology: methodologyName, Agent: agentName, Project: project, Initiator: authz.From(ctx)}
+	ok, err = e.mayRun(ctx, p, p.Initiator, "agent", ag.Name, ag.Roles)
+	return ok, ag.Roles, err
+}
+
+// conversationOf is the conversation of the assistant that started the process (ADR 0090), "" for any other.
+func conversationOf(p *Process) string {
+	s, _ := p.Vars[VarConversation].(string)
+	return s
+}
+
+// VarConversation is the process variable naming the assistant conversation that started it (ADR 0090): accounting
+// only, it reaches the ledger of the gateway as the conversation of the calls of the process.
+const VarConversation = "conversationId"
+
 // checkAgentRoles refuses to start an agent its initiator may not run: it declares roles and they hold none of
 // them on the project (ADR 0043).
 func (e *Engine) checkAgentRoles(ctx context.Context, p *Process) error {
