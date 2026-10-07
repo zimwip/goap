@@ -23,7 +23,7 @@ the change when it is created. The graph still knows no methodology: it asks the
   anything else is a compile issue tied to the path `goal` (`checkMainGoal`).
 - `Methodology.MainGoal()` (promoted to `Compiled`): the declared `goal`, else the first declared goal, else the first
   process, else "".
-- Shipped methodologies: `sdlc` -> `deliver` (the end-to-end goal; `formulate` is only its first stage),
+- Shipped methodologies: `sdlc` -> `formulate` (the goal a new change starts from: its first stage),
   `methodology-improvement` -> `improve_methodology`, the examples their delivery goal. `risk-management` is transverse
   (no change of its own) and sets none.
 

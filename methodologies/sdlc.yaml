@@ -11,7 +11,7 @@ description: >
   refined.
 
 namespace: alm
-goal: deliver
+goal: formulate
 
 # risks_under_control, the release train gate, is a condition of the `risks` library
 imports: [risks]
