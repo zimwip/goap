@@ -82,6 +82,7 @@
         <h3>Prompt · {req.label}</h3>
         <button type="button" class="ghost" aria-label="Close" onclick={closeModelExchange}>✕</button>
       </header>
+      <div class="body">
       {#if meta}
         <p class="meta">
           {sourceLabel(meta.source)}{#if meta.subject} · {meta.subject}{/if} · {meta.alias ? `${meta.alias} → ` : ''}{meta.provider ? `${meta.provider}/` : ''}{meta.model ?? ''}
@@ -101,6 +102,7 @@
         {/each}
         {#if ex.response}{@render block('Answer', ex.response)}{/if}
       {/if}
+      </div>
     </div>
   </div>
 {/if}
@@ -117,18 +119,29 @@
   .dialog {
     width: min(900px, calc(100vw - 28px));
     max-height: calc(100vh - 40px);
-    overflow: auto;
-    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
     background: var(--surface);
     color: var(--text);
     border: 1px solid var(--border);
     border-radius: var(--radius);
     box-shadow: var(--shadow-pop);
   }
+  /* the title and the close button stay in view while the prompt scrolls */
   header {
+    flex: none;
     display: flex;
     align-items: center;
     gap: 0.6rem;
+    padding: 0.7rem 1rem;
+    border-bottom: 1px solid var(--border);
+  }
+  .body {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 0.3rem 1rem 1rem;
   }
   h3 {
     margin: 0;
