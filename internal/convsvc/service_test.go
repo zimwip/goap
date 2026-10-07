@@ -226,6 +226,14 @@ func TestLimits(t *testing.T) {
 					_, err := s.Append(ctx, system, c.ID, convsvc.RoleAssistant, convsvc.Content{Status: "maybe"})
 					return err
 				},
+				"long context": func() error {
+					_, err := s.Append(ctx, alice, c.ID, "", convsvc.Content{Text: "x", Context: strings.Repeat("x", convsvc.MaxContextBytes+1)})
+					return err
+				},
+				"context on an assistant message": func() error {
+					_, err := s.Append(ctx, system, c.ID, convsvc.RoleAssistant, convsvc.Content{Context: "tab change"})
+					return err
+				},
 				"action without type": func() error {
 					_, err := s.Append(ctx, system, c.ID, convsvc.RoleAssistant, convsvc.Content{Actions: []convsvc.Action{{"args": 1}}})
 					return err
@@ -338,5 +346,26 @@ func TestHandler(t *testing.T) {
 	as(alice, lr)
 	if l, err := cl.ListConversations(ctx, lr); err != nil || len(l.Msg.Conversations) != 1 || l.Msg.Conversations[0].Title != "First" {
 		t.Fatalf("list = %v, %v", l, err)
+	}
+}
+
+// The short description of the context of a user message is stored with it.
+func TestMessageContext(t *testing.T) {
+	ctx := context.Background()
+	for name, st := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			s := newService(st)
+			c, err := s.Create(ctx, alice, "t")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Append(ctx, alice, c.ID, "", convsvc.Content{Text: "hi", Context: "tab change, project PROJ-A"}); err != nil {
+				t.Fatal(err)
+			}
+			_, ms, err := s.Get(ctx, alice, c.ID)
+			if err != nil || len(ms) != 1 || ms[0].Context != "tab change, project PROJ-A" {
+				t.Fatalf("%v %+v", err, ms)
+			}
+		})
 	}
 }

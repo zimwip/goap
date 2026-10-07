@@ -1,6 +1,7 @@
 package access_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/access"
@@ -43,5 +44,28 @@ func TestMayAccessProject(t *testing.T) {
 		if got := s.MayAccessProject(c.who, c.project); got != c.want {
 			t.Errorf("%s on %s = %v, want %v", c.who.Subject, c.project, got, c.want)
 		}
+	}
+}
+
+// The methodologies of a project are its own and those of its ancestors, nearest first, without repeats; a project that
+// is not in the organisation is not one.
+func TestApplicableMethodologies(t *testing.T) {
+	node := func(id, key string, methods ...any) domain.Node {
+		return domain.Node{ID: domain.NodeID(id), Key: key, Type: access.NodeTypeProjectUnit, Namespace: "organisation", Properties: map[string]any{"methodologies": methods}}
+	}
+	lnk := func(from, to string) domain.Link {
+		return domain.Link{Type: access.LinkProjectPartOf, From: domain.NodeRef{ID: domain.NodeID(from)}, To: domain.NodeRef{ID: domain.NodeID(to)}}
+	}
+	nodes := []domain.Node{node("1", "PROJ-ROOT", "base"), node("2", "PROJ-A", "sdlc", "base"), node("3", "PROJ-A1", "risk")}
+	links := []domain.Link{lnk("1", "1"), lnk("2", "1"), lnk("3", "2")}
+	s := access.BuildSnapshot(typecat.Builtin().Structures(), "b", nodes, links)
+	if got := strings.Join(s.ApplicableMethodologies("PROJ-A1"), ","); got != "risk,sdlc,base" {
+		t.Errorf("PROJ-A1: %s", got)
+	}
+	if got := strings.Join(s.ApplicableMethodologies("PROJ-ROOT"), ","); got != "base" {
+		t.Errorf("root: %s", got)
+	}
+	if !s.HasProject("PROJ-A") || s.HasProject("PROJ-NOPE") {
+		t.Error("HasProject")
 	}
 }

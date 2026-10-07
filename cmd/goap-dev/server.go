@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/labstack/echo/v5"
 
+	"github.com/zimwip/goap/gen/goap/assistant/v1/assistantv1connect"
 	"github.com/zimwip/goap/gen/goap/conversations/v1/conversationsv1connect"
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/events/v1/eventsv1connect"
@@ -18,6 +19,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/preferences/v1/preferencesv1connect"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
+	"github.com/zimwip/goap/internal/assistantsvc"
 	"github.com/zimwip/goap/internal/convsvc"
 	"github.com/zimwip/goap/internal/credsvc"
 	"github.com/zimwip/goap/internal/eventsvc"
@@ -72,7 +74,13 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: pp.hub, Authz: authorizer, Identity: ident, ConnectorToken: pp.connToken}, telemetry.HandlerOptions()...))
 	mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: pp.gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: &prefssvc.Service{Store: st.prefs}, Identity: ident}, telemetry.HandlerOptions()...))
-	mount(conversationsv1connect.NewConversationServiceHandler(&convsvc.Handler{Service: &convsvc.Service{Store: st.convs}, Identity: ident}, telemetry.HandlerOptions()...))
+	convs := &convsvc.Service{Store: st.convs}
+	mount(conversationsv1connect.NewConversationServiceHandler(&convsvc.Handler{Service: convs, Identity: ident}, telemetry.HandlerOptions()...))
+	// the assistant (ADR 0087) in process: the real graph (a change it creates starts its triggers like any other), the
+	// gateway, the registry, the access directory and the conversation service, all acting for the caller
+	assistant := &assistantsvc.Service{Convs: convs, Model: pp.gw, Graph: engine.EventingGraph{GraphPort: gp.g, OnEvent: e.triggers.onChange},
+		Methodologies: rp.reg, Projects: assistantsvc.Directory{Directory: gp.directory}, Log: e.log}
+	mount(assistantv1connect.NewAssistantServiceHandler(&assistantsvc.Handler{Service: assistant, Identity: ident}, telemetry.HandlerOptions()...))
 	mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: pp.indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	mount(enginev1connect.NewEngineServiceHandler(ep.handler, telemetry.HandlerOptions()...))
 	rp.bus.Authz = authorizer

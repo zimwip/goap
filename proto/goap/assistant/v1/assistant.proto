@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package goap.assistant.v1;
+
+import "goap/conversations/v1/conversations.proto";
+
+// AssistantService is the conversational assistant (ADR 0087). It answers the messages of a conversation of the
+// caller (ADR 0085) with the model of the "assistant" alias, as the caller, and may use four tools: list the
+// methodologies of the active project, select a project, create a change, open a change.
+service AssistantService {
+  // Appends the user message and a pending assistant message to the conversation, starts the answer in the background
+  // and returns both at once. The web polls GetConversation until the assistant message is no longer pending. Refused
+  // with FAILED_PRECONDITION when the caller has no "assistant" model alias or the previous message is still being
+  // answered.
+  rpc Send(SendRequest) returns (SendResponse);
+}
+
+message PageTab {
+  string kind = 1;
+  map<string, string> params = 2;
+}
+
+// What the person was looking at when they wrote the message: used for this turn only, never stored (the user message
+// keeps a short description of it).
+message PageContext {
+  PageTab tab = 1;
+  // the node or change the tab is about (opaque)
+  string subject = 2;
+  // the text selected on the page
+  string selection = 3;
+  // the active project key
+  string project = 4;
+}
+
+message SendRequest {
+  string conversation_id = 1;
+  string text = 2;
+  PageContext context = 3;
+}
+
+message SendResponse {
+  goap.conversations.v1.Message user_message = 1;
+  // status "pending"; its id is the one to watch
+  goap.conversations.v1.Message assistant_message = 2;
+}

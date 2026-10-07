@@ -1,6 +1,6 @@
 # ADR 0085 — The conversation service
 
-**Status**: accepted, implemented (service, gateway route, web API client; the assistant that fills it is not) ·
+**Status**: accepted, implemented (service, gateway route, web API client; the assistant that fills it: ADR 0087) ·
 **Date**: 2026-10 · Modelled on ADR 0038 (user preferences service).
 
 ## Context
@@ -20,7 +20,8 @@ so it cannot stay in the browser.
 - **Model**: a `Conversation` {id, subject, title, createdAt, updatedAt} owned by one subject; `Message` {id,
   conversationId, `seq` (from 1, given by the store in the transaction that appends), `role` `user` | `assistant`, text,
   `actions` (a JSON array of `{type, args, result?}` the assistant asked the web to run), `processId` (the engine run
-  that produced an assistant message), `status` `pending` | `done` | `error`, error, createdAt}. The service does not
+  that produced an assistant message), `status` `pending` | `done` | `error`, error, `context` (ADR 0087: a short
+  description, at most 300 bytes, of what the user was looking at, on a user message only), createdAt}. The service does not
   interpret `type` or `args` (the web owns that vocabulary, as it owns the preference keys, ADR 0068); it only requires a
   `type`.
 - **Who may do what**: the subject of a request is the caller's, never named by the request. The owner lists (newest

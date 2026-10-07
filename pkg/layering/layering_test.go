@@ -24,7 +24,7 @@ var forbidden = map[string][]string{
 	"pkg/domain/def":  {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
 	"pkg/access":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
 	"pkg/llmcfg":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
-	"pkg/engine":      {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove"},
+	"pkg/engine":      {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove", "internal/assistantsvc"},
 	"pkg/builtins":    {"pkg/methodology", "pkg/engine", "pkg/domain"},
 	"pkg/adapter":     {"pkg/mcpbuiltin", "pkg/access"},
 	"pkg/domain":      {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "pkg/review"},
@@ -32,7 +32,7 @@ var forbidden = map[string][]string{
 	"pkg/verify":      {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition"},
 	"pkg/decision":    {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal"},
 	"pkg/journal":     {"pkg/graph", "pkg/engine", "pkg/methodology"},
-	"pkg/graph":       {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "pkg/review", "internal/registrysvc"},
+	"pkg/graph":       {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "pkg/review", "internal/registrysvc", "internal/assistantsvc"},
 	"pkg/review":      {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
 }
 

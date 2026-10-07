@@ -144,6 +144,8 @@ type Snapshot struct {
 	// units and projects are the hierarchies of the organisation (part_of) and of the projects (project_part_of,
 	// ADR 0039), resolved by domain.Hierarchy
 	units, projects *domain.Hierarchy
+	// projectMethods are the methodologies each project names (ADR 0039), by project key; a key is present for every project
+	projectMethods map[string][]string
 	// assignments are the Assignment nodes (ADR 0039), resolved from their assigns_org/assigns_project links
 	assignments []assignment
 	// criticality are the policies of the criticality levels, by the unit that owns them and the level
@@ -161,7 +163,8 @@ type assignment struct {
 // projects are the nodes of their types (and subtypes), their hierarchies the parent links st names (ADR 0054).
 func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 	nodes, links = InForce(nodes, links)
-	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links)}
+	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links),
+		projectMethods: map[string][]string{}}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
 	var crit []domain.Node
@@ -170,6 +173,9 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 		byID[n.ID] = n
 		// nodes is scoped to the namespace of the structures by the Directory's cache; this switch does not need to
 		// filter it again.
+		if st.In(domain.StructureProject, n.Type) {
+			s.projectMethods[n.Key] = stringList(n.Properties["methodologies"])
+		}
 		switch n.Type {
 		case NodeTypeUser:
 			u, err := UserFromProps(n.Properties)
@@ -224,6 +230,41 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 	s.readCriticality(crit, byID)
 	sort.Slice(s.Policies, func(i, j int) bool { return PolicyKey(s.Policies[i]) < PolicyKey(s.Policies[j]) })
 	return s
+}
+
+// HasProject reports whether a project of that key exists (as of the snapshot).
+func (s *Snapshot) HasProject(key string) bool {
+	_, ok := s.projectMethods[key]
+	return ok
+}
+
+// ApplicableMethodologies returns the methodologies that apply to a project: its own and those of its ancestors, nearest
+// first, without repeats (ADR 0039; the server-side twin of the web's applicableMethodologies).
+func (s *Snapshot) ApplicableMethodologies(project string) []string {
+	var out []string
+	for _, k := range s.ProjectChain(project) {
+		for _, m := range s.projectMethods[k] {
+			if !slices.Contains(out, m) {
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
+
+func stringList(v any) []string {
+	var out []string
+	switch l := v.(type) {
+	case []string:
+		out = append(out, l...)
+	case []any:
+		for _, x := range l {
+			if s, ok := x.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
 }
 
 // Chain returns a unit followed by its ancestors (part_of), nearest first, ending with the default unit: where a role
