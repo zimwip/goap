@@ -3,6 +3,7 @@
   // in it: what a level cannot reach is shown as unresolved inputs and unreached outputs (CheckLevels).
   import ProcessFlowView from './ProcessFlowView.svelte';
   import { registry, errorMessage, type Issue, type LevelCheck, type PlanPreview, type ProcessGraph } from '../api';
+  import { splitIssues } from '../issues';
   import { fromForm } from '../methodologyForm';
   import type { Draft } from '../stores/drafts.svelte';
 
@@ -49,7 +50,7 @@
           graph = g.graph ?? graph;
           levels = l.levels ?? levels;
           if (l.conditions) known = Object.entries(l.conditions).map(([name, expr]) => ({ name, expr }));
-          ruled = g.issues?.length ? g.issues : (l.issues ?? []);
+          ruled = splitIssues(g.issues?.length ? g.issues : (l.issues ?? [])).errors; // the remarks are not drawn on the flow
           issue = !g.graph && ruled.length ? `The draft does not compile (${ruled.length} issue(s), see the Issues console) and nothing of this flow can be drawn.` : '';
         })
         .catch((e) => {

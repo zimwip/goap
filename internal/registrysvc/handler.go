@@ -88,7 +88,7 @@ func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[regist
 	}
 	g, ok := c.ProcessGraph(r.Msg.Process)
 	if !ok {
-		if len(issues) > 0 {
+		if issues.HasErrors() {
 			return connect.NewResponse(&registryv1.GetProcessGraphResponse{Issues: IssuesToPB(issues)}), nil
 		}
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process %q in %s", r.Msg.Process, m.Name))
@@ -106,7 +106,7 @@ func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1
 	}
 	ls, ok := c.CheckLevels(r.Msg.Root)
 	if !ok {
-		if len(issues) > 0 {
+		if issues.HasErrors() {
 			return connect.NewResponse(&registryv1.CheckLevelsResponse{Issues: IssuesToPB(issues)}), nil
 		}
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process or method with steps %q in %s", r.Msg.Root, m.Name))
@@ -125,7 +125,7 @@ func (h *Handler) PreviewPlan(ctx context.Context, r *connect.Request[registryv1
 	}
 	p, err := engine.PreviewPlan(c, domain.Blackboard{}, r.Msg.Agent, r.Msg.Goal, r.Msg.Overrides)
 	if err != nil {
-		if len(issues) > 0 { // the agent or goal may be one the draft's issues dropped: tell the issues
+		if issues.HasErrors() { // the agent or goal may be one the draft's issues dropped: tell the issues
 			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(issues)}), nil
 		}
 		if errors.Is(err, engine.ErrLivePlanner) {

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 func cachedService(t *testing.T) *Service {
@@ -87,4 +88,24 @@ func TestMethodologyCacheConcurrentReaders(t *testing.T) {
 		}()
 	}
 	wg.Wait()
+}
+
+// A draft with a warning only (nothing can start on an empty change) is saved with the warning and publishes.
+func TestWarningsDoNotBlockPublish(t *testing.T) {
+	enf, _ := authz.NewCasbin(nil)
+	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	withALM(t, s)
+	m := example(t)
+	m.Name = "stuck"
+	m.Goal = "p"
+	m.Conditions = append(m.Conditions, methodology.Condition{Name: "wk_a", Expr: "false"}, methodology.Condition{Name: "wk_c", Expr: "false"})
+	m.Actions = append(m.Actions, methodology.Action{Name: "wk_x", Kind: methodology.KindHuman, Pre: map[string]bool{"wk_c": true}, Effects: map[string]bool{"wk_a": true}})
+	m.Processes = []methodology.Process{{Name: "p", Steps: []methodology.Step{{Name: "one", Action: "wk_x"}}}}
+	_, issues, err := s.Save(as("admin"), m)
+	if err != nil || issues.HasErrors() || len(issues.Warnings()) != 1 || issues.Warnings()[0].Path != "goal" {
+		t.Fatalf("save: %v %v", issues, err)
+	}
+	if _, err := s.Publish(as("admin"), m.Name, m.Version); err != nil {
+		t.Fatalf("a warning must not block the publish: %v", err)
+	}
 }

@@ -211,7 +211,16 @@ func nilIfNone(s []string) []string {
 func IssuesToPB(is def.Issues) []*registryv1.Issue {
 	out := make([]*registryv1.Issue, len(is))
 	for i, x := range is {
-		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity}
+		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity, Severity: x.Severity}
+	}
+	return out
+}
+
+// IssuesFromPB is the inverse of IssuesToPB.
+func IssuesFromPB(is []*registryv1.Issue) def.Issues {
+	var out def.Issues
+	for _, x := range is {
+		out = append(out, def.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity, Severity: x.Severity})
 	}
 	return out
 }

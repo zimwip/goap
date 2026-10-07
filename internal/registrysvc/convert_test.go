@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -74,5 +75,13 @@ func TestGoalRoundTripsThroughPB(t *testing.T) {
 	in := methodology.Methodology{Name: "m", Version: "1", Goal: "deliver"}
 	if out := FromPB(ToPB(Record{Methodology: in})); out.Goal != "deliver" {
 		t.Fatalf("goal: %q", out.Goal)
+	}
+}
+
+func TestIssuesRoundTripKeepSeverity(t *testing.T) {
+	in := def.Issues{{Path: "goal", Message: "w", Severity: def.SeverityWarning}, {Path: "name", Message: "e", Activity: "p/s"}}
+	out := IssuesFromPB(IssuesToPB(in))
+	if len(out) != 2 || out[0] != in[0] || out[1] != in[1] || !out[0].IsWarning() || out[1].IsWarning() {
+		t.Fatalf("%v", out)
 	}
 }

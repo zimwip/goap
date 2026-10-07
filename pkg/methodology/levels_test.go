@@ -29,7 +29,7 @@ processes:
           - {name: second, action: do_b}
       - {name: last, action: do_c, pre: {b: true}}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ls, ok := c.CheckLevels("flow")
@@ -64,7 +64,7 @@ processes:
         steps:
           - {name: only, action: do_c, pre: {b: true}}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ls, _ := c.CheckLevels("loop")
@@ -100,7 +100,7 @@ processes:
             steps:
               - {name: requirements, action: do_b}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ls, _ := c.CheckLevels("lift")
@@ -127,7 +127,7 @@ processes:
           - {name: y, action: do_b, done: {b: true}}
       - {name: after, action: do_c}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ls, _ := c.CheckLevels("inner")
@@ -157,7 +157,7 @@ processes:
     steps:
       - {name: work, method: working}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ms, ok := c.CheckLevels("by_agent")
@@ -186,7 +186,7 @@ processes:
     steps:
       - {name: work, method: working}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ls, _ := c.CheckLevels("flow")

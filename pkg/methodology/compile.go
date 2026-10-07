@@ -31,6 +31,14 @@ type CompileOptions struct {
 // nothing at all can be built. A compiler panic is a bug and is not caught here.
 func (m *Methodology) CompileWith(opt CompileOptions) (*Compiled, def.Issues) {
 	c, issues := m.compileWith(opt.Lenient)
+	if c != nil && !issues.HasErrors() {
+		// Remarks come last and only on a methodology that stands: on a partial one they would be noise.
+		for _, h := range c.Hints() {
+			h.Severity = def.SeverityWarning
+			h.Activity = m.ActivityOf(h.Path)
+			issues = append(issues, h)
+		}
+	}
 	if opt.Stored && m.Namespace == "" && len(m.AppliesTo) == 0 {
 		issues = append(def.Issues{{Path: "namespace", Message: "namespace required: the namespace (domain) the changes of the methodology act on"}}, issues...)
 		if !opt.Lenient {
@@ -56,8 +64,8 @@ func (m *Methodology) ValidateStored() def.Issues {
 // expectations. The methodology itself is not modified; generated effects live in the compiled actions only.
 func (m *Methodology) Compile() (*Compiled, error) {
 	c, issues := m.CompileWith(CompileOptions{})
-	if len(issues) > 0 {
-		return nil, fmt.Errorf("methodology %s: %w", m.Name, issues)
+	if issues.HasErrors() {
+		return nil, fmt.Errorf("methodology %s: %w", m.Name, issues.Errors())
 	}
 	return c, nil
 }

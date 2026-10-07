@@ -668,4 +668,6 @@ export interface Issue {
   message?: string;
   /** flow path of the process, method or step the issue is about ("<process>/<step>/<sub-step>"); empty: none */
   activity?: string;
+  /** "warning": a remark that never blocks; empty or "error": a blocking issue */
+  severity?: string;
 }

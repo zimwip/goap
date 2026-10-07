@@ -189,6 +189,9 @@
             {#if f.goal.trim() && !goals.includes(f.goal.trim())}<option value={f.goal}>{f.goal} (unknown)</option>{/if}
             {#each goals as n (n)}<option value={n}>{n}</option>{/each}
           </select>
+          {#each d.warnings.filter((w) => w.norm === 'goal') as w, k (k)}
+            <p class="field-warn" role="status">{w.message}</p>
+          {/each}
         </div>
         {#if d.meta.updatedAt || d.meta.publishedAt}
           <p class="hint">
@@ -383,6 +386,11 @@
 </div>
 
 <style>
+  .field-warn {
+    margin: 0.25rem 0 0;
+    font-size: 0.85em;
+    color: var(--warn);
+  }
   .row.head {
     display: flex;
     align-items: center;

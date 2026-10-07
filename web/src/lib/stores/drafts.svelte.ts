@@ -14,6 +14,7 @@ import {
   type Section,
   type SectionItem,
 } from '../methodologyForm';
+import { splitIssues } from '../issues';
 import { loadTypes, typeCatalog } from './types.svelte';
 import { confirmDialog } from '../shell/confirmState.svelte';
 
@@ -78,6 +79,9 @@ export class Draft {
   readonly allIssues = $derived<NormIssue[]>(
     [...this.localIssues, ...(this.issues ?? [])].map((i) => ({ ...i, norm: normalizePath(i.path) })),
   );
+  /** the blocking issues and the remarks (ADR 0097): only the errors refuse a publish and paint a field red */
+  readonly errors = $derived(splitIssues(this.allIssues).errors);
+  readonly warnings = $derived(splitIssues(this.allIssues).warnings);
   readonly conditionOptions = $derived(conditionNames(this.form));
   /** node and link types of the target namespace, qualified (from the registry's catalogue) */
   readonly nodeTypeNames = $derived(typeCatalog.cat.names(this.form.namespace.trim()));
@@ -89,7 +93,7 @@ export class Draft {
       !this.dirty &&
       !this.busy &&
       this.issues !== null &&
-      this.allIssues.length === 0 &&
+      this.errors.length === 0 &&
       this.validatedAt === this.current
     );
   }
@@ -161,7 +165,7 @@ export class Draft {
 
   /** Does field `path` (or, unless `exact`, one of its descendants) have an issue? */
   bad = (path: string, exact = false): boolean =>
-    this.allIssues.some((i) => (exact ? i.norm === path : under(i.norm, path)));
+    this.errors.some((i) => (exact ? i.norm === path : under(i.norm, path)));
 
   /** The issues of the element at `path` and of what it holds, with their messages. */
   issuesAt(path: string): NormIssue[] {
@@ -169,7 +173,7 @@ export class Draft {
   }
 
   count(path: string): number {
-    return this.allIssues.filter((i) => under(i.norm, path)).length;
+    return this.errors.filter((i) => under(i.norm, path)).length;
   }
 
   // --- elements ------------------------------------------------------------------

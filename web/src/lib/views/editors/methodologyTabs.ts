@@ -20,6 +20,7 @@ import {
   type StepForm,
   type SectionItem,
 } from '../../methodologyForm';
+import { issueSummary } from '../../issues';
 import { typeName, type TypeCatalog } from '../../stores/types.svelte';
 
 export const SECTION_KIND: Record<Section, string> = {
@@ -242,7 +243,7 @@ export function draftActions(d: Draft, extra: ToolbarAction[] = []): ToolbarActi
         run: async () => {
           await d.validate();
           if (d.error) notify(d.error, 'error');
-          else notify(d.allIssues.length ? `${d.allIssues.length} issue(s) — see the "Issues" console.` : 'No issues detected.', d.allIssues.length ? 'info' : 'ok');
+          else notify(d.allIssues.length ? `${issueSummary(d.allIssues)} — see the "Issues" console.` : 'No issues detected.', d.allIssues.length ? 'info' : 'ok');
         },
       });
       acts.push({
@@ -250,7 +251,7 @@ export function draftActions(d: Draft, extra: ToolbarAction[] = []): ToolbarActi
         label: d.busy === 'publish' ? 'Publishing…' : 'Publish',
         icon: 'upload',
         disabled: !d.canPublish,
-        title: d.canPublish ? 'Freeze this version' : 'Save and validate the draft (with no issues) to be able to publish it',
+        title: d.canPublish ? 'Freeze this version' : 'Save and validate the draft (with no errors) to be able to publish it',
         run: async () => {
           if (await d.publish()) notify(`${d.label} published.`, 'ok');
           else if (d.error) notify(d.error, 'error');

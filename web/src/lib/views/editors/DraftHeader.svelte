@@ -4,6 +4,7 @@
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { methodologySpec } from './methodologyTabs';
+  import { splitIssues } from '../../issues';
   import type { Draft } from '../../stores/drafts.svelte';
 
   let {
@@ -16,7 +17,9 @@
   }: { draft: Draft; icon: IconName; kind: string; title: string; dirty: boolean; path?: string } = $props();
 
   // the rules this element breaks (compilation and validation issues), with where each is
-  const ruled = $derived(path ? draft.issuesAt(path) : []);
+  const all = $derived(path ? draft.issuesAt(path) : []);
+  const ruled = $derived(splitIssues(all).errors);
+  const remarks = $derived(splitIssues(all).warnings);
   const where = (p: string | undefined) => (p ?? '').replace(path, '').replace(/^\./, '');
 </script>
 
@@ -41,6 +44,16 @@
     <ul>
       {#each ruled as i, k (k)}
         <li>{#if where(i.norm)}<code>{where(i.norm)}</code> {/if}{i.message}</li>
+      {/each}
+    </ul>
+  </div>
+{/if}
+{#if remarks.length}
+  <div class="alert warn" role="status">
+    <strong>{remarks.length} warning{remarks.length === 1 ? '' : 's'}</strong>
+    <ul>
+      {#each remarks as i, k (k)}
+        <li>{i.message}</li>
       {/each}
     </ul>
   </div>

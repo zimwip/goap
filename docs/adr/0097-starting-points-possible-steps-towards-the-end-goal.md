@@ -91,9 +91,21 @@ non-blocking remark tied to the path `goal` when, on an empty blackboard, no ste
 working towards the main goal has its entry satisfied, with the first conditions it waits for. It is not a compile
 issue: nothing is refused, the shipped methodologies and examples give no hint (`TestShippedMethodologiesHaveNoHint`).
 
+## Warnings in the editor
+
+`def.Issue` has a `Severity`: empty or `error` blocks, `warning` is a remark (`Issue.IsWarning`; `Issues.Errors` /
+`Warnings` / `HasErrors`). Only errors refuse: `Compile`, the registry's publish / import-as-published and the
+"domain would break a methodology" check test `HasErrors`, never `len(issues)`. `CompileWith` appends the hints of
+`Compiled.Hints()` as warnings (path `goal`) after the other issues, strict or lenient, only when the methodology has
+no error (on a partial build they would be noise); `Validate` / `ValidateStored` and the registry RPCs carry them
+(`Issue.severity` in the proto, `IssuesToPB` / `IssuesFromPB`), and the compile cache is unchanged (the hints are
+computed at compile, once per cached build). Web (`web/src/lib/issues.ts`): the Issues console draws a warning in
+amber with its own icon and the tab counter reads `errors · warningsw`; fields turn red and the publish button
+depends on the errors only; the `goal` select shows the warning under it and the editor header lists warnings apart
+from the broken rules; the flow draws errors only.
+
 ## Not done
 
-- The hint is not yet shown by the methodology editor (no warning severity in `def.Issue`; the function is there).
 - A declared agent without steps (a plain `goals`/`actions` methodology) has no step to propose; its actions are not
   listed either, so such a methodology shows "no step of the methodology works towards the goal".
 - Starting several points at once; ordering points by value.

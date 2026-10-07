@@ -139,8 +139,8 @@ func (s *Service) Publish(ctx context.Context, name, version string) (Record, er
 	if r.Status != StatusDraft {
 		return Record{}, fmt.Errorf("%s@%s: %w", name, version, ErrImmutable)
 	}
-	if issues := s.validate(ctx, &r.Methodology); len(issues) > 0 {
-		return Record{}, fmt.Errorf("%w: %v", ErrInvalid, issues)
+	if issues := s.validate(ctx, &r.Methodology); issues.HasErrors() {
+		return Record{}, fmt.Errorf("%w: %v", ErrInvalid, issues.Errors())
 	}
 	if err := s.Store.SetStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
 		return Record{}, err
@@ -218,12 +218,12 @@ func (s *Service) importPublished(ctx context.Context, m methodology.Methodology
 	if err := s.authorize(ctx, "publish", &m); err != nil {
 		return Record{}, nil, err
 	}
-	if issues := s.validate(ctx, &m); len(issues) > 0 {
+	if issues := s.validate(ctx, &m); issues.HasErrors() {
 		r, _, err := s.Save(ctx, m)
 		if err != nil {
 			return r, issues, err
 		}
-		return r, issues, fmt.Errorf("%w: cannot publish: %v", ErrInvalid, issues)
+		return r, issues, fmt.Errorf("%w: cannot publish: %v", ErrInvalid, issues.Errors())
 	}
 	now := s.clock()
 	r := Record{Methodology: m, Status: StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}

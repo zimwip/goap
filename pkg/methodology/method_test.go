@@ -24,7 +24,7 @@ processes:
     steps:
       - {name: finish, method: assembling, pre: {c: true}}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ag, ok := c.Agent("assemble")
@@ -110,7 +110,7 @@ processes:
     steps:
       - {name: finish, method: assembling}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ag, ok := c.Agent("assemble")
@@ -133,7 +133,7 @@ methods:
   - {name: two, for: f, actions: [do_c], done: {c: true}, when: 'artifacts.exists(x, x.type == "u") && artifacts.exists(x, x.type == "v")'}
   - {name: forced, for: f, actions: [do_c], done: {c: true}, priority: 1, when: 'artifacts.exists(x, x.type == "u")'}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	var bb domain.Blackboard

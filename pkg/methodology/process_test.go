@@ -55,7 +55,7 @@ processes:
         description: Sign off
         references: [{title: Checklist, ref: "doc:CHK-1", section: "2"}]
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	ag, ok := c.Agent("flow")
@@ -208,7 +208,7 @@ processes:
       - {name: first, action: do_a}
       - {name: sign}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	run, _ := c.Action("outer/inner_run")
@@ -225,7 +225,7 @@ processes:
       - {name: b_step, action: do_b}
       - {name: c_step, action: do_c, pre: {b: true}}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	if r, _ := c2.Action("outer/run"); len(r.Pre) != 1 || !r.Pre["a"] {
@@ -261,7 +261,7 @@ processes:
     steps:
       - {name: finish, method: finishing, pre: {a: true}}
 `)
-	if len(issues) > 0 {
+	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	a, _ := c.Action("flow/finish")

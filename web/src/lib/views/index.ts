@@ -59,6 +59,7 @@ import ProblemsConsole from './bottom/ProblemsConsole.svelte';
 import TokensConsole from './bottom/TokensConsole.svelte';
 
 import TesterPanel from './right/TesterPanel.svelte';
+import { issueBadge, issueSummary } from '../issues';
 import PropertiesPanel from './right/PropertiesPanel.svelte';
 import DslHelpPanel from './right/DslHelpPanel.svelte';
 
@@ -102,7 +103,7 @@ registerView({
   order: 3,
   badge: () => {
     const d = activeDraft();
-    return d && !d.readonly ? d.allIssues.length || undefined : undefined;
+    return d && !d.readonly ? issueBadge(d.allIssues) : undefined;
   },
 });
 registerView({
@@ -158,7 +159,7 @@ registerView({
         ['Actions', String(d.form.actions.length)],
         ['Conditions', String(d.form.conditions.length)],
         ['Goals', String(d.form.goals.length)],
-        ['Issues', d.issues === null ? 'not validated' : String(d.allIssues.length)],
+        ['Issues', d.issues === null ? 'not validated' : issueSummary(d.allIssues)],
         ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
         ['Published', formatDate(d.meta.publishedAt)],
       ],
@@ -204,7 +205,7 @@ registerView({
         ['Lifecycles', String(d.form.lifecycles.length)],
         ['Algorithms', `${d.form.algorithms.length} (${d.form.instances.length} instances)`],
         ['Used by', String(d.usage.length)],
-        ['Issues', d.issues === null ? 'not validated' : String(d.allIssues.length)],
+        ['Issues', d.issues === null ? 'not validated' : issueSummary(d.allIssues)],
         ['Modified', `${formatDate(d.meta.updatedAt)}${d.meta.updatedBy ? ` by ${d.meta.updatedBy}` : ''}`],
         ['Published', formatDate(d.meta.publishedAt)],
       ],

@@ -1242,7 +1242,7 @@ client). **Domains** are the definition of a graph (namespace, node types, link 
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
 database (`domain_version`, PostgreSQL or SQLite, `registrysvc.SQLDomainStore`). The registry validates, compiles,
 publishes and emits the `goap.registry.*` events. Compilation is one pipeline with a policy
-(`Methodology.CompileWith(CompileOptions{Lenient, Stored})`; `Compile`, `CompileLenient`, `Validate`, `ValidateStored` are
+(`Methodology.CompileWith(CompileOptions{Lenient, Stored})`; `Compile`, `CompileLenient`, `Validate`, `ValidateStored` are `def.Issue.Severity` (`error` default, `warning`; ADR 0097): only errors refuse a compile, a validation or a publish (`Issues.HasErrors`), and `CompileWith` adds the `Compiled.Hints()` remarks as `goal` warnings, shown by the editor without blocking Save or Publish.
 its policies, [ADR 0072](adr/0072-one-compile-pipeline-split-apply-compile-cache.md)); the registry caches the compiled
 methodologies by (name, version, content hash, published domains in force), so the engine's per-event and per-action reads
 do not recompile.

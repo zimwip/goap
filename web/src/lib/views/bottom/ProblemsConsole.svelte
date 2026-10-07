@@ -2,6 +2,7 @@
   // "Problems" console: validation of the active tab's draft.
   import Icon from '../../shell/Icon.svelte';
   import { activeDraft } from './activeDraft';
+  import { isWarning, issueSummary } from '../../issues';
   import { revealIssue } from '../editors/methodologyTabs';
   import type { Section } from '../../methodologyForm';
 
@@ -34,7 +35,7 @@
     {:else if stale}
       <span class="hint">validation pending (changes in progress)…</span>
     {:else}
-      <span class="hint">validated</span>
+      <span class="hint">validated{d.allIssues.length ? ` — ${issueSummary(d.allIssues)}` : ''}</span>
     {/if}
     <span class="grow"></span>
     {#if !d.readonly && !d.isNew}
@@ -52,8 +53,8 @@
       <ul class="issues">
         {#each d.allIssues as i, k (k)}
           <li>
-            <button type="button" class="issue" onclick={() => revealIssue(d, i.norm)}>
-              <Icon name="alert" size={13} />
+            <button type="button" class="issue" class:warning={isWarning(i)} onclick={() => revealIssue(d, i.norm)}>
+              <Icon name={isWarning(i) ? 'bell' : 'alert'} size={13} />
               <span class="msg">{i.message}</span>
               <span class="where">{where(i.norm)}</span>
               {#if i.path}<code class="path">{i.path}</code>{/if}
@@ -89,6 +90,9 @@
   }
   .issue :global(svg) {
     color: var(--danger);
+  }
+  .issue.warning :global(svg) {
+    color: var(--warn);
   }
   .issue:hover:not(:disabled) {
     background: var(--hover);

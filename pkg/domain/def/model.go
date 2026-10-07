@@ -237,7 +237,19 @@ type Issue struct {
 	// Activity is the flow path of the process, method or step the issue is about ("<process>/<step>/<sub-step>"),
 	// empty when it belongs to no activity: the flow draws the issue on that node.
 	Activity string `json:"activity,omitempty"`
+	// Severity is SeverityError (the default, empty) or SeverityWarning: a warning is a remark that never refuses a
+	// validation, a compile or a publish (ADR 0097).
+	Severity string `json:"severity,omitempty"`
 }
+
+// Severities of an Issue.
+const (
+	SeverityError   = "error"
+	SeverityWarning = "warning"
+)
+
+// IsWarning reports whether the issue is a non-blocking remark; any other severity is an error.
+func (i Issue) IsWarning() bool { return i.Severity == SeverityWarning }
 
 func (i Issue) String() string {
 	if i.Path == "" {
@@ -255,6 +267,32 @@ func (is Issues) Error() string {
 		msgs[i] = x.String()
 	}
 	return strings.Join(msgs, "; ")
+}
+
+// Errors returns the blocking issues.
+func (is Issues) Errors() Issues { return is.of(false) }
+
+// Warnings returns the non-blocking remarks.
+func (is Issues) Warnings() Issues { return is.of(true) }
+
+// HasErrors reports whether any issue blocks: only errors refuse a validation, a compile or a publish.
+func (is Issues) HasErrors() bool {
+	for _, x := range is {
+		if !x.IsWarning() {
+			return true
+		}
+	}
+	return false
+}
+
+func (is Issues) of(warning bool) Issues {
+	var out Issues
+	for _, x := range is {
+		if x.IsWarning() == warning {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 var lifecycleNameRE = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
