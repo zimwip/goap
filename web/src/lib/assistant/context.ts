@@ -1,10 +1,10 @@
-// What the assistant is told with each message (ADR 0087): the active tab, the node or change it is about, the text the
-// user selected and the active project. Never the content of a form: only the selection, which the user chose to
+// What the assistant is told with each message (ADR 0087): the active tab, the text the user selected and the active
+// project (the layered collector of ADR 0092 replaces this). Never the content of a form: only the selection, which the user chose to
 // select. The server caps what it accepts (assistantsvc `MaxSelectionBytes`, `MaxContextBytes`); the same limits are
 // applied here so a request is never refused for its size.
 import type { AssistantContext } from '../api';
 import type { Tab } from '../shell/types';
-import { selectedText, subjectOf } from '../helper/context';
+import { selectedText } from '../helper/context';
 
 export const MAX_SELECTION_BYTES = 2000;
 const MAX_PARAMS = 10;
@@ -26,18 +26,18 @@ export function clipBytes(s: string, n: number): string {
   return out;
 }
 
-/** The context of one turn. Empty fields are left out. */
+/** The context of one turn. Empty fields are left out. (The layered collector, ADR 0092, replaces this one.) */
 export function assistantContext(tab: Tab | undefined, project: string, selection: string = selectedText()): AssistantContext {
   const ctx: AssistantContext = {};
+  const app: NonNullable<AssistantContext['app']> = {};
   if (tab) {
     const params: Record<string, string> = {};
     for (const [k, v] of Object.entries(tab.params).slice(0, MAX_PARAMS)) params[k] = clipBytes(String(v), MAX_PARAM_BYTES);
-    ctx.tab = { kind: tab.kind, params };
-    const subject = subjectOf(tab);
-    if (subject) ctx.subject = clipBytes(subject, MAX_PARAM_BYTES);
+    app.tab = { kind: tab.kind, params };
   }
+  if (project) app.project = project;
+  if (app.tab || app.project) ctx.app = app;
   const sel = clipBytes(selection, MAX_SELECTION_BYTES);
-  if (sel) ctx.selection = sel;
-  if (project) ctx.project = project;
+  if (sel) ctx.focus = { selection: sel };
   return ctx;
 }

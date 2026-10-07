@@ -72,9 +72,9 @@ describe('assistant actions', () => {
 describe('assistant context', () => {
   const tab = { id: 'change:C1', kind: 'change', params: { id: 'C1' }, pinned: true };
 
-  it('has the tab, subject, selection and project, and nothing else', () => {
+  it('has the tab, selection and project, and nothing else', () => {
     const c = assistantContext(tab, 'PROJ-A', 'chosen text');
-    expect(c).toEqual({ tab: { kind: 'change', params: { id: 'C1' } }, subject: 'C1', selection: 'chosen text', project: 'PROJ-A' });
+    expect(c).toEqual({ app: { tab: { kind: 'change', params: { id: 'C1' } }, project: 'PROJ-A' }, focus: { selection: 'chosen text' } });
   });
 
   it('leaves out what is empty', () => {
@@ -83,7 +83,7 @@ describe('assistant context', () => {
 
   it('caps the selection in bytes', () => {
     const c = assistantContext(tab, '', 'é'.repeat(3000));
-    expect(new TextEncoder().encode(c.selection ?? '').length).toBeLessThanOrEqual(2000);
+    expect(new TextEncoder().encode(c.focus?.selection ?? '').length).toBeLessThanOrEqual(2000);
     expect(clipBytes('abc', 2)).toBe('ab');
   });
 });

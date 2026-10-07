@@ -42,11 +42,17 @@ type turn struct {
 	project string
 	// actions are the UI actions to hand to the web, in order
 	actions []convsvc.Action
+	// uiTools are the tools of the screen this turn, by name (ADR 0092); effects and proposals count what the answer
+	// holds so far
+	uiTools            map[string]UITool
+	effects, proposals int
 }
 
 type toolCall struct {
 	Name      string          `json:"name"`
 	Arguments json.RawMessage `json:"arguments"`
+	// Rationale is why, in a sentence; kept on the proposals of screen tools.
+	Rationale string `json:"rationale"`
 }
 
 type answer struct {
@@ -96,7 +102,7 @@ func (t *turn) loop(ctx context.Context) (string, error) {
 	}
 	d.add("user", t.in.Text)
 	for round := 1; ; round++ {
-		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: systemPrompt(t.in.Context, t.project), Messages: slices.Clone(d), JSON: true, MaxTokens: 2048})
+		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: systemPrompt(t.in.Context, t.project, t.in.UITools), Messages: slices.Clone(d), JSON: true, MaxTokens: 2048})
 		if err != nil {
 			return "", err
 		}
@@ -172,6 +178,9 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 			return nil, fmt.Errorf("the arguments of %s must be a JSON object", c.Name)
 		}
 	}
+	if strings.HasPrefix(c.Name, PrefixUI) {
+		return t.uiTool(c, a)
+	}
 	switch c.Name {
 	case ToolListMethodologies:
 		return t.listMethodologies(ctx)
@@ -186,7 +195,7 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 	case ToolStartAgent:
 		return t.startAgent(ctx, a)
 	}
-	return nil, fmt.Errorf("unknown tool %q: the tools are %s", c.Name, strings.Join(Tools(), ", "))
+	return nil, fmt.Errorf("unknown tool %q: the tools are %s (and the screen tools prefixed %q)", c.Name, strings.Join(Tools(), ", "), PrefixUI)
 }
 
 // applicable returns the methodologies of the active project.

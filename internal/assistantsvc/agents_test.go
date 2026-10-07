@@ -110,7 +110,7 @@ func (e *env) toolResult(round int) string {
 }
 
 func changeCtx(id string) Context {
-	return Context{TabKind: "change", TabParams: map[string]string{"id": id}, Subject: id, Project: "PROJ-A"}
+	return Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "change", Params: map[string]string{"id": id}}}}
 }
 
 func agentNames(t *testing.T, result string) []string {
@@ -133,7 +133,7 @@ func agentNames(t *testing.T, result string) []string {
 
 func TestListAgentsFiltersByProjectAndRoles(t *testing.T) {
 	e := newEnv(t, call(ToolListAgents, `{}`), `{"message":"ok"}`)
-	if _, _, err := e.send("what can I run?", Context{Project: "PROJ-A"}); err != nil {
+	if _, _, err := e.send("what can I run?", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
 	res := e.toolResult(1)
@@ -148,7 +148,7 @@ func TestListAgentsFiltersByProjectAndRoles(t *testing.T) {
 	e = newEnv(t, call(ToolListAgents, `{}`), `{"message":"ok"}`)
 	e.user.Project = "PROJ-B"
 	e.ctx = authz.With(context.Background(), e.user)
-	if _, _, err := e.send("and here?", Context{Project: "PROJ-B"}); err != nil {
+	if _, _, err := e.send("and here?", inProject("PROJ-B")); err != nil {
 		t.Fatal(err)
 	}
 	if got := agentNames(t, e.toolResult(1)); !slices.Equal(got, []string{"other/stranger"}) {
@@ -157,7 +157,7 @@ func TestListAgentsFiltersByProjectAndRoles(t *testing.T) {
 	// a release manager sees the shipper too
 	e = newEnv(t, call(ToolListAgents, `{}`), `{"message":"ok"}`)
 	e.engine.held["u1"] = []string{"release_manager"}
-	if _, _, err := e.send("what can I run?", Context{Project: "PROJ-A"}); err != nil {
+	if _, _, err := e.send("what can I run?", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
 	if got := agentNames(t, e.toolResult(1)); !slices.Equal(got, []string{"delivery/shipper", "delivery/helper"}) {
@@ -217,7 +217,7 @@ func proposeArgs(extra string) string {
 
 func TestStartAgentOnlyRecordsAProposal(t *testing.T) {
 	e := newEnv(t, call(ToolStartAgent, proposeArgs(`,"newChange":{"title":"Build v2","intent":"a build of v2"}`)), `{"message":"I propose to start the builder."}`)
-	if _, _, err := e.send("build v2", Context{Project: "PROJ-A"}); err != nil {
+	if _, _, err := e.send("build v2", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
 	if len(e.engine.starts) != 0 || len(e.graph.created) != 0 {
@@ -250,14 +250,14 @@ func TestStartAgentRefusals(t *testing.T) {
 		ctx  Context
 		want string
 	}{
-		"a role the caller lacks":  {`{"methodology":"delivery","agent":"shipper","goal":"ship","newChange":{"title":"t","intent":"i"}}`, Context{Project: "PROJ-A"}, "not one you may run here"},
-		"another project":          {`{"methodology":"other","agent":"stranger","newChange":{"title":"t","intent":"i"}}`, Context{Project: "PROJ-A"}, "not one you may run here"},
-		"an unknown goal":          {`{"methodology":"delivery","agent":"builder","goal":"nope","newChange":{"title":"t","intent":"i"}}`, Context{Project: "PROJ-A"}, "no goal"},
-		"no change and no new":     {proposeArgs(``), Context{Project: "PROJ-A"}, "newChange"},
+		"a role the caller lacks":  {`{"methodology":"delivery","agent":"shipper","goal":"ship","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "not one you may run here"},
+		"another project":          {`{"methodology":"other","agent":"stranger","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "not one you may run here"},
+		"an unknown goal":          {`{"methodology":"delivery","agent":"builder","goal":"nope","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "no goal"},
+		"no change and no new":     {proposeArgs(``), inProject("PROJ-A"), "newChange"},
 		"a change out of context":  {proposeArgs(`,"changeId":"CHG-OTHER"`), changeCtx("CHG-D"), "looking at"},
 		"a new change in a change": {proposeArgs(`,"newChange":{"title":"t","intent":"i"}`), changeCtx("CHG-D"), "no newChange"},
 		"a closed change":          {proposeArgs(``), changeCtx("CHG-DONE"), "not one you may run here"},
-		"a goal to choose":         {`{"methodology":"delivery","agent":"helper","goal":"","newChange":{"title":"t","intent":"i"}}`, Context{Project: "PROJ-A"}, ""},
+		"a goal to choose":         {`{"methodology":"delivery","agent":"helper","goal":"","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t, call(ToolStartAgent, tc.args), `{"message":"no"}`)
@@ -295,7 +295,7 @@ func TestStartAgentOnTheChangeInContext(t *testing.T) {
 func TestOneProposalPerAnswer(t *testing.T) {
 	two := `{"message":"","tool_calls":[{"name":"start_agent","arguments":` + proposeArgs(`,"newChange":{"title":"t","intent":"i"}`) + `},{"name":"start_agent","arguments":` + proposeArgs(`,"newChange":{"title":"t","intent":"i"}`) + `}]}`
 	e := newEnv(t, two, `{"message":"proposed"}`)
-	if _, _, err := e.send("build", Context{Project: "PROJ-A"}); err != nil {
+	if _, _, err := e.send("build", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
 	if n := len(e.answer(t).Actions); n != 1 || !strings.Contains(e.toolResult(1), "one proposal per answer") {
@@ -326,7 +326,7 @@ const newChangeArg = `,"newChange":{"title":"Build v2","intent":"a build of v2"}
 
 func TestConfirmAcceptCreatesTheChangeAndStartsAsTheCaller(t *testing.T) {
 	e := newEnv(t)
-	m := e.propose(t, newChangeArg, Context{Project: "PROJ-A"})
+	m := e.propose(t, newChangeArg, inProject("PROJ-A"))
 	got, err := e.confirm(m, DecisionAccept)
 	if err != nil {
 		t.Fatal(err)
@@ -379,7 +379,7 @@ func TestConfirmAcceptOnAnExistingChange(t *testing.T) {
 
 func TestConfirmRejectStartsNothing(t *testing.T) {
 	e := newEnv(t)
-	m := e.propose(t, newChangeArg, Context{Project: "PROJ-A"})
+	m := e.propose(t, newChangeArg, inProject("PROJ-A"))
 	got, err := e.confirm(m, DecisionReject)
 	if err != nil {
 		t.Fatal(err)
@@ -394,7 +394,7 @@ func TestConfirmRejectStartsNothing(t *testing.T) {
 
 func TestConfirmOnlyByTheOwnerOnAProposal(t *testing.T) {
 	e := newEnv(t)
-	m := e.propose(t, newChangeArg, Context{Project: "PROJ-A"})
+	m := e.propose(t, newChangeArg, inProject("PROJ-A"))
 	other := authz.Principal{Subject: "u2", Project: "PROJ-A"}
 	_, err := e.svc.Confirm(authz.With(context.Background(), other), ConfirmInput{ConversationID: e.conv.ID, MessageID: m.ID, Decision: DecisionAccept})
 	if !errors.Is(err, convsvc.ErrNotFound) {
@@ -421,7 +421,7 @@ func TestConfirmOnlyByTheOwnerOnAProposal(t *testing.T) {
 
 func TestConfirmStaleProposalStaysProposed(t *testing.T) {
 	e := newEnv(t)
-	m := e.propose(t, newChangeArg, Context{Project: "PROJ-A"})
+	m := e.propose(t, newChangeArg, inProject("PROJ-A"))
 	// the active project is no longer the proposal's
 	_, err := e.svc.Confirm(e.ctx, ConfirmInput{ConversationID: e.conv.ID, MessageID: m.ID, Decision: DecisionAccept, Project: "PROJ-B"})
 	if !errors.Is(err, ErrStale) || !strings.Contains(err.Error(), "PROJ-B") {
@@ -452,7 +452,7 @@ func TestConfirmStaleProposalStaysProposed(t *testing.T) {
 
 func TestConfirmStartFailureIsRecorded(t *testing.T) {
 	e := newEnv(t)
-	m := e.propose(t, newChangeArg, Context{Project: "PROJ-A"})
+	m := e.propose(t, newChangeArg, inProject("PROJ-A"))
 	e.engine.startErr = errors.New("engine is down")
 	got, err := e.confirm(m, DecisionAccept)
 	if err != nil {
@@ -471,7 +471,7 @@ func TestConfirmStartFailureIsRecorded(t *testing.T) {
 	}
 	// the change creation failing
 	e = newEnv(t)
-	m = e.propose(t, newChangeArg, Context{Project: "PROJ-A"})
+	m = e.propose(t, newChangeArg, inProject("PROJ-A"))
 	e.graph.err = errors.New("graph is down")
 	got, err = e.confirm(m, DecisionAccept)
 	if err != nil || got.Actions[0]["status"] != StatusFailed || len(e.engine.starts) != 0 {
@@ -485,7 +485,7 @@ func TestTheDecisionIsInTheNextHistory(t *testing.T) {
 		DecisionReject: "rejected the proposal to start agent builder of delivery",
 	} {
 		e := newEnv(t)
-		m := e.propose(t, newChangeArg, Context{Project: "PROJ-A"})
+		m := e.propose(t, newChangeArg, inProject("PROJ-A"))
 		// before the decision: nothing was started
 		if h := historyOf(e.messages(t)); !strings.Contains(h[len(h)-1].Content, "has not decided yet, nothing was started") {
 			t.Fatalf("%+v", h)
@@ -495,7 +495,7 @@ func TestTheDecisionIsInTheNextHistory(t *testing.T) {
 		}
 		e.model.answers = []string{`{"message":"ok"}`}
 		e.model.got = nil
-		if _, _, err := e.send("and then?", Context{Project: "PROJ-A"}); err != nil {
+		if _, _, err := e.send("and then?", inProject("PROJ-A")); err != nil {
 			t.Fatal(err)
 		}
 		var sent []string
@@ -511,7 +511,7 @@ func TestTheDecisionIsInTheNextHistory(t *testing.T) {
 func TestAgentToolsNeedTheEngine(t *testing.T) {
 	e := newEnv(t, call(ToolListAgents, `{}`), `{"message":"no"}`)
 	e.svc.Engine = nil
-	if _, _, err := e.send("what can I run?", Context{Project: "PROJ-A"}); err != nil {
+	if _, _, err := e.send("what can I run?", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
 	if res := e.toolResult(1); !strings.Contains(res, "engine is not reachable") {

@@ -64,9 +64,7 @@ describe('assistant store', () => {
     expect(await send('  hello  ')).toBe(true);
     expect(api.create).toHaveBeenCalledWith('hello');
     expect(api.send).toHaveBeenCalledWith('C1', 'hello', {
-      tab: { kind: 'change', params: { id: 'C1' } },
-      subject: 'C1',
-      project: 'PROJ-A',
+      app: { tab: { kind: 'change', params: { id: 'C1' } }, project: 'PROJ-A' },
     });
     expect(isPending()).toBe(true);
     expect(assistant.conversations[0].id).toBe('C1');

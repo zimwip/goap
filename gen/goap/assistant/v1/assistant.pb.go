@@ -22,6 +22,123 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// What the person was looking at when they wrote the message, in three layers, the most specific first (ADR 0092):
+// the focus (the element they act on, their selection, the dialog and the action in progress), the screen (what the
+// open view shows) and the application (project and tab). Used for this turn only, never stored (the user message keeps
+// a short description of it). The server caps and sanitises everything.
+type PageContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	App           *AppContext            `protobuf:"bytes,1,opt,name=app,proto3" json:"app,omitempty"`
+	Screen        *ScreenContext         `protobuf:"bytes,2,opt,name=screen,proto3" json:"screen,omitempty"`
+	Focus         *FocusContext          `protobuf:"bytes,3,opt,name=focus,proto3" json:"focus,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PageContext) Reset() {
+	*x = PageContext{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PageContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PageContext) ProtoMessage() {}
+
+func (x *PageContext) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PageContext.ProtoReflect.Descriptor instead.
+func (*PageContext) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *PageContext) GetApp() *AppContext {
+	if x != nil {
+		return x.App
+	}
+	return nil
+}
+
+func (x *PageContext) GetScreen() *ScreenContext {
+	if x != nil {
+		return x.Screen
+	}
+	return nil
+}
+
+func (x *PageContext) GetFocus() *FocusContext {
+	if x != nil {
+		return x.Focus
+	}
+	return nil
+}
+
+type AppContext struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the active project key
+	Project       string   `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Tab           *PageTab `protobuf:"bytes,2,opt,name=tab,proto3" json:"tab,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AppContext) Reset() {
+	*x = AppContext{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AppContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AppContext) ProtoMessage() {}
+
+func (x *AppContext) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AppContext.ProtoReflect.Descriptor instead.
+func (*AppContext) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *AppContext) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *AppContext) GetTab() *PageTab {
+	if x != nil {
+		return x.Tab
+	}
+	return nil
+}
+
 type PageTab struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
@@ -32,7 +149,7 @@ type PageTab struct {
 
 func (x *PageTab) Reset() {
 	*x = PageTab{}
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[0]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +161,7 @@ func (x *PageTab) String() string {
 func (*PageTab) ProtoMessage() {}
 
 func (x *PageTab) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[0]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,7 +174,7 @@ func (x *PageTab) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PageTab.ProtoReflect.Descriptor instead.
 func (*PageTab) Descriptor() ([]byte, []int) {
-	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{0}
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *PageTab) GetKind() string {
@@ -74,36 +191,34 @@ func (x *PageTab) GetParams() map[string]string {
 	return nil
 }
 
-// What the person was looking at when they wrote the message: used for this turn only, never stored (the user message
-// keeps a short description of it).
-type PageContext struct {
+type ScreenContext struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Tab   *PageTab               `protobuf:"bytes,1,opt,name=tab,proto3" json:"tab,omitempty"`
-	// the node or change the tab is about (opaque)
-	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
-	// the text selected on the page
-	Selection string `protobuf:"bytes,3,opt,name=selection,proto3" json:"selection,omitempty"`
-	// the active project key
-	Project       string `protobuf:"bytes,4,opt,name=project,proto3" json:"project,omitempty"`
+	// the kind of view (a change, a node, the organisation, ...), opaque
+	Kind  string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Title string `protobuf:"bytes,2,opt,name=title,proto3" json:"title,omitempty"`
+	// a short text of what the view shows
+	Summary string `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
+	// the elements the view shows that the assistant may talk about (at most 40)
+	Entities      []*Entity `protobuf:"bytes,4,rep,name=entities,proto3" json:"entities,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *PageContext) Reset() {
-	*x = PageContext{}
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[1]
+func (x *ScreenContext) Reset() {
+	*x = ScreenContext{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PageContext) String() string {
+func (x *ScreenContext) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PageContext) ProtoMessage() {}
+func (*ScreenContext) ProtoMessage() {}
 
-func (x *PageContext) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[1]
+func (x *ScreenContext) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -114,37 +229,485 @@ func (x *PageContext) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PageContext.ProtoReflect.Descriptor instead.
-func (*PageContext) Descriptor() ([]byte, []int) {
-	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{1}
+// Deprecated: Use ScreenContext.ProtoReflect.Descriptor instead.
+func (*ScreenContext) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *PageContext) GetTab() *PageTab {
+func (x *ScreenContext) GetKind() string {
 	if x != nil {
-		return x.Tab
-	}
-	return nil
-}
-
-func (x *PageContext) GetSubject() string {
-	if x != nil {
-		return x.Subject
+		return x.Kind
 	}
 	return ""
 }
 
-func (x *PageContext) GetSelection() string {
+func (x *ScreenContext) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *ScreenContext) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *ScreenContext) GetEntities() []*Entity {
+	if x != nil {
+		return x.Entities
+	}
+	return nil
+}
+
+type Entity struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Id    string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Label string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	State string                 `protobuf:"bytes,4,opt,name=state,proto3" json:"state,omitempty"`
+	// a few small properties
+	Props         map[string]string `protobuf:"bytes,5,rep,name=props,proto3" json:"props,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Entity) Reset() {
+	*x = Entity{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Entity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Entity) ProtoMessage() {}
+
+func (x *Entity) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Entity.ProtoReflect.Descriptor instead.
+func (*Entity) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *Entity) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Entity) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Entity) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *Entity) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *Entity) GetProps() map[string]string {
+	if x != nil {
+		return x.Props
+	}
+	return nil
+}
+
+// The element the person acts on: type, id, label.
+type Element struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Id            string                 `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Element) Reset() {
+	*x = Element{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Element) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Element) ProtoMessage() {}
+
+func (x *Element) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Element.ProtoReflect.Descriptor instead.
+func (*Element) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *Element) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *Element) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Element) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+type FocusContext struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Element *Element               `protobuf:"bytes,1,opt,name=element,proto3" json:"element,omitempty"`
+	// the text selected on the page
+	Selection   string `protobuf:"bytes,2,opt,name=selection,proto3" json:"selection,omitempty"`
+	DialogKind  string `protobuf:"bytes,3,opt,name=dialog_kind,json=dialogKind,proto3" json:"dialog_kind,omitempty"`
+	DialogTitle string `protobuf:"bytes,4,opt,name=dialog_title,json=dialogTitle,proto3" json:"dialog_title,omitempty"`
+	// what the person is in the middle of (a short text)
+	PendingAction string `protobuf:"bytes,5,opt,name=pending_action,json=pendingAction,proto3" json:"pending_action,omitempty"`
+	// the errors shown on the screen (at most 10)
+	Errors []string `protobuf:"bytes,6,rep,name=errors,proto3" json:"errors,omitempty"`
+	// the last thing the person did (a short text)
+	LastAction    string `protobuf:"bytes,7,opt,name=last_action,json=lastAction,proto3" json:"last_action,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FocusContext) Reset() {
+	*x = FocusContext{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FocusContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FocusContext) ProtoMessage() {}
+
+func (x *FocusContext) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FocusContext.ProtoReflect.Descriptor instead.
+func (*FocusContext) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FocusContext) GetElement() *Element {
+	if x != nil {
+		return x.Element
+	}
+	return nil
+}
+
+func (x *FocusContext) GetSelection() string {
 	if x != nil {
 		return x.Selection
 	}
 	return ""
 }
 
-func (x *PageContext) GetProject() string {
+func (x *FocusContext) GetDialogKind() string {
 	if x != nil {
-		return x.Project
+		return x.DialogKind
 	}
 	return ""
+}
+
+func (x *FocusContext) GetDialogTitle() string {
+	if x != nil {
+		return x.DialogTitle
+	}
+	return ""
+}
+
+func (x *FocusContext) GetPendingAction() string {
+	if x != nil {
+		return x.PendingAction
+	}
+	return ""
+}
+
+func (x *FocusContext) GetErrors() []string {
+	if x != nil {
+		return x.Errors
+	}
+	return nil
+}
+
+func (x *FocusContext) GetLastAction() string {
+	if x != nil {
+		return x.LastAction
+	}
+	return ""
+}
+
+// A tool the current screen offers this turn (ADR 0092). The server never runs it: an "effect" tool (no data
+// changes) is handed back to the web as a requested action, a "write" tool as a proposal the person confirms.
+type UiTool struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// [a-z][a-z0-9_.-]{0,48}, unique in the request; the model calls it "ui.<name>"
+	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// one line: what is required to feed it
+	Guidance string `protobuf:"bytes,3,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	// effect | write
+	Level string  `protobuf:"bytes,4,opt,name=level,proto3" json:"level,omitempty"`
+	Args  *UiArgs `protobuf:"bytes,5,opt,name=args,proto3" json:"args,omitempty"`
+	// the element id it acts on
+	Target        string `protobuf:"bytes,6,opt,name=target,proto3" json:"target,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UiTool) Reset() {
+	*x = UiTool{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UiTool) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UiTool) ProtoMessage() {}
+
+func (x *UiTool) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UiTool.ProtoReflect.Descriptor instead.
+func (*UiTool) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *UiTool) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *UiTool) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *UiTool) GetGuidance() string {
+	if x != nil {
+		return x.Guidance
+	}
+	return ""
+}
+
+func (x *UiTool) GetLevel() string {
+	if x != nil {
+		return x.Level
+	}
+	return ""
+}
+
+func (x *UiTool) GetArgs() *UiArgs {
+	if x != nil {
+		return x.Args
+	}
+	return nil
+}
+
+func (x *UiTool) GetTarget() string {
+	if x != nil {
+		return x.Target
+	}
+	return ""
+}
+
+// The subset of JSON Schema a screen tool takes: an object of scalar, enum or array properties.
+type UiArgs struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Properties    map[string]*UiParam    `protobuf:"bytes,1,rep,name=properties,proto3" json:"properties,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Required      []string               `protobuf:"bytes,2,rep,name=required,proto3" json:"required,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UiArgs) Reset() {
+	*x = UiArgs{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UiArgs) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UiArgs) ProtoMessage() {}
+
+func (x *UiArgs) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UiArgs.ProtoReflect.Descriptor instead.
+func (*UiArgs) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *UiArgs) GetProperties() map[string]*UiParam {
+	if x != nil {
+		return x.Properties
+	}
+	return nil
+}
+
+func (x *UiArgs) GetRequired() []string {
+	if x != nil {
+		return x.Required
+	}
+	return nil
+}
+
+type UiParam struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// string | number | boolean | enum | array
+	Type        string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// the values of an enum (type "enum")
+	Enum []string `protobuf:"bytes,3,rep,name=enum,proto3" json:"enum,omitempty"`
+	// the element of an array: a string, number, boolean or enum param
+	Items         *UiParam `protobuf:"bytes,4,opt,name=items,proto3" json:"items,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UiParam) Reset() {
+	*x = UiParam{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UiParam) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UiParam) ProtoMessage() {}
+
+func (x *UiParam) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UiParam.ProtoReflect.Descriptor instead.
+func (*UiParam) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UiParam) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *UiParam) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *UiParam) GetEnum() []string {
+	if x != nil {
+		return x.Enum
+	}
+	return nil
+}
+
+func (x *UiParam) GetItems() *UiParam {
+	if x != nil {
+		return x.Items
+	}
+	return nil
 }
 
 type SendRequest struct {
@@ -152,13 +715,15 @@ type SendRequest struct {
 	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
 	Text           string                 `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
 	Context        *PageContext           `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// the tools the current screen offers this turn (at most 30)
+	UiTools       []*UiTool `protobuf:"bytes,4,rep,name=ui_tools,json=uiTools,proto3" json:"ui_tools,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendRequest) Reset() {
 	*x = SendRequest{}
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[2]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -170,7 +735,7 @@ func (x *SendRequest) String() string {
 func (*SendRequest) ProtoMessage() {}
 
 func (x *SendRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[2]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -183,7 +748,7 @@ func (x *SendRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendRequest.ProtoReflect.Descriptor instead.
 func (*SendRequest) Descriptor() ([]byte, []int) {
-	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{2}
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *SendRequest) GetConversationId() string {
@@ -207,6 +772,13 @@ func (x *SendRequest) GetContext() *PageContext {
 	return nil
 }
 
+func (x *SendRequest) GetUiTools() []*UiTool {
+	if x != nil {
+		return x.UiTools
+	}
+	return nil
+}
+
 type SendResponse struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	UserMessage *v1.Message            `protobuf:"bytes,1,opt,name=user_message,json=userMessage,proto3" json:"user_message,omitempty"`
@@ -218,7 +790,7 @@ type SendResponse struct {
 
 func (x *SendResponse) Reset() {
 	*x = SendResponse{}
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[3]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -230,7 +802,7 @@ func (x *SendResponse) String() string {
 func (*SendResponse) ProtoMessage() {}
 
 func (x *SendResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[3]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -243,7 +815,7 @@ func (x *SendResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SendResponse.ProtoReflect.Descriptor instead.
 func (*SendResponse) Descriptor() ([]byte, []int) {
-	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{3}
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *SendResponse) GetUserMessage() *v1.Message {
@@ -277,7 +849,7 @@ type ConfirmActionRequest struct {
 
 func (x *ConfirmActionRequest) Reset() {
 	*x = ConfirmActionRequest{}
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[4]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -289,7 +861,7 @@ func (x *ConfirmActionRequest) String() string {
 func (*ConfirmActionRequest) ProtoMessage() {}
 
 func (x *ConfirmActionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[4]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -302,7 +874,7 @@ func (x *ConfirmActionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmActionRequest.ProtoReflect.Descriptor instead.
 func (*ConfirmActionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{4}
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ConfirmActionRequest) GetConversationId() string {
@@ -340,6 +912,128 @@ func (x *ConfirmActionRequest) GetProject() string {
 	return ""
 }
 
+type ReportActionRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	MessageId      string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	ActionIndex    int32                  `protobuf:"varint,3,opt,name=action_index,json=actionIndex,proto3" json:"action_index,omitempty"`
+	// done | failed
+	Status string `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
+	// what went wrong, for "failed"
+	Error         string `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportActionRequest) Reset() {
+	*x = ReportActionRequest{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportActionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportActionRequest) ProtoMessage() {}
+
+func (x *ReportActionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportActionRequest.ProtoReflect.Descriptor instead.
+func (*ReportActionRequest) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *ReportActionRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+func (x *ReportActionRequest) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *ReportActionRequest) GetActionIndex() int32 {
+	if x != nil {
+		return x.ActionIndex
+	}
+	return 0
+}
+
+func (x *ReportActionRequest) GetStatus() string {
+	if x != nil {
+		return x.Status
+	}
+	return ""
+}
+
+func (x *ReportActionRequest) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type ReportActionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       *v1.Message            `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReportActionResponse) Reset() {
+	*x = ReportActionResponse{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReportActionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReportActionResponse) ProtoMessage() {}
+
+func (x *ReportActionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReportActionResponse.ProtoReflect.Descriptor instead.
+func (*ReportActionResponse) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *ReportActionResponse) GetMessage() *v1.Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
 type ConfirmActionResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the assistant message with the action updated
@@ -350,7 +1044,7 @@ type ConfirmActionResponse struct {
 
 func (x *ConfirmActionResponse) Reset() {
 	*x = ConfirmActionResponse{}
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[5]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -362,7 +1056,7 @@ func (x *ConfirmActionResponse) String() string {
 func (*ConfirmActionResponse) ProtoMessage() {}
 
 func (x *ConfirmActionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[5]
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -375,7 +1069,7 @@ func (x *ConfirmActionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConfirmActionResponse.ProtoReflect.Descriptor instead.
 func (*ConfirmActionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{5}
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ConfirmActionResponse) GetMessage() *v1.Message {
@@ -389,22 +1083,75 @@ var File_goap_assistant_v1_assistant_proto protoreflect.FileDescriptor
 
 const file_goap_assistant_v1_assistant_proto_rawDesc = "" +
 	"\n" +
-	"!goap/assistant/v1/assistant.proto\x12\x11goap.assistant.v1\x1a)goap/conversations/v1/conversations.proto\"\x98\x01\n" +
+	"!goap/assistant/v1/assistant.proto\x12\x11goap.assistant.v1\x1a)goap/conversations/v1/conversations.proto\"\xaf\x01\n" +
+	"\vPageContext\x12/\n" +
+	"\x03app\x18\x01 \x01(\v2\x1d.goap.assistant.v1.AppContextR\x03app\x128\n" +
+	"\x06screen\x18\x02 \x01(\v2 .goap.assistant.v1.ScreenContextR\x06screen\x125\n" +
+	"\x05focus\x18\x03 \x01(\v2\x1f.goap.assistant.v1.FocusContextR\x05focus\"T\n" +
+	"\n" +
+	"AppContext\x12\x18\n" +
+	"\aproject\x18\x01 \x01(\tR\aproject\x12,\n" +
+	"\x03tab\x18\x02 \x01(\v2\x1a.goap.assistant.v1.PageTabR\x03tab\"\x98\x01\n" +
 	"\aPageTab\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12>\n" +
 	"\x06params\x18\x02 \x03(\v2&.goap.assistant.v1.PageTab.ParamsEntryR\x06params\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8d\x01\n" +
-	"\vPageContext\x12,\n" +
-	"\x03tab\x18\x01 \x01(\v2\x1a.goap.assistant.v1.PageTabR\x03tab\x12\x18\n" +
-	"\asubject\x18\x02 \x01(\tR\asubject\x12\x1c\n" +
-	"\tselection\x18\x03 \x01(\tR\tselection\x12\x18\n" +
-	"\aproject\x18\x04 \x01(\tR\aproject\"\x84\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8a\x01\n" +
+	"\rScreenContext\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05title\x18\x02 \x01(\tR\x05title\x12\x18\n" +
+	"\asummary\x18\x03 \x01(\tR\asummary\x125\n" +
+	"\bentities\x18\x04 \x03(\v2\x19.goap.assistant.v1.EntityR\bentities\"\xce\x01\n" +
+	"\x06Entity\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x14\n" +
+	"\x05state\x18\x04 \x01(\tR\x05state\x12:\n" +
+	"\x05props\x18\x05 \x03(\v2$.goap.assistant.v1.Entity.PropsEntryR\x05props\x1a8\n" +
+	"\n" +
+	"PropsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"C\n" +
+	"\aElement\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x0e\n" +
+	"\x02id\x18\x02 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\"\x86\x02\n" +
+	"\fFocusContext\x124\n" +
+	"\aelement\x18\x01 \x01(\v2\x1a.goap.assistant.v1.ElementR\aelement\x12\x1c\n" +
+	"\tselection\x18\x02 \x01(\tR\tselection\x12\x1f\n" +
+	"\vdialog_kind\x18\x03 \x01(\tR\n" +
+	"dialogKind\x12!\n" +
+	"\fdialog_title\x18\x04 \x01(\tR\vdialogTitle\x12%\n" +
+	"\x0epending_action\x18\x05 \x01(\tR\rpendingAction\x12\x16\n" +
+	"\x06errors\x18\x06 \x03(\tR\x06errors\x12\x1f\n" +
+	"\vlast_action\x18\a \x01(\tR\n" +
+	"lastAction\"\xb7\x01\n" +
+	"\x06UiTool\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
+	"\bguidance\x18\x03 \x01(\tR\bguidance\x12\x14\n" +
+	"\x05level\x18\x04 \x01(\tR\x05level\x12-\n" +
+	"\x04args\x18\x05 \x01(\v2\x19.goap.assistant.v1.UiArgsR\x04args\x12\x16\n" +
+	"\x06target\x18\x06 \x01(\tR\x06target\"\xca\x01\n" +
+	"\x06UiArgs\x12I\n" +
+	"\n" +
+	"properties\x18\x01 \x03(\v2).goap.assistant.v1.UiArgs.PropertiesEntryR\n" +
+	"properties\x12\x1a\n" +
+	"\brequired\x18\x02 \x03(\tR\brequired\x1aY\n" +
+	"\x0fPropertiesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.goap.assistant.v1.UiParamR\x05value:\x028\x01\"\x85\x01\n" +
+	"\aUiParam\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12 \n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
+	"\x04enum\x18\x03 \x03(\tR\x04enum\x120\n" +
+	"\x05items\x18\x04 \x01(\v2\x1a.goap.assistant.v1.UiParamR\x05items\"\xba\x01\n" +
 	"\vSendRequest\x12'\n" +
 	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x12\n" +
 	"\x04text\x18\x02 \x01(\tR\x04text\x128\n" +
-	"\acontext\x18\x03 \x01(\v2\x1e.goap.assistant.v1.PageContextR\acontext\"\x9e\x01\n" +
+	"\acontext\x18\x03 \x01(\v2\x1e.goap.assistant.v1.PageContextR\acontext\x124\n" +
+	"\bui_tools\x18\x04 \x03(\v2\x19.goap.assistant.v1.UiToolR\auiTools\"\x9e\x01\n" +
 	"\fSendResponse\x12A\n" +
 	"\fuser_message\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\vuserMessage\x12K\n" +
 	"\x11assistant_message\x18\x02 \x01(\v2\x1e.goap.conversations.v1.MessageR\x10assistantMessage\"\xb7\x01\n" +
@@ -414,12 +1161,22 @@ const file_goap_assistant_v1_assistant_proto_rawDesc = "" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12!\n" +
 	"\faction_index\x18\x03 \x01(\x05R\vactionIndex\x12\x1a\n" +
 	"\bdecision\x18\x04 \x01(\tR\bdecision\x12\x18\n" +
-	"\aproject\x18\x05 \x01(\tR\aproject\"Q\n" +
+	"\aproject\x18\x05 \x01(\tR\aproject\"\xae\x01\n" +
+	"\x13ReportActionRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\x12\x1d\n" +
+	"\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\x12!\n" +
+	"\faction_index\x18\x03 \x01(\x05R\vactionIndex\x12\x16\n" +
+	"\x06status\x18\x04 \x01(\tR\x06status\x12\x14\n" +
+	"\x05error\x18\x05 \x01(\tR\x05error\"P\n" +
+	"\x14ReportActionResponse\x128\n" +
+	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage\"Q\n" +
 	"\x15ConfirmActionResponse\x128\n" +
-	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage2\xbf\x01\n" +
+	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage2\xa0\x02\n" +
 	"\x10AssistantService\x12G\n" +
 	"\x04Send\x12\x1e.goap.assistant.v1.SendRequest\x1a\x1f.goap.assistant.v1.SendResponse\x12b\n" +
-	"\rConfirmAction\x12'.goap.assistant.v1.ConfirmActionRequest\x1a(.goap.assistant.v1.ConfirmActionResponseB\xc7\x01\n" +
+	"\rConfirmAction\x12'.goap.assistant.v1.ConfirmActionRequest\x1a(.goap.assistant.v1.ConfirmActionResponse\x12_\n" +
+	"\fReportAction\x12&.goap.assistant.v1.ReportActionRequest\x1a'.goap.assistant.v1.ReportActionResponseB\xc7\x01\n" +
 	"\x15com.goap.assistant.v1B\x0eAssistantProtoP\x01Z8github.com/zimwip/goap/gen/goap/assistant/v1;assistantv1\xa2\x02\x03GAX\xaa\x02\x11Goap.Assistant.V1\xca\x02\x11Goap\\Assistant\\V1\xe2\x02\x1dGoap\\Assistant\\V1\\GPBMetadata\xea\x02\x13Goap::Assistant::V1b\x06proto3"
 
 var (
@@ -434,33 +1191,59 @@ func file_goap_assistant_v1_assistant_proto_rawDescGZIP() []byte {
 	return file_goap_assistant_v1_assistant_proto_rawDescData
 }
 
-var file_goap_assistant_v1_assistant_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_goap_assistant_v1_assistant_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_goap_assistant_v1_assistant_proto_goTypes = []any{
-	(*PageTab)(nil),               // 0: goap.assistant.v1.PageTab
-	(*PageContext)(nil),           // 1: goap.assistant.v1.PageContext
-	(*SendRequest)(nil),           // 2: goap.assistant.v1.SendRequest
-	(*SendResponse)(nil),          // 3: goap.assistant.v1.SendResponse
-	(*ConfirmActionRequest)(nil),  // 4: goap.assistant.v1.ConfirmActionRequest
-	(*ConfirmActionResponse)(nil), // 5: goap.assistant.v1.ConfirmActionResponse
-	nil,                           // 6: goap.assistant.v1.PageTab.ParamsEntry
-	(*v1.Message)(nil),            // 7: goap.conversations.v1.Message
+	(*PageContext)(nil),           // 0: goap.assistant.v1.PageContext
+	(*AppContext)(nil),            // 1: goap.assistant.v1.AppContext
+	(*PageTab)(nil),               // 2: goap.assistant.v1.PageTab
+	(*ScreenContext)(nil),         // 3: goap.assistant.v1.ScreenContext
+	(*Entity)(nil),                // 4: goap.assistant.v1.Entity
+	(*Element)(nil),               // 5: goap.assistant.v1.Element
+	(*FocusContext)(nil),          // 6: goap.assistant.v1.FocusContext
+	(*UiTool)(nil),                // 7: goap.assistant.v1.UiTool
+	(*UiArgs)(nil),                // 8: goap.assistant.v1.UiArgs
+	(*UiParam)(nil),               // 9: goap.assistant.v1.UiParam
+	(*SendRequest)(nil),           // 10: goap.assistant.v1.SendRequest
+	(*SendResponse)(nil),          // 11: goap.assistant.v1.SendResponse
+	(*ConfirmActionRequest)(nil),  // 12: goap.assistant.v1.ConfirmActionRequest
+	(*ReportActionRequest)(nil),   // 13: goap.assistant.v1.ReportActionRequest
+	(*ReportActionResponse)(nil),  // 14: goap.assistant.v1.ReportActionResponse
+	(*ConfirmActionResponse)(nil), // 15: goap.assistant.v1.ConfirmActionResponse
+	nil,                           // 16: goap.assistant.v1.PageTab.ParamsEntry
+	nil,                           // 17: goap.assistant.v1.Entity.PropsEntry
+	nil,                           // 18: goap.assistant.v1.UiArgs.PropertiesEntry
+	(*v1.Message)(nil),            // 19: goap.conversations.v1.Message
 }
 var file_goap_assistant_v1_assistant_proto_depIdxs = []int32{
-	6, // 0: goap.assistant.v1.PageTab.params:type_name -> goap.assistant.v1.PageTab.ParamsEntry
-	0, // 1: goap.assistant.v1.PageContext.tab:type_name -> goap.assistant.v1.PageTab
-	1, // 2: goap.assistant.v1.SendRequest.context:type_name -> goap.assistant.v1.PageContext
-	7, // 3: goap.assistant.v1.SendResponse.user_message:type_name -> goap.conversations.v1.Message
-	7, // 4: goap.assistant.v1.SendResponse.assistant_message:type_name -> goap.conversations.v1.Message
-	7, // 5: goap.assistant.v1.ConfirmActionResponse.message:type_name -> goap.conversations.v1.Message
-	2, // 6: goap.assistant.v1.AssistantService.Send:input_type -> goap.assistant.v1.SendRequest
-	4, // 7: goap.assistant.v1.AssistantService.ConfirmAction:input_type -> goap.assistant.v1.ConfirmActionRequest
-	3, // 8: goap.assistant.v1.AssistantService.Send:output_type -> goap.assistant.v1.SendResponse
-	5, // 9: goap.assistant.v1.AssistantService.ConfirmAction:output_type -> goap.assistant.v1.ConfirmActionResponse
-	8, // [8:10] is the sub-list for method output_type
-	6, // [6:8] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	1,  // 0: goap.assistant.v1.PageContext.app:type_name -> goap.assistant.v1.AppContext
+	3,  // 1: goap.assistant.v1.PageContext.screen:type_name -> goap.assistant.v1.ScreenContext
+	6,  // 2: goap.assistant.v1.PageContext.focus:type_name -> goap.assistant.v1.FocusContext
+	2,  // 3: goap.assistant.v1.AppContext.tab:type_name -> goap.assistant.v1.PageTab
+	16, // 4: goap.assistant.v1.PageTab.params:type_name -> goap.assistant.v1.PageTab.ParamsEntry
+	4,  // 5: goap.assistant.v1.ScreenContext.entities:type_name -> goap.assistant.v1.Entity
+	17, // 6: goap.assistant.v1.Entity.props:type_name -> goap.assistant.v1.Entity.PropsEntry
+	5,  // 7: goap.assistant.v1.FocusContext.element:type_name -> goap.assistant.v1.Element
+	8,  // 8: goap.assistant.v1.UiTool.args:type_name -> goap.assistant.v1.UiArgs
+	18, // 9: goap.assistant.v1.UiArgs.properties:type_name -> goap.assistant.v1.UiArgs.PropertiesEntry
+	9,  // 10: goap.assistant.v1.UiParam.items:type_name -> goap.assistant.v1.UiParam
+	0,  // 11: goap.assistant.v1.SendRequest.context:type_name -> goap.assistant.v1.PageContext
+	7,  // 12: goap.assistant.v1.SendRequest.ui_tools:type_name -> goap.assistant.v1.UiTool
+	19, // 13: goap.assistant.v1.SendResponse.user_message:type_name -> goap.conversations.v1.Message
+	19, // 14: goap.assistant.v1.SendResponse.assistant_message:type_name -> goap.conversations.v1.Message
+	19, // 15: goap.assistant.v1.ReportActionResponse.message:type_name -> goap.conversations.v1.Message
+	19, // 16: goap.assistant.v1.ConfirmActionResponse.message:type_name -> goap.conversations.v1.Message
+	9,  // 17: goap.assistant.v1.UiArgs.PropertiesEntry.value:type_name -> goap.assistant.v1.UiParam
+	10, // 18: goap.assistant.v1.AssistantService.Send:input_type -> goap.assistant.v1.SendRequest
+	12, // 19: goap.assistant.v1.AssistantService.ConfirmAction:input_type -> goap.assistant.v1.ConfirmActionRequest
+	13, // 20: goap.assistant.v1.AssistantService.ReportAction:input_type -> goap.assistant.v1.ReportActionRequest
+	11, // 21: goap.assistant.v1.AssistantService.Send:output_type -> goap.assistant.v1.SendResponse
+	15, // 22: goap.assistant.v1.AssistantService.ConfirmAction:output_type -> goap.assistant.v1.ConfirmActionResponse
+	14, // 23: goap.assistant.v1.AssistantService.ReportAction:output_type -> goap.assistant.v1.ReportActionResponse
+	21, // [21:24] is the sub-list for method output_type
+	18, // [18:21] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_goap_assistant_v1_assistant_proto_init() }
@@ -474,7 +1257,7 @@ func file_goap_assistant_v1_assistant_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_assistant_v1_assistant_proto_rawDesc), len(file_goap_assistant_v1_assistant_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

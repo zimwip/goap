@@ -49,10 +49,10 @@ func (h *Handler) Send(ctx context.Context, r *connect.Request[assistantv1.SendR
 	ctx = h.Identity.Context(ctx, r.Header())
 	in := SendInput{ConversationID: r.Msg.GetConversationId(), Text: r.Msg.GetText()}
 	if c := r.Msg.GetContext(); c != nil {
-		in.Context = Context{Subject: c.GetSubject(), Selection: c.GetSelection(), Project: c.GetProject()}
-		if t := c.GetTab(); t != nil {
-			in.Context.TabKind, in.Context.TabParams = t.GetKind(), t.GetParams()
-		}
+		in.Context = contextFromPB(c)
+	}
+	for _, t := range r.Msg.GetUiTools() {
+		in.UITools = append(in.UITools, toolFromPB(t))
 	}
 	user, pending, err := h.Service.Send(ctx, in)
 	if err != nil {
@@ -81,4 +81,68 @@ func (h *Handler) ConfirmAction(ctx context.Context, r *connect.Request[assistan
 		return nil, rpcErr(err)
 	}
 	return connect.NewResponse(&assistantv1.ConfirmActionResponse{Message: pb}), nil
+}
+
+func (h *Handler) ReportAction(ctx context.Context, r *connect.Request[assistantv1.ReportActionRequest]) (*connect.Response[assistantv1.ReportActionResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m, err := h.Service.Report(ctx, ReportInput{ConversationID: r.Msg.GetConversationId(), MessageID: r.Msg.GetMessageId(),
+		ActionIndex: int(r.Msg.GetActionIndex()), Status: r.Msg.GetStatus(), Error: r.Msg.GetError()})
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	pb, err := convsvc.MessageToPB(m)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&assistantv1.ReportActionResponse{Message: pb}), nil
+}
+
+func contextFromPB(c *assistantv1.PageContext) Context {
+	var o Context
+	if a := c.GetApp(); a != nil {
+		o.App.Project = a.GetProject()
+		if t := a.GetTab(); t != nil {
+			o.App.Tab = Tab{Kind: t.GetKind(), Params: t.GetParams()}
+		}
+	}
+	if s := c.GetScreen(); s != nil {
+		o.Screen = Screen{Kind: s.GetKind(), Title: s.GetTitle(), Summary: s.GetSummary()}
+		for _, e := range s.GetEntities() {
+			o.Screen.Entities = append(o.Screen.Entities, Entity{Type: e.GetType(), ID: e.GetId(), Label: e.GetLabel(), State: e.GetState(), Props: e.GetProps()})
+		}
+	}
+	if f := c.GetFocus(); f != nil {
+		o.Focus = Focus{Selection: f.GetSelection(), Dialog: Dialog{Kind: f.GetDialogKind(), Title: f.GetDialogTitle()},
+			PendingAction: f.GetPendingAction(), Errors: f.GetErrors(), LastAction: f.GetLastAction()}
+		if e := f.GetElement(); e != nil {
+			o.Focus.Element = &Element{Type: e.GetType(), ID: e.GetId(), Label: e.GetLabel()}
+		}
+	}
+	return o
+}
+
+func paramFromPB(p *assistantv1.UiParam) UIParam {
+	if p == nil {
+		return UIParam{}
+	}
+	out := UIParam{Type: p.GetType(), Description: p.GetDescription(), Enum: p.GetEnum()}
+	if it := p.GetItems(); it != nil {
+		i := paramFromPB(it)
+		out.Items = &i
+	}
+	return out
+}
+
+func toolFromPB(t *assistantv1.UiTool) UITool {
+	out := UITool{Name: t.GetName(), Description: t.GetDescription(), Guidance: t.GetGuidance(), Level: t.GetLevel(), Target: t.GetTarget()}
+	if a := t.GetArgs(); a != nil {
+		out.Args.Required = a.GetRequired()
+		for k, p := range a.GetProperties() {
+			if out.Args.Properties == nil {
+				out.Args.Properties = map[string]UIParam{}
+			}
+			out.Args.Properties[k] = paramFromPB(p)
+		}
+	}
+	return out
 }

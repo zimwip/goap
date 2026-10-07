@@ -186,6 +186,8 @@ func (e *env) answer(t *testing.T) convsvc.Message {
 	return ms[len(ms)-1]
 }
 
+func inProject(p string) Context { return Context{App: App{Project: p}} }
+
 func call(name, arguments string) string {
 	return fmt.Sprintf(`{"message":"","tool_calls":[{"name":%q,"arguments":%s}]}`, name, arguments)
 }
@@ -194,7 +196,7 @@ func call(name, arguments string) string {
 
 func TestSendAnswersAndStoresTheTurn(t *testing.T) {
 	e := newEnv(t, call(ToolListMethodologies, `{}`), `{"message":"Use sdlc."}`)
-	user, pending, err := e.send("what can I do here?", Context{TabKind: "change", Subject: "CHG-1", Project: "PROJ-A"})
+	user, pending, err := e.send("what can I do here?", Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "change"}}, Focus: Focus{Element: &Element{Type: "change", ID: "CHG-1"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +211,7 @@ func TestSendAnswersAndStoresTheTurn(t *testing.T) {
 		t.Fatalf("%d model calls", len(e.model.got))
 	}
 	first, second := e.model.got[0], e.model.got[1]
-	if first.Model != "assistant" || !first.JSON || !strings.Contains(first.System, `"subject":"CHG-1"`) || !strings.Contains(first.System, `"activeProject":"PROJ-A"`) {
+	if first.Model != "assistant" || !first.JSON || !strings.Contains(first.System, `"element":{"type":"change","id":"CHG-1"}`) || !strings.Contains(first.System, `"activeProject":"PROJ-A"`) {
 		t.Fatalf("request %+v", first)
 	}
 	for _, m := range e.model.metas { // the ledger of the gateway names the assistant and its conversation (ADR 0089)
@@ -230,7 +232,7 @@ func TestSendAnswersAndStoresTheTurn(t *testing.T) {
 func TestContextIsDescribedNotStored(t *testing.T) {
 	e := newEnv(t, `{"message":"ok"}`)
 	secret := "my password is hunter2 " + strings.Repeat("x", 500)
-	user, _, err := e.send("help", Context{TabKind: "node", TabParams: map[string]string{"k": "v"}, Subject: "NODE-7", Selection: secret, Project: "PROJ-A"})
+	user, _, err := e.send("help", Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "node", Params: map[string]string{"k": "v"}}}, Focus: Focus{Element: &Element{Type: "node", ID: "NODE-7"}, Selection: secret}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +242,7 @@ func TestContextIsDescribedNotStored(t *testing.T) {
 	if user.Context == "" || len(user.Context) > convsvc.MaxContextBytes || strings.Contains(user.Context, "hunter2") || strings.Contains(user.Context, "k") && strings.Contains(user.Context, "v}") {
 		t.Fatalf("context %q", user.Context)
 	}
-	if !strings.Contains(user.Context, "tab node") || !strings.Contains(user.Context, "about NODE-7") || !strings.Contains(user.Context, "selected characters") {
+	if !strings.Contains(user.Context, "tab node") || !strings.Contains(user.Context, "on node NODE-7") || !strings.Contains(user.Context, "selected characters") {
 		t.Fatalf("context %q", user.Context)
 	}
 	// the model saw the selection for this turn only
@@ -253,7 +255,7 @@ func TestContextIsDescribedNotStored(t *testing.T) {
 		}
 	}
 	// a second turn: the old snapshot is gone from the prompt
-	if _, _, err := e.send("again", Context{TabKind: "home"}); err != nil {
+	if _, _, err := e.send("again", Context{App: App{Tab: Tab{Kind: "home"}}}); err != nil {
 		t.Fatal(err)
 	}
 	last := e.model.got[len(e.model.got)-1]
@@ -282,7 +284,7 @@ func TestSelectProject(t *testing.T) {
 		call(ToolSelectProject, `{"project":"PROJ-NOPE"}`),   // does not exist
 		call(ToolSelectProject, `{"project":"PROJ-B"}`),
 		`{"message":"Switched."}`)
-	if _, _, err := e.send("go to B", Context{Project: "PROJ-A"}); err != nil {
+	if _, _, err := e.send("go to B", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
 	for i, want := range []string{"PROJ-SECRET", "PROJ-NOPE"} {
@@ -306,7 +308,7 @@ func TestCreateChangeActsAsTheCaller(t *testing.T) {
 		call(ToolCreateChange, `{"title":"Ship v2","intent":"Customers need it","methodology":"risk"}`), // not applicable to PROJ-A
 		call(ToolCreateChange, `{"title":"Ship v2","intent":"Customers need it","methodology":"sdlc"}`),
 		`{"message":"Created."}`)
-	if _, _, err := e.send("start a change", Context{Project: "PROJ-A"}); err != nil {
+	if _, _, err := e.send("start a change", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
 	if res := e.model.got[1].Messages[len(e.model.got[1].Messages)-1].Content; !strings.Contains(res, "does not apply to the active project") {
@@ -333,7 +335,7 @@ func TestCreateChangeInAProjectTheCallerCannotUse(t *testing.T) {
 	e.user.Project = "PROJ-SECRET" // a stale claim; the project of the context is not usable either
 	e.ctx = authz.With(context.Background(), e.user)
 	// the context names the principal's own project (not re-checked at Send): the tool refuses it
-	if _, _, err := e.send("hi", Context{Project: "PROJ-SECRET"}); err != nil {
+	if _, _, err := e.send("hi", inProject("PROJ-SECRET")); err != nil {
 		t.Fatalf("the principal's own project is not re-checked: %v", err)
 	}
 	if len(e.graph.created) != 0 {
@@ -357,7 +359,7 @@ func TestCreateChangeRefusedByTheGraph(t *testing.T) {
 
 func TestSendRefusesAProjectTheCallerCannotUse(t *testing.T) {
 	e := newEnv(t, `{"message":"x"}`)
-	_, _, err := e.send("hi", Context{Project: "PROJ-SECRET"})
+	_, _, err := e.send("hi", inProject("PROJ-SECRET"))
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("got %v", err)
 	}
@@ -541,7 +543,7 @@ func TestSendValidation(t *testing.T) {
 	if _, _, err := e.send(strings.Repeat("x", MaxTextBytes+1), Context{}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("long: %v", err)
 	}
-	if _, _, err := e.send("hi", Context{Selection: strings.Repeat("x", MaxSelectionBytes+1)}); !errors.Is(err, ErrInvalid) {
+	if _, _, err := e.send("hi", Context{Focus: Focus{Selection: strings.Repeat("x", MaxSelectionBytes+1)}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("selection: %v", err)
 	}
 	if _, _, err := e.svc.Send(e.ctx, SendInput{ConversationID: "CONV-nope", Text: "hi"}); !errors.Is(err, convsvc.ErrNotFound) {
@@ -571,7 +573,7 @@ func TestHandler(t *testing.T) {
 	defer srv.Close()
 	cl := assistantv1connect.NewAssistantServiceClient(srv.Client(), srv.URL)
 	r, err := cl.Send(context.Background(), connect.NewRequest(&assistantv1.SendRequest{ConversationId: e.conv.ID, Text: "hi",
-		Context: &assistantv1.PageContext{Tab: &assistantv1.PageTab{Kind: "change", Params: map[string]string{"id": "CHG-1"}}, Subject: "CHG-1", Project: "PROJ-A"}}))
+		Context: &assistantv1.PageContext{App: &assistantv1.AppContext{Project: "PROJ-A", Tab: &assistantv1.PageTab{Kind: "change", Params: map[string]string{"id": "CHG-1"}}}}}))
 	if err != nil {
 		t.Fatal(err)
 	}

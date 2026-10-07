@@ -216,17 +216,6 @@ func (s *Service) runnable(ctx context.Context, p authz.Principal, project, chan
 	return c, nil
 }
 
-// contextChange is the change the page of the turn is about ("" for none).
-func (c Context) change() string {
-	if c.TabKind != "change" {
-		return ""
-	}
-	if id := strings.TrimSpace(c.TabParams["id"]); id != "" {
-		return id
-	}
-	return strings.TrimSpace(c.Subject)
-}
-
 func (t *turn) listAgents(ctx context.Context) (any, error) {
 	c, err := t.s.runnable(ctx, t.p, t.project, t.in.Context.change())
 	if err != nil {
@@ -377,8 +366,8 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 		return convsvc.Message{}, convsvc.ErrNotFound
 	}
 	msg := msgs[i]
-	if msg.Role != convsvc.RoleAssistant || in.ActionIndex < 0 || in.ActionIndex >= len(msg.Actions) || msg.Actions[in.ActionIndex]["type"] != ActionStartAgent {
-		return convsvc.Message{}, fmt.Errorf("%w: that is not a proposal to start an agent", ErrInvalid)
+	if msg.Role != convsvc.RoleAssistant || in.ActionIndex < 0 || in.ActionIndex >= len(msg.Actions) || (msg.Actions[in.ActionIndex]["type"] != ActionStartAgent && msg.Actions[in.ActionIndex]["type"] != ActionUITool) {
+		return convsvc.Message{}, fmt.Errorf("%w: that is not a proposal", ErrInvalid)
 	}
 	act := msg.Actions[in.ActionIndex]
 	if act["status"] != StatusProposed {
@@ -401,6 +390,14 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 	}
 	if in.Decision == DecisionReject {
 		return decide(StatusProposed, StatusRejected, nil)
+	}
+	if act["type"] == ActionUITool {
+		// a screen tool (ADR 0092): the server does nothing but record the decision; the web runs it through the
+		// edit path of the screen and reports the outcome. Stale when the project is no longer the proposal's.
+		if proj, _ := act["project"].(string); proj != p.Project {
+			return convsvc.Message{}, fmt.Errorf("%w: it was made for project %q and the active project is %q", ErrStale, proj, p.Project)
+		}
+		return decide(StatusProposed, StatusAccepted, nil)
 	}
 
 	ar := args(mapOf(act["args"]))
@@ -491,11 +488,16 @@ func mapOf(v any) map[string]any {
 }
 
 // describeActions is what the history says of the actions of an assistant message: the proposals with the decision of
-// the person (so the assistant can follow up), then the types of the other actions.
+// the person (so the assistant can follow up), the screen tools with what became of them, then the types of the other
+// actions.
 func describeActions(actions []convsvc.Action) string {
 	var other, notes []string
 	for _, a := range actions {
 		t, _ := a["type"].(string)
+		if t == ActionUITool {
+			notes = append(notes, describeUITool(a))
+			continue
+		}
 		if t != ActionStartAgent {
 			if t != "" {
 				other = append(other, t)
@@ -524,4 +526,28 @@ func describeActions(actions []convsvc.Action) string {
 		out = append(out, "("+n+")")
 	}
 	return strings.Join(out, "\n")
+}
+
+// describeUITool is the history line of a screen tool action: the tool with its arguments, and the decision and
+// outcome known so far.
+func describeUITool(a convsvc.Action) string {
+	what := fmt.Sprintf("%s%v", PrefixUI, a["tool"])
+	if s := shortArgs(mapOf(a["args"])); s != "" {
+		what += " " + s
+	}
+	switch a["status"] {
+	case StatusRequested:
+		return "the interface was asked to run " + what + ": no outcome is known"
+	case StatusProposed:
+		return "proposal " + what + ": the person has not decided yet, nothing was changed"
+	case StatusAccepted:
+		return "the person accepted the proposal " + what + ": the interface is applying it, no outcome reported yet"
+	case StatusRejected:
+		return "the person rejected the proposal " + what + ": nothing was changed"
+	case StatusDone:
+		return what + " was done in the interface"
+	case StatusFailed:
+		return fmt.Sprintf("%s failed in the interface: %v", what, a["error"])
+	}
+	return what
 }

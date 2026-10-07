@@ -1,6 +1,7 @@
 // Package assistantsvc is the conversational assistant (ADR 0087): it answers the messages a person writes in a
 // conversation (ADR 0085) with the model of the `assistant` alias, and may do six things for them through tools, no
-// more (ADR 0090 added the agents). It is a use case over the graph, the model gateway and the conversation service: `pkg/graph` and `pkg/engine`
+// more (ADR 0090 added the agents), and asks the interface to act on the screen they are on (ADR 0092: its tools are
+// handed back, never run here). It is a use case over the graph, the model gateway and the conversation service: `pkg/graph` and `pkg/engine`
 // do not import it (`pkg/layering`).
 package assistantsvc
 
@@ -49,8 +50,9 @@ const (
 	MaxToolCalls = 4
 	// MaxTextBytes caps a user message.
 	MaxTextBytes = 4 << 10
-	// MaxContextBytes caps the context snapshot of a request, MaxSelectionBytes its selected text.
-	MaxContextBytes   = 16 << 10
+	// MaxContextBytes caps the context snapshot of a request once rendered (context.go), MaxSelectionBytes the
+	// selected text.
+	MaxContextBytes   = 8 << 10
 	MaxSelectionBytes = 2000
 	// MaxHistoryMessages and MaxHistoryBytes cap what is sent of the conversation: its last messages, newest first,
 	// while they fit.
@@ -122,51 +124,6 @@ func (d Directory) ApplicableMethodologies(ctx context.Context, project string) 
 	return s.ApplicableMethodologies(project), nil
 }
 
-// Context is the snapshot of what the person was looking at when they wrote a message: the web collects it, it is
-// sent with the message, used for that turn only and never stored.
-type Context struct {
-	TabKind   string
-	TabParams map[string]string
-	// Subject is the node or change the tab is about (opaque).
-	Subject   string
-	Selection string
-	// Project is the active project key.
-	Project string
-}
-
-func (c Context) validate() error {
-	if len(c.Selection) > MaxSelectionBytes {
-		return fmt.Errorf("%w: the selection is %d bytes, at most %d", ErrInvalid, len(c.Selection), MaxSelectionBytes)
-	}
-	size := len(c.TabKind) + len(c.Subject) + len(c.Selection) + len(c.Project)
-	for k, v := range c.TabParams {
-		size += len(k) + len(v)
-	}
-	if size > MaxContextBytes {
-		return fmt.Errorf("%w: the context is %d bytes, at most %d", ErrInvalid, size, MaxContextBytes)
-	}
-	return nil
-}
-
-// describe is the short description of the context kept on the user message: what kind of page, about what, in which
-// project, and that a selection existed. Never the page, the selection or any form content.
-func (c Context) describe() string {
-	var parts []string
-	if c.TabKind != "" {
-		parts = append(parts, "tab "+clip(c.TabKind, 40))
-	}
-	if c.Subject != "" {
-		parts = append(parts, "about "+clip(c.Subject, 80))
-	}
-	if c.Project != "" {
-		parts = append(parts, "project "+clip(c.Project, 60))
-	}
-	if c.Selection != "" {
-		parts = append(parts, fmt.Sprintf("%d selected characters", len([]rune(c.Selection))))
-	}
-	return clip(strings.Join(parts, ", "), convsvc.MaxContextBytes)
-}
-
 // Service answers the messages of the conversations.
 //
 // A turn is the pending assistant message itself: Send appends the user message and a pending assistant message, and
@@ -213,6 +170,8 @@ type SendInput struct {
 	ConversationID string
 	Text           string
 	Context        Context
+	// UITools are the tools the current screen offers this turn (ADR 0092); the service never runs them.
+	UITools []UITool
 }
 
 func (s *Service) acquire(id string) bool {
@@ -249,7 +208,10 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 	if strings.TrimSpace(in.Text) == "" || len(in.Text) > MaxTextBytes {
 		return user, pending, fmt.Errorf("%w: a message needs a text of at most %d bytes", ErrInvalid, MaxTextBytes)
 	}
-	if err := in.Context.validate(); err != nil {
+	if in.Context, err = in.Context.normalise(); err != nil {
+		return user, pending, err
+	}
+	if in.UITools, err = checkTools(in.UITools); err != nil {
 		return user, pending, err
 	}
 	_, aliases, err := s.Model.Available(ctx)
@@ -259,7 +221,7 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 	if !slices.ContainsFunc(aliases, func(a modelgw.AliasEntry) bool { return a.Alias == Alias }) {
 		return user, pending, fmt.Errorf("%w: the %q model alias is not available to you", ErrUnavailable, Alias)
 	}
-	if project := in.Context.Project; project != "" && project != p.Project {
+	if project := in.Context.App.Project; project != "" && project != p.Project {
 		if ok, err := s.Projects.MayAccessProject(ctx, p, project); err != nil || !ok {
 			return user, pending, errors.Join(ErrForbidden, err)
 		}
@@ -293,10 +255,10 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 		return user, pending, err
 	}
 	// the turn runs as the caller, whose context ends with the request: it gets its own, with the same values
-	if in.Context.Project != "" {
-		p.Project = in.Context.Project
+	if in.Context.App.Project != "" {
+		p.Project = in.Context.App.Project
 	}
-	t := &turn{s: s, p: p, conversation: in.ConversationID, message: pending.ID, in: in, history: history, project: p.Project}
+	t := &turn{s: s, p: p, conversation: in.ConversationID, message: pending.ID, in: in, history: history, project: p.Project, uiTools: toolIndex(in.UITools)}
 	run := func() {
 		defer s.release(in.ConversationID)
 		t.run(authz.With(context.WithoutCancel(ctx), p))

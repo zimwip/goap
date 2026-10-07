@@ -14,13 +14,36 @@ service AssistantService {
   // with FAILED_PRECONDITION when the caller has no "assistant" model alias or the previous message is still being
   // answered.
   rpc Send(SendRequest) returns (SendResponse);
-  // Decides a proposal of the assistant (an action of type "start_agent" with status "proposed", ADR 0090). Only the
-  // owner of the conversation. Accept re-validates everything as the caller, creates the change when the proposal
+  // Decides a proposal of the assistant (an action of type "start_agent" or "ui_tool" with status "proposed", ADR 0090,
+  // 0092). For a ui_tool accept only marks it "accepted" (the web then runs it and reports the outcome); the server does
+  // nothing else. Only the owner of the
+  // conversation. For start_agent, accept re-validates everything as the caller, creates the change when the proposal
   // names a new one, starts the process through the engine as the caller and records the outcome in the action
   // (status "started" with processId and changeId, or "failed" with an error); reject records "rejected". An action
   // already decided is ABORTED; a proposal that is stale (the active project is no longer the proposal's, or the
   // change can no longer be worked on) is FAILED_PRECONDITION and stays proposed.
   rpc ConfirmAction(ConfirmActionRequest) returns (ConfirmActionResponse);
+  // Records the outcome of an action the web ran for the assistant (ADR 0092): a "ui_tool" write proposal that was
+  // accepted, or a ui_tool effect that was requested, becomes "done" or "failed" (with an error). Only the owner of the
+  // conversation; any other state of the action is FAILED_PRECONDITION, an outcome already reported ABORTED. The next
+  // turn's history tells the assistant what happened.
+  rpc ReportAction(ReportActionRequest) returns (ReportActionResponse);
+}
+
+// What the person was looking at when they wrote the message, in three layers, the most specific first (ADR 0092):
+// the focus (the element they act on, their selection, the dialog and the action in progress), the screen (what the
+// open view shows) and the application (project and tab). Used for this turn only, never stored (the user message keeps
+// a short description of it). The server caps and sanitises everything.
+message PageContext {
+  AppContext app = 1;
+  ScreenContext screen = 2;
+  FocusContext focus = 3;
+}
+
+message AppContext {
+  // the active project key
+  string project = 1;
+  PageTab tab = 2;
 }
 
 message PageTab {
@@ -28,22 +51,83 @@ message PageTab {
   map<string, string> params = 2;
 }
 
-// What the person was looking at when they wrote the message: used for this turn only, never stored (the user message
-// keeps a short description of it).
-message PageContext {
-  PageTab tab = 1;
-  // the node or change the tab is about (opaque)
-  string subject = 2;
+message ScreenContext {
+  // the kind of view (a change, a node, the organisation, ...), opaque
+  string kind = 1;
+  string title = 2;
+  // a short text of what the view shows
+  string summary = 3;
+  // the elements the view shows that the assistant may talk about (at most 40)
+  repeated Entity entities = 4;
+}
+
+message Entity {
+  string type = 1;
+  string id = 2;
+  string label = 3;
+  string state = 4;
+  // a few small properties
+  map<string, string> props = 5;
+}
+
+// The element the person acts on: type, id, label.
+message Element {
+  string type = 1;
+  string id = 2;
+  string label = 3;
+}
+
+message FocusContext {
+  Element element = 1;
   // the text selected on the page
-  string selection = 3;
-  // the active project key
-  string project = 4;
+  string selection = 2;
+  string dialog_kind = 3;
+  string dialog_title = 4;
+  // what the person is in the middle of (a short text)
+  string pending_action = 5;
+  // the errors shown on the screen (at most 10)
+  repeated string errors = 6;
+  // the last thing the person did (a short text)
+  string last_action = 7;
+}
+
+// A tool the current screen offers this turn (ADR 0092). The server never runs it: an "effect" tool (no data
+// changes) is handed back to the web as a requested action, a "write" tool as a proposal the person confirms.
+message UiTool {
+  // [a-z][a-z0-9_.-]{0,48}, unique in the request; the model calls it "ui.<name>"
+  string name = 1;
+  string description = 2;
+  // one line: what is required to feed it
+  string guidance = 3;
+  // effect | write
+  string level = 4;
+  UiArgs args = 5;
+  // the element id it acts on
+  string target = 6;
+}
+
+// The subset of JSON Schema a screen tool takes: an object of scalar, enum or array properties.
+message UiArgs {
+  map<string, UiParam> properties = 1;
+  repeated string required = 2;
+}
+
+message UiParam {
+  // string | number | boolean | enum | array
+  string type = 1;
+  string description = 2;
+  // the values of an enum (type "enum")
+  repeated string enum = 3;
+  // the element of an array: a string, number, boolean or enum param
+  UiParam items = 4;
 }
 
 message SendRequest {
   string conversation_id = 1;
   string text = 2;
   PageContext context = 3;
+  // the tools the current screen offers this turn (at most 30)
+  repeated UiTool ui_tools = 4;
 }
 
 message SendResponse {
@@ -62,6 +146,20 @@ message ConfirmActionRequest {
   string decision = 4;
   // the active project of the web (empty: the caller's token project); compared with the proposal's
   string project = 5;
+}
+
+message ReportActionRequest {
+  string conversation_id = 1;
+  string message_id = 2;
+  int32 action_index = 3;
+  // done | failed
+  string status = 4;
+  // what went wrong, for "failed"
+  string error = 5;
+}
+
+message ReportActionResponse {
+  goap.conversations.v1.Message message = 1;
 }
 
 message ConfirmActionResponse {

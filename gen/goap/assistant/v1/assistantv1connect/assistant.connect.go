@@ -38,6 +38,9 @@ const (
 	// AssistantServiceConfirmActionProcedure is the fully-qualified name of the AssistantService's
 	// ConfirmAction RPC.
 	AssistantServiceConfirmActionProcedure = "/goap.assistant.v1.AssistantService/ConfirmAction"
+	// AssistantServiceReportActionProcedure is the fully-qualified name of the AssistantService's
+	// ReportAction RPC.
+	AssistantServiceReportActionProcedure = "/goap.assistant.v1.AssistantService/ReportAction"
 )
 
 // AssistantServiceClient is a client for the goap.assistant.v1.AssistantService service.
@@ -47,13 +50,20 @@ type AssistantServiceClient interface {
 	// with FAILED_PRECONDITION when the caller has no "assistant" model alias or the previous message is still being
 	// answered.
 	Send(context.Context, *connect.Request[v1.SendRequest]) (*connect.Response[v1.SendResponse], error)
-	// Decides a proposal of the assistant (an action of type "start_agent" with status "proposed", ADR 0090). Only the
-	// owner of the conversation. Accept re-validates everything as the caller, creates the change when the proposal
+	// Decides a proposal of the assistant (an action of type "start_agent" or "ui_tool" with status "proposed", ADR 0090,
+	// 0092). For a ui_tool accept only marks it "accepted" (the web then runs it and reports the outcome); the server does
+	// nothing else. Only the owner of the
+	// conversation. For start_agent, accept re-validates everything as the caller, creates the change when the proposal
 	// names a new one, starts the process through the engine as the caller and records the outcome in the action
 	// (status "started" with processId and changeId, or "failed" with an error); reject records "rejected". An action
 	// already decided is ABORTED; a proposal that is stale (the active project is no longer the proposal's, or the
 	// change can no longer be worked on) is FAILED_PRECONDITION and stays proposed.
 	ConfirmAction(context.Context, *connect.Request[v1.ConfirmActionRequest]) (*connect.Response[v1.ConfirmActionResponse], error)
+	// Records the outcome of an action the web ran for the assistant (ADR 0092): a "ui_tool" write proposal that was
+	// accepted, or a ui_tool effect that was requested, becomes "done" or "failed" (with an error). Only the owner of the
+	// conversation; any other state of the action is FAILED_PRECONDITION, an outcome already reported ABORTED. The next
+	// turn's history tells the assistant what happened.
+	ReportAction(context.Context, *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error)
 }
 
 // NewAssistantServiceClient constructs a client for the goap.assistant.v1.AssistantService service.
@@ -79,6 +89,12 @@ func NewAssistantServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(assistantServiceMethods.ByName("ConfirmAction")),
 			connect.WithClientOptions(opts...),
 		),
+		reportAction: connect.NewClient[v1.ReportActionRequest, v1.ReportActionResponse](
+			httpClient,
+			baseURL+AssistantServiceReportActionProcedure,
+			connect.WithSchema(assistantServiceMethods.ByName("ReportAction")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -86,6 +102,7 @@ func NewAssistantServiceClient(httpClient connect.HTTPClient, baseURL string, op
 type assistantServiceClient struct {
 	send          *connect.Client[v1.SendRequest, v1.SendResponse]
 	confirmAction *connect.Client[v1.ConfirmActionRequest, v1.ConfirmActionResponse]
+	reportAction  *connect.Client[v1.ReportActionRequest, v1.ReportActionResponse]
 }
 
 // Send calls goap.assistant.v1.AssistantService.Send.
@@ -98,6 +115,11 @@ func (c *assistantServiceClient) ConfirmAction(ctx context.Context, req *connect
 	return c.confirmAction.CallUnary(ctx, req)
 }
 
+// ReportAction calls goap.assistant.v1.AssistantService.ReportAction.
+func (c *assistantServiceClient) ReportAction(ctx context.Context, req *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error) {
+	return c.reportAction.CallUnary(ctx, req)
+}
+
 // AssistantServiceHandler is an implementation of the goap.assistant.v1.AssistantService service.
 type AssistantServiceHandler interface {
 	// Appends the user message and a pending assistant message to the conversation, starts the answer in the background
@@ -105,13 +127,20 @@ type AssistantServiceHandler interface {
 	// with FAILED_PRECONDITION when the caller has no "assistant" model alias or the previous message is still being
 	// answered.
 	Send(context.Context, *connect.Request[v1.SendRequest]) (*connect.Response[v1.SendResponse], error)
-	// Decides a proposal of the assistant (an action of type "start_agent" with status "proposed", ADR 0090). Only the
-	// owner of the conversation. Accept re-validates everything as the caller, creates the change when the proposal
+	// Decides a proposal of the assistant (an action of type "start_agent" or "ui_tool" with status "proposed", ADR 0090,
+	// 0092). For a ui_tool accept only marks it "accepted" (the web then runs it and reports the outcome); the server does
+	// nothing else. Only the owner of the
+	// conversation. For start_agent, accept re-validates everything as the caller, creates the change when the proposal
 	// names a new one, starts the process through the engine as the caller and records the outcome in the action
 	// (status "started" with processId and changeId, or "failed" with an error); reject records "rejected". An action
 	// already decided is ABORTED; a proposal that is stale (the active project is no longer the proposal's, or the
 	// change can no longer be worked on) is FAILED_PRECONDITION and stays proposed.
 	ConfirmAction(context.Context, *connect.Request[v1.ConfirmActionRequest]) (*connect.Response[v1.ConfirmActionResponse], error)
+	// Records the outcome of an action the web ran for the assistant (ADR 0092): a "ui_tool" write proposal that was
+	// accepted, or a ui_tool effect that was requested, becomes "done" or "failed" (with an error). Only the owner of the
+	// conversation; any other state of the action is FAILED_PRECONDITION, an outcome already reported ABORTED. The next
+	// turn's history tells the assistant what happened.
+	ReportAction(context.Context, *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error)
 }
 
 // NewAssistantServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -133,12 +162,20 @@ func NewAssistantServiceHandler(svc AssistantServiceHandler, opts ...connect.Han
 		connect.WithSchema(assistantServiceMethods.ByName("ConfirmAction")),
 		connect.WithHandlerOptions(opts...),
 	)
+	assistantServiceReportActionHandler := connect.NewUnaryHandler(
+		AssistantServiceReportActionProcedure,
+		svc.ReportAction,
+		connect.WithSchema(assistantServiceMethods.ByName("ReportAction")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.assistant.v1.AssistantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AssistantServiceSendProcedure:
 			assistantServiceSendHandler.ServeHTTP(w, r)
 		case AssistantServiceConfirmActionProcedure:
 			assistantServiceConfirmActionHandler.ServeHTTP(w, r)
+		case AssistantServiceReportActionProcedure:
+			assistantServiceReportActionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -154,4 +191,8 @@ func (UnimplementedAssistantServiceHandler) Send(context.Context, *connect.Reque
 
 func (UnimplementedAssistantServiceHandler) ConfirmAction(context.Context, *connect.Request[v1.ConfirmActionRequest]) (*connect.Response[v1.ConfirmActionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.assistant.v1.AssistantService.ConfirmAction is not implemented"))
+}
+
+func (UnimplementedAssistantServiceHandler) ReportAction(context.Context, *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.assistant.v1.AssistantService.ReportAction is not implemented"))
 }

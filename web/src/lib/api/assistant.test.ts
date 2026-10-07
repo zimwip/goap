@@ -33,7 +33,7 @@ describe('assistantApi', () => {
         ),
       ),
     );
-    const r = await assistantApi.send('CONV-1', 'hi', { tab: { kind: 'change', params: { id: 'CHG-1' } }, subject: 'CHG-1', project: 'PROJ-A' });
+    const r = await assistantApi.send('CONV-1', 'hi', { app: { project: 'PROJ-A', tab: { kind: 'change', params: { id: 'CHG-1' } } }, focus: { element: { type: 'change', id: 'CHG-1' } } });
     expect(r.assistantMessage.status).toBe('pending');
     expect(r.userMessage.context).toContain('PROJ-A');
     const [url, init] = fetchMock.mock.calls[0];
@@ -41,7 +41,8 @@ describe('assistantApi', () => {
     expect(JSON.parse(init.body as string)).toEqual({
       conversationId: 'CONV-1',
       text: 'hi',
-      context: { tab: { kind: 'change', params: { id: 'CHG-1' } }, subject: 'CHG-1', project: 'PROJ-A' },
+      context: { app: { project: 'PROJ-A', tab: { kind: 'change', params: { id: 'CHG-1' } } }, focus: { element: { type: 'change', id: 'CHG-1' } } },
+      uiTools: [],
     });
   });
 
