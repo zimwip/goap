@@ -98,23 +98,32 @@ func TestStartingPointsArePossibleStepsOnly(t *testing.T) {
 	}
 }
 
-func TestStartingPointsWithoutMethodologyOrGoal(t *testing.T) {
+func TestStartingPointsWithoutMethodology(t *testing.T) {
 	ctx := context.Background()
 	e := stagedEngine(t)
-	for name, in := range map[string]graph.NewChange{
-		"no methodology": {},
-		"no goal":        {Methodology: "staged"},
-	} {
-		id := pointChange(t, e, in)
-		if name == "no goal" {
-			if _, err := e.Graph.UpdateChange(ctx, id, graph.ChangePatch{Goal: ptr("")}); err != nil {
-				t.Fatal(err)
-			}
-		}
-		sp, err := e.StartingPoints(ctx, id, StartingPointsOptions{})
-		if err != nil || len(sp.Points) != 0 || sp.Reason == "" {
-			t.Fatalf("%s: %+v %v", name, sp, err)
-		}
+	id := pointChange(t, e, graph.NewChange{})
+	sp, err := e.StartingPoints(ctx, id, StartingPointsOptions{})
+	if err != nil || len(sp.Points) != 0 || sp.Reason == "" {
+		t.Fatalf("no methodology: %+v %v", sp, err)
+	}
+	// a methodology chosen for the change: its main goal pulls the scheduler
+	sp, err = e.StartingPoints(ctx, id, StartingPointsOptions{Methodology: "staged"})
+	if err != nil || len(sp.Points) == 0 || sp.Goal == "" {
+		t.Fatalf("chosen methodology: %+v %v", sp, err)
+	}
+}
+
+// A change with no goal of its own (created before the default goal) is pulled by the main goal of its methodology.
+func TestStartingPointsFallBackToTheMainGoal(t *testing.T) {
+	ctx := context.Background()
+	e := stagedEngine(t)
+	id := pointChange(t, e, graph.NewChange{Methodology: "staged"})
+	if _, err := e.Graph.UpdateChange(ctx, id, graph.ChangePatch{Goal: ptr("")}); err != nil {
+		t.Fatal(err)
+	}
+	sp, err := e.StartingPoints(ctx, id, StartingPointsOptions{})
+	if err != nil || len(sp.Points) == 0 || sp.Goal == "" || sp.Reason != "" {
+		t.Fatalf("no goal: %+v %v", sp, err)
 	}
 }
 

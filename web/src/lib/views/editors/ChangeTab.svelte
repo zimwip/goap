@@ -24,7 +24,7 @@
     type StartingPointsResponse,
   } from '../../api';
   import { tick, untrack } from 'svelte';
-  import { followChangeProject } from '../../stores/project.svelte';
+  import { applicable, followChangeProject, loadApplicable } from '../../stores/project.svelte';
   import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
@@ -301,6 +301,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let pointsError = $state('');
   let startingId = $state('');
   const showSteps = $derived(showStartingPoints(change));
+  // a change with no methodology of its own: the one chosen among the project's to see its possible steps
+  let pointsMethodology = $state('');
+  const methodologyChoices = $derived(change && !change.methodology ? (applicable.names ?? []) : []);
+  $effect(() => {
+    if (change && !change.methodology) untrack(() => void loadApplicable());
+  });
+  $effect(() => {
+    void selected;
+    pointsMethodology = '';
+  });
+  function choosePointsMethodology(name: string) {
+    pointsMethodology = name;
+    pointsSoon.call();
+  }
   let readingPoints: AbortController | undefined;
   const pointsSoon = throttled(() => {
     const id = selected;
@@ -308,7 +322,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     readingPoints?.abort();
     const ctrl = (readingPoints = new AbortController());
     engine
-      .listStartingPoints(id, ctrl.signal)
+      .listStartingPoints(id, ctrl.signal, pointsMethodology)
       .then((r) => {
         if (ctrl.signal.aborted) return;
         startPoints = r;
@@ -1013,7 +1027,15 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           <ProcessProgress processId={p.id ?? ''} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
         {/each}
         {#if showSteps}
-          <PossibleSteps points={startPoints} error={pointsError} busy={startingId} onstart={(p) => void startPoint(p)} />
+          <PossibleSteps
+            points={startPoints}
+            error={pointsError}
+            busy={startingId}
+            onstart={(p) => void startPoint(p)}
+            choices={methodologyChoices}
+            chosen={pointsMethodology}
+            onchoose={choosePointsMethodology}
+          />
         {/if}
 
         {#if ch.status === 'committed'}

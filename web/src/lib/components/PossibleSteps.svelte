@@ -10,7 +10,19 @@
     error = '',
     busy = '',
     onstart,
-  }: { points: StartingPointsResponse | undefined; error?: string; busy?: string; onstart: (p: StartingPoint) => void } = $props();
+    choices = [],
+    chosen = '',
+    onchoose,
+  }: {
+    points: StartingPointsResponse | undefined;
+    error?: string;
+    busy?: string;
+    onstart: (p: StartingPoint) => void;
+    /** the methodologies of the project, offered when the change has none */
+    choices?: string[];
+    chosen?: string;
+    onchoose?: (name: string) => void;
+  } = $props();
 
   const list = $derived(points?.points ?? []);
   const waiting = $derived(waitingLine(points));
@@ -18,6 +30,15 @@
 
 <section class="steps" aria-label="Possible next steps">
   <h3>Possible next steps</h3>
+  {#if choices.length && onchoose}
+    <label class="pick">
+      This change has no methodology: steps of
+      <select value={chosen} onchange={(e) => onchoose?.(e.currentTarget.value)} data-no-pin>
+        <option value="">choose a methodology…</option>
+        {#each choices as m (m)}<option value={m}>{m}</option>{/each}
+      </select>
+    </label>
+  {/if}
   {#if error}<p class="error">{error}</p>{/if}
   {#if list.length}
     <ul>

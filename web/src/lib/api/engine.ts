@@ -60,8 +60,8 @@ export const engine = {
   getProcessProgress: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { progress?: ProcessProgress }>(ENGINE, 'GetProcessProgress', { id }, signal),
   /** The steps of the methodology of a change that are possible now towards its goal (ADR 0097). */
-  listStartingPoints: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, StartingPointsResponse>(ENGINE, 'ListStartingPoints', { changeId }, signal),
+  listStartingPoints: (changeId: string, signal?: AbortSignal, methodology = '') =>
+    rpc<{ changeId: string; methodology?: string }, StartingPointsResponse>(ENGINE, 'ListStartingPoints', { changeId, ...(methodology ? { methodology } : {}) }, signal),
   /** How a condition of the run's world state got its value against the run's change. */
   explainCondition: (processId: string, condition: string, signal?: AbortSignal) =>
     rpc<{ processId: string; condition: string }, ConditionExplanation>(ENGINE, 'ExplainCondition', { processId, condition }, signal),

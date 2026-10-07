@@ -17,8 +17,9 @@ describe('starting points', () => {
     expect(showStartingPoints({ status: 'active', methodology: 'm', goal: 'g' })).toBe(true);
     expect(showStartingPoints({ status: 'draft', methodology: 'm', goal: 'g' })).toBe(true);
     for (const status of ['applied', 'abandoned', 'committed']) expect(showStartingPoints({ status, methodology: 'm', goal: 'g' })).toBe(false);
-    expect(showStartingPoints({ status: 'active', methodology: 'm' })).toBe(false);
-    expect(showStartingPoints({ status: 'active', goal: 'g' })).toBe(false);
+    // no goal or no methodology: the panel is still there (the server falls back, or a methodology is chosen)
+    expect(showStartingPoints({ status: 'active', methodology: 'm' })).toBe(true);
+    expect(showStartingPoints({ status: 'active' })).toBe(true);
     expect(showStartingPoints(undefined)).toBe(false);
   });
 

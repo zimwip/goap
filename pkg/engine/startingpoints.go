@@ -110,13 +110,19 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 	case out.Methodology == "":
 		out.Reason = "the change has no methodology"
 		return out, nil
-	case out.Goal == "":
-		out.Reason = "the change has no goal"
-		return out, nil
 	}
 	m, err := e.Methodologies.Methodology(ctx, out.Methodology)
 	if err != nil {
 		return nil, err
+	}
+	// a change that predates the default goal (or a methodology chosen for a change that has none) is pulled by the end
+	// point of the methodology
+	if out.Goal == "" || opts.Methodology != "" && opts.Methodology != ch.Methodology {
+		out.Goal = m.MainGoal()
+	}
+	if out.Goal == "" {
+		out.Reason = "the methodology names no goal"
+		return out, nil
 	}
 	goal, ok := m.Goal(out.Goal)
 	if !ok {

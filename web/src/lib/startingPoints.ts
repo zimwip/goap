@@ -3,10 +3,12 @@
 // starts one with the launch the engine gave. Nothing here names an action.
 import type { StartingPoint, StartingPointsResponse, StartProcessRequest } from './api';
 
-/** The panel is shown for a change that can still take a process and has a methodology and a goal. */
+/**
+ * The panel is shown for a change that can still take a process. A change with no goal of its own is pulled by the main
+ * goal of its methodology (the server); one with no methodology offers to pick one of the project's.
+ */
 export function showStartingPoints(c: { status?: string; methodology?: string; goal?: string } | undefined): boolean {
-  if (!c?.methodology || !c.goal) return false;
-  return c.status === 'draft' || c.status === 'active';
+  return c?.status === 'draft' || c?.status === 'active';
 }
 
 /** The call that starts exactly one point: the agent plans towards the goal of the step and the scheduler sequences its actions. */
