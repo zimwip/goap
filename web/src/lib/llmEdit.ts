@@ -35,6 +35,11 @@ const modelProps = (m: CatalogModel): Struct => ({
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
+/** Why a protected alias cannot be removed (ADR 0084). */
+export const PROTECTED_ALIAS_HINT = 'Used by the platform itself: it cannot be removed or renamed, only retargeted. Without a model it is simply unavailable.';
+
+const isProtected = (n: { props: Record<string, unknown> }) => n.props.protected === true;
+
 // --- staging ------------------------------------------------------------------------------------------------------
 
 /** Stages the creation or the update of a provider. */
@@ -62,24 +67,26 @@ async function effective(): Promise<{ key: string; type: string; props: Record<s
   return [...out.values()];
 }
 
-/** Stages the removal of a model with the aliases that point to it. */
+/** Stages the removal of a model with the aliases that point to it; a protected alias stays, unavailable until retargeted. */
 export async function deleteModel(provider: string, model: string): Promise<void> {
   const target = `${provider}/${model}`;
   const nodes = await effective();
-  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && str(n.props.target) === target)) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
+  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && !isProtected(n) && str(n.props.target) === target)) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
   if (nodes.some((n) => n.key === modelKey(provider, model))) await stageRetire(ns.platform, MODEL_TYPE, modelKey(provider, model));
 }
 
-/** Stages the removal of a provider with its models and the aliases that point to them. */
+/** Stages the removal of a provider with its models and the aliases that point to them (the protected ones stay). */
 export async function deleteProvider(name: string): Promise<void> {
   const nodes = await effective();
-  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && str(n.props.target).startsWith(`${name}/`))) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
+  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && !isProtected(n) && str(n.props.target).startsWith(`${name}/`))) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
   for (const m of nodes.filter((n) => n.type === MODEL_TYPE && str(n.props.provider) === name)) await stageRetire(ns.platform, MODEL_TYPE, m.key);
   if (nodes.some((n) => n.key === providerKey(name))) await stageRetire(ns.platform, PROVIDER_TYPE, providerKey(name));
 }
 
 export async function deleteAlias(alias: string): Promise<void> {
-  if ((await effective()).some((n) => n.key === aliasKey(alias))) await stageRetire(ns.platform, ALIAS_TYPE, aliasKey(alias));
+  const node = (await effective()).find((n) => n.key === aliasKey(alias));
+  if (node && isProtected(node)) throw new Error(`The alias ${alias} is protected. ${PROTECTED_ALIAS_HINT}`);
+  if (node) await stageRetire(ns.platform, ALIAS_TYPE, aliasKey(alias));
 }
 
 // --- overlay: what the dialog shows -----------------------------------------------------------------------------
@@ -132,7 +139,7 @@ export const overlayAliases = (applied: ModelAlias[]): Unsaved<ModelAlias>[] =>
     const target = str(p.target);
     if (!alias || !target.includes('/')) return old;
     const [provider, ...rest] = target.split('/');
-    return { alias, provider, model: rest.join('/') };
+    return { alias, provider, model: rest.join('/'), ...(old?.protected || p.protected === true ? { protected: true } : {}) };
   });
 
 // --- alias proposals ----------------------------------------------------------------------------------------------

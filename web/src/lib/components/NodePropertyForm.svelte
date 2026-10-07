@@ -2,6 +2,7 @@
   import { untrack } from 'svelte';
   import { orderedAttributes, parseValue as parseAttr, valueText, type AttributeView } from '../attributes';
   import type { AttributeInfo } from '../api';
+  import { assistField, type FieldSpec } from '../helper/fields.svelte';
   // Edition of the properties of a node: the attributes its type defines (laid out by section, edited with
   // their widget), the other properties it has, and new ones. Only the changed values are returned.
   let {
@@ -45,6 +46,25 @@
   let newValue = $state('');
   let error = $state('');
 
+  /** What the contextual helper (ADR 0086) may fill: the attribute, read and set through the form's draft like a typed value. */
+  function helperField(a: AttributeView): FieldSpec {
+    return {
+      id: a.name,
+      label: a.label,
+      type: a.type || undefined,
+      enum: a.type === 'enum' ? a.values.map((v) => v.value) : undefined,
+      description: a.tooltip || undefined,
+      get: () => {
+        try {
+          return parseAttr(a, draft[a.name] ?? '');
+        } catch {
+          return draft[a.name];
+        }
+      },
+      set: (v) => (draft[a.name] = text(v)),
+    };
+  }
+
   /** A value typed in the form: text, unless the property already holds a non-text value. */
   function parse(key: string, value: string): unknown {
     const a = attrOf(key);
@@ -87,19 +107,19 @@
       <div class="field">
         <label for="np-{a.name}" title={a.tooltip}>{a.label}{#if a.label !== a.name} <span class="hint mono">{a.name}</span>{/if}</label>
         {#if a.widget === 'checkbox'}
-          <input id="np-{a.name}" type="checkbox" checked={draft[a.name] === 'true'} onchange={(e) => (draft[a.name] = e.currentTarget.checked ? 'true' : 'false')} />
+          <input id="np-{a.name}" use:assistField={helperField(a)} type="checkbox" checked={draft[a.name] === 'true'} onchange={(e) => (draft[a.name] = e.currentTarget.checked ? 'true' : 'false')} />
         {:else if a.widget === 'dropdown'}
-          <select id="np-{a.name}" bind:value={draft[a.name]}>
+          <select id="np-{a.name}" use:assistField={helperField(a)} bind:value={draft[a.name]}>
             <option value="">—</option>
             {#if draft[a.name] && !a.values.some((v) => v.value === draft[a.name])}<option value={draft[a.name]}>{draft[a.name]} (not in {a.enum || 'the list'})</option>{/if}
             {#each a.values as v (v.value)}<option value={v.value}>{v.label}</option>{/each}
           </select>
         {:else if a.widget === 'date'}
-          <input id="np-{a.name}" type="date" bind:value={draft[a.name]} />
+          <input id="np-{a.name}" use:assistField={helperField(a)} type="date" bind:value={draft[a.name]} />
         {:else if a.widget === 'textarea' || draft[a.name].length > 80 || draft[a.name].includes('\n')}
-          <textarea id="np-{a.name}" rows="4" bind:value={draft[a.name]}></textarea>
+          <textarea id="np-{a.name}" use:assistField={helperField(a)} rows="4" bind:value={draft[a.name]}></textarea>
         {:else}
-          <input id="np-{a.name}" type={a.type === 'number' ? 'number' : 'text'} step={a.type === 'number' ? 'any' : undefined} bind:value={draft[a.name]} />
+          <input id="np-{a.name}" use:assistField={helperField(a)} type={a.type === 'number' ? 'number' : 'text'} step={a.type === 'number' ? 'any' : undefined} bind:value={draft[a.name]} />
         {/if}
         {#if a.validators.length}<span class="hint">Checked by {a.validators.join(', ')}</span>{/if}
       </div>

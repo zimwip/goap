@@ -38,3 +38,25 @@ func TestSnapshotIgnoresDanglingAndMalformedNodes(t *testing.T) {
 		t.Fatalf("%+v", s)
 	}
 }
+
+func TestProtectedAliasProps(t *testing.T) {
+	a := Alias{Alias: AssistantAlias, Target: "fake/echo", Protected: true}
+	if back, err := AliasFromProps(a.Props()); err != nil || back != a {
+		t.Fatalf("%+v %v", back, err)
+	}
+	if _, has := (Alias{Alias: "x", Target: "a/b"}).Props()["protected"]; has {
+		t.Fatal("an unprotected alias carries no flag")
+	}
+	// only a protected alias may point to nothing
+	if _, err := AliasFromProps(Alias{Alias: HelperAlias, Protected: true}.Props()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AliasFromProps(Alias{Alias: "x"}.Props()); err == nil {
+		t.Fatal("an unprotected alias needs a target")
+	}
+	// a protected alias whose model is gone stays in the snapshot, no problem
+	s := BuildSnapshot("", []domain.Node{node(AliasKey(HelperAlias), NodeTypeAlias, Alias{Alias: HelperAlias, Target: "gone/m", Protected: true}.Props())}, nil)
+	if len(s.Aliases) != 1 || len(s.Problems) != 0 {
+		t.Fatalf("%+v", s)
+	}
+}

@@ -99,6 +99,14 @@ services:
       GOAP_DB_DSN: postgres://preferences:preferences@postgres:5432/goap?sslmode=disable
     ports: ["8087:8080"]
 
+  conversations:
+    <<: *service
+    build: {context: ../.., args: {SERVICE: conversations}}
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://conversations:conversations@postgres:5432/goap?sslmode=disable
+    ports: ["8090:8080"]
+
   credentials:
     <<: *service
     build: {context: ../.., args: {SERVICE: credentials}}
@@ -225,6 +233,7 @@ services:
       GOAP_ENGINE_URL: http://engine:8080
       GOAP_MODELGW_URL: http://modelgw:8080
       GOAP_PREFERENCES_URL: http://preferences:8080
+      GOAP_CONVERSATIONS_URL: http://conversations:8080
       GOAP_INDEXER_URL: http://indexer:8080
       GOAP_MCP_URL: http://mcp:8080
       GOAP_CREDENTIALS_URL: http://credentials:8080

@@ -110,8 +110,12 @@ func (s *Service) load(ctx context.Context, snap *llmcfg.Snapshot) {
 		active[p.Name] = ""
 	}
 	targets := map[string]Target{}
+	models := map[string]bool{}
+	for _, m := range snap.Models {
+		models[m.Provider+"/"+m.Model] = true
+	}
 	for _, a := range snap.Aliases {
-		if t, ok := parseTarget(a.Target); ok {
+		if t, ok := parseTarget(a.Target); ok && models[a.Target] { // a protected alias may point to nothing
 			targets[a.Alias] = t
 		}
 	}

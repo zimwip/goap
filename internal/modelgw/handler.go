@@ -96,7 +96,7 @@ func (h *Handler) ListModels(ctx context.Context, r *connect.Request[modelv1.Lis
 	}
 	for _, a := range aliases {
 		if t, ok := parseTarget(a.Target); ok {
-			out.Aliases = append(out.Aliases, &modelv1.ModelAlias{Alias: a.Alias, Provider: t.Provider, Model: t.Model})
+			out.Aliases = append(out.Aliases, &modelv1.ModelAlias{Alias: a.Alias, Provider: t.Provider, Model: t.Model, Protected: a.Protected})
 		}
 	}
 	return connect.NewResponse(out), nil
@@ -183,7 +183,9 @@ func (h *Handler) ListCatalog(ctx context.Context, r *connect.Request[modelv1.Li
 	}
 	for _, a := range aliases {
 		if t, ok := parseTarget(a.Target); ok {
-			out.Aliases = append(out.Aliases, &modelv1.ModelAlias{Alias: a.Alias, Provider: t.Provider, Model: t.Model})
+			out.Aliases = append(out.Aliases, &modelv1.ModelAlias{Alias: a.Alias, Provider: t.Provider, Model: t.Model, Protected: a.Protected})
+		} else if a.Protected { // listed for the administrators to retarget it, resolving to nothing
+			out.Aliases = append(out.Aliases, &modelv1.ModelAlias{Alias: a.Alias, Protected: true})
 		}
 	}
 	return connect.NewResponse(out), nil
@@ -197,6 +199,7 @@ type Client struct {
 var (
 	_ llm.Client   = (*Client)(nil)
 	_ llm.Embedder = (*Client)(nil)
+	_ SuggestModel = (*Client)(nil)
 )
 
 // NewClient returns a model gateway client.
@@ -237,6 +240,24 @@ func (h *Handler) Embed(ctx context.Context, r *connect.Request[modelv1.EmbedReq
 	return connect.NewResponse(out), nil
 }
 
+// Available lists what the caller may use: the models and the aliases pointing to them (the contextual helper and the
+// assistant check their alias with it).
+func (c *Client) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, error) {
+	r, err := c.rpc.ListModels(ctx, connect.NewRequest(&modelv1.ListModelsRequest{}))
+	if err != nil {
+		return nil, nil, err
+	}
+	var models []ModelEntry
+	for _, m := range r.Msg.Models {
+		models = append(models, ModelEntry{Provider: m.Provider, Model: m.Model, DisplayName: m.DisplayName, Enabled: true})
+	}
+	var aliases []AliasEntry
+	for _, a := range r.Msg.Aliases {
+		aliases = append(aliases, AliasEntry{Alias: a.Alias, Target: a.Provider + "/" + a.Model, Protected: a.Protected})
+	}
+	return models, aliases, nil
+}
+
 // Embed implements llm.Embedder.
 func (c *Client) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedResponse, error) {
 	r, err := c.rpc.Embed(ctx, connect.NewRequest(&modelv1.EmbedRequest{Model: req.Model, Texts: req.Texts}))
@@ -248,4 +269,38 @@ func (c *Client) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedResp
 		out.Vectors = append(out.Vectors, v.Values)
 	}
 	return out, nil
+}
+
+// Suggest implements the contextual helper (ADR 0086): stateless, as the calling principal.
+func (h *Handler) Suggest(ctx context.Context, r *connect.Request[modelv1.SuggestRequest]) (*connect.Response[modelv1.SuggestResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	res, err := h.Service.Suggest(ctx, suggestFromPB(r.Msg))
+	if err != nil {
+		if errors.Is(err, ErrForbidden) || errors.Is(err, ErrQuotaExceeded) || errors.Is(err, ErrModelDisabled) || errors.Is(err, ErrInvalid) {
+			return nil, rpcErr(err)
+		}
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
+	out := &modelv1.SuggestResponse{Message: res.Message, Usage: &modelv1.Usage{InputTokens: int32(res.Usage.InputTokens), OutputTokens: int32(res.Usage.OutputTokens)}}
+	for _, p := range res.Proposals {
+		out.Proposals = append(out.Proposals, &modelv1.SuggestProposal{FieldId: p.FieldID, Value: string(p.Value), Rationale: p.Rationale})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func suggestFromPB(m *modelv1.SuggestRequest) SuggestInput {
+	in := SuggestInput{Instruction: m.Instruction}
+	if c := m.Context; c != nil {
+		in.Context = SuggestContext{Subject: c.Subject, Selection: c.Selection}
+		if c.Tab != nil {
+			in.Context.TabKind, in.Context.TabParams = c.Tab.Kind, c.Tab.Params
+		}
+		for _, f := range c.Fields {
+			in.Context.Fields = append(in.Context.Fields, SuggestField{ID: f.Id, Label: f.Label, Type: f.Type, EnumValues: f.EnumValues, Description: f.Description, Current: f.CurrentValue, ReadOnly: f.ReadOnly})
+		}
+	}
+	for _, x := range m.Messages {
+		in.Messages = append(in.Messages, SuggestMessage{Role: x.Role, Text: x.Text})
+	}
+	return in
 }

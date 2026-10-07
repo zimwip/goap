@@ -7,6 +7,7 @@ import (
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/verify"
 )
 
@@ -42,6 +43,6 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
-	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
+	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, llmcfg.ProtectedAliasValidator{}}
 	return &graphPart{g: g, directory: directory, authorizer: authorizer}, nil
 }

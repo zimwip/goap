@@ -24,6 +24,8 @@
   import PlatformStatusModal from './PlatformStatusModal.svelte';
   import SearchOverlay from './SearchOverlay.svelte';
   import { openSearch } from './searchOverlay.svelte.ts';
+  import HelperBubble from '../helper/HelperBubble.svelte';
+  import { canOpenHelper, openHelper } from '../helper/helper.svelte';
   import StatusBar from './StatusBar.svelte';
   import { layout, LIMITS, toggleConsole } from './layout.svelte';
   import { activeTab, closeTab, startRouting } from './tabs.svelte';
@@ -76,6 +78,9 @@
     } else if (mod && e.shiftKey && k === 'f') {
       e.preventDefault();
       openSearch();
+    } else if (mod && !e.shiftKey && !e.altKey && k === '.') {
+      e.preventDefault();
+      if (canOpenHelper()) void openHelper();
     } else if (mod && (k === 'p' || k === 'k')) {
       e.preventDefault();
       focusRequests.search += 1;
@@ -157,6 +162,7 @@
 <UsageDialog />
 <PlatformStatusModal />
 <SearchOverlay />
+<HelperBubble />
 
 <style>
   .shell {

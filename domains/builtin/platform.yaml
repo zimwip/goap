@@ -60,6 +60,7 @@ nodeTypes:
     attributes:
       - {name: alias, label: Alias, description: "Name callers use (default, fast…)", type: string, section: Identity, order: 1, asName: true}
       - {name: target, label: Target, description: "The model, as provider/model", type: string, section: Identity, order: 2}
+      - {name: protected, label: Protected, description: "Alias the platform itself uses (assistant, helper): it may not be retired nor renamed, only retargeted", type: boolean, section: Identity, order: 3}
   # a built-in, platform-wide role (ADR 0046): granted by an organisation@Assignment naming no project
   # (assigns_org only), it holds everywhere, independent of any project's applicable methodologies — unlike
   # methodology@Role, which only exists where a project names the methodology declaring it. A fixed catalog

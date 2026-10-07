@@ -81,6 +81,7 @@ func main() {
 			{Prefix: "/goap.engine.v1.EngineService/", Upstream: platform.Env("GOAP_ENGINE_URL", "http://localhost:8083")},
 			{Prefix: "/goap.model.v1.ModelService/", Upstream: platform.Env("GOAP_MODELGW_URL", "http://localhost:8084")},
 			{Prefix: "/goap.preferences.v1.PreferencesService/", Upstream: platform.Env("GOAP_PREFERENCES_URL", "http://localhost:8087")},
+			{Prefix: "/goap.conversations.v1.ConversationService/", Upstream: platform.Env("GOAP_CONVERSATIONS_URL", "http://localhost:8090")},
 			{Prefix: "/goap.index.v1.IndexService/", Upstream: platform.Env("GOAP_INDEXER_URL", "http://localhost:8086")},
 			{Prefix: "/goap.events.v1.EventService/", Upstream: platform.Env("GOAP_EVENTS_URL", "http://localhost:8089")},
 			{Prefix: "/goap.mcp.v1.McpService/", Upstream: platform.Env("GOAP_MCP_URL", "http://localhost:8085")},

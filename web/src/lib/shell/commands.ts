@@ -4,6 +4,7 @@ import { layout, showTool, toggleConsole } from './layout.svelte';
 import { activeTab, closeAll, closeTab, openTab } from './tabs.svelte';
 import { focusRequests, runTabAction } from './workbench.svelte';
 import { openSearch } from './searchOverlay.svelte.ts';
+import { canOpenHelper, openHelper } from '../helper/helper.svelte';
 import { openUsage } from './usageState.svelte';
 
 export interface Command {
@@ -12,6 +13,8 @@ export interface Command {
   icon?: IconName;
   shortcut?: string;
   run: () => void;
+  /** the command is offered only while this holds (default: always) */
+  enabled?: () => boolean;
 }
 
 export const COMMANDS: Command[] = [
@@ -71,6 +74,14 @@ export const COMMANDS: Command[] = [
   { id: 'policies', label: 'Open access policies', icon: 'shield', run: () => openTab({ kind: 'policies', params: {} }) },
   { id: 'dsl', label: 'DSL Help', icon: 'help', run: () => showTool('right', 'dsl') },
   { id: 'assistant', label: 'Open assistant', icon: 'chat', run: () => openTab({ kind: 'assistant', params: {} }, { pin: true }) },
+  {
+    id: 'helper',
+    label: 'Ask the helper about this form',
+    icon: 'chat',
+    shortcut: 'Ctrl+.',
+    enabled: canOpenHelper,
+    run: () => void openHelper(),
+  },
   { id: 'triggers', label: 'Triggers', icon: 'clock', run: () => showTool('left', 'triggers') },
   { id: 'themeLight', label: 'Theme: light', icon: 'moon', run: () => (layout.theme = 'light') },
   { id: 'themeDark', label: 'Theme: dark', icon: 'moon', run: () => (layout.theme = 'dark') },

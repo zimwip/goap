@@ -8,6 +8,7 @@
     deleteModel,
     saveAlias as saveAliasNode,
     deleteAlias,
+    PROTECTED_ALIAS_HINT,
     acceptAliasProposal,
     declineAliasProposal,
     type AliasProposal,
@@ -302,10 +303,12 @@
       {#each aliases as a (a.alias)}
         <li>
           <code>{a.alias}</code>{#if a.pending} <span class="pending" title="Not saved yet">unsaved</span>{/if} →
-          <select value={`${a.provider}/${a.model}`} aria-label={`Target of ${a.alias}`} onchange={(e) => saveAlias(a.alias, e.currentTarget.value)}>
+          <select value={a.provider && a.model ? `${a.provider}/${a.model}` : ''} aria-label={`Target of ${a.alias}`} onchange={(e) => saveAlias(a.alias, e.currentTarget.value)}>
+            {#if !a.provider || !a.model}<option value="" disabled>not configured</option>{/if}
             {#each catalog as m (key(m))}<option value={key(m)}>{key(m)}</option>{/each}
           </select>
-          <button type="button" class="small danger" onclick={() => removeAlias(a.alias)}>Remove</button>
+          {#if a.protected}<span class="pending" title={PROTECTED_ALIAS_HINT}>protected</span>{/if}
+          <button type="button" class="small danger" disabled={a.protected} title={a.protected ? PROTECTED_ALIAS_HINT : undefined} onclick={() => removeAlias(a.alias)}>Remove</button>
         </li>
       {/each}
     </ul>

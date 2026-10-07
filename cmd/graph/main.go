@@ -24,6 +24,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/review"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/typecat"
@@ -121,7 +122,7 @@ func main() {
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
-	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}}
+	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, llmcfg.ProtectedAliasValidator{}}
 	// LandingGate, SubChangeValidator and Lifecycles (ADR 0058) need the registry service itself (its methodology store): only
 	// goap-dev, which holds it in process, wires them; the registry client has no RPC for them
 	// the built-in domains (organisation, platform) are always there; the demo seed needs alm

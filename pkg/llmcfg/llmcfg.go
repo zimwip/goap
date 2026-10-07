@@ -65,10 +65,26 @@ type Model struct {
 	Roles []string `json:"roles,omitempty"`
 }
 
+// The protected aliases of the platform (ADR 0084): internal names the platform itself resolves, so they exist on every
+// install and cannot be retired or renamed, only retargeted.
+const (
+	// AssistantAlias is the model of the conversational assistant.
+	AssistantAlias = "assistant"
+	// HelperAlias is the model of the contextual helper that fills fields.
+	HelperAlias = "helper"
+)
+
+// ProtectedAliases lists the aliases the platform keeps on every install.
+func ProtectedAliases() []string { return []string{AssistantAlias, HelperAlias} }
+
 // Alias maps a name ("default", "fast") to "provider/model".
 type Alias struct {
-	Alias  string `json:"alias"`
+	Alias string `json:"alias"`
+	// Target is "provider/model"; empty only for a protected alias nothing is configured for yet (it then resolves to
+	// nothing, so it is not available).
 	Target string `json:"target"`
+	// Protected marks an alias the platform itself uses: it may not be retired nor renamed (ADR 0084).
+	Protected bool `json:"protected,omitempty"`
 }
 
 // ProviderKey is the key of the node of a provider.
@@ -123,6 +139,9 @@ func (m Model) Validate() error {
 func (a Alias) Validate() error {
 	if !ValidName(a.Alias) {
 		return fmt.Errorf("alias must be 1-40 characters of a-z, 0-9, - or _")
+	}
+	if a.Protected && a.Target == "" {
+		return nil
 	}
 	if _, _, ok := SplitTarget(a.Target); !ok {
 		return fmt.Errorf("alias %s: target must be provider/model", a.Alias)
@@ -246,6 +265,11 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *
 	s.Models = keep
 	keepA := s.Aliases[:0]
 	for _, a := range s.Aliases {
+		if a.Protected && !have[a.Target] {
+			// nothing is configured for it (yet): it stays listed, resolving to nothing, and is no problem
+			keepA = append(keepA, a)
+			continue
+		}
 		if !have[a.Target] {
 			s.Problems = append(s.Problems, fmt.Sprintf("%s: unknown model %s", AliasKey(a.Alias), a.Target))
 			continue

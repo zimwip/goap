@@ -151,6 +151,70 @@ func SeedModels(ctx context.Context, g *graph.Graph, providers []llmcfg.Provider
 	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Model gateway configuration", items)
 }
 
+// SeedProtectedAliases makes sure, at every start, that the protected aliases of the platform exist (ADR 0084:
+// llmcfg.ProtectedAliases): SeedModels only runs on a graph holding no provider, so a graph that predates them gets them
+// here. A missing one is created targeting what the default alias targets (the helper: what the fast alias targets
+// when it exists), or nothing while no model is configured, in which case it resolves to nothing and is not available;
+// a node of that name without the protected flag, or retired, is flagged and restored. One that exists is never
+// retargeted: the target belongs to the administrators. It reports whether it wrote anything.
+func SeedProtectedAliases(ctx context.Context, g *graph.Graph) (bool, error) {
+	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
+	if err != nil && !errors.Is(err, graph.ErrNotFound) {
+		return false, err
+	}
+	current := map[string]domain.Node{}
+	if head.ID != "" {
+		nodes, _, err := g.BaselineGraph(ctx, head.ID)
+		if err != nil {
+			return false, err
+		}
+		for _, n := range nodes {
+			if n.Namespace == llmcfg.NamespacePlatform && n.Type == llmcfg.NodeTypeAlias && !n.Deleted {
+				current[n.Key] = n
+			}
+		}
+	}
+	targetOf := func(alias string) string {
+		n, ok := current[llmcfg.AliasKey(alias)]
+		if !ok || n.State == llmcfg.StateRetired {
+			return ""
+		}
+		a, err := llmcfg.AliasFromProps(n.Properties)
+		if err != nil {
+			return ""
+		}
+		return a.Target
+	}
+	var edits []graph.NodeEdit
+	for _, name := range llmcfg.ProtectedAliases() {
+		key := llmcfg.AliasKey(name)
+		n, ok := current[key]
+		if !ok {
+			target := targetOf("default")
+			if name == llmcfg.HelperAlias {
+				if fast := targetOf("fast"); fast != "" {
+					target = fast
+				}
+			}
+			edits = append(edits, SeedNode(key, llmcfg.NodeTypeAlias, llmcfg.Alias{Alias: name, Target: target, Protected: true}.Props()))
+			continue
+		}
+		if a, err := llmcfg.AliasFromProps(n.Properties); err == nil && a.Protected && n.State != llmcfg.StateRetired {
+			continue
+		}
+		pre := n.Ref()
+		e := graph.NodeEdit{Pre: &pre, Props: map[string]any{"protected": true}, Rationale: "Alias " + name + " is protected"}
+		if n.State == llmcfg.StateRetired {
+			e.State = "active"
+		}
+		edits = append(edits, e)
+	}
+	if len(edits) == 0 {
+		return false, nil
+	}
+	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Protected model aliases", edits)
+}
+
 // SeedBuiltins makes sure, at every start, that the built-in MCPs and their adapter definitions exist
 // and match the code (ADR 0028): like the built-in domains they ship with the platform. The first
 // time a built-in MCP is seeded the default organisation gets an instance of its adapter, so that

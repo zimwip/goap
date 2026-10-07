@@ -9,6 +9,10 @@ service ModelService {
   rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
   // Embeds texts on the embedding model (alias "embed" by default), one vector per text (ADR 0026).
   rpc Embed(EmbedRequest) returns (EmbedResponse);
+  // The contextual helper (ADR 0086): proposes values for the fields of the form the user is working on.
+  // Stateless and ephemeral: nothing is stored, no change, no journal entry; it calls the model of the
+  // "helper" alias as the caller (role allow-list and token usage as for any other call).
+  rpc Suggest(SuggestRequest) returns (SuggestResponse);
 
   // Platform administration of the gateway (`admin` on the `platform`
   // resource), read-only: providers, models and aliases are nodes of the
@@ -71,6 +75,9 @@ message ModelAlias {
   string alias = 1;
   string provider = 2;
   string model = 3;
+  // Used by the platform itself (assistant, helper): may not be retired nor renamed (ADR 0084). Provider and model are
+  // empty while nothing is configured for it.
+  bool protected = 4;
 }
 
 // A model the caller may use.
@@ -168,3 +175,60 @@ message ListCatalogResponse {
   repeated ModelAlias aliases = 2;
 }
 
+
+// ---- the contextual helper (ADR 0086) ---------------------------------------
+
+// The tab the user is on, as the web names it (opaque to the server).
+message SuggestTab {
+  string kind = 1;
+  map<string, string> params = 2;
+}
+
+// A field of the form: what the helper may propose a value for.
+message SuggestField {
+  string id = 1;
+  string label = 2;
+  // string | number | boolean | date | enum | json
+  string type = 3;
+  repeated string enum_values = 4;
+  string description = 5;
+  // the current value, as JSON text ("" when empty)
+  string current_value = 6;
+  bool read_only = 7;
+}
+
+message SuggestContext {
+  SuggestTab tab = 1;
+  // the node or change the tab is about (opaque strings)
+  string subject = 2;
+  // the text the user selected on the page
+  string selection = 3;
+  repeated SuggestField fields = 4;
+}
+
+message SuggestMessage {
+  // user | assistant
+  string role = 1;
+  string text = 2;
+}
+
+message SuggestRequest {
+  SuggestContext context = 1;
+  // the small discussion so far, resent each time
+  repeated SuggestMessage messages = 2;
+  // optional instruction of the user for this round
+  string instruction = 3;
+}
+
+message SuggestProposal {
+  string field_id = 1;
+  // the proposed value, as JSON text
+  string value = 2;
+  string rationale = 3;
+}
+
+message SuggestResponse {
+  string message = 1;
+  repeated SuggestProposal proposals = 2;
+  Usage usage = 3;
+}

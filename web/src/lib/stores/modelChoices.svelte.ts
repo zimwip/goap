@@ -42,4 +42,25 @@ export function isAvailableAlias(value: string): boolean {
   return modelChoices.aliases.some((a) => a.alias === v);
 }
 
+/** The protected aliases the platform resolves itself (ADR 0084): the conversational assistant and the field helper. */
+export const ASSISTANT_ALIAS = 'assistant';
+export const HELPER_ALIAS = 'helper';
+
+/** Can `alias` be used right now? ListModels only returns the aliases that resolve to a model the caller may use, so a
+ * protected alias nothing is configured for (or whose model is gone) is not available. False until the choices load. */
+export function aliasAvailable(alias: string): boolean {
+  return modelChoices.aliases.some((a) => a.alias === alias && !!a.provider && !!a.model);
+}
+
+/** Whether the assistant and the helper can be offered: reactive (read it in a template or an effect); the choices are
+ * refreshed when the model configuration changes (flux reducers), call `refreshModelChoices` once to load them. */
+export const aliasFlags = {
+  get assistantEnabled(): boolean {
+    return aliasAvailable(ASSISTANT_ALIAS);
+  },
+  get helperEnabled(): boolean {
+    return aliasAvailable(HELPER_ALIAS);
+  },
+};
+
 onTokenChange(() => void refreshModelChoices());

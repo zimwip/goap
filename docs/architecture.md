@@ -699,8 +699,9 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **registry** | Methodologies (graph data) and domains (its database), ADR 0023: editing (draft), validation, publishing, versions, the type catalogue, YAML import/export | Connect `registry.v1` | `registry` (`domain_version`) + the graph | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
 | **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply) | Connect `graph.v1` | `graph` | 🟢 |
-| **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces | Connect `model.v1` | `modelgw` (token usage; the configuration is graph data, ADR 0021) | 🟢 core |
+| **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces; `Suggest`, the stateless contextual helper over the `helper` alias (ADR 0086) | Connect `model.v1` | `modelgw` (token usage; the configuration is graph data, ADR 0021) | 🟢 core |
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
+| **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0084-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
 | **indexer** | Node index ([ADR 0026](adr/0026-node-index-and-search.md)): follows the node / baseline events of the graph, embeds through modelgw (alias `embed`), answers hybrid full-text + semantic searches with facets, filtered by ABAC | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters and their restrictions (graph) along the organisation hierarchy, tool calls, the built-in connectors of the platform (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
@@ -739,7 +740,7 @@ an interface, replaceable with the PostgreSQL implementation without changing th
 - **Local without containers**: a single SQLite file shared by `goap-dev` (migrations `migrations_sqlite/`
   per component, [ADR 0010](adr/0010-local-sqlite-mode.md)).
 - **Dev**: one PostgreSQL instance, **one schema per service** (`graph`, `engine`, `index`,
-  `modelgw`, `preferences`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
+  `modelgw`, `preferences`, `conversations`, `mcp`) and a dedicated role per service (`deploy/postgres/init.sql`).
 - **Prod**: one database (or cluster) per service; only the DSN changes (`GOAP_DB_DSN`, read from Vault).
 - Migrations embedded in each service (`embed.FS`), applied at startup (advisory lock).
 
@@ -1057,7 +1058,7 @@ Every composition (`goap-dev`, `cmd/graph`) seeds the platform through one funct
    catalogue). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
-   platform roles), `SeedModels` (`Options.Models`), then `Options.Dev`. Each step is idempotent.
+   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), then `Options.Dev`. Each step is idempotent.
 3. The registry then seeds the methodologies (`goap-dev`; `cmd/registry` seeds them over RPC): they need the aliases of step 2.
 
 Development and demo data is not part of it (`internal/devseed`: `Demo` the ALM repository, `DocumentRepository` the
@@ -1443,6 +1444,12 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   (engine, in-process) are trusted and skip the role check but still count toward the quota.
 - **Aliases** (`default`, `fast`…) point to catalog models; the router follows the graph. The RPCs of the gateway are read-only
   (`ListProviders`, `ListCatalog`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
+- **Protected aliases** (ADR 0084): `assistant` (the conversational assistant) and `helper` (the contextual field helper)
+  are `LlmAlias` nodes flagged `protected`, present on every install (`graphsvc.SeedProtectedAliases`, from `Boot`; no
+  model configured: the alias exists with no target, resolves to nothing and is not in `ListModels`, i.e. not available).
+  `llmcfg.ProtectedAliasValidator` (a `graph.NodeValidator`) refuses a change that retires one, renames it or drops its
+  flag; retargeting stays free. The web hides the removal of a protected alias and its staged deletions of a model or
+  provider skip it (`aliasFlags.assistantEnabled` / `helperEnabled` in `stores/modelChoices.svelte.ts`).
 
 
 ## Node lifecycle (ADR 0014)

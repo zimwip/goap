@@ -471,10 +471,13 @@ func (*ListModelsRequest) Descriptor() ([]byte, []int) {
 }
 
 type ModelAlias struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Alias         string                 `protobuf:"bytes,1,opt,name=alias,proto3" json:"alias,omitempty"`
-	Provider      string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
-	Model         string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Alias    string                 `protobuf:"bytes,1,opt,name=alias,proto3" json:"alias,omitempty"`
+	Provider string                 `protobuf:"bytes,2,opt,name=provider,proto3" json:"provider,omitempty"`
+	Model    string                 `protobuf:"bytes,3,opt,name=model,proto3" json:"model,omitempty"`
+	// Used by the platform itself (assistant, helper): may not be retired nor renamed (ADR 0084). Provider and model are
+	// empty while nothing is configured for it.
+	Protected     bool `protobuf:"varint,4,opt,name=protected,proto3" json:"protected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -528,6 +531,13 @@ func (x *ModelAlias) GetModel() string {
 		return x.Model
 	}
 	return ""
+}
+
+func (x *ModelAlias) GetProtected() bool {
+	if x != nil {
+		return x.Protected
+	}
+	return false
 }
 
 // A model the caller may use.
@@ -1410,6 +1420,460 @@ func (x *ListCatalogResponse) GetAliases() []*ModelAlias {
 	return nil
 }
 
+// The tab the user is on, as the web names it (opaque to the server).
+type SuggestTab struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Params        map[string]string      `protobuf:"bytes,2,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuggestTab) Reset() {
+	*x = SuggestTab{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuggestTab) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuggestTab) ProtoMessage() {}
+
+func (x *SuggestTab) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuggestTab.ProtoReflect.Descriptor instead.
+func (*SuggestTab) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SuggestTab) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *SuggestTab) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+// A field of the form: what the helper may propose a value for.
+type SuggestField struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Label string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	// string | number | boolean | date | enum | json
+	Type        string   `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	EnumValues  []string `protobuf:"bytes,4,rep,name=enum_values,json=enumValues,proto3" json:"enum_values,omitempty"`
+	Description string   `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
+	// the current value, as JSON text ("" when empty)
+	CurrentValue  string `protobuf:"bytes,6,opt,name=current_value,json=currentValue,proto3" json:"current_value,omitempty"`
+	ReadOnly      bool   `protobuf:"varint,7,opt,name=read_only,json=readOnly,proto3" json:"read_only,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuggestField) Reset() {
+	*x = SuggestField{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuggestField) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuggestField) ProtoMessage() {}
+
+func (x *SuggestField) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuggestField.ProtoReflect.Descriptor instead.
+func (*SuggestField) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{25}
+}
+
+func (x *SuggestField) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *SuggestField) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *SuggestField) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *SuggestField) GetEnumValues() []string {
+	if x != nil {
+		return x.EnumValues
+	}
+	return nil
+}
+
+func (x *SuggestField) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *SuggestField) GetCurrentValue() string {
+	if x != nil {
+		return x.CurrentValue
+	}
+	return ""
+}
+
+func (x *SuggestField) GetReadOnly() bool {
+	if x != nil {
+		return x.ReadOnly
+	}
+	return false
+}
+
+type SuggestContext struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Tab   *SuggestTab            `protobuf:"bytes,1,opt,name=tab,proto3" json:"tab,omitempty"`
+	// the node or change the tab is about (opaque strings)
+	Subject string `protobuf:"bytes,2,opt,name=subject,proto3" json:"subject,omitempty"`
+	// the text the user selected on the page
+	Selection     string          `protobuf:"bytes,3,opt,name=selection,proto3" json:"selection,omitempty"`
+	Fields        []*SuggestField `protobuf:"bytes,4,rep,name=fields,proto3" json:"fields,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuggestContext) Reset() {
+	*x = SuggestContext{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuggestContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuggestContext) ProtoMessage() {}
+
+func (x *SuggestContext) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuggestContext.ProtoReflect.Descriptor instead.
+func (*SuggestContext) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *SuggestContext) GetTab() *SuggestTab {
+	if x != nil {
+		return x.Tab
+	}
+	return nil
+}
+
+func (x *SuggestContext) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *SuggestContext) GetSelection() string {
+	if x != nil {
+		return x.Selection
+	}
+	return ""
+}
+
+func (x *SuggestContext) GetFields() []*SuggestField {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
+type SuggestMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// user | assistant
+	Role          string `protobuf:"bytes,1,opt,name=role,proto3" json:"role,omitempty"`
+	Text          string `protobuf:"bytes,2,opt,name=text,proto3" json:"text,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuggestMessage) Reset() {
+	*x = SuggestMessage{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuggestMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuggestMessage) ProtoMessage() {}
+
+func (x *SuggestMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuggestMessage.ProtoReflect.Descriptor instead.
+func (*SuggestMessage) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{27}
+}
+
+func (x *SuggestMessage) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
+}
+
+func (x *SuggestMessage) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+type SuggestRequest struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Context *SuggestContext        `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	// the small discussion so far, resent each time
+	Messages []*SuggestMessage `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"`
+	// optional instruction of the user for this round
+	Instruction   string `protobuf:"bytes,3,opt,name=instruction,proto3" json:"instruction,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuggestRequest) Reset() {
+	*x = SuggestRequest{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[28]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuggestRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuggestRequest) ProtoMessage() {}
+
+func (x *SuggestRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[28]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuggestRequest.ProtoReflect.Descriptor instead.
+func (*SuggestRequest) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{28}
+}
+
+func (x *SuggestRequest) GetContext() *SuggestContext {
+	if x != nil {
+		return x.Context
+	}
+	return nil
+}
+
+func (x *SuggestRequest) GetMessages() []*SuggestMessage {
+	if x != nil {
+		return x.Messages
+	}
+	return nil
+}
+
+func (x *SuggestRequest) GetInstruction() string {
+	if x != nil {
+		return x.Instruction
+	}
+	return ""
+}
+
+type SuggestProposal struct {
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	FieldId string                 `protobuf:"bytes,1,opt,name=field_id,json=fieldId,proto3" json:"field_id,omitempty"`
+	// the proposed value, as JSON text
+	Value         string `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	Rationale     string `protobuf:"bytes,3,opt,name=rationale,proto3" json:"rationale,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuggestProposal) Reset() {
+	*x = SuggestProposal{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[29]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuggestProposal) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuggestProposal) ProtoMessage() {}
+
+func (x *SuggestProposal) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[29]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuggestProposal.ProtoReflect.Descriptor instead.
+func (*SuggestProposal) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{29}
+}
+
+func (x *SuggestProposal) GetFieldId() string {
+	if x != nil {
+		return x.FieldId
+	}
+	return ""
+}
+
+func (x *SuggestProposal) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *SuggestProposal) GetRationale() string {
+	if x != nil {
+		return x.Rationale
+	}
+	return ""
+}
+
+type SuggestResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Proposals     []*SuggestProposal     `protobuf:"bytes,2,rep,name=proposals,proto3" json:"proposals,omitempty"`
+	Usage         *Usage                 `protobuf:"bytes,3,opt,name=usage,proto3" json:"usage,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SuggestResponse) Reset() {
+	*x = SuggestResponse{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[30]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SuggestResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SuggestResponse) ProtoMessage() {}
+
+func (x *SuggestResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[30]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SuggestResponse.ProtoReflect.Descriptor instead.
+func (*SuggestResponse) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{30}
+}
+
+func (x *SuggestResponse) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+func (x *SuggestResponse) GetProposals() []*SuggestProposal {
+	if x != nil {
+		return x.Proposals
+	}
+	return nil
+}
+
+func (x *SuggestResponse) GetUsage() *Usage {
+	if x != nil {
+		return x.Usage
+	}
+	return nil
+}
+
 var File_goap_model_v1_model_proto protoreflect.FileDescriptor
 
 const file_goap_model_v1_model_proto_rawDesc = "" +
@@ -1443,12 +1907,13 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x03 \x01(\tR\x05model\x12\x16\n" +
 	"\x06tokens\x18\x04 \x01(\x05R\x06tokens\"\x13\n" +
-	"\x11ListModelsRequest\"T\n" +
+	"\x11ListModelsRequest\"r\n" +
 	"\n" +
 	"ModelAlias\x12\x14\n" +
 	"\x05alias\x18\x01 \x01(\tR\x05alias\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x14\n" +
-	"\x05model\x18\x03 \x01(\tR\x05model\"e\n" +
+	"\x05model\x18\x03 \x01(\tR\x05model\x12\x1c\n" +
+	"\tprotected\x18\x04 \x01(\bR\tprotected\"e\n" +
 	"\x0eAvailableModel\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12!\n" +
@@ -1507,12 +1972,49 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x12ListCatalogRequest\"\x7f\n" +
 	"\x13ListCatalogResponse\x123\n" +
 	"\x06models\x18\x01 \x03(\v2\x1b.goap.model.v1.CatalogModelR\x06models\x123\n" +
-	"\aaliases\x18\x02 \x03(\v2\x19.goap.model.v1.ModelAliasR\aaliases2\xeb\x04\n" +
+	"\aaliases\x18\x02 \x03(\v2\x19.goap.model.v1.ModelAliasR\aaliases\"\x9a\x01\n" +
+	"\n" +
+	"SuggestTab\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12=\n" +
+	"\x06params\x18\x02 \x03(\v2%.goap.model.v1.SuggestTab.ParamsEntryR\x06params\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xcd\x01\n" +
+	"\fSuggestField\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x12\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1f\n" +
+	"\venum_values\x18\x04 \x03(\tR\n" +
+	"enumValues\x12 \n" +
+	"\vdescription\x18\x05 \x01(\tR\vdescription\x12#\n" +
+	"\rcurrent_value\x18\x06 \x01(\tR\fcurrentValue\x12\x1b\n" +
+	"\tread_only\x18\a \x01(\bR\breadOnly\"\xaa\x01\n" +
+	"\x0eSuggestContext\x12+\n" +
+	"\x03tab\x18\x01 \x01(\v2\x19.goap.model.v1.SuggestTabR\x03tab\x12\x18\n" +
+	"\asubject\x18\x02 \x01(\tR\asubject\x12\x1c\n" +
+	"\tselection\x18\x03 \x01(\tR\tselection\x123\n" +
+	"\x06fields\x18\x04 \x03(\v2\x1b.goap.model.v1.SuggestFieldR\x06fields\"8\n" +
+	"\x0eSuggestMessage\x12\x12\n" +
+	"\x04role\x18\x01 \x01(\tR\x04role\x12\x12\n" +
+	"\x04text\x18\x02 \x01(\tR\x04text\"\xa6\x01\n" +
+	"\x0eSuggestRequest\x127\n" +
+	"\acontext\x18\x01 \x01(\v2\x1d.goap.model.v1.SuggestContextR\acontext\x129\n" +
+	"\bmessages\x18\x02 \x03(\v2\x1d.goap.model.v1.SuggestMessageR\bmessages\x12 \n" +
+	"\vinstruction\x18\x03 \x01(\tR\vinstruction\"`\n" +
+	"\x0fSuggestProposal\x12\x19\n" +
+	"\bfield_id\x18\x01 \x01(\tR\afieldId\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value\x12\x1c\n" +
+	"\trationale\x18\x03 \x01(\tR\trationale\"\x95\x01\n" +
+	"\x0fSuggestResponse\x12\x18\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12<\n" +
+	"\tproposals\x18\x02 \x03(\v2\x1e.goap.model.v1.SuggestProposalR\tproposals\x12*\n" +
+	"\x05usage\x18\x03 \x01(\v2\x14.goap.model.v1.UsageR\x05usage2\xb5\x05\n" +
 	"\fModelService\x12K\n" +
 	"\bComplete\x12\x1e.goap.model.v1.CompleteRequest\x1a\x1f.goap.model.v1.CompleteResponse\x12Q\n" +
 	"\n" +
 	"ListModels\x12 .goap.model.v1.ListModelsRequest\x1a!.goap.model.v1.ListModelsResponse\x12B\n" +
-	"\x05Embed\x12\x1b.goap.model.v1.EmbedRequest\x1a\x1c.goap.model.v1.EmbedResponse\x12f\n" +
+	"\x05Embed\x12\x1b.goap.model.v1.EmbedRequest\x1a\x1c.goap.model.v1.EmbedResponse\x12H\n" +
+	"\aSuggest\x12\x1d.goap.model.v1.SuggestRequest\x1a\x1e.goap.model.v1.SuggestResponse\x12f\n" +
 	"\x11ListProviderKinds\x12'.goap.model.v1.ListProviderKindsRequest\x1a(.goap.model.v1.ListProviderKindsResponse\x12Z\n" +
 	"\rListProviders\x12#.goap.model.v1.ListProvidersRequest\x1a$.goap.model.v1.ListProvidersResponse\x12]\n" +
 	"\x0eDiscoverModels\x12$.goap.model.v1.DiscoverModelsRequest\x1a%.goap.model.v1.DiscoverModelsResponse\x12T\n" +
@@ -1532,7 +2034,7 @@ func file_goap_model_v1_model_proto_rawDescGZIP() []byte {
 	return file_goap_model_v1_model_proto_rawDescData
 }
 
-var file_goap_model_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_goap_model_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 32)
 var file_goap_model_v1_model_proto_goTypes = []any{
 	(*Message)(nil),                   // 0: goap.model.v1.Message
 	(*CompleteRequest)(nil),           // 1: goap.model.v1.CompleteRequest
@@ -1558,6 +2060,14 @@ var file_goap_model_v1_model_proto_goTypes = []any{
 	(*CatalogModel)(nil),              // 21: goap.model.v1.CatalogModel
 	(*ListCatalogRequest)(nil),        // 22: goap.model.v1.ListCatalogRequest
 	(*ListCatalogResponse)(nil),       // 23: goap.model.v1.ListCatalogResponse
+	(*SuggestTab)(nil),                // 24: goap.model.v1.SuggestTab
+	(*SuggestField)(nil),              // 25: goap.model.v1.SuggestField
+	(*SuggestContext)(nil),            // 26: goap.model.v1.SuggestContext
+	(*SuggestMessage)(nil),            // 27: goap.model.v1.SuggestMessage
+	(*SuggestRequest)(nil),            // 28: goap.model.v1.SuggestRequest
+	(*SuggestProposal)(nil),           // 29: goap.model.v1.SuggestProposal
+	(*SuggestResponse)(nil),           // 30: goap.model.v1.SuggestResponse
+	nil,                               // 31: goap.model.v1.SuggestTab.ParamsEntry
 }
 var file_goap_model_v1_model_proto_depIdxs = []int32{
 	0,  // 0: goap.model.v1.CompleteRequest.messages:type_name -> goap.model.v1.Message
@@ -1572,25 +2082,34 @@ var file_goap_model_v1_model_proto_depIdxs = []int32{
 	18, // 9: goap.model.v1.DiscoverModelsResponse.models:type_name -> goap.model.v1.DiscoveredModel
 	21, // 10: goap.model.v1.ListCatalogResponse.models:type_name -> goap.model.v1.CatalogModel
 	8,  // 11: goap.model.v1.ListCatalogResponse.aliases:type_name -> goap.model.v1.ModelAlias
-	1,  // 12: goap.model.v1.ModelService.Complete:input_type -> goap.model.v1.CompleteRequest
-	7,  // 13: goap.model.v1.ModelService.ListModels:input_type -> goap.model.v1.ListModelsRequest
-	4,  // 14: goap.model.v1.ModelService.Embed:input_type -> goap.model.v1.EmbedRequest
-	13, // 15: goap.model.v1.ModelService.ListProviderKinds:input_type -> goap.model.v1.ListProviderKindsRequest
-	16, // 16: goap.model.v1.ModelService.ListProviders:input_type -> goap.model.v1.ListProvidersRequest
-	19, // 17: goap.model.v1.ModelService.DiscoverModels:input_type -> goap.model.v1.DiscoverModelsRequest
-	22, // 18: goap.model.v1.ModelService.ListCatalog:input_type -> goap.model.v1.ListCatalogRequest
-	3,  // 19: goap.model.v1.ModelService.Complete:output_type -> goap.model.v1.CompleteResponse
-	10, // 20: goap.model.v1.ModelService.ListModels:output_type -> goap.model.v1.ListModelsResponse
-	6,  // 21: goap.model.v1.ModelService.Embed:output_type -> goap.model.v1.EmbedResponse
-	14, // 22: goap.model.v1.ModelService.ListProviderKinds:output_type -> goap.model.v1.ListProviderKindsResponse
-	17, // 23: goap.model.v1.ModelService.ListProviders:output_type -> goap.model.v1.ListProvidersResponse
-	20, // 24: goap.model.v1.ModelService.DiscoverModels:output_type -> goap.model.v1.DiscoverModelsResponse
-	23, // 25: goap.model.v1.ModelService.ListCatalog:output_type -> goap.model.v1.ListCatalogResponse
-	19, // [19:26] is the sub-list for method output_type
-	12, // [12:19] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	31, // 12: goap.model.v1.SuggestTab.params:type_name -> goap.model.v1.SuggestTab.ParamsEntry
+	24, // 13: goap.model.v1.SuggestContext.tab:type_name -> goap.model.v1.SuggestTab
+	25, // 14: goap.model.v1.SuggestContext.fields:type_name -> goap.model.v1.SuggestField
+	26, // 15: goap.model.v1.SuggestRequest.context:type_name -> goap.model.v1.SuggestContext
+	27, // 16: goap.model.v1.SuggestRequest.messages:type_name -> goap.model.v1.SuggestMessage
+	29, // 17: goap.model.v1.SuggestResponse.proposals:type_name -> goap.model.v1.SuggestProposal
+	2,  // 18: goap.model.v1.SuggestResponse.usage:type_name -> goap.model.v1.Usage
+	1,  // 19: goap.model.v1.ModelService.Complete:input_type -> goap.model.v1.CompleteRequest
+	7,  // 20: goap.model.v1.ModelService.ListModels:input_type -> goap.model.v1.ListModelsRequest
+	4,  // 21: goap.model.v1.ModelService.Embed:input_type -> goap.model.v1.EmbedRequest
+	28, // 22: goap.model.v1.ModelService.Suggest:input_type -> goap.model.v1.SuggestRequest
+	13, // 23: goap.model.v1.ModelService.ListProviderKinds:input_type -> goap.model.v1.ListProviderKindsRequest
+	16, // 24: goap.model.v1.ModelService.ListProviders:input_type -> goap.model.v1.ListProvidersRequest
+	19, // 25: goap.model.v1.ModelService.DiscoverModels:input_type -> goap.model.v1.DiscoverModelsRequest
+	22, // 26: goap.model.v1.ModelService.ListCatalog:input_type -> goap.model.v1.ListCatalogRequest
+	3,  // 27: goap.model.v1.ModelService.Complete:output_type -> goap.model.v1.CompleteResponse
+	10, // 28: goap.model.v1.ModelService.ListModels:output_type -> goap.model.v1.ListModelsResponse
+	6,  // 29: goap.model.v1.ModelService.Embed:output_type -> goap.model.v1.EmbedResponse
+	30, // 30: goap.model.v1.ModelService.Suggest:output_type -> goap.model.v1.SuggestResponse
+	14, // 31: goap.model.v1.ModelService.ListProviderKinds:output_type -> goap.model.v1.ListProviderKindsResponse
+	17, // 32: goap.model.v1.ModelService.ListProviders:output_type -> goap.model.v1.ListProvidersResponse
+	20, // 33: goap.model.v1.ModelService.DiscoverModels:output_type -> goap.model.v1.DiscoverModelsResponse
+	23, // 34: goap.model.v1.ModelService.ListCatalog:output_type -> goap.model.v1.ListCatalogResponse
+	27, // [27:35] is the sub-list for method output_type
+	19, // [19:27] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_goap_model_v1_model_proto_init() }
@@ -1604,7 +2123,7 @@ func file_goap_model_v1_model_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_model_v1_model_proto_rawDesc), len(file_goap_model_v1_model_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   32,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

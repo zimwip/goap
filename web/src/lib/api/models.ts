@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
-import type { AvailableModel, CatalogModel, DiscoveredModel, LlmProvider, ModelAlias, ProviderKind } from './types/models';
+import type { AvailableModel, CatalogModel, DiscoveredModel, LlmProvider, ModelAlias, ProviderKind, SuggestRequest, SuggestResponse } from './types/models';
 
 const MODEL = 'goap.model.v1.ModelService';
 const PREFERENCES = 'goap.preferences.v1.PreferencesService';
@@ -25,4 +25,6 @@ export const models = {
     rpc<object, { models?: DiscoveredModel[] }>(MODEL, 'DiscoverModels', { provider, apiKey }),
   listCatalog: (signal?: AbortSignal) =>
     rpc<Empty, { models?: CatalogModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListCatalog', {}, signal),
+  /** The contextual helper (ADR 0086): proposes values for the fields of a form. Stateless, nothing is stored. */
+  suggest: (req: SuggestRequest, signal?: AbortSignal) => rpc<SuggestRequest, SuggestResponse>(MODEL, 'Suggest', req, signal),
 };

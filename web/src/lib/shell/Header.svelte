@@ -62,7 +62,7 @@
     const raw = query.trim();
     if (raw.startsWith('>')) {
       const q = raw.slice(1).trim().toLowerCase();
-      return COMMANDS.filter((c) => !q || match(c.label, q)).map((c) => ({
+      return COMMANDS.filter((c) => (c.enabled?.() ?? true) && (!q || match(c.label, q))).map((c) => ({
         key: `cmd:${c.id}`,
         label: c.label,
         detail: c.shortcut ?? 'command',

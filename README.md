@@ -59,6 +59,7 @@ curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Typ
 | engine | 8083 | agentic processes: intent → planning → execution |
 | modelgw | 8084 | multi-provider LLM gateway (Anthropic, OpenAI-compatible, fake) |
 | preferences | 8087 | personal preferences of the users (theme, voice, dashboard defaults), outside the graph |
+| conversations | 8090 | conversations of the users with the assistant (messages, UI actions), outside the graph |
 | mcp | — | skeleton (API defined, not implemented) |
 | goap-runner | — | script action sandbox (one container / pod / process per execution) |
 | otel-collector, jaeger, prometheus, grafana | 4318, 16686, 9090, 3000 | OpenTelemetry observability |

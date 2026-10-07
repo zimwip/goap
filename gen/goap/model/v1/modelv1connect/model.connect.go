@@ -39,6 +39,8 @@ const (
 	ModelServiceListModelsProcedure = "/goap.model.v1.ModelService/ListModels"
 	// ModelServiceEmbedProcedure is the fully-qualified name of the ModelService's Embed RPC.
 	ModelServiceEmbedProcedure = "/goap.model.v1.ModelService/Embed"
+	// ModelServiceSuggestProcedure is the fully-qualified name of the ModelService's Suggest RPC.
+	ModelServiceSuggestProcedure = "/goap.model.v1.ModelService/Suggest"
 	// ModelServiceListProviderKindsProcedure is the fully-qualified name of the ModelService's
 	// ListProviderKinds RPC.
 	ModelServiceListProviderKindsProcedure = "/goap.model.v1.ModelService/ListProviderKinds"
@@ -59,6 +61,10 @@ type ModelServiceClient interface {
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	// Embeds texts on the embedding model (alias "embed" by default), one vector per text (ADR 0026).
 	Embed(context.Context, *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error)
+	// The contextual helper (ADR 0086): proposes values for the fields of the form the user is working on.
+	// Stateless and ephemeral: nothing is stored, no change, no journal entry; it calls the model of the
+	// "helper" alias as the caller (role allow-list and token usage as for any other call).
+	Suggest(context.Context, *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error)
 	// Platform administration of the gateway (`admin` on the `platform`
 	// resource), read-only: providers, models and aliases are nodes of the
 	// platform namespace of the graph, changed through changes. Providers are
@@ -101,6 +107,12 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("Embed")),
 			connect.WithClientOptions(opts...),
 		),
+		suggest: connect.NewClient[v1.SuggestRequest, v1.SuggestResponse](
+			httpClient,
+			baseURL+ModelServiceSuggestProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("Suggest")),
+			connect.WithClientOptions(opts...),
+		),
 		listProviderKinds: connect.NewClient[v1.ListProviderKindsRequest, v1.ListProviderKindsResponse](
 			httpClient,
 			baseURL+ModelServiceListProviderKindsProcedure,
@@ -133,6 +145,7 @@ type modelServiceClient struct {
 	complete          *connect.Client[v1.CompleteRequest, v1.CompleteResponse]
 	listModels        *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
 	embed             *connect.Client[v1.EmbedRequest, v1.EmbedResponse]
+	suggest           *connect.Client[v1.SuggestRequest, v1.SuggestResponse]
 	listProviderKinds *connect.Client[v1.ListProviderKindsRequest, v1.ListProviderKindsResponse]
 	listProviders     *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
 	discoverModels    *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
@@ -152,6 +165,11 @@ func (c *modelServiceClient) ListModels(ctx context.Context, req *connect.Reques
 // Embed calls goap.model.v1.ModelService.Embed.
 func (c *modelServiceClient) Embed(ctx context.Context, req *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error) {
 	return c.embed.CallUnary(ctx, req)
+}
+
+// Suggest calls goap.model.v1.ModelService.Suggest.
+func (c *modelServiceClient) Suggest(ctx context.Context, req *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error) {
+	return c.suggest.CallUnary(ctx, req)
 }
 
 // ListProviderKinds calls goap.model.v1.ModelService.ListProviderKinds.
@@ -180,6 +198,10 @@ type ModelServiceHandler interface {
 	ListModels(context.Context, *connect.Request[v1.ListModelsRequest]) (*connect.Response[v1.ListModelsResponse], error)
 	// Embeds texts on the embedding model (alias "embed" by default), one vector per text (ADR 0026).
 	Embed(context.Context, *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error)
+	// The contextual helper (ADR 0086): proposes values for the fields of the form the user is working on.
+	// Stateless and ephemeral: nothing is stored, no change, no journal entry; it calls the model of the
+	// "helper" alias as the caller (role allow-list and token usage as for any other call).
+	Suggest(context.Context, *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error)
 	// Platform administration of the gateway (`admin` on the `platform`
 	// resource), read-only: providers, models and aliases are nodes of the
 	// platform namespace of the graph, changed through changes. Providers are
@@ -218,6 +240,12 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("Embed")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceSuggestHandler := connect.NewUnaryHandler(
+		ModelServiceSuggestProcedure,
+		svc.Suggest,
+		connect.WithSchema(modelServiceMethods.ByName("Suggest")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelServiceListProviderKindsHandler := connect.NewUnaryHandler(
 		ModelServiceListProviderKindsProcedure,
 		svc.ListProviderKinds,
@@ -250,6 +278,8 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 			modelServiceListModelsHandler.ServeHTTP(w, r)
 		case ModelServiceEmbedProcedure:
 			modelServiceEmbedHandler.ServeHTTP(w, r)
+		case ModelServiceSuggestProcedure:
+			modelServiceSuggestHandler.ServeHTTP(w, r)
 		case ModelServiceListProviderKindsProcedure:
 			modelServiceListProviderKindsHandler.ServeHTTP(w, r)
 		case ModelServiceListProvidersProcedure:
@@ -277,6 +307,10 @@ func (UnimplementedModelServiceHandler) ListModels(context.Context, *connect.Req
 
 func (UnimplementedModelServiceHandler) Embed(context.Context, *connect.Request[v1.EmbedRequest]) (*connect.Response[v1.EmbedResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.Embed is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) Suggest(context.Context, *connect.Request[v1.SuggestRequest]) (*connect.Response[v1.SuggestResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.Suggest is not implemented"))
 }
 
 func (UnimplementedModelServiceHandler) ListProviderKinds(context.Context, *connect.Request[v1.ListProviderKindsRequest]) (*connect.Response[v1.ListProviderKindsResponse], error) {
