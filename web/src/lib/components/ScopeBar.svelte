@@ -3,7 +3,7 @@
   // content. Picking is local to this editor; "Work on it" moves the active pointer, the option the change and its
   // agents work on (every call that names no flow goes to it).
   import { graph, errorMessage, type Flow } from '../api';
-  import { MAIN_SCOPE, scopeColor } from '../changeScope';
+  import { MAIN_SCOPE, scopeColor, scopeKind, scopeStatus } from '../changeScope';
   import StatusBadge from './StatusBadge.svelte';
 
   let {
@@ -13,6 +13,7 @@
     candidates,
     mainImpacts = 0,
     closed = false,
+    writable = true,
     onchange,
     oncompare,
   }: {
@@ -23,6 +24,8 @@
     candidates: Map<string, number>;
     mainImpacts?: number;
     closed?: boolean;
+    /** whether the scope can be edited */
+    writable?: boolean;
     onchange?: () => void;
     oncompare?: () => void;
   } = $props();
@@ -63,9 +66,15 @@
     });
 </script>
 
-<div class="scope-bar" style="--scope: {scopeColor(options, scope)}">
+<div class="scope-bar" class:option={scopeKind(scope) === 'Option'} style="--scope: {scopeColor(options, scope)}">
+  <div class="banner" title="The tabs marked with a dot show this flow">
+    <span class="kind">{scopeKind(scope)}</span>
+    <span class="name">{scope === MAIN_SCOPE || !current ? 'Main flow' : current.option?.name}</span>
+    <span class="hint" aria-live="polite">{scopeStatus(scope, writable, closed)}{#if scope === MAIN_SCOPE && open.length} · {open.length} open option(s) hold their own impacts, pick one to see them{:else if current?.option?.hypothesis} · {current.option.hypothesis}{/if}</span>
+  </div>
+
   <div class="chips" role="tablist" aria-label="Scope of the change">
-    <span class="label">Scope</span>
+    <span class="label" title="Pick the flow the marked tabs show">Switch to</span>
     <button type="button" role="tab" class="chip" class:on={scope === MAIN_SCOPE} aria-selected={scope === MAIN_SCOPE} style="--c: {scopeColor(options, MAIN_SCOPE)}" onclick={() => (scope = MAIN_SCOPE)}>
       <span class="dot"></span> Main flow
       <span class="count" title="change impacts of the main flow">{mainImpacts}</span>
@@ -98,11 +107,6 @@
   </div>
 
   <div class="status">
-    {#if scope === MAIN_SCOPE}
-      <span>Looking at the <strong>main flow</strong>{#if open.length}: {open.length} open option(s) hold their own impacts, pick one to see them{/if}.</span>
-    {:else if current}
-      <span>Looking at the option <strong>{current.option?.name}</strong>{#if current.option?.hypothesis} — {current.option.hypothesis}{/if}. It sees the main flow plus what it changes.</span>
-    {/if}
     <span class="grow"></span>
     {#if !closed}
       {#if active}
@@ -136,7 +140,7 @@
 <style>
   .scope-bar {
     border: 1px solid var(--border);
-    border-top: 3px solid var(--scope);
+    border-top: 5px solid var(--scope);
     border-radius: var(--radius-sm);
     padding: 6px 10px;
     margin-bottom: 8px;
@@ -144,6 +148,41 @@
     flex-direction: column;
     gap: 6px;
     background: var(--surface);
+  }
+  .scope-bar.option {
+    background: color-mix(in srgb, var(--scope) 8%, var(--surface));
+    border-color: var(--scope);
+  }
+  /* the scope, said loudly: a band across the top of the bar in the colour of the flow */
+  .banner {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: -6px -10px 0;
+    padding: 8px 12px;
+    background: color-mix(in srgb, var(--scope) 22%, var(--surface));
+    border-bottom: 1px solid var(--scope);
+  }
+  .kind {
+    background: var(--scope);
+    color: var(--surface);
+    font-weight: 700;
+    font-size: 0.8em;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 4px;
+  }
+  .name {
+    font-size: 1.3em;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .banner .hint {
+    font-size: 0.9em;
+    color: var(--text);
+    opacity: 0.8;
   }
   .chips,
   .status,
@@ -154,7 +193,8 @@
     flex-wrap: wrap;
   }
   .label {
-    font-size: 0.8em;
+    font-size: 0.85em;
+    font-weight: 600;
     text-transform: uppercase;
     color: var(--muted);
     letter-spacing: 0.04em;

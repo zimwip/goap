@@ -137,17 +137,25 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   hypothesis (`OpenOption`); several are explored at once, each writing its own versions of the same nodes. The
   **active option** is the one the change works on: every call that names no flow goes to it
   (`Change.ResolveFlow`; `main` names the main flow), and a process on the main flow reads its graph
-  (`ChangeGraph`). Options are compared node by node at `written` or `accepted` (`CompareOptions`), evaluated,
+  (`ChangeGraph`). Two scopes (the main flow or an option, open or decided) are compared impact by impact at `written` or
+  `accepted` (`DiffFlows`, [ADR 0083](adr/0083-option-diff.md); the older `CompareOptions` still serves the `goap-change` tool); an option is evaluated,
   then one is selected (its flow is adopted: its versions join the change branch, no copy) and the others are
   rejected. In the IDE the change editor opens on a **scope bar**: the main flow and one chip per option (status,
   the active one marked, the impacts it declared). The scope is chosen first, and the scoped panes (`<scope> ▸
-  Impacts`, `<scope> ▸ Items`) show the change as that flow sees it (`GetBlackboard` on the flow), each impact
+  Impacts`, `<scope> ▸ Artifacts`) show the change as that flow sees it (`GetBlackboard` on the flow), each impact
   marked *this option* or *main flow*; reviews and edits made there name that flow explicitly. Looking at an
   option is local to the editor; *Work on it* moves the active pointer (where agents and calls without a flow go).
   The Impacts pane is one list: a row per impacted node (why, versions `pre → post`, state and edits, review), an
   impact is added by creating a node or picking one with the reason it is impacted, and the node link opens the
   version the change wrote in that scope (the node editor is bound to the change and the flow, its edits go there).
-  Comparing, evaluating, selecting and rejecting are the Compare pane.
+  Comparing, evaluating, selecting and rejecting are the **Compare & decide dialog**, opened from the scope bar (shown
+  when the change has an option): a left and a right scope (by default the main flow and the option the scope bar looks at,
+  else the first open option), a swap, a level, then the impacts that differ (*added* on the right only, *removed* on the
+  left only, *modified* with the attribute-level changes: properties, state, owner, links), filter chips by category
+  and a count of the identical impacts it does not list; a row opens the impact in the Impacts pane of its scope; the
+  decide bar (evaluate, select, reject) acts on the option on the right.
+  The Artifacts pane lists the artifact items of the scope; an item-level decision (`kind: decision`, accept / reject with a comment) is
+  shown on the artifact it concerns, and stays in the Audit pane; item kinds with no pane of their own sit in a collapsed raw list.
 - **Decision loops** ([ADR 0009](adr/0009-branches-options-decisions.md) §4): a **decision point** is a question the
   change must settle, usually which option (`OpenDecision`). A ruling is *decided* (an option, a confidence, a
   justification) or *undecidable* (why, and the questions to answer first).
@@ -200,7 +208,7 @@ makes for the person.
 | Retire an entry | An MCP, adapter, policy, assignment or model entry is never deleted: *Retire* moves it to `retired` (its readers leave it out), saving it again restores it | `CommitEdits` (`state`) |
 | Review | Change → Impacts: *Review…* (comment mandatory), a shortcut for one impact | `ImpactNodeReview` |
 | Review several impacts | Change → Reviews: *New review* (prefilled with every proposed impact), a global comment, one table of the proposed impacts (include / remove box, inline comment, accept / reject per row, Accept all / Reject all), *Submit review* (all or none) or *Discard* | `ReviewOpen`, `ReviewUpdate`, `ReviewSubmit`, `ReviewDiscard` (over `ImpactNodeReviewBatch`) |
-| Options, decisions | Scope bar, Compare, Decisions panes (a ruling made there is a person's) | `OpenOption` … `SelectOption`, `OpenDecision` … `RuleDecision` |
+| Options, decisions | Scope bar in the header of every tab (labelled "Flow: Main flow" or "Option: name", its colour, a status line; the Impacts, Reviews and Artifacts tabs follow it, marked by a dot of its colour), Compare & decide dialog (opened from the scope bar), Decisions pane (a ruling made there is a person's) | `OpenOption` … `SelectOption`, `OpenDecision` … `RuleDecision` |
 | Adopt or discard a flow | Change → Overview (a flow no run works on is adopted straight on the graph) | `AdoptFlow`, `DiscardFlow` |
 | Apply | Change → Overview: *Apply* | `ApplyChange` |
 | Resolve a merge | A `committed` change (its integration waits) shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` (`IntegrateChange`) |
@@ -921,7 +929,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   allowed tools; the engine plans a `tool` action only when its tool is allowed.
 - **Built-in MCPs** ([ADR 0028](adr/0028-builtin-mcps-and-connectors.md)): the platform as tools, split by concern —
   `goap-graph` (read / glob / grep / links / baselines), `goap-change` (create / read / write / edit / link / unlink / cancel / remove /
-  note / validate on a change, options / option / activate / evaluate / compare for its options, decisions /
+  note / validate on a change, options / option / activate / evaluate / compare for its options (compare: `CompareOptions`), decisions /
   decision / rule / answer for its decision points, reviews / review_open / review_update / review_submit / review_discard for its review objects (ADR 0080); no apply, no selection, no ratification), `goap-scheduler` (start / list / get processes, triggers / fire; scope
   `agent`) and
   `goap-admin` (units, users, MCPs, connectors, domains, methodologies). Their connectors

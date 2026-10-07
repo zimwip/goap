@@ -61,6 +61,14 @@ func TestOptionsThroughTheService(t *testing.T) {
 	if err != nil || len(cmp.Nodes) != 1 || cmp.Nodes[0].Options[a.ID] == nil || cmp.Nodes[0].Props[a.ID]["title"] != "two" {
 		t.Fatalf("compare: %+v %v", cmp, err)
 	}
+	df, err := cl.DiffFlows(ctx, c.ID, "main", a.ID, "")
+	if err != nil || len(df.Impacts) != 1 || df.Impacts[0].Category != domain.DiffAdded || df.Impacts[0].Key != "REQ-1" || df.Right != a.ID {
+		t.Fatalf("diff flows: %+v %v", df, err)
+	}
+	df, err = cl.DiffFlows(ctx, c.ID, a.ID, "main", "")
+	if err != nil || len(df.Impacts) != 1 || df.Impacts[0].Category != domain.DiffRemoved || df.Impacts[0].Left == nil || df.Impacts[0].Left.Impact != added.ID {
+		t.Fatalf("diff flows reversed: %+v %v", df, err)
+	}
 	if f, err := cl.EvaluateOption(ctx, c.ID, a.ID, "", "good"); err != nil || f.Evaluation != "good" || !f.Evaluated {
 		t.Fatalf("evaluate: %+v %v", f, err)
 	}

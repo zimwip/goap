@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
-import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, LinkWrite, MergePlan, NodeCreateSpec, NodeName, OptionComparison, Resolution, Restructured } from './types/engine';
+import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
 import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
@@ -164,9 +164,10 @@ export const graph = {
     rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'SelectOption', { changeId, option }),
   rejectOption: (changeId: string, option: string) =>
     rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'RejectOption', { changeId, option }),
-  /** The nodes the options changed, each side against the main flow, at written or accepted. */
-  compareOptions: (changeId: string, level: string, all = false, signal?: AbortSignal) =>
-    rpc<{ changeId: string; level: string; all: boolean }, OptionComparison>(GRAPH, 'CompareOptions', { changeId, level, all }, signal),
+  /** The impacts two flows of a change see, compared (ADR 0083): 'main' or an option id on each side; level written or
+   * accepted. Added, removed and modified impacts are listed, the identical ones counted. */
+  diffFlows: (changeId: string, left: string, right: string, level: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string; left: string; right: string; level: string }, FlowDiff>(GRAPH, 'DiffFlows', { changeId, left, right, level }, signal),
   /** Decision points of a change (ADR 0009 §4). */
   listDecisionPoints: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { points?: DecisionPoint[] }>(GRAPH, 'ListDecisionPoints', { changeId }, signal),

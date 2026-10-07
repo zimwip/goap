@@ -137,6 +137,9 @@ service GraphService {
   rpc RejectOption(RejectOptionRequest) returns (RejectOptionResponse);
   rpc ListOptions(ListOptionsRequest) returns (ListOptionsResponse);
   rpc CompareOptions(CompareOptionsRequest) returns (CompareOptionsResponse);
+  // The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
+  // changes of a modified one; the identical ones are counted, not listed.
+  rpc DiffFlows(DiffFlowsRequest) returns (DiffFlowsResponse);
   // The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
   // the change reads (the active option's, else the reference baseline).
   rpc GetChangeView(GetChangeViewRequest) returns (GetChangeViewResponse);
@@ -1611,6 +1614,62 @@ message CompareOptionsResponse {
   string level = 1;
   repeated Flow options = 2;
   repeated OptionNode nodes = 3;
+}
+
+message DiffFlowsRequest {
+  string change_id = 1;
+  // the flows to compare: "main" (or empty) for the main flow, else an option id (open or decided)
+  string left = 2;
+  string right = 3;
+  // written (default: every impact not rejected) | accepted (the impacts accepted on that flow)
+  string level = 4;
+}
+
+// FieldChange is one difference between the left and the right shape of an impact's node: a property (name), the state,
+// the owner, or a link (name: its type, target: the key of its target node). Old / new are absent when added / removed.
+message FieldChange {
+  // property | state | owner | link
+  string kind = 1;
+  string name = 2;
+  // added | removed | changed, from the left to the right
+  string op = 3;
+  string target = 4;
+  google.protobuf.Value old = 5;
+  google.protobuf.Value new = 6;
+}
+
+// ImpactSide is what one flow sees of an impact.
+message ImpactSide {
+  string impact = 1;
+  // the flow that declared the impact ("" = the main flow)
+  string flow = 2;
+  string intent = 3;
+  string review = 4;
+  // false for a planned impact: its node is not checked out
+  bool drafted = 5;
+  string state = 6;
+  string owner = 7;
+}
+
+// ImpactDiff is an impact that differs between the two flows (matched by node, else by type and key).
+message ImpactDiff {
+  string node = 1;
+  string key = 2;
+  string type = 3;
+  // added (right only) | removed (left only) | modified (both, other content)
+  string category = 4;
+  ImpactSide left = 5;
+  ImpactSide right = 6;
+  repeated FieldChange changes = 7;
+}
+
+message DiffFlowsResponse {
+  string left = 1;
+  string right = 2;
+  string level = 3;
+  repeated ImpactDiff impacts = 4;
+  // impacts both flows see with the same content (left out of impacts)
+  int32 identical = 5;
 }
 
 message GetChangeViewRequest {

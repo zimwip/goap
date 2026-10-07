@@ -454,6 +454,15 @@ func (c *Client) Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow
 	return out, nil
 }
 
+// DiffFlows compares the impacts two flows of a change see (ADR 0083).
+func (c *Client) DiffFlows(ctx context.Context, id domain.ChangeID, left, right, level string) (domain.FlowDiff, error) {
+	r, err := c.rpc.DiffFlows(ctx, connect.NewRequest(&graphv1.DiffFlowsRequest{ChangeId: string(id), Left: left, Right: right, Level: level}))
+	if err != nil {
+		return domain.FlowDiff{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.FlowDiffFromPB(id, r.Msg), nil
+}
+
 // CompareOptions implements engine.GraphPort.
 func (c *Client) CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error) {
 	r, err := c.rpc.CompareOptions(ctx, connect.NewRequest(&graphv1.CompareOptionsRequest{ChangeId: string(id), Level: level, All: all}))

@@ -5,6 +5,10 @@
     /** counter or short text shown next to the label */
     badge?: string | number;
     hidden?: boolean;
+    /** a colour marking the pane as following a scope (a small dot before the label) */
+    tint?: string;
+    /** tooltip of the tab */
+    title?: string;
   }
 </script>
 
@@ -55,10 +59,11 @@
           aria-controls="pane-{p.id}"
           tabindex={current === p.id ? 0 : -1}
           class:on={current === p.id}
+          title={p.title}
           onclick={() => (active = p.id)}
           onkeydown={(e) => onkey(e, i)}
         >
-          {p.label}{#if p.badge !== undefined && p.badge !== ''}<span class="badge">{p.badge}</span>{/if}
+          {#if p.tint}<span class="tint" style="background: {p.tint}" aria-hidden="true"></span>{/if}{p.label}{#if p.badge !== undefined && p.badge !== ''}<span class="badge">{p.badge}</span>{/if}
         </button>
       {/each}
     </div>
@@ -104,6 +109,14 @@
   .tabs button.on {
     color: var(--text);
     border-bottom-color: var(--accent);
+  }
+  .tint {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 0.35rem;
+    vertical-align: middle;
   }
   .badge {
     margin-left: 0.35rem;

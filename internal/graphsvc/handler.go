@@ -1150,6 +1150,11 @@ func (h *Handler) CompareOptions(ctx context.Context, r *connect.Request[graphv1
 	return res(out, err)
 }
 
+func (h *Handler) DiffFlows(ctx context.Context, r *connect.Request[graphv1.DiffFlowsRequest]) (*connect.Response[graphv1.DiffFlowsResponse], error) {
+	d, err := h.Graph.DiffFlows(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Left, r.Msg.Right, r.Msg.Level)
+	return res(pbconv.FlowDiffToPB(d), err)
+}
+
 func (h *Handler) GetChangeView(ctx context.Context, r *connect.Request[graphv1.GetChangeViewRequest]) (*connect.Response[graphv1.GetChangeViewResponse], error) {
 	b, err := h.Graph.ChangeView(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, r.Msg.Level)
 	return res(&graphv1.GetChangeViewResponse{Baseline: pbconv.BaselineToPB(b)}, err)

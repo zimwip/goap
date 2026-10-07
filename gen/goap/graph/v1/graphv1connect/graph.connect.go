@@ -245,6 +245,8 @@ const (
 	// GraphServiceCompareOptionsProcedure is the fully-qualified name of the GraphService's
 	// CompareOptions RPC.
 	GraphServiceCompareOptionsProcedure = "/goap.graph.v1.GraphService/CompareOptions"
+	// GraphServiceDiffFlowsProcedure is the fully-qualified name of the GraphService's DiffFlows RPC.
+	GraphServiceDiffFlowsProcedure = "/goap.graph.v1.GraphService/DiffFlows"
 	// GraphServiceGetChangeViewProcedure is the fully-qualified name of the GraphService's
 	// GetChangeView RPC.
 	GraphServiceGetChangeViewProcedure = "/goap.graph.v1.GraphService/GetChangeView"
@@ -404,6 +406,9 @@ type GraphServiceClient interface {
 	RejectOption(context.Context, *connect.Request[v1.RejectOptionRequest]) (*connect.Response[v1.RejectOptionResponse], error)
 	ListOptions(context.Context, *connect.Request[v1.ListOptionsRequest]) (*connect.Response[v1.ListOptionsResponse], error)
 	CompareOptions(context.Context, *connect.Request[v1.CompareOptionsRequest]) (*connect.Response[v1.CompareOptionsResponse], error)
+	// The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
+	// changes of a modified one; the identical ones are counted, not listed.
+	DiffFlows(context.Context, *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error)
 	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
 	// the change reads (the active option's, else the reference baseline).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
@@ -885,6 +890,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("CompareOptions")),
 			connect.WithClientOptions(opts...),
 		),
+		diffFlows: connect.NewClient[v1.DiffFlowsRequest, v1.DiffFlowsResponse](
+			httpClient,
+			baseURL+GraphServiceDiffFlowsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DiffFlows")),
+			connect.WithClientOptions(opts...),
+		),
 		getChangeView: connect.NewClient[v1.GetChangeViewRequest, v1.GetChangeViewResponse](
 			httpClient,
 			baseURL+GraphServiceGetChangeViewProcedure,
@@ -1025,6 +1036,7 @@ type graphServiceClient struct {
 	rejectOption           *connect.Client[v1.RejectOptionRequest, v1.RejectOptionResponse]
 	listOptions            *connect.Client[v1.ListOptionsRequest, v1.ListOptionsResponse]
 	compareOptions         *connect.Client[v1.CompareOptionsRequest, v1.CompareOptionsResponse]
+	diffFlows              *connect.Client[v1.DiffFlowsRequest, v1.DiffFlowsResponse]
 	getChangeView          *connect.Client[v1.GetChangeViewRequest, v1.GetChangeViewResponse]
 	openDecision           *connect.Client[v1.OpenDecisionRequest, v1.OpenDecisionResponse]
 	ruleDecision           *connect.Client[v1.RuleDecisionRequest, v1.RuleDecisionResponse]
@@ -1412,6 +1424,11 @@ func (c *graphServiceClient) CompareOptions(ctx context.Context, req *connect.Re
 	return c.compareOptions.CallUnary(ctx, req)
 }
 
+// DiffFlows calls goap.graph.v1.GraphService.DiffFlows.
+func (c *graphServiceClient) DiffFlows(ctx context.Context, req *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error) {
+	return c.diffFlows.CallUnary(ctx, req)
+}
+
 // GetChangeView calls goap.graph.v1.GraphService.GetChangeView.
 func (c *graphServiceClient) GetChangeView(ctx context.Context, req *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error) {
 	return c.getChangeView.CallUnary(ctx, req)
@@ -1590,6 +1607,9 @@ type GraphServiceHandler interface {
 	RejectOption(context.Context, *connect.Request[v1.RejectOptionRequest]) (*connect.Response[v1.RejectOptionResponse], error)
 	ListOptions(context.Context, *connect.Request[v1.ListOptionsRequest]) (*connect.Response[v1.ListOptionsResponse], error)
 	CompareOptions(context.Context, *connect.Request[v1.CompareOptionsRequest]) (*connect.Response[v1.CompareOptionsResponse], error)
+	// The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
+	// changes of a modified one; the identical ones are counted, not listed.
+	DiffFlows(context.Context, *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error)
 	// The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
 	// the change reads (the active option's, else the reference baseline).
 	GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error)
@@ -2067,6 +2087,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("CompareOptions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceDiffFlowsHandler := connect.NewUnaryHandler(
+		GraphServiceDiffFlowsProcedure,
+		svc.DiffFlows,
+		connect.WithSchema(graphServiceMethods.ByName("DiffFlows")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceGetChangeViewHandler := connect.NewUnaryHandler(
 		GraphServiceGetChangeViewProcedure,
 		svc.GetChangeView,
@@ -2279,6 +2305,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListOptionsHandler.ServeHTTP(w, r)
 		case GraphServiceCompareOptionsProcedure:
 			graphServiceCompareOptionsHandler.ServeHTTP(w, r)
+		case GraphServiceDiffFlowsProcedure:
+			graphServiceDiffFlowsHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeViewProcedure:
 			graphServiceGetChangeViewHandler.ServeHTTP(w, r)
 		case GraphServiceOpenDecisionProcedure:
@@ -2606,6 +2634,10 @@ func (UnimplementedGraphServiceHandler) ListOptions(context.Context, *connect.Re
 
 func (UnimplementedGraphServiceHandler) CompareOptions(context.Context, *connect.Request[v1.CompareOptionsRequest]) (*connect.Response[v1.CompareOptionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CompareOptions is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) DiffFlows(context.Context, *connect.Request[v1.DiffFlowsRequest]) (*connect.Response[v1.DiffFlowsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DiffFlows is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetChangeView(context.Context, *connect.Request[v1.GetChangeViewRequest]) (*connect.Response[v1.GetChangeViewResponse], error) {

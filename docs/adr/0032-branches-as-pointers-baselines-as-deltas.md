@@ -100,7 +100,8 @@ children of v1.
 - **Status**: `exploring` → `evaluated` (`EvaluateOption`, an `evaluate` flow event with its comment) →
   `selected` (the flow adopted) or `rejected` (the flow discarded). A decided option is not active any more.
 - **Comparison** (`CompareOptions`, at `written` or `accepted`): the nodes any open option changed from the main
-  flow, with the version and the properties on each side (both sides fork from the same graph).
+  flow, with the version and the properties on each side (both sides fork from the same graph). The IDE compares two
+  scopes impact by impact with `DiffFlows` instead ([ADR 0083](0083-option-diff.md)).
 - **Selection** (`SelectOption`) is a decision: the other open options are rejected, then the flow of the selected
   one is adopted. A flow that invalidated nothing (an option) and wrote every node it changes on top of the head of
   the change branch is adopted **without copies**: its versions join the change branch (§1). A flow that relaunched

@@ -33,3 +33,19 @@ export function scopeWritable(options: Flow[], scope: string, closed: boolean): 
   if (!scope || scope === MAIN_SCOPE) return true;
   return options.find((o) => o.id === scope)?.status === 'open';
 }
+
+/** The kind of a scope, as the header labels it: "Flow" for the main flow, "Option" for an option. */
+export function scopeKind(scope: string): 'Flow' | 'Option' {
+  return !scope || scope === MAIN_SCOPE ? 'Flow' : 'Option';
+}
+
+/** The one-line status of a scope in the header: what it shows, and whether it is read-only. */
+export function scopeStatus(scope: string, writable: boolean, closed: boolean): string {
+  const what = scopeKind(scope) === 'Flow' ? 'the change as agreed' : 'what this option sees: the main flow, and what it changes';
+  return !writable && !closed ? `${what} · read-only: the option is decided` : what;
+}
+
+/** The tooltip of a tab that follows the scope. */
+export function scopeTabTitle(options: Flow[], scope: string): string {
+  return `Shows ${scopeName(options, scope)}`;
+}

@@ -21,7 +21,7 @@
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import ChangeAudit from '../../components/ChangeAudit.svelte';
-  import { makeContext } from '../../items';
+  import { artifactsOf, decisionsByItem, rawItems } from '../../artifacts';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
@@ -42,7 +42,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { flowStepNumber } from '../../flowChain';
   import { processOfFlow } from '../../flowDecision';
   import BoardIssueList from '../../components/BoardIssueList.svelte';
-  import ChangeOptions from '../../components/ChangeOptions.svelte';
+  import CompareDialog from '../../components/CompareDialog.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ChangeRisks from '../../components/ChangeRisks.svelte';
   import ChangeCriticality from '../../components/ChangeCriticality.svelte';
@@ -57,7 +57,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
   import MergeResolver from '../../components/MergeResolver.svelte';
-  import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeWritable } from '../../changeScope';
+  import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeTabTitle, scopeWritable } from '../../changeScope';
 
   import NotFound from '../../shell/NotFound.svelte';
 
@@ -69,6 +69,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let posts = $state<PostVersions>(new Map());
   let extraNodes = $state<string[]>([]);
   let moving = $state('');
+  /** the Compare & decide dialog, opened from the scope bar */
+  let compareOpen = $state(false);
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
   $effect(() => {
     tab.params.pane = pane;
@@ -263,16 +265,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   });
   /** the badge of a flow: open flows that compete cannot be adopted any more */
   const flowBadge = (f: Flow) => (f.status === 'open' && f.competesWith?.length ? 'competing' : f.status);
-  const ctx = $derived(makeContext(nodes, items));
-  const groups = $derived({
-    decision: items.filter((i) => i.kind === 'decision'),
-    artifact: items.filter((i) => i.kind === 'artifact'),
-  });
-  const itemLabel = (id: string | undefined) => {
-    const it = ctx.items.get(id ?? '');
-    return it ? `${it.kind ?? 'item'}${it.type ? ` ${it.type}` : ''}` : shortId(id);
-  };
-  const others = $derived(items.filter((i) => !['decision', 'artifact'].includes(i.kind ?? '')));
+  const artifacts = $derived(artifactsOf(items));
+  // item-level decisions are shown on the artifact they concern; the others stay in the Audit pane
+  const decisionsOn = $derived(decisionsByItem(items));
+  const raw = $derived(rawItems(items));
 
   // applied, or applied on its own branch and waiting for its merge: nothing to apply any more
   const isApplied = $derived(change?.status === 'applied' || change?.status === 'committed');
@@ -301,10 +297,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const stuckNotLandable = $derived(lcRows.some((r) => r.lifecycle && !r.landable));
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
-    { id: 'impacts', label: `${scopeLabel} ▸ Impacts`, badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
-    { id: 'reviews', label: `${scopeLabel} ▸ Reviews`, badge: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
-    { id: 'items', label: `${scopeLabel} ▸ Items`, badge: items.length || undefined },
-    { id: 'compare', label: 'Compare', badge: options.filter((f) => f.status === 'open').length || undefined },
+    { id: 'impacts', label: 'Impacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
+    { id: 'reviews', label: 'Reviews', tint: scopeTint, title: scopeTabTitle(options, scope), badge: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
+    { id: 'artifacts', label: 'Artifacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: artifacts.length || undefined },
     { id: 'decisions', label: 'Decisions', badge: pendingDecisions || undefined },
     { id: 'risks', label: 'Risks & actions', badge: riskRegister(change?.items ?? []).filter(liveRisk).length || undefined },
     { id: 'verification', label: 'Verification', badge: verifications(change?.items ?? []).filter((v) => v.open).length || undefined },
@@ -556,11 +551,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
 
 {#snippet scopeHead(what: string, count: number)}
-  <div class="scope-head">
-    <span class="crumb"><span class="dot"></span>{scopeLabel}</span> ▸ <strong>{what}</strong> <span class="count">{count}</span>
-    {#if scope && scope !== MAIN_SCOPE}<span class="hint">what this option sees: the main flow, and what it changes</span>{/if}
-    {#if !writable && !closed}<span class="hint">· read-only: the option is decided</span>{/if}
-  </div>
+  <div class="scope-head"><strong>{what}</strong> <span class="count">{count}</span></div>
 {/snippet}
 
 {#snippet producer(i: ChangeItem)}
@@ -581,8 +572,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
 {#if change}
   {@const ch = change}
-  <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} onchange={() => load(selected)} oncompare={() => (pane = 'compare')} />
+  <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
   {#if ch.lifecycle}<ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} namespace={ch.namespace ?? ''} />{/if}
+  {#if compareOpen && options.length}
+    <CompareDialog
+      changeId={ch.id ?? ''}
+      {options}
+      {scope}
+      {closed}
+      onchange={() => load(selected)}
+      onclose={() => (compareOpen = false)}
+      onshow={(s, _d) => ((scope = s), (pane = 'impacts'), (compareOpen = false))}
+      onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
+    />
+  {/if}
   <EditorPanes {panes} bind:active={pane} label="Change sections">
     {#snippet children(active)}
       {#if active === 'overview'}
@@ -715,11 +718,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           </div>
         {/if}
       </section>
-      {:else if active === 'compare'}
-      <section class="card">
-        <h3>Compare the options <span class="count">{options.length}</span></h3>
-        <ChangeOptions changeId={ch.id ?? ''} {closed} onchange={() => load(selected)} onview={(id) => ((scope = id), (pane = 'impacts'))} />
-      </section>
       {:else if active === 'decisions'}
       <section class="card">
         <h3>Decision points</h3>
@@ -759,32 +757,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         onadd={addImpact}
       />
       </div>
-      {:else if active === 'items'}
+      {:else if active === 'artifacts'}
       <div class="scoped" style="--scope: {scopeTint}">
-      {@render scopeHead('Items', items.length)}
+      {@render scopeHead('Artifacts', artifacts.length)}
       <section class="card">
-        <h3>Decisions <span class="count">{groups.decision.length}</span></h3>
-        {#if groups.decision.length}
-          <table>
-            <thead><tr><th>Item</th><th>Decision</th><th>Comment</th></tr></thead>
-            <tbody>
-              {#each groups.decision as i (i.id)}
-                <tr class:superseded={i.status === ITEM_SUPERSEDED}>
-                  <td>{itemLabel(i.decision?.item)}</td>
-                  <td><StatusBadge status={i.decision?.accept ? 'accepted' : 'rejected'} /></td>
-                  <td>{i.decision?.comment ?? ''}</td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
-        {:else}
-          <p class="empty">No decisions.</p>
-        {/if}
-      </section>
-
-      <section class="card">
-        <h3>Artifacts <span class="count">{groups.artifact.length}</span></h3>
-        {#each groups.artifact as i (i.id)}
+        {#each artifacts as i (i.id)}
           {@const md = markdownOf(i)}
           <article class="artifact" class:superseded={i.status === ITEM_SUPERSEDED}>
             <h4>
@@ -799,17 +776,24 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             {:else if i.data}
               <pre>{JSON.stringify(i.data, null, 2)}</pre>
             {/if}
+            {#each decisionsOn.get(i.id ?? '') ?? [] as d (d.id)}
+              <p class="item-decision" class:superseded={d.status === ITEM_SUPERSEDED}>
+                <StatusBadge status={d.decision?.accept ? 'accepted' : 'rejected'} />
+                {#if d.decision?.comment}<span> — {d.decision.comment}</span>{/if}
+                {#if d.producedBy || d.createdAt}<span class="hint"> · {d.producedBy ?? ''}{d.producedBy && d.createdAt ? ' ' : ''}{d.createdAt ? new Date(d.createdAt).toLocaleString() : ''}</span>{/if}
+              </p>
+            {/each}
           </article>
         {:else}
           <p class="empty">No artifacts.</p>
         {/each}
       </section>
 
-      {#if others.length}
-        <section class="card">
-          <h3>Other items</h3>
-          <pre>{JSON.stringify(others, null, 2)}</pre>
-        </section>
+      {#if raw.length}
+        <details class="card">
+          <summary>Raw items (debug) <span class="count">{raw.length}</span></summary>
+          <pre>{JSON.stringify(raw, null, 2)}</pre>
+        </details>
       {/if}
       </div>
       {:else if active === 'audit'}
@@ -870,6 +854,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 </div>
 
 <style>
+  .item-decision {
+    margin: 0.4rem 0 0;
+    font-size: 0.85em;
+  }
   .scoped {
     border-left: 3px solid var(--scope);
     padding-left: 8px;
@@ -880,19 +868,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     gap: 6px;
     flex-wrap: wrap;
     margin: 4px 0 8px;
-  }
-  .scope-head .crumb {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    color: var(--scope);
-    font-weight: 600;
-  }
-  .scope-head .dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--scope);
   }
   .subs {
     list-style: none;

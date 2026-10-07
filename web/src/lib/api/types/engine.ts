@@ -1,6 +1,6 @@
 // Engine types (proto3 JSON).
 
-import type { Int64, Struct } from './common';
+import type { Int64, JsonValue, Struct } from './common';
 import type { ChangeImpact, DecisionPolicy, FlowOrigin, GraphNode, ItemKind, NodeRef, OptionSpec } from './graph';
 import type { DocumentReference, PlannerKind, Responsibilities, TriggerType } from './registry';
 
@@ -324,18 +324,6 @@ export interface Flow {
   active?: boolean;
 }
 
-/** A node written by at least one option, with its version on the main flow and on each option. */
-export interface OptionNode {
-  node?: string;
-  key?: string;
-  type?: string;
-  main?: NodeRef;
-  /** by option id (absent: not in the graph of that option) */
-  options?: Record<string, NodeRef>;
-  /** properties by side: 'main' or the option id */
-  props?: Record<string, Struct>;
-}
-
 /** A question raised by an undecidable ruling: it blocks its decision point until answered (ADR 0009 §4). */
 export interface Question {
   id?: string;
@@ -382,10 +370,52 @@ export interface DecisionPoint {
   decidedBy?: string;
 }
 
-export interface OptionComparison {
+/** One difference between the left and the right shape of an impact's node (ADR 0083): a property, the state, the owner or a link. */
+export interface FieldChange {
+  /** property | state | owner | link */
+  kind?: string;
+  /** the property, or the link type */
+  name?: string;
+  /** added | removed | changed, from the left to the right */
+  op?: string;
+  /** the key of the target of a link */
+  target?: string;
+  old?: JsonValue;
+  new?: JsonValue;
+}
+
+/** What one flow sees of an impact. */
+export interface ImpactSide {
+  impact?: string;
+  /** the flow that declared the impact ('' = the main flow) */
+  flow?: string;
+  intent?: string;
+  review?: string;
+  drafted?: boolean;
+  state?: string;
+  owner?: string;
+}
+
+/** An impact that differs between two flows: added (right only), removed (left only) or modified. */
+export interface ImpactDiff {
+  node?: string;
+  key?: string;
+  type?: string;
+  /** added | removed | modified */
+  category?: string;
+  left?: ImpactSide;
+  right?: ImpactSide;
+  changes?: FieldChange[];
+}
+
+/** The impacts two flows of a change see, compared (ADR 0083). */
+export interface FlowDiff {
+  left?: string;
+  right?: string;
   level?: string;
-  options?: Flow[];
-  nodes?: OptionNode[];
+  impacts?: ImpactDiff[];
+  /** impacts both flows see with the same content, left out of `impacts` */
+  identical?: number;
 }
 
 /** A node changed on the source branch of a merge. */
