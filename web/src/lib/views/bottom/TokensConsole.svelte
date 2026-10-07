@@ -59,22 +59,18 @@
     const p = processes.get(pid);
     return p?.title || shortId(pid);
   }
+  const bySeq = (seq: string | undefined) => rows.find((r) => r.seq === seq);
+  function openExchange(r: LLMCall) {
+    const req = exchangeRequestOf(r, label(r));
+    if (req) openModelExchange(req);
+  }
   const label = (r: LLMCall) => `${r.action || sourceLabel(r.source)}${r.processId ? ` #${stepOf(r) + 1}` : ''} · ${r.model ?? ''}`;
 </script>
 
-{#snippet prompt(r: LLMCall, value: string)}
+{#snippet when(r: LLMCall)}
   {#if hasExchange(r)}
-    <button
-      type="button"
-      class="link num"
-      title="Show the prompt and the answer"
-      onclick={(e) => {
-        e.stopPropagation();
-        const req = exchangeRequestOf(r, label(r));
-        if (req) openModelExchange(req);
-      }}>{value}</button
-    >
-  {:else}{value}{/if}
+    <button type="button" class="link" title="Show the prompt and the answer of this call" onclick={() => openExchange(r)}>{formatTime(r.at)}</button>
+  {:else}{formatTime(r.at)}{/if}
 {/snippet}
 
 <div class="console-tools">
@@ -113,7 +109,11 @@
 <div
   class="console-scroll"
   bind:this={scroller}
-  use:rowClick={(row) => row.dataset.pid && openTab({ kind: 'run', params: { id: row.dataset.pid } })}
+  use:rowClick={(row) => {
+    // a click on the call shows its context: the prompt and the answer
+    const r = bySeq(row.dataset.seq);
+    if (r && hasExchange(r)) openExchange(r);
+  }}
 >
   {#if rows.length}
     <table class="console-table">
@@ -125,8 +125,8 @@
       </thead>
       <tbody>
         {#each rows as r (r.seq)}
-          <tr class:clickable={!!r.processId} data-row data-pid={r.processId ?? ''}>
-            <td>{formatTime(r.at)}</td>
+          <tr class:clickable={hasExchange(r)} data-row data-seq={r.seq} title={hasExchange(r) ? 'Click to show the prompt and the answer' : 'No prompt stored for this call'}>
+            <td>{@render when(r)}</td>
             <td title={r.kind}>{sourceLabel(r.source)}</td>
             {#if platform}<td>{r.subject ?? ''}</td>{/if}
             <td title={r.processId}>
@@ -137,8 +137,8 @@
             <td>{r.agent ?? ''}</td>
             <td>{r.action ?? ''}{r.processId ? ` #${stepOf(r) + 1}` : ''}</td>
             <td title={[r.provider, r.alias && `alias ${r.alias}`].filter(Boolean).join(' · ')}>{r.model ?? ''}</td>
-            <td class="num">{@render prompt(r, n(int(r.inputTokens)))}</td>
-            <td class="num">{@render prompt(r, n(int(r.outputTokens)))}</td>
+            <td class="num">{n(int(r.inputTokens))}</td>
+            <td class="num">{n(int(r.outputTokens))}</td>
             <td class="num">{formatDuration(int(r.durationMs))}</td>
             <td class="err">{r.error ?? ''}</td>
           </tr>
