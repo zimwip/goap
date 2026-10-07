@@ -1,6 +1,7 @@
 // The feed of LLM calls: the gateway's ledger (ADR 0089), the one source of every per-call token view (the Tokens
 // console, the Token usage pane). Initial load = the latest rows, then a cursor follow (`ListUsage(afterSeq)`, no
 // event exists for it); the polling runs only while a view is attached and the page visible.
+import { untrack } from 'svelte';
 import { errorMessage, int, models, type LLMCall } from '../api';
 import { can, me } from './session.svelte';
 
@@ -107,11 +108,14 @@ function reload(): void {
 
 /** A view of the feed is shown: it loads and follows while there is at least one. */
 export function attachUsage(): () => void {
-  viewers++;
-  if (viewers === 1) {
-    fails = 0;
-    void poll();
-  }
+  // called from an $effect: what the first poll reads must not become a dependency of that effect
+  untrack(() => {
+    viewers++;
+    if (viewers === 1) {
+      fails = 0;
+      void poll();
+    }
+  });
   let released = false;
   return () => {
     if (released) return;

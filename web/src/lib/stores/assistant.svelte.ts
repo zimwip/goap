@@ -7,6 +7,7 @@ import { assistantContext, clipBytes } from '../assistant/context';
 import { runActions } from '../assistant/actions';
 import { describeTools } from '../assist/registry.svelte';
 import { forgetSelection } from '../assist/capture';
+import { untrack } from 'svelte';
 import { project } from './project.svelte';
 
 /** The server accepts a message of at most 4 KiB (assistantsvc `MaxTextBytes`). */
@@ -127,9 +128,13 @@ export async function reportOutcome(m: Pick<ConversationMessage, 'conversationId
 
 /** A view of the conversation (the tab, the floating panel) is shown: polling runs while there is at least one. */
 export function attachView(): () => void {
-  viewers++;
-  void ensureLoaded();
-  schedulePoll();
+  // attached from an $effect: nothing it reads here (the loading flags, the current id) may become a dependency of
+  // that effect, or loading re-runs the effect, which attaches again and loads again: a request storm
+  untrack(() => {
+    viewers++;
+    void ensureLoaded();
+    schedulePoll();
+  });
   let released = false;
   return () => {
     if (released) return;
