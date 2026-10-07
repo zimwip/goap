@@ -62,6 +62,20 @@ export function changeSummary(c: ChangeFacts, impacts: ImpactFacts[], view: { pa
   return parts.filter(Boolean).join('; ') + '.';
 }
 
+export interface TransitionFacts {
+  name: string;
+  to: string;
+  needsDecision?: boolean;
+}
+
+/** The transitions out of the current state as entities (names and target states), plus the decided points that may gate one. */
+export function transitionEntities(transitions: TransitionFacts[], decisions: { id: string; label: string }[] = []): AssistantEntity[] {
+  return [
+    ...transitions.map((t): AssistantEntity => ({ type: 'transition', id: t.name, label: t.name, props: { to: t.to, ...(t.needsDecision ? { needsDecision: 'yes' } : {}) } })),
+    ...decisions.map((d): AssistantEntity => ({ type: 'decision', id: d.id, label: d.label, state: 'decided' })),
+  ];
+}
+
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /** The names of the properties an impact adds, changes and clears, against the version it starts from. */

@@ -11,6 +11,8 @@
     type ChangeItem,
     type Change,
     type Flow,
+    type DecisionPoint,
+    type Lifecycle,
     type BoardIssue,
     type GraphNode,
     type LifecycleTransition,
@@ -21,9 +23,11 @@
   import { tick, untrack } from 'svelte';
   import { followChangeProject } from '../../stores/project.svelte';
   import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
-  import { changeSummary, impactEntities, type ImpactFacts } from '../../assist/changeScreen';
+  import { changeSummary, impactEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
   import { loadMoveOffer, moveChangeTo } from '../../changeMove';
+  import { availableTransitions, decisionLabel, findLifecycle, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
+  import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
   import { movable } from '../../changeProject';
   import type { Tab } from '../../shell/types';
@@ -149,6 +153,14 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let applying = $state(false);
   let applied = $state<Baseline | undefined>();
   let moveOpen = $state(false);
+  // the lifecycle definition the change follows, its decision points and the transition being taken (ADR 0058)
+  let lcDef = $state<Lifecycle>();
+  let lcDomain = $state('');
+  let lcFailure = $state('');
+  let lcLoading = $state(false);
+  let decisionPoints = $state<DecisionPoint[]>([]);
+  let transitioning = $state('');
+  let transitionRefusal = $state<{ transition: string; refusal: Refusal }>();
 
   const selected = $derived(tab.params.id ?? '');
 
@@ -188,7 +200,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   /** Loads the change as the scope sees it. */
   async function loadScope(id: string, sc: string, signal?: AbortSignal) {
     loadedScope = sc;
-    const v = (await graph.getBlackboard(id, sc || MAIN_SCOPE, signal)).change;
+    const bb = await graph.getBlackboard(id, sc || MAIN_SCOPE, signal);
+    const v = bb.change;
+    decisionPoints = bb.decisionPoints ?? [];
     const ps = await loadPosts(v?.nodes ?? [], true, { changeId: id, flow: sc || MAIN_SCOPE });
     if (signal?.aborted || sc !== scope) return;
     view = v;
@@ -240,6 +254,56 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     });
     return () => ctrl.abort();
   });
+
+  // the definition of the lifecycle the change follows (re-read when the lifecycle or the namespace changes)
+  $effect(() => {
+    const name = change?.lifecycle ?? '';
+    const ns = change?.namespace ?? '';
+    lcDef = undefined;
+    lcFailure = '';
+    if (!name) return;
+    const ctl = new AbortController();
+    lcLoading = true;
+    findLifecycle(name, ns, ctl.signal)
+      .then((r) => {
+        if (r) {
+          lcDef = r.lc;
+          lcDomain = r.domain;
+        } else lcFailure = `No domain defines the lifecycle “${name}”.`;
+      })
+      .catch((e) => {
+        if (!ctl.signal.aborted) lcFailure = errorMessage(e);
+      })
+      .finally(() => {
+        if (!ctl.signal.aborted) lcLoading = false;
+      });
+    return () => ctl.abort();
+  });
+  const offers = $derived(lifecycleMovable(change) ? availableTransitions(lcDef, change?.state) : []);
+  const pickable = $derived(pickableDecisions(decisionPoints, change?.items));
+
+  /** Takes a transition of the lifecycle: the button (with its confirmation) and the assistant (its card confirmed). */
+  async function takeTransition(offer: TransitionOffer, decision?: DecisionPoint, skipConfirm = false): Promise<string | undefined> {
+    transitioning = offer.name;
+    transitionRefusal = undefined;
+    error = '';
+    try {
+      const r = await runTransition(
+        { confirm: confirmDialog, call: (id, t, d) => graph.transitionChange(id, t, d), refresh: async () => {
+            if (change?.id) await load(change.id);
+          },
+          notify },
+        { change: change ?? {}, offer, decision, skipConfirm },
+      );
+      if (r.ok) return undefined;
+      if (r.cancelled) return r.message;
+      if (r.refusal) transitionRefusal = { transition: offer.name, refusal: r.refusal };
+      else error = r.message;
+      return r.message;
+    } finally {
+      transitioning = '';
+    }
+  }
 
   /** status of an item on the log: base status, then what the flow branches make of it */
   function effectiveStatus(i: ChangeItem): string | undefined {
@@ -564,6 +628,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   const assistTools: ToolImpl[] = [
     {
+      name: 'transition_change',
+      enabled: () => !!change && !defining && offers.length > 0,
+      describe: (base) => {
+        const names = offers.map((o) => o.name);
+        const transition = names.length && names.length <= 30 ? { type: 'enum' as const, enum: names, description: 'the transition name' } : { type: 'string' as const, description: 'the transition name' };
+        return { ...base, args: { ...base.args, properties: { ...base.args?.properties, transition } } };
+      },
+      run: async (a) => {
+        const c = resolveCall(offers, pickable, a);
+        if (typeof c === 'string') return c;
+        return takeTransition(c.offer, c.decision, true);
+      },
+    },
+    {
       name: 'select_impact',
       enabled: () => !!change && impactFacts.length > 0,
       describe: withIds('select_impact', () => impactFacts.map((i) => i.id)),
@@ -659,7 +737,13 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
                 impactFacts,
                 { pane, scope, filter: impactFilter },
               ),
-              entities: impactEntities(impactFacts),
+              entities: [
+                ...transitionEntities(
+                  offers.map((o) => ({ name: o.name, to: o.to, needsDecision: o.needsDecision })),
+                  pickable.map((p) => ({ id: p.id ?? '', label: decisionLabel(p) })),
+                ),
+                ...impactEntities(impactFacts),
+              ],
             }
           : undefined,
       focus: () => {
@@ -725,7 +809,13 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 {#if change}
   {@const ch = change}
   <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
-  {#if ch.lifecycle}<ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} namespace={ch.namespace ?? ''} />{/if}
+  {#if ch.lifecycle}
+    <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
+      {#if lcDef && lifecycleMovable(ch)}
+        <ChangeTransitions current={ch.state ?? ''} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
+      {/if}
+    </ChangeLifecycleView>
+  {/if}
   {#if compareOpen && options.length}
     <CompareDialog
       changeId={ch.id ?? ''}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { changeSummary, diffSummary, impactEntities } from './changeScreen';
+import { changeSummary, diffSummary, impactEntities, transitionEntities } from './changeScreen';
 
 describe('change screen facts', () => {
   const impacts = [
@@ -26,5 +26,14 @@ describe('change screen facts', () => {
     expect(d).toBe('Edits: adds d; changes b; clears c.');
     expect(d).not.toContain('new"');
     expect(diffSummary({ a: 1 }, { a: 1 })).toBe('No edit of the properties.');
+  });
+
+  it('lists the transitions out of the state and the decided points, by name', () => {
+    const e = transitionEntities([{ name: 'approve', to: 'approved', needsDecision: true }, { name: 'back', to: 'draft' }], [{ id: 'D1', label: 'Which? → A' }]);
+    expect(e).toEqual([
+      { type: 'transition', id: 'approve', label: 'approve', props: { to: 'approved', needsDecision: 'yes' } },
+      { type: 'transition', id: 'back', label: 'back', props: { to: 'draft' } },
+      { type: 'decision', id: 'D1', label: 'Which? → A', state: 'decided' },
+    ]);
   });
 });

@@ -65,6 +65,12 @@ export const TOOLS = {
     level: 'write',
     args: { properties: { project: str('the project key') }, required: ['project'] },
   },
+  transition_change: {
+    description: 'Move this change along a transition of its lifecycle, out of its current state.',
+    guidance: 'transition: the transition to take out of the current state; use the names offered by the screen. decision: a decided point, when it asks for one.',
+    level: 'write',
+    args: { properties: { transition: str('the transition name'), decision: str('the decided decision point id, when the transition needs one') }, required: ['transition'] },
+  },
   set_field: {
     description: 'Put a value in a field of the form on screen (the person still saves the form).',
     guidance: 'field: an id of the screen entities of type field; value: its value as text, in the type of the field.',

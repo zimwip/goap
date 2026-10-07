@@ -77,7 +77,18 @@ methodologies.
 
 What belongs to the use case, handled by domains and methodologies and added later: the states themselves
 (`proposed`, `analysing`, `implementing`, ...), their gates in `sdlc`, the lifecycle of sub-changes and administrative
-changes, the web stepper of a change.
+changes, the engine builtin.
+
+## Web
+
+The change tab shows, under the lifecycle diagram (`ChangeLifecycleView`), the transitions leaving the current state
+(`ChangeTransitions.svelte`, logic in `web/src/lib/changeTransition.ts`): the target state, what the definition says of the
+gate (guard, vetos, objectives, as written; no CEL runs client side) and, when the guard reads `change.decision`, a picker of
+the decided points no transition consumed yet. "Move" asks for a confirmation (from, to, the point used, that leaving a state
+freezes its impacts and going back reopens later reviews), calls `TransitionChange` and reads the change again; the server is
+the authority, its refusal (vetoes, objectives not covered, guard) is shown inline. Nothing is offered for a change with no
+lifecycle or one that is committed, applied or abandoned. The assistant's `transition_change` (write, ADR 0092) takes the same
+path without a second dialog: its proposal card is the confirmation.
 
 ## Consequences
 

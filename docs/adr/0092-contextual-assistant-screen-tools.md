@@ -73,4 +73,4 @@ describing the whole page evenly.
 ## Not done
 
 Expiry of unanswered proposals; screen tools for the other screens (nodes' lifecycle transitions, organisation, methodology
-editors); a change-level `transition_change` (no UI for it yet). The web phase is described in ADR 0088.
+editors). The web phase is described in ADR 0088.

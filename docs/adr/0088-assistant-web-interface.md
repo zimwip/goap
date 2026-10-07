@@ -70,7 +70,7 @@ process from the intent; it is replaced by the conversation service.
   the node property form (its attributes as fields, `set_field`); the new change form (`set_title`, `set_intent`, `set_project`
   fill the form and are effects, `create` is a write); the review comment fields (impact review in the change table and the node
   tab, the review object's comment and entry comments) as fields with guidance, and the impact with the names of the properties
-  it edits as the node tab's screen context. Change-level lifecycle transitions have no UI yet, hence no `transition_change`.
+  it edits as the node tab's screen context. The change tab's lifecycle transitions have a `transition_change` write tool (ADR 0058, ADR 0092).
 - **One helper at a time** is unchanged: the panel closes when the helper opens and the shortcut closes the helper first.
 
 ## Not done

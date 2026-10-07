@@ -315,6 +315,17 @@ export const graph = {
     ),
   /** Removes a change that landed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
   deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DeleteChange', { changeId }),
+  /**
+   * Moves the change along a transition of its lifecycle (ADR 0058). `decision` is the decision point that gates it
+   * (seen by the guard as change.decision, consumed by the move). A refusal comes as an error whose message names the
+   * vetos or the objectives not met (`parseRefusal` of `changeTransition.ts`).
+   */
+  transitionChange: (changeId: string, transition: string, decision = '') =>
+    rpc<{ changeId: string; transition: string; decision?: string }, { change?: Change }>(GRAPH, 'TransitionChange', {
+      changeId,
+      transition,
+      ...(decision ? { decision } : {}),
+    }),
   applyChange: (changeId: string, baselineName: string) =>
     rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'ApplyChange', {
       changeId,
