@@ -12,7 +12,7 @@ import (
 func TestBuiltinAdminOnly(t *testing.T) {
 	flagged := map[string]bool{"organisation@OrgUnit": true, "organisation@User": true, "organisation@ProjectUnit": true,
 		"organisation@Adapter": true, "platform@AdapterDef": true, "organisation@Policy": true, "organisation@Assignment": true,
-		"organisation@CriticalityPolicy": true}
+		"organisation@CriticalityPolicy": true, "platform@LlmBehavior": true}
 	c := Builtin()
 	for _, d := range Builtins() {
 		for _, n := range d.NodeTypes {

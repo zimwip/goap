@@ -63,7 +63,7 @@ func (s SQLStore) AddUsage(ctx context.Context, model, period string, tokens int
 }
 
 const callColumns = `seq, at_ms, duration_ms, subject, project, org, alias, provider, model, kind, input_tokens, output_tokens, error,
-	source, conversation_id, process_id, change_id, step, action, agent, call_index,
+	source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens,
 	CASE WHEN EXISTS (SELECT 1 FROM llm_call_exchange x WHERE x.seq = llm_call.seq) THEN 1 ELSE 0 END`
 
 // scanCall reads a row of callColumns.
@@ -71,11 +71,15 @@ func scanCall(sc interface{ Scan(...any) error }) (Call, error) {
 	var c Call
 	var ms int64
 	var has int
+	var behaviors string
 	if err := sc.Scan(&c.Seq, &ms, &c.DurationMs, &c.Subject, &c.Project, &c.Org, &c.Alias, &c.Provider, &c.Model, &c.Kind, &c.InputTokens,
-		&c.OutputTokens, &c.Error, &c.Source, &c.ConversationID, &c.ProcessID, &c.ChangeID, &c.Step, &c.Action, &c.Agent, &c.CallIndex, &has); err != nil {
+		&c.OutputTokens, &c.Error, &c.Source, &c.ConversationID, &c.ProcessID, &c.ChangeID, &c.Step, &c.Action, &c.Agent, &c.CallIndex, &behaviors, &c.BehaviorTokens, &has); err != nil {
 		return c, err
 	}
 	c.At, c.HasExchange = time.UnixMilli(ms).UTC(), has == 1
+	if behaviors != "" {
+		c.Behaviors = strings.Split(behaviors, ",")
+	}
 	return c, nil
 }
 
@@ -113,10 +117,10 @@ func (s SQLStore) AppendCall(ctx context.Context, c Call, x *Exchange) (int64, e
 	defer tx.Rollback()
 	var seq int64
 	err = tx.QueryRowContext(ctx, s.q(`INSERT INTO llm_call (at_ms, duration_ms, subject, project, org, alias, provider, model, kind,
-		input_tokens, output_tokens, error, source, conversation_id, process_id, change_id, step, action, agent, call_index)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`),
+		input_tokens, output_tokens, error, source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`),
 		c.At.UnixMilli(), c.DurationMs, c.Subject, c.Project, c.Org, c.Alias, c.Provider, c.Model, c.Kind, c.InputTokens, c.OutputTokens,
-		c.Error, c.Source, c.ConversationID, c.ProcessID, c.ChangeID, c.Step, c.Action, c.Agent, c.CallIndex).Scan(&seq)
+		c.Error, c.Source, c.ConversationID, c.ProcessID, c.ChangeID, c.Step, c.Action, c.Agent, c.CallIndex, strings.Join(c.Behaviors, ","), c.BehaviorTokens).Scan(&seq)
 	if err != nil {
 		return 0, err
 	}

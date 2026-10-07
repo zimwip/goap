@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/llmcfg"
 )
 
 // Handler implements modelv1connect.ModelServiceHandler.
@@ -77,7 +78,8 @@ func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.Compl
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	return connect.NewResponse(&modelv1.CompleteResponse{Text: resp.Text, Provider: resp.Provider, Model: resp.Model,
-		Usage: &modelv1.Usage{InputTokens: int32(resp.Usage.InputTokens), OutputTokens: int32(resp.Usage.OutputTokens)}}), nil
+		Usage:     &modelv1.Usage{InputTokens: int32(resp.Usage.InputTokens), OutputTokens: int32(resp.Usage.OutputTokens)},
+		Behaviors: resp.Behaviors, BehaviorTokens: int32(resp.BehaviorTokens)}), nil
 }
 
 func (h *Handler) ListModels(ctx context.Context, r *connect.Request[modelv1.ListModelsRequest]) (*connect.Response[modelv1.ListModelsResponse], error) {
@@ -192,6 +194,41 @@ func (h *Handler) ListCatalog(ctx context.Context, r *connect.Request[modelv1.Li
 	return connect.NewResponse(out), nil
 }
 
+func behaviorToPB(b llmcfg.Behavior) *modelv1.Behavior {
+	return &modelv1.Behavior{Name: b.Name, Description: b.Description, Instruction: b.Instruction, Enabled: b.Enabled, Position: b.Position,
+		Order: int32(b.Order), Aliases: b.Aliases, Models: b.Models, Sources: b.Sources, Kinds: b.Kinds, AppliesToJson: b.AppliesToJSON}
+}
+
+// ListBehaviors lists the global behaviours (ADR 0093); platform administrators only, like the catalog.
+func (h *Handler) ListBehaviors(ctx context.Context, r *connect.Request[modelv1.ListBehaviorsRequest]) (*connect.Response[modelv1.ListBehaviorsResponse], error) {
+	ctx, err := h.guard(ctx, r.Header())
+	if err != nil {
+		return nil, err
+	}
+	list, err := h.Service.Behaviors(ctx)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	out := &modelv1.ListBehaviorsResponse{MaxInstructionBytes: llmcfg.MaxInstruction, MaxTotalBytes: llmcfg.MaxBehaviorBytes, Sources: llmcfg.Sources()}
+	for _, b := range list {
+		out.Behaviors = append(out.Behaviors, behaviorToPB(b))
+	}
+	return connect.NewResponse(out), nil
+}
+
+// PreviewBehaviors computes the system text a call would be sent with; pure, no model is called. Administrators only.
+func (h *Handler) PreviewBehaviors(ctx context.Context, r *connect.Request[modelv1.PreviewBehaviorsRequest]) (*connect.Response[modelv1.PreviewBehaviorsResponse], error) {
+	ctx, err := h.guard(ctx, r.Header())
+	if err != nil {
+		return nil, err
+	}
+	ap, err := h.Service.PreviewBehaviors(ctx, r.Msg.Alias, r.Msg.Source, r.Msg.Json, r.Msg.System)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&modelv1.PreviewBehaviorsResponse{System: ap.System, Applied: ap.Names, Skipped: ap.Skipped, AddedTokens: int32(ap.Tokens())}), nil
+}
+
 // metaToPB is the declaration of the calls made with ctx, for the ledger of the gateway (ADR 0089).
 func metaToPB(ctx context.Context) *modelv1.CallMeta {
 	m := llm.MetaFrom(ctx)
@@ -234,7 +271,7 @@ func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 	if err != nil {
 		return llm.Response{}, err
 	}
-	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model}
+	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model, Behaviors: r.Msg.Behaviors, BehaviorTokens: int(r.Msg.BehaviorTokens)}
 	if u := r.Msg.Usage; u != nil {
 		out.Usage = llm.Usage{InputTokens: int(u.InputTokens), OutputTokens: int(u.OutputTokens)}
 	}
@@ -350,7 +387,7 @@ func callToPB(c Call) *modelv1.LLMCall {
 	return &modelv1.LLMCall{Seq: c.Seq, At: timestamppb.New(c.At), DurationMs: c.DurationMs, Subject: c.Subject, Project: c.Project, Org: c.Org,
 		Alias: c.Alias, Provider: c.Provider, Model: c.Model, Kind: c.Kind, InputTokens: c.InputTokens, OutputTokens: c.OutputTokens, Error: c.Error,
 		Source: c.Source, ConversationId: c.ConversationID, ProcessId: c.ProcessID, ChangeId: c.ChangeID, Step: int32(c.Step), Action: c.Action,
-		Agent: c.Agent, Call: int32(c.CallIndex), HasExchange: c.HasExchange}
+		Agent: c.Agent, Call: int32(c.CallIndex), HasExchange: c.HasExchange, Behaviors: c.Behaviors, BehaviorTokens: c.BehaviorTokens}
 }
 
 // ListUsage reads the ledger: the caller's own calls, any subject's for an administrator.

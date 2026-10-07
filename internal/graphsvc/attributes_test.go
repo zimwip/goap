@@ -71,6 +71,7 @@ func TestBuiltinNodePropsAreAttributes(t *testing.T) {
 		{llmcfg.NodeTypeProvider, jsonKeys(reflect.TypeFor[llmcfg.Provider]())},
 		{llmcfg.NodeTypeModel, jsonKeys(reflect.TypeFor[llmcfg.Model]())},
 		{llmcfg.NodeTypeAlias, jsonKeys(reflect.TypeFor[llmcfg.Alias]())},
+		{llmcfg.NodeTypeBehavior, jsonKeys(reflect.TypeFor[llmcfg.Behavior]())},
 	}
 	for _, c := range cases {
 		names, open := cat.AttributeNames(c.typ)

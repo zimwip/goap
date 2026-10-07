@@ -15,6 +15,7 @@
   import { prefs } from '../../stores/preferences.svelte';
   import { usage, attachUsage, setUsagePlatform, usageSubject } from '../../stores/usage.svelte';
   import { bucketsOf, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf, type Dim, type Slice } from '../../tokenStats';
+  import { behaviorsLine } from '../../behaviors';
 
   const RANGES: [string, string, number][] = [
     ['24h', 'Last 24 hours', 86_400_000],
@@ -295,7 +296,7 @@
       </div>
       <div class="scroll">
         <table>
-          <thead><tr><th>Source</th><th>Run</th><th>Action</th><th>Model</th><th class="num">Input</th><th class="num">Output</th><th class="num">Total</th></tr></thead>
+          <thead><tr><th>Source</th><th>Run</th><th>Action</th><th>Model</th><th>Behaviours</th><th class="num">Input</th><th class="num">Output</th><th class="num">Total</th></tr></thead>
           <tbody>
             {#each top as c (c.seq)}
               <tr>
@@ -303,6 +304,7 @@
                 <td>{#if c.processId}<button type="button" class="link" onclick={() => open(c.processId ?? '')}>{title(c.processId)}</button>{/if}</td>
                 <td>{c.action ?? ''}{c.processId ? ` #${stepOf(c) + 1}` : ''}</td>
                 <td><code>{c.model ?? ''}</code></td>
+                <td class="hint" title={behaviorsLine(c.behaviors, c.behaviorTokens)}>{#if c.behaviors?.length}{c.behaviors.join(', ')} · +{n(int(c.behaviorTokens))}{/if}</td>
                 <td class="num">{n(int(c.inputTokens))}</td>
                 <td class="num">{n(int(c.outputTokens))}</td>
                 <td class="num"><strong>{n(int(c.inputTokens) + int(c.outputTokens))}</strong></td>

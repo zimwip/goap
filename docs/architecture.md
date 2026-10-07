@@ -1082,7 +1082,7 @@ Every composition (`goap-dev`, `cmd/graph`) seeds the platform through one funct
    catalogue). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
-   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), then `Options.Dev`. Each step is idempotent.
+   platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), then `Options.Dev`. Each step is idempotent.
 3. The registry then seeds the methodologies (`goap-dev`; `cmd/registry` seeds them over RPC): they need the aliases of step 2.
 
 Development and demo data is not part of it (`internal/devseed`: `Demo` the ALM repository, `DocumentRepository` the
@@ -1467,7 +1467,7 @@ docs/                        architecture, ADRs
 
 Administrators (`admin` on the `platform` resource, Casbin) open **Platform settings** from the gear in the IDE
 status bar. The gateway configuration is **graph data** ([ADR 0021](adr/0021-model-configuration-in-the-graph.md)):
-`LlmProvider`, `LlmModel` and `LlmAlias` nodes of the `platform` namespace (`pkg/llmcfg`, the built-in `platform` domain), changed
+`LlmProvider`, `LlmModel`, `LlmAlias` and `LlmBehavior` nodes of the `platform` namespace (`pkg/llmcfg`, the built-in `platform` domain), changed
 through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the
 `platform` namespace's head of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
 (`graphsvc.SeedModels`). The `modelgw` database keeps the quota counters (`llm_usage`, keyed by the key of the model node and period, for the admission) the ledger of calls (`llm_call`) and the exchanges of the calls no change log keeps (`llm_call_exchange`, ADR 0089, below).
@@ -1482,7 +1482,7 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   any signed-in user; `admin` always). Only enabled catalog models can be called; calls without identity
   (engine, in-process) are trusted and skip the role check but still count toward the quota.
 - **Aliases** (`default`, `fast`…) point to catalog models; the router follows the graph. The RPCs of the gateway are read-only
-  (`ListProviders`, `ListCatalog`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
+  (`ListProviders`, `ListCatalog`, `ListBehaviors`, `PreviewBehaviors`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
 - **Ledger of LLM calls** (ADR 0089): every call the gateway serves or refuses (completion or embedding, whoever asked:
   engine, assistant, helper, indexer, intent) is one row of `llm_call`: time, duration, subject / project / org (the
   principal's), alias requested, provider, model, kind, input / output tokens, error, and what the caller declares
@@ -1492,6 +1492,15 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   `UsageSummary` (grouped by model / alias / source / subject / process / action / agent / day / hour); a caller reads its
   own calls, an administrator any; retention `GOAP_LLM_CALL_RETENTION_DAYS` (default 90, purge at start and daily).
   `TestEveryModelCallGoesThroughTheLedger` keeps the paths to a model through `Service`.
+- **Global behaviours** (ADR 0093): `platform@LlmBehavior` nodes (`LLB:<name>`, `adminOnly`, lifecycle `config`; `llmcfg.Behavior`) hold an
+  instruction the gateway adds to the system text of every completion matching their scope (aliases, models, sources, kinds;
+  `prepend` / `append`, `order`, `enabled`, `appliesToJSON`). `Service.Complete` applies them after `admit` and before the provider
+  (`llmcfg.Snapshot.Apply`, pure; the caller's request is never changed; embeddings never; 8 KiB cap, extra ones dropped and
+  recorded as `!name`); a call with `JSON` true gets only the ones flagged `appliesToJSON`, wrapped so they cannot change the format.
+  The ledger row records `behaviors` and an estimated `behavior_tokens` (`llm_call`, migration 0005), the stored exchange holds the
+  system text as sent, the engine's `model.call` log entry the text it built plus `behaviors` / `behaviorTokens`
+  (`llm.Response.Behaviors`). `ListBehaviors` / `PreviewBehaviors` (admin, like `ListCatalog`); web: settings "LLM behaviours".
+  `graphsvc.SeedBehaviors` seeds one disabled example, `terse`.
 - **Protected aliases** (ADR 0084): `assistant` (the conversational assistant) and `helper` (the contextual field helper)
   are `LlmAlias` nodes flagged `protected`, present on every install (`graphsvc.SeedProtectedAliases`, from `Boot`; no
   model configured: the alias exists with no target, resolves to nothing and is not in `ListModels`, i.e. not available).

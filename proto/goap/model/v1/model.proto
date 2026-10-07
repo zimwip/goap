@@ -27,6 +27,12 @@ service ModelService {
   rpc DiscoverModels(DiscoverModelsRequest) returns (DiscoverModelsResponse);
   // The catalog: models offered on the platform, with quota and access level.
   rpc ListCatalog(ListCatalogRequest) returns (ListCatalogResponse);
+  // The global behaviours of the LLM calls (ADR 0093): instructions the gateway adds to the system text of the calls
+  // matching their scope. Platform administrators only, like the catalog; they are nodes of the platform namespace,
+  // changed through changes.
+  rpc ListBehaviors(ListBehaviorsRequest) returns (ListBehaviorsResponse);
+  // What a call would be sent with, without calling any model (pure): the system text with the behaviours that apply.
+  rpc PreviewBehaviors(PreviewBehaviorsRequest) returns (PreviewBehaviorsResponse);
 
   // The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
   // assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
@@ -77,6 +83,10 @@ message CompleteResponse {
   string provider = 2;
   string model = 3;
   Usage usage = 4;
+  // the global behaviours the gateway added to the instructions (ADR 0093; "!name": dropped by the cap) and the tokens
+  // they added (an estimate)
+  repeated string behaviors = 5;
+  int32 behavior_tokens = 6;
 }
 
 message EmbedRequest {
@@ -203,6 +213,53 @@ message ListCatalogResponse {
   repeated ModelAlias aliases = 2;
 }
 
+// ---- global behaviours (ADR 0093) ---------------------------------------------
+
+message Behavior {
+  string name = 1;
+  string description = 2;
+  string instruction = 3;
+  bool enabled = 4;
+  // prepend | append
+  string position = 5;
+  int32 order = 6;
+  // selectors, ANDed, empty: everything
+  repeated string aliases = 7;
+  repeated string models = 8;
+  repeated string sources = 9;
+  repeated string kinds = 10;
+  bool applies_to_json = 11;
+}
+
+message ListBehaviorsRequest {}
+
+// enabled and disabled behaviours, by order then name
+message ListBehaviorsResponse {
+  repeated Behavior behaviors = 1;
+  // the caps: one instruction, and the text added to one call
+  int32 max_instruction_bytes = 2;
+  int32 max_total_bytes = 3;
+  repeated string sources = 4;
+}
+
+message PreviewBehaviorsRequest {
+  // the alias or provider/model the call would request ("" : default)
+  string alias = 1;
+  // the declared source of the call (engine, assistant, ...; "" : other)
+  string source = 2;
+  // the call requires a JSON answer
+  bool json = 3;
+  // the system text of the call, before the behaviours
+  string system = 4;
+}
+
+message PreviewBehaviorsResponse {
+  string system = 1;
+  repeated string applied = 2;
+  // dropped by the cap on the text added to a call
+  repeated string skipped = 3;
+  int32 added_tokens = 4;
+}
 
 // ---- the contextual helper (ADR 0086) ---------------------------------------
 
@@ -296,6 +353,10 @@ message LLMCall {
   int32 call = 21;
   // the gateway stores the request and the answer of this call (read them with GetCallExchange)
   bool has_exchange = 22;
+  // the global behaviours applied to the call ("!name": dropped by the cap, ADR 0093) and the tokens they added (an
+  // estimate). The stored exchange holds the system text as sent, behaviours included.
+  repeated string behaviors = 23;
+  int64 behavior_tokens = 24;
 }
 
 message GetCallExchangeRequest {

@@ -133,6 +133,10 @@ export interface LLMCall {
   call?: number;
   /** the gateway stores the request and the answer of this call (`getCallExchange`) */
   hasExchange?: boolean;
+  /** the global behaviours the gateway added to the instructions (ADR 0093); a leading `!` marks one dropped by the cap */
+  behaviors?: string[];
+  /** estimated tokens the behaviours added */
+  behaviorTokens?: Int64;
 }
 
 /** The exchange the gateway stores for a call (ADR 0089). */
@@ -182,4 +186,48 @@ export interface UsageSummaryRow {
   outputTokens?: Int64;
   errors?: Int64;
   durationMs?: Int64;
+}
+
+// ---- global behaviours of the LLM calls (ADR 0093) ---------------------------------
+
+/** An instruction the gateway adds to the system text of the calls matching its scope; every selector is optional and ANDed. */
+export interface LlmBehavior {
+  name: string;
+  description?: string;
+  instruction?: string;
+  enabled?: boolean;
+  /** `prepend` or `append` (default) to the system text */
+  position?: 'prepend' | 'append' | string;
+  /** lower first, then by name */
+  order?: number;
+  aliases?: string[];
+  /** provider/model */
+  models?: string[];
+  /** engine | assistant | helper | indexer | intent | other */
+  sources?: string[];
+  /** complete only: a behaviour never applies to an embedding */
+  kinds?: string[];
+  /** also apply to calls that require a JSON answer */
+  appliesToJson?: boolean;
+}
+
+export interface ListBehaviorsResponse {
+  behaviors?: LlmBehavior[];
+  maxInstructionBytes?: number;
+  maxTotalBytes?: number;
+  sources?: string[];
+}
+
+export interface PreviewBehaviorsRequest {
+  alias: string;
+  source: string;
+  json: boolean;
+  system: string;
+}
+
+export interface PreviewBehaviorsResponse {
+  system?: string;
+  applied?: string[];
+  skipped?: string[];
+  addedTokens?: number;
 }

@@ -214,6 +214,10 @@ type Snapshot struct {
 	Providers []Provider
 	Models    []Model
 	Aliases   []Alias
+	// Behaviors are the global behaviours in force (ADR 0093: enabled, not retired); Off are the disabled ones, kept for
+	// the administrators' listing.
+	Behaviors []Behavior
+	Off       []Behavior
 }
 
 // BuildSnapshot reads the configuration of a baseline graph. Models of an unknown provider and aliases
@@ -242,6 +246,15 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *
 			var a Alias
 			if a, err = AliasFromProps(n.Properties); err == nil {
 				s.Aliases = append(s.Aliases, a)
+			}
+		case NodeTypeBehavior:
+			var b Behavior
+			if b, err = BehaviorFromProps(n.Properties); err == nil {
+				if b.Enabled {
+					s.Behaviors = append(s.Behaviors, b)
+				} else {
+					s.Off = append(s.Off, b)
+				}
 			}
 		}
 		if err != nil {
@@ -280,6 +293,16 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *
 	sort.Slice(s.Providers, func(i, j int) bool { return s.Providers[i].Name < s.Providers[j].Name })
 	sort.Slice(s.Models, func(i, j int) bool { return s.Models[i].Key() < s.Models[j].Key() })
 	sort.Slice(s.Aliases, func(i, j int) bool { return s.Aliases[i].Alias < s.Aliases[j].Alias })
+	byName := func(l []Behavior) {
+		sort.Slice(l, func(i, j int) bool {
+			if l[i].Order != l[j].Order {
+				return l[i].Order < l[j].Order
+			}
+			return l[i].Name < l[j].Name
+		})
+	}
+	byName(s.Behaviors)
+	byName(s.Off)
 	return s
 }
 

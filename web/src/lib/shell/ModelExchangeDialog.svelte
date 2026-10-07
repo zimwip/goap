@@ -4,6 +4,7 @@
   // Mounted once at the shell root.
   import { decodeLogEntry, errorMessage, formatDuration, graph, int, isNotFound, models, type LLMCall, type ModelExchange } from '../api';
   import { sourceLabel } from '../tokenStats';
+  import { behaviorsLine } from '../behaviors';
   import { modelExchangeState, closeModelExchange } from './modelExchangeState.svelte';
 
   let dialog = $state<HTMLDivElement>();
@@ -12,6 +13,10 @@
   let loading = $state(false);
   // the ledger row the exchange belongs to: the gateway's answer carries it, the console's row stands for a log read
   let meta = $state<LLMCall>();
+  // the global behaviours the gateway added to the instructions (ADR 0093): the ledger row's, or the log entry's
+  const applied = $derived(behaviorsLine(ex?.behaviors ?? meta?.behaviors, ex?.behaviorTokens ?? meta?.behaviorTokens));
+  // an engine call's log keeps the system text the engine built; the gateway's addition is named, not repeated
+  const fromLog = $derived(modelExchangeState.current ? !('seq' in modelExchangeState.current) : false);
 
   $effect(() => {
     const req = modelExchangeState.current;
@@ -30,7 +35,7 @@
         .getCallExchange(req.seq, ctl.signal)
         .then((r) => {
           meta = r.call ?? meta;
-          ex = { system: r.system, messages: r.messages, response: r.response, truncated: r.truncated };
+          ex = { system: r.system, messages: r.messages, response: r.response, truncated: r.truncated, behaviors: r.call?.behaviors, behaviorTokens: Number(r.call?.behaviorTokens ?? 0) };
         })
         .catch((e) => {
           if (ctl.signal.aborted) return;
@@ -96,6 +101,11 @@
         <p class="error">{failure}</p>
       {:else if ex}
         {#if ex.truncated}<p class="note">A text was longer than what is kept and is cut.</p>{/if}
+        {#if applied}
+          <p class="note">
+            Applied behaviours: {applied}.{#if fromLog} The system text below is what the run built; the gateway added these on top.{:else} The system text below is as sent, behaviours included.{/if}
+          </p>
+        {/if}
         {#if ex.system}{@render block('System', ex.system)}{/if}
         {#each ex.messages ?? [] as m, i (i)}
           {@render block(m.role ?? 'message', m.content ?? '')}

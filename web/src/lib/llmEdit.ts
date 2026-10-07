@@ -1,7 +1,7 @@
 // The model gateway configuration is graph data (platform namespace): providers, catalog models and aliases are
 // nodes. The settings dialog does not apply its edits: it stages them as impacts of a personal change
 // (stores/pending.svelte.ts) that the user saves or discards. An API key is never stored, only its reference.
-import { graph, isDraft, type CatalogModel, type LlmProvider, type ModelAlias, type Struct } from './api';
+import { graph, isDraft, type CatalogModel, type LlmBehavior, type LlmProvider, type ModelAlias, type Struct } from './api';
 import { headGraph } from './graphEdit';
 import { ns, isUserKey } from './stores/session.svelte';
 import { pending, stageRetire, stageUpsert, stagedOfType } from './stores/pending.svelte';
@@ -9,10 +9,12 @@ import { pending, stageRetire, stageUpsert, stagedOfType } from './stores/pendin
 export const PROVIDER_TYPE = 'platform@LlmProvider';
 export const MODEL_TYPE = 'platform@LlmModel';
 export const ALIAS_TYPE = 'platform@LlmAlias';
+export const BEHAVIOR_TYPE = 'platform@LlmBehavior';
 
 export const providerKey = (name: string) => `LLP:${name}`;
 export const modelKey = (provider: string, model: string) => `LLM:${provider}/${model}`;
 export const aliasKey = (alias: string) => `LLA:${alias}`;
+export const behaviorKey = (name: string) => `LLB:${name}`;
 
 const providerProps = (p: LlmProvider): Struct => ({
   name: p.name,
@@ -54,6 +56,30 @@ export const saveModel = (m: CatalogModel) => saveModels([m]);
 
 export const saveAlias = (a: ModelAlias) =>
   stageUpsert(ns.platform, ALIAS_TYPE, aliasKey(a.alias), { alias: a.alias, target: `${a.provider}/${a.model}` });
+
+/** The properties of an LlmBehavior node: every key is sent, so that an emptied scope clears the stored one (a save merges). */
+export const behaviorProps = (b: LlmBehavior): Struct => ({
+  name: b.name,
+  description: b.description ?? '',
+  instruction: b.instruction ?? '',
+  enabled: !!b.enabled,
+  position: b.position === 'prepend' ? 'prepend' : 'append',
+  order: b.order ?? 0,
+  aliases: b.aliases ?? [],
+  models: b.models ?? [],
+  sources: b.sources ?? [],
+  kinds: b.kinds ?? [],
+  appliesToJSON: !!b.appliesToJson,
+});
+
+/** Stages the creation or the update of a global behaviour of the LLM calls (ADR 0093). */
+export const saveBehavior = (b: LlmBehavior) => stageUpsert(ns.platform, BEHAVIOR_TYPE, behaviorKey(b.name), behaviorProps(b));
+
+/** Stages the turning on or off of a behaviour: the other properties stay as stored. */
+export const setBehaviorEnabled = (name: string, enabled: boolean) => stageUpsert(ns.platform, BEHAVIOR_TYPE, behaviorKey(name), { enabled });
+
+/** Stages the retirement of a behaviour (a node is never deleted: it is taken out of the configuration). */
+export const retireBehavior = (name: string) => stageRetire(ns.platform, BEHAVIOR_TYPE, behaviorKey(name));
 
 /** The nodes of the platform namespace as the user sees them: main with the pending edits laid over it. */
 async function effective(): Promise<{ key: string; type: string; props: Record<string, unknown> }[]> {
@@ -115,6 +141,7 @@ function overlay<T extends object>(applied: T[], type: string, id: (t: T) => str
 const rowKey = (type: string, t: object): string => {
   if (type === PROVIDER_TYPE) return providerKey((t as LlmProvider).name);
   if (type === MODEL_TYPE) return modelKey((t as CatalogModel).provider, (t as CatalogModel).model);
+  if (type === BEHAVIOR_TYPE) return behaviorKey((t as LlmBehavior).name);
   return aliasKey((t as ModelAlias).alias);
 };
 
@@ -140,6 +167,27 @@ export const overlayAliases = (applied: ModelAlias[]): Unsaved<ModelAlias>[] =>
     if (!alias || !target.includes('/')) return old;
     const [provider, ...rest] = target.split('/');
     return { alias, provider, model: rest.join('/'), ...(old?.protected || p.protected === true ? { protected: true } : {}) };
+  });
+
+const strs = (v: unknown, old?: string[]): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : (old ?? []));
+
+export const overlayBehaviors = (applied: LlmBehavior[]): Unsaved<LlmBehavior>[] =>
+  overlay(applied, BEHAVIOR_TYPE, (b) => b.name, (p, old) => {
+    const name = str(p.name) || old?.name;
+    if (!name) return undefined;
+    return {
+      name,
+      description: typeof p.description === 'string' ? p.description : old?.description,
+      instruction: typeof p.instruction === 'string' ? p.instruction : old?.instruction,
+      enabled: typeof p.enabled === 'boolean' ? p.enabled : !!old?.enabled,
+      position: str(p.position) || old?.position || 'append',
+      order: typeof p.order === 'number' ? p.order : (old?.order ?? 0),
+      aliases: strs(p.aliases, old?.aliases),
+      models: strs(p.models, old?.models),
+      sources: strs(p.sources, old?.sources),
+      kinds: strs(p.kinds, old?.kinds),
+      appliesToJson: typeof p.appliesToJSON === 'boolean' ? p.appliesToJSON : !!old?.appliesToJson,
+    };
   });
 
 // --- alias proposals ----------------------------------------------------------------------------------------------

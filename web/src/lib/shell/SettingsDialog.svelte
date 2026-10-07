@@ -11,8 +11,9 @@
   import PreferencesPane from '../views/platform/PreferencesPane.svelte';
   import ProvidersPane from '../views/platform/ProvidersPane.svelte';
   import CatalogPane from '../views/platform/CatalogPane.svelte';
-  import { models, errorMessage, type CatalogModel, type LlmProvider, type ModelAlias, type ProviderKind } from '../api';
-  import { overlayAliases, overlayCatalog, overlayProviders, listAliasProposals, type AliasProposal } from '../llmEdit';
+  import BehaviorsPane from '../views/platform/BehaviorsPane.svelte';
+  import { models, errorMessage, type CatalogModel, type LlmBehavior, type LlmProvider, type ModelAlias, type ProviderKind } from '../api';
+  import { overlayAliases, overlayBehaviors, overlayCatalog, overlayProviders, listAliasProposals, type AliasProposal } from '../llmEdit';
 
   interface Section {
     id: string;
@@ -25,6 +26,7 @@
     { id: 'preferences', label: 'Preferences', icon: 'user' },
     { id: 'providers', label: 'LLM providers', icon: 'zap', admin: true },
     { id: 'catalog', label: 'Models & quotas', icon: 'database', admin: true },
+    { id: 'behaviors', label: 'LLM behaviours', icon: 'bot', admin: true },
   ];
 
   const visible = $derived(SECTIONS.filter((s) => !s.admin || can.administer));
@@ -42,6 +44,10 @@
   // what the gateway runs (applied), and what the dialog shows: that, with the staged edits laid over it
   let applied = $state<{ providers: LlmProvider[]; catalog: CatalogModel[]; aliases: ModelAlias[] }>({ providers: [], catalog: [], aliases: [] });
   let proposals = $state<AliasProposal[]>([]);
+  // the global behaviours of the LLM calls (ADR 0093), applied, and the caps the server states
+  let appliedBehaviors = $state<LlmBehavior[]>([]);
+  let behaviorCaps = $state<{ maxInstruction?: number; maxTotal?: number; sources?: string[] }>({});
+  const behaviors = $derived(overlayBehaviors(appliedBehaviors));
   const providers = $derived(overlayProviders(applied.providers));
   const catalog = $derived(overlayCatalog(applied.catalog));
   const aliases = $derived(overlayAliases(applied.aliases));
@@ -51,10 +57,12 @@
 
   async function loadGateway() {
     try {
-      const [k, p, c] = await Promise.all([models.listProviderKinds(), models.listProviders(), models.listCatalog()]);
+      const [k, p, c, b] = await Promise.all([models.listProviderKinds(), models.listProviders(), models.listCatalog(), models.listBehaviors()]);
       kinds = k.kinds ?? [];
       protocols = k.protocols ?? [];
       applied = { providers: p.providers ?? [], catalog: c.models ?? [], aliases: c.aliases ?? [] };
+      appliedBehaviors = b.behaviors ?? [];
+      behaviorCaps = { maxInstruction: b.maxInstructionBytes, maxTotal: b.maxTotalBytes, sources: b.sources };
       proposals = await listAliasProposals().catch(() => []);
       gatewayError = '';
     } catch (e) {
@@ -65,7 +73,7 @@
   }
 
   $effect(() => {
-    if (settingsState.open && (active?.id === 'providers' || active?.id === 'catalog') && !gatewayLoaded) void loadGateway();
+    if (settingsState.open && (active?.id === 'providers' || active?.id === 'catalog' || active?.id === 'behaviors') && !gatewayLoaded) void loadGateway();
   });
 
   // leaving with unsaved preferences asks first: accepting loses them, declining stays in the dialog
@@ -133,6 +141,9 @@
           {:else if active.id === 'catalog'}
             {#if gatewayError}<div class="alert">{gatewayError}</div>{/if}
             <CatalogPane {providers} {catalog} {aliases} {proposals} onchange={refreshGateway} openProviders={() => (settingsState.section = 'providers')} />
+          {:else if active.id === 'behaviors'}
+            {#if gatewayError}<div class="alert">{gatewayError}</div>{/if}
+            <BehaviorsPane {behaviors} {catalog} {aliases} maxInstruction={behaviorCaps.maxInstruction || undefined} maxTotal={behaviorCaps.maxTotal || undefined} sources={behaviorCaps.sources?.length ? behaviorCaps.sources : undefined} onchange={refreshGateway} />
           {/if}
         </div>
         <div class="savebar" class:dirty={count > 0}>

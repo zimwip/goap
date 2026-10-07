@@ -78,6 +78,10 @@ export interface ModelExchange {
   messages?: { role?: string; content?: string }[];
   response?: string;
   truncated?: boolean;
+  /** the global behaviours the gateway added to `system` (ADR 0093); a leading `!` marks one dropped by the cap */
+  behaviors?: string[];
+  /** estimated tokens they added */
+  behaviorTokens?: number;
 }
 
 export interface ChangeLogQuery {

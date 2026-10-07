@@ -121,7 +121,7 @@ func TestCompositionsUseBoot(t *testing.T) {
 		if !strings.Contains(src, "graphsvc.Boot(") {
 			t.Errorf("%s does not call graphsvc.Boot", path)
 		}
-		for _, seed := range []string{"SeedAccess", "SeedBuiltins", "SeedModels", "SeedProtectedAliases", "SeedDefaults", "SeedDemo"} {
+		for _, seed := range []string{"SeedAccess", "SeedBuiltins", "SeedModels", "SeedProtectedAliases", "SeedBehaviors", "SeedDefaults", "SeedDemo"} {
 			if strings.Contains(src, "graphsvc."+seed) {
 				t.Errorf("%s calls graphsvc.%s directly", path, seed)
 			}

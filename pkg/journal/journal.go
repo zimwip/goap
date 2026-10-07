@@ -137,6 +137,11 @@ type ModelExchange struct {
 	System   string         `json:"system,omitempty"`
 	Messages []ModelMessage `json:"messages,omitempty"`
 	Response string         `json:"response,omitempty"`
+	// Behaviors names the global behaviours the gateway added to System on its way to the model (ADR 0093; "!name": dropped
+	// by the cap), BehaviorTokens the tokens they added (an estimate). System is what the engine built: the gateway's
+	// addition is not repeated in the log, the ledger row of the call holds the same names.
+	Behaviors      []string `json:"behaviors,omitempty"`
+	BehaviorTokens int      `json:"behaviorTokens,omitempty"`
 	// Truncated says a text was cut to MaxExchangeText.
 	Truncated bool `json:"truncated,omitempty"`
 }

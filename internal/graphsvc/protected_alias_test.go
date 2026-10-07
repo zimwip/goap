@@ -3,6 +3,7 @@ package graphsvc_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -148,5 +149,38 @@ func TestProtectedAliasGuard(t *testing.T) {
 		graphsvc.SeedNode(llmcfg.AliasKey("helper"), llmcfg.NodeTypeAlias, llmcfg.Alias{Alias: "helper", Target: "fake/echo"}.Props())})
 	if !errors.Is(err, graph.ErrInvalid) {
 		t.Fatalf("unprotected helper: %v", err)
+	}
+}
+
+// Boot gives every install the built-in terse behaviour, disabled; an administrator's edit or retirement of it is kept
+// (the seed never overrides an existing node), and a second boot writes nothing (ADR 0093).
+func TestBootSeedsTerseBehaviorOnce(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	r, err := graphsvc.Boot(ctx, g, graphsvc.Options{Models: modelsWithAliases()})
+	if err != nil || !r.Behaviors {
+		t.Fatalf("boot = %+v, %v", r, err)
+	}
+	n, err := g.NodeByKey(ctx, domain.NamespacePlatform, llmcfg.BehaviorKey("terse"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := llmcfg.BehaviorFromProps(n.Properties)
+	if err != nil || b.Enabled || !strings.Contains(b.Instruction, "Answer tersely") {
+		t.Fatalf("%+v %v", b, err)
+	}
+	pre := n.Ref()
+	if err := graphsvc.SeedChange(ctx, g, domain.NamespacePlatform, "retire", []graph.NodeEdit{{Pre: &pre, State: llmcfg.StateRetired, Rationale: "r"}}); err != nil {
+		t.Fatal(err)
+	}
+	cs, _ := g.Changes(ctx)
+	if again, err := graphsvc.Boot(ctx, g, graphsvc.Options{Models: modelsWithAliases()}); err != nil || again != (graphsvc.Report{}) {
+		t.Fatalf("second boot = %+v, %v", again, err)
+	}
+	if after, _ := g.Changes(ctx); len(after) != len(cs) {
+		t.Fatalf("a second boot wrote changes: %d -> %d", len(cs), len(after))
+	}
+	if n2, _ := g.NodeByKey(ctx, domain.NamespacePlatform, llmcfg.BehaviorKey("terse")); n2.State != llmcfg.StateRetired {
+		t.Fatalf("the seed restored a retired behaviour: %q", n2.State)
 	}
 }

@@ -178,7 +178,14 @@ func (s *Service) Complete(ctx context.Context, req llm.Request) (llm.Response, 
 		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
 		return llm.Response{}, err
 	}
+	// the global behaviours join the instructions here, after the admission and before the provider (ADR 0093); req is
+	// the gateway's own copy, the caller's request is never changed
+	ap := s.behave(ctx, req, t)
+	req.System = ap.System
+	rec.request(req.System, req.Messages)
+	rec.behaved(ap)
 	resp, err := s.Router.Complete(ctx, req)
+	resp.Behaviors, resp.BehaviorTokens = behaviorNames(ap), ap.Tokens()
 	rec.answer(resp.Text)
 	s.recordUsage(ctx, t, m, period, int64(resp.Usage.InputTokens+resp.Usage.OutputTokens))
 	rec.finish(ctx, t.Provider, t.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens, err)
@@ -403,4 +410,73 @@ func (s *Service) Catalog(ctx context.Context) ([]CatalogEntry, []AliasEntry, er
 		out[i] = CatalogEntry{ModelEntry: m, Used: used}
 	}
 	return out, snap.Aliases, nil
+}
+
+// ---- global behaviours (ADR 0093) ---------------------------------------------
+
+// behave applies the behaviours of the configuration to a completion resolved to t. A configuration that cannot be read
+// applies none: a style never fails a call.
+func (s *Service) behave(ctx context.Context, req llm.Request, t Target) llmcfg.Applied {
+	snap, err := s.sync(ctx)
+	if err != nil || snap == nil {
+		return llmcfg.Applied{System: req.System}
+	}
+	ap := snap.Apply(req.System, callInfo(llm.MetaFrom(ctx).Source, req.Model, t, req.JSON))
+	if len(ap.Skipped) > 0 {
+		s.Log.Warn("behaviors dropped by the cap", "skipped", ap.Skipped, "capBytes", llmcfg.MaxBehaviorBytes, "model", t.Provider+"/"+t.Model)
+	}
+	return ap
+}
+
+// callInfo is the call as the behaviours match it: the alias is the name requested ("default" when none, "" for a
+// literal provider/model, as the ledger names it).
+func callInfo(source, requested string, t Target, json bool) llmcfg.CallInfo {
+	alias := requested
+	if alias == "" {
+		alias = "default"
+	}
+	if strings.Contains(alias, "/") {
+		alias = ""
+	}
+	return llmcfg.CallInfo{Alias: alias, Provider: t.Provider, Model: t.Model, Source: source, Kind: llmcfg.KindComplete, JSON: json}
+}
+
+// behaviorNames lists the behaviours of a call for the ledger and the caller: the applied ones, then the dropped ones
+// prefixed with "!".
+func behaviorNames(ap llmcfg.Applied) []string {
+	out := slices.Clone(ap.Names)
+	for _, n := range ap.Skipped {
+		out = append(out, "!"+n)
+	}
+	return out
+}
+
+// Behaviors lists the behaviours of the configuration, the enabled and the disabled ones, by order then name.
+func (s *Service) Behaviors(ctx context.Context) ([]llmcfg.Behavior, error) {
+	snap, err := s.sync(ctx)
+	if err != nil {
+		return nil, err
+	}
+	all := append(slices.Clone(snap.Behaviors), snap.Off...)
+	sort.SliceStable(all, func(i, j int) bool {
+		if all[i].Order != all[j].Order {
+			return all[i].Order < all[j].Order
+		}
+		return all[i].Name < all[j].Name
+	})
+	return all, nil
+}
+
+// PreviewBehaviors returns the system text a completion of the given alias, source and mode would be sent with, and which
+// behaviours made it, without calling any model. An alias that resolves to nothing is ErrInvalid.
+func (s *Service) PreviewBehaviors(ctx context.Context, alias, source string, json bool, system string) (llmcfg.Applied, error) {
+	snap, err := s.sync(ctx)
+	if err != nil {
+		return llmcfg.Applied{}, err
+	}
+	t, _, err := s.Router.Resolve(alias)
+	if err != nil {
+		return llmcfg.Applied{}, fmt.Errorf("%w: %w", ErrInvalid, err)
+	}
+	return snap.Apply(system, callInfo(llm.CallMeta{Source: source}.Clean().Source, alias, t, json)), nil
 }

@@ -216,6 +216,19 @@ func SeedProtectedAliases(ctx context.Context, g *graph.Graph) (bool, error) {
 	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Protected model aliases", edits)
 }
 
+// SeedBehaviors gives every install the built-in example behaviour of the gateway (ADR 0093: llmcfg.TerseBehavior,
+// disabled): created when no node of its key exists, never touched afterwards, so an administrator who edited, enabled
+// or retired it keeps it so. It reports whether it wrote anything.
+func SeedBehaviors(ctx context.Context, g *graph.Graph) (bool, error) {
+	b := llmcfg.TerseBehavior()
+	if _, err := g.NodeByKey(ctx, llmcfg.NamespacePlatform, llmcfg.BehaviorKey(b.Name)); err == nil {
+		return false, nil
+	} else if !errors.Is(err, graph.ErrNotFound) {
+		return false, err
+	}
+	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Built-in LLM behaviours", []graph.NodeEdit{SeedNode(llmcfg.BehaviorKey(b.Name), llmcfg.NodeTypeBehavior, b.Props())})
+}
+
 // SeedBuiltins makes sure, at every start, that the built-in MCPs and their adapter definitions exist
 // and match the code (ADR 0028): like the built-in domains they ship with the platform. The first
 // time a built-in MCP is seeded the default organisation gets an instance of its adapter, so that

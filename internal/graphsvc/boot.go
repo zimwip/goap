@@ -33,7 +33,7 @@ type ModelsConfig struct {
 
 // Report says what Boot wrote.
 type Report struct {
-	Access, Builtins, Models, Aliases bool
+	Access, Builtins, Models, Aliases, Behaviors bool
 }
 
 // Boot is the platform bootstrap every composition runs, the same steps in the same order (ADR 0071). Ordering contract:
@@ -43,7 +43,7 @@ type Report struct {
 //     catalogue holding the domains Boot and Options.Dev write to (the registry seeds the domains: SeedDomains, then
 //     Types reload). Boot writes through those hooks: it never runs ahead of them.
 //  2. Boot: Graph.Bootstrap (the roots ORG-DEFAULT and PROJ-ROOT, ADR 0054), SeedAccess (the default policies),
-//     SeedBuiltins (the built-in MCPs, adapter definitions, roles), SeedModels (the model gateway configuration), SeedProtectedAliases (the assistant and helper aliases, ADR 0084), then
+//     SeedBuiltins (the built-in MCPs, adapter definitions, roles), SeedModels (the model gateway configuration), SeedProtectedAliases (the assistant and helper aliases, ADR 0084), SeedBehaviors (the built-in LLM behaviour, disabled, ADR 0093), then
 //     Options.Dev if any. Every step is idempotent, so a second call writes nothing.
 //  3. After Boot, the registry seeds the methodologies (Service.Seed): they need the model aliases of SeedModels.
 //
@@ -78,6 +78,9 @@ func Boot(ctx context.Context, g *graph.Graph, o Options) (Report, error) {
 	}
 	if r.Aliases, err = SeedProtectedAliases(ctx, g); err != nil {
 		return r, fmt.Errorf("seed protected aliases: %w", err)
+	}
+	if r.Behaviors, err = SeedBehaviors(ctx, g); err != nil {
+		return r, fmt.Errorf("seed LLM behaviors: %w", err)
 	}
 	if o.Dev != nil {
 		if err := o.Dev(ctx, g); err != nil {

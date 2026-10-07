@@ -38,6 +38,11 @@ type Response struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
 	Usage    Usage  `json:"usage"`
+	// Behaviors names the global behaviours the gateway added to the instructions of the call (ADR 0093; a name with a
+	// leading "!" was dropped by the cap), and BehaviorTokens estimates the tokens they added. The caller's request is
+	// never changed: the gateway reports what it added here.
+	Behaviors      []string `json:"behaviors,omitempty"`
+	BehaviorTokens int      `json:"behaviorTokens,omitempty"`
 }
 
 // Client completes prompts.

@@ -53,6 +53,12 @@ const (
 	// ModelServiceListCatalogProcedure is the fully-qualified name of the ModelService's ListCatalog
 	// RPC.
 	ModelServiceListCatalogProcedure = "/goap.model.v1.ModelService/ListCatalog"
+	// ModelServiceListBehaviorsProcedure is the fully-qualified name of the ModelService's
+	// ListBehaviors RPC.
+	ModelServiceListBehaviorsProcedure = "/goap.model.v1.ModelService/ListBehaviors"
+	// ModelServicePreviewBehaviorsProcedure is the fully-qualified name of the ModelService's
+	// PreviewBehaviors RPC.
+	ModelServicePreviewBehaviorsProcedure = "/goap.model.v1.ModelService/PreviewBehaviors"
 	// ModelServiceListUsageProcedure is the fully-qualified name of the ModelService's ListUsage RPC.
 	ModelServiceListUsageProcedure = "/goap.model.v1.ModelService/ListUsage"
 	// ModelServiceUsageSummaryProcedure is the fully-qualified name of the ModelService's UsageSummary
@@ -84,6 +90,12 @@ type ModelServiceClient interface {
 	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
 	// The catalog: models offered on the platform, with quota and access level.
 	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
+	// The global behaviours of the LLM calls (ADR 0093): instructions the gateway adds to the system text of the calls
+	// matching their scope. Platform administrators only, like the catalog; they are nodes of the platform namespace,
+	// changed through changes.
+	ListBehaviors(context.Context, *connect.Request[v1.ListBehaviorsRequest]) (*connect.Response[v1.ListBehaviorsResponse], error)
+	// What a call would be sent with, without calling any model (pure): the system text with the behaviours that apply.
+	PreviewBehaviors(context.Context, *connect.Request[v1.PreviewBehaviorsRequest]) (*connect.Response[v1.PreviewBehaviorsResponse], error)
 	// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
 	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
 	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
@@ -153,6 +165,18 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("ListCatalog")),
 			connect.WithClientOptions(opts...),
 		),
+		listBehaviors: connect.NewClient[v1.ListBehaviorsRequest, v1.ListBehaviorsResponse](
+			httpClient,
+			baseURL+ModelServiceListBehaviorsProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("ListBehaviors")),
+			connect.WithClientOptions(opts...),
+		),
+		previewBehaviors: connect.NewClient[v1.PreviewBehaviorsRequest, v1.PreviewBehaviorsResponse](
+			httpClient,
+			baseURL+ModelServicePreviewBehaviorsProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("PreviewBehaviors")),
+			connect.WithClientOptions(opts...),
+		),
 		listUsage: connect.NewClient[v1.ListUsageRequest, v1.ListUsageResponse](
 			httpClient,
 			baseURL+ModelServiceListUsageProcedure,
@@ -184,6 +208,8 @@ type modelServiceClient struct {
 	listProviders     *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
 	discoverModels    *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
 	listCatalog       *connect.Client[v1.ListCatalogRequest, v1.ListCatalogResponse]
+	listBehaviors     *connect.Client[v1.ListBehaviorsRequest, v1.ListBehaviorsResponse]
+	previewBehaviors  *connect.Client[v1.PreviewBehaviorsRequest, v1.PreviewBehaviorsResponse]
 	listUsage         *connect.Client[v1.ListUsageRequest, v1.ListUsageResponse]
 	usageSummary      *connect.Client[v1.UsageSummaryRequest, v1.UsageSummaryResponse]
 	getCallExchange   *connect.Client[v1.GetCallExchangeRequest, v1.GetCallExchangeResponse]
@@ -229,6 +255,16 @@ func (c *modelServiceClient) ListCatalog(ctx context.Context, req *connect.Reque
 	return c.listCatalog.CallUnary(ctx, req)
 }
 
+// ListBehaviors calls goap.model.v1.ModelService.ListBehaviors.
+func (c *modelServiceClient) ListBehaviors(ctx context.Context, req *connect.Request[v1.ListBehaviorsRequest]) (*connect.Response[v1.ListBehaviorsResponse], error) {
+	return c.listBehaviors.CallUnary(ctx, req)
+}
+
+// PreviewBehaviors calls goap.model.v1.ModelService.PreviewBehaviors.
+func (c *modelServiceClient) PreviewBehaviors(ctx context.Context, req *connect.Request[v1.PreviewBehaviorsRequest]) (*connect.Response[v1.PreviewBehaviorsResponse], error) {
+	return c.previewBehaviors.CallUnary(ctx, req)
+}
+
 // ListUsage calls goap.model.v1.ModelService.ListUsage.
 func (c *modelServiceClient) ListUsage(ctx context.Context, req *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error) {
 	return c.listUsage.CallUnary(ctx, req)
@@ -265,6 +301,12 @@ type ModelServiceHandler interface {
 	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
 	// The catalog: models offered on the platform, with quota and access level.
 	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
+	// The global behaviours of the LLM calls (ADR 0093): instructions the gateway adds to the system text of the calls
+	// matching their scope. Platform administrators only, like the catalog; they are nodes of the platform namespace,
+	// changed through changes.
+	ListBehaviors(context.Context, *connect.Request[v1.ListBehaviorsRequest]) (*connect.Response[v1.ListBehaviorsResponse], error)
+	// What a call would be sent with, without calling any model (pure): the system text with the behaviours that apply.
+	PreviewBehaviors(context.Context, *connect.Request[v1.PreviewBehaviorsRequest]) (*connect.Response[v1.PreviewBehaviorsResponse], error)
 	// The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused, whoever asked (engine,
 	// assistant, helper, indexer). A caller reads its own calls; platform administrators any subject.
 	ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error)
@@ -330,6 +372,18 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("ListCatalog")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceListBehaviorsHandler := connect.NewUnaryHandler(
+		ModelServiceListBehaviorsProcedure,
+		svc.ListBehaviors,
+		connect.WithSchema(modelServiceMethods.ByName("ListBehaviors")),
+		connect.WithHandlerOptions(opts...),
+	)
+	modelServicePreviewBehaviorsHandler := connect.NewUnaryHandler(
+		ModelServicePreviewBehaviorsProcedure,
+		svc.PreviewBehaviors,
+		connect.WithSchema(modelServiceMethods.ByName("PreviewBehaviors")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelServiceListUsageHandler := connect.NewUnaryHandler(
 		ModelServiceListUsageProcedure,
 		svc.ListUsage,
@@ -366,6 +420,10 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 			modelServiceDiscoverModelsHandler.ServeHTTP(w, r)
 		case ModelServiceListCatalogProcedure:
 			modelServiceListCatalogHandler.ServeHTTP(w, r)
+		case ModelServiceListBehaviorsProcedure:
+			modelServiceListBehaviorsHandler.ServeHTTP(w, r)
+		case ModelServicePreviewBehaviorsProcedure:
+			modelServicePreviewBehaviorsHandler.ServeHTTP(w, r)
 		case ModelServiceListUsageProcedure:
 			modelServiceListUsageHandler.ServeHTTP(w, r)
 		case ModelServiceUsageSummaryProcedure:
@@ -411,6 +469,14 @@ func (UnimplementedModelServiceHandler) DiscoverModels(context.Context, *connect
 
 func (UnimplementedModelServiceHandler) ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListCatalog is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) ListBehaviors(context.Context, *connect.Request[v1.ListBehaviorsRequest]) (*connect.Response[v1.ListBehaviorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.ListBehaviors is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) PreviewBehaviors(context.Context, *connect.Request[v1.PreviewBehaviorsRequest]) (*connect.Response[v1.PreviewBehaviorsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.PreviewBehaviors is not implemented"))
 }
 
 func (UnimplementedModelServiceHandler) ListUsage(context.Context, *connect.Request[v1.ListUsageRequest]) (*connect.Response[v1.ListUsageResponse], error) {

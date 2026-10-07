@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/llmcfg"
 )
 
 // The ledger of LLM calls (ADR 0089): one row per call the gateway served or refused. The exchange (request and answer)
@@ -44,6 +45,10 @@ type Call struct {
 	Action    string
 	Agent     string
 	CallIndex int
+	// Behaviors are the global behaviours the gateway added to the instructions (ADR 0093; "!name": dropped by the cap),
+	// BehaviorTokens the tokens they added (an estimate).
+	Behaviors      []string
+	BehaviorTokens int64
 	// HasExchange says the gateway stores the exchange of this row (read only: set by the store, ignored on write).
 	HasExchange bool
 }
@@ -252,6 +257,11 @@ func (p *pending) request(system string, msgs []llm.Message) {
 	if p.x != nil {
 		p.x.System, p.x.Messages = system, msgs
 	}
+}
+
+// behaved notes the behaviours added to the instructions of the call.
+func (p *pending) behaved(ap llmcfg.Applied) {
+	p.call.Behaviors, p.call.BehaviorTokens = behaviorNames(ap), int64(ap.Tokens())
 }
 
 // answer notes what came back, for the exchange.
