@@ -8,3 +8,6 @@
 /.goap/
 /.air/
 /web/.vitest/
+
+# compiled dev binary (built by `go build ./cmd/goap-dev`)
+/goap-dev
