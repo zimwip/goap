@@ -2,6 +2,7 @@
   // Home page of the editor area (no tab open).
   import Icon from '../shell/Icon.svelte';
   import { runCommand } from '../shell/commands';
+  import { assistantEnabled } from '../assistant/enabled';
   import { showTool } from '../shell/layout.svelte';
 
   const SHORTCUTS: [string, string][] = [
@@ -9,6 +10,7 @@
     ['Ctrl/Cmd + W (or Alt + W)', 'Close the tab'],
     ['Ctrl/Cmd + J', 'Show / hide the console'],
     ['Ctrl/Cmd + B', 'Show / hide navigation'],
+    ['Ctrl/Cmd + Shift + A', 'Ask the assistant'],
     ['Ctrl/Cmd + P', 'Search for an object (">": commands)'],
     ['Double click', 'Pin a tab or open a pinned item'],
     ['Middle click', 'Close a tab'],
@@ -24,7 +26,9 @@
     <section>
       <h2>Get started</h2>
       <ul class="links">
-        <li><button type="button" class="link" onclick={() => runCommand('assistant')}><Icon name="chat" size={14} /> Assistant (plain-language request)</button></li>
+        {#if assistantEnabled()}
+          <li><button type="button" class="link" onclick={() => runCommand('assistant')}><Icon name="chat" size={14} /> Assistant (plain-language request)</button></li>
+        {/if}
         <li><button type="button" class="link" onclick={() => runCommand('newMethodology')}><Icon name="plus" size={14} /> New methodology</button></li>
         <li><button type="button" class="link" onclick={() => runCommand('import')}><Icon name="upload" size={14} /> Import a methodology (YAML)</button></li>
         <li><button type="button" class="link" onclick={() => runCommand('test')}><Icon name="flask" size={14} /> New intent test</button></li>

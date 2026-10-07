@@ -1,10 +1,10 @@
 <script lang="ts">
-  // "Assistant" tab (same conversation as the side tool).
+  // "Assistant" tab (same conversation as the floating panel).
   import type { Tab } from '../../shell/types';
   import Assistant from './Assistant.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
-  import { newConversation, conversation } from '../../stores/assistant.svelte';
-  import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { assistant, newConversation } from '../../stores/assistant.svelte';
+  import { assistantEnabled } from '../../assistant/enabled';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -15,10 +15,8 @@
         id: 'new',
         label: 'New conversation',
         icon: 'plus',
-        disabled: !conversation.threads.length,
-        run: async () => {
-          if (await confirmDialog('Start a new conversation? The current history will be erased.')) newConversation();
-        },
+        disabled: !assistantEnabled() || !assistant.messages.length,
+        run: newConversation,
       },
     ],
   );

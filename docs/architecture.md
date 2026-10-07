@@ -1155,13 +1155,28 @@ subject's sessions), a new password ends them all; the web offers "Log out on ev
 
 ### 3.8 Voice input ([ADR 0022](adr/0022-voice-interaction.md))
 
-The assistant accepts push-to-talk voice input. Speech-to-text runs **entirely in the browser**
+The assistant's input box accepts push-to-talk voice input. Speech-to-text runs **entirely in the browser**
 (Whisper `tiny` / `base` through transformers.js in a Web Worker, WebGPU with WASM fallback;
-French and English). Only the resulting text reaches the backend, through the same
-`StartProcess` path as typed requests, so voice adds no server-side load, API or scaling
+French and English). Only the resulting text reaches the backend, as a typed message of the conversation
+(`assistant.v1.Send`, ADR 0087), so voice adds no server-side load, API or scaling
 concern. Audio is never uploaded or persisted. Code: `web/src/lib/voice/`. Server-side
 transcription (stateless unary RPC) and live conversation (ephemeral token to a realtime
 provider, or gateway WebSocket) are analyzed in the ADR but not built.
+
+### 3.9 The assistant in the web ([ADR 0088](adr/0088-assistant-web-interface.md))
+
+One conversation view (`views/assistant/Assistant.svelte`) is shown as the **assistant tab** and as the **floating
+panel** opened by a round launcher (`assistant/Launcher.svelte`, mounted once in `Shell.svelte`; `Ctrl+Shift+A`, the
+command "Ask the assistant"). The state is `stores/assistant.svelte.ts`: conversations of the caller (newest first), the
+current one and its messages, the draft; `send` collects the context (`assistant/context.ts`: active tab, subject,
+selection, active project; never a form value) and calls `assistant.v1.Send`, then polls `GetConversation` every 1.5 s
+(backing off on errors, not while the page is hidden, only while a view is shown) until the answer is `done` or `error`.
+The actions of an answer (`select_project`, `open_change`, `create_change`: `assistant/actions.ts`) run once, only for a
+message seen pending in this page; a reloaded conversation replays nothing; each shows as a chip that repeats it. The
+current conversation is kept in memory only (ADR 0052): a new page opens the most recent one. The whole interface depends
+on `aliasFlags.assistantEnabled`: without a model for the `assistant` alias the launcher is not rendered, the commands
+are hidden and the tab explains it with a link to the model catalog. The launcher stays clear of the right activity bar,
+tool panel, console and status bar, and gives way to the field helper (they are never open together).
 
 ## 4. Format of a methodology
 

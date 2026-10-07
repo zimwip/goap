@@ -27,10 +27,10 @@ export function save(key: string, value: unknown): void {
 }
 
 /** What the browser keeps for the signed-in user (not for the browser): dropped when the session changes. */
-const SESSION_KEYS = ['goap.ide.notifications', 'goap.ide.assistant'];
+const SESSION_KEYS = ['goap.ide.notifications'];
 
 /** State kept by earlier versions, now in the URL or in memory: removed so it cannot come back. */
-const LEGACY_KEYS = ['goap.ide.tabs', 'goap.project', 'goap.ide.expanded', 'goap.ide.baselineTool', 'goap.ide.algorithms.domain'];
+const LEGACY_KEYS = ['goap.ide.tabs', 'goap.project', 'goap.ide.expanded', 'goap.ide.baselineTool', 'goap.ide.algorithms.domain', 'goap.ide.assistant'];
 
 function remove(keys: string[]): void {
   try {

@@ -4,7 +4,9 @@ import { layout, showTool, toggleConsole } from './layout.svelte';
 import { activeTab, closeAll, closeTab, openTab } from './tabs.svelte';
 import { focusRequests, runTabAction } from './workbench.svelte';
 import { openSearch } from './searchOverlay.svelte.ts';
-import { canOpenHelper, openHelper } from '../helper/helper.svelte';
+import { canOpenHelper, closeHelper, openHelper } from '../helper/helper.svelte';
+import { assistantEnabled } from '../assistant/enabled';
+import { openPanel } from '../stores/assistant.svelte';
 import { openUsage } from './usageState.svelte';
 
 export interface Command {
@@ -73,7 +75,21 @@ export const COMMANDS: Command[] = [
   { id: 'import', label: 'Import a methodology (YAML)', icon: 'upload', run: () => openTab({ kind: 'import', params: {} }, { pin: true }) },
   { id: 'policies', label: 'Open access policies', icon: 'shield', run: () => openTab({ kind: 'policies', params: {} }) },
   { id: 'dsl', label: 'DSL Help', icon: 'help', run: () => showTool('right', 'dsl') },
-  { id: 'assistant', label: 'Open assistant', icon: 'chat', run: () => openTab({ kind: 'assistant', params: {} }, { pin: true }) },
+  {
+    id: 'assistant',
+    label: 'Open assistant',
+    icon: 'chat',
+    enabled: assistantEnabled,
+    run: () => openTab({ kind: 'assistant', params: {} }, { pin: true }),
+  },
+  {
+    id: 'askAssistant',
+    label: 'Ask the assistant',
+    icon: 'chat',
+    shortcut: 'Ctrl+Shift+A',
+    enabled: assistantEnabled,
+    run: () => (closeHelper(), openPanel()),
+  },
   {
     id: 'helper',
     label: 'Ask the helper about this form',

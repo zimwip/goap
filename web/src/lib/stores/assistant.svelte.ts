@@ -1,162 +1,288 @@
-// Conversational assistant: conversation history (localStorage), info from
-// published methodologies (agent and action descriptions), and sending
-// requests (StartProcess without a methodology).
-import { SvelteMap } from 'svelte/reactivity';
-import { engine, registry, errorMessage, type Agent, type Methodology } from '../api';
-import { loadRaw, save } from '../shell/storage';
-import { ingestProcess } from './live.svelte';
-import { applicable } from './project.svelte';
-import { latestPublished, methodologies, refreshMethodologies } from './catalog.svelte';
+// The conversational assistant (ADR 0087): conversations of the caller from the conversation service (ADR 0085), the
+// messages of the current one, and the polling of an answer being written. Memory only: the current conversation is not
+// kept in the browser (ADR 0052), a new page opens the most recent one.
+import { assistantApi, conversationsApi, errorMessage, type Conversation, type ConversationAction, type ConversationMessage } from '../api';
+import { activeTab } from '../shell/tabs.svelte';
+import { assistantContext, clipBytes } from '../assistant/context';
+import { runActions } from '../assistant/actions';
+import { project } from './project.svelte';
 
-export interface Thread {
-  id: string;
-  /** user's request */
-  text: string;
-  at: string;
-  processId?: string;
-  error?: string;
+/** The server accepts a message of at most 4 KiB (assistantsvc `MaxTextBytes`). */
+export const MAX_TEXT_BYTES = 4 << 10;
+export const POLL_MS = 1500;
+const POLL_MAX_MS = 15000;
+/** consecutive failed polls after which polling stops and the error is shown */
+const POLL_GIVE_UP = 6;
+const TITLE_MAX = 60;
+
+export const assistant = $state({
+  conversations: [] as Conversation[],
+  /** the current conversation ('' : a new one, created with its first message) */
+  currentId: '',
+  messages: [] as ConversationMessage[],
+  /** the draft of the input box, shared by the tab and the floating panel */
+  draft: '',
+  loaded: false,
+  loading: false,
+  sending: false,
+  error: '',
+  /** the floating panel */
+  panelOpen: false,
+  /** bumped to ask the input box to take the focus */
+  focus: 0,
+});
+
+let viewers = 0;
+let timer: ReturnType<typeof setTimeout> | undefined;
+let fails = 0;
+let inflight: AbortController | undefined;
+/** one token per load / switch: an answer that comes back for an older one is dropped */
+let epoch = 0;
+/** the assistant messages seen pending, whose actions run when they turn done (so only ones that turned done here) */
+const watching = new Set<string>();
+
+export const lastMessage = (): ConversationMessage | undefined => assistant.messages[assistant.messages.length - 1];
+
+/** Is an answer being written. */
+export const isPending = (): boolean => lastMessage()?.role === 'assistant' && lastMessage()?.status === 'pending';
+
+export const currentConversation = (): Conversation | undefined => assistant.conversations.find((c) => c.id === assistant.currentId);
+
+function stopPolling(): void {
+  if (timer) clearTimeout(timer);
+  timer = undefined;
+  inflight?.abort();
+  inflight = undefined;
 }
 
-interface Conversation {
-  threads: Thread[];
-  /** chosen baseline ('': the most recent of the identified methodology's namespace) */
-  baselineId: string;
-  /** draft of the input box */
-  draft: string;
+function schedulePoll(): void {
+  if (timer || viewers <= 0 || !assistant.currentId || !isPending()) return;
+  const delay = Math.min(POLL_MS * 2 ** fails, POLL_MAX_MS);
+  timer = setTimeout(() => {
+    timer = undefined;
+    void poll();
+  }, delay);
 }
 
-const KEY = 'goap.ide.assistant';
+async function poll(): Promise<void> {
+  if (viewers <= 0 || !assistant.currentId || !isPending()) return;
+  // nothing is fetched while the tab is hidden
+  if (typeof document !== 'undefined' && document.hidden) return schedulePoll();
+  const mine = epoch;
+  const id = assistant.currentId;
+  const ctrl = new AbortController();
+  inflight = ctrl;
+  try {
+    const r = await conversationsApi.get(id, ctrl.signal);
+    if (mine !== epoch) return;
+    fails = 0;
+    assistant.error = '';
+    apply(r.conversation, r.messages ?? []);
+  } catch (e) {
+    if (mine !== epoch || ctrl.signal.aborted) return;
+    fails++;
+    if (fails >= POLL_GIVE_UP) {
+      assistant.error = `Lost track of the answer: ${errorMessage(e)}`;
+      fails = 0;
+      return;
+    }
+  } finally {
+    if (inflight === ctrl) inflight = undefined;
+  }
+  schedulePoll();
+}
 
-function restore(): Conversation {
-  const raw = loadRaw(KEY) as Partial<Conversation> | undefined;
-  return {
-    threads: Array.isArray(raw?.threads) ? raw.threads.filter((t) => t && typeof t.id === 'string') : [],
-    baselineId: typeof raw?.baselineId === 'string' ? raw.baselineId : '',
-    draft: typeof raw?.draft === 'string' ? raw.draft : '',
+/** Takes the messages of the server; runs the actions of the ones that turned done since they were seen pending. */
+function apply(c: Conversation | undefined, msgs: ConversationMessage[]): void {
+  const sorted = [...msgs].sort((a, b) => a.seq - b.seq);
+  const ready: ConversationAction[][] = [];
+  for (const m of sorted) {
+    if (m.role !== 'assistant') continue;
+    if (m.status === 'pending') watching.add(m.id);
+    else if (watching.delete(m.id) && m.status === 'done' && m.actions?.length) ready.push(m.actions);
+  }
+  assistant.messages = sorted;
+  if (c?.id) assistant.conversations = assistant.conversations.map((x) => (x.id === c.id ? { ...x, ...c } : x));
+  // the actions of different messages run in order, none of them twice
+  void (async () => {
+    for (const acts of ready) await runActions(acts);
+  })();
+}
+
+/** A view of the conversation (the tab, the floating panel) is shown: polling runs while there is at least one. */
+export function attachView(): () => void {
+  viewers++;
+  void ensureLoaded();
+  schedulePoll();
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    viewers--;
+    if (viewers <= 0) {
+      viewers = 0;
+      stopPolling();
+    }
   };
 }
 
-export const conversation: Conversation = $state(restore());
-export const assistantUi = $state({ sending: false, focus: 0 });
-
-$effect.root(() => {
-  $effect(() => {
-    save(KEY, $state.snapshot(conversation));
-  });
-});
-
-// --- published methodologies -------------------------------------------------------------
-
-/** Latest published version of each methodology, by name. */
-export const published = new SvelteMap<string, Methodology>();
-const pending = new Map<string, Promise<void>>();
-
-export function loadMethodology(name: string): Promise<void> {
-  if (!name || published.has(name)) return Promise.resolve();
-  let p = pending.get(name);
-  if (!p) {
-    p = registry
-      .getMethodology(name, '')
-      .then((r) => {
-        if (r.methodology) published.set(name, r.methodology);
-      })
-      .catch(() => undefined)
-      .finally(() => pending.delete(name));
-    pending.set(name, p);
+async function ensureLoaded(): Promise<void> {
+  if (assistant.loading) return;
+  if (!assistant.loaded) {
+    await loadConversations(true);
+  } else if (assistant.currentId) {
+    // shown again: what was answered meanwhile
+    await openConversation(assistant.currentId, true);
   }
-  return p;
 }
 
-export async function loadCatalog(): Promise<void> {
-  if (!methodologies.loaded) await refreshMethodologies();
-  await Promise.all(latestPublished().map((m) => loadMethodology(m.name ?? '')));
-}
-
-export interface AgentCard {
-  methodology: string;
-  agent: Agent;
-  /** implicit agent of a methodology without agents */
-  implicit: boolean;
-  examples: string[];
-}
-
-export function agentCards(): AgentCard[] {
-  const out: AgentCard[] = [];
-  for (const s of latestPublished()) {
-    // only the methodologies attached to the active project (while unknown: none filtered out)
-    if (applicable.names && !applicable.names.includes(s.name ?? '')) continue;
-    const m = published.get(s.name ?? '');
-    if (!m) continue;
-    const goalExamples = (m.goals ?? []).flatMap((g) => g.examples ?? []);
-    if (m.agents?.length) {
-      for (const a of m.agents) {
-        const goals = (m.goals ?? []).filter((g) => !a.goals?.length || a.goals.includes(g.name ?? ''));
-        const ex = a.examples?.length ? a.examples : goals.flatMap((g) => g.examples ?? []);
-        out.push({ methodology: m.name ?? '', agent: a, implicit: false, examples: ex.slice(0, 4) });
-      }
-    } else {
-      out.push({
-        methodology: m.name ?? '',
-        agent: { name: 'default', description: m.description, examples: [] },
-        implicit: true,
-        examples: goalExamples.slice(0, 4),
-      });
-    }
-  }
-  return out;
-}
-
-/** Readable name of an agent: first short sentence of its description, else its name. */
-export function agentLabel(methodology: string | undefined, agent: string | undefined): string {
-  const m = published.get(methodology ?? '');
-  const a = m?.agents?.find((x) => x.name === agent);
-  const desc = (a?.description || (agent === 'default' || !agent ? m?.description : '') || '').trim();
-  const first = desc.split(/(?<=[.!?])\s|\n| — | : /)[0]?.replace(/[.:]$/, '').trim() ?? '';
-  if (first && first.length <= 60) return first;
-  if (agent && agent !== 'default') return agent;
-  return methodology || 'assistant';
-}
-
-/** Label of an action: its description in the methodology, else its name made readable. */
-export function actionLabel(methodology: string | undefined, action: string | undefined): string {
-  const m = published.get(methodology ?? '');
-  const a = m?.actions?.find((x) => x.name === action);
-  if (a?.description) return a.description;
-  return (action ?? '').replace(/[_-]+/g, ' ');
-}
-
-export function goalLabel(methodology: string | undefined, goal: string | undefined): string {
-  const m = published.get(methodology ?? '');
-  return m?.goals?.find((g) => g.name === goal)?.description || (goal ?? '').replace(/[_-]+/g, ' ');
-}
-
-// --- sending -----------------------------------------------------------------------------------
-
-export async function sendRequest(text: string): Promise<void> {
-  const t = text.trim();
-  if (!t || assistantUi.sending) return;
-  assistantUi.sending = true;
-  const thread: Thread = { id: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, text: t, at: new Date().toISOString() };
-  conversation.threads.push(thread);
-  const th = conversation.threads[conversation.threads.length - 1];
-  conversation.draft = '';
+/** Reads the list (newest first); the first time, opens the most recent conversation. */
+export async function loadConversations(openLatest = false): Promise<void> {
+  assistant.loading = true;
   try {
-    // no baseline chosen: the engine starts from the latest one of the identified methodology's namespace
-    const baselineId = conversation.baselineId;
-    const res = await engine.startProcess({ intent: t, ...(baselineId ? { baselineId } : {}) });
-    if (res.process?.id) {
-      ingestProcess(res.process);
-      th.processId = res.process.id;
-      void loadMethodology(res.process.methodology ?? '');
-    } else th.error = 'The engine did not create a run.';
+    const r = await conversationsApi.list(50);
+    assistant.conversations = r.conversations ?? [];
+    assistant.error = '';
+    assistant.loaded = true;
+    if (openLatest && !assistant.currentId && assistant.conversations.length) await openConversation(assistant.conversations[0].id);
   } catch (e) {
-    th.error = errorMessage(e);
+    assistant.error = errorMessage(e);
   } finally {
-    assistantUi.sending = false;
+    assistant.loading = false;
   }
 }
 
+/** Makes a conversation the current one and reads its messages. `keep`: re-reading the current one, nothing is reset. */
+export async function openConversation(id: string, keep = false): Promise<void> {
+  if (!keep) {
+    stopPolling();
+    epoch++;
+    fails = 0;
+    assistant.currentId = id;
+    assistant.messages = [];
+  }
+  const mine = epoch;
+  assistant.loading = true;
+  try {
+    const r = await conversationsApi.get(id);
+    if (mine !== epoch || assistant.currentId !== id) return;
+    assistant.error = '';
+    apply(r.conversation, r.messages ?? []);
+    schedulePoll();
+  } catch (e) {
+    if (mine === epoch) assistant.error = errorMessage(e);
+  } finally {
+    assistant.loading = false;
+  }
+}
+
+/** A new conversation: it is created with its first message. */
 export function newConversation(): void {
-  conversation.threads = [];
-  conversation.draft = '';
+  stopPolling();
+  epoch++;
+  fails = 0;
+  assistant.currentId = '';
+  assistant.messages = [];
+  assistant.error = '';
+  assistant.focus++;
+}
+
+const titleOf = (text: string): string => {
+  const t = text.trim().replace(/\s+/g, ' ');
+  return t.length <= TITLE_MAX ? t : t.slice(0, TITLE_MAX - 1) + '…';
+};
+
+/**
+ * Sends a message with the context of the page. True when the server took it (the caller clears its draft), false with
+ * `assistant.error` set otherwise.
+ */
+export async function send(text: string): Promise<boolean> {
+  const t = text.trim();
+  if (!t || assistant.sending || isPending()) return false;
+  if (new TextEncoder().encode(t).length > MAX_TEXT_BYTES) {
+    assistant.error = `The message is too long: at most ${MAX_TEXT_BYTES} bytes.`;
+    return false;
+  }
+  assistant.sending = true;
+  assistant.error = '';
+  stopPolling();
+  const mine = ++epoch;
+  try {
+    let id = assistant.currentId;
+    if (!id) {
+      const created = (await conversationsApi.create(clipBytes(titleOf(t), 200))).conversation;
+      if (mine !== epoch) return false;
+      id = created.id;
+      assistant.currentId = id;
+      assistant.conversations = [created, ...assistant.conversations.filter((c) => c.id !== id)];
+    }
+    const r = await assistantApi.send(id, t, assistantContext(activeTab(), project.current));
+    if (mine !== epoch) return true;
+    watching.add(r.assistantMessage.id);
+    assistant.messages = [...assistant.messages.filter((m) => m.id !== r.userMessage.id && m.id !== r.assistantMessage.id), r.userMessage, r.assistantMessage].sort(
+      (a, b) => a.seq - b.seq,
+    );
+    schedulePoll();
+    return true;
+  } catch (e) {
+    if (mine === epoch) assistant.error = errorMessage(e);
+    return false;
+  } finally {
+    assistant.sending = false;
+  }
+}
+
+/** Sends again the text of the user message before an assistant message that failed. */
+export async function retry(messageId: string): Promise<boolean> {
+  const i = assistant.messages.findIndex((m) => m.id === messageId);
+  const prev = i > 0 ? assistant.messages[i - 1] : undefined;
+  if (!prev || prev.role !== 'user' || !prev.text) return false;
+  return send(prev.text);
+}
+
+export async function renameConversation(id: string, title: string): Promise<void> {
+  const t = title.trim();
+  if (!t) return;
+  try {
+    const r = await conversationsApi.rename(id, t);
+    assistant.conversations = assistant.conversations.map((c) => (c.id === id ? { ...c, ...r.conversation } : c));
+  } catch (e) {
+    assistant.error = errorMessage(e);
+  }
+}
+
+/** Deletes a conversation; the current one is replaced by a new one. */
+export async function deleteConversation(id: string): Promise<void> {
+  try {
+    await conversationsApi.remove(id);
+  } catch (e) {
+    assistant.error = errorMessage(e);
+    return;
+  }
+  assistant.conversations = assistant.conversations.filter((c) => c.id !== id);
+  if (assistant.currentId === id) newConversation();
+}
+
+export function openPanel(): void {
+  assistant.panelOpen = true;
+  assistant.focus++;
+}
+
+export function closePanel(): void {
+  assistant.panelOpen = false;
+}
+
+export function togglePanel(): void {
+  if (assistant.panelOpen) closePanel();
+  else openPanel();
+}
+
+/** For tests: forgets everything. */
+export function resetAssistant(): void {
+  stopPolling();
+  epoch++;
+  viewers = 0;
+  fails = 0;
+  watching.clear();
+  Object.assign(assistant, { conversations: [], currentId: '', messages: [], draft: '', loaded: false, loading: false, sending: false, error: '', panelOpen: false, focus: 0 });
 }

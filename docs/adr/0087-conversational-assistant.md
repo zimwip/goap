@@ -1,6 +1,6 @@
 # ADR 0087 — The conversational assistant
 
-**Status**: accepted, implemented (server side, web API client; the web interface is not) · **Date**: 2026-10 · Builds on
+**Status**: accepted, implemented (server side, web API client; the web interface is ADR 0088) · **Date**: 2026-10 · Builds on
 ADR 0084 (protected aliases), 0085 (conversations) and 0086 (contextual helper, whose model call it reuses).
 
 ## Context
@@ -72,8 +72,8 @@ and ask it to start a change or to take them to one. The conversation is stored 
   Read tools and refusals leave no action.
 - **Conversation service change**: `Message.context` (a column of both dialects, schema edited in place, greenfield), set
   by the owner on a user message, refused on an assistant one, at most 300 bytes.
-- **Web**: only the API client (`web/src/lib/api/assistant.ts`, `AssistantContext`, the action types) and its test; the
-  interface is a later phase.
+- **Web**: the API client (`web/src/lib/api/assistant.ts`, `AssistantContext`, the action types) and its test; the
+  interface is ADR 0088.
 
 ## Consequences
 
@@ -87,5 +87,5 @@ and ask it to start a change or to take them to one. The conversation is stored 
 
 ## Not done
 
-The web interface; streaming of the answer; a retention policy of conversations; a token budget specific to the assistant
+Streaming of the answer; a retention policy of conversations; a token budget specific to the assistant
 (the quota of the model applies).

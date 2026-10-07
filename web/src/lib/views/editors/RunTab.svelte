@@ -35,11 +35,10 @@
   import type { StreamStatus } from '../../stream';
   import { watchProcess } from '../../flux/events.svelte';
   import { processes, ingestProcess, childrenOf, refreshProcesses } from '../../stores/live.svelte';
-  import { changes, refreshChanges } from '../../stores/catalog.svelte';
+  import { changes, refreshChanges, loadMethodology, published } from '../../stores/catalog.svelte';
   import { viewBaseline } from '../../stores/baselineTool.svelte';
   import { chainOf, inChain, restartedStepNumber } from '../../flowChain';
   import { namespaceOf } from '../../namespace';
-  import { loadMethodology, published } from '../../stores/assistant.svelte';
 
   import NotFound from '../../shell/NotFound.svelte';
 

@@ -1,5 +1,6 @@
 // Catalogs shared by the explorers, the tester and search: methodologies
 // (all versions), baselines, changes.
+import { SvelteMap } from 'svelte/reactivity';
 import { isMeta } from './session.svelte';
 import {
   registry,
@@ -8,6 +9,7 @@ import {
   compareVersions,
   type Baseline,
   type Change,
+  type Methodology,
   type MethodologySummary,
 } from '../api';
 
@@ -102,4 +104,24 @@ export function latestPublished(): MethodologySummary[] {
     if (!cur || compareVersions(m.version, cur.version) > 0) best.set(m.name, m);
   }
   return [...best.values()].sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''));
+}
+
+/** Full definition of the latest published version of each methodology, by name (read on demand). */
+export const published = new SvelteMap<string, Methodology>();
+const publishedPending = new Map<string, Promise<void>>();
+
+export function loadMethodology(name: string): Promise<void> {
+  if (!name || published.has(name)) return Promise.resolve();
+  let p = publishedPending.get(name);
+  if (!p) {
+    p = registry
+      .getMethodology(name, '')
+      .then((r) => {
+        if (r.methodology) published.set(name, r.methodology);
+      })
+      .catch(() => undefined)
+      .finally(() => publishedPending.delete(name));
+    publishedPending.set(name, p);
+  }
+  return p;
 }

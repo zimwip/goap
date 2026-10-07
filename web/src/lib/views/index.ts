@@ -27,7 +27,6 @@ import UserTab from './editors/UserTab.svelte';
 import McpTab from './editors/McpTab.svelte';
 import TriggersExplorer from './nav/TriggersExplorer.svelte';
 import ProcessesExplorer from './nav/ProcessesExplorer.svelte';
-import AssistantPanel from './assistant/AssistantPanel.svelte';
 import AssistantTab from './assistant/AssistantTab.svelte';
 
 import MethodologyTab from './editors/MethodologyTab.svelte';
@@ -64,7 +63,6 @@ import DslHelpPanel from './right/DslHelpPanel.svelte';
 
 // --- navigation (left) -------------------------------------------------------------
 
-registerView({ id: 'assistant', zone: 'left', title: 'Assistant', icon: 'chat', component: AssistantPanel, order: 0 });
 registerView({ id: 'methodologies', zone: 'left', title: 'Methodologies', icon: 'book', component: MethodologyExplorer, order: 1 });
 registerView({ id: 'domains', zone: 'left', title: 'Domains', icon: 'graph', component: DomainExplorer, order: 1.5 });
 registerView({ id: 'processes', zone: 'left', title: 'My processes', icon: 'runs', component: ProcessesExplorer, order: 2.2 });
