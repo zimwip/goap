@@ -519,8 +519,8 @@ func TestAgentToolsNeedTheEngine(t *testing.T) {
 	}
 }
 
-func TestToolsAreSix(t *testing.T) {
-	if got := Tools(); len(got) != 6 {
+func TestToolsAreSeven(t *testing.T) {
+	if got := Tools(); len(got) != 7 {
 		t.Fatalf("%v", got)
 	}
 	for _, name := range Tools() {

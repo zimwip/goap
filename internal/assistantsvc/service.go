@@ -1,5 +1,5 @@
 // Package assistantsvc is the conversational assistant (ADR 0087): it answers the messages a person writes in a
-// conversation (ADR 0085) with the model of the `assistant` alias, and may do six things for them through tools, no
+// conversation (ADR 0085) with the model of the `assistant` alias, and may do seven things for them through tools, no
 // more (ADR 0090 added the agents), and asks the interface to act on the screen they are on (ADR 0092: its tools are
 // handed back, never run here). It is a use case over the graph, the model gateway and the conversation service: `pkg/graph` and `pkg/engine`
 // do not import it (`pkg/layering`).

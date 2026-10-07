@@ -35,7 +35,7 @@ describing the whole page evenly.
   description of 300 bytes, a guidance of 200, 12 properties named `[A-Za-z][A-Za-z0-9_]{0,39}`, 2 KiB of schema per
   tool. An invalid descriptor refuses the request (`InvalidArgument`): it is a bug of the screen, not of the model. The
   model sees them in the prompt and calls them `ui.<name>` in the same tool-call protocol, so a screen tool can never
-  shadow one of the six server tools (the six and ADR 0090 are untouched). A call to a name not in this turn's
+  shadow one of the server tools (ADR 0090 and 0094 are untouched). A call to a name not in this turn's
   descriptors, or whose arguments fail the schema (unknown property, missing required, type, enum, array element,
   4 KiB of arguments, 2000 bytes per string) is an error fed back to the model and never emitted. **The server never
   executes a screen tool.**
