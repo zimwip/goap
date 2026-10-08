@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ChangeObject, ChangeObjectQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, ObjectWrite, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ChangeObject, ChangeObjectQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, ObjectWrite, Request, RequestEntry, RequestQuery, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -308,6 +308,23 @@ export const graph = {
   /** Writes change objects on a change (ADR 0098), in order and as one write. */
   putChangeObjects: (changeId: string, objects: ObjectWrite[]) =>
     rpc<{ changeId: string; objects: ObjectWrite[] }, { objects?: ChangeObject[] }>(GRAPH, 'PutChangeObjects', { changeId, objects }),
+  /** Records a request of the caller (ADR 0098): the origin of a piece of work. */
+  createRequest: (req: { title: string; text?: string; projectId?: string; originKind?: string; originRef?: string }) =>
+    rpc<typeof req, { request?: Request }>(GRAPH, 'CreateRequest', req),
+  getRequest: (requestId: string, signal?: AbortSignal) => rpc<{ requestId: string }, { request?: Request }>(GRAPH, 'GetRequest', { requestId }, signal),
+  /** The requests the caller may view matching the query. */
+  listRequests: (req: RequestQuery, signal?: AbortSignal) => rpc<RequestQuery, { requests?: Request[] }>(GRAPH, 'ListRequests', req, signal),
+  updateRequest: (requestId: string, title: string) => rpc<{ requestId: string; title: string }, { request?: Request }>(GRAPH, 'UpdateRequest', { requestId, title }),
+  /** Closes, rejects or withdraws a request. */
+  setRequestStatus: (requestId: string, status: 'closed' | 'rejected' | 'withdrawn', comment = '') =>
+    rpc<{ requestId: string; status: string; comment: string }, { request?: Request }>(GRAPH, 'SetRequestStatus', { requestId, status, comment }),
+  /** Links a request to a change that answers it (origin, amends, covers). */
+  linkRequest: (requestId: string, changeId: string, role: 'origin' | 'amends' | 'covers') =>
+    rpc<{ requestId: string; changeId: string; role: string }, { request?: Request }>(GRAPH, 'LinkRequest', { requestId, changeId, role }),
+  unlinkRequest: (requestId: string, changeId: string) =>
+    rpc<{ requestId: string; changeId: string }, { request?: Request }>(GRAPH, 'UnlinkRequest', { requestId, changeId }),
+  listRequestLog: (requestId: string, signal?: AbortSignal) =>
+    rpc<{ requestId: string }, { entries?: RequestEntry[] }>(GRAPH, 'ListRequestLog', { requestId }, signal),
   /** The change objects of a change: the last version of each, or the versions in force at a position of the log. */
   listChangeObjects: (req: ChangeObjectQuery, signal?: AbortSignal) =>
     rpc<ChangeObjectQuery, { objects?: ChangeObject[] }>(GRAPH, 'ListChangeObjects', req, signal),

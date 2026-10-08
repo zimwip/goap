@@ -43,6 +43,38 @@ type observedTx struct {
 	// written, in order; purged are the ones deleted.
 	indexed []domain.ChangeID
 	purged  []domain.ChangeID
+	// requests are the requests whose document must be published (ADR 0098): the request or its links were written
+	requests []domain.RequestID
+}
+
+func (t *observedTx) request(id domain.RequestID) {
+	if id != "" && !slices.Contains(t.requests, id) {
+		t.requests = append(t.requests, id)
+	}
+}
+
+func (t *observedTx) PutRequest(ctx context.Context, r domain.Request) error {
+	if err := t.Tx.PutRequest(ctx, r); err != nil {
+		return err
+	}
+	t.request(r.ID)
+	return nil
+}
+
+func (t *observedTx) PutRequestLink(ctx context.Context, l domain.RequestLink) error {
+	if err := t.Tx.PutRequestLink(ctx, l); err != nil {
+		return err
+	}
+	t.request(l.Request)
+	return nil
+}
+
+func (t *observedTx) DeleteRequestLink(ctx context.Context, change domain.ChangeID, request domain.RequestID) error {
+	if err := t.Tx.DeleteRequestLink(ctx, change, request); err != nil {
+		return err
+	}
+	t.request(request)
+	return nil
 }
 
 func (t *observedTx) index(id domain.ChangeID) {
@@ -162,6 +194,11 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		return nil, err
 	}
 	out = append(out, docs...)
+	reqs, err := g.requestDocs(ctx, tx, ot)
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, reqs...)
 	if len(ot.nodes) > 0 {
 		// typesAt ignores its baseline argument (the type catalogue is process-global, not
 		// namespace-scoped graph data): no baseline lookup is needed to build it.
@@ -255,6 +292,41 @@ func (g *Graph) changeDocs(ctx context.Context, tx Tx, ot *observedTx) ([]publis
 	return out, nil
 }
 
+// requestDocs builds the index documents of the requests a transaction wrote or linked, and of the requests linked to
+// the changes whose header it wrote (their effective status follows the changes, ADR 0098).
+func (g *Graph) requestDocs(ctx context.Context, tx Tx, ot *observedTx) ([]published, error) {
+	ids := slices.Clone(ot.requests)
+	for id := range ot.headers {
+		links, err := tx.RequestLinks(ctx, false, string(id))
+		if err != nil {
+			return nil, err
+		}
+		for _, l := range links {
+			if !slices.Contains(ids, l.Request) {
+				ids = append(ids, l.Request)
+			}
+		}
+	}
+	var out []published
+	for _, id := range ids {
+		r, err := requestTx(ctx, tx, id)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, published{fmt.Sprintf(domain.SubjectRequestIndexed, id), requestDoc(r)})
+	}
+	return out, nil
+}
+
+func requestDoc(r domain.Request) domain.RequestDocEvent {
+	ev := domain.RequestDocEvent{ID: r.ID, Title: r.Title, Text: r.Text, Requester: r.Requester, ProjectID: r.ProjectID, Status: r.Effective(),
+		Origin: r.Origin.Kind, CreatedAt: r.CreatedAt}
+	for _, l := range r.Links {
+		ev.Changes = append(ev.Changes, l.Change)
+	}
+	return ev
+}
+
 // subjectToken makes a value usable as one token of a NATS subject.
 func subjectToken(s string) string {
 	return strings.Map(func(r rune) rune {
@@ -338,7 +410,18 @@ func (g *Graph) republishChanges(ctx context.Context, sink EventSink) (int, erro
 		for _, c := range cs {
 			ot.index(c.ID)
 		}
-		events, err = g.changeDocs(ctx, tx, ot)
+		if events, err = g.changeDocs(ctx, tx, ot); err != nil {
+			return err
+		}
+		rs, err := tx.Requests(ctx, domain.RequestFilter{})
+		if err != nil {
+			return err
+		}
+		for _, r := range rs {
+			ot.request(r.ID)
+		}
+		reqs, err := g.requestDocs(ctx, tx, ot)
+		events = append(events, reqs...)
 		return err
 	})
 	if err != nil {

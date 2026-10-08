@@ -83,7 +83,8 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 				moved = c
 			}
 		}
-		return nil
+		// the requests linked to the family alone follow it (ADR 0098)
+		return g.moveRequestsTx(ctx, tx, again, project)
 	})
 	return moved, err
 }

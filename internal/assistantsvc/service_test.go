@@ -55,10 +55,12 @@ func (m *fakeModel) Available(context.Context) ([]modelgw.ModelEntry, []modelgw.
 }
 
 type fakeGraph struct {
-	created []graph.NewChange
-	who     []authz.Principal
-	changes map[domain.ChangeID]domain.Change
-	err     error
+	created  []graph.NewChange
+	requests []graph.NewRequest
+	links    []domain.RequestLink
+	who      []authz.Principal
+	changes  map[domain.ChangeID]domain.Change
+	err      error
 }
 
 func (g *fakeGraph) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
@@ -68,6 +70,16 @@ func (g *fakeGraph) CreateChange(ctx context.Context, in graph.NewChange) (domai
 	g.created = append(g.created, in)
 	g.who = append(g.who, authz.From(ctx))
 	return domain.Change{ID: "CHG-NEW", Title: in.Title, Methodology: in.Methodology, ProjectID: in.ProjectID}, nil
+}
+
+func (g *fakeGraph) CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error) {
+	g.requests = append(g.requests, in)
+	return domain.Request{ID: domain.RequestID(fmt.Sprintf("REQ-%d", len(g.requests))), Title: in.Title, Text: in.Text, Requester: in.Requester, Origin: in.Origin}, nil
+}
+
+func (g *fakeGraph) LinkRequest(_ context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error) {
+	g.links = append(g.links, domain.RequestLink{Request: id, Change: change, Role: role})
+	return domain.Request{ID: id}, nil
 }
 
 func (g *fakeGraph) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
@@ -328,6 +340,14 @@ func TestCreateChangeActsAsTheCaller(t *testing.T) {
 	}
 	if who.Subject != "u1" || who.Project != "PROJ-A" || in.Data["createdBy"] != "u1" || in.Data["via"] != "assistant" {
 		t.Fatalf("created as %+v data %+v", who, in.Data)
+	}
+	// the change is created for a request of the person, in their words, linked as its origin (ADR 0098)
+	if len(e.graph.requests) != 1 || e.graph.requests[0].Requester != "u1" || e.graph.requests[0].Origin.Kind != domain.OriginConversation ||
+		e.graph.requests[0].Title != "Ship v2" || e.graph.requests[0].Text == "" {
+		t.Fatalf("request %+v", e.graph.requests)
+	}
+	if len(e.graph.links) != 1 || e.graph.links[0].Change != "CHG-NEW" || e.graph.links[0].Role != domain.LinkOrigin {
+		t.Fatalf("link %+v", e.graph.links)
 	}
 	a := e.answer(t)
 	if len(a.Actions) != 1 || a.Actions[0]["type"] != "create_change" || a.Actions[0]["result"].(map[string]any)["changeId"] != "CHG-NEW" {

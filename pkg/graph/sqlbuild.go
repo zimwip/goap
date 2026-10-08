@@ -338,6 +338,7 @@ func (d dialect) deleteChangeRows() []string {
 		`DELETE FROM change_impact WHERE change_id = ` + p,
 		`DELETE FROM change_log WHERE change_id = ` + p,
 		`DELETE FROM change_object WHERE change_id = ` + p,
+		`DELETE FROM change_request WHERE change_id = ` + p,
 		`DELETE FROM tag WHERE change_id = ` + p,
 	}
 }
@@ -433,4 +434,77 @@ func (d dialect) sqlChangeObjects(change domain.ChangeID, f domain.ObjectFilter)
 	}
 	conds = append(conds, d.labelsWhere(f.Labels, arg)...)
 	return `SELECT ` + d.changeObjectCols() + ` FROM change_object WHERE ` + strings.Join(conds, " AND ") + ` ORDER BY created_seq`, args
+}
+
+// Requests (ADR 0098): the columns of a request, its links and its log.
+var (
+	requestColumns       = []string{"id", "title", "text", "requester", "project_id", "origin_kind", "origin_ref", "status", "created_at"}
+	requestLinkColumns   = []string{"change_id", "request_id", "role", "linked_by", "linked_at"}
+	requestLogColumns    = []string{"request_id", "type", "by_whom", "at", "payload"}
+	requestLinkSelection = "l.change_id, l.request_id, l.role, l.linked_by, l.linked_at, c.status"
+)
+
+// requestCols is the select list of a request.
+func (d dialect) requestCols() string {
+	return d.cols(su("id"), sc("title"), sc("text"), sc("requester"), sc("project_id"), sc("origin_kind"), sc("origin_ref"), sc("status"), sc("created_at"))
+}
+
+// sqlUpsertRequest writes a request (the arguments of requestColumns): its text, requester and origin never change.
+func (d dialect) sqlUpsertRequest() string {
+	return d.sqlInsert("request", requestColumns, ` ON CONFLICT (id) DO UPDATE SET title = excluded.title, project_id = excluded.project_id, status = excluded.status`)
+}
+
+// sqlRequest reads a request.
+func (d dialect) sqlRequest(id domain.RequestID) (string, []any) {
+	return `SELECT ` + d.requestCols() + ` FROM request WHERE id = ` + d.ph(1), []any{string(id)}
+}
+
+// sqlRequests reads the requests matching the requester, the projects and the change of f (the statuses and the limit
+// are applied by the graph: delivered is derived), oldest first.
+func (d dialect) sqlRequests(f domain.RequestFilter) (string, []any) {
+	q, args := `SELECT `+d.requestCols()+` FROM request`+d.where1(), []any{}
+	arg := func(v any) string {
+		args = append(args, v)
+		return d.ph(len(args))
+	}
+	if f.Requester != "" {
+		q += " AND requester = " + arg(f.Requester)
+	}
+	if f.Projects != nil {
+		if len(f.Projects) == 0 {
+			q += " AND 1 = 0"
+		} else {
+			ps := make([]string, len(f.Projects))
+			for i, p := range f.Projects {
+				ps[i] = arg(p)
+			}
+			q += " AND project_id IN (" + strings.Join(ps, ", ") + ")"
+		}
+	}
+	if f.Change != "" {
+		q += " AND id IN (SELECT request_id FROM change_request WHERE change_id = " + arg(string(f.Change)) + ")"
+	}
+	return q + d.orderBy("created_at", ", id"), args
+}
+
+// sqlRequestLinks reads the links of a request (byRequest) or of a change, with the status of the change, in the order
+// they were made.
+func (d dialect) sqlRequestLinks(byRequest bool, id string) (string, []any) {
+	col := "l.change_id"
+	if byRequest {
+		col = "l.request_id"
+	}
+	sel := strings.ReplaceAll(requestLinkSelection, "l.change_id,", d.id("l.change_id")+",")
+	sel = strings.ReplaceAll(sel, "l.request_id,", d.id("l.request_id")+",")
+	return `SELECT ` + sel + ` FROM change_request l JOIN change c ON c.id = l.change_id WHERE ` + col + ` = ` + d.ph(1) + ` ORDER BY l.linked_at`, []any{id}
+}
+
+// sqlDeleteRequestLink deletes a link: arguments change, request.
+func (d dialect) sqlDeleteRequestLink() string {
+	return `DELETE FROM change_request WHERE change_id = ` + d.ph(1) + ` AND request_id = ` + d.ph(2)
+}
+
+// sqlRequestLog reads the log of a request, in order.
+func (d dialect) sqlRequestLog(id domain.RequestID) (string, []any) {
+	return `SELECT seq, ` + d.id("request_id") + `, type, by_whom, at, payload FROM request_log WHERE request_id = ` + d.ph(1) + ` ORDER BY seq`, []any{string(id)}
 }

@@ -2,10 +2,21 @@
 // graph, filtered by type, project, owner, status and methodology, with facets and nearest-document search. JSON of the
 // proto3 messages of goap.index.v1 (camelCase, zero values omitted).
 
-export type DocumentKind = 'node' | 'change';
+export type DocumentKind = 'node' | 'change' | 'request';
 export type SearchMode = 'lexical' | 'semantic' | 'hybrid';
 
 /** What a hit of kind `change` adds. */
+/** What a hit tells of a request (ADR 0098). */
+export interface RequestInfo {
+  requestId?: string;
+  title?: string;
+  /** effective status */
+  status?: string;
+  /** empty until triaged */
+  projectId?: string;
+  requester?: string;
+}
+
 export interface ChangeInfo {
   changeId: string;
   title?: string;
@@ -42,6 +53,8 @@ export interface NodeHit {
   snippet?: string;
   /** Set for a change. */
   change?: ChangeInfo;
+  /** set for a request (ADR 0098) */
+  request?: RequestInfo;
 }
 
 /** The document a similar_to search starts from. */

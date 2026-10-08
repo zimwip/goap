@@ -78,6 +78,10 @@ const RoleAdmin = "admin"
 // project reads that project's own Assignments itself (ProjectRoles); the grant itself is project-independent.
 const RoleReader = "reader"
 
+// RoleTriage is the built-in platform role that triages the requests (ADR 0098): it sees and handles every request,
+// the untriaged ones included, until a request has a project whose roles then apply too.
+const RoleTriage = "triage"
+
 // PolicyPrefix starts the key of a Policy node.
 const PolicyPrefix = "POL:"
 

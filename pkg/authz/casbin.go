@@ -66,6 +66,17 @@ var DefaultPolicies = []Policy{
 	{Rule: `onProject(r.sub)`, Resource: "process", Action: "*", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "object", Action: "create", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "node", Action: "transition", Effect: "allow"},
+	// requests (ADR 0098): anyone signed in asks; the requester does everything on their own request; a triager on any; the
+	// members of the project of a triaged one view, update, link and reject it. "view", not "read": the read rule above
+	// would open the untriaged ones to everyone.
+	{Rule: `!isAnonymous(r.sub)`, Resource: "request", Action: "create", Effect: "allow"},
+	{Rule: `!isAnonymous(r.sub) && r.sub.Subject == r.obj.Owner`, Resource: "request", Action: "*", Effect: "allow"},
+	{Rule: `hasRole(r.sub, "triage")`, Resource: "request", Action: "*", Effect: "allow"},
+	{Rule: `hasRole(r.sub, "reader")`, Resource: "request", Action: "view", Effect: "allow"},
+	{Rule: `r.obj.ProjectID != "" && onProject(r.sub)`, Resource: "request", Action: "view", Effect: "allow"},
+	{Rule: `r.obj.ProjectID != "" && onProject(r.sub)`, Resource: "request", Action: "update", Effect: "allow"},
+	{Rule: `r.obj.ProjectID != "" && onProject(r.sub)`, Resource: "request", Action: "link", Effect: "allow"},
+	{Rule: `r.obj.ProjectID != "" && onProject(r.sub)`, Resource: "request", Action: "reject", Effect: "allow"},
 	// the change objects of a change (ADR 0098): what it carries beyond its impacts, written by the project's members
 	{Rule: `onProject(r.sub)`, Resource: "change-object", Action: "write", Effect: "allow"},
 	// approving a requirement (alm): the control is the accepted review of the change, which its guard requires (ADR

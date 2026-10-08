@@ -37,6 +37,10 @@ type memState struct {
 	tags []domain.Tag
 	// objects are the change objects of each change (ADR 0098), in the order of their first version
 	objects map[domain.ChangeID][]domain.ChangeObject
+	// requests, their links to changes and their log (ADR 0098), in creation order
+	requests []domain.Request
+	rlinks   []domain.RequestLink
+	rlog     []domain.RequestEntry
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -63,6 +67,9 @@ func (s memState) clone() memState {
 		branches:  maps.Clone(s.branches),
 		joins:     maps.Clone(s.joins),
 		log:       slices.Clone(s.log),
+		requests:  slices.Clone(s.requests),
+		rlinks:    slices.Clone(s.rlinks),
+		rlog:      slices.Clone(s.rlog),
 		tags:      slices.Clone(s.tags),
 		nodes:     make(map[domain.ChangeID][]domain.ChangeImpact, len(s.nodes)),
 		objects:   make(map[domain.ChangeID][]domain.ChangeObject, len(s.objects)),
@@ -509,6 +516,100 @@ func cloneValue(v map[string]any) map[string]any {
 	return out
 }
 
+func (t *memTx) PutRequest(_ context.Context, r domain.Request) error {
+	r.Links = nil
+	for i, x := range t.st.requests {
+		if x.ID == r.ID {
+			x.Title, x.ProjectID, x.Status = r.Title, r.ProjectID, r.Status
+			t.st.requests[i] = x
+			return nil
+		}
+	}
+	if r.Title == "" {
+		return fmt.Errorf("request %s: a title is required: %w", r.ID, ErrInvalid)
+	}
+	t.st.requests = append(t.st.requests, r)
+	return nil
+}
+
+func (t *memTx) Request(_ context.Context, id domain.RequestID) (domain.Request, error) {
+	for _, r := range t.st.requests {
+		if r.ID == id {
+			return r, nil
+		}
+	}
+	return domain.Request{}, fmt.Errorf("request %s: %w", id, ErrNotFound)
+}
+
+func (t *memTx) Requests(_ context.Context, f domain.RequestFilter) ([]domain.Request, error) {
+	var out []domain.Request
+	for _, r := range t.st.requests {
+		if (f.Requester != "" && r.Requester != f.Requester) || (f.Projects != nil && !slices.Contains(f.Projects, r.ProjectID)) {
+			continue
+		}
+		if f.Change != "" && !slices.ContainsFunc(t.st.rlinks, func(l domain.RequestLink) bool { return l.Change == f.Change && l.Request == r.ID }) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+func (t *memTx) PutRequestLink(_ context.Context, l domain.RequestLink) error {
+	if _, ok := t.st.changes[l.Change]; !ok {
+		return fmt.Errorf("change %s: %w", l.Change, ErrInvalid)
+	}
+	if !slices.ContainsFunc(t.st.requests, func(r domain.Request) bool { return r.ID == l.Request }) {
+		return fmt.Errorf("request %s: %w", l.Request, ErrInvalid)
+	}
+	if slices.ContainsFunc(t.st.rlinks, func(x domain.RequestLink) bool { return x.Change == l.Change && x.Request == l.Request }) {
+		return fmt.Errorf("request %s is already linked to change %s: %w", l.Request, l.Change, ErrConflict)
+	}
+	l.ChangeStatus = ""
+	t.st.rlinks = append(t.st.rlinks, l)
+	return nil
+}
+
+func (t *memTx) DeleteRequestLink(_ context.Context, change domain.ChangeID, request domain.RequestID) error {
+	n := len(t.st.rlinks)
+	t.st.rlinks = slices.DeleteFunc(t.st.rlinks, func(l domain.RequestLink) bool { return l.Change == change && l.Request == request })
+	if len(t.st.rlinks) == n {
+		return fmt.Errorf("request %s is not linked to change %s: %w", request, change, ErrNotFound)
+	}
+	return nil
+}
+
+func (t *memTx) RequestLinks(_ context.Context, byRequest bool, id string) ([]domain.RequestLink, error) {
+	var out []domain.RequestLink
+	for _, l := range t.st.rlinks {
+		if (byRequest && string(l.Request) == id) || (!byRequest && string(l.Change) == id) {
+			l.ChangeStatus = t.st.changes[l.Change].Status
+			out = append(out, l)
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) AppendRequestLog(_ context.Context, e domain.RequestEntry) (domain.RequestEntry, error) {
+	if !slices.ContainsFunc(t.st.requests, func(r domain.Request) bool { return r.ID == e.Request }) {
+		return e, fmt.Errorf("request %s: %w", e.Request, ErrInvalid)
+	}
+	e.Payload = slices.Clone(e.Payload)
+	e.Seq = int64(len(t.st.rlog) + 1)
+	t.st.rlog = append(t.st.rlog, e)
+	return e, nil
+}
+
+func (t *memTx) RequestLog(_ context.Context, id domain.RequestID) ([]domain.RequestEntry, error) {
+	var out []domain.RequestEntry
+	for _, e := range t.st.rlog {
+		if e.Request == id {
+			out = append(out, e)
+		}
+	}
+	return out, nil
+}
+
 func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
 	var out []domain.ChangeID
 	for id, c := range t.st.changes {
@@ -696,6 +797,7 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 	t.st.log = slices.DeleteFunc(t.st.log, func(e domain.LogEntry) bool { return e.Change == id })
 	delete(t.st.nodes, id)
 	delete(t.st.objects, id)
+	t.st.rlinks = slices.DeleteFunc(t.st.rlinks, func(l domain.RequestLink) bool { return l.Change == id })
 	t.st.tags = slices.DeleteFunc(t.st.tags, func(tag domain.Tag) bool { return tag.ChangeID == id })
 	if branch != "" {
 		delete(t.st.branches, branchKey(namespace, branch))

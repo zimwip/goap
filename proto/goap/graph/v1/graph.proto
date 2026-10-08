@@ -50,6 +50,15 @@ service GraphService {
   rpc ListChangeObjects(ListChangeObjectsRequest) returns (ListChangeObjectsResponse);
   // Impact operations, items and change objects written on a change in one transaction, all or none (ADR 0098).
   rpc SubmitBatch(SubmitBatchRequest) returns (SubmitBatchResponse);
+  // Requests (ADR 0098): the origin of a piece of work, linked to the changes that answer it.
+  rpc CreateRequest(CreateRequestRequest) returns (RequestResponse);
+  rpc GetRequest(GetRequestRequest) returns (RequestResponse);
+  rpc ListRequests(ListRequestsRequest) returns (ListRequestsResponse);
+  rpc UpdateRequest(UpdateRequestRequest) returns (RequestResponse);
+  rpc SetRequestStatus(SetRequestStatusRequest) returns (RequestResponse);
+  rpc LinkRequest(LinkRequestRequest) returns (RequestResponse);
+  rpc UnlinkRequest(UnlinkRequestRequest) returns (RequestResponse);
+  rpc ListRequestLog(ListRequestLogRequest) returns (ListRequestLogResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
   rpc ProposeImpact(ProposeImpactRequest) returns (ProposeImpactResponse);
@@ -768,6 +777,111 @@ message SubmitBatchRequest {
   repeated ImpactLinkCreateRequest links = 5;
   repeated ChangeItem items = 6;
   repeated ObjectWrite objects = 7;
+}
+
+// Request is the origin of a piece of work (ADR 0098).
+message Request {
+  string id = 1;
+  string title = 2;
+  // the voice of the requester, never rewritten
+  string text = 3;
+  string requester = 4;
+  // empty until triaged
+  string project_id = 5;
+  // conversation | trigger | external | change | manual
+  string origin_kind = 6;
+  string origin_ref = 7;
+  // effective status: open | triaged | delivered (derived) | closed | rejected | withdrawn
+  string status = 8;
+  google.protobuf.Timestamp created_at = 9;
+  repeated RequestLink links = 10;
+}
+
+// RequestLink links a request to a change that answers it.
+message RequestLink {
+  string change_id = 1;
+  // origin | amends | covers
+  string role = 2;
+  string by = 3;
+  google.protobuf.Timestamp at = 4;
+  // status of the change
+  string change_status = 5;
+}
+
+message RequestResponse {
+  Request request = 1;
+}
+
+message CreateRequestRequest {
+  string title = 1;
+  string text = 2;
+  // the project when it is known; empty: untriaged
+  string project_id = 3;
+  string origin_kind = 4;
+  string origin_ref = 5;
+}
+
+message GetRequestRequest {
+  string request_id = 1;
+}
+
+message ListRequestsRequest {
+  // a subject; "@me": the caller
+  string requester = 1;
+  // projects kept when filter_projects is set ("" the untriaged requests)
+  repeated string project_ids = 2;
+  bool filter_projects = 3;
+  // effective statuses
+  repeated string statuses = 4;
+  // the requests linked to a change
+  string change_id = 5;
+  int32 limit = 6;
+}
+
+message ListRequestsResponse {
+  repeated Request requests = 1;
+}
+
+message UpdateRequestRequest {
+  string request_id = 1;
+  string title = 2;
+}
+
+message SetRequestStatusRequest {
+  string request_id = 1;
+  // closed | rejected | withdrawn
+  string status = 2;
+  string comment = 3;
+}
+
+message LinkRequestRequest {
+  string request_id = 1;
+  string change_id = 2;
+  // origin | amends | covers
+  string role = 3;
+}
+
+message UnlinkRequestRequest {
+  string request_id = 1;
+  string change_id = 2;
+}
+
+message ListRequestLogRequest {
+  string request_id = 1;
+}
+
+message RequestEntry {
+  int64 seq = 1;
+  // created | updated | linked | unlinked | moved | status
+  string type = 2;
+  string by = 3;
+  google.protobuf.Timestamp at = 4;
+  // details, as JSON
+  string payload = 5;
+}
+
+message ListRequestLogResponse {
+  repeated RequestEntry entries = 1;
 }
 
 message SubmitBatchResponse {

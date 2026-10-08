@@ -609,6 +609,114 @@ func (t *sqliteTx) ChangeObjects(ctx context.Context, change domain.ChangeID, f 
 	return out, rows.Err()
 }
 
+func (t *sqliteTx) PutRequest(ctx context.Context, r domain.Request) error {
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlUpsertRequest(), string(r.ID), r.Title, r.Text, r.Requester, r.ProjectID, r.Origin.Kind, r.Origin.Ref, string(r.Status), tsText(r.CreatedAt))
+	return sqliteErr(err, "request "+string(r.ID))
+}
+
+type sqliteScanner interface{ Scan(dest ...any) error }
+
+func sqliteScanRequest(row sqliteScanner) (domain.Request, error) {
+	var r domain.Request
+	var created string
+	err := row.Scan((*string)(&r.ID), &r.Title, &r.Text, &r.Requester, &r.ProjectID, &r.Origin.Kind, &r.Origin.Ref, (*string)(&r.Status), &created)
+	r.CreatedAt = tsParse(created)
+	return r, err
+}
+
+func (t *sqliteTx) Request(ctx context.Context, id domain.RequestID) (domain.Request, error) {
+	q, args := dialectSQLite.sqlRequest(id)
+	r, err := sqliteScanRequest(t.tx.QueryRowContext(ctx, q, args...))
+	return r, sqliteErr(err, "request "+string(id))
+}
+
+func (t *sqliteTx) Requests(ctx context.Context, f domain.RequestFilter) ([]domain.Request, error) {
+	q, args := dialectSQLite.sqlRequests(f)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "requests")
+	}
+	defer rows.Close()
+	var out []domain.Request
+	for rows.Next() {
+		r, err := sqliteScanRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) PutRequestLink(ctx context.Context, l domain.RequestLink) error {
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_request", requestLinkColumns, ""), string(l.Change), string(l.Request), string(l.Role), l.By, tsText(l.At))
+	return sqliteErr(err, "link of request "+string(l.Request))
+}
+
+func (t *sqliteTx) DeleteRequestLink(ctx context.Context, change domain.ChangeID, request domain.RequestID) error {
+	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlDeleteRequestLink(), string(change), string(request))
+	if err != nil {
+		return sqliteErr(err, "link of request "+string(request))
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return fmt.Errorf("request %s is not linked to change %s: %w", request, change, ErrNotFound)
+	}
+	return nil
+}
+
+func (t *sqliteTx) RequestLinks(ctx context.Context, byRequest bool, id string) ([]domain.RequestLink, error) {
+	q, args := dialectSQLite.sqlRequestLinks(byRequest, id)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "request links")
+	}
+	defer rows.Close()
+	var out []domain.RequestLink
+	for rows.Next() {
+		var l domain.RequestLink
+		var at string
+		if err := rows.Scan((*string)(&l.Change), (*string)(&l.Request), (*string)(&l.Role), &l.By, &at, (*string)(&l.ChangeStatus)); err != nil {
+			return nil, err
+		}
+		l.At = tsParse(at)
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) AppendRequestLog(ctx context.Context, e domain.RequestEntry) (domain.RequestEntry, error) {
+	payload := string(e.Payload)
+	if payload == "" {
+		payload = "{}"
+	}
+	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("request_log", requestLogColumns, ""), string(e.Request), e.Type, e.By, tsText(e.At), payload)
+	if err != nil {
+		return e, sqliteErr(err, "request log "+string(e.Request))
+	}
+	e.Seq, err = res.LastInsertId()
+	return e, err
+}
+
+func (t *sqliteTx) RequestLog(ctx context.Context, id domain.RequestID) ([]domain.RequestEntry, error) {
+	q, args := dialectSQLite.sqlRequestLog(id)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "request log")
+	}
+	defer rows.Close()
+	var out []domain.RequestEntry
+	for rows.Next() {
+		var e domain.RequestEntry
+		var at, payload string
+		if err := rows.Scan(&e.Seq, (*string)(&e.Request), &e.Type, &e.By, &at, &payload); err != nil {
+			return nil, err
+		}
+		e.At, e.Payload = tsParse(at), json.RawMessage(payload)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (t *sqliteTx) OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error) {
 	rows, err := t.tx.QueryContext(ctx, dialectSQLite.sqlOpenChangeIDs())
 	if err != nil {

@@ -76,6 +76,9 @@ type GraphPort interface {
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
 	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
+	// Requests (ADR 0098): the origin of a piece of work, linked to the changes that answer it.
+	CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error)
+	LinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error)
 	// Structures are the organisation and project hierarchies in force (ADR 0054); AdminOnlyType tells a node type
 	// platform administrators alone write (ADR 0068).
 	Structures(ctx context.Context) (domain.Structures, error)

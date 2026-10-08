@@ -31,8 +31,8 @@ func (h *Handler) Search(ctx context.Context, r *connect.Request[indexv1.SearchR
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	for _, k := range m.Kinds {
-		if k != index.KindNode && k != index.KindChange {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown kind %q (node or change)", k))
+		if k != index.KindNode && k != index.KindChange && k != index.KindRequest {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown kind %q (node, change or request)", k))
 		}
 	}
 	q := index.Query{Text: m.Text, Facets: m.Facets, Limit: int(m.Limit), Offset: int(m.Offset), Mode: m.Mode, MinSimilarity: m.MinSimilarity, Snippet: m.Snippet,
@@ -54,8 +54,8 @@ func (h *Handler) Search(ctx context.Context, r *connect.Request[indexv1.SearchR
 		q.Filter.Project = all
 	}
 	if m.SimilarTo != nil {
-		if m.SimilarTo.Id == "" || (m.SimilarTo.Kind != "" && m.SimilarTo.Kind != index.KindNode && m.SimilarTo.Kind != index.KindChange) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("similar_to needs a kind (node or change) and an id"))
+		if m.SimilarTo.Id == "" || (m.SimilarTo.Kind != "" && m.SimilarTo.Kind != index.KindNode && m.SimilarTo.Kind != index.KindChange && m.SimilarTo.Kind != index.KindRequest) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("similar_to needs a kind (node, change or request) and an id"))
 		}
 		q.SimilarTo = &index.Ref{Kind: m.SimilarTo.Kind, ID: domain.NodeID(m.SimilarTo.Id)}
 	}
@@ -77,6 +77,9 @@ func (h *Handler) Search(ctx context.Context, r *connect.Request[indexv1.SearchR
 		if x.Kind == index.KindChange {
 			hit.Change = &indexv1.ChangeInfo{ChangeId: string(x.ID), Title: x.Title, Status: x.Status, ProjectId: x.Project, Methodology: x.Methodology,
 				OwnerOrg: x.Owner, ParentId: x.Parent}
+		}
+		if x.Kind == index.KindRequest {
+			hit.Request = &indexv1.RequestInfo{RequestId: string(x.ID), Title: x.Title, Status: x.Status, ProjectId: x.Project, Requester: x.Owner}
 		}
 		out.Hits = append(out.Hits, hit)
 	}

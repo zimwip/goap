@@ -505,10 +505,26 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		baseline = b
 	}
 	p.BaselineID = baseline
+	// a trigger opening a change is a request of its own (ADR 0098): recorded first, linked as the origin of the change
+	var origin domain.Request
+	if p.Trigger != "" {
+		var err error
+		// asked by the identity the trigger runs as (system:trigger:<methodology>/<agent>/<trigger>)
+		requester := firstNonEmpty(authz.From(ctx).Subject, "system:trigger:"+p.Trigger)
+		if origin, err = e.Graph.CreateRequest(ctx, graph.NewRequest{Title: title, Text: intent, ProjectID: projectID, Requester: requester,
+			Origin: domain.RequestOrigin{Kind: domain.OriginTrigger, Ref: p.Trigger}}); err != nil {
+			return "", fmt.Errorf("the request of trigger %s: %w", p.Trigger, err)
+		}
+	}
 	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID,
 		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
 	if err != nil {
 		return "", err
+	}
+	if origin.ID != "" {
+		if _, err := e.Graph.LinkRequest(ctx, origin.ID, c.ID, domain.LinkOrigin); err != nil {
+			return "", fmt.Errorf("the request of trigger %s: %w", p.Trigger, err)
+		}
 	}
 	// the run works where its change does: the roles it checks are held on that project (ADR 0043)
 	if p.Project == "" {

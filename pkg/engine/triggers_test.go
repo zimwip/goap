@@ -4,6 +4,9 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 )
 
 func TestEventTriggerStartsReviewerOnSameChange(t *testing.T) {
@@ -89,6 +92,12 @@ func TestManualFireOfScheduleTrigger(t *testing.T) {
 	bb, _ := e.Graph.Blackboard(ctx, p.ChangeID)
 	if bb.Change.Data["trigger"] != "test-design/test-designer/nightly" {
 		t.Fatalf("change not marked with its trigger: %v", bb.Change.Data)
+	}
+	// the trigger asked for it (ADR 0098): a request of origin trigger, the origin of the change
+	rs, err := e.Graph.(*graph.Graph).Requests(ctx, domain.RequestFilter{Change: p.ChangeID})
+	if err != nil || len(rs) != 1 || rs[0].Origin.Kind != domain.OriginTrigger || rs[0].Origin.Ref != "test-design/test-designer/nightly" ||
+		len(rs[0].Links) != 1 || rs[0].Links[0].Role != domain.LinkOrigin {
+		t.Fatalf("the request of the trigger: %+v %v", rs, err)
 	}
 	if s := tm.States(); s[1].Fires != 1 || s[1].LastProcessID != p.ID {
 		t.Fatalf("state %+v", s)

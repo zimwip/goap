@@ -786,3 +786,69 @@ func (c *Client) Submit(ctx context.Context, id domain.ChangeID, b graph.Batch) 
 	}
 	return out, nil
 }
+
+// CreateRequest records a request of the caller (ADR 0098).
+func (c *Client) CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error) {
+	r, err := c.rpc.CreateRequest(ctx, connect.NewRequest(&graphv1.CreateRequestRequest{Title: in.Title, Text: in.Text, ProjectId: in.ProjectID,
+		OriginKind: in.Origin.Kind, OriginRef: in.Origin.Ref}))
+	if err != nil {
+		return domain.Request{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.RequestFromPB(r.Msg.Request), nil
+}
+
+// Request reads a request.
+func (c *Client) Request(ctx context.Context, id domain.RequestID) (domain.Request, error) {
+	r, err := c.rpc.GetRequest(ctx, connect.NewRequest(&graphv1.GetRequestRequest{RequestId: string(id)}))
+	if err != nil {
+		return domain.Request{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.RequestFromPB(r.Msg.Request), nil
+}
+
+// Requests lists the requests matching f that the caller may view.
+func (c *Client) Requests(ctx context.Context, f domain.RequestFilter) ([]domain.Request, error) {
+	req := &graphv1.ListRequestsRequest{Requester: f.Requester, ChangeId: string(f.Change), Limit: int32(f.Limit)}
+	if f.Projects != nil {
+		req.FilterProjects, req.ProjectIds = true, f.Projects
+	}
+	for _, s := range f.Statuses {
+		req.Statuses = append(req.Statuses, string(s))
+	}
+	r, err := c.rpc.ListRequests(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	out := make([]domain.Request, len(r.Msg.Requests))
+	for i, x := range r.Msg.Requests {
+		out[i] = pbconv.RequestFromPB(x)
+	}
+	return out, nil
+}
+
+// LinkRequest links a request to a change that answers it.
+func (c *Client) LinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error) {
+	r, err := c.rpc.LinkRequest(ctx, connect.NewRequest(&graphv1.LinkRequestRequest{RequestId: string(id), ChangeId: string(change), Role: string(role)}))
+	if err != nil {
+		return domain.Request{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.RequestFromPB(r.Msg.Request), nil
+}
+
+// UnlinkRequest removes the link of a request to a change.
+func (c *Client) UnlinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID) (domain.Request, error) {
+	r, err := c.rpc.UnlinkRequest(ctx, connect.NewRequest(&graphv1.UnlinkRequestRequest{RequestId: string(id), ChangeId: string(change)}))
+	if err != nil {
+		return domain.Request{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.RequestFromPB(r.Msg.Request), nil
+}
+
+// SetRequestStatus closes, rejects or withdraws a request.
+func (c *Client) SetRequestStatus(ctx context.Context, id domain.RequestID, status domain.RequestStatus, comment string) (domain.Request, error) {
+	r, err := c.rpc.SetRequestStatus(ctx, connect.NewRequest(&graphv1.SetRequestStatusRequest{RequestId: string(id), Status: string(status), Comment: comment}))
+	if err != nil {
+		return domain.Request{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.RequestFromPB(r.Msg.Request), nil
+}

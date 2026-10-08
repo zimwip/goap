@@ -39,6 +39,10 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			}
 			branch = own.Name
 		}
+		// its requests stay: the links go, logged on each (ADR 0098)
+		if err := g.unlinkPurgedTx(ctx, tx, id); err != nil {
+			return err
+		}
 		g.draftStates.drop(id)
 		return tx.DeleteChange(ctx, id, c.Namespace, branch)
 	})

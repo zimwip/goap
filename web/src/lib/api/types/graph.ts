@@ -528,3 +528,51 @@ export interface DecisionPolicy {
   /** RFC 3339 */
   deadline?: string;
 }
+
+/** The origin of a piece of work (ADR 0098), linked to the changes that answer it. */
+export interface Request {
+  id?: string;
+  title?: string;
+  /** the voice of the requester, never rewritten */
+  text?: string;
+  requester?: string;
+  /** empty until triaged */
+  projectId?: string;
+  /** conversation | trigger | external | change | manual */
+  originKind?: string;
+  originRef?: string;
+  /** effective status: open | triaged | delivered | closed | rejected | withdrawn */
+  status?: string;
+  createdAt?: string;
+  links?: RequestLink[];
+}
+
+export interface RequestLink {
+  changeId?: string;
+  /** origin | amends | covers */
+  role?: string;
+  by?: string;
+  at?: string;
+  changeStatus?: string;
+}
+
+export interface RequestEntry {
+  seq?: Int64;
+  /** created | updated | linked | unlinked | moved | status */
+  type?: string;
+  by?: string;
+  at?: string;
+  /** details, as JSON */
+  payload?: string;
+}
+
+export interface RequestQuery {
+  /** a subject; '@me': the caller */
+  requester?: string;
+  /** kept when filterProjects is set ('' the untriaged requests) */
+  projectIds?: string[];
+  filterProjects?: boolean;
+  statuses?: string[];
+  changeId?: string;
+  limit?: number;
+}

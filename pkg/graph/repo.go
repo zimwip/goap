@@ -89,6 +89,22 @@ type Tx interface {
 	// ChangeObjects lists the change objects of a change matching f (f.AtSeq aside), in the order of their first version.
 	ChangeObjects(ctx context.Context, change domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error)
 
+	// PutRequest writes a request (ADR 0098): its text, requester and origin are written once.
+	PutRequest(ctx context.Context, r domain.Request) error
+	// Request reads a request, without its links (ErrNotFound when absent).
+	Request(ctx context.Context, id domain.RequestID) (domain.Request, error)
+	// Requests lists the requests matching the requester, projects and change of f, oldest first, without their links.
+	Requests(ctx context.Context, f domain.RequestFilter) ([]domain.Request, error)
+	// PutRequestLink links a request and a change (ErrConflict when they are linked already); DeleteRequestLink removes
+	// the link (ErrNotFound when absent).
+	PutRequestLink(ctx context.Context, l domain.RequestLink) error
+	DeleteRequestLink(ctx context.Context, change domain.ChangeID, request domain.RequestID) error
+	// RequestLinks lists the links of a request (byRequest) or of a change, with the status of each change.
+	RequestLinks(ctx context.Context, byRequest bool, id string) ([]domain.RequestLink, error)
+	// AppendRequestLog appends an entry to the log of a request; RequestLog reads it.
+	AppendRequestLog(ctx context.Context, e domain.RequestEntry) (domain.RequestEntry, error)
+	RequestLog(ctx context.Context, id domain.RequestID) ([]domain.RequestEntry, error)
+
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)
 	// PutChangeImpact inserts or updates a change impact of a change (ADR 0024). The table is the projection of the

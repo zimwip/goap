@@ -22,6 +22,8 @@ import (
 const (
 	KindNode   = "node"
 	KindChange = "change"
+	// KindRequest is a request (ADR 0098): Owner holds its requester, Project its project (empty until triaged).
+	KindRequest = "request"
 )
 
 // Built-in facets, always present besides the ones the node type declares.

@@ -572,13 +572,13 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 				return fail(err)
 			}
 		}
-		ch, err := s.Graph.CreateChange(ctx, graph.NewChange{Title: nc.str("title"), Intent: nc.str("intent"), Methodology: m.Name, Namespace: m.Namespace,
-			ProjectID: changeProject, Data: map[string]any{"createdBy": p.Subject, "via": "assistant", "conversation": in.ConversationID}})
+		ch, req, err := requestedChange(ctx, s.Graph, "", in.ConversationID, graph.NewChange{Title: nc.str("title"), Intent: nc.str("intent"), Methodology: m.Name,
+			Namespace: m.Namespace, ProjectID: changeProject, Data: map[string]any{"createdBy": p.Subject, "via": "assistant", "conversation": in.ConversationID}})
 		if err != nil {
 			return fail(fmt.Errorf("the change was not created: %w", err))
 		}
 		changeID = string(ch.ID)
-		result["changeId"] = changeID
+		result["changeId"], result["requestId"] = changeID, string(req.ID)
 	}
 	pr, err := s.Engine.StartProcess(ctx, StartProcess{Methodology: ar.str("methodology"), Agent: ar.str("agent"), Goal: ar.str("goal"),
 		Intent: ar.str("intent"), ChangeID: changeID, ProjectID: project,

@@ -1259,6 +1259,14 @@ the log of the change (whose entries also carry opaque `labels`), the last versi
 projection; `Graph.Submit` writes impact operations, items and change objects in one transaction (RPCs
 `PutChangeObjects`, `ListChangeObjects`, `SubmitBatch`, ABAC `change-object:write`).
 
+**Requests** ([ADR 0098](adr/0098-change-as-receptacle-blackboard-as-engine-view-requests.md)): the origin of a piece of
+work (who asks for what, from where) is a request, an object of the change component that may exist before any change
+and is linked many to many to the root changes that answer it (`origin`, `amends`, `covers`). A request is open until its
+first link triages it (it takes the project of the change), delivered (derived) when every linked change is applied,
+closed by its requester or a triager (platform role `triage`), or rejected / withdrawn; its text is never rewritten and
+its log records everything. The assistant and the triggers record the request a change is created for; requests are
+indexed (kind `request`) to find duplicates.
+
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
 engine) → **archived**. Modifying a published version means creating a new draft version (`CreateVersion`).

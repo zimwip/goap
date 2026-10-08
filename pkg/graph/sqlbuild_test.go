@@ -277,6 +277,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
 		`DELETE FROM change_object WHERE change_id = $1`,
+		`DELETE FROM change_request WHERE change_id = $1`,
 		`DELETE FROM tag WHERE change_id = $1`,
 	})
 	checkList("sqlite DeleteChange rows", lite, lite.deleteChangeRows(), []string{
@@ -286,6 +287,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,
 		`DELETE FROM change_object WHERE change_id = ?1`,
+		`DELETE FROM change_request WHERE change_id = ?1`,
 		`DELETE FROM tag WHERE change_id = ?1`,
 	})
 	checkSQL(t, "pg orphan", pg, pg.sqlDeleteOrphanNode(), `DELETE FROM node WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = $1)`)

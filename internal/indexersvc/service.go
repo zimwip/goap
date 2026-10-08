@@ -20,7 +20,7 @@ import (
 )
 
 // Subjects the indexer consumes.
-var Subjects = []string{"goap.node.>", "goap.baseline.>", "goap.changeindex.>"}
+var Subjects = []string{"goap.node.>", "goap.baseline.>", "goap.changeindex.>", "goap.requestindex.>"}
 
 // Access is what the service asks of the organisation to authorize and scope a search (ADR 0095): implemented by
 // access.Directory. The index itself knows no organisation.
@@ -77,7 +77,8 @@ func New(store index.Store, embedder llm.Embedder, authorizer authz.Authorizer, 
 //   - a node: action "read" on its type, in its namespace, and access to the project it was created in (a platform
 //     role, or a role on the project or above it; administrators see all);
 //   - a change: a personal one (held by a personal unit, ADR 0037) only for its subject, administrators included; any
-//     other one needs access to its project.
+//     other one needs access to its project;
+//   - a request: action "view" on it (its requester, the triagers, the members of the project of a triaged one).
 //
 // Callers without identity are trusted internal services and see everything (the gateway always identifies the
 // callers of the public API; the index port is not exposed).
@@ -107,6 +108,18 @@ func readFilter(a authz.Authorizer, access func() Access) index.Authorizer {
 		}
 		out := hits[:0:0]
 		for _, h := range hits {
+			if h.Kind == index.KindRequest {
+				// the rule of the requests (ADR 0098): the requester, the triagers, the members of the project of a triaged one
+				ok, err := a.Authorize(ctx, authz.Request{Subject: who, Action: "view", Resource: authz.Resource{Type: index.KindRequest, ID: string(h.ID), Owner: h.Owner,
+					ProjectID: h.Project}})
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					out = append(out, h)
+				}
+				continue
+			}
 			if h.Kind == index.KindChange {
 				if h.PersonalTo != "" {
 					if h.PersonalTo == who.Subject {
@@ -164,6 +177,12 @@ func (s *Service) Handle(ctx context.Context, subject string, data []byte) error
 			return nil
 		}
 		return s.count(&s.changes, s.Indexer.OnChange(ctx, ev, access.PersonalSubject(ev.OwnerOrg)))
+	case strings.HasPrefix(subject, "goap.requestindex."):
+		var ev domain.RequestDocEvent
+		if err := json.Unmarshal(data, &ev); err != nil {
+			return nil
+		}
+		return s.count(&s.changes, s.Indexer.OnRequest(ctx, ev))
 	}
 	return nil
 }
@@ -221,7 +240,7 @@ func NewSink(ctx context.Context, svc *Service) *Sink {
 
 // Publish implements graph.EventSink.
 func (k *Sink) Publish(ctx context.Context, subject string, v any) error {
-	if !strings.HasPrefix(subject, "goap.node.") && !strings.HasPrefix(subject, "goap.baseline.") && !strings.HasPrefix(subject, "goap.changeindex.") {
+	if !strings.HasPrefix(subject, "goap.node.") && !strings.HasPrefix(subject, "goap.baseline.") && !strings.HasPrefix(subject, "goap.changeindex.") && !strings.HasPrefix(subject, "goap.requestindex.") {
 		return nil
 	}
 	data, err := json.Marshal(v)

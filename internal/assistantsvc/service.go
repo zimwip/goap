@@ -73,11 +73,35 @@ const (
 // caller may use (*modelgw.Service, *modelgw.Client).
 type Model = modelgw.SuggestModel
 
-// Graph is what the assistant needs of the graph: to create a change and to read one, as the caller
-// (*graph.Graph, *graphsvc.Client).
+// Graph is what the assistant needs of the graph: to create a change and to read one, and to record the request a
+// change is created for (ADR 0098), as the caller (*graph.Graph, *graphsvc.Client).
 type Graph interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
+	CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error)
+	LinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error)
+}
+
+// requestedChange records the request of the person (ADR 0098: the words they said, from the conversation), creates
+// the change for it and links them (origin). The request stays when the change cannot be created.
+func requestedChange(ctx context.Context, g Graph, words, conversation string, in graph.NewChange) (domain.Change, domain.Request, error) {
+	text := words
+	if text == "" {
+		text = in.Intent
+	}
+	req, err := g.CreateRequest(ctx, graph.NewRequest{Title: in.Title, Text: text, Requester: authz.From(ctx).Subject, ProjectID: in.ProjectID,
+		Origin: domain.RequestOrigin{Kind: domain.OriginConversation, Ref: conversation}})
+	if err != nil {
+		return domain.Change{}, req, fmt.Errorf("the request was not recorded: %w", err)
+	}
+	ch, err := g.CreateChange(ctx, in)
+	if err != nil {
+		return ch, req, err
+	}
+	if req, err = g.LinkRequest(ctx, req.ID, ch.ID, domain.LinkOrigin); err != nil {
+		return ch, req, fmt.Errorf("the change was created but not linked to its request: %w", err)
+	}
+	return ch, req, nil
 }
 
 // Methodologies serves a methodology by name (*registrysvc.Service, *registrysvc.Client).

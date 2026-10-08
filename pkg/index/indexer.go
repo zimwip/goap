@@ -49,6 +49,17 @@ func (x *Indexer) OnChange(ctx context.Context, ev domain.ChangeDocEvent, person
 		PersonalTo: personalTo, Title: ev.Title, Text: ChangeText(ev), Time: ev.CreatedAt})
 }
 
+// OnRequest indexes the document of a request (ADR 0098): its title and text; Owner is its requester, Project its
+// project (empty while it is untriaged), Status its effective status.
+func (x *Indexer) OnRequest(ctx context.Context, ev domain.RequestDocEvent) error {
+	text := string(ev.ID) + "\ntitle: " + truncate(ev.Title, MaxChangeField)
+	if ev.Text != "" {
+		text += "\ntext: " + truncate(ev.Text, MaxChangeField)
+	}
+	return x.put(ctx, Doc{Kind: KindRequest, ID: domain.NodeID(ev.ID), Key: string(ev.ID), Branch: domain.MainBranch, Main: true, Project: ev.ProjectID,
+		Owner: ev.Requester, Status: string(ev.Status), Title: ev.Title, Text: truncate(text, MaxChangeText), Time: ev.CreatedAt})
+}
+
 // ChangeText builds the text of a change: its title, intent and goal, its methodology and namespace, then the keys
 // (and types) of the nodes it acts on, bounded.
 func ChangeText(ev domain.ChangeDocEvent) string {

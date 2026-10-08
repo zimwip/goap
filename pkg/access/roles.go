@@ -32,6 +32,7 @@ func BuiltinRoles() []Role {
 	return []Role{
 		{Name: RoleAdmin, Description: "Administers the platform: organisation, projects, methodologies, domains, policies, adapters, and everything else."},
 		{Name: RoleReader, Description: "Reads everything on the platform, past the usual organisation/project scoping."},
+		{Name: RoleTriage, Description: "Triages the requests: sees every request, links it to the changes that answer it, closes or rejects it."},
 	}
 }
 

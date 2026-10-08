@@ -16,6 +16,9 @@ const (
 	// when the header or the impacts of the change were written, or when it was purged (ADR 0095). A subject of its own:
 	// the hub forwards goap.changed.> to the browsers, which have no use for the impact keys.
 	SubjectChangeIndexed = "goap.changeindex.%s"
+	// SubjectRequestIndexed is "goap.requestindex.<id>": the document of a request for the index (a RequestDocEvent),
+	// published when the request or its links were written, or when a change it is linked to was (ADR 0098).
+	SubjectRequestIndexed = "goap.requestindex.%s"
 )
 
 // SearchProperty declares how the node index uses a property of a node type.
@@ -74,6 +77,20 @@ type ChangeDocEvent struct {
 	Branch      string         `json:"branch,omitempty"`
 	Impacts     []ChangeDocRef `json:"impacts,omitempty"`
 	CreatedAt   time.Time      `json:"createdAt,omitempty"`
+}
+
+// RequestDocEvent is what the index needs to know of a request (ADR 0098): its title and text, who asked, its project
+// (empty until triaged) and its effective status, to search them and find the duplicates of a new one.
+type RequestDocEvent struct {
+	ID        RequestID     `json:"id"`
+	Title     string        `json:"title"`
+	Text      string        `json:"text,omitempty"`
+	Requester string        `json:"requester"`
+	ProjectID string        `json:"projectId,omitempty"`
+	Status    RequestStatus `json:"status"`
+	Origin    string        `json:"origin,omitempty"`
+	Changes   []ChangeID    `json:"changes,omitempty"`
+	CreatedAt time.Time     `json:"createdAt,omitempty"`
 }
 
 // ChangeDocRef names a node a change acts on.

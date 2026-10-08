@@ -336,12 +336,12 @@ func (t *turn) createChange(ctx context.Context, a args) (any, error) {
 			return nil, err
 		}
 	}
-	ch, err := t.s.Graph.CreateChange(authz.With(ctx, t.p), graph.NewChange{Title: title, Intent: intent, Methodology: method, Namespace: namespace,
-		ProjectID: project, Data: map[string]any{"createdBy": t.p.Subject, "via": "assistant", "conversation": t.conversation}})
+	ch, req, err := requestedChange(authz.With(ctx, t.p), t.s.Graph, t.in.Text, t.conversation, graph.NewChange{Title: title, Intent: intent, Methodology: method,
+		Namespace: namespace, ProjectID: project, Data: map[string]any{"createdBy": t.p.Subject, "via": "assistant", "conversation": t.conversation}})
 	if err != nil {
 		return nil, fmt.Errorf("the change was not created: %w", err)
 	}
-	res := map[string]any{"changeId": string(ch.ID), "title": ch.Title, "project": ch.ProjectID, "methodology": ch.Methodology}
+	res := map[string]any{"changeId": string(ch.ID), "title": ch.Title, "project": ch.ProjectID, "methodology": ch.Methodology, "requestId": string(req.ID)}
 	t.actions = append(t.actions, convsvc.Action{"type": ToolCreateChange,
 		"args":   map[string]any{"title": title, "intent": intent, "methodology": method, "project": t.project},
 		"result": res})

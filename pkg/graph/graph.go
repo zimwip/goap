@@ -452,6 +452,8 @@ type ChangesFilter struct {
 	OwnerOrg  string
 	// Status: draft, active, committed, applied, abandoned (empty: every status).
 	Status []domain.ChangeStatus
+	// Request keeps the changes linked to a request (ADR 0098).
+	Request domain.RequestID
 }
 
 // Match reports whether a change satisfies the filter.
@@ -474,9 +476,20 @@ func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) ([]domain.Chan
 	if err != nil {
 		return nil, err
 	}
+	var linked map[domain.ChangeID]bool
+	if f.Request != "" {
+		r, err := g.Request(ctx, f.Request)
+		if err != nil {
+			return nil, err
+		}
+		linked = map[domain.ChangeID]bool{}
+		for _, l := range r.Links {
+			linked[l.Change] = true
+		}
+	}
 	out := make([]domain.Change, 0, len(cs))
 	for _, c := range cs {
-		if f.Match(c) {
+		if f.Match(c) && (linked == nil || linked[c.ID]) {
 			out = append(out, c)
 		}
 	}

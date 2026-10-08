@@ -214,6 +214,45 @@ CREATE TABLE change_object (
 );
 CREATE INDEX change_object_seq ON change_object (change_id, created_seq);
 
+-- ADR 0098: a request is the origin of a piece of work, an object of the change component that may exist before any
+-- change. project_id is '' until it is triaged; status is the stored one (open, triaged, closed, rejected, withdrawn),
+-- delivered is derived from the changes it is linked to.
+CREATE TABLE request (
+    id          text PRIMARY KEY,
+    title       text        NOT NULL CHECK (title <> ''),
+    text        text        NOT NULL DEFAULT '',
+    requester   text        NOT NULL,
+    project_id  text        NOT NULL DEFAULT '',
+    origin_kind text        NOT NULL,
+    origin_ref  text        NOT NULL DEFAULT '',
+    status      text        NOT NULL,
+    created_at  text NOT NULL
+);
+CREATE INDEX request_requester ON request (requester);
+CREATE INDEX request_project ON request (project_id);
+
+-- the links of the requests and the changes that answer them: origin, amends or covers (many to many)
+CREATE TABLE change_request (
+    change_id  text        NOT NULL REFERENCES change(id),
+    request_id text        NOT NULL REFERENCES request(id),
+    role       text        NOT NULL,
+    linked_by  text        NOT NULL DEFAULT '',
+    linked_at  text NOT NULL,
+    PRIMARY KEY (change_id, request_id)
+);
+CREATE INDEX change_request_request ON change_request (request_id);
+
+-- the log of a request (insert-only): created, updated, linked, unlinked, moved, status
+CREATE TABLE request_log (
+    seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id text        NOT NULL REFERENCES request(id),
+    type       text        NOT NULL,
+    by_whom    text        NOT NULL DEFAULT '',
+    at         text NOT NULL,
+    payload    text       NOT NULL DEFAULT '{}'
+);
+CREATE INDEX request_log_request ON request_log (request_id, seq);
+
 -- A tag names the state a change leaves (ADR 0056). Not unique: a name may label several changes. baseline_id is the
 -- materialised snapshot of that state, when one is kept.
 CREATE TABLE tag (

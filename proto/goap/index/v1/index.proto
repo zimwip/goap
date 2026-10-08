@@ -20,7 +20,7 @@ message FacetFilter {
 
 // The document a similar_to search starts from.
 message DocumentRef {
-  // node | change
+  // node | change | request
   string kind = 1;
   // node id, or change id
   string id = 2;
@@ -112,6 +112,19 @@ message Hit {
   string snippet = 16;
   // set for a change
   ChangeInfo change = 17;
+  // set for a request (ADR 0098)
+  RequestInfo request = 18;
+}
+
+// RequestInfo is what a hit tells of a request (ADR 0098).
+message RequestInfo {
+  string request_id = 1;
+  string title = 2;
+  // effective status
+  string status = 3;
+  // empty until triaged
+  string project_id = 4;
+  string requester = 5;
 }
 
 message FacetCount {

@@ -642,6 +642,104 @@ func (t *pgTx) ChangeObjects(ctx context.Context, change domain.ChangeID, f doma
 	return out, rows.Err()
 }
 
+func (t *pgTx) PutRequest(ctx context.Context, r domain.Request) error {
+	_, err := t.tx.Exec(ctx, dialectPG.sqlUpsertRequest(), string(r.ID), r.Title, r.Text, r.Requester, r.ProjectID, r.Origin.Kind, r.Origin.Ref, string(r.Status), r.CreatedAt)
+	return mapErr(err, "request "+string(r.ID))
+}
+
+func pgScanRequest(row pgx.Row) (domain.Request, error) {
+	var r domain.Request
+	err := row.Scan((*string)(&r.ID), &r.Title, &r.Text, &r.Requester, &r.ProjectID, &r.Origin.Kind, &r.Origin.Ref, (*string)(&r.Status), &r.CreatedAt)
+	return r, err
+}
+
+func (t *pgTx) Request(ctx context.Context, id domain.RequestID) (domain.Request, error) {
+	q, args := dialectPG.sqlRequest(id)
+	r, err := pgScanRequest(t.tx.QueryRow(ctx, q, args...))
+	return r, mapErr(err, "request "+string(id))
+}
+
+func (t *pgTx) Requests(ctx context.Context, f domain.RequestFilter) ([]domain.Request, error) {
+	q, args := dialectPG.sqlRequests(f)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "requests")
+	}
+	defer rows.Close()
+	var out []domain.Request
+	for rows.Next() {
+		r, err := pgScanRequest(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) PutRequestLink(ctx context.Context, l domain.RequestLink) error {
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("change_request", requestLinkColumns, ""), string(l.Change), string(l.Request), string(l.Role), l.By, l.At)
+	return mapErr(err, "link of request "+string(l.Request))
+}
+
+func (t *pgTx) DeleteRequestLink(ctx context.Context, change domain.ChangeID, request domain.RequestID) error {
+	tag, err := t.tx.Exec(ctx, dialectPG.sqlDeleteRequestLink(), string(change), string(request))
+	if err != nil {
+		return mapErr(err, "link of request "+string(request))
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("request %s is not linked to change %s: %w", request, change, ErrNotFound)
+	}
+	return nil
+}
+
+func (t *pgTx) RequestLinks(ctx context.Context, byRequest bool, id string) ([]domain.RequestLink, error) {
+	q, args := dialectPG.sqlRequestLinks(byRequest, id)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "request links")
+	}
+	defer rows.Close()
+	var out []domain.RequestLink
+	for rows.Next() {
+		var l domain.RequestLink
+		if err := rows.Scan((*string)(&l.Change), (*string)(&l.Request), (*string)(&l.Role), &l.By, &l.At, (*string)(&l.ChangeStatus)); err != nil {
+			return nil, err
+		}
+		out = append(out, l)
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) AppendRequestLog(ctx context.Context, e domain.RequestEntry) (domain.RequestEntry, error) {
+	payload := []byte(e.Payload)
+	if len(payload) == 0 {
+		payload = []byte("{}")
+	}
+	err := t.tx.QueryRow(ctx, dialectPG.sqlInsert("request_log", requestLogColumns, " RETURNING seq"), string(e.Request), e.Type, e.By, e.At, payload).Scan(&e.Seq)
+	return e, mapErr(err, "request log "+string(e.Request))
+}
+
+func (t *pgTx) RequestLog(ctx context.Context, id domain.RequestID) ([]domain.RequestEntry, error) {
+	q, args := dialectPG.sqlRequestLog(id)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "request log")
+	}
+	defer rows.Close()
+	var out []domain.RequestEntry
+	for rows.Next() {
+		var e domain.RequestEntry
+		var payload []byte
+		if err := rows.Scan(&e.Seq, (*string)(&e.Request), &e.Type, &e.By, &e.At, &payload); err != nil {
+			return nil, err
+		}
+		e.Payload = json.RawMessage(payload)
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
 func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {
 	q, args := dialectPG.sqlChangeImpacts(change)
 	rows, err := t.tx.Query(ctx, q, args...)
