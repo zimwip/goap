@@ -34,7 +34,10 @@ type Service struct {
 	Router *Router
 	// Secrets resolves the reference of a provider's API key.
 	Secrets func(ctx context.Context, ref string) (string, error)
-	Log     *slog.Logger
+	// Vault writes a raw secret to the backing store (StoreProviderKey); nil when no write support is
+	// configured, in which case StoreProviderKey fails with a fallback message pointing at env:VAR.
+	Vault func(ctx context.Context, path, field, value string) error
+	Log   *slog.Logger
 	// HTTP is used to list the models of a provider.
 	HTTP *http.Client
 	Now  func() time.Time
@@ -147,6 +150,26 @@ func (s *Service) key(ctx context.Context, p ProviderRecord) (string, error) {
 		return "", nil
 	}
 	return s.Secrets(ctx, p.APIKeyRef)
+}
+
+// StoreProviderKey writes apiKey to the secret store under goap/modelgw/<providerName> (field api_key) and
+// returns the reference to store as Provider.APIKeyRef. The key is never logged or echoed beyond the returned
+// reference.
+func (s *Service) StoreProviderKey(ctx context.Context, providerName, apiKey string) (string, error) {
+	if !llmcfg.ValidName(providerName) {
+		return "", fmt.Errorf("%w: invalid provider name", ErrInvalid)
+	}
+	if apiKey == "" {
+		return "", fmt.Errorf("%w: empty key", ErrInvalid)
+	}
+	if s.Vault == nil {
+		return "", errors.New("vault is not configured on this server: enter env:VARNAME instead")
+	}
+	path := "goap/modelgw/" + providerName
+	if err := s.Vault(ctx, path, "api_key", apiKey); err != nil {
+		return "", err
+	}
+	return path + "#api_key", nil
 }
 
 // build creates the runtime provider of a record; overrideKey (when set) replaces the referenced key.

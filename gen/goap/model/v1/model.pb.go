@@ -1377,6 +1377,105 @@ func (x *DiscoverModelsResponse) GetModels() []*DiscoveredModel {
 	return nil
 }
 
+type StoreProviderKeyRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the provider name the key belongs to (same grammar as Provider.name)
+	ProviderName string `protobuf:"bytes,1,opt,name=provider_name,json=providerName,proto3" json:"provider_name,omitempty"`
+	// the raw key, never persisted outside Vault
+	ApiKey        string `protobuf:"bytes,2,opt,name=api_key,json=apiKey,proto3" json:"api_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StoreProviderKeyRequest) Reset() {
+	*x = StoreProviderKeyRequest{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StoreProviderKeyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StoreProviderKeyRequest) ProtoMessage() {}
+
+func (x *StoreProviderKeyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StoreProviderKeyRequest.ProtoReflect.Descriptor instead.
+func (*StoreProviderKeyRequest) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *StoreProviderKeyRequest) GetProviderName() string {
+	if x != nil {
+		return x.ProviderName
+	}
+	return ""
+}
+
+func (x *StoreProviderKeyRequest) GetApiKey() string {
+	if x != nil {
+		return x.ApiKey
+	}
+	return ""
+}
+
+type StoreProviderKeyResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Provider.api_key_ref to store, e.g. "goap/modelgw/<provider_name>#api_key"
+	ApiKeyRef     string `protobuf:"bytes,1,opt,name=api_key_ref,json=apiKeyRef,proto3" json:"api_key_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StoreProviderKeyResponse) Reset() {
+	*x = StoreProviderKeyResponse{}
+	mi := &file_goap_model_v1_model_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StoreProviderKeyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StoreProviderKeyResponse) ProtoMessage() {}
+
+func (x *StoreProviderKeyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_model_v1_model_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StoreProviderKeyResponse.ProtoReflect.Descriptor instead.
+func (*StoreProviderKeyResponse) Descriptor() ([]byte, []int) {
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *StoreProviderKeyResponse) GetApiKeyRef() string {
+	if x != nil {
+		return x.ApiKeyRef
+	}
+	return ""
+}
+
 // A catalog entry. roles: any of these roles may call the model (empty:
 // every authenticated caller); admins always may. quota_tokens: global token
 // budget per period (0: unlimited); quota_period: day | month | total.
@@ -1396,7 +1495,7 @@ type CatalogModel struct {
 
 func (x *CatalogModel) Reset() {
 	*x = CatalogModel{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[22]
+	mi := &file_goap_model_v1_model_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1408,7 +1507,7 @@ func (x *CatalogModel) String() string {
 func (*CatalogModel) ProtoMessage() {}
 
 func (x *CatalogModel) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[22]
+	mi := &file_goap_model_v1_model_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1421,7 +1520,7 @@ func (x *CatalogModel) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CatalogModel.ProtoReflect.Descriptor instead.
 func (*CatalogModel) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{22}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *CatalogModel) GetProvider() string {
@@ -1488,7 +1587,7 @@ type ListCatalogRequest struct {
 
 func (x *ListCatalogRequest) Reset() {
 	*x = ListCatalogRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[23]
+	mi := &file_goap_model_v1_model_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1500,7 +1599,7 @@ func (x *ListCatalogRequest) String() string {
 func (*ListCatalogRequest) ProtoMessage() {}
 
 func (x *ListCatalogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[23]
+	mi := &file_goap_model_v1_model_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1513,7 +1612,7 @@ func (x *ListCatalogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogRequest.ProtoReflect.Descriptor instead.
 func (*ListCatalogRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{23}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{25}
 }
 
 type ListCatalogResponse struct {
@@ -1526,7 +1625,7 @@ type ListCatalogResponse struct {
 
 func (x *ListCatalogResponse) Reset() {
 	*x = ListCatalogResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[24]
+	mi := &file_goap_model_v1_model_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1538,7 +1637,7 @@ func (x *ListCatalogResponse) String() string {
 func (*ListCatalogResponse) ProtoMessage() {}
 
 func (x *ListCatalogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[24]
+	mi := &file_goap_model_v1_model_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1551,7 +1650,7 @@ func (x *ListCatalogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListCatalogResponse.ProtoReflect.Descriptor instead.
 func (*ListCatalogResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{24}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ListCatalogResponse) GetModels() []*CatalogModel {
@@ -1591,7 +1690,7 @@ type Behavior struct {
 
 func (x *Behavior) Reset() {
 	*x = Behavior{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[25]
+	mi := &file_goap_model_v1_model_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1603,7 +1702,7 @@ func (x *Behavior) String() string {
 func (*Behavior) ProtoMessage() {}
 
 func (x *Behavior) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[25]
+	mi := &file_goap_model_v1_model_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1616,7 +1715,7 @@ func (x *Behavior) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Behavior.ProtoReflect.Descriptor instead.
 func (*Behavior) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{25}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *Behavior) GetName() string {
@@ -1727,7 +1826,7 @@ type BehaviorCost struct {
 
 func (x *BehaviorCost) Reset() {
 	*x = BehaviorCost{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[26]
+	mi := &file_goap_model_v1_model_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1739,7 +1838,7 @@ func (x *BehaviorCost) String() string {
 func (*BehaviorCost) ProtoMessage() {}
 
 func (x *BehaviorCost) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[26]
+	mi := &file_goap_model_v1_model_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1752,7 +1851,7 @@ func (x *BehaviorCost) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BehaviorCost.ProtoReflect.Descriptor instead.
 func (*BehaviorCost) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{26}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *BehaviorCost) GetBehavior() string {
@@ -1823,7 +1922,7 @@ type MeasureBehaviorsRequest struct {
 
 func (x *MeasureBehaviorsRequest) Reset() {
 	*x = MeasureBehaviorsRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[27]
+	mi := &file_goap_model_v1_model_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1835,7 +1934,7 @@ func (x *MeasureBehaviorsRequest) String() string {
 func (*MeasureBehaviorsRequest) ProtoMessage() {}
 
 func (x *MeasureBehaviorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[27]
+	mi := &file_goap_model_v1_model_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1848,7 +1947,7 @@ func (x *MeasureBehaviorsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeasureBehaviorsRequest.ProtoReflect.Descriptor instead.
 func (*MeasureBehaviorsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{27}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *MeasureBehaviorsRequest) GetNames() []string {
@@ -1874,7 +1973,7 @@ type MeasureBehaviorsResponse struct {
 
 func (x *MeasureBehaviorsResponse) Reset() {
 	*x = MeasureBehaviorsResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[28]
+	mi := &file_goap_model_v1_model_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1886,7 +1985,7 @@ func (x *MeasureBehaviorsResponse) String() string {
 func (*MeasureBehaviorsResponse) ProtoMessage() {}
 
 func (x *MeasureBehaviorsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[28]
+	mi := &file_goap_model_v1_model_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1899,7 +1998,7 @@ func (x *MeasureBehaviorsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MeasureBehaviorsResponse.ProtoReflect.Descriptor instead.
 func (*MeasureBehaviorsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{28}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *MeasureBehaviorsResponse) GetCosts() []*BehaviorCost {
@@ -1917,7 +2016,7 @@ type ListBehaviorsRequest struct {
 
 func (x *ListBehaviorsRequest) Reset() {
 	*x = ListBehaviorsRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[29]
+	mi := &file_goap_model_v1_model_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1929,7 +2028,7 @@ func (x *ListBehaviorsRequest) String() string {
 func (*ListBehaviorsRequest) ProtoMessage() {}
 
 func (x *ListBehaviorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[29]
+	mi := &file_goap_model_v1_model_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1942,7 +2041,7 @@ func (x *ListBehaviorsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBehaviorsRequest.ProtoReflect.Descriptor instead.
 func (*ListBehaviorsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{29}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{31}
 }
 
 // enabled and disabled behaviours, by order then name
@@ -1959,7 +2058,7 @@ type ListBehaviorsResponse struct {
 
 func (x *ListBehaviorsResponse) Reset() {
 	*x = ListBehaviorsResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[30]
+	mi := &file_goap_model_v1_model_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1971,7 +2070,7 @@ func (x *ListBehaviorsResponse) String() string {
 func (*ListBehaviorsResponse) ProtoMessage() {}
 
 func (x *ListBehaviorsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[30]
+	mi := &file_goap_model_v1_model_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1984,7 +2083,7 @@ func (x *ListBehaviorsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBehaviorsResponse.ProtoReflect.Descriptor instead.
 func (*ListBehaviorsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{30}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *ListBehaviorsResponse) GetBehaviors() []*Behavior {
@@ -2031,7 +2130,7 @@ type PreviewBehaviorsRequest struct {
 
 func (x *PreviewBehaviorsRequest) Reset() {
 	*x = PreviewBehaviorsRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[31]
+	mi := &file_goap_model_v1_model_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2043,7 +2142,7 @@ func (x *PreviewBehaviorsRequest) String() string {
 func (*PreviewBehaviorsRequest) ProtoMessage() {}
 
 func (x *PreviewBehaviorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[31]
+	mi := &file_goap_model_v1_model_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2056,7 +2155,7 @@ func (x *PreviewBehaviorsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewBehaviorsRequest.ProtoReflect.Descriptor instead.
 func (*PreviewBehaviorsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{31}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *PreviewBehaviorsRequest) GetAlias() string {
@@ -2102,7 +2201,7 @@ type PreviewBehaviorsResponse struct {
 
 func (x *PreviewBehaviorsResponse) Reset() {
 	*x = PreviewBehaviorsResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[32]
+	mi := &file_goap_model_v1_model_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2114,7 +2213,7 @@ func (x *PreviewBehaviorsResponse) String() string {
 func (*PreviewBehaviorsResponse) ProtoMessage() {}
 
 func (x *PreviewBehaviorsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[32]
+	mi := &file_goap_model_v1_model_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2127,7 +2226,7 @@ func (x *PreviewBehaviorsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewBehaviorsResponse.ProtoReflect.Descriptor instead.
 func (*PreviewBehaviorsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{32}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *PreviewBehaviorsResponse) GetSystem() string {
@@ -2176,7 +2275,7 @@ type SuggestTab struct {
 
 func (x *SuggestTab) Reset() {
 	*x = SuggestTab{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[33]
+	mi := &file_goap_model_v1_model_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2188,7 +2287,7 @@ func (x *SuggestTab) String() string {
 func (*SuggestTab) ProtoMessage() {}
 
 func (x *SuggestTab) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[33]
+	mi := &file_goap_model_v1_model_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2201,7 +2300,7 @@ func (x *SuggestTab) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuggestTab.ProtoReflect.Descriptor instead.
 func (*SuggestTab) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{33}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *SuggestTab) GetKind() string {
@@ -2236,7 +2335,7 @@ type SuggestField struct {
 
 func (x *SuggestField) Reset() {
 	*x = SuggestField{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[34]
+	mi := &file_goap_model_v1_model_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2248,7 +2347,7 @@ func (x *SuggestField) String() string {
 func (*SuggestField) ProtoMessage() {}
 
 func (x *SuggestField) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[34]
+	mi := &file_goap_model_v1_model_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2261,7 +2360,7 @@ func (x *SuggestField) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuggestField.ProtoReflect.Descriptor instead.
 func (*SuggestField) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{34}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *SuggestField) GetId() string {
@@ -2327,7 +2426,7 @@ type SuggestContext struct {
 
 func (x *SuggestContext) Reset() {
 	*x = SuggestContext{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[35]
+	mi := &file_goap_model_v1_model_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2339,7 +2438,7 @@ func (x *SuggestContext) String() string {
 func (*SuggestContext) ProtoMessage() {}
 
 func (x *SuggestContext) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[35]
+	mi := &file_goap_model_v1_model_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2352,7 +2451,7 @@ func (x *SuggestContext) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuggestContext.ProtoReflect.Descriptor instead.
 func (*SuggestContext) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{35}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *SuggestContext) GetTab() *SuggestTab {
@@ -2394,7 +2493,7 @@ type SuggestMessage struct {
 
 func (x *SuggestMessage) Reset() {
 	*x = SuggestMessage{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[36]
+	mi := &file_goap_model_v1_model_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2406,7 +2505,7 @@ func (x *SuggestMessage) String() string {
 func (*SuggestMessage) ProtoMessage() {}
 
 func (x *SuggestMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[36]
+	mi := &file_goap_model_v1_model_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2419,7 +2518,7 @@ func (x *SuggestMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuggestMessage.ProtoReflect.Descriptor instead.
 func (*SuggestMessage) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{36}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *SuggestMessage) GetRole() string {
@@ -2449,7 +2548,7 @@ type SuggestRequest struct {
 
 func (x *SuggestRequest) Reset() {
 	*x = SuggestRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[37]
+	mi := &file_goap_model_v1_model_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2461,7 +2560,7 @@ func (x *SuggestRequest) String() string {
 func (*SuggestRequest) ProtoMessage() {}
 
 func (x *SuggestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[37]
+	mi := &file_goap_model_v1_model_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2474,7 +2573,7 @@ func (x *SuggestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuggestRequest.ProtoReflect.Descriptor instead.
 func (*SuggestRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{37}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *SuggestRequest) GetContext() *SuggestContext {
@@ -2510,7 +2609,7 @@ type SuggestProposal struct {
 
 func (x *SuggestProposal) Reset() {
 	*x = SuggestProposal{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[38]
+	mi := &file_goap_model_v1_model_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2522,7 +2621,7 @@ func (x *SuggestProposal) String() string {
 func (*SuggestProposal) ProtoMessage() {}
 
 func (x *SuggestProposal) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[38]
+	mi := &file_goap_model_v1_model_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2535,7 +2634,7 @@ func (x *SuggestProposal) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuggestProposal.ProtoReflect.Descriptor instead.
 func (*SuggestProposal) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{38}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *SuggestProposal) GetFieldId() string {
@@ -2570,7 +2669,7 @@ type SuggestResponse struct {
 
 func (x *SuggestResponse) Reset() {
 	*x = SuggestResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[39]
+	mi := &file_goap_model_v1_model_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2582,7 +2681,7 @@ func (x *SuggestResponse) String() string {
 func (*SuggestResponse) ProtoMessage() {}
 
 func (x *SuggestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[39]
+	mi := &file_goap_model_v1_model_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2595,7 +2694,7 @@ func (x *SuggestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuggestResponse.ProtoReflect.Descriptor instead.
 func (*SuggestResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{39}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SuggestResponse) GetMessage() string {
@@ -2664,7 +2763,7 @@ type LLMCall struct {
 
 func (x *LLMCall) Reset() {
 	*x = LLMCall{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[40]
+	mi := &file_goap_model_v1_model_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2676,7 +2775,7 @@ func (x *LLMCall) String() string {
 func (*LLMCall) ProtoMessage() {}
 
 func (x *LLMCall) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[40]
+	mi := &file_goap_model_v1_model_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2689,7 +2788,7 @@ func (x *LLMCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LLMCall.ProtoReflect.Descriptor instead.
 func (*LLMCall) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{40}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *LLMCall) GetSeq() int64 {
@@ -2876,7 +2975,7 @@ type GetCallExchangeRequest struct {
 
 func (x *GetCallExchangeRequest) Reset() {
 	*x = GetCallExchangeRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[41]
+	mi := &file_goap_model_v1_model_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2888,7 +2987,7 @@ func (x *GetCallExchangeRequest) String() string {
 func (*GetCallExchangeRequest) ProtoMessage() {}
 
 func (x *GetCallExchangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[41]
+	mi := &file_goap_model_v1_model_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2901,7 +3000,7 @@ func (x *GetCallExchangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCallExchangeRequest.ProtoReflect.Descriptor instead.
 func (*GetCallExchangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{41}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *GetCallExchangeRequest) GetSeq() int64 {
@@ -2921,7 +3020,7 @@ type ExchangeMessage struct {
 
 func (x *ExchangeMessage) Reset() {
 	*x = ExchangeMessage{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[42]
+	mi := &file_goap_model_v1_model_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2933,7 +3032,7 @@ func (x *ExchangeMessage) String() string {
 func (*ExchangeMessage) ProtoMessage() {}
 
 func (x *ExchangeMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[42]
+	mi := &file_goap_model_v1_model_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2946,7 +3045,7 @@ func (x *ExchangeMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExchangeMessage.ProtoReflect.Descriptor instead.
 func (*ExchangeMessage) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{42}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *ExchangeMessage) GetRole() string {
@@ -2979,7 +3078,7 @@ type GetCallExchangeResponse struct {
 
 func (x *GetCallExchangeResponse) Reset() {
 	*x = GetCallExchangeResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[43]
+	mi := &file_goap_model_v1_model_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2991,7 +3090,7 @@ func (x *GetCallExchangeResponse) String() string {
 func (*GetCallExchangeResponse) ProtoMessage() {}
 
 func (x *GetCallExchangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[43]
+	mi := &file_goap_model_v1_model_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3004,7 +3103,7 @@ func (x *GetCallExchangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCallExchangeResponse.ProtoReflect.Descriptor instead.
 func (*GetCallExchangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{43}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *GetCallExchangeResponse) GetCall() *LLMCall {
@@ -3074,7 +3173,7 @@ type UsageFilter struct {
 
 func (x *UsageFilter) Reset() {
 	*x = UsageFilter{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[44]
+	mi := &file_goap_model_v1_model_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3086,7 +3185,7 @@ func (x *UsageFilter) String() string {
 func (*UsageFilter) ProtoMessage() {}
 
 func (x *UsageFilter) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[44]
+	mi := &file_goap_model_v1_model_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3099,7 +3198,7 @@ func (x *UsageFilter) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageFilter.ProtoReflect.Descriptor instead.
 func (*UsageFilter) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{44}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *UsageFilter) GetFrom() *timestamppb.Timestamp {
@@ -3195,7 +3294,7 @@ type ListUsageRequest struct {
 
 func (x *ListUsageRequest) Reset() {
 	*x = ListUsageRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[45]
+	mi := &file_goap_model_v1_model_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3207,7 +3306,7 @@ func (x *ListUsageRequest) String() string {
 func (*ListUsageRequest) ProtoMessage() {}
 
 func (x *ListUsageRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[45]
+	mi := &file_goap_model_v1_model_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3220,7 +3319,7 @@ func (x *ListUsageRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUsageRequest.ProtoReflect.Descriptor instead.
 func (*ListUsageRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{45}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *ListUsageRequest) GetFilter() *UsageFilter {
@@ -3244,7 +3343,7 @@ type ListUsageResponse struct {
 
 func (x *ListUsageResponse) Reset() {
 	*x = ListUsageResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[46]
+	mi := &file_goap_model_v1_model_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3256,7 +3355,7 @@ func (x *ListUsageResponse) String() string {
 func (*ListUsageResponse) ProtoMessage() {}
 
 func (x *ListUsageResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[46]
+	mi := &file_goap_model_v1_model_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3269,7 +3368,7 @@ func (x *ListUsageResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListUsageResponse.ProtoReflect.Descriptor instead.
 func (*ListUsageResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{46}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *ListUsageResponse) GetCalls() []*LLMCall {
@@ -3305,7 +3404,7 @@ type UsageSummaryRequest struct {
 
 func (x *UsageSummaryRequest) Reset() {
 	*x = UsageSummaryRequest{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[47]
+	mi := &file_goap_model_v1_model_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3317,7 +3416,7 @@ func (x *UsageSummaryRequest) String() string {
 func (*UsageSummaryRequest) ProtoMessage() {}
 
 func (x *UsageSummaryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[47]
+	mi := &file_goap_model_v1_model_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3330,7 +3429,7 @@ func (x *UsageSummaryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageSummaryRequest.ProtoReflect.Descriptor instead.
 func (*UsageSummaryRequest) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{47}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *UsageSummaryRequest) GetFilter() *UsageFilter {
@@ -3362,7 +3461,7 @@ type UsageSummaryRow struct {
 
 func (x *UsageSummaryRow) Reset() {
 	*x = UsageSummaryRow{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[48]
+	mi := &file_goap_model_v1_model_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3374,7 +3473,7 @@ func (x *UsageSummaryRow) String() string {
 func (*UsageSummaryRow) ProtoMessage() {}
 
 func (x *UsageSummaryRow) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[48]
+	mi := &file_goap_model_v1_model_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3387,7 +3486,7 @@ func (x *UsageSummaryRow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageSummaryRow.ProtoReflect.Descriptor instead.
 func (*UsageSummaryRow) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{48}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *UsageSummaryRow) GetKey() string {
@@ -3442,7 +3541,7 @@ type UsageSummaryResponse struct {
 
 func (x *UsageSummaryResponse) Reset() {
 	*x = UsageSummaryResponse{}
-	mi := &file_goap_model_v1_model_proto_msgTypes[49]
+	mi := &file_goap_model_v1_model_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3454,7 +3553,7 @@ func (x *UsageSummaryResponse) String() string {
 func (*UsageSummaryResponse) ProtoMessage() {}
 
 func (x *UsageSummaryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_model_v1_model_proto_msgTypes[49]
+	mi := &file_goap_model_v1_model_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3467,7 +3566,7 @@ func (x *UsageSummaryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UsageSummaryResponse.ProtoReflect.Descriptor instead.
 func (*UsageSummaryResponse) Descriptor() ([]byte, []int) {
-	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{49}
+	return file_goap_model_v1_model_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *UsageSummaryResponse) GetRows() []*UsageSummaryRow {
@@ -3576,7 +3675,12 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\bprovider\x18\x01 \x01(\v2\x17.goap.model.v1.ProviderR\bprovider\x12\x17\n" +
 	"\aapi_key\x18\x02 \x01(\tR\x06apiKey\"P\n" +
 	"\x16DiscoverModelsResponse\x126\n" +
-	"\x06models\x18\x01 \x03(\v2\x1e.goap.model.v1.DiscoveredModelR\x06models\"\xfa\x01\n" +
+	"\x06models\x18\x01 \x03(\v2\x1e.goap.model.v1.DiscoveredModelR\x06models\"W\n" +
+	"\x17StoreProviderKeyRequest\x12#\n" +
+	"\rprovider_name\x18\x01 \x01(\tR\fproviderName\x12\x17\n" +
+	"\aapi_key\x18\x02 \x01(\tR\x06apiKey\":\n" +
+	"\x18StoreProviderKeyResponse\x12\x1e\n" +
+	"\vapi_key_ref\x18\x01 \x01(\tR\tapiKeyRef\"\xfa\x01\n" +
 	"\fCatalogModel\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12!\n" +
@@ -3746,7 +3850,8 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\vduration_ms\x18\x06 \x01(\x03R\n" +
 	"durationMs\"J\n" +
 	"\x14UsageSummaryResponse\x122\n" +
-	"\x04rows\x18\x01 \x03(\v2\x1e.goap.model.v1.UsageSummaryRowR\x04rows2\xe6\t\n" +
+	"\x04rows\x18\x01 \x03(\v2\x1e.goap.model.v1.UsageSummaryRowR\x04rows2\xcb\n" +
+	"\n" +
 	"\fModelService\x12K\n" +
 	"\bComplete\x12\x1e.goap.model.v1.CompleteRequest\x1a\x1f.goap.model.v1.CompleteResponse\x12Q\n" +
 	"\n" +
@@ -3755,7 +3860,8 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\aSuggest\x12\x1d.goap.model.v1.SuggestRequest\x1a\x1e.goap.model.v1.SuggestResponse\x12f\n" +
 	"\x11ListProviderKinds\x12'.goap.model.v1.ListProviderKindsRequest\x1a(.goap.model.v1.ListProviderKindsResponse\x12Z\n" +
 	"\rListProviders\x12#.goap.model.v1.ListProvidersRequest\x1a$.goap.model.v1.ListProvidersResponse\x12]\n" +
-	"\x0eDiscoverModels\x12$.goap.model.v1.DiscoverModelsRequest\x1a%.goap.model.v1.DiscoverModelsResponse\x12T\n" +
+	"\x0eDiscoverModels\x12$.goap.model.v1.DiscoverModelsRequest\x1a%.goap.model.v1.DiscoverModelsResponse\x12c\n" +
+	"\x10StoreProviderKey\x12&.goap.model.v1.StoreProviderKeyRequest\x1a'.goap.model.v1.StoreProviderKeyResponse\x12T\n" +
 	"\vListCatalog\x12!.goap.model.v1.ListCatalogRequest\x1a\".goap.model.v1.ListCatalogResponse\x12Z\n" +
 	"\rListBehaviors\x12#.goap.model.v1.ListBehaviorsRequest\x1a$.goap.model.v1.ListBehaviorsResponse\x12c\n" +
 	"\x10PreviewBehaviors\x12&.goap.model.v1.PreviewBehaviorsRequest\x1a'.goap.model.v1.PreviewBehaviorsResponse\x12c\n" +
@@ -3778,7 +3884,7 @@ func file_goap_model_v1_model_proto_rawDescGZIP() []byte {
 	return file_goap_model_v1_model_proto_rawDescData
 }
 
-var file_goap_model_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
+var file_goap_model_v1_model_proto_msgTypes = make([]protoimpl.MessageInfo, 53)
 var file_goap_model_v1_model_proto_goTypes = []any{
 	(*Message)(nil),                   // 0: goap.model.v1.Message
 	(*CallMeta)(nil),                  // 1: goap.model.v1.CallMeta
@@ -3802,36 +3908,38 @@ var file_goap_model_v1_model_proto_goTypes = []any{
 	(*DiscoveredModel)(nil),           // 19: goap.model.v1.DiscoveredModel
 	(*DiscoverModelsRequest)(nil),     // 20: goap.model.v1.DiscoverModelsRequest
 	(*DiscoverModelsResponse)(nil),    // 21: goap.model.v1.DiscoverModelsResponse
-	(*CatalogModel)(nil),              // 22: goap.model.v1.CatalogModel
-	(*ListCatalogRequest)(nil),        // 23: goap.model.v1.ListCatalogRequest
-	(*ListCatalogResponse)(nil),       // 24: goap.model.v1.ListCatalogResponse
-	(*Behavior)(nil),                  // 25: goap.model.v1.Behavior
-	(*BehaviorCost)(nil),              // 26: goap.model.v1.BehaviorCost
-	(*MeasureBehaviorsRequest)(nil),   // 27: goap.model.v1.MeasureBehaviorsRequest
-	(*MeasureBehaviorsResponse)(nil),  // 28: goap.model.v1.MeasureBehaviorsResponse
-	(*ListBehaviorsRequest)(nil),      // 29: goap.model.v1.ListBehaviorsRequest
-	(*ListBehaviorsResponse)(nil),     // 30: goap.model.v1.ListBehaviorsResponse
-	(*PreviewBehaviorsRequest)(nil),   // 31: goap.model.v1.PreviewBehaviorsRequest
-	(*PreviewBehaviorsResponse)(nil),  // 32: goap.model.v1.PreviewBehaviorsResponse
-	(*SuggestTab)(nil),                // 33: goap.model.v1.SuggestTab
-	(*SuggestField)(nil),              // 34: goap.model.v1.SuggestField
-	(*SuggestContext)(nil),            // 35: goap.model.v1.SuggestContext
-	(*SuggestMessage)(nil),            // 36: goap.model.v1.SuggestMessage
-	(*SuggestRequest)(nil),            // 37: goap.model.v1.SuggestRequest
-	(*SuggestProposal)(nil),           // 38: goap.model.v1.SuggestProposal
-	(*SuggestResponse)(nil),           // 39: goap.model.v1.SuggestResponse
-	(*LLMCall)(nil),                   // 40: goap.model.v1.LLMCall
-	(*GetCallExchangeRequest)(nil),    // 41: goap.model.v1.GetCallExchangeRequest
-	(*ExchangeMessage)(nil),           // 42: goap.model.v1.ExchangeMessage
-	(*GetCallExchangeResponse)(nil),   // 43: goap.model.v1.GetCallExchangeResponse
-	(*UsageFilter)(nil),               // 44: goap.model.v1.UsageFilter
-	(*ListUsageRequest)(nil),          // 45: goap.model.v1.ListUsageRequest
-	(*ListUsageResponse)(nil),         // 46: goap.model.v1.ListUsageResponse
-	(*UsageSummaryRequest)(nil),       // 47: goap.model.v1.UsageSummaryRequest
-	(*UsageSummaryRow)(nil),           // 48: goap.model.v1.UsageSummaryRow
-	(*UsageSummaryResponse)(nil),      // 49: goap.model.v1.UsageSummaryResponse
-	nil,                               // 50: goap.model.v1.SuggestTab.ParamsEntry
-	(*timestamppb.Timestamp)(nil),     // 51: google.protobuf.Timestamp
+	(*StoreProviderKeyRequest)(nil),   // 22: goap.model.v1.StoreProviderKeyRequest
+	(*StoreProviderKeyResponse)(nil),  // 23: goap.model.v1.StoreProviderKeyResponse
+	(*CatalogModel)(nil),              // 24: goap.model.v1.CatalogModel
+	(*ListCatalogRequest)(nil),        // 25: goap.model.v1.ListCatalogRequest
+	(*ListCatalogResponse)(nil),       // 26: goap.model.v1.ListCatalogResponse
+	(*Behavior)(nil),                  // 27: goap.model.v1.Behavior
+	(*BehaviorCost)(nil),              // 28: goap.model.v1.BehaviorCost
+	(*MeasureBehaviorsRequest)(nil),   // 29: goap.model.v1.MeasureBehaviorsRequest
+	(*MeasureBehaviorsResponse)(nil),  // 30: goap.model.v1.MeasureBehaviorsResponse
+	(*ListBehaviorsRequest)(nil),      // 31: goap.model.v1.ListBehaviorsRequest
+	(*ListBehaviorsResponse)(nil),     // 32: goap.model.v1.ListBehaviorsResponse
+	(*PreviewBehaviorsRequest)(nil),   // 33: goap.model.v1.PreviewBehaviorsRequest
+	(*PreviewBehaviorsResponse)(nil),  // 34: goap.model.v1.PreviewBehaviorsResponse
+	(*SuggestTab)(nil),                // 35: goap.model.v1.SuggestTab
+	(*SuggestField)(nil),              // 36: goap.model.v1.SuggestField
+	(*SuggestContext)(nil),            // 37: goap.model.v1.SuggestContext
+	(*SuggestMessage)(nil),            // 38: goap.model.v1.SuggestMessage
+	(*SuggestRequest)(nil),            // 39: goap.model.v1.SuggestRequest
+	(*SuggestProposal)(nil),           // 40: goap.model.v1.SuggestProposal
+	(*SuggestResponse)(nil),           // 41: goap.model.v1.SuggestResponse
+	(*LLMCall)(nil),                   // 42: goap.model.v1.LLMCall
+	(*GetCallExchangeRequest)(nil),    // 43: goap.model.v1.GetCallExchangeRequest
+	(*ExchangeMessage)(nil),           // 44: goap.model.v1.ExchangeMessage
+	(*GetCallExchangeResponse)(nil),   // 45: goap.model.v1.GetCallExchangeResponse
+	(*UsageFilter)(nil),               // 46: goap.model.v1.UsageFilter
+	(*ListUsageRequest)(nil),          // 47: goap.model.v1.ListUsageRequest
+	(*ListUsageResponse)(nil),         // 48: goap.model.v1.ListUsageResponse
+	(*UsageSummaryRequest)(nil),       // 49: goap.model.v1.UsageSummaryRequest
+	(*UsageSummaryRow)(nil),           // 50: goap.model.v1.UsageSummaryRow
+	(*UsageSummaryResponse)(nil),      // 51: goap.model.v1.UsageSummaryResponse
+	nil,                               // 52: goap.model.v1.SuggestTab.ParamsEntry
+	(*timestamppb.Timestamp)(nil),     // 53: google.protobuf.Timestamp
 }
 var file_goap_model_v1_model_proto_depIdxs = []int32{
 	0,  // 0: goap.model.v1.CompleteRequest.messages:type_name -> goap.model.v1.Message
@@ -3846,57 +3954,59 @@ var file_goap_model_v1_model_proto_depIdxs = []int32{
 	16, // 9: goap.model.v1.ListProvidersResponse.providers:type_name -> goap.model.v1.Provider
 	16, // 10: goap.model.v1.DiscoverModelsRequest.provider:type_name -> goap.model.v1.Provider
 	19, // 11: goap.model.v1.DiscoverModelsResponse.models:type_name -> goap.model.v1.DiscoveredModel
-	22, // 12: goap.model.v1.ListCatalogResponse.models:type_name -> goap.model.v1.CatalogModel
+	24, // 12: goap.model.v1.ListCatalogResponse.models:type_name -> goap.model.v1.CatalogModel
 	9,  // 13: goap.model.v1.ListCatalogResponse.aliases:type_name -> goap.model.v1.ModelAlias
-	26, // 14: goap.model.v1.Behavior.costs:type_name -> goap.model.v1.BehaviorCost
-	26, // 15: goap.model.v1.MeasureBehaviorsResponse.costs:type_name -> goap.model.v1.BehaviorCost
-	25, // 16: goap.model.v1.ListBehaviorsResponse.behaviors:type_name -> goap.model.v1.Behavior
-	50, // 17: goap.model.v1.SuggestTab.params:type_name -> goap.model.v1.SuggestTab.ParamsEntry
-	33, // 18: goap.model.v1.SuggestContext.tab:type_name -> goap.model.v1.SuggestTab
-	34, // 19: goap.model.v1.SuggestContext.fields:type_name -> goap.model.v1.SuggestField
-	35, // 20: goap.model.v1.SuggestRequest.context:type_name -> goap.model.v1.SuggestContext
-	36, // 21: goap.model.v1.SuggestRequest.messages:type_name -> goap.model.v1.SuggestMessage
-	38, // 22: goap.model.v1.SuggestResponse.proposals:type_name -> goap.model.v1.SuggestProposal
+	28, // 14: goap.model.v1.Behavior.costs:type_name -> goap.model.v1.BehaviorCost
+	28, // 15: goap.model.v1.MeasureBehaviorsResponse.costs:type_name -> goap.model.v1.BehaviorCost
+	27, // 16: goap.model.v1.ListBehaviorsResponse.behaviors:type_name -> goap.model.v1.Behavior
+	52, // 17: goap.model.v1.SuggestTab.params:type_name -> goap.model.v1.SuggestTab.ParamsEntry
+	35, // 18: goap.model.v1.SuggestContext.tab:type_name -> goap.model.v1.SuggestTab
+	36, // 19: goap.model.v1.SuggestContext.fields:type_name -> goap.model.v1.SuggestField
+	37, // 20: goap.model.v1.SuggestRequest.context:type_name -> goap.model.v1.SuggestContext
+	38, // 21: goap.model.v1.SuggestRequest.messages:type_name -> goap.model.v1.SuggestMessage
+	40, // 22: goap.model.v1.SuggestResponse.proposals:type_name -> goap.model.v1.SuggestProposal
 	3,  // 23: goap.model.v1.SuggestResponse.usage:type_name -> goap.model.v1.Usage
-	51, // 24: goap.model.v1.LLMCall.at:type_name -> google.protobuf.Timestamp
-	40, // 25: goap.model.v1.GetCallExchangeResponse.call:type_name -> goap.model.v1.LLMCall
-	42, // 26: goap.model.v1.GetCallExchangeResponse.messages:type_name -> goap.model.v1.ExchangeMessage
-	51, // 27: goap.model.v1.UsageFilter.from:type_name -> google.protobuf.Timestamp
-	51, // 28: goap.model.v1.UsageFilter.to:type_name -> google.protobuf.Timestamp
-	44, // 29: goap.model.v1.ListUsageRequest.filter:type_name -> goap.model.v1.UsageFilter
-	40, // 30: goap.model.v1.ListUsageResponse.calls:type_name -> goap.model.v1.LLMCall
-	44, // 31: goap.model.v1.UsageSummaryRequest.filter:type_name -> goap.model.v1.UsageFilter
-	48, // 32: goap.model.v1.UsageSummaryResponse.rows:type_name -> goap.model.v1.UsageSummaryRow
+	53, // 24: goap.model.v1.LLMCall.at:type_name -> google.protobuf.Timestamp
+	42, // 25: goap.model.v1.GetCallExchangeResponse.call:type_name -> goap.model.v1.LLMCall
+	44, // 26: goap.model.v1.GetCallExchangeResponse.messages:type_name -> goap.model.v1.ExchangeMessage
+	53, // 27: goap.model.v1.UsageFilter.from:type_name -> google.protobuf.Timestamp
+	53, // 28: goap.model.v1.UsageFilter.to:type_name -> google.protobuf.Timestamp
+	46, // 29: goap.model.v1.ListUsageRequest.filter:type_name -> goap.model.v1.UsageFilter
+	42, // 30: goap.model.v1.ListUsageResponse.calls:type_name -> goap.model.v1.LLMCall
+	46, // 31: goap.model.v1.UsageSummaryRequest.filter:type_name -> goap.model.v1.UsageFilter
+	50, // 32: goap.model.v1.UsageSummaryResponse.rows:type_name -> goap.model.v1.UsageSummaryRow
 	2,  // 33: goap.model.v1.ModelService.Complete:input_type -> goap.model.v1.CompleteRequest
 	8,  // 34: goap.model.v1.ModelService.ListModels:input_type -> goap.model.v1.ListModelsRequest
 	5,  // 35: goap.model.v1.ModelService.Embed:input_type -> goap.model.v1.EmbedRequest
-	37, // 36: goap.model.v1.ModelService.Suggest:input_type -> goap.model.v1.SuggestRequest
+	39, // 36: goap.model.v1.ModelService.Suggest:input_type -> goap.model.v1.SuggestRequest
 	14, // 37: goap.model.v1.ModelService.ListProviderKinds:input_type -> goap.model.v1.ListProviderKindsRequest
 	17, // 38: goap.model.v1.ModelService.ListProviders:input_type -> goap.model.v1.ListProvidersRequest
 	20, // 39: goap.model.v1.ModelService.DiscoverModels:input_type -> goap.model.v1.DiscoverModelsRequest
-	23, // 40: goap.model.v1.ModelService.ListCatalog:input_type -> goap.model.v1.ListCatalogRequest
-	29, // 41: goap.model.v1.ModelService.ListBehaviors:input_type -> goap.model.v1.ListBehaviorsRequest
-	31, // 42: goap.model.v1.ModelService.PreviewBehaviors:input_type -> goap.model.v1.PreviewBehaviorsRequest
-	27, // 43: goap.model.v1.ModelService.MeasureBehaviors:input_type -> goap.model.v1.MeasureBehaviorsRequest
-	45, // 44: goap.model.v1.ModelService.ListUsage:input_type -> goap.model.v1.ListUsageRequest
-	47, // 45: goap.model.v1.ModelService.UsageSummary:input_type -> goap.model.v1.UsageSummaryRequest
-	41, // 46: goap.model.v1.ModelService.GetCallExchange:input_type -> goap.model.v1.GetCallExchangeRequest
-	4,  // 47: goap.model.v1.ModelService.Complete:output_type -> goap.model.v1.CompleteResponse
-	11, // 48: goap.model.v1.ModelService.ListModels:output_type -> goap.model.v1.ListModelsResponse
-	7,  // 49: goap.model.v1.ModelService.Embed:output_type -> goap.model.v1.EmbedResponse
-	39, // 50: goap.model.v1.ModelService.Suggest:output_type -> goap.model.v1.SuggestResponse
-	15, // 51: goap.model.v1.ModelService.ListProviderKinds:output_type -> goap.model.v1.ListProviderKindsResponse
-	18, // 52: goap.model.v1.ModelService.ListProviders:output_type -> goap.model.v1.ListProvidersResponse
-	21, // 53: goap.model.v1.ModelService.DiscoverModels:output_type -> goap.model.v1.DiscoverModelsResponse
-	24, // 54: goap.model.v1.ModelService.ListCatalog:output_type -> goap.model.v1.ListCatalogResponse
-	30, // 55: goap.model.v1.ModelService.ListBehaviors:output_type -> goap.model.v1.ListBehaviorsResponse
-	32, // 56: goap.model.v1.ModelService.PreviewBehaviors:output_type -> goap.model.v1.PreviewBehaviorsResponse
-	28, // 57: goap.model.v1.ModelService.MeasureBehaviors:output_type -> goap.model.v1.MeasureBehaviorsResponse
-	46, // 58: goap.model.v1.ModelService.ListUsage:output_type -> goap.model.v1.ListUsageResponse
-	49, // 59: goap.model.v1.ModelService.UsageSummary:output_type -> goap.model.v1.UsageSummaryResponse
-	43, // 60: goap.model.v1.ModelService.GetCallExchange:output_type -> goap.model.v1.GetCallExchangeResponse
-	47, // [47:61] is the sub-list for method output_type
-	33, // [33:47] is the sub-list for method input_type
+	22, // 40: goap.model.v1.ModelService.StoreProviderKey:input_type -> goap.model.v1.StoreProviderKeyRequest
+	25, // 41: goap.model.v1.ModelService.ListCatalog:input_type -> goap.model.v1.ListCatalogRequest
+	31, // 42: goap.model.v1.ModelService.ListBehaviors:input_type -> goap.model.v1.ListBehaviorsRequest
+	33, // 43: goap.model.v1.ModelService.PreviewBehaviors:input_type -> goap.model.v1.PreviewBehaviorsRequest
+	29, // 44: goap.model.v1.ModelService.MeasureBehaviors:input_type -> goap.model.v1.MeasureBehaviorsRequest
+	47, // 45: goap.model.v1.ModelService.ListUsage:input_type -> goap.model.v1.ListUsageRequest
+	49, // 46: goap.model.v1.ModelService.UsageSummary:input_type -> goap.model.v1.UsageSummaryRequest
+	43, // 47: goap.model.v1.ModelService.GetCallExchange:input_type -> goap.model.v1.GetCallExchangeRequest
+	4,  // 48: goap.model.v1.ModelService.Complete:output_type -> goap.model.v1.CompleteResponse
+	11, // 49: goap.model.v1.ModelService.ListModels:output_type -> goap.model.v1.ListModelsResponse
+	7,  // 50: goap.model.v1.ModelService.Embed:output_type -> goap.model.v1.EmbedResponse
+	41, // 51: goap.model.v1.ModelService.Suggest:output_type -> goap.model.v1.SuggestResponse
+	15, // 52: goap.model.v1.ModelService.ListProviderKinds:output_type -> goap.model.v1.ListProviderKindsResponse
+	18, // 53: goap.model.v1.ModelService.ListProviders:output_type -> goap.model.v1.ListProvidersResponse
+	21, // 54: goap.model.v1.ModelService.DiscoverModels:output_type -> goap.model.v1.DiscoverModelsResponse
+	23, // 55: goap.model.v1.ModelService.StoreProviderKey:output_type -> goap.model.v1.StoreProviderKeyResponse
+	26, // 56: goap.model.v1.ModelService.ListCatalog:output_type -> goap.model.v1.ListCatalogResponse
+	32, // 57: goap.model.v1.ModelService.ListBehaviors:output_type -> goap.model.v1.ListBehaviorsResponse
+	34, // 58: goap.model.v1.ModelService.PreviewBehaviors:output_type -> goap.model.v1.PreviewBehaviorsResponse
+	30, // 59: goap.model.v1.ModelService.MeasureBehaviors:output_type -> goap.model.v1.MeasureBehaviorsResponse
+	48, // 60: goap.model.v1.ModelService.ListUsage:output_type -> goap.model.v1.ListUsageResponse
+	51, // 61: goap.model.v1.ModelService.UsageSummary:output_type -> goap.model.v1.UsageSummaryResponse
+	45, // 62: goap.model.v1.ModelService.GetCallExchange:output_type -> goap.model.v1.GetCallExchangeResponse
+	48, // [48:63] is the sub-list for method output_type
+	33, // [33:48] is the sub-list for method input_type
 	33, // [33:33] is the sub-list for extension type_name
 	33, // [33:33] is the sub-list for extension extendee
 	0,  // [0:33] is the sub-list for field type_name
@@ -3913,7 +4023,7 @@ func file_goap_model_v1_model_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_model_v1_model_proto_rawDesc), len(file_goap_model_v1_model_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   51,
+			NumMessages:   53,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

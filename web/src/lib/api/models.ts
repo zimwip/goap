@@ -23,6 +23,9 @@ export const models = {
   /** Ask the provider for its models; `apiKey` empty resolves the key from the provider's reference. Read-only: the configuration is edited with `llmEdit`. */
   discoverModels: (provider: Partial<LlmProvider>, apiKey = '') =>
     rpc<object, { models?: DiscoveredModel[] }>(MODEL, 'DiscoverModels', { provider, apiKey }),
+  /** Writes a raw key to Vault and returns the apiKeyRef to store; fails if Vault is not configured server-side. */
+  storeProviderKey: (providerName: string, apiKey: string) =>
+    rpc<{ providerName: string; apiKey: string }, { apiKeyRef?: string }>(MODEL, 'StoreProviderKey', { providerName, apiKey }),
   listCatalog: (signal?: AbortSignal) =>
     rpc<Empty, { models?: CatalogModel[]; aliases?: ModelAlias[] }>(MODEL, 'ListCatalog', {}, signal),
   /** The global behaviours of the LLM calls (ADR 0093), enabled and disabled; administrators only. Edited with `llmEdit`. */

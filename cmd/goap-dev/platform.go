@@ -30,7 +30,12 @@ type platformPart struct {
 // connectors join the hub's map once the engine exists (buildEngine).
 func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platformPart, error) {
 	g := gp.g
+	// devlocal (ADR 0010): no Vault running, so a raw key an admin asks to be vaulted falls back to a local
+	// file next to the SQLite database (platform.Secrets.Dir), the same convenience as the generated JWT/connector
+	// secrets (localSecret); ignored once a real Vault is configured (VAULT_ADDR).
+	e.secrets.Dir = st.dir
 	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, e.secrets.Resolve, e.log)
+	gw.Vault = e.secrets.Put
 	gw.Router.Instrument = telemetry.NewGenAI().Instrument
 	gw.Authz = gp.authorizer // the roles a model requires are held on the caller's project (ADR 0043)
 	if err := gw.Reload(e.ctx); err != nil {

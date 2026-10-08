@@ -50,6 +50,9 @@ const (
 	// ModelServiceDiscoverModelsProcedure is the fully-qualified name of the ModelService's
 	// DiscoverModels RPC.
 	ModelServiceDiscoverModelsProcedure = "/goap.model.v1.ModelService/DiscoverModels"
+	// ModelServiceStoreProviderKeyProcedure is the fully-qualified name of the ModelService's
+	// StoreProviderKey RPC.
+	ModelServiceStoreProviderKeyProcedure = "/goap.model.v1.ModelService/StoreProviderKey"
 	// ModelServiceListCatalogProcedure is the fully-qualified name of the ModelService's ListCatalog
 	// RPC.
 	ModelServiceListCatalogProcedure = "/goap.model.v1.ModelService/ListCatalog"
@@ -91,6 +94,10 @@ type ModelServiceClient interface {
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
 	// Ask the provider for its models (before or after saving it).
 	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
+	// Stores a raw API key in Vault and returns the reference to put in Provider.api_key_ref. The key itself is
+	// never persisted outside Vault and never echoed back beyond this one response. Requires Vault to be
+	// configured on the server (VAULT_ADDR); fails otherwise so the admin can fall back to env:VAR.
+	StoreProviderKey(context.Context, *connect.Request[v1.StoreProviderKeyRequest]) (*connect.Response[v1.StoreProviderKeyResponse], error)
 	// The catalog: models offered on the platform, with quota and access level.
 	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
 	// The global behaviours of the LLM calls (ADR 0093): instructions the gateway adds to the system text of the calls
@@ -165,6 +172,12 @@ func NewModelServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(modelServiceMethods.ByName("DiscoverModels")),
 			connect.WithClientOptions(opts...),
 		),
+		storeProviderKey: connect.NewClient[v1.StoreProviderKeyRequest, v1.StoreProviderKeyResponse](
+			httpClient,
+			baseURL+ModelServiceStoreProviderKeyProcedure,
+			connect.WithSchema(modelServiceMethods.ByName("StoreProviderKey")),
+			connect.WithClientOptions(opts...),
+		),
 		listCatalog: connect.NewClient[v1.ListCatalogRequest, v1.ListCatalogResponse](
 			httpClient,
 			baseURL+ModelServiceListCatalogProcedure,
@@ -219,6 +232,7 @@ type modelServiceClient struct {
 	listProviderKinds *connect.Client[v1.ListProviderKindsRequest, v1.ListProviderKindsResponse]
 	listProviders     *connect.Client[v1.ListProvidersRequest, v1.ListProvidersResponse]
 	discoverModels    *connect.Client[v1.DiscoverModelsRequest, v1.DiscoverModelsResponse]
+	storeProviderKey  *connect.Client[v1.StoreProviderKeyRequest, v1.StoreProviderKeyResponse]
 	listCatalog       *connect.Client[v1.ListCatalogRequest, v1.ListCatalogResponse]
 	listBehaviors     *connect.Client[v1.ListBehaviorsRequest, v1.ListBehaviorsResponse]
 	previewBehaviors  *connect.Client[v1.PreviewBehaviorsRequest, v1.PreviewBehaviorsResponse]
@@ -261,6 +275,11 @@ func (c *modelServiceClient) ListProviders(ctx context.Context, req *connect.Req
 // DiscoverModels calls goap.model.v1.ModelService.DiscoverModels.
 func (c *modelServiceClient) DiscoverModels(ctx context.Context, req *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error) {
 	return c.discoverModels.CallUnary(ctx, req)
+}
+
+// StoreProviderKey calls goap.model.v1.ModelService.StoreProviderKey.
+func (c *modelServiceClient) StoreProviderKey(ctx context.Context, req *connect.Request[v1.StoreProviderKeyRequest]) (*connect.Response[v1.StoreProviderKeyResponse], error) {
+	return c.storeProviderKey.CallUnary(ctx, req)
 }
 
 // ListCatalog calls goap.model.v1.ModelService.ListCatalog.
@@ -317,6 +336,10 @@ type ModelServiceHandler interface {
 	ListProviders(context.Context, *connect.Request[v1.ListProvidersRequest]) (*connect.Response[v1.ListProvidersResponse], error)
 	// Ask the provider for its models (before or after saving it).
 	DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error)
+	// Stores a raw API key in Vault and returns the reference to put in Provider.api_key_ref. The key itself is
+	// never persisted outside Vault and never echoed back beyond this one response. Requires Vault to be
+	// configured on the server (VAULT_ADDR); fails otherwise so the admin can fall back to env:VAR.
+	StoreProviderKey(context.Context, *connect.Request[v1.StoreProviderKeyRequest]) (*connect.Response[v1.StoreProviderKeyResponse], error)
 	// The catalog: models offered on the platform, with quota and access level.
 	ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error)
 	// The global behaviours of the LLM calls (ADR 0093): instructions the gateway adds to the system text of the calls
@@ -387,6 +410,12 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(modelServiceMethods.ByName("DiscoverModels")),
 		connect.WithHandlerOptions(opts...),
 	)
+	modelServiceStoreProviderKeyHandler := connect.NewUnaryHandler(
+		ModelServiceStoreProviderKeyProcedure,
+		svc.StoreProviderKey,
+		connect.WithSchema(modelServiceMethods.ByName("StoreProviderKey")),
+		connect.WithHandlerOptions(opts...),
+	)
 	modelServiceListCatalogHandler := connect.NewUnaryHandler(
 		ModelServiceListCatalogProcedure,
 		svc.ListCatalog,
@@ -445,6 +474,8 @@ func NewModelServiceHandler(svc ModelServiceHandler, opts ...connect.HandlerOpti
 			modelServiceListProvidersHandler.ServeHTTP(w, r)
 		case ModelServiceDiscoverModelsProcedure:
 			modelServiceDiscoverModelsHandler.ServeHTTP(w, r)
+		case ModelServiceStoreProviderKeyProcedure:
+			modelServiceStoreProviderKeyHandler.ServeHTTP(w, r)
 		case ModelServiceListCatalogProcedure:
 			modelServiceListCatalogHandler.ServeHTTP(w, r)
 		case ModelServiceListBehaviorsProcedure:
@@ -494,6 +525,10 @@ func (UnimplementedModelServiceHandler) ListProviders(context.Context, *connect.
 
 func (UnimplementedModelServiceHandler) DiscoverModels(context.Context, *connect.Request[v1.DiscoverModelsRequest]) (*connect.Response[v1.DiscoverModelsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.DiscoverModels is not implemented"))
+}
+
+func (UnimplementedModelServiceHandler) StoreProviderKey(context.Context, *connect.Request[v1.StoreProviderKeyRequest]) (*connect.Response[v1.StoreProviderKeyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.model.v1.ModelService.StoreProviderKey is not implemented"))
 }
 
 func (UnimplementedModelServiceHandler) ListCatalog(context.Context, *connect.Request[v1.ListCatalogRequest]) (*connect.Response[v1.ListCatalogResponse], error) {

@@ -25,6 +25,10 @@ service ModelService {
   rpc ListProviders(ListProvidersRequest) returns (ListProvidersResponse);
   // Ask the provider for its models (before or after saving it).
   rpc DiscoverModels(DiscoverModelsRequest) returns (DiscoverModelsResponse);
+  // Stores a raw API key in Vault and returns the reference to put in Provider.api_key_ref. The key itself is
+  // never persisted outside Vault and never echoed back beyond this one response. Requires Vault to be
+  // configured on the server (VAULT_ADDR); fails otherwise so the admin can fall back to env:VAR.
+  rpc StoreProviderKey(StoreProviderKeyRequest) returns (StoreProviderKeyResponse);
   // The catalog: models offered on the platform, with quota and access level.
   rpc ListCatalog(ListCatalogRequest) returns (ListCatalogResponse);
   // The global behaviours of the LLM calls (ADR 0093): instructions the gateway adds to the system text of the calls
@@ -195,6 +199,18 @@ message DiscoverModelsRequest {
 
 message DiscoverModelsResponse {
   repeated DiscoveredModel models = 1;
+}
+
+message StoreProviderKeyRequest {
+  // the provider name the key belongs to (same grammar as Provider.name)
+  string provider_name = 1;
+  // the raw key, never persisted outside Vault
+  string api_key = 2;
+}
+
+message StoreProviderKeyResponse {
+  // Provider.api_key_ref to store, e.g. "goap/modelgw/<provider_name>#api_key"
+  string api_key_ref = 1;
 }
 
 // A catalog entry. roles: any of these roles may call the model (empty:

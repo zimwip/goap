@@ -3,7 +3,7 @@
   // A provider is a node of the graph; the API key itself is never stored, only where to find it.
   import { models, errorMessage, type CatalogModel, type DiscoveredModel, type LlmProvider, type ProviderKind } from '../../api';
   import { SvelteSet } from 'svelte/reactivity';
-  import { deleteProvider, saveModels, saveProvider as saveProviderNode, type Unsaved } from '../../llmEdit';
+  import { deleteProvider, looksLikeRawKey, saveModels, saveProvider as saveProviderNode, type Unsaved } from '../../llmEdit';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let {
@@ -101,6 +101,11 @@
     if (!form) return false;
     const f = form;
     try {
+      if (looksLikeRawKey(f.apiKeyRef)) {
+        const { apiKeyRef } = await models.storeProviderKey(f.name, f.apiKeyRef.trim());
+        if (!apiKeyRef) throw new Error('Vault did not return a reference');
+        f.apiKeyRef = apiKeyRef; // show exactly what was stored
+      }
       await saveProviderNode(toProvider(f));
       f.isNew = false;
       await onchange();
@@ -300,8 +305,8 @@
       </div>
       <div class="field wide">
         <label for="pv-key">API key reference {#if !keyRequired}<span class="hint">(optional)</span>{/if}</label>
-        <input id="pv-key" type="text" class="mono" bind:value={form.apiKeyRef} placeholder="env:MISTRAL_API_KEY  or  goap/modelgw#mistral_api_key" spellcheck="false" autocomplete="off" />
-        <span class="hint">The key is read by the gateway from the environment (<code>env:NAME</code>) or Vault (<code>path#field</code>); alternatives separated by <code>|</code>. It is never stored on the graph.</span>
+        <input id="pv-key" type="text" class="mono" bind:value={form.apiKeyRef} placeholder="env:MISTRAL_API_KEY, goap/modelgw#mistral_api_key, or paste the raw key" spellcheck="false" autocomplete="off" />
+        <span class="hint">The key is read by the gateway from the environment (<code>env:NAME</code>) or Vault (<code>path#field</code>); alternatives separated by <code>|</code>. It is never stored on the graph. Paste a raw key and Save stores it in Vault for you.</span>
       </div>
       <div class="field wide">
         <label for="pv-test">Key for the test only <span class="hint">(optional)</span></label>

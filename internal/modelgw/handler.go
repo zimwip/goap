@@ -166,6 +166,22 @@ func (h *Handler) DiscoverModels(ctx context.Context, r *connect.Request[modelv1
 	return connect.NewResponse(out), nil
 }
 
+func (h *Handler) StoreProviderKey(ctx context.Context, r *connect.Request[modelv1.StoreProviderKeyRequest]) (*connect.Response[modelv1.StoreProviderKeyResponse], error) {
+	ctx, err := h.guard(ctx, r.Header())
+	if err != nil {
+		return nil, err
+	}
+	ref, err := h.Service.StoreProviderKey(ctx, r.Msg.ProviderName, r.Msg.ApiKey)
+	if err != nil {
+		if errors.Is(err, ErrInvalid) {
+			return nil, rpcErr(err)
+		}
+		// Vault unreachable or not configured: not an internal error
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
+	return connect.NewResponse(&modelv1.StoreProviderKeyResponse{ApiKeyRef: ref}), nil
+}
+
 func catalogToPB(e CatalogEntry) *modelv1.CatalogModel {
 	return &modelv1.CatalogModel{Provider: e.Provider, Model: e.Model, DisplayName: e.DisplayName, Enabled: e.Enabled,
 		QuotaTokens: e.QuotaTokens, QuotaPeriod: e.QuotaPeriod, Roles: e.Roles, UsedTokens: e.Used}

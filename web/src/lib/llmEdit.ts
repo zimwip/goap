@@ -44,6 +44,12 @@ const isProtected = (n: { props: Record<string, unknown> }) => n.props.protected
 
 // --- staging ------------------------------------------------------------------------------------------------------
 
+/** True when ref does not look like env:VAR or <path>#<field> (alternatives separated by "|"): a raw key. */
+export const looksLikeRawKey = (ref: string): boolean => {
+  const r = ref.trim();
+  return !!r && !r.includes('|') && !r.startsWith('env:') && !r.includes('#');
+};
+
 /** Stages the creation or the update of a provider. */
 export const saveProvider = (p: LlmProvider) => stageUpsert(ns.platform, PROVIDER_TYPE, providerKey(p.name), providerProps(p));
 
