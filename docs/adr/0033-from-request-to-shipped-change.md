@@ -1,6 +1,6 @@
 # ADR 0033 — From a request to a shipped change: intake, proposals, participation
 
-**Status**: proposed · **Date**: 2026-09 ·
+**Status**: proposed; §1 superseded by ADR 0098 (the request is an object of the change component, not an intake process) · **Date**: 2026-09 ·
 Builds on ADR 0001 (the change as blackboard), ADR 0004 (change application), ADR 0016 (sub-changes),
 ADR 0020 (access control), ADR 0026 (node index), ADR 0031 (deferred change binding).
 
