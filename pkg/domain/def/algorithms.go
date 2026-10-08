@@ -98,6 +98,13 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 			}
 		}
 	}
+	for i, t := range s.ChangeObjectTypes {
+		for j, a := range t.Attributes {
+			for k, v := range a.Validators {
+				plug(fmt.Sprintf(prefix+"changeObjectTypes[%d].attributes[%d].validators[%d]", i, j, k), v, algo.UsagePropertyValidator)
+			}
+		}
+	}
 	for i, n := range s.NodeTypes {
 		for j, sp := range n.Search {
 			if props[n.Name] == nil {
@@ -160,6 +167,22 @@ func (s Schema) OwnBoundValidators(t NodeType) []algo.Bound {
 	for _, v := range t.Validators {
 		if b, err := set.Bind(v, algo.UsageNodeValidator); err == nil {
 			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// ObjectValidators returns the validators of the attributes of a change object type resolved with their algorithm, in
+// declaration order, each bound to its attribute. Instances that do not resolve are left out (Validate reports them).
+func (s Schema) ObjectValidators(t ChangeObjectType) []algo.Bound {
+	set := s.algorithms()
+	var out []algo.Bound
+	for _, a := range t.Attributes {
+		for _, v := range a.Validators {
+			if b, err := set.Bind(v, algo.UsagePropertyValidator); err == nil {
+				b.Property = a.Name
+				out = append(out, b)
+			}
 		}
 	}
 	return out

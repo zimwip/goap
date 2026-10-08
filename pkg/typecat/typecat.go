@@ -12,6 +12,7 @@ import (
 	"maps"
 	"slices"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -97,10 +98,42 @@ type LinkType struct {
 	Attributes []Attribute
 }
 
+// ObjectType is the resolved model of a change object type (ADR 0098).
+type ObjectType struct {
+	Ref         domain.TypeRef
+	Description string
+	// Key is the key type; a ref to a change object type is qualified.
+	Key def.KeyType
+	// Scope is def.ScopeChange or def.ScopeWorkspace.
+	Scope string
+	// Attributes define the value of the change objects.
+	Attributes []Attribute
+	// Lifecycle is the lifecycle of the change objects, its algorithm guards and actions resolved; nil: no state.
+	Lifecycle *domain.Lifecycle
+	// Validators are the validators of the attributes in call order.
+	Validators []algo.Bound
+	// Search are the index declarations.
+	Search []domain.SearchProperty
+	// Editor is the editor of the user interface showing them; empty: the default object editor.
+	Editor string
+	// AdditionalProperties: the value may carry properties that are no attribute of the type.
+	AdditionalProperties bool
+}
+
+// PropertyNames lists the names of the attributes.
+func (x *ObjectType) PropertyNames() []string {
+	out := make([]string, 0, len(x.Attributes))
+	for _, a := range x.Attributes {
+		out = append(out, a.Name)
+	}
+	return out
+}
+
 // Catalog is the set of the types in force.
 type Catalog struct {
 	types   map[domain.TypeRef]*Type
 	links   map[domain.TypeRef]*LinkType
+	objects map[domain.TypeRef]*ObjectType
 	domains map[string]string // namespace -> version
 	// structures are the hierarchies tagged by the domains (ADR 0054), by kind.
 	structures map[string]domain.Structure
@@ -112,10 +145,10 @@ var ErrUnknown = errors.New("unknown type")
 // ErrInvalid marks a node or a link that breaks the types of the catalogue.
 var ErrInvalid = errors.New("invalid")
 
-// Builtins returns the built-in domains (methodology, organisation, platform).
+// Builtins returns the built-in domains (methodology, organisation, platform, execution).
 func Builtins() []*def.Domain { return def.BuiltinDomains() }
 
-// IsBuiltin reports the namespace of a built-in domain (methodology, organisation, platform): frozen, it changes with
+// IsBuiltin reports the namespace of a built-in domain (methodology, organisation, platform, execution): frozen, it changes with
 // the code.
 func IsBuiltin(ns string) bool { return def.IsBuiltinDomain(ns) }
 
@@ -142,7 +175,7 @@ func Builtin() *Catalog {
 func New(ds ...*def.Domain) (*Catalog, error) {
 	all := append(slices.Clone(Builtins()), ds...)
 	nb := len(Builtins())
-	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}, structures: map[string]domain.Structure{}}
+	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, objects: map[domain.TypeRef]*ObjectType{}, domains: map[string]string{}, structures: map[string]domain.Structure{}}
 	decl := map[domain.TypeRef]declared{}
 	for i, d := range all {
 		if d == nil {
@@ -200,6 +233,13 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 			}
 			c.links[ref] = lt
 		}
+		for _, t := range d.ChangeObjectTypes {
+			ot, err := resolveObject(d, t)
+			if err != nil {
+				return nil, err
+			}
+			c.objects[ot.Ref] = ot
+		}
 	}
 	for ref := range decl {
 		t, err := resolve(ref, decl)
@@ -213,6 +253,14 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 			if !end.IsZero() && c.types[end] == nil {
 				return nil, fmt.Errorf("link type %s: %s: %w", lt.Ref, end, ErrUnknown)
 			}
+		}
+	}
+	for _, ot := range c.objects {
+		if c.types[ot.Ref] != nil || c.links[ot.Ref] != nil {
+			return nil, fmt.Errorf("change object type %s: also a node or link type: %w", ot.Ref, ErrInvalid)
+		}
+		if ot.Key.Kind == def.KeyRef && strings.Contains(ot.Key.Ref, domain.TypeSep) && c.objects[mustRef(ot.Key.Ref)] == nil {
+			return nil, fmt.Errorf("change object type %s: key ref %s: %w", ot.Ref, ot.Key.Ref, ErrUnknown)
 		}
 	}
 	for _, kind := range c.structureKinds() {
@@ -271,6 +319,39 @@ func (c *Catalog) IsA(typ, base string) bool {
 	}
 	b, err := domain.ParseTypeRef(base)
 	return err == nil && t.Is(b)
+}
+
+// resolveObject builds the model of a change object type of d.
+func resolveObject(d *def.Domain, t def.ChangeObjectType) (*ObjectType, error) {
+	ref := domain.TypeRef{Namespace: d.Name, Name: t.Name}
+	ot := &ObjectType{Ref: ref, Description: t.Description, Key: t.Key, Scope: t.ScopeOrDefault(), Editor: t.Editor,
+		AdditionalProperties: t.AdditionalProperties, Validators: d.ObjectValidators(t)}
+	ot.Key.Attributes = slices.Clone(t.Key.Attributes)
+	if t.Key.Kind == def.KeyRef && t.Key.Ref != "" && !slices.Contains(def.RefTargets, t.Key.Ref) {
+		r, err := domain.QualifyIn(d.Name, t.Key.Ref)
+		if err != nil {
+			return nil, fmt.Errorf("change object type %s: key ref: %w", ref, err)
+		}
+		ot.Key.Ref = r.String()
+	}
+	if t.Lifecycle != "" {
+		if ot.Lifecycle = d.BindLifecycle(d.Lifecycle(t.Lifecycle)); ot.Lifecycle == nil {
+			return nil, fmt.Errorf("change object type %s: lifecycle %s: %w", ref, t.Lifecycle, ErrUnknown)
+		}
+	}
+	for _, a := range t.Attributes {
+		ra := Attribute{Attribute: a}
+		for _, e := range d.Enums {
+			if a.Enum != "" && e.Name == a.Enum {
+				ra.Values = e.Values
+			}
+		}
+		ot.Attributes = append(ot.Attributes, ra)
+	}
+	for _, sp := range t.Search {
+		ot.Search = append(ot.Search, domain.SearchProperty{Property: sp.Property, Text: sp.Text, Facet: sp.Facet})
+	}
+	return ot, nil
 }
 
 type declared struct {
@@ -495,6 +576,38 @@ func (c *Catalog) AdminOnly(typ string) bool {
 func (c *Catalog) Composes(typ string) bool {
 	l, ok := c.LinkType(typ)
 	return ok && l.Compose
+}
+
+// ObjectType returns the model of a qualified change object type ("risks@Risk").
+func (c *Catalog) ObjectType(ref string) (*ObjectType, bool) {
+	r, err := domain.ParseTypeRef(ref)
+	if err != nil || !r.Qualified() {
+		return nil, false
+	}
+	t, ok := c.objects[r]
+	return t, ok
+}
+
+// HasObjectType reports a known qualified change object type.
+func (c *Catalog) HasObjectType(ref string) bool { _, ok := c.ObjectType(ref); return ok }
+
+// ObjectTypes lists the change object types, sorted by reference.
+func (c *Catalog) ObjectTypes() []*ObjectType {
+	out := make([]*ObjectType, 0, len(c.objects))
+	for _, t := range c.objects {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Ref.String() < out[j].Ref.String() })
+	return out
+}
+
+// ObjectAttributeChecks are what is checked of the value of the change objects of a type.
+func (c *Catalog) ObjectAttributeChecks(typ string) []domain.AttributeCheck {
+	t, ok := c.ObjectType(typ)
+	if !ok {
+		return nil
+	}
+	return attributeChecks(t.Attributes)
 }
 
 // HasNodeType reports a known qualified node type (def.TypeSet).

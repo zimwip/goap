@@ -133,7 +133,7 @@ func TestDomainLifecycle(t *testing.T) {
 				}
 				return r.Builtin
 			})
-			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "organisation", "platform"}) {
+			if len(stored) != 1 || stored[0].Domain.Version != "3" || !slices.Equal(builtin, []string{"methodology", "organisation", "platform", "execution"}) {
 				t.Fatalf("latest: %v %+v", builtin, stored)
 			}
 		})
@@ -157,7 +157,7 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 	if _, issues, _ := s.Save(ctx, m); len(issues) == 0 || issues[0].Path != "namespace" {
 		t.Fatalf("a methodology names its target namespace: %v", issues)
 	}
-	for _, name := range []string{"methodology", "organisation", "platform"} {
+	for _, name := range []string{"methodology", "organisation", "platform", "execution"} {
 		if _, _, err := s.SaveDomain(ctx, def.Domain{Name: name, Version: "9", Schema: def.Schema{NodeTypes: []def.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
 			t.Fatalf("the built-in domain %s is frozen: %v", name, err)
 		}

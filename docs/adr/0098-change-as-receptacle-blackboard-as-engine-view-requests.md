@@ -1,6 +1,6 @@
 # ADR 0098 — The change is a receptacle, the blackboard is the engine's view of it, requests are the origin of work
 
-**Status**: proposed · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
+**Status**: accepted; phase 1 implemented (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
 impacts, event-sourced, one log), 0027 (node editors), 0031 (deferred change binding), 0055 (attributes), 0058 (change
 lifecycle and gates), 0065 / 0066 / 0067 (item kinds, facets, flow origin and decision policy out of the core), 0079
 (drafts and versions at landing), 0096 (goal of a change). Partly supersedes ADR 0033 §1 (the request as an intake
@@ -330,6 +330,27 @@ Each phase keeps the suites green and the platform usable.
    serves them.
 6. **Web**: `openChangeTab` / `registerChangeTab`, the default object editor, the existing panes moved behind it.
 7. **API split**: `change.v1` out of `graph.v1`; `GraphPort` split; the `pkg/layering` rules of §10.
+
+## Implementation
+
+**Phase 1 (done)**: change object types are part of the domain model.
+
+- `def.ChangeObjectType` / `def.KeyType` (`pkg/domain/def/changeobject.go`): `Schema.ChangeObjectTypes` (YAML
+  `changeObjectTypes:`), checked by `Domain.Validate` (`checkChangeObjectTypes`: unique name, nor a node or link type of
+  the domain; key kinds `singleton` / `sequence` (`prefix`, uppercase) / `natural` (`attributes` of the type) / `ref`
+  (`impact`, `node`, `request`, `run`, `workspace` or a change object type); `scope` `change` | `workspace`; lifecycle,
+  editor, search; attributes and their validators as for node types). A domain may declare change object types only.
+- `typecat.ObjectType`, `Catalog.ObjectType` / `ObjectTypes` / `HasObjectType` / `ObjectAttributeChecks`: a bare ref key
+  qualified, enum values and the lifecycle resolved; an unknown foreign ref or a reference naming a node or link type
+  too is refused by `typecat.New`.
+- The built-in domain `execution` (`domains/builtin/execution.yaml`, frozen like the other built-in domains): `Methodology`,
+  `State`, `Transition`, `Fact`, `Option`, `Run`, `Journal`, `ModelCall` (§5).
+- Registry: `registry.v1` `ChangeObjectType` / `KeyType` on `Domain.change_object_types`,
+  `DomainSummary.change_object_type_count`, `ListTypesResponse.change_object_types` (`ChangeObjectTypeInfo`);
+  `DomainToPB` now also carries the enums of a domain (they were dropped over RPC). Web: the types of
+  `web/src/lib/api/types/registry.ts`; the domain form keeps the change object types as they are (no editor of them yet).
+
+Nothing writes a change object yet (phase 2), and no methodology references one.
 
 ## Consequences
 

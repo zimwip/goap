@@ -15,10 +15,10 @@ var (
 // BuiltinDomains returns the domains that ship with the platform (ADR 0012 §4), known before any domain is loaded:
 // the meta-domain "methodology", which types the definition nodes of the methodologies (ADR 0023), and "organisation"
 // and "platform", whose types the platform itself reads (units, adapters, users, policies; MCPs, adapter definitions,
-// model configuration). They are frozen: they change with the code (their YAML), the registry never versions them.
+// model configuration), and "execution", the change object types of the engine's view of a change (ADR 0098). They are frozen: they change with the code (their YAML), the registry never versions them.
 func BuiltinDomains() []*Domain {
 	builtinOnce.Do(func() {
-		for _, f := range []string{"methodology.yaml", "organisation.yaml", "platform.yaml"} {
+		for _, f := range []string{"methodology.yaml", "organisation.yaml", "platform.yaml", "execution.yaml"} {
 			src, err := builtin.FS.ReadFile(f)
 			if err != nil {
 				panic(err)

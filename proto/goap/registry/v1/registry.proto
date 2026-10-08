@@ -253,6 +253,37 @@ message LinkType {
   string description = 6;
 }
 
+// ChangeObjectType is what can be added to a change beyond its impacts (ADR 0098), available on every change.
+message ChangeObjectType {
+  string name = 1;
+  string description = 2;
+  // how the key of a change object is made: its identity
+  KeyType key = 3;
+  // change (default) | workspace: where a key is unique
+  string scope = 4;
+  // the value of the change objects
+  repeated Attribute attributes = 5;
+  // name of the lifecycle of the change objects (one of the domain's lifecycles)
+  string lifecycle = 6;
+  // editor of the user interface showing them (a tab of the change view); empty: the default object editor
+  string editor = 7;
+  repeated SearchProperty search = 8;
+  // the value may carry properties that are no attribute of the type
+  bool additional_properties = 9;
+}
+
+// KeyType gives a change object its identity (ADR 0098).
+message KeyType {
+  // singleton | sequence | natural | ref
+  string kind = 1;
+  // prefix of a sequence key (RISK gives RISK-1, RISK-2...)
+  string prefix = 2;
+  // attributes whose values, joined, make a natural key
+  repeated string attributes = 3;
+  // what a ref key designates: impact | node | request | run | workspace, or a change object type
+  string ref = 4;
+}
+
 message Condition {
   string name = 1;
   string description = 2;
@@ -659,10 +690,12 @@ message Domain {
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
   string updated_by = 10;
-  // built into the platform (methodology, organisation, platform): published and frozen, it changes with the code
+  // built into the platform (methodology, organisation, platform, execution): published and frozen, it changes with the code
   bool builtin = 14;
   reserved 15;
   reserved "frozen";
+  // what can be added to a change beyond its impacts (ADR 0098)
+  repeated ChangeObjectType change_object_types = 17;
 }
 
 message DomainSummary {
@@ -678,6 +711,7 @@ message DomainSummary {
   bool builtin = 9;
   reserved 10;
   reserved "frozen";
+  int32 change_object_type_count = 11;
 }
 
 message ListDomainsRequest {
@@ -806,6 +840,24 @@ message ListTypesResponse {
   repeated LinkTypeInfo link_types = 2;
   // namespace (domain) -> version in force
   map<string, string> domains = 3;
+  // change object types (ADR 0098)
+  repeated ChangeObjectTypeInfo change_object_types = 4;
+}
+
+// ChangeObjectTypeInfo is the resolved model of a change object type ("<namespace>@<name>").
+message ChangeObjectTypeInfo {
+  string ref = 1;
+  string description = 2;
+  // a ref to a change object type is qualified
+  KeyType key = 3;
+  // change | workspace
+  string scope = 4;
+  repeated AttributeInfo attributes = 5;
+  // absent: the change objects have no state
+  Lifecycle lifecycle = 6;
+  // empty: the default object editor
+  string editor = 7;
+  bool additional_properties = 8;
 }
 
 // TypeInfo is the resolved model of a node type ("<namespace>@<name>").

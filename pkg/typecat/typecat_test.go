@@ -63,7 +63,7 @@ func TestBuiltinDomainsAreAlwaysThere(t *testing.T) {
 	if c.HasNodeType("domain@NodeType") {
 		t.Fatal("domain definitions are not graph data (ADR 0023)")
 	}
-	for _, name := range []string{"methodology", "organisation", "platform"} {
+	for _, name := range []string{"methodology", "organisation", "platform", "execution"} {
 		if _, err := New(parse(t, "name: "+name+"\nversion: 1.0.0\nnodeTypes: [X]\n")); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("a domain cannot take the name of a built-in domain: %v", err)
 		}

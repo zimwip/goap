@@ -246,7 +246,7 @@ func DomainToPB(r DomainRecord) *registryv1.Domain {
 	d := r.Domain
 	return &registryv1.Domain{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
 		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes), Lifecycles: lifecyclesToPB(d.Lifecycles),
-		Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances),
+		Enums: enumsToPB(d.Enums), Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances), ChangeObjectTypes: changeObjectTypesToPB(d.ChangeObjectTypes),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy, Builtin: r.Builtin}
 }
 
@@ -254,7 +254,7 @@ func DomainToPB(r DomainRecord) *registryv1.Domain {
 func DomainSummaryToPB(r DomainRecord) *registryv1.DomainSummary {
 	d := r.Domain
 	return &registryv1.DomainSummary{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
-		NodeTypeCount: int32(len(d.NodeTypes)), LinkTypeCount: int32(len(d.LinkTypes)),
+		NodeTypeCount: int32(len(d.NodeTypes)), LinkTypeCount: int32(len(d.LinkTypes)), ChangeObjectTypeCount: int32(len(d.ChangeObjectTypes)),
 		UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), Builtin: r.Builtin}
 }
 
@@ -273,7 +273,35 @@ func DomainFromPB(p *registryv1.Domain) def.Domain {
 	d.Enums = enumsFromPB(p.Enums)
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
 	d.Algorithms, d.Instances = algorithmsFromPB(p.Algorithms), instancesFromPB(p.AlgorithmInstances)
+	for _, t := range p.ChangeObjectTypes {
+		d.ChangeObjectTypes = append(d.ChangeObjectTypes, changeObjectTypeFromPB(t))
+	}
 	return d
+}
+
+func changeObjectTypesToPB(ts []def.ChangeObjectType) []*registryv1.ChangeObjectType {
+	var out []*registryv1.ChangeObjectType
+	for _, t := range ts {
+		out = append(out, &registryv1.ChangeObjectType{Name: t.Name, Description: t.Description, Key: keyTypeToPB(t.Key), Scope: t.Scope,
+			Attributes: attributesToPB(t.Attributes), Lifecycle: t.Lifecycle, Editor: t.Editor, Search: searchToPB(t.Search), AdditionalProperties: t.AdditionalProperties})
+	}
+	return out
+}
+
+func changeObjectTypeFromPB(t *registryv1.ChangeObjectType) def.ChangeObjectType {
+	return def.ChangeObjectType{Name: t.Name, Description: t.Description, Key: keyTypeFromPB(t.Key), Scope: t.Scope, Attributes: attributesFromPB(t.Attributes),
+		Lifecycle: t.Lifecycle, Editor: t.Editor, Search: searchFromPB(t.Search), AdditionalProperties: t.AdditionalProperties}
+}
+
+func keyTypeToPB(k def.KeyType) *registryv1.KeyType {
+	return &registryv1.KeyType{Kind: k.Kind, Prefix: k.Prefix, Attributes: k.Attributes, Ref: k.Ref}
+}
+
+func keyTypeFromPB(k *registryv1.KeyType) def.KeyType {
+	if k == nil {
+		return def.KeyType{}
+	}
+	return def.KeyType{Kind: k.Kind, Prefix: k.Prefix, Attributes: nilIfNone(k.Attributes), Ref: k.Ref}
 }
 
 func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {

@@ -48,8 +48,8 @@ func (d *Domain) Validate() Issues {
 	case !NameRE.MatchString(d.Name):
 		add("name", "name must be lowercase letters, digits, '-' or '_' and start with a letter")
 	}
-	if len(d.NodeTypes) == 0 {
-		add("nodeTypes", "at least one node type required")
+	if len(d.NodeTypes) == 0 && len(d.ChangeObjectTypes) == 0 {
+		add("nodeTypes", "at least one node type or change object type required")
 	}
 	d.Schema.check("", add)
 	return issues

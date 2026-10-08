@@ -1,6 +1,6 @@
 // Editing model of a domain (node types and link types). It reuses the
 // row models of the methodology form.
-import type { Domain } from './api';
+import type { ChangeObjectType, Domain } from './api';
 import { algorithmFromForm, algorithmToForm, instanceFromForm, instanceToForm, type AlgorithmForm, type InstanceForm } from './algorithmForm';
 import {
   enumFromForm,
@@ -27,10 +27,12 @@ export interface DomainForm {
   lifecycles: LifecycleForm[];
   algorithms: AlgorithmForm[];
   instances: InstanceForm[];
+  /** change object types (ADR 0098), kept as they are: no editor of them yet, a save must not drop them */
+  changeObjectTypes: ChangeObjectType[];
 }
 
 export function emptyDomainForm(): DomainForm {
-  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [], enums: [], lifecycles: [], algorithms: [], instances: [] };
+  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [], enums: [], lifecycles: [], algorithms: [], instances: [], changeObjectTypes: [] };
 }
 
 export function toDomainForm(d: Domain): DomainForm {
@@ -44,6 +46,7 @@ export function toDomainForm(d: Domain): DomainForm {
     lifecycles: (d.lifecycles ?? []).map(lifecycleToForm),
     algorithms: (d.algorithms ?? []).map(algorithmToForm),
     instances: (d.algorithmInstances ?? []).map(instanceToForm),
+    changeObjectTypes: structuredClone(d.changeObjectTypes ?? []),
   };
 }
 
@@ -56,6 +59,7 @@ export function fromDomainForm(f: DomainForm): Domain {
   if (f.lifecycles.length) d.lifecycles = f.lifecycles.map(lifecycleFromForm);
   if (f.algorithms.length) d.algorithms = f.algorithms.map(algorithmFromForm);
   if (f.instances.length) d.algorithmInstances = f.instances.map(instanceFromForm);
+  if (f.changeObjectTypes.length) d.changeObjectTypes = structuredClone(f.changeObjectTypes);
   return d;
 }
 

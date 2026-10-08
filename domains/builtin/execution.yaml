@@ -1,0 +1,81 @@
+name: execution
+version: 1.0.0
+description: >
+  What the engine adds to a change it runs on (ADR 0098): the methodologies the change carries, the lifecycle state of
+  the change, the facts of its runs, its options, the runs working on it, the journal and the model calls. Change object
+  types only: the blackboard is the engine's view of a change, stored as change objects of these types; the change
+  validates them by their type and does not know what they mean.
+enums:
+  - name: methodology-role
+    description: How a methodology takes part in a change
+    values: [{value: primary, label: Primary}, {value: companion, label: Companion (transverse)}]
+  - name: fact-status
+    description: Review state of a fact of the blackboard
+    values: [proposed, accepted, rejected, superseded, candidate, stale]
+  - name: option-status
+    description: Where an option of the change stands (ADR 0009 §3, ADR 0032 §6)
+    values: [exploring, evaluated, selected, rejected]
+changeObjectTypes:
+  # One per methodology the change carries, keyed by its name: the primary one and the transverse companions.
+  - name: Methodology
+    description: A methodology the change carries, its version and the goal the change pursues with it
+    key: {kind: natural, attributes: [name]}
+    attributes:
+      - {name: name, type: string, label: Methodology, asName: true}
+      - {name: version, type: string, label: Version}
+      - {name: role, type: enum, enum: methodology-role, label: Role, default: primary}
+      - {name: goal, type: string, label: Goal}
+  - name: State
+    description: The state of the change in the lifecycle of its methodology (ADR 0058)
+    key: {kind: singleton}
+    attributes:
+      - {name: lifecycle, type: string, label: Lifecycle}
+      - {name: state, type: string, label: State, asName: true}
+  - name: Transition
+    description: A move of the lifecycle of the change, and the decision point that gated it
+    key: {kind: sequence, prefix: TR}
+    attributes:
+      - {name: transition, type: string, label: Transition, asName: true}
+      - {name: from, type: string, label: From}
+      - {name: to, type: string, label: To}
+      - {name: decision, type: string, label: Decision point}
+  - name: Fact
+    description: A fact a run puts on the blackboard (a decision, an artifact, a signal...)
+    key: {kind: sequence, prefix: FACT}
+    attributes:
+      - {name: kind, type: string, label: Kind}
+      - {name: type, type: string, label: Type}
+      - {name: title, type: string, label: Title, asName: true}
+      - {name: status, type: enum, enum: fact-status, label: Status, default: proposed}
+      - {name: data, type: json, label: Data}
+    search: [{property: title, text: true}, {property: kind, facet: true}]
+  - name: Option
+    description: A workspace of the change opened as a hypothesis
+    key: {kind: ref, ref: workspace}
+    attributes:
+      - {name: name, type: string, label: Name, asName: true}
+      - {name: hypothesis, type: string, label: Hypothesis, widget: textarea}
+      - {name: status, type: enum, enum: option-status, label: Status, default: exploring}
+      - {name: evaluation, type: string, label: Evaluation, widget: textarea}
+      - {name: origin, type: json, label: Origin}
+  - name: Run
+    description: A run of the engine working on the change (the run itself is stored by the engine)
+    key: {kind: ref, ref: run}
+    attributes:
+      - {name: methodology, type: string, label: Methodology}
+      - {name: agent, type: string, label: Agent, asName: true}
+      - {name: goal, type: string, label: Goal}
+      - {name: status, type: string, label: Status}
+      - {name: startedAt, type: date, label: Started}
+  - name: Journal
+    description: A record of the execution journal of a run (ADR 0011)
+    key: {kind: sequence, prefix: JRN}
+    attributes:
+      - {name: kind, type: string, label: Kind}
+      - {name: record, type: json, label: Record}
+  - name: ModelCall
+    description: The request and answer of a model call of an action (ADR 0059)
+    key: {kind: sequence, prefix: CALL}
+    attributes:
+      - {name: model, type: string, label: Model}
+      - {name: exchange, type: json, label: Exchange}

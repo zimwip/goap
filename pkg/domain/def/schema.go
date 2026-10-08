@@ -23,6 +23,8 @@ type Schema struct {
 	// parameterized uses; node types and lifecycle transitions plug instances.
 	Algorithms []algo.Algorithm `yaml:"algorithms,omitempty" json:"algorithms,omitempty"`
 	Instances  []algo.Instance  `yaml:"algorithmInstances,omitempty" json:"algorithmInstances,omitempty"`
+	// ChangeObjectTypes are what can be added to a change beyond its impacts (ADR 0098), available on every change.
+	ChangeObjectTypes []ChangeObjectType `yaml:"changeObjectTypes,omitempty" json:"changeObjectTypes,omitempty"`
 }
 
 // algorithms returns the algorithm set of the schema.
@@ -40,6 +42,13 @@ func (s Schema) HasAlgorithms() bool {
 			return true
 		}
 		for _, a := range n.Attributes {
+			if len(a.Validators) > 0 {
+				return true
+			}
+		}
+	}
+	for _, t := range s.ChangeObjectTypes {
+		for _, a := range t.Attributes {
 			if len(a.Validators) > 0 {
 				return true
 			}
@@ -113,6 +122,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 	}
 	s.checkStructures(prefix, add)
 	s.checkRequires(prefix, add)
+	s.checkChangeObjectTypes(prefix, nodeTypes, linkTypes, add)
 	return nodeTypes, linkTypes
 }
 
@@ -389,6 +399,9 @@ func (s Schema) checkAttributes(prefix string, add func(path, format string, arg
 	}
 	for i, l := range s.LinkTypes {
 		check(fmt.Sprintf(prefix+"linkTypes[%d]", i), l.Attributes, false)
+	}
+	for i, t := range s.ChangeObjectTypes {
+		check(fmt.Sprintf(prefix+"changeObjectTypes[%d]", i), t.Attributes, true)
 	}
 }
 

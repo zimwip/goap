@@ -1247,6 +1247,15 @@ its policies, [ADR 0072](adr/0072-one-compile-pipeline-split-apply-compile-cache
 methodologies by (name, version, content hash, published domains in force), so the engine's per-event and per-action reads
 do not recompile.
 
+**Change object types** ([ADR 0098](adr/0098-change-as-receptacle-blackboard-as-engine-view-requests.md)): next to its node
+and link types, a domain declares `changeObjectTypes`, what can be added to a change beyond its impacts (a risk, a
+decision point, the state of the change...), available on every change as node types are. A type has a **key type**
+giving each change object its identity (`singleton`, `sequence` with a `prefix`, `natural` over attributes, `ref` to an
+impact, a node, a request, a run, a workspace or another change object type), a `scope` (`change` or `workspace`),
+attributes, a lifecycle and an `editor` (the change view tab showing them). The type catalogue resolves them
+(`typecat.ObjectType`) and `ListTypes` serves them; the built-in domain `execution` holds the engine's ones. Storing and
+reading change objects on a change is the next phase of the ADR.
+
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
 engine) → **archived**. Modifying a published version means creating a new draft version (`CreateVersion`).

@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty } from './types/common';
-import type { Algorithm, Domain, DomainSummary, DomainUser, Issue, LevelCheck, LinkTypeInfo, Methodology, MethodologySummary, PlanPreview, ProcessGraph, RunAlgorithmResponse, TypeInfo } from './types/registry';
+import type { Algorithm, ChangeObjectTypeInfo, Domain, DomainSummary, DomainUser, Issue, LevelCheck, LinkTypeInfo, Methodology, MethodologySummary, PlanPreview, ProcessGraph, RunAlgorithmResponse, TypeInfo } from './types/registry';
 
 const REGISTRY = 'goap.registry.v1.RegistryService';
 type NameVersion = { name: string; version: string };
@@ -96,9 +96,14 @@ export const registry = {
   /** Methodology versions referencing a domain version (unpinned references included). */
   getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
     rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),
-  /** The type catalogue in force (ADR 0012): node and link types of the published and built-in domains. */
+  /** The type catalogue in force (ADR 0012): node, link and change object types (ADR 0098) of the published and built-in domains. */
   listTypes: (signal?: AbortSignal) =>
-    rpc<Record<string, never>, { types?: TypeInfo[]; linkTypes?: LinkTypeInfo[]; domains?: Record<string, string> }>(REGISTRY, 'ListTypes', {}, signal),
+    rpc<Record<string, never>, { types?: TypeInfo[]; linkTypes?: LinkTypeInfo[]; changeObjectTypes?: ChangeObjectTypeInfo[]; domains?: Record<string, string> }>(
+      REGISTRY,
+      'ListTypes',
+      {},
+      signal,
+    ),
   /** Tries an algorithm on a sample input; nothing is saved. */
   runAlgorithm: (algorithm: Algorithm, values: Record<string, unknown>, input: Record<string, unknown>) =>
     rpc<{ algorithm: Algorithm; values: Record<string, unknown>; input: Record<string, unknown> }, RunAlgorithmResponse>(

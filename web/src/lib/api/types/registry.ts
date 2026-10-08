@@ -74,6 +74,48 @@ export interface TypeInfo {
   nodeValidators?: string[];
 }
 
+/** Key type of a change object type (ADR 0098): how the key of a change object is made, its identity. */
+export interface KeyType {
+  /** singleton | sequence | natural | ref */
+  kind?: string;
+  /** prefix of a sequence key (RISK gives RISK-1, RISK-2...) */
+  prefix?: string;
+  /** attributes whose values, joined, make a natural key */
+  attributes?: string[];
+  /** what a ref key designates: impact | node | request | run | workspace, or a change object type */
+  ref?: string;
+}
+
+/** What can be added to a change beyond its impacts (ADR 0098), declared by a domain, available on every change. */
+export interface ChangeObjectType {
+  name?: string;
+  description?: string;
+  key?: KeyType;
+  /** change (default) | workspace: where a key is unique */
+  scope?: string;
+  attributes?: Attribute[];
+  lifecycle?: string;
+  /** editor of the change view tab showing them; empty: the default object editor */
+  editor?: string;
+  search?: SearchProperty[];
+  additionalProperties?: boolean;
+}
+
+/** Resolved model of a change object type of the catalogue ("<namespace>@<name>", ADR 0098). */
+export interface ChangeObjectTypeInfo {
+  ref?: string;
+  description?: string;
+  /** a ref to a change object type is qualified */
+  key?: KeyType;
+  /** change | workspace */
+  scope?: string;
+  attributes?: AttributeInfo[];
+  lifecycle?: Lifecycle;
+  /** empty: the default object editor */
+  editor?: string;
+  additionalProperties?: boolean;
+}
+
 /** Resolved model of a link type; an empty end accepts any node type. */
 export interface LinkTypeInfo {
   ref?: string;
@@ -610,11 +652,13 @@ export interface Domain {
   lifecycles?: Lifecycle[];
   algorithms?: Algorithm[];
   algorithmInstances?: AlgorithmInstance[];
+  /** what can be added to a change beyond its impacts (ADR 0098) */
+  changeObjectTypes?: ChangeObjectType[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
-  /** built into the platform (methodology, organisation, platform): published and frozen, it changes with the code */
+  /** built into the platform (methodology, organisation, platform, execution): published and frozen, it changes with the code */
   builtin?: boolean;
 }
 
@@ -625,6 +669,7 @@ export interface DomainSummary {
   status?: string;
   nodeTypeCount?: number;
   linkTypeCount?: number;
+  changeObjectTypeCount?: number;
   updatedAt?: string;
   publishedAt?: string;
   /** built into the platform: published and frozen */

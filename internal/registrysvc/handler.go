@@ -314,5 +314,13 @@ func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.L
 		}
 		out.LinkTypes = append(out.LinkTypes, li)
 	}
+	for _, t := range cat.ObjectTypes() {
+		oi := &registryv1.ChangeObjectTypeInfo{Ref: t.Ref.String(), Description: t.Description, Key: keyTypeToPB(t.Key), Scope: t.Scope,
+			Attributes: attributeInfosToPB(t.Attributes), Editor: t.Editor, AdditionalProperties: t.AdditionalProperties}
+		if t.Lifecycle != nil {
+			oi.Lifecycle = lifecyclesToPB([]domain.Lifecycle{*t.Lifecycle})[0]
+		}
+		out.ChangeObjectTypes = append(out.ChangeObjectTypes, oi)
+	}
 	return connect.NewResponse(out), nil
 }
