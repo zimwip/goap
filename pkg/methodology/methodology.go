@@ -43,10 +43,10 @@ type Methodology struct {
 	// Goal names the main goal of the methodology (ADR 0096): a declared goal or a process (a process reaches the goal
 	// of its name). The changes of the methodology start with it as their goal; empty: Compiled.MainGoal falls back
 	// on the first declared goal, else the first process.
-	Goal       string      `yaml:"goal,omitempty" json:"goal,omitempty"`
+	Goal string `yaml:"goal,omitempty" json:"goal,omitempty"`
 	// Additions are what the methodology adds to the view of its changes (ADR 0098): the tabs of the change view, each
 	// showing change objects of the types it names. Empty: none.
-	Additions *Additions `yaml:"additions,omitempty" json:"additions,omitempty"`
+	Additions  *Additions  `yaml:"additions,omitempty" json:"additions,omitempty"`
 	Conditions []Condition `yaml:"conditions" json:"conditions"`
 	Actions    []Action    `yaml:"actions" json:"actions"`
 	Goals      []Goal      `yaml:"goals" json:"goals"`
