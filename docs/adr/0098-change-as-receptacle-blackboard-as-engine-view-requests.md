@@ -66,18 +66,20 @@ The change keeps only what makes a change of the graph:
 - **workspaces**: the layers the drafts live in (today's flows stripped of their meaning: a parent, a fork point,
   adopted or discarded). Whether a workspace is an option or the relaunch of a step is the methodology's (§5);
 - a **header** for identity, scope and storage: `id, title, intent, namespace, owner_org, project_id, parent_id,
-  baseline_id, branch, result_baseline_id, status, guardian, created_at`. `status` is the storage lifecycle (`draft`,
+  baseline_id, branch, result_baseline_id, status, guardian, object_types, created_at`. `status` is the storage lifecycle (`draft`,
   `active`, `committed`, `applied`, `abandoned`); `intent` the working formulation, editable (the words of whoever asked
-  are in the requests, §7); `guardian` an opaque name (§4).
+  are in the requests, §7); `guardian` an opaque name (§4); `object_types` the change object types enabled on the change beyond those of its
+  domain (§3), a list of qualified names the change only checks membership of.
 
 `methodology`, `goal`, `lifecycle`, `state` and the free-form `data` leave the header. **Everything else a change carries
-is an addition declared by a methodology** (§3), stored as typed change objects. The CEL the change evaluates is the domain's
+is a change object**, typed by a domain (§3): available by hand on every change of that domain, or added to its changes
+by a methodology. The CEL the change evaluates is the domain's
 only (node lifecycle guards, validators); it never evaluates a methodology's conditions.
 
 `Submit(change, Batch)` applies change object writes and impact operations in one transaction, all or none: an action's
 outputs are written together at the end of the action, and a run can be replayed safely (ADR 0031).
 
-### 3. Additions: change object types declared by domains, added by methodologies
+### 3. Change objects: types declared by domains, available by hand, added by methodologies
 
 #### Change object types are domain definitions
 
@@ -135,11 +137,28 @@ additions:
     - {title: Decisions, editor: decision-board, objects: [decisions@DecisionPoint]}
 ```
 
-A change object type is writable on a change only while a methodology the change carries adds it (the engine checks it when
-it writes, the guardian when it lands); a change with no methodology takes no change objects. The use cases of today
+#### Which change object types a change takes
+
+A change object is tied to a domain, not to a method, so the types a change takes are:
+
+- **the types of the domain of its namespace**: available on every change of that namespace, with or without a
+  methodology; a person adds, edits and moves their change objects by hand through the change API, like impacts;
+- **the types its methodologies add** (`additions.objects`), from any domain (the library domains `risks`, `decisions`,
+  `verify`, the built-in `execution`): when the engine declares a methodology on a change (§5) it enables them by writing
+  their names into `object_types`, in the same `Submit`. Once enabled, they are change objects like the others: a person
+  may write them by hand too, within the ABAC permission of their type.
+
+The change checks that the type of every change object written is in one of the two sets, without knowing why it is
+there; the guardian may refuse to land a change whose change objects break the rules of its methodology (§4). The use cases of today
 (`pkg/risk`, `pkg/verify`, `pkg/review`, `pkg/criticality`, decision points, options, the lifecycle state) become change object
 types of built-in or library domains, and `domain.RegisterItemKind` disappears: a new use case is a domain addition and,
 if needed, an editor, never a change to the core.
+
+#### Sub-changes
+
+A sub-change takes the change object types of its domain and those its **own** methodology adds, never its parent's
+additions. When it is integrated (ADR 0081), its change objects of a type the parent takes are installed in the parent's
+main workspace with its drafts; the others stay on the sub-change, read from the parent through its sub-change history.
 
 ### 4. The guardian
 
@@ -237,8 +256,9 @@ request_log:    seq, request_id, type, by_whom, at, payload
 ### 8. The change view in the web is declared
 
 The change view keeps the panes of the core: the header, the impacts (`pre` / `post`, drafts, diff) and their review,
-the requests, the log. Every other tab is **declared** by the methodologies the change carries (`additions.tabs`), in
-editor mode, as node types name their editor (ADR 0027):
+the requests, the log. Every other tab is **declared**, in editor mode, as node types name their editor (ADR 0027): one
+tab per change object type of the domain of the change (the `editor` of the type), and the tabs the methodologies of
+the change declare (`additions.tabs`, grouping the types they add):
 
 - a tab names an `editor` and the change object types it shows; the web opens it through one entry point
   (`openChangeTab`) and the editors register themselves (`registerChangeTab(name, component)`, next to
@@ -247,8 +267,8 @@ editor mode, as node types name their editor (ADR 0027):
   a form generated from their attributes (`attributes.ts`, `AttributeEditor.svelte`), with the transitions of their
   lifecycle;
 - the existing panes that show a use case (decisions, options, risks, review) become registered editors of their change object
-  types, shown only when a methodology of the change adds them;
-- a change with no methodology shows the core panes only.
+  types, shown only when the change takes them;
+- a change with no methodology shows the core panes and the tabs of its domain's change object types.
 
 ### 9. APIs
 
@@ -264,6 +284,7 @@ type Changes interface {
     View(ctx, id, workspace, level) (Baseline, error)
     OpenWorkspace, AdoptWorkspace, DiscardWorkspace
 
+    EnableObjectTypes(ctx, id, []string) error           // beyond the domain's: the additions of a methodology
     PutObjects(ctx, id, []ObjectWrite) ([]ChangeObject, error)  // validated against the change object types
     Objects(ctx, id, ObjectFilter{Types, KeyPrefix, Workspace, Labels, AtSeq}) ([]ChangeObject, error) // last version per key
     Log(ctx, id, LogFilter) ([]Entry, error)
@@ -288,8 +309,8 @@ editors are names).
 **`engine.v1`** keeps the runs (`StartProcess`, which can take a `request` instead of a change, `SubmitHumanInput`,
 `ApproveAction`, `UnblockProcess`, `GetProcess`, `GetProcessProgress`, `ListStartingPoints`...) and gains the
 blackboard: `Observe`, `ExplainCondition`, `PutObjects` (checked against the additions of the change's methodologies),
-`ListTransitions` / `Transition`, options, decision points, and `DeclareMethodology` (writes `execution@Methodology` and the
-guardian).
+`ListTransitions` / `Transition`, options, decision points, and `DeclareMethodology` (writes `execution@Methodology`, enables the change object types the methodology adds and
+sets the guardian, in one `Submit`).
 
 **Ports of the engine**: `engine.GraphPort` is split into `ChangePort` (the subset of `Changes` and `Requests` it uses)
 and `GraphReadPort` (baselines, node reads, structures), both over neutral types in `pkg/domain` (or a contract package),
@@ -309,7 +330,7 @@ Each phase keeps the suites green and the platform usable.
 
 1. **Change object types**: in `pkg/domain/def` and `pkg/typecat` (key types, scope, editor), in the registry and `ListTypes`;
    the built-in domain `execution`.
-2. **Change objects**: `PutObjects` / `Objects`, the `change_object` projection, `workspace` + `labels` on `change_log` (both
+2. **Change objects**: `PutObjects` / `Objects`, the `change_object` projection, `object_types` on `change`, `workspace` + `labels` on `change_log` (both
    dialects, `TestSchemasAligned`), the `change-object:write` permission; `Submit`.
 3. **Guardian**: the port in the change, implemented first over the current registry seams (`LandingGate`,
    `SubChangeValidator`, `ProjectMoveGate`), then moved to the engine.
@@ -336,12 +357,3 @@ Each phase keeps the suites green and the platform usable.
   runtime dependency (the change asks the engine as guardian, refusing while it is unreachable); change object types become part
   of the domain compatibility rules (a domain version that breaks a published methodology's additions is refused, as
   for node types).
-
-## Open questions
-
-1. **Change objects outside a methodology**: may a person add change objects by hand to a change no methodology governs (a free
-   note, a risk), or are change objects strictly the additions of a methodology? Proposal: strictly additions; a change edited
-   by hand has impacts and reviews only.
-2. **Change object types and sub-changes**: does a sub-change take its parent's additions, or only those of its own
-   methodology? Proposal: its own methodology's; the change objects are integrated into the parent with its drafts only when
-   the parent's methodology adds the type.
