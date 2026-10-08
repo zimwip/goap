@@ -17,6 +17,11 @@ type TypeSet interface {
 	Supertypes() map[string][]string
 }
 
+// ObjectTypeSet is a TypeSet that knows the change object types too (ADR 0098): pkg/typecat.Catalog, DomainTypes.
+type ObjectTypeSet interface {
+	HasObjectType(ref string) bool
+}
+
 // NodeType is a domain node type.
 type NodeType struct {
 	Name        string `yaml:"name" json:"name"`

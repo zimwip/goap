@@ -1,5 +1,5 @@
 name: methodology
-version: 1.8.0
+version: 1.9.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -19,6 +19,7 @@ nodeTypes:
       - {name: lifecycle, label: Lifecycle, description: "Lifecycle of the domain the changes of the methodology follow (ADR 0058); empty: none", type: string, section: Definition, order: 4}
       - {name: criticality, label: Criticality, description: "Default criticality of the changes of the methodology (C1, C2 or C3, ADR 0075); empty: C2", type: string, section: Definition, order: 4}
       - {name: goal, label: Goal, description: "Main goal of the methodology (a goal or a process): the goal its changes start with (ADR 0096); empty: the first goal or process", type: string, section: Definition, order: 4}
+      - {name: additions, label: Additions, description: "What the methodology adds to the view of its changes: the tabs showing change objects (ADR 0098)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: administrative, label: Administrative, description: "The changes of the methodology name no project (it manages organisation, project, policy or adapter data)", type: boolean, section: Definition, order: 4}
       - {name: appliesTo, label: "Applies to", description: "Methodologies whose changes it runs alongside (a transverse methodology, ADR 0036)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: imports, label: Imports, description: "Condition libraries the methodology uses without declaring their conditions", type: json, widget: textarea, section: Definition, order: 4}

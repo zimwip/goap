@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Attribute, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, Attribute, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyAdditions, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -360,6 +360,8 @@ export interface MethodologyForm {
   appliesTo: string;
   /** the condition libraries it imports, comma separated (ADR 0064) */
   imports: string;
+  /** the tabs it adds to the view of its changes (ADR 0098), kept as they are: no editor of them yet */
+  additions?: MethodologyAdditions;
   /** the events of their changes it reacts to */
   on: { event: string; filter: string }[];
 }
@@ -867,6 +869,7 @@ export function toForm(m: Methodology): MethodologyForm {
     roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '' })),
     appliesTo: (m.appliesTo ?? []).join(', '),
     imports: (m.imports ?? []).join(', '),
+    additions: m.additions ? structuredClone(m.additions) : undefined,
     on: (m.on ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '' })),
   };
 }
@@ -1195,6 +1198,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
   );
   put(m, 'appliesTo', csv(f.appliesTo));
   put(m, 'imports', csv(f.imports));
+  if (f.additions?.tabs?.length) m.additions = structuredClone(f.additions);
   put(
     m,
     'on',

@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.5
+version: 0.5.6
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -15,6 +15,11 @@ goal: deliver
 
 # risks_under_control, the release train gate, is a condition of the `risks` library
 imports: [risks]
+
+# the tabs the methodology adds to the view of its changes (ADR 0098): the facts its runs put on the blackboard
+additions:
+  tabs:
+    - {title: Facts, objects: [execution@Fact]}
 
 conditions:
   # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,

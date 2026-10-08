@@ -64,6 +64,22 @@ func (m *Methodology) checkTypeRef(ref string, link bool) string {
 	return ""
 }
 
+// checkObjectTypeRef checks a reference to a change object type (ADR 0098): qualified and known, when the types are
+// resolved and know change object types. It returns the problem, or "".
+func (m *Methodology) checkObjectTypeRef(ref string) string {
+	r, err := domain.ParseTypeRef(ref)
+	if err != nil {
+		return err.Error()
+	}
+	if !r.Qualified() {
+		return fmt.Sprintf("type reference %q must be qualified: <namespace>@%s", ref, ref)
+	}
+	if ot, ok := m.Types.(def.ObjectTypeSet); ok && !ot.HasObjectType(ref) {
+		return fmt.Sprintf("unknown change object type %s", ref)
+	}
+	return ""
+}
+
 // lintTypeRefs checks the type references a methodology uses in CEL literals and builtin params (ADR 0012).
 func (m *Methodology) lintTypeRefs(add func(path, format string, args ...any)) {
 	scan := func(path, expr string) {

@@ -44,6 +44,9 @@ type Methodology struct {
 	// of its name). The changes of the methodology start with it as their goal; empty: Compiled.MainGoal falls back
 	// on the first declared goal, else the first process.
 	Goal       string      `yaml:"goal,omitempty" json:"goal,omitempty"`
+	// Additions are what the methodology adds to the view of its changes (ADR 0098): the tabs of the change view, each
+	// showing change objects of the types it names. Empty: none.
+	Additions *Additions `yaml:"additions,omitempty" json:"additions,omitempty"`
 	Conditions []Condition `yaml:"conditions" json:"conditions"`
 	Actions    []Action    `yaml:"actions" json:"actions"`
 	Goals      []Goal      `yaml:"goals" json:"goals"`
@@ -597,4 +600,25 @@ func overlap(entry, exit map[string]bool) []string {
 
 func inputAndOutput(k, of string) string {
 	return fmt.Sprintf("condition %s is both an input and an output of %s: an activity does not take what it makes true (drop it from the entry; what is already true is not planned again)", k, of)
+}
+
+// Additions are what a methodology adds to the view of its changes (ADR 0098).
+type Additions struct {
+	Tabs []ChangeTab `yaml:"tabs,omitempty" json:"tabs,omitempty"`
+}
+
+// ChangeTab is a tab of the view of the changes of a methodology: the change objects of the types it names, shown by an
+// editor of the user interface (empty or unknown: the default object editor).
+type ChangeTab struct {
+	Title   string   `yaml:"title" json:"title"`
+	Editor  string   `yaml:"editor,omitempty" json:"editor,omitempty"`
+	Objects []string `yaml:"objects" json:"objects"`
+}
+
+// TabsOf lists the tabs a methodology adds to its changes (nil: none).
+func (m *Methodology) TabsOf() []ChangeTab {
+	if m.Additions == nil {
+		return nil
+	}
+	return m.Additions.Tabs
 }

@@ -59,7 +59,7 @@ func (d *Domain) Validate() Issues {
 // type of that domain. The registry and the services use the type catalogue (pkg/typecat); this is for files and
 // tests.
 func DomainTypes(ds ...*Domain) TypeSet {
-	t := domainTypes{nodes: map[string]bool{}, links: map[string]bool{}, parents: map[string]string{}}
+	t := domainTypes{nodes: map[string]bool{}, links: map[string]bool{}, objects: map[string]bool{}, parents: map[string]string{}}
 	for _, d := range append(slices.Clone(BuiltinDomains()), ds...) {
 		for _, n := range d.NodeTypes {
 			ref := d.Name + domain.TypeSep + n.Name
@@ -73,17 +73,23 @@ func DomainTypes(ds ...*Domain) TypeSet {
 		for _, l := range d.LinkTypes {
 			t.links[d.Name+domain.TypeSep+l.Name] = true
 		}
+		for _, o := range d.ChangeObjectTypes {
+			t.objects[d.Name+domain.TypeSep+o.Name] = true
+		}
 	}
 	return t
 }
 
 type domainTypes struct {
-	nodes, links map[string]bool
-	parents      map[string]string
+	nodes, links, objects map[string]bool
+	parents               map[string]string
 }
 
 func (t domainTypes) HasNodeType(ref string) bool { return t.nodes[ref] }
 func (t domainTypes) HasLinkType(ref string) bool { return t.links[ref] }
+
+// HasObjectType reports a known change object type (ObjectTypeSet).
+func (t domainTypes) HasObjectType(ref string) bool { return t.objects[ref] }
 func (t domainTypes) Supertypes() map[string][]string {
 	out := map[string][]string{}
 	for n := range t.nodes {

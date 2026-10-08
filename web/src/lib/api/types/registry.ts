@@ -74,6 +74,20 @@ export interface TypeInfo {
   nodeValidators?: string[];
 }
 
+/** What a methodology adds to the view of its changes (ADR 0098). */
+export interface MethodologyAdditions {
+  tabs?: ChangeTab[];
+}
+
+/** A tab of the view of the changes of a methodology: the change objects of the types it names. */
+export interface ChangeTab {
+  title?: string;
+  /** editor of the user interface; empty or unknown: the default object editor */
+  editor?: string;
+  /** qualified change object types */
+  objects?: string[];
+}
+
 /** Key type of a change object type (ADR 0098): how the key of a change object is made, its identity. */
 export interface KeyType {
   /** singleton | sequence | natural | ref */
@@ -632,6 +646,8 @@ export interface Methodology {
   goal?: string;
   /** the built-in condition libraries it imports (ADR 0064): decisions, risks, verification, derogations */
   imports?: string[];
+  /** what it adds to the view of its changes (ADR 0098): the tabs showing change objects */
+  additions?: MethodologyAdditions;
   /** the events of those changes it reacts to */
   on?: { event?: string; filter?: string }[];
   createdAt?: string;

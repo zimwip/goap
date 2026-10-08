@@ -131,6 +131,7 @@ func (s *compileState) checkHeader() {
 		s.add("namespace", "namespace must be lowercase letters, digits, '-' or '_' and start with a letter")
 	}
 	s.checkCriticality()
+	s.checkAdditions()
 	m.lintTypeRefs(s.add)
 }
 
@@ -279,6 +280,28 @@ func (s *compileState) checkImplementation(path string, a Action) {
 		s.add(path+".builtin", "builtin action requires a builtin")
 	case a.Kind == KindBuiltin && s.m.Builtins != nil && a.Builtin != builtins.ProcessStep && !s.m.Builtins.HasBuiltin(a.Builtin):
 		s.add(path+".builtin", "unknown builtin %q", a.Builtin)
+	}
+}
+
+// checkAdditions checks the tabs a methodology adds to its changes (ADR 0098): a title, an editor name, and change object
+// types that are qualified and known (when the types are resolved).
+func (s *compileState) checkAdditions() {
+	for i, t := range s.m.TabsOf() {
+		path := fmt.Sprintf("additions.tabs[%d]", i)
+		if strings.TrimSpace(t.Title) == "" {
+			s.add(path+".title", "a tab needs a title")
+		}
+		if t.Editor != "" && !def.NameRE.MatchString(t.Editor) {
+			s.add(path+".editor", "invalid editor name %q (lowercase letters, digits, - and _)", t.Editor)
+		}
+		if len(t.Objects) == 0 {
+			s.add(path+".objects", "a tab shows the change objects of at least one type")
+		}
+		for j, ref := range t.Objects {
+			if msg := s.m.checkObjectTypeRef(ref); msg != "" {
+				s.add(fmt.Sprintf(path+".objects[%d]", j), "%s", msg)
+			}
+		}
 	}
 }
 

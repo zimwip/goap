@@ -284,6 +284,20 @@ message KeyType {
   string ref = 4;
 }
 
+// Additions are what a methodology adds to the view of its changes (ADR 0098).
+message Additions {
+  repeated ChangeTab tabs = 1;
+}
+
+// ChangeTab is a tab of the view of the changes of a methodology: the change objects of the types it names.
+message ChangeTab {
+  string title = 1;
+  // editor of the user interface; empty or unknown: the default object editor
+  string editor = 2;
+  // qualified change object types
+  repeated string objects = 3;
+}
+
 message Condition {
   string name = 1;
   string description = 2;
@@ -444,6 +458,8 @@ message Methodology {
   string criticality = 25;
   // the main goal of the methodology: a declared goal or a process; its changes start with it (ADR 0096)
   string goal = 26;
+  // what the methodology adds to the view of its changes: the tabs showing change objects (ADR 0098)
+  Additions additions = 27;
 }
 
 // An event a transverse methodology reacts to, with a CEL filter over event ({type, change, process, step, items}).

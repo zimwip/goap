@@ -13,7 +13,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Additions: additionsToPB(m.Additions), Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
@@ -150,7 +150,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	if p == nil {
 		return methodology.Methodology{}
 	}
-	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal}
+	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal, Additions: additionsFromPB(p.Additions)}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}
@@ -471,6 +471,28 @@ func PlanPreviewToPB(p *engine.PlanPreview) *registryv1.PlanPreview {
 	out := &registryv1.PlanPreview{Agent: p.Agent, Goal: p.Goal, Planner: p.Planner, Reached: p.Reached, Cost: p.Cost, Awaiting: p.Awaiting}
 	for _, a := range p.Actions {
 		out.Actions = append(out.Actions, &registryv1.PlanStep{Name: a.Name, Step: a.Step, Kind: a.Kind, Cost: a.Cost})
+	}
+	return out
+}
+
+func additionsToPB(a *methodology.Additions) *registryv1.Additions {
+	if a == nil {
+		return nil
+	}
+	out := &registryv1.Additions{}
+	for _, t := range a.Tabs {
+		out.Tabs = append(out.Tabs, &registryv1.ChangeTab{Title: t.Title, Editor: t.Editor, Objects: t.Objects})
+	}
+	return out
+}
+
+func additionsFromPB(a *registryv1.Additions) *methodology.Additions {
+	if a == nil || len(a.Tabs) == 0 {
+		return nil
+	}
+	out := &methodology.Additions{}
+	for _, t := range a.Tabs {
+		out.Tabs = append(out.Tabs, methodology.ChangeTab{Title: t.Title, Editor: t.Editor, Objects: nilIfNone(t.Objects)})
 	}
 	return out
 }
