@@ -846,7 +846,8 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	out := &graphv1.GetBlackboardResponse{Change: pbconv.ChangeToPB(bb.Change), ActiveOption: domain.ActiveOptionOf(bb), At: pbconv.Time(bb.At)}
+	out := &graphv1.GetBlackboardResponse{Change: pbconv.ChangeToPB(bb.Change), ActiveOption: domain.ActiveOptionOf(bb), At: pbconv.Time(bb.At),
+		Objects: pbconv.ChangeObjectsToPB(domain.ObjectsOf(bb))}
 	for _, f := range domain.OptionsOf(bb) {
 		out.Options = append(out.Options, pbconv.FlowToPB(f))
 	}

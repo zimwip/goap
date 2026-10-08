@@ -109,6 +109,9 @@ type Process struct {
 	UpdatedAt time.Time       `json:"updatedAt"`
 	// MethodologyVersion is the published version run by the process.
 	MethodologyVersion string `json:"methodologyVersion,omitempty"`
+	// Recorded is what the run last recorded on its change (ADR 0098): the change its methodology was declared on
+	// (execution@Methodology) and the status its execution@Run record holds.
+	Recorded *RunRecorded `json:"recorded,omitempty"`
 	// JournalSeq numbers the execution journal records of the process.
 	JournalSeq int `json:"journalSeq,omitempty"`
 	// Started marks that the process.started journal record was written (Run
@@ -396,4 +399,10 @@ func (s *Step) dropExchanges() {
 	for i := range s.LLMCalls {
 		s.LLMCalls[i].Exchange = nil
 	}
+}
+
+// RunRecorded is what a run last recorded on its change (ADR 0098).
+type RunRecorded struct {
+	Change domain.ChangeID `json:"change"`
+	Status Status          `json:"status"`
 }

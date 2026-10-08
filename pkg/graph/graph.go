@@ -728,6 +728,19 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		// what the view of a flow does not carry: the options and the decision points of the change (ADR 0009)
 		now := g.now()
 		facets := g.facets(c, now)
+		// the change objects the flow sees (ADR 0098): the change-scoped ones and the workspace-scoped ones of the flow
+		workspaces := []string{""}
+		if flow != "" {
+			workspaces = append(workspaces, flow)
+		}
+		objs, err := tx.ChangeObjects(ctx, id, domain.ObjectFilter{Workspaces: workspaces})
+		if err != nil {
+			return err
+		}
+		if facets == nil {
+			facets = map[string]any{}
+		}
+		facets[domain.FacetObjects] = objs
 		full := c // the drafts are read with the flows of the change, the view of a flow has none
 		c = c.View(flow)
 		c.Nodes = nodes

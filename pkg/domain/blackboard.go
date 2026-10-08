@@ -42,6 +42,9 @@ const (
 	FacetOptions        = "options"        // []Flow: the options of the change (ADR 0032 §6)
 	FacetActiveOption   = "activeOption"   // string: the option the change works on
 	FacetDecisionPoints = "decisionPoints" // []DecisionPoint: replayed at Blackboard.At (ADR 0009 §4)
+	// FacetObjects are the change objects the flow sees (ADR 0098): []ChangeObject, the last version of each, the
+	// change-scoped ones and the workspace-scoped ones of the flow.
+	FacetObjects = "objects"
 	// FacetCriticalityPolicy is what the organisation of the change requires of its criticality (ADR 0075 §3), set by a
 	// provider of Graph.Facets that reads the organisation; opaque to the graph. Absent: the compiled-in table.
 	FacetCriticalityPolicy = "criticalityPolicy"
@@ -100,4 +103,10 @@ func (c *Change) ReferencedNodes() []NodeRef {
 		add(cn.Landed)
 	}
 	return out
+}
+
+// ObjectsOf returns the change objects of a blackboard (FacetObjects, ADR 0098).
+func ObjectsOf(bb Blackboard) []ChangeObject {
+	os, _ := bb.Facets[FacetObjects].([]ChangeObject)
+	return os
 }

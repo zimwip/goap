@@ -19,6 +19,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
+	"github.com/zimwip/goap/pkg/engine/blackboard"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
@@ -1337,6 +1338,7 @@ func (e *Engine) save(ctx context.Context, p *Process, event string) error {
 	if p.TraceID == "" {
 		p.TraceID = e.tracer().TraceID(ctx)
 	}
+	e.recordRun(ctx, p)
 	if p.Status.Terminal() && event == string(p.Status) {
 		r := endRecord(p)
 		r.EndedAt = p.UpdatedAt
@@ -1362,6 +1364,50 @@ func (e *Engine) save(ctx context.Context, p *Process, event string) error {
 		}
 	}
 	return nil
+}
+
+// recordRun records the run on its change (ADR 0098), best effort: the methodology the change carries
+// (execution@Methodology, once per change: the primary one, or a companion for a transverse run) and the run itself
+// (execution@Run, its status as it changes). A change that takes no more change objects (committed, applied) is not
+// asked again; any other failure is retried at the next save.
+func (e *Engine) recordRun(ctx context.Context, p *Process) {
+	if p.ChangeID == "" || p.Methodology == "" || p.Status == "" {
+		return
+	}
+	rec := p.Recorded
+	if rec != nil && rec.Change == p.ChangeID && rec.Status == p.Status {
+		return
+	}
+	var writes []domain.ObjectWrite
+	if rec == nil || rec.Change != p.ChangeID {
+		ref := blackboard.MethodologyRef{Name: p.Methodology, Version: p.MethodologyVersion, Role: blackboard.RolePrimary}
+		if strings.HasPrefix(p.Trigger, CompanionPrefix) {
+			ref.Role = blackboard.RoleCompanion
+		}
+		if ref.Role == blackboard.RolePrimary {
+			if m, err := e.Methodologies.Methodology(ctx, p.Methodology); err == nil && m != nil {
+				ref.Goal = m.MainGoal()
+				if ref.Version == "" {
+					ref.Version = m.Version
+				}
+			}
+		}
+		// a methodology already declared on the change (by another run) keeps its record: merged, never downgraded
+		if bb, err := e.Graph.Objects(ctx, p.ChangeID, domain.ObjectFilter{Types: []string{blackboard.TypeMethodology}, KeyPrefix: p.Methodology}); err == nil &&
+			slices.ContainsFunc(bb, func(o domain.ChangeObject) bool { return o.Key == p.Methodology }) {
+			ref = blackboard.MethodologyRef{}
+		}
+		if ref.Name != "" {
+			writes = append(writes, blackboard.DeclareMethodology(ref))
+		}
+	}
+	writes = append(writes, blackboard.RecordRun(blackboard.RunRef{ID: p.ID, Methodology: p.Methodology, Agent: p.Agent, Goal: p.Goal,
+		Status: string(p.Status), StartedAt: p.CreatedAt}))
+	if _, err := e.Graph.PutObjects(ctx, p.ChangeID, writes); err != nil && !errors.Is(err, graph.ErrConflict) {
+		e.log().Debug("run not recorded on its change", "process", p.ID, "change", p.ChangeID, "err", err)
+		return
+	}
+	p.Recorded = &RunRecorded{Change: p.ChangeID, Status: p.Status}
 }
 
 func truncate(s string, n int) string {

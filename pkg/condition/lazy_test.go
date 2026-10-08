@@ -170,3 +170,28 @@ func TestCheckGate(t *testing.T) {
 		t.Fatal("a criterion that cannot be evaluated is an error")
 	}
 }
+
+// The change objects of the blackboard are the variable objects, by type (ADR 0098).
+func TestObjectsVariable(t *testing.T) {
+	bb := domain.Blackboard{Facets: map[string]any{domain.FacetObjects: []domain.ChangeObject{
+		{Type: "risks@Risk", Key: "RISK-1", Version: 2, State: "open", Value: map[string]any{"level": "high"}, Labels: map[string]string{"step": "s1"}},
+		{Type: "risks@Risk", Key: "RISK-2", Version: 1, State: "closed"},
+	}}}
+	set, err := Compile([]Definition{
+		{Name: "open_high", Expr: `"risks@Risk" in objects && objects["risks@Risk"].exists(r, r.state == "open" && r.value.level == "high" && r.labels.step == "s1")`},
+		{Name: "no_action", Expr: `!("risks@Action" in objects)`},
+		{Name: "two", Expr: `objects["risks@Risk"].size() == 2 && objects["risks@Risk"][0].version == 2`},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	st := set.Evaluate(bb)
+	if len(st.Errors) > 0 {
+		t.Fatal(st.Errors)
+	}
+	for _, n := range []string{"open_high", "no_action", "two"} {
+		if !st.State[n] {
+			t.Errorf("%s does not hold: %v", n, st.State)
+		}
+	}
+}

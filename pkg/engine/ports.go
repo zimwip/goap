@@ -76,6 +76,10 @@ type GraphPort interface {
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
 	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
+	// Change objects (ADR 0098): the engine records its own (the methodologies a change carries, its runs) as change
+	// objects of the built-in domain execution, written and read through the change (pkg/engine/blackboard).
+	PutObjects(ctx context.Context, id domain.ChangeID, writes []domain.ObjectWrite) ([]domain.ChangeObject, error)
+	Objects(ctx context.Context, id domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error)
 	// Requests (ADR 0098): the origin of a piece of work, linked to the changes that answer it.
 	CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error)
 	LinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error)

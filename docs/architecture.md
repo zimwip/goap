@@ -254,6 +254,7 @@ Variables exposed to the expression:
 | `risks`, `actions` | the risk register and the actions of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): `{key, title, description, probability, impact, score, status, live, owner, actions, step, versions}` and `{key, title, status, owner, due, for, result, versions}`, the last version of each key |
 | `verifications`, `derogations` | the verification state of the effects of the action runs and the derogations of the change ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `{execution, action, impact, oracle, independent, state, producer, by, open}` and `{key, rule, target, reason, signatory, expires, status, open, expired, versions}` |
 | `change.criticality`, `criticalityPolicy` | the criticality level of the change and what the organisation requires of it: `{oracles, sampling, signatoryRole, maxDerogationHours}` (not `policy`, taken by decision points) |
+| `objects` | the change objects the flow sees, by type ([ADR 0098](adr/0098-change-as-receptacle-blackboard-as-engine-view-requests.md)): `objects["risks@Risk"]` lists `{key, version, state, workspace, value, labels, by}`; a type with none is absent (`"risks@Risk" in objects`) |
 
 **Condition libraries** ([ADR 0064](adr/0064-condition-libraries.md)): a methodology gets no condition it did not
 declare, except those of the libraries it imports (`imports: [decisions, risks, verification, derogations]`, `condition.Library`). `decisions`:

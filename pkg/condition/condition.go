@@ -37,7 +37,7 @@ type compiled struct {
 
 // Variables exposed to expressions.
 var Variables = []string{"change", "items", "changeImpacts", "decisions", "artifacts", "merges", "vars",
-	"options", "activeOption", "decisionPoints", "questions", "risks", "actions", "verifications", "derogations", "criticalityPolicy"}
+	"options", "activeOption", "decisionPoints", "questions", "risks", "actions", "verifications", "derogations", "criticalityPolicy", "objects"}
 
 // NewEnv returns the CEL environment used for conditions.
 func NewEnv() (*cel.Env, error) {
@@ -63,6 +63,9 @@ func NewEnv() (*cel.Env, error) {
 		cel.Variable("derogations", cel.ListType(cel.DynType)),
 		// what the organisation requires of the criticality of the change (ADR 0075 §3)
 		cel.Variable("criticalityPolicy", cel.MapType(cel.StringType, cel.DynType)),
+		// the change objects of the change by type (ADR 0098): objects["risks@Risk"], a list of {key, version, state,
+		// workspace, value, labels}; a type with none is absent ("risks@Risk" in objects)
+		cel.Variable("objects", cel.MapType(cel.StringType, cel.ListType(cel.DynType))),
 		ext.Strings(),
 		ext.Lists(),
 		ext.Sets(),

@@ -908,6 +908,8 @@ message GetBlackboardResponse {
   string active_option = 5;
   repeated DecisionPoint decision_points = 6;
   google.protobuf.Timestamp at = 7;
+  // the change objects the flow sees (ADR 0098)
+  repeated ChangeObject objects = 8;
 }
 
 message ApplyChangeRequest {

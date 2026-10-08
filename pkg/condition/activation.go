@@ -40,6 +40,7 @@ func Activation(bb domain.Blackboard) map[string]any {
 	drg := lazy(func() []any { return derogations(&c, bb.At) })
 	pol := lazy(func() map[string]any { return criticalityPolicy(bb) })
 	dec := lazy(func() decisionView { return decisions(bb) })
+	objs := lazy(func() map[string][]any { return objectsByType(bb) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
@@ -62,7 +63,26 @@ func Activation(bb domain.Blackboard) map[string]any {
 		// criticalityPolicy is what the organisation requires of the criticality of the change: the facet its provider
 		// gave the blackboard, else the compiled-in table (ADR 0075 §3; `policy` is a field of the decision points)
 		"criticalityPolicy": func() any { return pol() },
+		"objects":           func() any { return objs() },
 	}
+}
+
+// objectsByType are the change objects of the blackboard by type (ADR 0098), each as CEL reads it.
+func objectsByType(bb domain.Blackboard) map[string][]any {
+	out := map[string][]any{}
+	for _, o := range domain.ObjectsOf(bb) {
+		value := o.Value
+		if value == nil {
+			value = map[string]any{}
+		}
+		labels := map[string]any{}
+		for k, v := range o.Labels {
+			labels[k] = v
+		}
+		out[o.Type] = append(out[o.Type], map[string]any{"key": o.Key, "version": int64(o.Version), "state": o.State, "workspace": o.Workspace,
+			"value": value, "labels": labels, "by": o.By})
+	}
+	return out
 }
 
 // Resolve returns the value of an activation entry, computing a lazy one.

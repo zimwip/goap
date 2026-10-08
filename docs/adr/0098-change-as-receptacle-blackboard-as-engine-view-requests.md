@@ -427,8 +427,28 @@ No methodology references a change object type yet (phase 5).
   words, origin `conversation`) and link it as the origin of the change (`assistantsvc.Graph` gained `CreateRequest` /
   `LinkRequest`, as `engine.GraphPort`); a trigger opening a change records a request of origin `trigger` (requester
   its service identity) linked as its origin.
-- Not done: `sdlc`'s intake (`find_or_create_change`) still creates a change and does not look up the requests, and no
+- Not done (phase 4): `sdlc`'s intake (`find_or_create_change`) still creates a change and does not look up the requests, and no
   `goap-change` tool reads or links requests yet; the web has no request view (the API only).
+
+**Phase 5, first steps (done)**: the engine's view and records.
+
+- 5a: a methodology declares `additions.tabs` (`methodology.Additions`, `ChangeTab{title, editor, objects}`), checked at
+  compile (`checkAdditions`: a title, an editor name, qualified and known change object types, `def.ObjectTypeSet`),
+  stored as an attribute of `methodology@MethodologyVersion`, carried by `registry.v1` (`Additions`, `ChangeTab`) and kept
+  by the web methodology form; `sdlc` adds a Facts tab.
+- 5b: `pkg/engine/blackboard`: the execution view of a change (`View` from a blackboard: `Methodologies`, `Runs`,
+  `OfType`) and the writes of the engine (`DeclareMethodology`, `RecordRun`) over the types of the built-in domain
+  `execution`. Every run records itself on its change from `Engine.save` (`Engine.recordRun`, best effort,
+  `Process.Recorded`): the methodology the change carries (`execution@Methodology`, primary with its main goal, or
+  companion for a transverse run; never rewritten by another run) and the run (`execution@Run`, keyed by the run,
+  labelled `process`, a new version when its status changes). The blackboard of the graph carries the change objects the
+  flow sees (`domain.FacetObjects`, `GetBlackboardResponse.objects`), the conditions read them as `objects` (by type).
+  `engine.GraphPort` gained `PutObjects` / `Objects`.
+- Still on the header of the change, to move in the next steps of phase 5: the methodology, goal, lifecycle and state
+  columns (the `execution@Methodology` records are written alongside, not read yet as the reference), the lifecycle
+  transitions and gates (`Graph.TransitionChange`, `ChangeLifecycles`), the items (`decision`, `artifact`, `signal`,
+  `flow`, `merge` and the registered kinds) and the options and decision points of `pkg/graph`; the guardian is still the
+  registry's.
 
 ## Consequences
 
