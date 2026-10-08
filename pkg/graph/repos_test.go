@@ -88,6 +88,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewMemory()
 		f(t, repo)
 		checkImpactLogs(t, repo)
+		checkObjectLogs(t, repo)
 		checkLandings(t, repo)
 		checkStates(t, repo)
 	})
@@ -104,6 +105,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewSQLite(db)
 		f(t, repo)
 		checkImpactLogs(t, repo)
+		checkObjectLogs(t, repo)
 		checkLandings(t, repo)
 		checkStates(t, repo)
 	})
@@ -139,6 +141,7 @@ func forEachRepo(t *testing.T, f func(t *testing.T, repo Repo)) {
 		repo := NewPostgres(pool)
 		f(t, repo)
 		checkImpactLogs(t, repo)
+		checkObjectLogs(t, repo)
 		checkLandings(t, repo)
 		checkStates(t, repo)
 	})
@@ -211,6 +214,57 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 			}
 			if got, want := dj(replayed), dj(storedDrafts); got != want {
 				t.Errorf("change %s: the folded drafts of its %d events differ from the from-scratch fold\nreplay: %s\nread: %s", c.ID, len(events), got, want)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+// checkObjectLogs replays the object entries of the log of every change and compares them with the change_object
+// projection (ADR 0098): nothing writes the projection without an entry.
+func checkObjectLogs(t *testing.T, repo Repo) {
+	t.Helper()
+	if t.Failed() {
+		return
+	}
+	norm := func(list []domain.ChangeObject) string {
+		out := make([]domain.ChangeObject, len(list))
+		for i, o := range list {
+			o.At = o.At.UTC().Truncate(time.Millisecond)
+			raw, _ := json.Marshal(o.Value) // the numbers as a store gives them back
+			o.Value = nil
+			_ = json.Unmarshal(raw, &o.Value)
+			if len(o.Labels) == 0 {
+				o.Labels = nil
+			}
+			out[i] = o
+		}
+		b, _ := json.MarshalIndent(out, "", " ")
+		return string(b)
+	}
+	err := repo.InTx(context.Background(), func(tx Tx) error {
+		cs, err := tx.Changes(context.Background())
+		if err != nil {
+			return err
+		}
+		for _, c := range cs {
+			stored, err := tx.ChangeObjects(context.Background(), c.ID, domain.ObjectFilter{})
+			if err != nil {
+				return err
+			}
+			entries, err := tx.Log(context.Background(), domain.LogFilter{Change: c.ID, Types: []string{domain.LogObject + "."}})
+			if err != nil {
+				return err
+			}
+			replayed, err := domain.FoldObjects(entries)
+			if err != nil {
+				return err
+			}
+			if got, want := norm(replayed), norm(stored); got != want {
+				t.Errorf("change %s: the replay of its object entries differs from the projection\nreplay: %s\nstored: %s", c.ID, got, want)
 			}
 		}
 		return nil

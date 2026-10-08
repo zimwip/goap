@@ -67,14 +67,13 @@ func factsFilter(change domain.ChangeID) domain.LogFilter {
 	return domain.LogFilter{Change: change, Types: []string{domain.LogFact + "."}}
 }
 
-// logWhere is the WHERE clause of a log filter for the SQL repositories (the limit aside); ph gives the placeholder
-// of the n-th argument (1-based).
-func logWhere(f domain.LogFilter, ph func(int) string) (string, []any) {
+// logWhere is the WHERE clause of a log filter for the SQL repositories (the limit aside).
+func logWhere(f domain.LogFilter, d dialect) (string, []any) {
 	var conds []string
 	var args []any
 	arg := func(v any) string {
 		args = append(args, v)
-		return ph(len(args))
+		return d.ph(len(args))
 	}
 	in := func(col string, vals []string) {
 		ps := make([]string, len(vals))
@@ -110,6 +109,7 @@ func logWhere(f domain.LogFilter, ph func(int) string) (string, []any) {
 	if f.Execution != "" {
 		conds = append(conds, "execution = "+arg(f.Execution))
 	}
+	conds = append(conds, d.labelsWhere(f.Labels, func(v any) string { return arg(v) })...)
 	if f.AfterSeq > 0 {
 		conds = append(conds, "seq > "+arg(f.AfterSeq))
 	}
@@ -145,14 +145,14 @@ func (g *Graph) ChangeLog(ctx context.Context, f domain.LogFilter) (out []domain
 
 // AppendLog appends entries to the logs of their changes, as one write (ids are assigned and the time set when empty).
 // The graph does not look into them: what an entry says is its stream's, a use case (the execution journal,
-// pkg/journal). The streams the graph writes itself (domain.LogFact, domain.LogImpact: items and change impacts have
-// their own operations, which check them) are refused, and so is an entry of an unknown change.
+// pkg/journal). The streams the graph writes itself (domain.LogFact, domain.LogImpact, domain.LogObject: items, change
+// impacts and change objects have their own operations, which check them) are refused, and so is an entry of an unknown change.
 func (g *Graph) AppendLog(ctx context.Context, entries []domain.LogEntry) error {
 	for _, e := range entries {
 		if e.Change == "" || !strings.Contains(e.Type, ".") {
 			return fmt.Errorf("a log entry needs a change and a type <stream>.<kind>: %w", ErrInvalid)
 		}
-		if s := e.Stream(); s == domain.LogFact || s == domain.LogImpact || s == domain.LogChange {
+		if s := e.Stream(); s == domain.LogFact || s == domain.LogImpact || s == domain.LogChange || s == domain.LogObject {
 			return fmt.Errorf("the %s stream of a log is written by the graph only: %w", s, ErrInvalid)
 		}
 	}
@@ -170,4 +170,47 @@ func (g *Graph) AppendLog(ctx context.Context, entries []domain.LogEntry) error 
 		}
 		return nil
 	})
+}
+
+// labelsJSON encodes labels for the labels columns ('{}' when none).
+func labelsJSON(l map[string]string) string {
+	if len(l) == 0 {
+		return "{}"
+	}
+	raw, _ := json.Marshal(l)
+	return string(raw)
+}
+
+// parseLabels decodes a labels column (nil when empty).
+func parseLabels(raw []byte) (map[string]string, error) {
+	var l map[string]string
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &l); err != nil {
+			return nil, err
+		}
+	}
+	if len(l) == 0 {
+		return nil, nil
+	}
+	return l, nil
+}
+
+// scanObjectJSON decodes the value and the labels of a change object row.
+func scanObjectJSON(value, labels []byte) (map[string]any, map[string]string, error) {
+	var v map[string]any
+	if err := json.Unmarshal(value, &v); err != nil {
+		return nil, nil, err
+	}
+	if len(v) == 0 {
+		v = nil
+	}
+	l, err := parseLabels(labels)
+	return v, l, err
+}
+
+func nonNilMap(m map[string]any) map[string]any {
+	if m == nil {
+		return map[string]any{}
+	}
+	return m
 }

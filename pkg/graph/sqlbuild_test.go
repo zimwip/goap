@@ -174,15 +174,34 @@ func TestSQLBuildersGolden(t *testing.T) {
 		t.Fatal("AfterSeq type")
 	}
 	q, a = pg.sqlLog(f)
-	check("pg Log", pg, q, normSeq(a), `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, at, payload FROM change_log WHERE change_id = $1 AND (type LIKE $2 OR type = $3) AND flow IN ($4) AND process_id IN ($5, $6) AND execution = $7 AND seq > $8 ORDER BY seq LIMIT 5`, normSeq(wantArgs))
+	check("pg Log", pg, q, normSeq(a), `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, at, payload, labels FROM change_log WHERE change_id = $1 AND (type LIKE $2 OR type = $3) AND flow IN ($4) AND process_id IN ($5, $6) AND execution = $7 AND seq > $8 ORDER BY seq LIMIT 5`, normSeq(wantArgs))
 	q, a = lite.sqlLog(f)
-	check("sqlite Log", lite, q, normSeq(a), `SELECT seq, id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload FROM change_log WHERE change_id = ? AND (type LIKE ? OR type = ?) AND flow IN (?) AND process_id IN (?, ?) AND execution = ? AND seq > ? ORDER BY seq LIMIT 5`, normSeq(wantArgs))
+	check("sqlite Log", lite, q, normSeq(a), `SELECT seq, id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload, labels FROM change_log WHERE change_id = ? AND (type LIKE ? OR type = ?) AND flow IN (?) AND process_id IN (?, ?) AND execution = ? AND seq > ? ORDER BY seq LIMIT 5`, normSeq(wantArgs))
 	q, a = pg.sqlLogCounts(f)
 	check("pg LogCounts", pg, q, normSeq(a), `SELECT type, count(*) FROM change_log WHERE change_id = $1 AND (type LIKE $2 OR type = $3) AND flow IN ($4) AND process_id IN ($5, $6) AND execution = $7 GROUP BY type`, normSeq(wantArgs[:7]))
 	q, a = lite.sqlLogCounts(f)
 	check("sqlite LogCounts", lite, q, normSeq(a), `SELECT type, count(*) FROM change_log WHERE change_id = ? AND (type LIKE ? OR type = ?) AND flow IN (?) AND process_id IN (?, ?) AND execution = ? GROUP BY type`, normSeq(wantArgs[:7]))
 	q, a = pg.sqlLog(domain.LogFilter{Change: "c1", Flows: []string{}})
-	check("pg Log no flows", pg, q, a, `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, at, payload FROM change_log WHERE change_id = $1 AND 1 = 0 ORDER BY seq`, []any{"c1"})
+	check("pg Log no flows", pg, q, a, `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, at, payload, labels FROM change_log WHERE change_id = $1 AND 1 = 0 ORDER BY seq`, []any{"c1"})
+
+	// labels (ADR 0098): the jsonb containment in PostgreSQL, one json_extract per label (sorted) in SQLite
+	q, a = pg.sqlLog(domain.LogFilter{Change: "c1", Labels: map[string]string{"step": "s1", "process": "p1"}})
+	check("pg Log labels", pg, q, a, `SELECT seq, id, change_id::text, type, flow, process_id, execution, subject, by_whom, at, payload, labels FROM change_log WHERE change_id = $1 AND labels @> $2::jsonb ORDER BY seq`,
+		[]any{"c1", `{"process":"p1","step":"s1"}`})
+	q, a = lite.sqlLog(domain.LogFilter{Change: "c1", Labels: map[string]string{"step": "s1", "process": "p1"}})
+	check("sqlite Log labels", lite, q, a, `SELECT seq, id, change_id, type, flow, process_id, execution, subject, by_whom, at, payload, labels FROM change_log WHERE change_id = ? AND json_extract(labels, ?) = ? AND json_extract(labels, ?) = ? ORDER BY seq`,
+		[]any{"c1", `$."process"`, "p1", `$."step"`, "s1"})
+
+	// change objects (ADR 0098)
+	of := domain.ObjectFilter{Types: []string{"risks@Risk"}, KeyPrefix: "RISK-", Workspaces: []string{""}, Labels: map[string]string{"step": "s1"}}
+	q, a = pg.sqlChangeObjects("c1", of)
+	check("pg ChangeObjects", pg, q, a, `SELECT change_id::text, type, key, workspace, version, seq, state, value, labels, by_whom, at FROM change_object WHERE change_id = $1 AND type IN ($2) AND substr(key, 1, 5) = $3 AND workspace IN ($4) AND labels @> $5::jsonb ORDER BY created_seq`,
+		[]any{"c1", "risks@Risk", "RISK-", "", `{"step":"s1"}`})
+	q, a = lite.sqlChangeObjects("c1", of)
+	check("sqlite ChangeObjects", lite, q, a, `SELECT change_id, type, key, workspace, version, seq, state, value, labels, by_whom, at FROM change_object WHERE change_id = ? AND type IN (?) AND substr(key, 1, 5) = ? AND workspace IN (?) AND json_extract(labels, ?) = ? ORDER BY created_seq`,
+		[]any{"c1", "risks@Risk", "RISK-", "", `$."step"`, "s1"})
+	checkSQL(t, "pg UpsertChangeObject", pg, pg.sqlUpsertChangeObject(), `INSERT INTO change_object (change_id, type, key, workspace, version, seq, created_seq, state, value, labels, by_whom, at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) ON CONFLICT (change_id, type, key, workspace) DO UPDATE SET version = excluded.version,
+		seq = excluded.seq, state = excluded.state, value = excluded.value, labels = excluded.labels, by_whom = excluded.by_whom, at = excluded.at`)
 
 	// Tags
 	tf := domain.TagFilter{Namespace: "ns", Name: "v1", Change: "c1"}
@@ -257,6 +276,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM node_version WHERE change_id = $1`,
 		`DELETE FROM change_impact WHERE change_id = $1`,
 		`DELETE FROM change_log WHERE change_id = $1`,
+		`DELETE FROM change_object WHERE change_id = $1`,
 		`DELETE FROM tag WHERE change_id = $1`,
 	})
 	checkList("sqlite DeleteChange rows", lite, lite.deleteChangeRows(), []string{
@@ -265,6 +285,7 @@ func TestSQLBuildersGolden(t *testing.T) {
 		`DELETE FROM node_version WHERE change_id = ?1`,
 		`DELETE FROM change_impact WHERE change_id = ?1`,
 		`DELETE FROM change_log WHERE change_id = ?1`,
+		`DELETE FROM change_object WHERE change_id = ?1`,
 		`DELETE FROM tag WHERE change_id = ?1`,
 	})
 	checkSQL(t, "pg orphan", pg, pg.sqlDeleteOrphanNode(), `DELETE FROM node WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM node_version WHERE node_id = $1)`)

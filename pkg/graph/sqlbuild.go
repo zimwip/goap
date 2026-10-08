@@ -3,6 +3,7 @@ package graph
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -234,12 +235,12 @@ func (d dialect) sqlChangeImpacts(change domain.ChangeID) (string, []any) {
 
 // logCols is the select list of a log entry.
 func (d dialect) logCols() string {
-	return d.cols(sc("seq"), sc("id"), su("change_id"), sc("type"), sc("flow"), sc("process_id"), sc("execution"), sc("subject"), sc("by_whom"), sc("at"), sc("payload"))
+	return d.cols(sc("seq"), sc("id"), su("change_id"), sc("type"), sc("flow"), sc("process_id"), sc("execution"), sc("subject"), sc("by_whom"), sc("at"), sc("payload"), sc("labels"))
 }
 
 // sqlLog reads the entries of the log matching f, in order.
 func (d dialect) sqlLog(f domain.LogFilter) (string, []any) {
-	where, args := logWhere(f, d.ph)
+	where, args := logWhere(f, d)
 	q := `SELECT ` + d.logCols() + ` FROM change_log` + where + ` ORDER BY seq`
 	if f.Limit > 0 {
 		q += fmt.Sprintf(" LIMIT %d", f.Limit)
@@ -250,7 +251,7 @@ func (d dialect) sqlLog(f domain.LogFilter) (string, []any) {
 // sqlLogCounts counts the entries of the log matching f by type (f.AfterSeq does not apply).
 func (d dialect) sqlLogCounts(f domain.LogFilter) (string, []any) {
 	f.AfterSeq = 0
-	where, args := logWhere(f, d.ph)
+	where, args := logWhere(f, d)
 	return `SELECT type, count(*) FROM change_log` + where + ` GROUP BY type`, args
 }
 
@@ -336,6 +337,7 @@ func (d dialect) deleteChangeRows() []string {
 		`DELETE FROM node_version WHERE change_id = ` + p,
 		`DELETE FROM change_impact WHERE change_id = ` + p,
 		`DELETE FROM change_log WHERE change_id = ` + p,
+		`DELETE FROM change_object WHERE change_id = ` + p,
 		`DELETE FROM tag WHERE change_id = ` + p,
 	}
 }
@@ -360,8 +362,75 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins"}
-	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
-	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
-	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "at", "payload"}
+	nodeVersionColumns  = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins"}
+	linkColumns         = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
+	baselineColumns     = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
+	changeLogColumns    = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "at", "payload", "labels"}
+	changeObjectColumns = []string{"change_id", "type", "key", "workspace", "version", "seq", "created_seq", "state", "value", "labels", "by_whom", "at"}
 )
+
+// labelsWhere is the condition an entry or a change object carries every label of want: the jsonb containment in
+// PostgreSQL, one json_extract per label in SQLite (labels are checked by validLabels: no quote in a key).
+func (d dialect) labelsWhere(want map[string]string, arg func(any) string) []string {
+	if len(want) == 0 {
+		return nil
+	}
+	if d.pg {
+		raw, _ := json.Marshal(want)
+		return []string{"labels @> " + arg(string(raw)) + "::jsonb"}
+	}
+	keys := make([]string, 0, len(want))
+	for k := range want {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []string
+	for _, k := range keys {
+		out = append(out, "json_extract(labels, "+arg(`$."`+k+`"`)+") = "+arg(want[k]))
+	}
+	return out
+}
+
+// sqlUpsertChangeObject writes the last version of a change object in the projection (the arguments of
+// changeObjectColumns); created_seq keeps the position of its first version.
+func (d dialect) sqlUpsertChangeObject() string {
+	return d.sqlInsert("change_object", changeObjectColumns, ` ON CONFLICT (change_id, type, key, workspace) DO UPDATE SET version = excluded.version,
+		seq = excluded.seq, state = excluded.state, value = excluded.value, labels = excluded.labels, by_whom = excluded.by_whom, at = excluded.at`)
+}
+
+// changeObjectCols is the select list of a change object.
+func (d dialect) changeObjectCols() string {
+	return d.cols(su("change_id"), sc("type"), sc("key"), sc("workspace"), sc("version"), sc("seq"), sc("state"), sc("value"), sc("labels"), sc("by_whom"), sc("at"))
+}
+
+// sqlChangeObjects reads the change objects of a change matching f (AtSeq aside), in the order of their first version.
+func (d dialect) sqlChangeObjects(change domain.ChangeID, f domain.ObjectFilter) (string, []any) {
+	var args []any
+	arg := func(v any) string {
+		args = append(args, v)
+		return d.ph(len(args))
+	}
+	conds := []string{"change_id = " + arg(string(change))}
+	in := func(col string, vals []string) {
+		ps := make([]string, len(vals))
+		for i, v := range vals {
+			ps[i] = arg(v)
+		}
+		conds = append(conds, col+" IN ("+strings.Join(ps, ", ")+")")
+	}
+	if len(f.Types) > 0 {
+		in("type", f.Types)
+	}
+	if f.KeyPrefix != "" {
+		conds = append(conds, "substr(key, 1, "+strconv.Itoa(len(f.KeyPrefix))+") = "+arg(f.KeyPrefix))
+	}
+	if f.Workspaces != nil {
+		if len(f.Workspaces) == 0 {
+			conds = append(conds, "1 = 0")
+		} else {
+			in("workspace", f.Workspaces)
+		}
+	}
+	conds = append(conds, d.labelsWhere(f.Labels, arg)...)
+	return `SELECT ` + d.changeObjectCols() + ` FROM change_object WHERE ` + strings.Join(conds, " AND ") + ` ORDER BY created_seq`, args
+}

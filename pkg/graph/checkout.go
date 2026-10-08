@@ -492,41 +492,46 @@ func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact
 		return cn, invalidf("nothing to update")
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.resolve(ctx, tx, id, target{Impact: impact, Node: in.Node, Key: in.Key, Flow: in.Flow, Execution: in.Execution})
-		if err != nil {
-			return err
-		}
-		d, err := g.working(ctx, tx, w)
-		if err != nil {
-			return err
-		}
-		patch := map[string]any{}
-		if len(in.Properties) > 0 {
-			props := cloneMap(d.Properties)
-			if props == nil {
-				props = map[string]any{}
-			}
-			maps.Copy(props, in.Properties)
-			if err := w.checkDraftAttributes(d, props); err != nil {
-				return err
-			}
-			patch["props"] = in.Properties
-		}
-		if in.Owner != "" {
-			unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, in.Owner)
-			if err != nil {
-				return err
-			}
-			patch["owner"], patch["ownerId"] = in.Owner, string(unit.ID)
-		}
-		ref := d.Ref()
-		if err := g.emitUpdated(ctx, tx, w, ref, in.Execution, patch); err != nil {
-			return err
-		}
-		cn = w.seenAs(&ref)
-		return nil
+		cn, err = g.updateTx(ctx, tx, id, impact, in)
+		return err
 	})
 	return
+}
+
+// updateTx is ImpactNodeUpdate inside a transaction.
+func (g *Graph) updateTx(ctx context.Context, tx Tx, id domain.ChangeID, impact domain.ChangeImpactID, in NodeUpdate) (domain.ChangeImpact, error) {
+	w, err := g.resolve(ctx, tx, id, target{Impact: impact, Node: in.Node, Key: in.Key, Flow: in.Flow, Execution: in.Execution})
+	if err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	d, err := g.working(ctx, tx, w)
+	if err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	patch := map[string]any{}
+	if len(in.Properties) > 0 {
+		props := cloneMap(d.Properties)
+		if props == nil {
+			props = map[string]any{}
+		}
+		maps.Copy(props, in.Properties)
+		if err := w.checkDraftAttributes(d, props); err != nil {
+			return domain.ChangeImpact{}, err
+		}
+		patch["props"] = in.Properties
+	}
+	if in.Owner != "" {
+		unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, in.Owner)
+		if err != nil {
+			return domain.ChangeImpact{}, err
+		}
+		patch["owner"], patch["ownerId"] = in.Owner, string(unit.ID)
+	}
+	ref := d.Ref()
+	if err := g.emitUpdated(ctx, tx, w, ref, in.Execution, patch); err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	return w.seenAs(&ref), nil
 }
 
 // linkPatch describes a link added to a draft, for the updated event: the audit trail reads to, the draft fold the rest.
@@ -537,25 +542,31 @@ func linkPatch(l domain.DraftLink) map[string]any {
 // ImpactLinkCreate adds an outgoing link to the draft of a change impact.
 func (g *Graph) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l LinkWrite, flow, execution string) (link domain.Link, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.workOn(ctx, tx, id, flow)
-		if err != nil {
-			return err
-		}
-		if err := g.impact(ctx, tx, w, impact); err != nil {
-			return err
-		}
-		d, err := g.working(ctx, tx, w)
-		if err != nil {
-			return err
-		}
-		dl, err := g.newDraftLink(ctx, tx, w, d, l)
-		if err != nil {
-			return err
-		}
-		link = domain.Link{ID: dl.ID, Type: dl.Type, From: d.Ref(), To: dl.To, Properties: dl.Properties, ChangeID: id}
-		return g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"addLink": linkPatch(dl)})
+		link, err = g.linkCreateTx(ctx, tx, id, impact, l, flow, execution)
+		return err
 	})
 	return
+}
+
+// linkCreateTx is ImpactLinkCreate inside a transaction.
+func (g *Graph) linkCreateTx(ctx context.Context, tx Tx, id domain.ChangeID, impact domain.ChangeImpactID, l LinkWrite, flow, execution string) (domain.Link, error) {
+	w, err := g.workOn(ctx, tx, id, flow)
+	if err != nil {
+		return domain.Link{}, err
+	}
+	if err := g.impact(ctx, tx, w, impact); err != nil {
+		return domain.Link{}, err
+	}
+	d, err := g.working(ctx, tx, w)
+	if err != nil {
+		return domain.Link{}, err
+	}
+	dl, err := g.newDraftLink(ctx, tx, w, d, l)
+	if err != nil {
+		return domain.Link{}, err
+	}
+	link := domain.Link{ID: dl.ID, Type: dl.Type, From: d.Ref(), To: dl.To, Properties: dl.Properties, ChangeID: id}
+	return link, g.emitUpdated(ctx, tx, w, d.Ref(), execution, map[string]any{"addLink": linkPatch(dl)})
 }
 
 // emitUpdated records an edit of the draft ref (the updated event with its patch), then sends an accepted review back

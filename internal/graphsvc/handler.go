@@ -146,7 +146,7 @@ func Caller(ctx context.Context) string { return authz.From(ctx).Subject }
 
 func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.ListChangeLogRequest]) (*connect.Response[graphv1.ListChangeLogResponse], error) {
 	f := domain.LogFilter{Change: domain.ChangeID(r.Msg.ChangeId), Types: r.Msg.Types, Processes: r.Msg.ProcessIds, Execution: r.Msg.Execution,
-		AfterSeq: r.Msg.AfterSeq, Limit: int(r.Msg.Limit)}
+		AfterSeq: r.Msg.AfterSeq, Limit: int(r.Msg.Limit), Labels: r.Msg.Labels}
 	for _, fl := range r.Msg.Flows {
 		if fl == "main" {
 			fl = ""

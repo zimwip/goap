@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"slices"
@@ -34,6 +35,8 @@ type memState struct {
 	log []domain.LogEntry
 	// tags name the state a change leaves (ADR 0056), in creation order
 	tags []domain.Tag
+	// objects are the change objects of each change (ADR 0098), in the order of their first version
+	objects map[domain.ChangeID][]domain.ChangeObject
 }
 
 // NewMemory returns an empty in-memory repository.
@@ -46,6 +49,7 @@ func NewMemory() *Memory {
 		branches:  map[string]domain.Branch{},
 		joins:     map[joinKey]domain.ChangeID{},
 		nodes:     map[domain.ChangeID][]domain.ChangeImpact{},
+		objects:   map[domain.ChangeID][]domain.ChangeObject{},
 	}}
 }
 
@@ -61,6 +65,10 @@ func (s memState) clone() memState {
 		log:       slices.Clone(s.log),
 		tags:      slices.Clone(s.tags),
 		nodes:     make(map[domain.ChangeID][]domain.ChangeImpact, len(s.nodes)),
+		objects:   make(map[domain.ChangeID][]domain.ChangeObject, len(s.objects)),
+	}
+	for k, v := range s.objects {
+		c.objects[k] = slices.Clone(v)
 	}
 	for k, v := range s.nodes {
 		c.nodes[k] = slices.Clone(v)
@@ -433,7 +441,7 @@ func (t *memTx) AppendLog(_ context.Context, e domain.LogEntry) (domain.LogEntry
 			return e, fmt.Errorf("log entry %s: %w", e.ID, ErrConflict)
 		}
 	}
-	e.Payload = slices.Clone(e.Payload)
+	e.Payload, e.Labels = slices.Clone(e.Payload), maps.Clone(e.Labels)
 	e.Seq = int64(len(t.st.log) + 1)
 	t.st.log = append(t.st.log, e)
 	return e, nil
@@ -461,6 +469,44 @@ func (t *memTx) Log(_ context.Context, f domain.LogFilter) ([]domain.LogEntry, e
 		}
 	}
 	return out, nil
+}
+
+func (t *memTx) PutChangeObject(_ context.Context, o domain.ChangeObject) error {
+	if _, ok := t.st.changes[o.Change]; !ok {
+		return fmt.Errorf("change %s: %w", o.Change, ErrInvalid)
+	}
+	o.Value, o.Labels = cloneValue(o.Value), maps.Clone(o.Labels)
+	list := t.st.objects[o.Change]
+	for i, x := range list {
+		if x.ID() == o.ID() {
+			list[i] = o
+			return nil
+		}
+	}
+	t.st.objects[o.Change] = append(list, o)
+	return nil
+}
+
+func (t *memTx) ChangeObjects(_ context.Context, change domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error) {
+	var out []domain.ChangeObject
+	for _, o := range t.st.objects[change] {
+		if f.Match(o) {
+			o.Value, o.Labels = cloneValue(o.Value), maps.Clone(o.Labels)
+			out = append(out, o)
+		}
+	}
+	return out, nil
+}
+
+// cloneValue copies a value through JSON, as a store would (numbers become float64).
+func cloneValue(v map[string]any) map[string]any {
+	if v == nil {
+		return nil
+	}
+	raw, _ := json.Marshal(v)
+	var out map[string]any
+	_ = json.Unmarshal(raw, &out)
+	return out
 }
 
 func (t *memTx) OpenChangeIDs(_ context.Context) ([]domain.ChangeID, error) {
@@ -649,6 +695,7 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 	}
 	t.st.log = slices.DeleteFunc(t.st.log, func(e domain.LogEntry) bool { return e.Change == id })
 	delete(t.st.nodes, id)
+	delete(t.st.objects, id)
 	t.st.tags = slices.DeleteFunc(t.st.tags, func(tag domain.Tag) bool { return tag.ChangeID == id })
 	if branch != "" {
 		delete(t.st.branches, branchKey(namespace, branch))

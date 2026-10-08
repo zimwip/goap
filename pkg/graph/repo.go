@@ -82,6 +82,12 @@ type Tx interface {
 	Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error)
 	// LogCounts counts the entries matching f by type (the limit and the position aside).
 	LogCounts(ctx context.Context, f domain.LogFilter) (map[string]int, error)
+	// PutChangeObject writes the last version of a change object in the projection of the object entries of the log
+	// (ADR 0098): only Graph.putObjectTx writes it, with the entry. A change object keeps the position of its first
+	// version.
+	PutChangeObject(ctx context.Context, o domain.ChangeObject) error
+	// ChangeObjects lists the change objects of a change matching f (f.AtSeq aside), in the order of their first version.
+	ChangeObjects(ctx context.Context, change domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error)
 
 	// OpenChangeIDs lists the changes that are neither applied nor abandoned.
 	OpenChangeIDs(ctx context.Context) ([]domain.ChangeID, error)

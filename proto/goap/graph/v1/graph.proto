@@ -45,6 +45,11 @@ service GraphService {
   rpc UpdateChange(UpdateChangeRequest) returns (UpdateChangeResponse);
   rpc MoveChange(MoveChangeRequest) returns (MoveChangeResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
+  // Change objects (ADR 0098): what a change carries beyond its impacts, typed by the change object types of the domains.
+  rpc PutChangeObjects(PutChangeObjectsRequest) returns (PutChangeObjectsResponse);
+  rpc ListChangeObjects(ListChangeObjectsRequest) returns (ListChangeObjectsResponse);
+  // Impact operations, items and change objects written on a change in one transaction, all or none (ADR 0098).
+  rpc SubmitBatch(SubmitBatchRequest) returns (SubmitBatchResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
   rpc ProposeImpact(ProposeImpactRequest) returns (ProposeImpactResponse);
@@ -526,6 +531,8 @@ message LogEntry {
   google.protobuf.Timestamp at = 10;
   // the whole fact, journal record or impact event, as JSON
   string payload = 11;
+  // opaque labels of the writer (process, execution, step...), ADR 0098
+  map<string, string> labels = 12;
 }
 
 message ListChangeLogRequest {
@@ -540,6 +547,8 @@ message ListChangeLogRequest {
   // entries after this position (to follow the log)
   int64 after_seq = 6;
   int32 limit = 7;
+  // entries carrying every one of these labels
+  map<string, string> labels = 8;
 }
 
 message ListChangeLogResponse {
@@ -683,6 +692,88 @@ message AddItemsRequest {
 
 message AddItemsResponse {
   repeated ChangeItem items = 1;
+}
+
+// ChangeObject is a version of a change object (ADR 0098), the last one unless read at a position of the log.
+message ChangeObject {
+  string change_id = 1;
+  // qualified change object type ("risks@Risk")
+  string type = 2;
+  // key among the change objects of its type (empty: a singleton)
+  string key = 3;
+  // workspace (flow) of a workspace-scoped change object; empty: change-scoped or the main workspace
+  string workspace = 4;
+  int32 version = 5;
+  // position of the version in the log of the change
+  int64 seq = 6;
+  // state in the lifecycle of its type; empty: none
+  string state = 7;
+  google.protobuf.Struct value = 8;
+  map<string, string> labels = 9;
+  string by = 10;
+  google.protobuf.Timestamp at = 11;
+}
+
+// ObjectWrite writes a change object: a new one, or a new version of the one of the same type, key and workspace.
+message ObjectWrite {
+  string type = 1;
+  // empty for a singleton, a natural key (made from the value) and the first write of a sequence key (allocated)
+  string key = 2;
+  // the whole value, or merged into the last one when merge is set (a null removes the property)
+  google.protobuf.Struct value = 3;
+  bool merge = 4;
+  // a transition of the lifecycle of the type, out of the current state
+  string transition = 5;
+  // workspace of a workspace-scoped type (empty: the active option, else the main workspace)
+  string workspace = 6;
+  map<string, string> labels = 7;
+}
+
+message PutChangeObjectsRequest {
+  string change_id = 1;
+  repeated ObjectWrite objects = 2;
+}
+
+message PutChangeObjectsResponse {
+  repeated ChangeObject objects = 1;
+}
+
+message ListChangeObjectsRequest {
+  string change_id = 1;
+  // qualified change object types; empty: every type
+  repeated string types = 2;
+  string key_prefix = 3;
+  // workspaces kept when filter_workspaces is set ("" the main one and the change-scoped ones)
+  repeated string workspaces = 4;
+  bool filter_workspaces = 5;
+  // the change objects whose last write carries these labels
+  map<string, string> labels = 6;
+  // the versions in force at that position of the log; 0: the last versions
+  int64 at_seq = 7;
+}
+
+message ListChangeObjectsResponse {
+  repeated ChangeObject objects = 1;
+}
+
+// SubmitBatchRequest writes on a change, in one transaction and in this order: node creations, checkouts, draft
+// updates, links, items and change objects. The change_id of the embedded requests is ignored.
+message SubmitBatchRequest {
+  string change_id = 1;
+  repeated ImpactNodeCreateRequest creates = 2;
+  repeated ImpactNodeCheckoutRequest checkouts = 3;
+  repeated ImpactNodeUpdateRequest updates = 4;
+  repeated ImpactLinkCreateRequest links = 5;
+  repeated ChangeItem items = 6;
+  repeated ObjectWrite objects = 7;
+}
+
+message SubmitBatchResponse {
+  // the impacts of the creations, checkouts and updates, in order
+  repeated ChangeImpact impacts = 1;
+  repeated Link links = 2;
+  repeated ChangeItem items = 3;
+  repeated ChangeObject objects = 4;
 }
 
 message GetBlackboardRequest {

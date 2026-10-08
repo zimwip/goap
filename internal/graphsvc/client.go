@@ -551,7 +551,7 @@ func (c *Client) AppendLog(ctx context.Context, entries []domain.LogEntry) error
 // without its types (graph.Graph.ChangeLog).
 func (c *Client) ChangeLog(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, map[string]int, error) {
 	req := &graphv1.ListChangeLogRequest{ChangeId: string(f.Change), Types: f.Types, ProcessIds: f.Processes, Execution: f.Execution,
-		AfterSeq: f.AfterSeq, Limit: int32(f.Limit)}
+		AfterSeq: f.AfterSeq, Limit: int32(f.Limit), Labels: f.Labels}
 	for _, fl := range f.Flows {
 		if fl == "" {
 			fl = "main"
@@ -721,6 +721,68 @@ func (c *Client) DecisionPoints(ctx context.Context, id domain.ChangeID) ([]doma
 	var out []domain.DecisionPoint
 	for _, d := range r.Msg.Points {
 		out = append(out, pbconv.DecisionPointFromPB(d))
+	}
+	return out, nil
+}
+
+// PutObjects writes change objects on a change (ADR 0098).
+func (c *Client) PutObjects(ctx context.Context, id domain.ChangeID, writes []domain.ObjectWrite) ([]domain.ChangeObject, error) {
+	r, err := c.rpc.PutChangeObjects(ctx, connect.NewRequest(&graphv1.PutChangeObjectsRequest{ChangeId: string(id), Objects: pbconv.ObjectWritesToPB(writes)}))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeObjectsFromPB(r.Msg.Objects), nil
+}
+
+// Objects reads the change objects of a change (ADR 0098).
+func (c *Client) Objects(ctx context.Context, id domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error) {
+	req := &graphv1.ListChangeObjectsRequest{ChangeId: string(id), Types: f.Types, KeyPrefix: f.KeyPrefix, Labels: f.Labels, AtSeq: f.AtSeq}
+	if f.Workspaces != nil {
+		req.FilterWorkspaces = true
+		for _, w := range f.Workspaces {
+			if w == "" {
+				w = domain.MainFlow
+			}
+			req.Workspaces = append(req.Workspaces, w)
+		}
+	}
+	r, err := c.rpc.ListChangeObjects(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeObjectsFromPB(r.Msg.Objects), nil
+}
+
+// Submit writes a batch on a change in one transaction (ADR 0098).
+func (c *Client) Submit(ctx context.Context, id domain.ChangeID, b graph.Batch) (graph.BatchResult, error) {
+	req := &graphv1.SubmitBatchRequest{ChangeId: string(id), Items: pbconv.ItemsToPB(b.Items), Objects: pbconv.ObjectWritesToPB(b.Objects)}
+	for _, in := range b.Creates {
+		var links []*graphv1.NodeLinkWrite
+		for _, l := range in.Links {
+			links = append(links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
+		}
+		req.Creates = append(req.Creates, &graphv1.ImpactNodeCreateRequest{Key: in.Key, Type: in.Type, Props: pbconv.Struct(in.Properties), Owner: in.Owner,
+			Rationale: in.Rationale, Links: links, Flow: in.Flow, Execution: in.Execution})
+	}
+	for _, in := range b.Checkouts {
+		req.Checkouts = append(req.Checkouts, &graphv1.ImpactNodeCheckoutRequest{ChangeImpactId: string(in.Impact), NodeId: string(in.Node), Rationale: in.Rationale,
+			Flow: in.Flow, Execution: in.Execution})
+	}
+	for _, in := range b.Updates {
+		req.Updates = append(req.Updates, &graphv1.ImpactNodeUpdateRequest{ChangeImpactId: string(in.Impact), Props: pbconv.Struct(in.Properties), Owner: in.Owner,
+			Flow: in.Flow, Execution: in.Execution})
+	}
+	for _, in := range b.Links {
+		req.Links = append(req.Links, &graphv1.ImpactLinkCreateRequest{ChangeImpactId: string(in.Impact), Type: in.Link.Type, To: pbconv.RefToPB(in.Link.To),
+			Props: pbconv.Struct(in.Link.Properties), Flow: in.Flow, Execution: in.Execution})
+	}
+	r, err := c.rpc.SubmitBatch(ctx, connect.NewRequest(req))
+	if err != nil {
+		return graph.BatchResult{}, rpcerr.FromConnect(err)
+	}
+	out := graph.BatchResult{Links: pbconv.LinksFromPB(r.Msg.Links), Items: pbconv.ItemsFromPB(r.Msg.Items), Objects: pbconv.ChangeObjectsFromPB(r.Msg.Objects)}
+	for _, cn := range r.Msg.Impacts {
+		out.Impacts = append(out.Impacts, pbconv.ChangeImpactFromPB(cn))
 	}
 	return out, nil
 }

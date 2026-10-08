@@ -532,7 +532,7 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 
 func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	err := t.tx.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.At, []byte(e.Payload)).Scan(&e.Seq)
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.At, []byte(e.Payload), labelsJSON(e.Labels)).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
@@ -566,11 +566,14 @@ func (t *pgTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, 
 	for rows.Next() {
 		var e domain.LogEntry
 		var change string
-		var payload []byte
-		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.At, &payload); err != nil {
+		var payload, labels []byte
+		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.At, &payload, &labels); err != nil {
 			return nil, err
 		}
 		e.Change, e.Payload = domain.ChangeID(change), json.RawMessage(payload)
+		if e.Labels, err = parseLabels(labels); err != nil {
+			return nil, err
+		}
 		out = append(out, e)
 	}
 	return out, rows.Err()
@@ -603,6 +606,40 @@ func (t *pgTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn d
 			review = $11, reviews = $12, via = $13, recheck = $14, produced_by = $15, derived_from = $16, items = $17, execution = $18, flow = $20, superseded = $21`,
 		r.ID, string(change), r.NodeID, r.Key, r.Type, r.Intent, r.Rationale, r.Pre, r.Post, r.Landed, r.Review, r.Reviews, nullUUID(r.Via), r.Recheck, r.ProducedBy, r.DerivedFrom, r.Items, r.Execution, cn.CreatedAt, r.Flow, r.Superseded)
 	return mapErr(err, "change impact "+cn.Key)
+}
+
+func (t *pgTx) PutChangeObject(ctx context.Context, o domain.ChangeObject) error {
+	value, err := json.Marshal(nonNilMap(o.Value))
+	if err != nil {
+		return err
+	}
+	_, err = t.tx.Exec(ctx, dialectPG.sqlUpsertChangeObject(), string(o.Change), o.Type, o.Key, o.Workspace, o.Version, o.Seq, o.Seq, o.State, value,
+		labelsJSON(o.Labels), o.By, o.At)
+	return mapErr(err, "change object "+o.ID())
+}
+
+func (t *pgTx) ChangeObjects(ctx context.Context, change domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error) {
+	q, args := dialectPG.sqlChangeObjects(change, f)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "change objects")
+	}
+	defer rows.Close()
+	var out []domain.ChangeObject
+	for rows.Next() {
+		var o domain.ChangeObject
+		var id string
+		var value, labels []byte
+		if err := rows.Scan(&id, &o.Type, &o.Key, &o.Workspace, &o.Version, &o.Seq, &o.State, &value, &labels, &o.By, &o.At); err != nil {
+			return nil, err
+		}
+		o.Change = domain.ChangeID(id)
+		if o.Value, o.Labels, err = scanObjectJSON(value, labels); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
 }
 
 func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error) {

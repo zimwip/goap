@@ -526,7 +526,7 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 
 func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, tsText(e.At), string(e.Payload))
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, tsText(e.At), string(e.Payload), labelsJSON(e.Labels))
 	if err != nil {
 		return e, sqliteErr(err, "log entry "+e.Type)
 	}
@@ -563,12 +563,48 @@ func (t *sqliteTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEnt
 	var out []domain.LogEntry
 	for rows.Next() {
 		var e domain.LogEntry
-		var change, at, payload string
-		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &at, &payload); err != nil {
+		var change, at, payload, labels string
+		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &at, &payload, &labels); err != nil {
 			return nil, err
 		}
 		e.Change, e.At, e.Payload = domain.ChangeID(change), tsParse(at), json.RawMessage(payload)
+		if e.Labels, err = parseLabels([]byte(labels)); err != nil {
+			return nil, err
+		}
 		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) PutChangeObject(ctx context.Context, o domain.ChangeObject) error {
+	value, err := json.Marshal(nonNilMap(o.Value))
+	if err != nil {
+		return err
+	}
+	_, err = t.tx.ExecContext(ctx, dialectSQLite.sqlUpsertChangeObject(), string(o.Change), o.Type, o.Key, o.Workspace, o.Version, o.Seq, o.Seq, o.State,
+		string(value), labelsJSON(o.Labels), o.By, tsText(o.At))
+	return sqliteErr(err, "change object "+o.ID())
+}
+
+func (t *sqliteTx) ChangeObjects(ctx context.Context, change domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error) {
+	q, args := dialectSQLite.sqlChangeObjects(change, f)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, sqliteErr(err, "change objects")
+	}
+	defer rows.Close()
+	var out []domain.ChangeObject
+	for rows.Next() {
+		var o domain.ChangeObject
+		var id, value, labels, at string
+		if err := rows.Scan(&id, &o.Type, &o.Key, &o.Workspace, &o.Version, &o.Seq, &o.State, &value, &labels, &o.By, &at); err != nil {
+			return nil, err
+		}
+		o.Change, o.At = domain.ChangeID(id), tsParse(at)
+		if o.Value, o.Labels, err = scanObjectJSON([]byte(value), []byte(labels)); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
 	}
 	return out, rows.Err()
 }

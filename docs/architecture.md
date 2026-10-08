@@ -1253,8 +1253,11 @@ decision point, the state of the change...), available on every change as node t
 giving each change object its identity (`singleton`, `sequence` with a `prefix`, `natural` over attributes, `ref` to an
 impact, a node, a request, a run, a workspace or another change object type), a `scope` (`change` or `workspace`),
 attributes, a lifecycle and an `editor` (the change view tab showing them). The type catalogue resolves them
-(`typecat.ObjectType`) and `ListTypes` serves them; the built-in domain `execution` holds the engine's ones. Storing and
-reading change objects on a change is the next phase of the ADR.
+(`typecat.ObjectType`) and `ListTypes` serves them; the built-in domain `execution` holds the engine's ones. A change
+object is stored on its change (`Graph.PutObjects` / `Objects`): every write is a version, an `object.<type>` entry of
+the log of the change (whose entries also carry opaque `labels`), the last version kept in the `change_object`
+projection; `Graph.Submit` writes impact operations, items and change objects in one transaction (RPCs
+`PutChangeObjects`, `ListChangeObjects`, `SubmitBatch`, ABAC `change-object:write`).
 
 Lifecycle of a version: **draft** (editable, can be invalid: anomalies are returned
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the

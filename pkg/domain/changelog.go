@@ -56,12 +56,14 @@ type LogEntry struct {
 	// Process is the process of a journal record; Execution the action run behind the entry (a journal record is
 	// its own); Subject what it is about (the action, the fact type, the change impact); By the principal or
 	// component.
-	Process   string          `json:"process,omitempty"`
-	Execution string          `json:"execution,omitempty"`
-	Subject   string          `json:"subject,omitempty"`
-	By        string          `json:"by,omitempty"`
-	At        time.Time       `json:"at"`
-	Payload   json.RawMessage `json:"payload"`
+	Process   string    `json:"process,omitempty"`
+	Execution string    `json:"execution,omitempty"`
+	Subject   string    `json:"subject,omitempty"`
+	By        string    `json:"by,omitempty"`
+	At        time.Time `json:"at"`
+	// Labels are opaque labels of the entry, indexed (ADR 0098): process, execution, step... of the writer.
+	Labels  map[string]string `json:"labels,omitempty"`
+	Payload json.RawMessage   `json:"payload"`
 }
 
 // Stream is the stream of the entry: fact, impact, or one a use case writes.
@@ -79,6 +81,8 @@ type LogFilter struct {
 	Flows     []string
 	Processes []string
 	Execution string
+	// Labels keeps the entries carrying every one of these labels.
+	Labels map[string]string
 	// AfterSeq keeps the entries after a position (to follow the log); Limit caps their number.
 	AfterSeq int64
 	Limit    int
@@ -104,6 +108,7 @@ func (f LogFilter) Match(e LogEntry) bool {
 		(f.Flows == nil || slices.Contains(f.Flows, e.Flow)) &&
 		(len(f.Processes) == 0 || slices.Contains(f.Processes, e.Process)) &&
 		(f.Execution == "" || e.Execution == f.Execution) &&
+		LabelsMatch(e.Labels, f.Labels) &&
 		e.Seq > f.AfterSeq
 }
 

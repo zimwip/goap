@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ChangeObject, ChangeObjectQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, ObjectWrite, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -305,6 +305,12 @@ export const graph = {
     rpc<typeof req, { changeId?: string }>(GRAPH, 'CommitEdits', req),
   addItems: (changeId: string, items: ChangeItem[]) =>
     rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(GRAPH, 'AddItems', { changeId, items }),
+  /** Writes change objects on a change (ADR 0098), in order and as one write. */
+  putChangeObjects: (changeId: string, objects: ObjectWrite[]) =>
+    rpc<{ changeId: string; objects: ObjectWrite[] }, { objects?: ChangeObject[] }>(GRAPH, 'PutChangeObjects', { changeId, objects }),
+  /** The change objects of a change: the last version of each, or the versions in force at a position of the log. */
+  listChangeObjects: (req: ChangeObjectQuery, signal?: AbortSignal) =>
+    rpc<ChangeObjectQuery, { objects?: ChangeObject[] }>(GRAPH, 'ListChangeObjects', req, signal),
   /** Execution journal of a change, optionally restricted to given processes. */
   listExecutions: (changeId: string, processIds: string[] = [], signal?: AbortSignal) =>
     rpc<{ changeId: string; processIds?: string[] }, { records?: ExecutionRecord[] }>(

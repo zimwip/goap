@@ -95,6 +95,15 @@ const (
 	GraphServiceMoveChangeProcedure = "/goap.graph.v1.GraphService/MoveChange"
 	// GraphServiceAddItemsProcedure is the fully-qualified name of the GraphService's AddItems RPC.
 	GraphServiceAddItemsProcedure = "/goap.graph.v1.GraphService/AddItems"
+	// GraphServicePutChangeObjectsProcedure is the fully-qualified name of the GraphService's
+	// PutChangeObjects RPC.
+	GraphServicePutChangeObjectsProcedure = "/goap.graph.v1.GraphService/PutChangeObjects"
+	// GraphServiceListChangeObjectsProcedure is the fully-qualified name of the GraphService's
+	// ListChangeObjects RPC.
+	GraphServiceListChangeObjectsProcedure = "/goap.graph.v1.GraphService/ListChangeObjects"
+	// GraphServiceSubmitBatchProcedure is the fully-qualified name of the GraphService's SubmitBatch
+	// RPC.
+	GraphServiceSubmitBatchProcedure = "/goap.graph.v1.GraphService/SubmitBatch"
 	// GraphServiceProposeImpactProcedure is the fully-qualified name of the GraphService's
 	// ProposeImpact RPC.
 	GraphServiceProposeImpactProcedure = "/goap.graph.v1.GraphService/ProposeImpact"
@@ -317,6 +326,11 @@ type GraphServiceClient interface {
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	MoveChange(context.Context, *connect.Request[v1.MoveChangeRequest]) (*connect.Response[v1.MoveChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
+	// Change objects (ADR 0098): what a change carries beyond its impacts, typed by the change object types of the domains.
+	PutChangeObjects(context.Context, *connect.Request[v1.PutChangeObjectsRequest]) (*connect.Response[v1.PutChangeObjectsResponse], error)
+	ListChangeObjects(context.Context, *connect.Request[v1.ListChangeObjectsRequest]) (*connect.Response[v1.ListChangeObjectsResponse], error)
+	// Impact operations, items and change objects written on a change in one transaction, all or none (ADR 0098).
+	SubmitBatch(context.Context, *connect.Request[v1.SubmitBatchRequest]) (*connect.Response[v1.SubmitBatchResponse], error)
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
 	ProposeImpact(context.Context, *connect.Request[v1.ProposeImpactRequest]) (*connect.Response[v1.ProposeImpactResponse], error)
@@ -579,6 +593,24 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceAddItemsProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("AddItems")),
+			connect.WithClientOptions(opts...),
+		),
+		putChangeObjects: connect.NewClient[v1.PutChangeObjectsRequest, v1.PutChangeObjectsResponse](
+			httpClient,
+			baseURL+GraphServicePutChangeObjectsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("PutChangeObjects")),
+			connect.WithClientOptions(opts...),
+		),
+		listChangeObjects: connect.NewClient[v1.ListChangeObjectsRequest, v1.ListChangeObjectsResponse](
+			httpClient,
+			baseURL+GraphServiceListChangeObjectsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListChangeObjects")),
+			connect.WithClientOptions(opts...),
+		),
+		submitBatch: connect.NewClient[v1.SubmitBatchRequest, v1.SubmitBatchResponse](
+			httpClient,
+			baseURL+GraphServiceSubmitBatchProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("SubmitBatch")),
 			connect.WithClientOptions(opts...),
 		),
 		proposeImpact: connect.NewClient[v1.ProposeImpactRequest, v1.ProposeImpactResponse](
@@ -993,6 +1025,9 @@ type graphServiceClient struct {
 	updateChange           *connect.Client[v1.UpdateChangeRequest, v1.UpdateChangeResponse]
 	moveChange             *connect.Client[v1.MoveChangeRequest, v1.MoveChangeResponse]
 	addItems               *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
+	putChangeObjects       *connect.Client[v1.PutChangeObjectsRequest, v1.PutChangeObjectsResponse]
+	listChangeObjects      *connect.Client[v1.ListChangeObjectsRequest, v1.ListChangeObjectsResponse]
+	submitBatch            *connect.Client[v1.SubmitBatchRequest, v1.SubmitBatchResponse]
 	proposeImpact          *connect.Client[v1.ProposeImpactRequest, v1.ProposeImpactResponse]
 	impactNodeCreate       *connect.Client[v1.ImpactNodeCreateRequest, v1.ImpactNodeCreateResponse]
 	impactNodeCheckout     *connect.Client[v1.ImpactNodeCheckoutRequest, v1.ImpactNodeCheckoutResponse]
@@ -1172,6 +1207,21 @@ func (c *graphServiceClient) MoveChange(ctx context.Context, req *connect.Reques
 // AddItems calls goap.graph.v1.GraphService.AddItems.
 func (c *graphServiceClient) AddItems(ctx context.Context, req *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error) {
 	return c.addItems.CallUnary(ctx, req)
+}
+
+// PutChangeObjects calls goap.graph.v1.GraphService.PutChangeObjects.
+func (c *graphServiceClient) PutChangeObjects(ctx context.Context, req *connect.Request[v1.PutChangeObjectsRequest]) (*connect.Response[v1.PutChangeObjectsResponse], error) {
+	return c.putChangeObjects.CallUnary(ctx, req)
+}
+
+// ListChangeObjects calls goap.graph.v1.GraphService.ListChangeObjects.
+func (c *graphServiceClient) ListChangeObjects(ctx context.Context, req *connect.Request[v1.ListChangeObjectsRequest]) (*connect.Response[v1.ListChangeObjectsResponse], error) {
+	return c.listChangeObjects.CallUnary(ctx, req)
+}
+
+// SubmitBatch calls goap.graph.v1.GraphService.SubmitBatch.
+func (c *graphServiceClient) SubmitBatch(ctx context.Context, req *connect.Request[v1.SubmitBatchRequest]) (*connect.Response[v1.SubmitBatchResponse], error) {
+	return c.submitBatch.CallUnary(ctx, req)
 }
 
 // ProposeImpact calls goap.graph.v1.GraphService.ProposeImpact.
@@ -1531,6 +1581,11 @@ type GraphServiceHandler interface {
 	UpdateChange(context.Context, *connect.Request[v1.UpdateChangeRequest]) (*connect.Response[v1.UpdateChangeResponse], error)
 	MoveChange(context.Context, *connect.Request[v1.MoveChangeRequest]) (*connect.Response[v1.MoveChangeResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
+	// Change objects (ADR 0098): what a change carries beyond its impacts, typed by the change object types of the domains.
+	PutChangeObjects(context.Context, *connect.Request[v1.PutChangeObjectsRequest]) (*connect.Response[v1.PutChangeObjectsResponse], error)
+	ListChangeObjects(context.Context, *connect.Request[v1.ListChangeObjectsRequest]) (*connect.Response[v1.ListChangeObjectsResponse], error)
+	// Impact operations, items and change objects written on a change in one transaction, all or none (ADR 0098).
+	SubmitBatch(context.Context, *connect.Request[v1.SubmitBatchRequest]) (*connect.Response[v1.SubmitBatchResponse], error)
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
 	ProposeImpact(context.Context, *connect.Request[v1.ProposeImpactRequest]) (*connect.Response[v1.ProposeImpactResponse], error)
@@ -1789,6 +1844,24 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceAddItemsProcedure,
 		svc.AddItems,
 		connect.WithSchema(graphServiceMethods.ByName("AddItems")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServicePutChangeObjectsHandler := connect.NewUnaryHandler(
+		GraphServicePutChangeObjectsProcedure,
+		svc.PutChangeObjects,
+		connect.WithSchema(graphServiceMethods.ByName("PutChangeObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListChangeObjectsHandler := connect.NewUnaryHandler(
+		GraphServiceListChangeObjectsProcedure,
+		svc.ListChangeObjects,
+		connect.WithSchema(graphServiceMethods.ByName("ListChangeObjects")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceSubmitBatchHandler := connect.NewUnaryHandler(
+		GraphServiceSubmitBatchProcedure,
+		svc.SubmitBatch,
+		connect.WithSchema(graphServiceMethods.ByName("SubmitBatch")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceProposeImpactHandler := connect.NewUnaryHandler(
@@ -2223,6 +2296,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceMoveChangeHandler.ServeHTTP(w, r)
 		case GraphServiceAddItemsProcedure:
 			graphServiceAddItemsHandler.ServeHTTP(w, r)
+		case GraphServicePutChangeObjectsProcedure:
+			graphServicePutChangeObjectsHandler.ServeHTTP(w, r)
+		case GraphServiceListChangeObjectsProcedure:
+			graphServiceListChangeObjectsHandler.ServeHTTP(w, r)
+		case GraphServiceSubmitBatchProcedure:
+			graphServiceSubmitBatchHandler.ServeHTTP(w, r)
 		case GraphServiceProposeImpactProcedure:
 			graphServiceProposeImpactHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeCreateProcedure:
@@ -2450,6 +2529,18 @@ func (UnimplementedGraphServiceHandler) MoveChange(context.Context, *connect.Req
 
 func (UnimplementedGraphServiceHandler) AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.AddItems is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) PutChangeObjects(context.Context, *connect.Request[v1.PutChangeObjectsRequest]) (*connect.Response[v1.PutChangeObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.PutChangeObjects is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListChangeObjects(context.Context, *connect.Request[v1.ListChangeObjectsRequest]) (*connect.Response[v1.ListChangeObjectsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListChangeObjects is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) SubmitBatch(context.Context, *connect.Request[v1.SubmitBatchRequest]) (*connect.Response[v1.SubmitBatchResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SubmitBatch is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ProposeImpact(context.Context, *connect.Request[v1.ProposeImpactRequest]) (*connect.Response[v1.ProposeImpactResponse], error) {

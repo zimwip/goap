@@ -68,6 +68,52 @@ export interface LogEntry {
   at?: string;
   /** the whole fact, journal record or impact event, as JSON */
   payload?: string;
+  /** opaque labels of the writer (process, execution, step...), ADR 0098 */
+  labels?: Record<string, string>;
+}
+
+/** A version of a change object (ADR 0098): what a change carries beyond its impacts, typed by a change object type. */
+export interface ChangeObject {
+  changeId?: string;
+  /** qualified change object type ("risks@Risk") */
+  type?: string;
+  /** key among the change objects of its type (empty: a singleton) */
+  key?: string;
+  /** workspace of a workspace-scoped change object; empty: change-scoped or the main workspace */
+  workspace?: string;
+  version?: number;
+  /** position in the log (int64: a string in JSON) */
+  seq?: Int64;
+  /** state in the lifecycle of its type */
+  state?: string;
+  value?: Record<string, unknown>;
+  labels?: Record<string, string>;
+  by?: string;
+  at?: string;
+}
+
+/** Writes a change object: a new one, or a new version of the one of the same type, key and workspace. */
+export interface ObjectWrite {
+  type: string;
+  /** empty for a singleton, a natural key and the first write of a sequence key */
+  key?: string;
+  /** the whole value, or merged into the last one when merge is set (null removes a property) */
+  value?: Record<string, unknown>;
+  merge?: boolean;
+  transition?: string;
+  workspace?: string;
+  labels?: Record<string, string>;
+}
+
+export interface ChangeObjectQuery {
+  changeId: string;
+  types?: string[];
+  keyPrefix?: string;
+  /** kept when filterWorkspaces is set ('' or 'main': the main one and the change-scoped ones) */
+  workspaces?: string[];
+  filterWorkspaces?: boolean;
+  labels?: Record<string, string>;
+  atSeq?: Int64;
 }
 
 /** The request and the answer of one LLM call (payload of a model.call log entry). */
@@ -96,6 +142,8 @@ export interface ChangeLogQuery {
   execution?: string;
   afterSeq?: number;
   limit?: number;
+  /** entries carrying every one of these labels (ADR 0098) */
+  labels?: Record<string, string>;
 }
 
 /** What a rebase did to an impact of a sub-change (ADR 0082). */

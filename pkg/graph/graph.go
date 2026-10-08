@@ -557,75 +557,83 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 	if err := g.authorizeItems(ctx, id, items); err != nil {
 		return nil, err
 	}
-	out := make([]domain.ChangeItem, 0, len(items))
+	var out []domain.ChangeItem
 	err := g.repo.InTx(ctx, func(tx Tx) error {
-		c, err := tx.Change(ctx, id)
-		if err != nil {
-			return err
-		}
-		if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
-			return fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
-		}
-		known := map[domain.ItemID]bool{}
-		for _, it := range c.Items {
-			known[it.ID] = true
-		}
-		items = slices.Clone(items)
-		for i := range items {
-			if items[i].Kind != domain.KindFlow {
-				items[i].Flow = c.ResolveFlow(items[i].Flow) // no flow: the active option (ADR 0032 §6)
-			}
-		}
-		batchFlow := ""
-		if len(items) > 0 {
-			batchFlow = items[0].Flow
-		}
-		for _, it := range items {
-			if it.Kind == domain.KindFlow {
-				return fmt.Errorf("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow: %w", ErrInvalid)
-			}
-			if it.Kind == domain.KindTransition {
-				return fmt.Errorf("transitions are recorded by TransitionChange: %w", ErrInvalid)
-			}
-			if it.Kind == domain.KindDecisionPoint {
-				return fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)
-			}
-			if it.Flow != batchFlow {
-				return fmt.Errorf("the items of a batch belong to one flow: %w", ErrInvalid)
-			}
-		}
-		if batchFlow != "" && c.FlowStatusOf(batchFlow) != domain.FlowOpen {
-			return fmt.Errorf("flow %s is not open: %w", batchFlow, ErrConflict)
-		}
-		for i := range items {
-			if items[i].ID == "" {
-				items[i].ID = domain.ItemID(g.newID())
-			}
-		}
-		for _, it := range items {
-			if it.Status == "" {
-				it.Status = domain.ItemProposed
-			}
-			it.CreatedAt = g.now()
-			if err := it.Validate(); err != nil {
-				return fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
-			}
-			if it.Decision != nil && !known[it.Decision.Item] {
-				return fmt.Errorf("decision %s targets unknown item %s: %w", it.ID, it.Decision.Item, ErrInvalid)
-			}
-			if err := putItem(ctx, tx, id, it); err != nil {
-				return err
-			}
-			known[it.ID] = true
-			out = append(out, it)
-		}
-		if c.Status == domain.ChangeDraft {
-			c.Status = domain.ChangeActive
-			return tx.PutChange(ctx, c)
-		}
-		return nil
+		var err error
+		out, err = g.addItemsTx(ctx, tx, id, items)
+		return err
 	})
 	return out, err
+}
+
+// addItemsTx is AddItems inside a transaction, its items authorized (authorizeItems).
+func (g *Graph) addItemsTx(ctx context.Context, tx Tx, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
+	out := make([]domain.ChangeItem, 0, len(items))
+	c, err := tx.Change(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
+		return nil, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
+	}
+	known := map[domain.ItemID]bool{}
+	for _, it := range c.Items {
+		known[it.ID] = true
+	}
+	items = slices.Clone(items)
+	for i := range items {
+		if items[i].Kind != domain.KindFlow {
+			items[i].Flow = c.ResolveFlow(items[i].Flow) // no flow: the active option (ADR 0032 §6)
+		}
+	}
+	batchFlow := ""
+	if len(items) > 0 {
+		batchFlow = items[0].Flow
+	}
+	for _, it := range items {
+		if it.Kind == domain.KindFlow {
+			return nil, fmt.Errorf("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow: %w", ErrInvalid)
+		}
+		if it.Kind == domain.KindTransition {
+			return nil, fmt.Errorf("transitions are recorded by TransitionChange: %w", ErrInvalid)
+		}
+		if it.Kind == domain.KindDecisionPoint {
+			return nil, fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)
+		}
+		if it.Flow != batchFlow {
+			return nil, fmt.Errorf("the items of a batch belong to one flow: %w", ErrInvalid)
+		}
+	}
+	if batchFlow != "" && c.FlowStatusOf(batchFlow) != domain.FlowOpen {
+		return nil, fmt.Errorf("flow %s is not open: %w", batchFlow, ErrConflict)
+	}
+	for i := range items {
+		if items[i].ID == "" {
+			items[i].ID = domain.ItemID(g.newID())
+		}
+	}
+	for _, it := range items {
+		if it.Status == "" {
+			it.Status = domain.ItemProposed
+		}
+		it.CreatedAt = g.now()
+		if err := it.Validate(); err != nil {
+			return nil, fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
+		}
+		if it.Decision != nil && !known[it.Decision.Item] {
+			return nil, fmt.Errorf("decision %s targets unknown item %s: %w", it.ID, it.Decision.Item, ErrInvalid)
+		}
+		if err := putItem(ctx, tx, id, it); err != nil {
+			return nil, err
+		}
+		known[it.ID] = true
+		out = append(out, it)
+	}
+	if c.Status == domain.ChangeDraft {
+		c.Status = domain.ChangeActive
+		return out, tx.PutChange(ctx, c)
+	}
+	return out, nil
 }
 
 // ItemAuthorizer judges the write of an item whose kind asks a permission of its writer: the permission it asks, the

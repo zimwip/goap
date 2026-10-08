@@ -183,13 +183,34 @@ CREATE TABLE change_log (
     subject    text        NOT NULL DEFAULT '',
     by_whom    text        NOT NULL DEFAULT '',
     at         text        NOT NULL,
-    payload    text        NOT NULL
+    payload    text        NOT NULL,
+    -- opaque labels of the writer (process, execution, step...), ADR 0098
+    labels     text        NOT NULL DEFAULT '{}'
 );
 CREATE INDEX change_log_change ON change_log (change_id, seq);
 CREATE INDEX change_log_type ON change_log (change_id, type, seq);
 CREATE INDEX change_log_flow ON change_log (change_id, flow, seq);
 CREATE INDEX change_log_process ON change_log (process_id, seq);
 CREATE INDEX change_log_execution ON change_log (execution);
+
+-- ADR 0098: the change objects of a change, the projection of the object.* entries of its log (the last version of each,
+-- written by the graph with the entry). workspace is '' for a change-scoped change object and the main workspace.
+CREATE TABLE change_object (
+    change_id   text        NOT NULL REFERENCES change(id),
+    type        text        NOT NULL,
+    key         text        NOT NULL,
+    workspace   text        NOT NULL DEFAULT '',
+    version     integer     NOT NULL,
+    seq         integer     NOT NULL,
+    created_seq integer     NOT NULL,
+    state       text        NOT NULL DEFAULT '',
+    value       text        NOT NULL DEFAULT '{}',
+    labels      text        NOT NULL DEFAULT '{}',
+    by_whom     text        NOT NULL DEFAULT '',
+    at          text        NOT NULL,
+    PRIMARY KEY (change_id, type, key, workspace)
+);
+CREATE INDEX change_object_seq ON change_object (change_id, created_seq);
 
 -- A tag names the state a change leaves (ADR 0056). Not unique: a name may label several changes. baseline_id is the
 -- materialised snapshot of that state, when one is kept.

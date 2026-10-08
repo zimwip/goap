@@ -1,6 +1,6 @@
 # ADR 0098 — The change is a receptacle, the blackboard is the engine's view of it, requests are the origin of work
 
-**Status**: accepted; phase 1 implemented (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
+**Status**: accepted; phases 1 and 2 implemented (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
 impacts, event-sourced, one log), 0027 (node editors), 0031 (deferred change binding), 0055 (attributes), 0058 (change
 lifecycle and gates), 0065 / 0066 / 0067 (item kinds, facets, flow origin and decision policy out of the core), 0079
 (drafts and versions at landing), 0096 (goal of a change). Partly supersedes ADR 0033 §1 (the request as an intake
@@ -350,7 +350,36 @@ Each phase keeps the suites green and the platform usable.
   `DomainToPB` now also carries the enums of a domain (they were dropped over RPC). Web: the types of
   `web/src/lib/api/types/registry.ts`; the domain form keeps the change object types as they are (no editor of them yet).
 
-Nothing writes a change object yet (phase 2), and no methodology references one.
+**Phase 2 (done)**: change objects are stored on the change.
+
+- `domain.ChangeObject` / `ObjectWrite` / `ObjectFilter` (`pkg/domain/changeobject.go`); a version is an
+  `object.<type>` entry of the log (`domain.LogObject`, a stream the graph alone writes: `AppendLog` refuses it), its
+  workspace as flow and its key as subject; `domain.FoldObjects` replays them.
+- `Graph.PutObjects` / `Graph.Objects` (`pkg/graph/changeobject.go`): the type from the catalogue in force (an untyped
+  graph uses the built-in domains), the key made by its key type (a `sequence` key allocated as `<prefix>-<n>` on the
+  first write and required afterwards, a `natural` key made of its attributes, a `ref` key checked against the impacts,
+  nodes, workspaces or change objects of the change; a run or a request is taken as given), the value checked as node
+  properties (strict attributes unless open, type and enum, property validators), `merge` over the last version, the
+  first write in the initial state of the lifecycle and `transition` checked (from the current state, required
+  attributes, CEL guard over `node` and `change`; transition permissions and algorithm guards are not run for change
+  objects). A committed, applied or abandoned change takes none; a draft change becomes active. `Objects` reads the
+  `change_object` projection, or folds the log up to `AtSeq`.
+- Storage: `change_object` (both dialects, `TestSchemasAligned`; deleted with its change by `DeleteChange`), queries in
+  `sqlbuild.go`; the log gains a `labels` column (`domain.LogEntry.Labels`, `LogFilter.Labels`: `jsonb @>` in
+  PostgreSQL, `json_extract` per label in SQLite). The `flow`, `process_id` and `execution` columns stay until phase 5,
+  when the engine takes the execution vocabulary out of the change. The repository tests replay the object entries of
+  every change against the projection (`checkObjectLogs`).
+- `Graph.Submit(change, Batch)` (`pkg/graph/submit.go`): node creations, checkouts, draft updates, links, items and
+  change objects in one transaction, in that order (`createTx`, `checkoutTx`, `updateTx`, `linkCreateTx`, `addItemsTx`,
+  `putObjectsTx`). Transitions, reviews and merges are not part of a batch.
+- RPCs `PutChangeObjects`, `ListChangeObjects`, `SubmitBatch` (`graph.v1` for now; `change.v1` is phase 7), labels on
+  `LogEntry` and `ListChangeLogRequest`; `graphsvc.Handler` checks `change-object:write` per type
+  (`graphsvc.ResourceChangeObject`; a default policy grants it to the members of the project, stored policies of an
+  existing install need the rule added), each part of a batch as its own RPC; `graphsvc.Client.PutObjects` / `Objects` /
+  `Submit`; PROV-O maps a version to a `goap:ChangeObject` entity, revision of the previous one; web
+  `graph.putChangeObjects` / `listChangeObjects`.
+
+No methodology references a change object type yet (phase 5).
 
 ## Consequences
 
