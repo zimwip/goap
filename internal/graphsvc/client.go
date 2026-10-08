@@ -395,7 +395,7 @@ func (c *Client) BlackboardIn(ctx context.Context, id domain.ChangeID, flow stri
 	bb := domain.Blackboard{Change: pbconv.ChangeFromPB(r.Msg.Change), Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
 		Facets: map[string]any{domain.FacetOptions: options, domain.FacetActiveOption: r.Msg.ActiveOption, domain.FacetDecisionPoints: points,
 			domain.FacetObjects: pbconv.ChangeObjectsFromPB(r.Msg.Objects)},
-		At:     pbconv.FromTime(r.Msg.At)}
+		At: pbconv.FromTime(r.Msg.At)}
 	for _, v := range r.Msg.Nodes {
 		nv := pbconv.ViewFromPB(v)
 		bb.Nodes[nv.Ref()] = nv
