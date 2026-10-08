@@ -135,7 +135,7 @@ additions:
     - {title: Decisions, editor: decision-board, objects: [decisions@DecisionPoint]}
 ```
 
-Nothing is enabled: like node types, every change object type of a published domain is available on every change,
+There is no activation: like node types, every change object type of a published domain is available on every change,
 with or without a methodology, and a person adds, edits and moves change objects by hand through the change API, like
 impacts, within the ABAC permission of their type. A methodology names the types it works with where it uses them (its
 conditions, its actions, its `expects`, the tabs above), checked at save and publish as its node type references are;
