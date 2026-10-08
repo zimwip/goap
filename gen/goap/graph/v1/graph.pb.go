@@ -878,8 +878,10 @@ type Change struct {
 	// key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
 	ProjectId string `protobuf:"bytes,18,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// the lifecycle the change follows (named by its methodology) and its state (ADR 0058); empty: none
-	Lifecycle     string `protobuf:"bytes,20,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
-	State         string `protobuf:"bytes,21,opt,name=state,proto3" json:"state,omitempty"`
+	Lifecycle string `protobuf:"bytes,20,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	State     string `protobuf:"bytes,21,opt,name=state,proto3" json:"state,omitempty"`
+	// the guardian the change asks before it lands, takes a sub-change or moves (ADR 0098); empty: free
+	Guardian      string `protobuf:"bytes,22,opt,name=guardian,proto3" json:"guardian,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1043,6 +1045,13 @@ func (x *Change) GetLifecycle() string {
 func (x *Change) GetState() string {
 	if x != nil {
 		return x.State
+	}
+	return ""
+}
+
+func (x *Change) GetGuardian() string {
+	if x != nil {
+		return x.Guardian
 	}
 	return ""
 }
@@ -15162,7 +15171,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x0f \x01(\tR\x04flow\x127\n" +
 	"\n" +
 	"flow_event\x18\x10 \x01(\v2\x18.goap.graph.v1.FlowEventR\tflowEvent\x12C\n" +
-	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEventJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0e\x10\x0f\"\xfe\x04\n" +
+	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEventJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0e\x10\x0f\"\x9a\x05\n" +
 	"\x06Change\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -15186,7 +15195,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x12 \x01(\tR\tprojectId\x12\x1c\n" +
 	"\tlifecycle\x18\x14 \x01(\tR\tlifecycle\x12\x14\n" +
-	"\x05state\x18\x15 \x01(\tR\x05stateJ\x04\b\x10\x10\x11J\x04\b\x13\x10\x14\"\xe5\x01\n" +
+	"\x05state\x18\x15 \x01(\tR\x05state\x12\x1a\n" +
+	"\bguardian\x18\x16 \x01(\tR\bguardianJ\x04\b\x10\x10\x11J\x04\b\x13\x10\x14\"\xe5\x01\n" +
 	"\x06Review\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x0e\n" +
 	"\x02by\x18\x02 \x01(\tR\x02by\x12\x18\n" +

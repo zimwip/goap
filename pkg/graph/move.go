@@ -9,11 +9,11 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// ProjectMoveGate is asked before a change moves to another project (ADR 0091), outside any transaction (it reads the
+// ProjectMoveGate authorizes a move of a change to another project (ADR 0091), outside any transaction (it reads the
 // graph): family is the change and its open sub-changes, each with the project it is in, and to the project they move
-// to. It authorizes the caller on both projects and checks that the methodology of each change applies to both; the
-// graph names no methodology and no access rule (ADR 0066, 0069), so both are the gate's. Nil: no check beyond the
-// graph's own rules.
+// to. It authorizes the caller on both projects; the graph names no access rule (ADR 0066, 0069). What governs the
+// change (its methodology applying to both projects) is the guardian's (Guardian.MayMove, ADR 0098). Nil: no check beyond
+// the graph's own rules.
 type ProjectMoveGate func(ctx context.Context, family []domain.Change, to string) error
 
 // HeaderProjectID is the field of a change.updated log entry that records a move to another project.
@@ -21,7 +21,8 @@ const HeaderProjectID = "projectId"
 
 // MoveChange moves a change to another project (ADR 0091): the root change of a family, still draft or active, and
 // with it its open sub-changes, in one transaction. A sub-change cannot move alone: its project is its parent's. The
-// target must be a project and not the one the change is in, and ProjectMoveGate (when set) must accept the move. Only
+// target must be a project and not the one the change is in, ProjectMoveGate (when set) must authorize the move and the
+// guardian of the change (ADR 0098) accept it. Only
 // the project of the change changes: the nodes keep theirs (the project of a node never changes), the nodes the change
 // creates take the new project when it lands. Each moved change logs a change.updated entry with a projectId field
 // {from, to}, by the caller. It returns the change as moved.
@@ -41,8 +42,18 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 			return domain.Change{}, err
 		}
 	}
+	// the guardian of the root change judges the move of the family (ADR 0098): its sub-changes take its guardian
+	gd, err := g.guardianOf(family[0])
+	if err != nil {
+		return domain.Change{}, err
+	}
+	if gd != nil {
+		if err := gd.MayMove(ctx, family, project); err != nil {
+			return domain.Change{}, err
+		}
+	}
 	var moved domain.Change
-	err := g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
 		again, err := g.movable(ctx, tx, id, project)
 		if err != nil {
 			return err

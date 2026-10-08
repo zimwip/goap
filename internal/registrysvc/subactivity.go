@@ -8,12 +8,11 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 )
 
-// SubChangeValidator resolves pkg/graph.Graph.SubChangeValidator (architecture plan "Activity concept" cascade): the
-// Activity a sub-change is scoped to must be its parent's or a descendant of it, following the sub_activity links of
-// the methodology namespace. Unlike the unit and the project, an unset activity is not inherited: a sub-change is
-// typically scoped to a more specific sub-activity than its parent, not the same one. Wire it from main:
-// g.SubChangeValidator = reg.SubChangeValidator. A registry with no graph behind its store (MemoryStore) validates
-// nothing.
+// SubChangeValidator is the sub-change rule of the guardian of the registry (Guardian.MayCreateChild, ADR 0098;
+// architecture plan "Activity concept" cascade): the Activity a sub-change is scoped to must be its parent's or a
+// descendant of it, following the sub_activity links of the methodology namespace. Unlike the unit and the project, an
+// unset activity is not inherited: a sub-change is typically scoped to a more specific sub-activity than its parent,
+// not the same one. A registry with no graph behind its store (MemoryStore) validates nothing.
 func (s *Service) SubChangeValidator(ctx context.Context, parent, child domain.Change) error {
 	ref, ancestor := ActivityOf(child), ActivityOf(parent)
 	if ref == "" || ancestor == "" || ref == ancestor {

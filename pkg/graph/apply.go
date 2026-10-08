@@ -136,16 +136,22 @@ func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselin
 // writes (the stores are not reentrant).
 var errCollected = errors.New("transitions collected")
 
-// landingDecision is what Graph.LandingGate answered about a change.
+// landingDecision is what the guardian of a change answered about its landing (Guardian.MayCommit).
 type landingDecision struct{ decided, ok bool }
 
-// askLandingGate asks LandingGate about the change before the transaction that applies it: the gate may read the graph
-// itself, which a transaction held by the apply would block (the stores are not reentrant). A pass that is rolled back
-// builds the blackboard it decides against. The lifecycle transitions are authorized when they are taken
+// askLandingGate asks the guardian of the change (ADR 0098) about its landing before the transaction that applies it:
+// the guardian may read the graph itself, which a transaction held by the apply would block (the stores are not
+// reentrant). A pass that is rolled back builds the blackboard it decides against. A free change asks nothing; a change
+// whose guardian is not available does not land. The lifecycle transitions are authorized when they are taken
 // (ImpactNodeTransition, ADR 0076), not here.
 func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing *landingDecision, err error) {
-	if g.LandingGate == nil {
-		return nil, nil
+	head, err := g.Change(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	gd, err := g.guardianOf(head)
+	if err != nil || gd == nil {
+		return nil, err
 	}
 	var change domain.Change
 	var bb domain.Blackboard
@@ -181,7 +187,7 @@ func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing
 	if !haveBB {
 		return nil, nil
 	}
-	decided, ok, err := g.LandingGate(ctx, change, bb)
+	decided, ok, err := gd.MayCommit(ctx, change, bb)
 	if err != nil {
 		return nil, err
 	}
@@ -306,7 +312,7 @@ type applier struct {
 	cposts []cpost
 	// collect marks the rolled-back pass of askLandingGate, which only builds the blackboard the gate decides against
 	collect bool
-	// landing is the answer of LandingGate, asked by askLandingGate's rolled-back pass before this transaction (the
+	// landing is the answer of the guardian of the change, asked by askLandingGate's rolled-back pass before this transaction (the
 	// hook may itself read the graph).
 	landing *landingDecision
 	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076),

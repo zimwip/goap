@@ -39,7 +39,7 @@ type Report struct {
 // Boot is the platform bootstrap every composition runs, the same steps in the same order (ADR 0071). Ordering contract:
 //
 //  1. Before Boot, the caller has assigned every hook of the graph (Authorizer, ChangeAuthorizer, Validators and, where it
-//     holds the registry, LandingGate, SubChangeValidator, Lifecycles, plus DecisionPolicy and Types) and has a type
+//     holds the registry, its Guardians and DefaultGuardian (ADR 0098) and Lifecycles, plus DecisionPolicy and Types) and has a type
 //     catalogue holding the domains Boot and Options.Dev write to (the registry seeds the domains: SeedDomains, then
 //     Types reload). Boot writes through those hooks: it never runs ahead of them.
 //  2. Boot: Graph.Bootstrap (the roots ORG-DEFAULT and PROJ-ROOT, ADR 0054), SeedAccess (the default policies),
@@ -47,14 +47,13 @@ type Report struct {
 //     Options.Dev if any. Every step is idempotent, so a second call writes nothing.
 //  3. After Boot, the registry seeds the methodologies (Service.Seed): they need the model aliases of SeedModels.
 //
-// A composition without the registry in process cannot wire LandingGate, SubChangeValidator and Lifecycles: Boot logs one
-// warning saying so.
+// A composition without the registry in process cannot wire a guardian and Lifecycles: Boot logs one warning saying so.
 func Boot(ctx context.Context, g *graph.Graph, o Options) (Report, error) {
 	var r Report
 	if o.RequireHooks && (g.Authorizer == nil || g.ChangeAuthorizer == nil || len(g.Validators) == 0) {
 		panic("graphsvc.Boot: the graph hooks (Authorizer, ChangeAuthorizer, Validators) must be set before the bootstrap")
 	}
-	if g.LandingGate == nil || g.SubChangeValidator == nil || g.Lifecycles == nil {
+	if len(g.Guardians) == 0 || g.Lifecycles == nil {
 		log := o.Log
 		if log == nil {
 			log = slog.Default()

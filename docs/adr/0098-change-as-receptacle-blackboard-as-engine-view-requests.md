@@ -1,6 +1,6 @@
 # ADR 0098 — The change is a receptacle, the blackboard is the engine's view of it, requests are the origin of work
 
-**Status**: accepted; phases 1 and 2 implemented (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
+**Status**: accepted; phases 1 to 3 implemented (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
 impacts, event-sourced, one log), 0027 (node editors), 0031 (deferred change binding), 0055 (attributes), 0058 (change
 lifecycle and gates), 0065 / 0066 / 0067 (item kinds, facets, flow origin and decision policy out of the core), 0079
 (drafts and versions at landing), 0096 (goal of a change). Partly supersedes ADR 0033 §1 (the request as an intake
@@ -157,9 +157,10 @@ one generic port and does not know what is checked:
 
 ```go
 type Guardian interface {
-    MayCommit(ctx context.Context, c Change) error
+    // decided replaces the floor of the landable states (ADR 0078) by ok; not decided leaves it in force
+    MayCommit(ctx context.Context, c Change, bb Blackboard) (decided, ok bool, err error)
     MayCreateChild(ctx context.Context, parent, child Change) error
-    MayMove(ctx context.Context, c Change, project string) error
+    MayMove(ctx context.Context, family []Change, to string) error
 }
 ```
 
@@ -169,7 +170,8 @@ type Guardian interface {
   change, and implements the port with the landing floor and gates of ADR 0058 / 0078, the sub-activity cascade
   (`SubChangeValidator`), the project move rules (`ProjectMoveGate`, ADR 0091) and the change object types a methodology
   requires (a request, a closed risk register...).
-- `Graph.LandingGate`, `Graph.SubChangeValidator` and `Graph.ProjectMoveGate` are replaced by it.
+- `Graph.LandingGate` and `Graph.SubChangeValidator` are replaced by it; `Graph.ProjectMoveGate` keeps the
+  authorization of a move (who may move it, on both projects), the guardian judges what governs the change.
 
 ### 5. The blackboard is the engine's execution view of a change
 
@@ -380,6 +382,22 @@ Each phase keeps the suites green and the platform usable.
   `graph.putChangeObjects` / `listChangeObjects`.
 
 No methodology references a change object type yet (phase 5).
+
+**Phase 3 (done)**: the guardian port.
+
+- `graph.Guardian` (`pkg/graph/guardian.go`) with `MayCommit(c, bb) (decided, ok)`, `MayCreateChild`, `MayMove(family,
+  to)`; `Change.Guardian` (column `guardian` in both dialects, `graph.v1` `Change.guardian`, web type), set by
+  `NewChange.Guardian`, else the parent's for a sub-change, else `Graph.DefaultGuardian` for a root change.
+  `Graph.Guardians` resolves the name; a name it cannot resolve refuses the landing, the sub-changes and the moves of the
+  change (`ErrConflict`); a change naming none is free and asks nothing.
+- `Graph.LandingGate` and `Graph.SubChangeValidator` are gone: `askLandingGate` asks `MayCommit` of the guardian of the
+  change (the rolled-back pass building the blackboard is unchanged), `CreateChange` asks `MayCreateChild` of the
+  parent's, `MoveChange` asks `MayMove` of the root change's after `ProjectMoveGate`, which now only authorizes.
+- `registrysvc.Guardian` (name `registry`, `registrysvc.GuardianName`) holds the rules of the registry until the engine
+  takes them (phase 5): `MayCommit` is `Service.LandingGate`, `MayCreateChild` `Service.SubChangeValidator`, `MayMove`
+  the methodology rule of a move moved out of `graphsvc.ProjectMoveGate` (`Directory` reads the organisation).
+  `goap-dev` wires it as the default guardian; `cmd/graph`, with no registry in process, has none: its changes are free
+  (`graphsvc.Boot` warns), as they had no landing gate before.
 
 ## Consequences
 

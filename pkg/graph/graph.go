@@ -64,19 +64,12 @@ type Graph struct {
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
-	// LandingGate, when set, is asked at Apply / Commit time about every change, with the blackboard built from this
-	// Apply's own cposts (ADR 0024), not a fresh read, since it must see the change's own pending writes before they
-	// are visible outside this transaction. decided false: the gate has nothing to say about this change and the
-	// node-type lifecycle's landable-state floor applies unchanged; decided true: ok says whether the change may land, and
-	// the gate replaces that floor (a use case, e.g. the Activity a change is scoped to, judges the maturity of
-	// content and state instead of a fixed per-type flag). The graph knows no use case: what the gate reads from the
-	// change (Change.Data) and how it decides is the owner's (internal/registrysvc, wired from main). It may read the
-	// graph itself: it runs outside any transaction (authorizeMoves).
-	LandingGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
-	// SubChangeValidator, when set, is asked by CreateChange about a sub-change before it is stored, with its parent
-	// as stored and the change as it is about to be (Data, Methodology, ...): an error refuses it (wrap ErrInvalid).
-	// Like LandingGate it runs outside any transaction and may read the graph.
-	SubChangeValidator func(ctx context.Context, parent, child domain.Change) error
+	// Guardians are the guardians a change may name (Change.Guardian, ADR 0098), by name: what it asks before it lands,
+	// takes a sub-change or moves. A change naming a guardian missing here is refused those operations.
+	Guardians map[string]Guardian
+	// DefaultGuardian is the guardian a root change created without one names (empty: none); a sub-change takes its
+	// parent's.
+	DefaultGuardian string
 
 	// Facets are the providers of the facets of a blackboard (domain.Blackboard.Facets) beyond the built-in ones (options,
 	// active option, decision points, builtinFacets), by name: a use case adds what its conditions and actions observe
@@ -111,7 +104,7 @@ type Graph struct {
 	// ChangeAuthorizer, when set, is asked before every transition of the lifecycle of a change (ADR 0058), like
 	// Authorizer is for the nodes.
 	ChangeAuthorizer ChangeTransitionAuthorizer
-	// ProjectMoveGate, when set, is asked before a change moves to another project (ADR 0091): who may move it and
+	// ProjectMoveGate, when set, authorizes a move of a change to another project (ADR 0091): who may move it and
 	// whether its methodology applies to both projects. Nil: no check beyond the graph's own rules.
 	ProjectMoveGate ProjectMoveGate
 
@@ -319,6 +312,9 @@ type NewChange struct {
 	// ErrInvalid. The edges resolve a caller's active project (empty: the root project), the graph does not.
 	ProjectID string
 	Data      map[string]any
+	// Guardian names the guardian of the change (ADR 0098); empty: a sub-change takes its parent's, a root change
+	// Graph.DefaultGuardian.
+	Guardian string
 }
 
 // CreateChange opens a change on a reference baseline. A sub-change
@@ -348,17 +344,29 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			lifecycle, initial = lc.Name, lc.Initial
 		}
 	}
-	// the validator of sub-changes is asked before the transaction too, it reads the graph
-	if g.SubChangeValidator != nil && in.ParentID != "" {
+	// the guardian of the parent is asked about a sub-change before the transaction too, it reads the graph (ADR 0098)
+	guardian := in.Guardian
+	if in.ParentID != "" {
 		parent, err := g.Change(ctx, in.ParentID)
 		if err != nil {
 			return domain.Change{}, err
 		}
-		child := domain.Change{Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
-			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Data: in.Data}
-		if err := g.SubChangeValidator(ctx, parent, child); err != nil {
+		gd, err := g.guardianOf(parent)
+		if err != nil {
 			return domain.Change{}, err
 		}
+		if guardian == "" {
+			guardian = parent.Guardian
+		}
+		if gd != nil {
+			child := domain.Change{Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
+				ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Data: in.Data, Guardian: guardian}
+			if err := gd.MayCreateChild(ctx, parent, child); err != nil {
+				return domain.Change{}, err
+			}
+		}
+	} else if guardian == "" {
+		guardian = g.DefaultGuardian
 	}
 	var c domain.Change
 	err := g.repo.InTx(ctx, func(tx Tx) error {
@@ -367,7 +375,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID,
 		}
-		c.Lifecycle, c.State, c.Goal = lifecycle, initial, goal
+		c.Lifecycle, c.State, c.Goal, c.Guardian = lifecycle, initial, goal, guardian
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}

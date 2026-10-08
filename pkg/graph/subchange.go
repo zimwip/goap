@@ -352,11 +352,11 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 // from them would be, and nothing is written to a branch: the sub-change hands its drafts to its parent when it is
 // integrated. The states its nodes are left in are the parent's to land.
 func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing *landingDecision) error {
-	if g.LandingGate != nil && landing == nil {
-		return fmt.Errorf("change %s: the landing gate was not asked before this transaction: %w", c.ID, ErrInvalid)
+	if c.Guardian != "" && landing == nil {
+		return fmt.Errorf("change %s: its guardian was not asked before this transaction: %w", c.ID, ErrInvalid)
 	}
 	if landing != nil && landing.decided && !landing.ok {
-		return invalidf("the change does not satisfy the goal of its landing gate")
+		return invalidf("the guardian of the change refuses its landing")
 	}
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
 	if err != nil {

@@ -228,22 +228,22 @@ func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 	return nil
 }
 
-// settleChangeImpacts decides what the walk found: the landing gate, else the states left that cannot land.
+// settleChangeImpacts decides what the walk found: the guardian of the change, else the states left that cannot land.
 func (a *applier) settleChangeImpacts(stuck []string) error {
-	// LandingGate may itself need to read the graph, which this transaction would block (the stores are not
-	// reentrant): askLandingGate asks it in its own rolled-back pass before this transaction opens, and passes the
-	// answer in as a.landing. a.collect means this call IS that earlier pass: nothing to check yet, just leave the
+	// The guardian of the change (ADR 0098) may itself need to read the graph, which this transaction would block (the
+	// stores are not reentrant): askLandingGate asks it in its own rolled-back pass before this transaction opens, and
+	// passes the answer in as a.landing. a.collect means this call IS that earlier pass: nothing to check yet, just leave the
 	// blackboard (landingBlackboard) for the caller to evaluate outside it.
 	if a.collect {
 		return nil
 	}
-	if a.g.LandingGate != nil && a.landing == nil {
-		return fmt.Errorf("change %s: the landing gate was not asked before this transaction: %w", a.change.ID, ErrInvalid)
+	if a.change.Guardian != "" && a.landing == nil {
+		return fmt.Errorf("change %s: its guardian was not asked before this transaction: %w", a.change.ID, ErrInvalid)
 	}
 	switch {
 	case a.landing != nil && a.landing.decided:
 		if !a.landing.ok {
-			return invalidf("the change does not satisfy the goal of its landing gate")
+			return invalidf("the guardian of the change refuses its landing")
 		}
 	case len(stuck) > 0:
 		return invalidf("the change leaves nodes in a state that cannot land, move them to a landable state first: %s", joinSorted(stuck))
@@ -251,7 +251,7 @@ func (a *applier) settleChangeImpacts(stuck []string) error {
 	return nil
 }
 
-// landingBlackboard builds the blackboard LandingGate decides against: the change with its impacts (for the
+// landingBlackboard builds the blackboard the guardian decides the landing against (Guardian.MayCommit): the change with its impacts (for the
 // changeImpacts condition variable), hydrated with the pre/post node content this Apply already resolved (ADR
 // 0024) - not a fresh read, since this change's own pending writes are not yet visible outside this transaction.
 func (a *applier) landingBlackboard() domain.Blackboard {

@@ -63,7 +63,10 @@ type Change struct {
 	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State
 	// is the state it is in; both are empty when the methodology names no lifecycle. State is moved only by
 	// TransitionChange, which journals it as a KindTransition item.
-	Lifecycle  string       `json:"lifecycle,omitempty"`
+	Lifecycle string `json:"lifecycle,omitempty"`
+	// Guardian names the guardian the change asks before it lands, takes a sub-change or moves (ADR 0098): an opaque
+	// name the graph resolves among its guardians (Graph.Guardians); empty: the change is free (manual editing).
+	Guardian   string       `json:"guardian,omitempty"`
 	State      string       `json:"state,omitempty"`
 	Goal       string       `json:"goal,omitempty"`
 	Status     ChangeStatus `json:"status"`

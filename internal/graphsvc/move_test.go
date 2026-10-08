@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
@@ -41,6 +42,9 @@ func moveWorld(t *testing.T) moveEnv {
 		t.Fatal(err)
 	}
 	g.ProjectMoveGate = graphsvc.ProjectMoveGate(a, dir)
+	// the methodology of a change applying to both projects is its guardian's (ADR 0098)
+	g.Guardians = map[string]graph.Guardian{registrysvc.GuardianName: registrysvc.Guardian{Service: &registrysvc.Service{Store: registrysvc.NewMemoryStore()}, Directory: dir}}
+	g.DefaultGuardian = registrysvc.GuardianName
 	if err := graphsvc.SeedUnit(ctx, g, "team-a", "Team A", "team", ""); err != nil {
 		t.Fatal(err)
 	}
@@ -90,7 +94,8 @@ func (f authorizerFunc) Authorize(ctx context.Context, r authz.Request) (bool, e
 	return f(ctx, r)
 }
 
-// A change moves between projects the caller works on and whose methodologies both include the change's (ADR 0091).
+// A change moves between projects the caller works on (ProjectMoveGate) and whose methodologies both include the
+// change's (its guardian, registrysvc.Guardian, ADR 0091, 0098).
 func TestProjectMoveGate(t *testing.T) {
 	e := moveWorld(t)
 	dev := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "team-a"})

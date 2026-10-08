@@ -95,7 +95,7 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 }
 
 // A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
-// (Graph.LandingGate), not the node-type lifecycle's landable-state floor: the activity's call on content/state
+// (the guardian of the change, Guardian.MayCommit, ADR 0098), not the node-type lifecycle's landable-state floor: the activity's call on content/state
 // maturity replaces the blanket "state cannot land" check, rather than adding to it.
 func TestActivityGoalsGateReplacesLandableFloor(t *testing.T) {
 	forEachRepo(t, testActivityGoalsGateReplacesLandableFloor)
@@ -104,7 +104,9 @@ func TestActivityGoalsGateReplacesLandableFloor(t *testing.T) {
 func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
-	c, err := w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-2", BaselineID: w.base.ID, Data: map[string]any{"scope": "deliver/draft-requirement"}})
+	gd := &testGuardian{}
+	w.g.Guardians = map[string]Guardian{"test": gd}
+	c, err := w.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "edit REQ-2", BaselineID: w.base.ID, Guardian: "test", Data: map[string]any{"scope": "deliver/draft-requirement"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -116,7 +118,7 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	}
 	w.accept(t, c)
 
-	// no hook registered: the landable-state floor still applies, exactly as for a change the gate does not decide
+	// a guardian that does not decide: the landable-state floor still applies
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot land") {
 		t.Fatalf("no hook: landable floor must still apply: %v", err)
 	}
@@ -124,7 +126,7 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	var gotRef string
 	var gotBB domain.Blackboard
 	met := false
-	w.g.LandingGate = func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	gd.commit = func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
 		ref, _ := c.Data["scope"].(string)
 		if ref == "" {
 			return false, false, nil
@@ -134,7 +136,7 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	}
 
 	// the hook says no: refused, by the activity's own message, not the landable-state one
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "refuses its landing") {
 		t.Fatalf("hook unmet: %v", err)
 	}
 	if gotRef != "deliver/draft-requirement" || len(gotBB.Change.Nodes) != 1 || gotBB.Change.Nodes[0].ID != id {
@@ -514,4 +516,32 @@ func testChangeStatusMachine(t *testing.T, repo Repo) {
 	if _, err := w.g.UpdateChange(ctx, c2.ID, ChangePatch{Status: &applied}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("only Apply applies a change: %v", err)
 	}
+}
+
+// testGuardian is a guardian (ADR 0098) whose answers the tests set; an unset answer accepts and decides nothing.
+type testGuardian struct {
+	commit func(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error)
+	child  func(ctx context.Context, parent, child domain.Change) error
+	move   func(ctx context.Context, family []domain.Change, to string) error
+}
+
+func (gd *testGuardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	if gd.commit == nil {
+		return false, false, nil
+	}
+	return gd.commit(ctx, c, bb)
+}
+
+func (gd *testGuardian) MayCreateChild(ctx context.Context, parent, child domain.Change) error {
+	if gd.child == nil {
+		return nil
+	}
+	return gd.child(ctx, parent, child)
+}
+
+func (gd *testGuardian) MayMove(ctx context.Context, family []domain.Change, to string) error {
+	if gd.move == nil {
+		return nil
+	}
+	return gd.move(ctx, family, to)
 }

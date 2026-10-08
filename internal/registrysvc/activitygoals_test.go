@@ -19,7 +19,8 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.LandingGate = reg.LandingGate
+	g.Guardians = map[string]graph.Guardian{GuardianName: Guardian{Service: reg}}
+	g.DefaultGuardian = GuardianName
 
 	m := methodology.Methodology{
 		Name: "shipping", Version: "1", Namespace: "alm",
@@ -43,7 +44,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	}
 
 	// the process's goal ("signed") is not yet met: Apply refuses with the activity's own message
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "refuses its landing") {
 		t.Fatalf("goal unmet: %v", err)
 	}
 
@@ -51,7 +52,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "note", Status: domain.ItemAccepted}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "refuses its landing") {
 		t.Fatalf("unrelated artifact: %v", err)
 	}
 
@@ -71,7 +72,8 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.LandingGate = reg.LandingGate
+	g.Guardians = map[string]graph.Guardian{GuardianName: Guardian{Service: reg}}
+	g.DefaultGuardian = GuardianName
 
 	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {

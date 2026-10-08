@@ -302,6 +302,8 @@ message Change {
   // the lifecycle the change follows (named by its methodology) and its state (ADR 0058); empty: none
   string lifecycle = 20;
   string state = 21;
+  // the guardian the change asks before it lands, takes a sub-change or moves (ADR 0098); empty: free
+  string guardian = 22;
 }
 
 message Review {

@@ -124,8 +124,8 @@ func main() {
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, llmcfg.ProtectedAliasValidator{}}
-	// LandingGate, SubChangeValidator and Lifecycles (ADR 0058) need the registry service itself (its methodology store): only
-	// goap-dev, which holds it in process, wires them; the registry client has no RPC for them
+	// the guardian of the changes (ADR 0098) and Lifecycles (ADR 0058) need the registry service itself (its methodology
+	// store): only goap-dev, which holds it in process, wires them; the registry client has no RPC for them
 	// the built-in domains (organisation, platform) are always there; the demo seed needs alm
 	var need []string
 	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"

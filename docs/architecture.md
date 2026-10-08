@@ -1098,7 +1098,7 @@ created in a project; the engine only executes, through changes.
 Every composition (`goap-dev`, `cmd/graph`) seeds the platform through one function, `graphsvc.Boot(ctx, g, Options)`:
 
 1. The caller sets every hook of the graph first (`Authorizer`, `ChangeAuthorizer`, `Validators`, `DecisionPolicy`, `Types`;
-   `LandingGate`, `SubChangeValidator`, `Lifecycles` where the registry runs in process: only `goap-dev`) and has a type
+   the guardian of the changes (`Guardians`, `DefaultGuardian`, ADR 0098) and `Lifecycles` where the registry runs in process: only `goap-dev`) and has a type
    catalogue holding the domains (`goap-dev`: `SeedDomains`, then the catalogue reload; `cmd/graph`: it waits for the
    catalogue). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
@@ -1440,7 +1440,7 @@ internal/platform/           config, logs, HTTP/Connect server, NATS, Postgres, 
 internal/<service>/          Connect handler implementation for a service (graphsvc, registrysvc…)
 internal/identity/           caller identity (headers set by the gateway)
 pkg/domain/                  graph model (domain axis + change axis)
-pkg/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, the generic log of a change (`AppendLog` / `ChangeLog`); hooks (`LandingGate`, `SubChangeValidator`, `Facets`) for the use cases it does not know (ADR 0066)
+pkg/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, the generic log of a change (`AppendLog` / `ChangeLog`); the guardian port (`Guardian`, ADR 0098) and hooks (`Facets`) for the use cases it does not know (ADR 0066)
 pkg/journal/                 the execution journal: records, prompts and their entries in the log of a change (ADR 0011, 0066); the graph and the domain import nothing of it
 pkg/observe/                 run cost analysis (journal + traces) and improvement proposals
 pkg/builtins/                names of the builtin actions and the static list the compiler and the registry check (ADR 0062); a leaf package

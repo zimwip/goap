@@ -35,10 +35,11 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
-	// a change scoped to an Activity is gated by its own goal condition at Apply, not the node-type lifecycle's
-	// landable-state floor (architecture plan "Activity concept")
-	g.LandingGate = reg.LandingGate
-	g.SubChangeValidator = reg.SubChangeValidator
+	// the guardian of the changes (ADR 0098): a change scoped to an Activity is gated by its own goal condition at Apply,
+	// not the node-type lifecycle's landable-state floor (architecture plan "Activity concept"), its sub-changes stay in
+	// its activity and it moves only between projects applying its methodology
+	g.Guardians = map[string]graph.Guardian{registrysvc.GuardianName: registrysvc.Guardian{Service: reg, Directory: gp.directory}}
+	g.DefaultGuardian = registrysvc.GuardianName
 	// a change follows the lifecycle its methodology names, its gates read the conditions of the methodology (ADR 0058)
 	g.Lifecycles = reg
 	// the one event stream of the web (ADR 0053): every publication of the platform also feeds it

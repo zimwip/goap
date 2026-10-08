@@ -318,6 +318,8 @@ export interface Change {
   /** the domain lifecycle the change follows (named by its methodology) and its state (ADR 0058); absent: none */
   lifecycle?: string;
   state?: string;
+  /** the guardian the change asks before it lands, takes a sub-change or moves (ADR 0098); empty: free */
+  guardian?: string;
   data?: Struct;
   items?: ChangeItem[];
   /** the nodes the change reads, modifies or creates: stored, and derived from its items */

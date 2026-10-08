@@ -370,13 +370,15 @@ func testSubChangeLandingGate(t *testing.T, repo Repo) {
 	w := newSubWorld(t, repo)
 	g := w.g
 	made := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, w.parent.ID, NodeCreate{Key: "NEW-1", Type: "Component", Rationale: "new"}))
-	sub := w.sub(t, "sub")
+	gd := &testGuardian{}
+	g.Guardians = map[string]Guardian{"test": gd}
+	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub", ParentID: w.parent.ID, Guardian: "test"}))
 	child := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, sub.ID, NodeCreate{Key: "NEW-2", Type: "Component", Rationale: "child",
 		Links: []LinkWrite{{Type: "uses", To: *made.Post}}}))
 	must[domain.ChangeImpact](t)(g.accept(ctx, sub.ID, child.ID, "reviewer", "ok"))
 	allow := false
 	var seen domain.Blackboard
-	g.LandingGate = func(_ context.Context, _ domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	gd.commit = func(_ context.Context, _ domain.Change, bb domain.Blackboard) (bool, bool, error) {
 		seen = bb
 		return true, allow, nil
 	}

@@ -12,7 +12,7 @@ import (
 // DataActivity is the key of Change.Data holding the Activity a change is scoped to (architecture plan "Activity
 // concept"): the node key of a methodology@Process/Step/Method/MethodStep ("MV:<name>@<version>/<kind>/<item>"), the
 // activity whose goal condition the change must satisfy to land. The graph never reads it: Service.LandingGate and
-// Service.SubChangeValidator do. Absent: no activity-relative gating beyond a node type's own lifecycle.
+// Service.SubChangeValidator do, through the guardian of the change (Guardian, ADR 0098). Absent: no activity-relative gating beyond a node type's own lifecycle.
 const DataActivity = "activityRef"
 
 // ActivityOf is the Activity a change is scoped to ("" when it has none).
@@ -21,10 +21,9 @@ func ActivityOf(c domain.Change) string {
 	return ref
 }
 
-// LandingGate resolves pkg/graph.Graph.LandingGate: a change scoped to an Activity (DataActivity) is gated at
-// landing by that activity's own goal condition instead of the node-type lifecycle's landable-state floor; any other
-// change is not decided. Wire it from main: g.LandingGate = reg.LandingGate, where reg is the *Service* backing the
-// registry.
+// LandingGate is the landing rule of the guardian of the registry (Guardian.MayCommit, ADR 0098): a change scoped to an
+// Activity (DataActivity) is gated at landing by that activity's own goal condition instead of the node-type
+// lifecycle's landable-state floor; any other change is not decided.
 func (s *Service) LandingGate(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {
 	ref := ActivityOf(c)
 	if ref == "" {

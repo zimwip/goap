@@ -343,9 +343,9 @@ func testProjectSubChangeRules(t *testing.T, repo Repo) {
 	}
 }
 
-// CreateChange asks Graph.SubChangeValidator about a sub-change, with its parent as stored and the change about to
-// be (the graph knows no use case: what the validator reads from Change.Data is its own business); the branch the
-// sub-change gets defaults to Intent derive.
+// CreateChange asks the guardian of the parent (Guardian.MayCreateChild, ADR 0098) about a sub-change, with its parent
+// as stored and the change about to be (the graph knows no use case: what the guardian reads from Change.Data is its own
+// business); the sub-change takes the guardian of its parent, and the branch it gets defaults to Intent derive.
 func TestSubChangeValidatorHook(t *testing.T) { forEachRepo(t, testSubChangeValidatorHook) }
 
 func testSubChangeValidatorHook(t *testing.T, repo Repo) {
@@ -353,14 +353,16 @@ func testSubChangeValidatorHook(t *testing.T, repo Repo) {
 	w := newOrgWorld(t, repo)
 	g := w.g
 	var gotParent, gotChild domain.Change
-	g.SubChangeValidator = func(_ context.Context, parent, child domain.Change) error {
+	gd := &testGuardian{}
+	g.Guardians = map[string]Guardian{"test": gd}
+	gd.child = func(_ context.Context, parent, child domain.Change) error {
 		gotParent, gotChild = parent, child
 		if child.Data["scope"] == "outside" {
 			return fmt.Errorf("scope is not part of its parent's: %w", ErrInvalid)
 		}
 		return nil
 	}
-	parent, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "p", BaselineID: w.base.ID, OwnBranch: true, Data: map[string]any{"scope": "parent"}})
+	parent, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "p", BaselineID: w.base.ID, OwnBranch: true, Guardian: "test", Data: map[string]any{"scope": "parent"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,6 +372,9 @@ func testSubChangeValidatorHook(t *testing.T, repo Repo) {
 	}
 	if gotParent.ID != parent.ID || gotParent.Data["scope"] != "parent" || gotChild.Data["scope"] != "child" || gotChild.ParentID != parent.ID {
 		t.Fatalf("validator arguments: parent=%+v child=%+v", gotParent, gotChild)
+	}
+	if within.Guardian != "test" || gotChild.Guardian != "test" {
+		t.Fatalf("a sub-change takes the guardian of its parent: %q %q", within.Guardian, gotChild.Guardian)
 	}
 	if within.Data["scope"] != "child" {
 		t.Fatalf("data = %v", within.Data)

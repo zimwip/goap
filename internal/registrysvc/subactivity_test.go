@@ -17,7 +17,8 @@ func TestSubChangeActivityCascade(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.SubChangeValidator = reg.SubChangeValidator
+	g.Guardians = map[string]graph.Guardian{GuardianName: Guardian{Service: reg}}
+	g.DefaultGuardian = GuardianName
 
 	mk := func(key string, links ...graph.LinkEdit) graph.NodeEdit {
 		return graph.NodeEdit{Key: key, Type: "methodology@Process", Links: links}
