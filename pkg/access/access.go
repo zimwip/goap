@@ -44,6 +44,10 @@ const (
 	// ResourcePolicy is the ABAC resource that guards changes to User and Policy nodes.
 	ResourcePolicy = "policy"
 
+	// ResourceRequest is the ABAC resource of a request (ADR 0098): Owner its requester, ProjectID its project (empty
+	// until triaged); actions create, view, update, link, close, reject, withdraw.
+	ResourceRequest = "request"
+
 	// PropWaitingUnit is the OrgUnit property that flags the waiting unit (ADR 0042): a unit an administrator
 	// creates, at their discretion, for users signing in for the first time — they are linked member_of it
 	// until an administrator moves them. Without one, new users join DefaultOrg.

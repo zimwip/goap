@@ -609,7 +609,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks", "derogations", "reviews"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
+	if !slices.Equal(change, []string{"requests", "read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks", "derogations", "reviews"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -627,7 +627,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 11 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
+		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 12 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}
@@ -789,5 +789,40 @@ func TestChangeCreateAndMoveProject(t *testing.T) {
 	moved := p.call(t, alice, "ORG-CHECKOUT", "goap-change/move", map[string]any{"change": c["id"], "project": "PROJ-MV"})["change"].(map[string]any)
 	if moved["project"] != "PROJ-MV" {
 		t.Fatalf("moved: %v", moved)
+	}
+}
+
+// The request tools of goap-change (ADR 0098): a request is recorded by its requester, found by its text, seen by the
+// requester alone while untriaged, and linked to the change that answers it, whose project it takes.
+func TestChangeRequestTools(t *testing.T) {
+	p := newPlatform(t)
+	alice := as("alice", "ORG-CHECKOUT", "contributor")
+	r := p.call(t, alice, "ORG-CHECKOUT", "goap-change/request", map[string]any{"title": "Refunds by voucher", "text": "Customers want vouchers"})["request"].(map[string]any)
+	id := r["id"].(string)
+	if r["status"] != string(domain.RequestOpen) || r["requester"] != "alice" {
+		t.Fatalf("request = %v", r)
+	}
+	count := func(ctx context.Context, args map[string]any) int {
+		return len(p.call(t, ctx, "ORG-CHECKOUT", "goap-change/requests", args)["requests"].([]any))
+	}
+	if count(alice, map[string]any{"q": "VOUCHER"}) != 1 || count(alice, map[string]any{"q": "invoice"}) != 0 {
+		t.Fatal("found by its text")
+	}
+	if count(as("bob", "ORG-CHECKOUT", "contributor"), nil) != 0 {
+		t.Fatal("an untriaged request is its requester's")
+	}
+	change := p.call(t, alice, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds by voucher", "intent": "vouchers",
+		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)["id"].(string)
+	in := mcp.WithCall(alice, mcp.CallContext{Change: change, Process: "P1"})
+	linked := p.call(t, in, "ORG-CHECKOUT", "goap-change/link_request", map[string]any{"request": id, "role": "origin"})["request"].(map[string]any)
+	if linked["status"] != string(domain.RequestTriaged) || linked["project"] == "" {
+		t.Fatalf("linked = %v", linked)
+	}
+	if count(in, map[string]any{"linked": true}) != 1 {
+		t.Fatal("the requests of the change")
+	}
+	raised := p.call(t, in, "ORG-CHECKOUT", "goap-change/request", map[string]any{"title": "Voucher expiry"})["request"].(map[string]any)
+	if o := raised["origin"].(map[string]any); o["kind"] != domain.OriginChange || o["ref"] != change {
+		t.Fatalf("a request a run raises: %v", raised)
 	}
 }

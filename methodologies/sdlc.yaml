@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.6
+version: 0.5.7
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -103,9 +103,10 @@ actions:
   - name: find_or_create_change
     kind: llm
     description: >
-      List the open changes of the requesting unit and compare them to the request: continue a
-      clear match, else clarify this new change (title, intent, scope) with the requester,
-      looping (a note per round) until it is well-defined enough to start.
+      Read the requests the change answers (ADR 0098), list the open changes of the requesting unit
+      and compare them to the request: continue a clear match (the requests follow), else clarify
+      this new change (title, intent, scope) with the requester, looping (a note per round) until
+      it is well-defined enough to start, and link the open requests asking the same thing.
     
     effects: {formulated: true}
     cost: 1
@@ -117,11 +118,14 @@ actions:
       {{ range .Artifacts }}{{ if .Data.text }}- {{ .Data.text }}
       {{ end }}{{ end }}
 
+      0. Call goap-change/requests with linked=true: the requests this change answers (their text is
+         the requester's own words; there may be none, e.g. a change opened by hand).
       1. Call goap-change/list (status draft, active or committed; filter by namespace "alm" and,
          if known, the requester's unit) to see the open changes.
       2. If one of them clearly is the same piece of work as the request, hand it off: call
          goap-scheduler/attach with change=<its id> (binds this same process to it directly, in
          place of the change opened for this request — no second process, no change left unused),
+         link each request of step 0 to it (goap-change/link_request, change=<its id>, role covers),
          then finish with
          {"kind":"artifact","type":"change_formulated","data":{"continued":true,"changeId":"<its id>"}}.
       3. Otherwise this change is the right one, but only once its definition is clear: a concrete
@@ -130,7 +134,9 @@ actions:
          {"kind":"artifact","type":"question","data":{"text":"<question>"}} (do not set change_formulated:
          the requester's next note is read back in on the next round).
       4. Once it is clear, call goap-change/reformulate with the clarified title, a one-paragraph
-         intent (concrete outcome and scope) and a rationale, then finish with
+         intent (concrete outcome and scope) and a rationale. Call goap-change/requests with q set to
+         a few key words of the intent: link each open request clearly asking the same thing
+         (goap-change/link_request, role covers). Then finish with
          {"kind":"artifact","type":"change_formulated","data":{"continued":false,"changeId":"{{ .Change.ID }}"}}.
 
   # ======================= impact analysis

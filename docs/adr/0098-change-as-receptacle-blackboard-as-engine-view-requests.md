@@ -427,8 +427,12 @@ No methodology references a change object type yet (phase 5).
   words, origin `conversation`) and link it as the origin of the change (`assistantsvc.Graph` gained `CreateRequest` /
   `LinkRequest`, as `engine.GraphPort`); a trigger opening a change records a request of origin `trigger` (requester
   its service identity) linked as its origin.
-- Not done (phase 4): `sdlc`'s intake (`find_or_create_change`) still creates a change and does not look up the requests, and no
-  `goap-change` tool reads or links requests yet; the web has no request view (the API only).
+- `goap-change` has `requests` (read: open and triaged by default, a text `q`, or `linked` to the change), `request`
+  (records one; within a process its origin is the change of the process) and `link_request` (role `covers` by
+  default), authorized in process by the connector (`access.ResourceRequest`); `engine.GraphPort` gained `Request` /
+  `Requests`. `sdlc`'s intake (`find_or_create_change`, 0.5.7) reads the requests of the change, carries them to the
+  change it continues, and links the open requests asking the same thing to the change it formulates.
+- Not done (phase 4): the web has no request view (the API only).
 
 **Phase 5, first steps (done)**: the engine's view and records.
 

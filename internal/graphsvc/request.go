@@ -9,6 +9,7 @@ import (
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/internal/rpcerr"
+	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -18,7 +19,7 @@ import (
 // until triaged). Its actions are create, view, update, link, close, reject, withdraw: "view", not "read", so that the
 // generic read rule of the organisation does not open the untriaged requests (authz.DefaultPolicies: the requester and
 // the triagers see them, the members of the project see a triaged one).
-const ResourceRequest = "request"
+const ResourceRequest = access.ResourceRequest
 
 // requestActions maps a final status to the action that sets it.
 var requestActions = map[domain.RequestStatus]string{domain.RequestClosed: "close", domain.RequestRejected: "reject", domain.RequestWithdrawn: "withdraw"}

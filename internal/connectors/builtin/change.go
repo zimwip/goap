@@ -35,6 +35,10 @@ var _ connectorkit.Connector = Change{}
 var changeOps = []op{
 	{"create", "Open a change on the head of main of a namespace: {change}", schema(map[string]string{"title": "string", "intent": "string", "namespace": "string", "methodology": "string", "unit": "string", "project": "string"}, "title", "intent", "namespace")},
 	{"move", "Move a root change, draft or active, with its sub-changes, to another project: {change}", schema(map[string]string{"change": "string", "project": "string"}, "project")},
+	{"requests", "List the requests (the origin of work, ADR 0098) open or triaged, matching a text, or those linked to the change (linked): {requests, truncated}",
+		schema(map[string]string{"change": "string", "linked": "boolean", "q": "string", "status": "string", "project": "string", "mine": "boolean", "limit": "integer"})},
+	{"request", "Record a request: who asks for what (the caller, from the change of the calling process): {request}", schema(map[string]string{"title": "string", "text": "string", "project": "string"}, "title")},
+	{"link_request", "Link a request to the change that answers it (role origin|amends|covers, default covers): {request}", schema(map[string]string{"change": "string", "request": "string", "role": "string"}, "request")},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
 	{"reformulate", "Revise the title/intent of a change, superseding the previous definition (history kept): {change, item}",
@@ -107,6 +111,8 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return c.create(ctx, who, a)
 	case "list":
 		return c.list(ctx, a)
+	case "requests", "request", "link_request":
+		return c.requests(ctx, who, op, a)
 	}
 	id, err := changeID(ctx, a)
 	if err != nil {
