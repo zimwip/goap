@@ -60,14 +60,11 @@ type Change struct {
 	// and never empty once stored: the nodes the change creates are created in it. It changes only through
 	// Graph.MoveChange, before the change lands (existing nodes keep their project).
 	ProjectID string `json:"projectId,omitempty"`
-	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State
-	// is the state it is in; both are empty when the methodology names no lifecycle. State is moved only by
-	// TransitionChange, which journals it as a KindTransition item.
-	Lifecycle string `json:"lifecycle,omitempty"`
-	// Guardian names the guardian the change asks before it lands, takes a sub-change or moves (ADR 0098): an opaque
-	// name the graph resolves among its guardians (Graph.Guardians); empty: the change is free (manual editing).
+	// Guardian names the guardian the change asks before it lands, takes a sub-change, moves or edits an impact it
+	// holds (ADR 0098): an opaque name the graph resolves among its guardians (Graph.Guardians); empty: the change is
+	// free (manual editing). The state of the change in the lifecycle of its methodology is the guardian's (execution@State
+	// change objects), never a field of the change.
 	Guardian   string       `json:"guardian,omitempty"`
-	State      string       `json:"state,omitempty"`
 	Goal       string       `json:"goal,omitempty"`
 	Status     ChangeStatus `json:"status"`
 	BaselineID BaselineID   `json:"baselineId"`
@@ -109,9 +106,6 @@ const (
 	// KindSignal is a named notification other agents or a live parent may react
 	// to (Type is the signal's name, Target addresses a process, "" = broadcast).
 	KindSignal ItemKind = "signal"
-	// KindTransition records a move of the lifecycle of the change (ADR 0058): Data holds transition, from, to and,
-	// when a decision point gated it, decision. Written only by TransitionChange.
-	KindTransition ItemKind = "transition"
 )
 
 // ItemStatus is the review state of an item.
@@ -182,10 +176,6 @@ func (it ChangeItem) Validate() error {
 	case KindSignal:
 		if it.Type == "" {
 			return fmt.Errorf("signal item requires type")
-		}
-	case KindTransition:
-		if s, _ := it.Data["to"].(string); s == "" {
-			return fmt.Errorf("transition item requires data.to")
 		}
 	default:
 		validate := itemKinds.get(it.Kind)

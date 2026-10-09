@@ -29,6 +29,11 @@ type ObjectTypes interface {
 }
 
 // objectTypes is the catalogue of change object types in force.
+// ObjectType is the change object type the graph validates a write of (the catalogue's, else the built-in one).
+func (g *Graph) ObjectType(ref string) (*typecat.ObjectType, bool) {
+	return g.objectTypes().ObjectType(ref)
+}
+
 func (g *Graph) objectTypes() ObjectTypes {
 	if g.Types != nil {
 		if ot, ok := g.Types().(ObjectTypes); ok {
@@ -175,6 +180,15 @@ func (g *Graph) putObjectTx(ctx context.Context, tx Tx, c domain.Change, w domai
 		}
 		prev = find(key)
 		o.Key = key
+	}
+	if w.Expect != nil {
+		have := 0
+		if prev != nil {
+			have = prev.Version
+		}
+		if have != *w.Expect {
+			return o, fmt.Errorf("change object %s/%s is at version %d, not %d: %w", o.Type, o.Key, have, *w.Expect, ErrConflict)
+		}
 	}
 	if prev != nil {
 		o.Key, o.Version, o.State = prev.Key, prev.Version+1, prev.State

@@ -1434,8 +1434,10 @@ type ChangeObjectType struct {
 	Search []*SearchProperty `protobuf:"bytes,8,rep,name=search,proto3" json:"search,omitempty"`
 	// the value may carry properties that are no attribute of the type
 	AdditionalProperties bool `protobuf:"varint,9,opt,name=additional_properties,json=additionalProperties,proto3" json:"additional_properties,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// written by platform services only (the state of a change, ADR 0098)
+	System        bool `protobuf:"varint,10,opt,name=system,proto3" json:"system,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChangeObjectType) Reset() {
@@ -1527,6 +1529,13 @@ func (x *ChangeObjectType) GetSearch() []*SearchProperty {
 func (x *ChangeObjectType) GetAdditionalProperties() bool {
 	if x != nil {
 		return x.AdditionalProperties
+	}
+	return false
+}
+
+func (x *ChangeObjectType) GetSystem() bool {
+	if x != nil {
+		return x.System
 	}
 	return false
 }
@@ -6202,8 +6211,10 @@ type ChangeObjectTypeInfo struct {
 	// empty: the default object editor
 	Editor               string `protobuf:"bytes,7,opt,name=editor,proto3" json:"editor,omitempty"`
 	AdditionalProperties bool   `protobuf:"varint,8,opt,name=additional_properties,json=additionalProperties,proto3" json:"additional_properties,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// written by platform services only: a person reads them, never writes them
+	System        bool `protobuf:"varint,9,opt,name=system,proto3" json:"system,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChangeObjectTypeInfo) Reset() {
@@ -6288,6 +6299,13 @@ func (x *ChangeObjectTypeInfo) GetEditor() string {
 func (x *ChangeObjectTypeInfo) GetAdditionalProperties() bool {
 	if x != nil {
 		return x.AdditionalProperties
+	}
+	return false
+}
+
+func (x *ChangeObjectTypeInfo) GetSystem() bool {
+	if x != nil {
+		return x.System
 	}
 	return false
 }
@@ -8009,7 +8027,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\x05 \x03(\v2\x1b.goap.registry.v1.AttributeR\n" +
 	"attributes\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"\xed\x02\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\"\x85\x03\n" +
 	"\x10ChangeObjectType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12+\n" +
@@ -8021,7 +8039,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\tlifecycle\x18\x06 \x01(\tR\tlifecycle\x12\x16\n" +
 	"\x06editor\x18\a \x01(\tR\x06editor\x128\n" +
 	"\x06search\x18\b \x03(\v2 .goap.registry.v1.SearchPropertyR\x06search\x123\n" +
-	"\x15additional_properties\x18\t \x01(\bR\x14additionalProperties\"g\n" +
+	"\x15additional_properties\x18\t \x01(\bR\x14additionalProperties\x12\x16\n" +
+	"\x06system\x18\n" +
+	" \x01(\bR\x06system\"g\n" +
 	"\aKeyType\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x16\n" +
 	"\x06prefix\x18\x02 \x01(\tR\x06prefix\x12\x1e\n" +
@@ -8412,7 +8432,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x13change_object_types\x18\x04 \x03(\v2&.goap.registry.v1.ChangeObjectTypeInfoR\x11changeObjectTypes\x1a:\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd6\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xee\x02\n" +
 	"\x14ChangeObjectTypeInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12+\n" +
@@ -8423,7 +8443,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"attributes\x129\n" +
 	"\tlifecycle\x18\x06 \x01(\v2\x1b.goap.registry.v1.LifecycleR\tlifecycle\x12\x16\n" +
 	"\x06editor\x18\a \x01(\tR\x06editor\x123\n" +
-	"\x15additional_properties\x18\b \x01(\bR\x14additionalProperties\"\x97\x03\n" +
+	"\x15additional_properties\x18\b \x01(\bR\x14additionalProperties\x12\x16\n" +
+	"\x06system\x18\t \x01(\bR\x06system\"\x97\x03\n" +
 	"\bTypeInfo\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12?\n" +

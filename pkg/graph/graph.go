@@ -98,13 +98,10 @@ type Graph struct {
 	// policy the services plug.
 	ItemPolicy ItemPolicy
 
-	// Lifecycles resolves the lifecycle of the changes of a methodology and the world state their guards read (ADR
-	// 0058). Unset: no change follows a lifecycle (tests, tools).
-	Lifecycles ChangeLifecycles
+	// Defaults gives a new change the main goal of its methodology (ADR 0096). Unset: a change starts with the goal it
+	// names.
+	Defaults ChangeDefaults
 
-	// ChangeAuthorizer, when set, is asked before every transition of the lifecycle of a change (ADR 0058), like
-	// Authorizer is for the nodes.
-	ChangeAuthorizer ChangeTransitionAuthorizer
 	// ProjectMoveGate, when set, authorizes a move of a change to another project (ADR 0091): who may move it and
 	// whether its methodology applies to both projects. Nil: no check beyond the graph's own rules.
 	ProjectMoveGate ProjectMoveGate
@@ -293,25 +290,15 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 	if err := g.Bootstrap(ctx); err != nil {
 		return domain.Change{}, fmt.Errorf("bootstrap: %w", err)
 	}
-	// a change whose methodology names a lifecycle starts in its initial state (ADR 0058); the registry is asked
-	// before the transaction, it reads the graph
-	var lifecycle, initial, goal string
-	goal = in.Goal
-	if g.Lifecycles != nil && in.Methodology != "" {
-		if goal == "" {
-			dg, err := g.Lifecycles.DefaultGoal(ctx, in.Methodology)
-			if err != nil {
-				return domain.Change{}, err
-			}
-			goal = dg
-		}
-		lc, err := g.Lifecycles.Lifecycle(ctx, in.Methodology)
+	// a change starts with the main goal of its methodology (ADR 0096); the registry is asked before the transaction,
+	// it reads the graph
+	goal := in.Goal
+	if g.Defaults != nil && in.Methodology != "" && goal == "" {
+		dg, err := g.Defaults.DefaultGoal(ctx, in.Methodology)
 		if err != nil {
 			return domain.Change{}, err
 		}
-		if lc != nil {
-			lifecycle, initial = lc.Name, lc.Initial
-		}
+		goal = dg
 	}
 	// the guardian of the parent is asked about a sub-change before the transaction too, it reads the graph (ADR 0098)
 	guardian := in.Guardian
@@ -344,7 +331,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID,
 		}
-		c.Lifecycle, c.State, c.Goal, c.Guardian = lifecycle, initial, goal, guardian
+		c.Goal, c.Guardian = goal, guardian
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}
@@ -554,9 +541,6 @@ func (g *Graph) addItemsTx(ctx context.Context, tx Tx, id domain.ChangeID, items
 	for _, it := range items {
 		if it.Kind == domain.KindFlow {
 			return nil, fmt.Errorf("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow: %w", ErrInvalid)
-		}
-		if it.Kind == domain.KindTransition {
-			return nil, fmt.Errorf("transitions are recorded by TransitionChange: %w", ErrInvalid)
 		}
 		if it.Kind == domain.KindDecisionPoint {
 			return nil, fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)

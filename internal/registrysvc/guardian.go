@@ -10,14 +10,14 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 )
 
-// GuardianName is the name of the guardian of the registry on the graph (ADR 0098): the rules of the methodology of a
-// change, until the engine holds them (phase 5 of the ADR).
+// GuardianName names the rules of the registry when a composition makes them the guardian of its changes by themselves
+// (tests); the platform's guardian is the engine's (engine.GuardianName), which asks these rules after its own.
 const GuardianName = "registry"
 
-// Guardian is the guardian (graph.Guardian, ADR 0098) of the changes governed by a methodology the registry holds: the
-// goal of the Activity a change is scoped to at its landing (LandingGate), the sub_activity cascade of its sub-changes
-// (SubChangeValidator), and a move only between projects that both apply its methodology. Directory reads the
-// organisation for the last rule; nil: not checked.
+// Guardian is the part of the guardian of a change (graph.Guardian, ADR 0098) that the registry holds, asked by the
+// engine's guardian (engine.Guardian.Next) after the lifecycle: the goal of the Activity a change is scoped to at its
+// landing (LandingGate), the sub_activity cascade of its sub-changes (SubChangeValidator), and a move only between
+// projects that both apply its methodology. Directory reads the organisation for the last rule; nil: not checked.
 type Guardian struct {
 	Service   *Service
 	Directory *access.Directory
@@ -59,3 +59,6 @@ func (gd Guardian) MayMove(ctx context.Context, family []domain.Change, to strin
 	}
 	return nil
 }
+
+// MayEdit implements graph.Guardian: the registry's rules freeze nothing (the lifecycle of a change is the engine's).
+func (Guardian) MayEdit(context.Context, domain.Change, domain.ChangeImpactID) error { return nil }

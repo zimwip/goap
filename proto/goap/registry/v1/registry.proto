@@ -270,6 +270,8 @@ message ChangeObjectType {
   repeated SearchProperty search = 8;
   // the value may carry properties that are no attribute of the type
   bool additional_properties = 9;
+  // written by platform services only (the state of a change, ADR 0098)
+  bool system = 10;
 }
 
 // KeyType gives a change object its identity (ADR 0098).
@@ -874,6 +876,8 @@ message ChangeObjectTypeInfo {
   // empty: the default object editor
   string editor = 7;
   bool additional_properties = 8;
+  // written by platform services only: a person reads them, never writes them
+  bool system = 9;
 }
 
 // TypeInfo is the resolved model of a node type ("<namespace>@<name>").

@@ -48,18 +48,11 @@ const testProject = "PROJ-TEST"
 // mainGoals is the registry's part of ChangeLifecycles the engine tests need: the default goal of a change (ADR 0096).
 type mainGoals struct{ c *methodology.Compiled }
 
-func (m mainGoals) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
 func (m mainGoals) DefaultGoal(_ context.Context, name string) (string, error) {
 	if name == m.c.Name {
 		return m.c.MainGoal(), nil
 	}
 	return "", nil
-}
-func (m mainGoals) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {
-	return true, nil
-}
-func (m mainGoals) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
-	return domain.GateResult{}, nil
 }
 
 func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
@@ -74,7 +67,7 @@ func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 		t.Fatal(err)
 	}
 	g := graph.New(graph.NewMemory())
-	g.Lifecycles = mainGoals{cm}
+	g.Defaults = mainGoals{cm}
 	// a project every test starts its (non-administrative) processes in (ADR 0039)
 	if _, err := graphtest.Project(ctx, g, testProject, "Test"); err != nil {
 		t.Fatal(err)

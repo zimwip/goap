@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/engine/blackboard"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
@@ -41,10 +42,12 @@ func Activation(bb domain.Blackboard) map[string]any {
 	pol := lazy(func() map[string]any { return criticalityPolicy(bb) })
 	dec := lazy(func() decisionView { return decisions(bb) })
 	objs := lazy(func() map[string][]any { return objectsByType(bb) })
+	// the state of the change in the lifecycle of its methodology is the engine's (ADR 0098): an execution@State object
+	state, _ := blackboard.Of(bb).State()
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
-			"criticality": string(criticality.Of(c.Data)), "lifecycle": c.Lifecycle, "state": c.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
+			"criticality": string(criticality.Of(c.Data)), "lifecycle": state.Lifecycle, "state": state.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
 		},
 		"items":          items,
 		"changeImpacts":  h.changeImpacts(),

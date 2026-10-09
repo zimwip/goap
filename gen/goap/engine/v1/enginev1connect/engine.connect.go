@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// EngineServiceName is the fully-qualified name of the EngineService service.
 	EngineServiceName = "goap.engine.v1.EngineService"
+	// GuardianServiceName is the fully-qualified name of the GuardianService service.
+	GuardianServiceName = "goap.engine.v1.GuardianService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -33,6 +35,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// EngineServiceTransitionChangeProcedure is the fully-qualified name of the EngineService's
+	// TransitionChange RPC.
+	EngineServiceTransitionChangeProcedure = "/goap.engine.v1.EngineService/TransitionChange"
 	// EngineServiceStartProcessProcedure is the fully-qualified name of the EngineService's
 	// StartProcess RPC.
 	EngineServiceStartProcessProcedure = "/goap.engine.v1.EngineService/StartProcess"
@@ -90,10 +95,24 @@ const (
 	// EngineServiceFireTriggerProcedure is the fully-qualified name of the EngineService's FireTrigger
 	// RPC.
 	EngineServiceFireTriggerProcedure = "/goap.engine.v1.EngineService/FireTrigger"
+	// GuardianServiceMayCommitProcedure is the fully-qualified name of the GuardianService's MayCommit
+	// RPC.
+	GuardianServiceMayCommitProcedure = "/goap.engine.v1.GuardianService/MayCommit"
+	// GuardianServiceMayCreateChildProcedure is the fully-qualified name of the GuardianService's
+	// MayCreateChild RPC.
+	GuardianServiceMayCreateChildProcedure = "/goap.engine.v1.GuardianService/MayCreateChild"
+	// GuardianServiceMayMoveProcedure is the fully-qualified name of the GuardianService's MayMove RPC.
+	GuardianServiceMayMoveProcedure = "/goap.engine.v1.GuardianService/MayMove"
+	// GuardianServiceMayEditProcedure is the fully-qualified name of the GuardianService's MayEdit RPC.
+	GuardianServiceMayEditProcedure = "/goap.engine.v1.GuardianService/MayEdit"
 )
 
 // EngineServiceClient is a client for the goap.engine.v1.EngineService service.
 type EngineServiceClient interface {
+	// Move a change along a transition of the lifecycle of its methodology (ADR 0058, ADR 0098): the methodology defines
+	// the states and their rules, the engine checks the guard, the vetos and the objectives and records the move as
+	// execution@Transition and execution@State change objects of the change.
+	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
 	AnswerIntent(context.Context, *connect.Request[v1.AnswerIntentRequest]) (*connect.Response[v1.AnswerIntentResponse], error)
 	SubmitHumanInput(context.Context, *connect.Request[v1.SubmitHumanInputRequest]) (*connect.Response[v1.SubmitHumanInputResponse], error)
@@ -151,6 +170,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	engineServiceMethods := v1.File_goap_engine_v1_engine_proto.Services().ByName("EngineService").Methods()
 	return &engineServiceClient{
+		transitionChange: connect.NewClient[v1.TransitionChangeRequest, v1.TransitionChangeResponse](
+			httpClient,
+			baseURL+EngineServiceTransitionChangeProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("TransitionChange")),
+			connect.WithClientOptions(opts...),
+		),
 		startProcess: connect.NewClient[v1.StartProcessRequest, v1.StartProcessResponse](
 			httpClient,
 			baseURL+EngineServiceStartProcessProcedure,
@@ -270,6 +295,7 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // engineServiceClient implements EngineServiceClient.
 type engineServiceClient struct {
+	transitionChange   *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
 	startProcess       *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
 	answerIntent       *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
 	submitHumanInput   *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
@@ -289,6 +315,11 @@ type engineServiceClient struct {
 	watchEvents        *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
 	listTriggers       *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
 	fireTrigger        *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
+}
+
+// TransitionChange calls goap.engine.v1.EngineService.TransitionChange.
+func (c *engineServiceClient) TransitionChange(ctx context.Context, req *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error) {
+	return c.transitionChange.CallUnary(ctx, req)
 }
 
 // StartProcess calls goap.engine.v1.EngineService.StartProcess.
@@ -388,6 +419,10 @@ func (c *engineServiceClient) FireTrigger(ctx context.Context, req *connect.Requ
 
 // EngineServiceHandler is an implementation of the goap.engine.v1.EngineService service.
 type EngineServiceHandler interface {
+	// Move a change along a transition of the lifecycle of its methodology (ADR 0058, ADR 0098): the methodology defines
+	// the states and their rules, the engine checks the guard, the vetos and the objectives and records the move as
+	// execution@Transition and execution@State change objects of the change.
+	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error)
 	AnswerIntent(context.Context, *connect.Request[v1.AnswerIntentRequest]) (*connect.Response[v1.AnswerIntentResponse], error)
 	SubmitHumanInput(context.Context, *connect.Request[v1.SubmitHumanInputRequest]) (*connect.Response[v1.SubmitHumanInputResponse], error)
@@ -441,6 +476,12 @@ type EngineServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	engineServiceMethods := v1.File_goap_engine_v1_engine_proto.Services().ByName("EngineService").Methods()
+	engineServiceTransitionChangeHandler := connect.NewUnaryHandler(
+		EngineServiceTransitionChangeProcedure,
+		svc.TransitionChange,
+		connect.WithSchema(engineServiceMethods.ByName("TransitionChange")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceStartProcessHandler := connect.NewUnaryHandler(
 		EngineServiceStartProcessProcedure,
 		svc.StartProcess,
@@ -557,6 +598,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/goap.engine.v1.EngineService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case EngineServiceTransitionChangeProcedure:
+			engineServiceTransitionChangeHandler.ServeHTTP(w, r)
 		case EngineServiceStartProcessProcedure:
 			engineServiceStartProcessHandler.ServeHTTP(w, r)
 		case EngineServiceAnswerIntentProcedure:
@@ -603,6 +646,10 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedEngineServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedEngineServiceHandler struct{}
+
+func (UnimplementedEngineServiceHandler) TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.TransitionChange is not implemented"))
+}
 
 func (UnimplementedEngineServiceHandler) StartProcess(context.Context, *connect.Request[v1.StartProcessRequest]) (*connect.Response[v1.StartProcessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.StartProcess is not implemented"))
@@ -678,4 +725,152 @@ func (UnimplementedEngineServiceHandler) ListTriggers(context.Context, *connect.
 
 func (UnimplementedEngineServiceHandler) FireTrigger(context.Context, *connect.Request[v1.FireTriggerRequest]) (*connect.Response[v1.FireTriggerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.FireTrigger is not implemented"))
+}
+
+// GuardianServiceClient is a client for the goap.engine.v1.GuardianService service.
+type GuardianServiceClient interface {
+	MayCommit(context.Context, *connect.Request[v1.MayCommitRequest]) (*connect.Response[v1.MayCommitResponse], error)
+	MayCreateChild(context.Context, *connect.Request[v1.MayCreateChildRequest]) (*connect.Response[v1.MayCreateChildResponse], error)
+	MayMove(context.Context, *connect.Request[v1.MayMoveRequest]) (*connect.Response[v1.MayMoveResponse], error)
+	MayEdit(context.Context, *connect.Request[v1.MayEditRequest]) (*connect.Response[v1.MayEditResponse], error)
+}
+
+// NewGuardianServiceClient constructs a client for the goap.engine.v1.GuardianService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewGuardianServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) GuardianServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	guardianServiceMethods := v1.File_goap_engine_v1_engine_proto.Services().ByName("GuardianService").Methods()
+	return &guardianServiceClient{
+		mayCommit: connect.NewClient[v1.MayCommitRequest, v1.MayCommitResponse](
+			httpClient,
+			baseURL+GuardianServiceMayCommitProcedure,
+			connect.WithSchema(guardianServiceMethods.ByName("MayCommit")),
+			connect.WithClientOptions(opts...),
+		),
+		mayCreateChild: connect.NewClient[v1.MayCreateChildRequest, v1.MayCreateChildResponse](
+			httpClient,
+			baseURL+GuardianServiceMayCreateChildProcedure,
+			connect.WithSchema(guardianServiceMethods.ByName("MayCreateChild")),
+			connect.WithClientOptions(opts...),
+		),
+		mayMove: connect.NewClient[v1.MayMoveRequest, v1.MayMoveResponse](
+			httpClient,
+			baseURL+GuardianServiceMayMoveProcedure,
+			connect.WithSchema(guardianServiceMethods.ByName("MayMove")),
+			connect.WithClientOptions(opts...),
+		),
+		mayEdit: connect.NewClient[v1.MayEditRequest, v1.MayEditResponse](
+			httpClient,
+			baseURL+GuardianServiceMayEditProcedure,
+			connect.WithSchema(guardianServiceMethods.ByName("MayEdit")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// guardianServiceClient implements GuardianServiceClient.
+type guardianServiceClient struct {
+	mayCommit      *connect.Client[v1.MayCommitRequest, v1.MayCommitResponse]
+	mayCreateChild *connect.Client[v1.MayCreateChildRequest, v1.MayCreateChildResponse]
+	mayMove        *connect.Client[v1.MayMoveRequest, v1.MayMoveResponse]
+	mayEdit        *connect.Client[v1.MayEditRequest, v1.MayEditResponse]
+}
+
+// MayCommit calls goap.engine.v1.GuardianService.MayCommit.
+func (c *guardianServiceClient) MayCommit(ctx context.Context, req *connect.Request[v1.MayCommitRequest]) (*connect.Response[v1.MayCommitResponse], error) {
+	return c.mayCommit.CallUnary(ctx, req)
+}
+
+// MayCreateChild calls goap.engine.v1.GuardianService.MayCreateChild.
+func (c *guardianServiceClient) MayCreateChild(ctx context.Context, req *connect.Request[v1.MayCreateChildRequest]) (*connect.Response[v1.MayCreateChildResponse], error) {
+	return c.mayCreateChild.CallUnary(ctx, req)
+}
+
+// MayMove calls goap.engine.v1.GuardianService.MayMove.
+func (c *guardianServiceClient) MayMove(ctx context.Context, req *connect.Request[v1.MayMoveRequest]) (*connect.Response[v1.MayMoveResponse], error) {
+	return c.mayMove.CallUnary(ctx, req)
+}
+
+// MayEdit calls goap.engine.v1.GuardianService.MayEdit.
+func (c *guardianServiceClient) MayEdit(ctx context.Context, req *connect.Request[v1.MayEditRequest]) (*connect.Response[v1.MayEditResponse], error) {
+	return c.mayEdit.CallUnary(ctx, req)
+}
+
+// GuardianServiceHandler is an implementation of the goap.engine.v1.GuardianService service.
+type GuardianServiceHandler interface {
+	MayCommit(context.Context, *connect.Request[v1.MayCommitRequest]) (*connect.Response[v1.MayCommitResponse], error)
+	MayCreateChild(context.Context, *connect.Request[v1.MayCreateChildRequest]) (*connect.Response[v1.MayCreateChildResponse], error)
+	MayMove(context.Context, *connect.Request[v1.MayMoveRequest]) (*connect.Response[v1.MayMoveResponse], error)
+	MayEdit(context.Context, *connect.Request[v1.MayEditRequest]) (*connect.Response[v1.MayEditResponse], error)
+}
+
+// NewGuardianServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewGuardianServiceHandler(svc GuardianServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	guardianServiceMethods := v1.File_goap_engine_v1_engine_proto.Services().ByName("GuardianService").Methods()
+	guardianServiceMayCommitHandler := connect.NewUnaryHandler(
+		GuardianServiceMayCommitProcedure,
+		svc.MayCommit,
+		connect.WithSchema(guardianServiceMethods.ByName("MayCommit")),
+		connect.WithHandlerOptions(opts...),
+	)
+	guardianServiceMayCreateChildHandler := connect.NewUnaryHandler(
+		GuardianServiceMayCreateChildProcedure,
+		svc.MayCreateChild,
+		connect.WithSchema(guardianServiceMethods.ByName("MayCreateChild")),
+		connect.WithHandlerOptions(opts...),
+	)
+	guardianServiceMayMoveHandler := connect.NewUnaryHandler(
+		GuardianServiceMayMoveProcedure,
+		svc.MayMove,
+		connect.WithSchema(guardianServiceMethods.ByName("MayMove")),
+		connect.WithHandlerOptions(opts...),
+	)
+	guardianServiceMayEditHandler := connect.NewUnaryHandler(
+		GuardianServiceMayEditProcedure,
+		svc.MayEdit,
+		connect.WithSchema(guardianServiceMethods.ByName("MayEdit")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/goap.engine.v1.GuardianService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case GuardianServiceMayCommitProcedure:
+			guardianServiceMayCommitHandler.ServeHTTP(w, r)
+		case GuardianServiceMayCreateChildProcedure:
+			guardianServiceMayCreateChildHandler.ServeHTTP(w, r)
+		case GuardianServiceMayMoveProcedure:
+			guardianServiceMayMoveHandler.ServeHTTP(w, r)
+		case GuardianServiceMayEditProcedure:
+			guardianServiceMayEditHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedGuardianServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedGuardianServiceHandler struct{}
+
+func (UnimplementedGuardianServiceHandler) MayCommit(context.Context, *connect.Request[v1.MayCommitRequest]) (*connect.Response[v1.MayCommitResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.GuardianService.MayCommit is not implemented"))
+}
+
+func (UnimplementedGuardianServiceHandler) MayCreateChild(context.Context, *connect.Request[v1.MayCreateChildRequest]) (*connect.Response[v1.MayCreateChildResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.GuardianService.MayCreateChild is not implemented"))
+}
+
+func (UnimplementedGuardianServiceHandler) MayMove(context.Context, *connect.Request[v1.MayMoveRequest]) (*connect.Response[v1.MayMoveResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.GuardianService.MayMove is not implemented"))
+}
+
+func (UnimplementedGuardianServiceHandler) MayEdit(context.Context, *connect.Request[v1.MayEditRequest]) (*connect.Response[v1.MayEditResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.GuardianService.MayEdit is not implemented"))
 }

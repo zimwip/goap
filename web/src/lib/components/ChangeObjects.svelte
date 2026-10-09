@@ -59,12 +59,14 @@
   {@const info = cat.objectType(type)}
   {@const rows = objectsOfTypes(objects, [type])}
   {@const cols = columns(type)}
+  {@const locked = readonly || info?.system === true}
   <section class="card">
     <div class="head">
       <h3 title={type}>{typeName(type)}</h3>
       {#if info?.description}<span class="muted">{info.description}</span>{/if}
       <span class="grow"></span>
-      {#if !readonly}
+      {#if info?.system}<span class="muted" title="Written by the platform once the rules of the methodology hold">recorded by the platform</span>{/if}
+      {#if !locked}
         <button type="button" disabled={busy} onclick={() => ((editing = { type }), (newKey = ''))}>New</button>
       {/if}
     </div>
@@ -97,7 +99,7 @@
               {#each cols as c (c.name)}<td>{shownValue(c, o.value?.[c.name])}</td>{/each}
               <td title={o.by ? `by ${o.by}` : ''}>v{o.version}</td>
               <td class="actions">
-                {#if !readonly}
+                {#if !locked}
                   <button type="button" class="link" disabled={busy} onclick={() => (editing = { type, object: o })}>Edit</button>
                   {#each transitionsOf(info, o.state) as tr (tr.name)}
                     <button type="button" class="link" disabled={busy} title="to {tr.to}" onclick={() => write(editWrite(o, {}, tr.name))}>{tr.name}</button>

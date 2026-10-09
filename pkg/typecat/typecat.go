@@ -118,6 +118,8 @@ type ObjectType struct {
 	Editor string
 	// AdditionalProperties: the value may carry properties that are no attribute of the type.
 	AdditionalProperties bool
+	// System: written by platform services only (def.ChangeObjectType.System).
+	System bool
 }
 
 // PropertyNames lists the names of the attributes.
@@ -325,7 +327,7 @@ func (c *Catalog) IsA(typ, base string) bool {
 func resolveObject(d *def.Domain, t def.ChangeObjectType) (*ObjectType, error) {
 	ref := domain.TypeRef{Namespace: d.Name, Name: t.Name}
 	ot := &ObjectType{Ref: ref, Description: t.Description, Key: t.Key, Scope: t.ScopeOrDefault(), Editor: t.Editor,
-		AdditionalProperties: t.AdditionalProperties, Validators: d.ObjectValidators(t)}
+		AdditionalProperties: t.AdditionalProperties, System: t.System, Validators: d.ObjectValidators(t)}
 	ot.Key.Attributes = slices.Clone(t.Key.Attributes)
 	if t.Key.Kind == def.KeyRef && t.Key.Ref != "" && !slices.Contains(def.RefTargets, t.Key.Ref) {
 		r, err := domain.QualifyIn(d.Name, t.Key.Ref)

@@ -88,9 +88,6 @@ service ChangeService {
   rpc CommitEdits(goap.graph.v1.CommitEditsRequest) returns (goap.graph.v1.CommitEditsResponse);
   rpc GetBlackboard(goap.graph.v1.GetBlackboardRequest) returns (goap.graph.v1.GetBlackboardResponse);
   rpc ApplyChange(goap.graph.v1.ApplyChangeRequest) returns (goap.graph.v1.ApplyChangeResponse);
-  // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
-  // the expected world state) must hold, and it is journaled.
-  rpc TransitionChange(goap.graph.v1.TransitionChangeRequest) returns (goap.graph.v1.TransitionChangeResponse);
   // Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
   rpc DeleteChange(goap.graph.v1.DeleteChangeRequest) returns (goap.graph.v1.DeleteChangeResponse);
   // Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).

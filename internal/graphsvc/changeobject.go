@@ -2,6 +2,7 @@ package graphsvc
 
 import (
 	"context"
+	"fmt"
 	"slices"
 
 	"connectrpc.com/connect"
@@ -18,8 +19,8 @@ import (
 // change, Name the change object type.
 const ResourceChangeObject = "change-object"
 
-// checkObjects is the ABAC check of writing change objects of these types on a change: change-object:write, once per
-// type.
+// checkObjects is the check of writing change objects of these types on a change: a type flagged system by platform
+// services only, any other change-object:write (ABAC), once per type.
 func (h *Handler) checkObjects(ctx context.Context, c domain.Change, writes []domain.ObjectWrite) error {
 	who := authz.From(ctx)
 	var seen []string
@@ -28,6 +29,14 @@ func (h *Handler) checkObjects(ctx context.Context, c domain.Change, writes []do
 			continue
 		}
 		seen = append(seen, w.Type)
+		// a type written by platform services only (the state of a change, ADR 0098): no role lets a person write it, and
+		// the service writing it has checked its caller under its own rules (the engine: the permission of the transition)
+		if ot, ok := h.Graph.ObjectType(w.Type); ok && ot.System {
+			if !who.System() {
+				return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("%s change objects are written by the platform only: %w", w.Type, authz.ErrForbidden))
+			}
+			continue
+		}
 		if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "write",
 			Resource: authz.Resource{Type: ResourceChangeObject, Name: w.Type, Namespace: c.Namespace, Org: c.OwnerOrg, Owner: who.Subject, ProjectID: c.ProjectID}}); err != nil {
 			return rpcerr.ToConnect(err)

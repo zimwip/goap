@@ -30,6 +30,10 @@ type ChangeObjectType struct {
 	Search []SearchProperty `yaml:"search,omitempty" json:"search,omitempty"`
 	// AdditionalProperties: the value may carry properties that are no attribute of the type.
 	AdditionalProperties bool `yaml:"additionalProperties,omitempty" json:"additionalProperties,omitempty"`
+	// System: the change objects of the type are written by platform services only (the state of a change, written by
+	// the engine once the rules of its methodology hold, ADR 0098); a person reads them, never writes them, whatever
+	// their roles.
+	System bool `yaml:"system,omitempty" json:"system,omitempty"`
 }
 
 // UnmarshalYAML rejects a bare name: a change object type always declares its key.

@@ -7,6 +7,18 @@ const ENGINE = 'goap.engine.v1.EngineService';
 export const ENGINE_SERVICE = ENGINE;
 
 export const engine = {
+  /**
+   * Moves a change along a transition of the lifecycle of its methodology (ADR 0058, ADR 0098: the engine runs the
+   * lifecycle and records the move as execution@Transition / execution@State change objects). `decision` is the
+   * decision point that gates it (seen by the guard as change.decision, consumed by the move). A refusal comes as an
+   * error whose message names the vetos or the objectives not met (`parseRefusal` of `changeTransition.ts`).
+   */
+  transitionChange: (changeId: string, transition: string, decision = '') =>
+    rpc<{ changeId: string; transition: string; decision?: string }, { lifecycle?: string; state?: string; transitionKey?: string }>(ENGINE, 'TransitionChange', {
+      changeId,
+      transition,
+      ...(decision ? { decision } : {}),
+    }),
   startProcess: (req: StartProcessRequest) =>
     rpc<StartProcessRequest, { process?: Process }>(ENGINE, 'StartProcess', req),
   answerIntent: (processId: string, answer: string) =>

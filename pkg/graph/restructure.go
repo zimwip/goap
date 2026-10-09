@@ -38,13 +38,14 @@ type Restructured = changeapi.Restructured
 // to the new node too. Refused (ErrInvalid) for a source with no parent, nodes of another namespace or of a type
 // incompatible with the new node, or created by the change; (ErrConflict) for a source checked out.
 func (g *Graph) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in MergeInput) (out Restructured, err error) {
+	ctx = withEdits(ctx)
 	if len(in.Sources) < 2 {
 		return out, invalidf("a merge needs at least two nodes")
 	}
 	into := in.Into
 	into.Flow, into.Execution = in.Flow, in.Execution
 	err = g.gated(ctx, in.Gate, func(gate func(string) error, collected func() error) error {
-		return g.repo.InTx(ctx, func(tx Tx) error {
+		return g.editTx(ctx, func(tx Tx) error {
 			var err error
 			if out, err = g.restructure(ctx, tx, id, in.Sources, []NodeCreate{into}, true, in.Rationale, in.Flow, in.Execution, gate); err != nil {
 				return err
@@ -58,6 +59,7 @@ func (g *Graph) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in Merg
 // ImpactNodeSplit splits a node into new ones, in one transaction (see the top of the file). The links of other types
 // to the source are left and returned as suspect.
 func (g *Graph) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in SplitInput) (out Restructured, err error) {
+	ctx = withEdits(ctx)
 	if len(in.Into) < 2 {
 		return out, invalidf("a split needs at least two new nodes")
 	}
@@ -66,7 +68,7 @@ func (g *Graph) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in Spli
 		into[i].Flow, into[i].Execution = in.Flow, in.Execution
 	}
 	err = g.gated(ctx, in.Gate, func(gate func(string) error, collected func() error) error {
-		return g.repo.InTx(ctx, func(tx Tx) error {
+		return g.editTx(ctx, func(tx Tx) error {
 			var err error
 			if out, err = g.restructure(ctx, tx, id, []NodeName{in.Source}, into, false, in.Rationale, in.Flow, in.Execution, gate); err != nil {
 				return err

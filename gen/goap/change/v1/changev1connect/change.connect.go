@@ -170,9 +170,6 @@ const (
 	// ChangeServiceApplyChangeProcedure is the fully-qualified name of the ChangeService's ApplyChange
 	// RPC.
 	ChangeServiceApplyChangeProcedure = "/goap.change.v1.ChangeService/ApplyChange"
-	// ChangeServiceTransitionChangeProcedure is the fully-qualified name of the ChangeService's
-	// TransitionChange RPC.
-	ChangeServiceTransitionChangeProcedure = "/goap.change.v1.ChangeService/TransitionChange"
 	// ChangeServiceDeleteChangeProcedure is the fully-qualified name of the ChangeService's
 	// DeleteChange RPC.
 	ChangeServiceDeleteChangeProcedure = "/goap.change.v1.ChangeService/DeleteChange"
@@ -332,9 +329,6 @@ type ChangeServiceClient interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
-	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
-	// the expected world state) must hold, and it is journaled.
-	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
@@ -668,12 +662,6 @@ func NewChangeServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(changeServiceMethods.ByName("ApplyChange")),
 			connect.WithClientOptions(opts...),
 		),
-		transitionChange: connect.NewClient[v1.TransitionChangeRequest, v1.TransitionChangeResponse](
-			httpClient,
-			baseURL+ChangeServiceTransitionChangeProcedure,
-			connect.WithSchema(changeServiceMethods.ByName("TransitionChange")),
-			connect.WithClientOptions(opts...),
-		),
 		deleteChange: connect.NewClient[v1.DeleteChangeRequest, v1.DeleteChangeResponse](
 			httpClient,
 			baseURL+ChangeServiceDeleteChangeProcedure,
@@ -887,7 +875,6 @@ type changeServiceClient struct {
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
 	applyChange            *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
-	transitionChange       *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
 	deleteChange           *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
 	mergeChange            *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
 	getSharedNodes         *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
@@ -1147,11 +1134,6 @@ func (c *changeServiceClient) ApplyChange(ctx context.Context, req *connect.Requ
 	return c.applyChange.CallUnary(ctx, req)
 }
 
-// TransitionChange calls goap.change.v1.ChangeService.TransitionChange.
-func (c *changeServiceClient) TransitionChange(ctx context.Context, req *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error) {
-	return c.transitionChange.CallUnary(ctx, req)
-}
-
 // DeleteChange calls goap.change.v1.ChangeService.DeleteChange.
 func (c *changeServiceClient) DeleteChange(ctx context.Context, req *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error) {
 	return c.deleteChange.CallUnary(ctx, req)
@@ -1368,9 +1350,6 @@ type ChangeServiceHandler interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
-	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
-	// the expected world state) must hold, and it is journaled.
-	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
 	// Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
@@ -1700,12 +1679,6 @@ func NewChangeServiceHandler(svc ChangeServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(changeServiceMethods.ByName("ApplyChange")),
 		connect.WithHandlerOptions(opts...),
 	)
-	changeServiceTransitionChangeHandler := connect.NewUnaryHandler(
-		ChangeServiceTransitionChangeProcedure,
-		svc.TransitionChange,
-		connect.WithSchema(changeServiceMethods.ByName("TransitionChange")),
-		connect.WithHandlerOptions(opts...),
-	)
 	changeServiceDeleteChangeHandler := connect.NewUnaryHandler(
 		ChangeServiceDeleteChangeProcedure,
 		svc.DeleteChange,
@@ -1962,8 +1935,6 @@ func NewChangeServiceHandler(svc ChangeServiceHandler, opts ...connect.HandlerOp
 			changeServiceGetBlackboardHandler.ServeHTTP(w, r)
 		case ChangeServiceApplyChangeProcedure:
 			changeServiceApplyChangeHandler.ServeHTTP(w, r)
-		case ChangeServiceTransitionChangeProcedure:
-			changeServiceTransitionChangeHandler.ServeHTTP(w, r)
 		case ChangeServiceDeleteChangeProcedure:
 			changeServiceDeleteChangeHandler.ServeHTTP(w, r)
 		case ChangeServiceMergeChangeProcedure:
@@ -2209,10 +2180,6 @@ func (UnimplementedChangeServiceHandler) GetBlackboard(context.Context, *connect
 
 func (UnimplementedChangeServiceHandler) ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.change.v1.ChangeService.ApplyChange is not implemented"))
-}
-
-func (UnimplementedChangeServiceHandler) TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.change.v1.ChangeService.TransitionChange is not implemented"))
 }
 
 func (UnimplementedChangeServiceHandler) DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error) {

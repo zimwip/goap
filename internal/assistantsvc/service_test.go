@@ -20,6 +20,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/engine/blackboard"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -80,6 +81,14 @@ func (g *fakeGraph) CreateRequest(ctx context.Context, in graph.NewRequest) (dom
 func (g *fakeGraph) LinkRequest(_ context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error) {
 	g.links = append(g.links, domain.RequestLink{Request: id, Change: change, Role: role})
 	return domain.Request{ID: id}, nil
+}
+
+// Objects is the state the engine recorded for the delivery change (ADR 0098).
+func (g *fakeGraph) Objects(_ context.Context, id domain.ChangeID, _ domain.ObjectFilter) ([]domain.ChangeObject, error) {
+	if id != "CHG-D" {
+		return nil, nil
+	}
+	return []domain.ChangeObject{{Change: id, Type: blackboard.TypeState, Version: 1, Value: map[string]any{"lifecycle": "delivery", "state": "design"}}}, nil
 }
 
 func (g *fakeGraph) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
@@ -146,7 +155,7 @@ func newEnv(t *testing.T, answers ...string) *env {
 			"CHG-1":    {ID: "CHG-1", Title: "Existing", ProjectID: "PROJ-A", Status: domain.ChangeDraft},
 			"CHG-MINE": {ID: "CHG-MINE", Title: "Mine", OwnerOrg: access.PersonalUnit("u1")},
 			"CHG-HERS": {ID: "CHG-HERS", Title: "Hers", OwnerOrg: access.PersonalUnit("u2")},
-			"CHG-D":    {ID: "CHG-D", Title: "Delivery", Methodology: "delivery", Namespace: "alm", ProjectID: "PROJ-A", Status: domain.ChangeActive, State: "design"},
+			"CHG-D":    {ID: "CHG-D", Title: "Delivery", Methodology: "delivery", Namespace: "alm", ProjectID: "PROJ-A", Status: domain.ChangeActive},
 			"CHG-DONE": {ID: "CHG-DONE", Title: "Done", Methodology: "delivery", Namespace: "alm", ProjectID: "PROJ-A", Status: domain.ChangeApplied},
 		}},
 		convs: &convsvc.Service{Store: convsvc.NewMemoryStore()},

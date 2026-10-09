@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/engine/blackboard"
 	"github.com/zimwip/goap/pkg/graph"
 )
 
@@ -172,7 +173,13 @@ func (s *Service) runnable(ctx context.Context, p authz.Principal, project, chan
 			c.project = ch.ProjectID
 		}
 		cv := &changeView{ID: string(ch.ID), Title: clip(ch.Title, 200), Methodology: ch.Methodology, Namespace: ch.Namespace, Project: ch.ProjectID,
-			Status: string(ch.Status), Lifecycle: ch.Lifecycle, State: ch.State}
+			Status: string(ch.Status)}
+		// the state of the change in the lifecycle of its methodology is the engine's (ADR 0098)
+		if objs, err := s.Graph.Objects(authz.With(ctx, p), ch.ID, domain.ObjectFilter{Types: []string{blackboard.TypeState}}); err == nil {
+			if st, ok := (blackboard.View{Objects: objs}).State(); ok {
+				cv.Lifecycle, cv.State = st.Lifecycle, st.State
+			}
+		}
 		c.change = cv
 		active, err := s.Engine.Active(authz.With(ctx, p))
 		if err != nil {

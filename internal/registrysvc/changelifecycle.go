@@ -5,11 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Lifecycle implements pkg/graph.ChangeLifecycles (ADR 0058): the lifecycle the changes of a methodology follow, the
+// Lifecycle implements engine.LifecyclePort (ADR 0058, 0098): the lifecycle the changes of a methodology follow, the
 // one it names in the domain of its namespace (else in any domain, a built-in one for instance). A methodology the
 // registry does not know, or one naming none, gives nil: its changes have no state.
 func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Lifecycle, error) {
@@ -40,7 +39,7 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 	return found, nil
 }
 
-// DefaultGoal implements pkg/graph.ChangeLifecycles (ADR 0096): the main goal of a methodology, the goal its changes
+// DefaultGoal implements pkg/graph.ChangeDefaults (ADR 0096): the main goal of a methodology, the goal its changes
 // start with; "" for a methodology the registry does not know. It reads the definition, a methodology that does not
 // compile still gives its goal.
 func (s *Service) DefaultGoal(ctx context.Context, name string) (string, error) {
@@ -52,24 +51,4 @@ func (s *Service) DefaultGoal(ctx context.Context, name string) (string, error) 
 		return "", err
 	}
 	return r.Methodology.MainGoal(), nil
-}
-
-// Guard implements pkg/graph.ChangeLifecycles: the guard of a transition of the lifecycle of a change, in the
-// environment of the conditions of its methodology, whose values are the world state the guard reads.
-func (s *Service) Guard(ctx context.Context, bb domain.Blackboard, expr, transition, decision string) (bool, error) {
-	c, err := s.Methodology(ctx, bb.Change.Methodology)
-	if err != nil {
-		return false, err
-	}
-	return condition.CheckGuard(expr, bb, c.Conditions.Evaluate(bb).State, transition, decision)
-}
-
-// Gate implements pkg/graph.ChangeLifecycles: the vetos and objectives of a transition (ADR 0075 §3), in the same
-// environment as its guard.
-func (s *Service) Gate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
-	c, err := s.Methodology(ctx, bb.Change.Methodology)
-	if err != nil {
-		return domain.GateResult{}, err
-	}
-	return condition.CheckGate(t, bb, c.Conditions.Evaluate(bb).State, decision)
 }

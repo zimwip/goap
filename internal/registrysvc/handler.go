@@ -316,7 +316,7 @@ func (h *Handler) ListTypes(ctx context.Context, _ *connect.Request[registryv1.L
 	}
 	for _, t := range cat.ObjectTypes() {
 		oi := &registryv1.ChangeObjectTypeInfo{Ref: t.Ref.String(), Description: t.Description, Key: keyTypeToPB(t.Key), Scope: t.Scope,
-			Attributes: attributeInfosToPB(t.Attributes), Editor: t.Editor, AdditionalProperties: t.AdditionalProperties}
+			Attributes: attributeInfosToPB(t.Attributes), Editor: t.Editor, AdditionalProperties: t.AdditionalProperties, System: t.System}
 		if t.Lifecycle != nil {
 			oi.Lifecycle = lifecyclesToPB([]domain.Lifecycle{*t.Lifecycle})[0]
 		}

@@ -2,12 +2,17 @@ syntax = "proto3";
 
 package goap.engine.v1;
 
+import "goap/graph/v1/graph.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
 // EngineService runs agent processes: intent loop, then GOAP planning and
 // execution over the blackboard of a change.
 service EngineService {
+  // Move a change along a transition of the lifecycle of its methodology (ADR 0058, ADR 0098): the methodology defines
+  // the states and their rules, the engine checks the guard, the vetos and the objectives and records the move as
+  // execution@Transition and execution@State change objects of the change.
+  rpc TransitionChange(TransitionChangeRequest) returns (TransitionChangeResponse);
   rpc StartProcess(StartProcessRequest) returns (StartProcessResponse);
   rpc AnswerIntent(AnswerIntentRequest) returns (AnswerIntentResponse);
   rpc SubmitHumanInput(SubmitHumanInputRequest) returns (SubmitHumanInputResponse);
@@ -625,3 +630,61 @@ message ResolveBoardResponse {
   // the process relaunched on a new flow branch, when relaunch was chosen
   Process relaunched = 2;
 }
+
+message TransitionChangeRequest {
+  string change_id = 1;
+  // name of the transition out of the current state
+  string transition = 2;
+  // the decision point that gates it, seen by the guard as change.decision; a point gates one transition only
+  string decision = 3;
+}
+
+message TransitionChangeResponse {
+  string lifecycle = 1;
+  // the state the change is now in
+  string state = 2;
+  // the key of the execution@Transition change object recording the move
+  string transition_key = 3;
+}
+
+// GuardianService is the guardian of the changes governed by a methodology (ADR 0098), served by the engine and asked
+// by the graph before it lands a change, takes a sub-change, moves a change or edits an impact a change holds. A
+// refusal is an error of the call (FailedPrecondition for a rule of the methodology).
+service GuardianService {
+  rpc MayCommit(MayCommitRequest) returns (MayCommitResponse);
+  rpc MayCreateChild(MayCreateChildRequest) returns (MayCreateChildResponse);
+  rpc MayMove(MayMoveRequest) returns (MayMoveResponse);
+  rpc MayEdit(MayEditRequest) returns (MayEditResponse);
+}
+
+message MayCommitRequest {
+  // the blackboard the landing builds: the change and its impacts hydrated with the versions it writes
+  goap.graph.v1.GetBlackboardResponse blackboard = 1;
+}
+
+message MayCommitResponse {
+  // decided: ok replaces the floor of the landable states; not decided leaves it in force
+  bool decided = 1;
+  bool ok = 2;
+}
+
+message MayCreateChildRequest {
+  goap.graph.v1.Change parent = 1;
+  goap.graph.v1.Change child = 2;
+}
+
+message MayCreateChildResponse {}
+
+message MayMoveRequest {
+  repeated goap.graph.v1.Change family = 1;
+  string to = 2;
+}
+
+message MayMoveResponse {}
+
+message MayEditRequest {
+  goap.graph.v1.Change change = 1;
+  string impact_id = 2;
+}
+
+message MayEditResponse {}

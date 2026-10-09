@@ -62,7 +62,7 @@ func (g *Graph) OpenFlow(ctx context.Context, id domain.ChangeID, in OpenFlowReq
 			return err
 		}
 		for _, it := range in.Items {
-			if it.Kind == domain.KindFlow || it.Kind == domain.KindTransition || it.Kind == domain.KindDecisionPoint {
+			if it.Kind == domain.KindFlow || it.Kind == domain.KindDecisionPoint {
 				return fmt.Errorf("a %s item is recorded by its own operation, not at the opening of a flow: %w", it.Kind, ErrInvalid)
 			}
 			it.ID, it.Flow, it.CreatedAt = domain.ItemID(g.newID()), flow, g.now()

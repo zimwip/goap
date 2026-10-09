@@ -4,6 +4,7 @@
 package changeapi
 
 import (
+	"context"
 	"errors"
 	"slices"
 
@@ -314,4 +315,25 @@ func DraftBranch(c domain.Change, flow string) string {
 // checkout and an update.
 func IsWorking(c domain.Change, flow string, n domain.Node) bool {
 	return n.IsDraft() && domain.BranchOf(n.Branch) == DraftBranch(c, c.ResolveFlow(flow))
+}
+
+// Guardian is what a change asks of whoever governs it (ADR 0098): the rules of its methodology, which a manual
+// operation on the change must not skip. The change knows only that it is open or closed; the state of a change in the
+// lifecycle of its methodology, its transitions and what they freeze are the guardian's. The graph resolves the
+// guardian a change names (Change.Guardian) and refuses the operation when it cannot reach it. Every method runs
+// outside any transaction of the change and may read it.
+type Guardian interface {
+	// MayCommit decides whether c lands, on the blackboard its landing builds (the change and its impacts hydrated with
+	// the versions it writes): decided replaces the floor of the landable states (ADR 0078) by ok; not decided leaves
+	// the floor in force; an error refuses the landing.
+	MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+	// MayCreateChild accepts or refuses a sub-change of parent, before it is stored.
+	MayCreateChild(ctx context.Context, parent, child domain.Change) error
+	// MayMove accepts or refuses the move of a family of changes (a root change and its open sub-changes) to project to
+	// (ADR 0091), after the move was authorized.
+	MayMove(ctx context.Context, family []domain.Change, to string) error
+	// MayEdit accepts or refuses an operation on an impact the change already holds (an edit of its draft, a link, a
+	// transition of the node, a cancellation, a withdrawal): a guardian freezes the impacts written in a state of the
+	// lifecycle the change has left (ADR 0058).
+	MayEdit(ctx context.Context, c domain.Change, impact domain.ChangeImpactID) error
 }

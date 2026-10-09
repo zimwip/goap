@@ -47,6 +47,7 @@ func (b Batch) IsEmpty() bool {
 // Submit applies a batch to a change in one transaction, all or none (ADR 0098): an action's outputs are written
 // together, and a run replayed after a failure finds nothing half written.
 func (g *Graph) Submit(ctx context.Context, id domain.ChangeID, b Batch) (res BatchResult, err error) {
+	ctx = withEdits(ctx)
 	if b.IsEmpty() {
 		return res, invalidf("nothing to submit")
 	}
@@ -65,7 +66,7 @@ func (g *Graph) Submit(ctx context.Context, id domain.ChangeID, b Batch) (res Ba
 			return res, err
 		}
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.editTx(ctx, func(tx Tx) error {
 		res = BatchResult{}
 		for _, in := range b.Creates {
 			cn, err := g.createTx(ctx, tx, id, in, nil)

@@ -7,6 +7,7 @@
 package enginev1
 
 import (
+	v1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	structpb "google.golang.org/protobuf/types/known/structpb"
@@ -4712,11 +4713,497 @@ func (x *ResolveBoardResponse) GetRelaunched() *Process {
 	return nil
 }
 
+type TransitionChangeRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	ChangeId string                 `protobuf:"bytes,1,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	// name of the transition out of the current state
+	Transition string `protobuf:"bytes,2,opt,name=transition,proto3" json:"transition,omitempty"`
+	// the decision point that gates it, seen by the guard as change.decision; a point gates one transition only
+	Decision      string `protobuf:"bytes,3,opt,name=decision,proto3" json:"decision,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransitionChangeRequest) Reset() {
+	*x = TransitionChangeRequest{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransitionChangeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransitionChangeRequest) ProtoMessage() {}
+
+func (x *TransitionChangeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransitionChangeRequest.ProtoReflect.Descriptor instead.
+func (*TransitionChangeRequest) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *TransitionChangeRequest) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *TransitionChangeRequest) GetTransition() string {
+	if x != nil {
+		return x.Transition
+	}
+	return ""
+}
+
+func (x *TransitionChangeRequest) GetDecision() string {
+	if x != nil {
+		return x.Decision
+	}
+	return ""
+}
+
+type TransitionChangeResponse struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Lifecycle string                 `protobuf:"bytes,1,opt,name=lifecycle,proto3" json:"lifecycle,omitempty"`
+	// the state the change is now in
+	State string `protobuf:"bytes,2,opt,name=state,proto3" json:"state,omitempty"`
+	// the key of the execution@Transition change object recording the move
+	TransitionKey string `protobuf:"bytes,3,opt,name=transition_key,json=transitionKey,proto3" json:"transition_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TransitionChangeResponse) Reset() {
+	*x = TransitionChangeResponse{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TransitionChangeResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TransitionChangeResponse) ProtoMessage() {}
+
+func (x *TransitionChangeResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TransitionChangeResponse.ProtoReflect.Descriptor instead.
+func (*TransitionChangeResponse) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *TransitionChangeResponse) GetLifecycle() string {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return ""
+}
+
+func (x *TransitionChangeResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *TransitionChangeResponse) GetTransitionKey() string {
+	if x != nil {
+		return x.TransitionKey
+	}
+	return ""
+}
+
+type MayCommitRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the blackboard the landing builds: the change and its impacts hydrated with the versions it writes
+	Blackboard    *v1.GetBlackboardResponse `protobuf:"bytes,1,opt,name=blackboard,proto3" json:"blackboard,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayCommitRequest) Reset() {
+	*x = MayCommitRequest{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[65]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayCommitRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayCommitRequest) ProtoMessage() {}
+
+func (x *MayCommitRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[65]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayCommitRequest.ProtoReflect.Descriptor instead.
+func (*MayCommitRequest) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{65}
+}
+
+func (x *MayCommitRequest) GetBlackboard() *v1.GetBlackboardResponse {
+	if x != nil {
+		return x.Blackboard
+	}
+	return nil
+}
+
+type MayCommitResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// decided: ok replaces the floor of the landable states; not decided leaves it in force
+	Decided       bool `protobuf:"varint,1,opt,name=decided,proto3" json:"decided,omitempty"`
+	Ok            bool `protobuf:"varint,2,opt,name=ok,proto3" json:"ok,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayCommitResponse) Reset() {
+	*x = MayCommitResponse{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayCommitResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayCommitResponse) ProtoMessage() {}
+
+func (x *MayCommitResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayCommitResponse.ProtoReflect.Descriptor instead.
+func (*MayCommitResponse) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *MayCommitResponse) GetDecided() bool {
+	if x != nil {
+		return x.Decided
+	}
+	return false
+}
+
+func (x *MayCommitResponse) GetOk() bool {
+	if x != nil {
+		return x.Ok
+	}
+	return false
+}
+
+type MayCreateChildRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Parent        *v1.Change             `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
+	Child         *v1.Change             `protobuf:"bytes,2,opt,name=child,proto3" json:"child,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayCreateChildRequest) Reset() {
+	*x = MayCreateChildRequest{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayCreateChildRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayCreateChildRequest) ProtoMessage() {}
+
+func (x *MayCreateChildRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayCreateChildRequest.ProtoReflect.Descriptor instead.
+func (*MayCreateChildRequest) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *MayCreateChildRequest) GetParent() *v1.Change {
+	if x != nil {
+		return x.Parent
+	}
+	return nil
+}
+
+func (x *MayCreateChildRequest) GetChild() *v1.Change {
+	if x != nil {
+		return x.Child
+	}
+	return nil
+}
+
+type MayCreateChildResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayCreateChildResponse) Reset() {
+	*x = MayCreateChildResponse{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayCreateChildResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayCreateChildResponse) ProtoMessage() {}
+
+func (x *MayCreateChildResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayCreateChildResponse.ProtoReflect.Descriptor instead.
+func (*MayCreateChildResponse) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{68}
+}
+
+type MayMoveRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Family        []*v1.Change           `protobuf:"bytes,1,rep,name=family,proto3" json:"family,omitempty"`
+	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayMoveRequest) Reset() {
+	*x = MayMoveRequest{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[69]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayMoveRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayMoveRequest) ProtoMessage() {}
+
+func (x *MayMoveRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[69]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayMoveRequest.ProtoReflect.Descriptor instead.
+func (*MayMoveRequest) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{69}
+}
+
+func (x *MayMoveRequest) GetFamily() []*v1.Change {
+	if x != nil {
+		return x.Family
+	}
+	return nil
+}
+
+func (x *MayMoveRequest) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+type MayMoveResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayMoveResponse) Reset() {
+	*x = MayMoveResponse{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayMoveResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayMoveResponse) ProtoMessage() {}
+
+func (x *MayMoveResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayMoveResponse.ProtoReflect.Descriptor instead.
+func (*MayMoveResponse) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{70}
+}
+
+type MayEditRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Change        *v1.Change             `protobuf:"bytes,1,opt,name=change,proto3" json:"change,omitempty"`
+	ImpactId      string                 `protobuf:"bytes,2,opt,name=impact_id,json=impactId,proto3" json:"impact_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayEditRequest) Reset() {
+	*x = MayEditRequest{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[71]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayEditRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayEditRequest) ProtoMessage() {}
+
+func (x *MayEditRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[71]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayEditRequest.ProtoReflect.Descriptor instead.
+func (*MayEditRequest) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{71}
+}
+
+func (x *MayEditRequest) GetChange() *v1.Change {
+	if x != nil {
+		return x.Change
+	}
+	return nil
+}
+
+func (x *MayEditRequest) GetImpactId() string {
+	if x != nil {
+		return x.ImpactId
+	}
+	return ""
+}
+
+type MayEditResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MayEditResponse) Reset() {
+	*x = MayEditResponse{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[72]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MayEditResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MayEditResponse) ProtoMessage() {}
+
+func (x *MayEditResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[72]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MayEditResponse.ProtoReflect.Descriptor instead.
+func (*MayEditResponse) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{72}
+}
+
 var File_goap_engine_v1_engine_proto protoreflect.FileDescriptor
 
 const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\n" +
-	"\x1bgoap/engine/v1/engine.proto\x12\x0egoap.engine.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xad\x03\n" +
+	"\x1bgoap/engine/v1/engine.proto\x12\x0egoap.engine.v1\x1a\x19goap/graph/v1/graph.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xad\x03\n" +
 	"\fTriggerState\x12 \n" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x14\n" +
 	"\x05agent\x18\x02 \x01(\tR\x05agent\x12\x12\n" +
@@ -5154,8 +5641,38 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\x127\n" +
 	"\n" +
 	"relaunched\x18\x02 \x01(\v2\x17.goap.engine.v1.ProcessR\n" +
-	"relaunched2\x88\x0e\n" +
-	"\rEngineService\x12Y\n" +
+	"relaunched\"r\n" +
+	"\x17TransitionChangeRequest\x12\x1b\n" +
+	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1e\n" +
+	"\n" +
+	"transition\x18\x02 \x01(\tR\n" +
+	"transition\x12\x1a\n" +
+	"\bdecision\x18\x03 \x01(\tR\bdecision\"u\n" +
+	"\x18TransitionChangeResponse\x12\x1c\n" +
+	"\tlifecycle\x18\x01 \x01(\tR\tlifecycle\x12\x14\n" +
+	"\x05state\x18\x02 \x01(\tR\x05state\x12%\n" +
+	"\x0etransition_key\x18\x03 \x01(\tR\rtransitionKey\"X\n" +
+	"\x10MayCommitRequest\x12D\n" +
+	"\n" +
+	"blackboard\x18\x01 \x01(\v2$.goap.graph.v1.GetBlackboardResponseR\n" +
+	"blackboard\"=\n" +
+	"\x11MayCommitResponse\x12\x18\n" +
+	"\adecided\x18\x01 \x01(\bR\adecided\x12\x0e\n" +
+	"\x02ok\x18\x02 \x01(\bR\x02ok\"s\n" +
+	"\x15MayCreateChildRequest\x12-\n" +
+	"\x06parent\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06parent\x12+\n" +
+	"\x05child\x18\x02 \x01(\v2\x15.goap.graph.v1.ChangeR\x05child\"\x18\n" +
+	"\x16MayCreateChildResponse\"O\n" +
+	"\x0eMayMoveRequest\x12-\n" +
+	"\x06family\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\x06family\x12\x0e\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\"\x11\n" +
+	"\x0fMayMoveResponse\"\\\n" +
+	"\x0eMayEditRequest\x12-\n" +
+	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\x12\x1b\n" +
+	"\timpact_id\x18\x02 \x01(\tR\bimpactId\"\x11\n" +
+	"\x0fMayEditResponse2\xef\x0e\n" +
+	"\rEngineService\x12e\n" +
+	"\x10TransitionChange\x12'.goap.engine.v1.TransitionChangeRequest\x1a(.goap.engine.v1.TransitionChangeResponse\x12Y\n" +
 	"\fStartProcess\x12#.goap.engine.v1.StartProcessRequest\x1a$.goap.engine.v1.StartProcessResponse\x12Y\n" +
 	"\fAnswerIntent\x12#.goap.engine.v1.AnswerIntentRequest\x1a$.goap.engine.v1.AnswerIntentResponse\x12e\n" +
 	"\x10SubmitHumanInput\x12'.goap.engine.v1.SubmitHumanInputRequest\x1a(.goap.engine.v1.SubmitHumanInputResponse\x12\\\n" +
@@ -5176,7 +5693,12 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\rGetProcessLog\x12$.goap.engine.v1.GetProcessLogRequest\x1a%.goap.engine.v1.GetProcessLogResponse\x12X\n" +
 	"\vWatchEvents\x12\".goap.engine.v1.WatchEventsRequest\x1a#.goap.engine.v1.WatchEventsResponse0\x01\x12Y\n" +
 	"\fListTriggers\x12#.goap.engine.v1.ListTriggersRequest\x1a$.goap.engine.v1.ListTriggersResponse\x12V\n" +
-	"\vFireTrigger\x12\".goap.engine.v1.FireTriggerRequest\x1a#.goap.engine.v1.FireTriggerResponseB\xaf\x01\n" +
+	"\vFireTrigger\x12\".goap.engine.v1.FireTriggerRequest\x1a#.goap.engine.v1.FireTriggerResponse2\xdc\x02\n" +
+	"\x0fGuardianService\x12P\n" +
+	"\tMayCommit\x12 .goap.engine.v1.MayCommitRequest\x1a!.goap.engine.v1.MayCommitResponse\x12_\n" +
+	"\x0eMayCreateChild\x12%.goap.engine.v1.MayCreateChildRequest\x1a&.goap.engine.v1.MayCreateChildResponse\x12J\n" +
+	"\aMayMove\x12\x1e.goap.engine.v1.MayMoveRequest\x1a\x1f.goap.engine.v1.MayMoveResponse\x12J\n" +
+	"\aMayEdit\x12\x1e.goap.engine.v1.MayEditRequest\x1a\x1f.goap.engine.v1.MayEditResponseB\xaf\x01\n" +
 	"\x12com.goap.engine.v1B\vEngineProtoP\x01Z2github.com/zimwip/goap/gen/goap/engine/v1;enginev1\xa2\x02\x03GEX\xaa\x02\x0eGoap.Engine.V1\xca\x02\x0eGoap\\Engine\\V1\xe2\x02\x1aGoap\\Engine\\V1\\GPBMetadata\xea\x02\x10Goap::Engine::V1b\x06proto3"
 
 var (
@@ -5191,7 +5713,7 @@ func file_goap_engine_v1_engine_proto_rawDescGZIP() []byte {
 	return file_goap_engine_v1_engine_proto_rawDescData
 }
 
-var file_goap_engine_v1_engine_proto_msgTypes = make([]protoimpl.MessageInfo, 68)
+var file_goap_engine_v1_engine_proto_msgTypes = make([]protoimpl.MessageInfo, 78)
 var file_goap_engine_v1_engine_proto_goTypes = []any{
 	(*TriggerState)(nil),               // 0: goap.engine.v1.TriggerState
 	(*ListTriggersRequest)(nil),        // 1: goap.engine.v1.ListTriggersRequest
@@ -5256,29 +5778,41 @@ var file_goap_engine_v1_engine_proto_goTypes = []any{
 	(*DecideFlowResponse)(nil),         // 60: goap.engine.v1.DecideFlowResponse
 	(*ResolveBoardRequest)(nil),        // 61: goap.engine.v1.ResolveBoardRequest
 	(*ResolveBoardResponse)(nil),       // 62: goap.engine.v1.ResolveBoardResponse
-	nil,                                // 63: goap.engine.v1.Step.BeforeEntry
-	nil,                                // 64: goap.engine.v1.Step.AfterEntry
-	nil,                                // 65: goap.engine.v1.Process.WorldEntry
-	nil,                                // 66: goap.engine.v1.Process.UnknownEntry
-	nil,                                // 67: goap.engine.v1.ExplainConditionResponse.InputsEntry
-	(*timestamppb.Timestamp)(nil),      // 68: google.protobuf.Timestamp
-	(*structpb.Struct)(nil),            // 69: google.protobuf.Struct
+	(*TransitionChangeRequest)(nil),    // 63: goap.engine.v1.TransitionChangeRequest
+	(*TransitionChangeResponse)(nil),   // 64: goap.engine.v1.TransitionChangeResponse
+	(*MayCommitRequest)(nil),           // 65: goap.engine.v1.MayCommitRequest
+	(*MayCommitResponse)(nil),          // 66: goap.engine.v1.MayCommitResponse
+	(*MayCreateChildRequest)(nil),      // 67: goap.engine.v1.MayCreateChildRequest
+	(*MayCreateChildResponse)(nil),     // 68: goap.engine.v1.MayCreateChildResponse
+	(*MayMoveRequest)(nil),             // 69: goap.engine.v1.MayMoveRequest
+	(*MayMoveResponse)(nil),            // 70: goap.engine.v1.MayMoveResponse
+	(*MayEditRequest)(nil),             // 71: goap.engine.v1.MayEditRequest
+	(*MayEditResponse)(nil),            // 72: goap.engine.v1.MayEditResponse
+	nil,                                // 73: goap.engine.v1.Step.BeforeEntry
+	nil,                                // 74: goap.engine.v1.Step.AfterEntry
+	nil,                                // 75: goap.engine.v1.Process.WorldEntry
+	nil,                                // 76: goap.engine.v1.Process.UnknownEntry
+	nil,                                // 77: goap.engine.v1.ExplainConditionResponse.InputsEntry
+	(*timestamppb.Timestamp)(nil),      // 78: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),            // 79: google.protobuf.Struct
+	(*v1.GetBlackboardResponse)(nil),   // 80: goap.graph.v1.GetBlackboardResponse
+	(*v1.Change)(nil),                  // 81: goap.graph.v1.Change
 }
 var file_goap_engine_v1_engine_proto_depIdxs = []int32{
-	68, // 0: goap.engine.v1.TriggerState.last_fired:type_name -> google.protobuf.Timestamp
-	68, // 1: goap.engine.v1.TriggerState.next_fire:type_name -> google.protobuf.Timestamp
+	78, // 0: goap.engine.v1.TriggerState.last_fired:type_name -> google.protobuf.Timestamp
+	78, // 1: goap.engine.v1.TriggerState.next_fire:type_name -> google.protobuf.Timestamp
 	0,  // 2: goap.engine.v1.ListTriggersResponse.triggers:type_name -> goap.engine.v1.TriggerState
 	19, // 3: goap.engine.v1.FireTriggerResponse.process:type_name -> goap.engine.v1.Process
-	68, // 4: goap.engine.v1.LogLine.time:type_name -> google.protobuf.Timestamp
+	78, // 4: goap.engine.v1.LogLine.time:type_name -> google.protobuf.Timestamp
 	16, // 5: goap.engine.v1.HumanTask.issues:type_name -> goap.engine.v1.BoardIssue
 	17, // 6: goap.engine.v1.HumanTask.proposal:type_name -> goap.engine.v1.RelaunchProposal
 	13, // 7: goap.engine.v1.HumanTask.context:type_name -> goap.engine.v1.StepContext
 	15, // 8: goap.engine.v1.StepContext.references:type_name -> goap.engine.v1.DocumentReference
 	14, // 9: goap.engine.v1.StepContext.roles:type_name -> goap.engine.v1.Responsibilities
-	63, // 10: goap.engine.v1.Step.before:type_name -> goap.engine.v1.Step.BeforeEntry
-	64, // 11: goap.engine.v1.Step.after:type_name -> goap.engine.v1.Step.AfterEntry
-	68, // 12: goap.engine.v1.Step.started_at:type_name -> google.protobuf.Timestamp
-	68, // 13: goap.engine.v1.Step.ended_at:type_name -> google.protobuf.Timestamp
+	73, // 10: goap.engine.v1.Step.before:type_name -> goap.engine.v1.Step.BeforeEntry
+	74, // 11: goap.engine.v1.Step.after:type_name -> goap.engine.v1.Step.AfterEntry
+	78, // 12: goap.engine.v1.Step.started_at:type_name -> google.protobuf.Timestamp
+	78, // 13: goap.engine.v1.Step.ended_at:type_name -> google.protobuf.Timestamp
 	5,  // 14: goap.engine.v1.Step.usage:type_name -> goap.engine.v1.Usage
 	6,  // 15: goap.engine.v1.Step.llm_calls:type_name -> goap.engine.v1.LlmCall
 	7,  // 16: goap.engine.v1.Step.tool_calls:type_name -> goap.engine.v1.ToolCall
@@ -5286,31 +5820,31 @@ var file_goap_engine_v1_engine_proto_depIdxs = []int32{
 	9,  // 18: goap.engine.v1.Process.turns:type_name -> goap.engine.v1.Turn
 	10, // 19: goap.engine.v1.Process.candidates:type_name -> goap.engine.v1.Candidate
 	12, // 20: goap.engine.v1.Process.pending:type_name -> goap.engine.v1.HumanTask
-	65, // 21: goap.engine.v1.Process.world:type_name -> goap.engine.v1.Process.WorldEntry
-	66, // 22: goap.engine.v1.Process.unknown:type_name -> goap.engine.v1.Process.UnknownEntry
+	75, // 21: goap.engine.v1.Process.world:type_name -> goap.engine.v1.Process.WorldEntry
+	76, // 22: goap.engine.v1.Process.unknown:type_name -> goap.engine.v1.Process.UnknownEntry
 	18, // 23: goap.engine.v1.Process.steps:type_name -> goap.engine.v1.Step
-	68, // 24: goap.engine.v1.Process.created_at:type_name -> google.protobuf.Timestamp
-	68, // 25: goap.engine.v1.Process.updated_at:type_name -> google.protobuf.Timestamp
+	78, // 24: goap.engine.v1.Process.created_at:type_name -> google.protobuf.Timestamp
+	78, // 25: goap.engine.v1.Process.updated_at:type_name -> google.protobuf.Timestamp
 	11, // 26: goap.engine.v1.Process.initiator:type_name -> goap.engine.v1.Principal
 	5,  // 27: goap.engine.v1.Process.usage:type_name -> goap.engine.v1.Usage
-	69, // 28: goap.engine.v1.StartProcessRequest.vars:type_name -> google.protobuf.Struct
+	79, // 28: goap.engine.v1.StartProcessRequest.vars:type_name -> google.protobuf.Struct
 	22, // 29: goap.engine.v1.StartingPoint.launch:type_name -> goap.engine.v1.StartLaunch
 	23, // 30: goap.engine.v1.ListStartingPointsResponse.points:type_name -> goap.engine.v1.StartingPoint
 	24, // 31: goap.engine.v1.ListStartingPointsResponse.blocked:type_name -> goap.engine.v1.BlockedStep
 	27, // 32: goap.engine.v1.CheckAgentsResponse.agents:type_name -> goap.engine.v1.AgentCheck
 	19, // 33: goap.engine.v1.StartProcessResponse.process:type_name -> goap.engine.v1.Process
 	19, // 34: goap.engine.v1.AnswerIntentResponse.process:type_name -> goap.engine.v1.Process
-	69, // 35: goap.engine.v1.SubmitHumanInputRequest.items:type_name -> google.protobuf.Struct
+	79, // 35: goap.engine.v1.SubmitHumanInputRequest.items:type_name -> google.protobuf.Struct
 	19, // 36: goap.engine.v1.SubmitHumanInputResponse.process:type_name -> goap.engine.v1.Process
 	19, // 37: goap.engine.v1.ApproveActionResponse.process:type_name -> goap.engine.v1.Process
 	19, // 38: goap.engine.v1.UnblockProcessResponse.process:type_name -> goap.engine.v1.Process
 	19, // 39: goap.engine.v1.AttachChangeResponse.process:type_name -> goap.engine.v1.Process
-	68, // 40: goap.engine.v1.ProcessLogEntry.at:type_name -> google.protobuf.Timestamp
+	78, // 40: goap.engine.v1.ProcessLogEntry.at:type_name -> google.protobuf.Timestamp
 	40, // 41: goap.engine.v1.GetProcessLogResponse.entries:type_name -> goap.engine.v1.ProcessLogEntry
 	19, // 42: goap.engine.v1.GetProcessResponse.process:type_name -> goap.engine.v1.Process
 	50, // 43: goap.engine.v1.GetProcessProgressResponse.progress:type_name -> goap.engine.v1.ProcessProgress
 	49, // 44: goap.engine.v1.ExplainConditionResponse.root:type_name -> goap.engine.v1.ConditionTerm
-	67, // 45: goap.engine.v1.ExplainConditionResponse.inputs:type_name -> goap.engine.v1.ExplainConditionResponse.InputsEntry
+	77, // 45: goap.engine.v1.ExplainConditionResponse.inputs:type_name -> goap.engine.v1.ExplainConditionResponse.InputsEntry
 	49, // 46: goap.engine.v1.ConditionTerm.terms:type_name -> goap.engine.v1.ConditionTerm
 	51, // 47: goap.engine.v1.ProcessProgress.steps:type_name -> goap.engine.v1.StepProgress
 	15, // 48: goap.engine.v1.StepProgress.references:type_name -> goap.engine.v1.DocumentReference
@@ -5318,56 +5852,71 @@ var file_goap_engine_v1_engine_proto_depIdxs = []int32{
 	14, // 50: goap.engine.v1.StepProgress.roles:type_name -> goap.engine.v1.Responsibilities
 	52, // 51: goap.engine.v1.StepProgress.lanes:type_name -> goap.engine.v1.Lane
 	19, // 52: goap.engine.v1.ListProcessesResponse.processes:type_name -> goap.engine.v1.Process
-	68, // 53: goap.engine.v1.WatchEventsResponse.time:type_name -> google.protobuf.Timestamp
+	78, // 53: goap.engine.v1.WatchEventsResponse.time:type_name -> google.protobuf.Timestamp
 	19, // 54: goap.engine.v1.WatchEventsResponse.process:type_name -> goap.engine.v1.Process
 	8,  // 55: goap.engine.v1.WatchEventsResponse.log:type_name -> goap.engine.v1.LogLine
 	19, // 56: goap.engine.v1.RelaunchStepResponse.process:type_name -> goap.engine.v1.Process
 	19, // 57: goap.engine.v1.DecideFlowResponse.process:type_name -> goap.engine.v1.Process
 	19, // 58: goap.engine.v1.ResolveBoardResponse.process:type_name -> goap.engine.v1.Process
 	19, // 59: goap.engine.v1.ResolveBoardResponse.relaunched:type_name -> goap.engine.v1.Process
-	20, // 60: goap.engine.v1.EngineService.StartProcess:input_type -> goap.engine.v1.StartProcessRequest
-	30, // 61: goap.engine.v1.EngineService.AnswerIntent:input_type -> goap.engine.v1.AnswerIntentRequest
-	32, // 62: goap.engine.v1.EngineService.SubmitHumanInput:input_type -> goap.engine.v1.SubmitHumanInputRequest
-	34, // 63: goap.engine.v1.EngineService.ApproveAction:input_type -> goap.engine.v1.ApproveActionRequest
-	36, // 64: goap.engine.v1.EngineService.UnblockProcess:input_type -> goap.engine.v1.UnblockProcessRequest
-	57, // 65: goap.engine.v1.EngineService.RelaunchStep:input_type -> goap.engine.v1.RelaunchStepRequest
-	59, // 66: goap.engine.v1.EngineService.DecideFlow:input_type -> goap.engine.v1.DecideFlowRequest
-	61, // 67: goap.engine.v1.EngineService.ResolveBoard:input_type -> goap.engine.v1.ResolveBoardRequest
-	43, // 68: goap.engine.v1.EngineService.GetProcess:input_type -> goap.engine.v1.GetProcessRequest
-	45, // 69: goap.engine.v1.EngineService.GetProcessProgress:input_type -> goap.engine.v1.GetProcessProgressRequest
-	47, // 70: goap.engine.v1.EngineService.ExplainCondition:input_type -> goap.engine.v1.ExplainConditionRequest
-	53, // 71: goap.engine.v1.EngineService.ListProcesses:input_type -> goap.engine.v1.ListProcessesRequest
-	26, // 72: goap.engine.v1.EngineService.CheckAgents:input_type -> goap.engine.v1.CheckAgentsRequest
-	21, // 73: goap.engine.v1.EngineService.ListStartingPoints:input_type -> goap.engine.v1.ListStartingPointsRequest
-	38, // 74: goap.engine.v1.EngineService.AttachChange:input_type -> goap.engine.v1.AttachChangeRequest
-	41, // 75: goap.engine.v1.EngineService.GetProcessLog:input_type -> goap.engine.v1.GetProcessLogRequest
-	55, // 76: goap.engine.v1.EngineService.WatchEvents:input_type -> goap.engine.v1.WatchEventsRequest
-	1,  // 77: goap.engine.v1.EngineService.ListTriggers:input_type -> goap.engine.v1.ListTriggersRequest
-	3,  // 78: goap.engine.v1.EngineService.FireTrigger:input_type -> goap.engine.v1.FireTriggerRequest
-	29, // 79: goap.engine.v1.EngineService.StartProcess:output_type -> goap.engine.v1.StartProcessResponse
-	31, // 80: goap.engine.v1.EngineService.AnswerIntent:output_type -> goap.engine.v1.AnswerIntentResponse
-	33, // 81: goap.engine.v1.EngineService.SubmitHumanInput:output_type -> goap.engine.v1.SubmitHumanInputResponse
-	35, // 82: goap.engine.v1.EngineService.ApproveAction:output_type -> goap.engine.v1.ApproveActionResponse
-	37, // 83: goap.engine.v1.EngineService.UnblockProcess:output_type -> goap.engine.v1.UnblockProcessResponse
-	58, // 84: goap.engine.v1.EngineService.RelaunchStep:output_type -> goap.engine.v1.RelaunchStepResponse
-	60, // 85: goap.engine.v1.EngineService.DecideFlow:output_type -> goap.engine.v1.DecideFlowResponse
-	62, // 86: goap.engine.v1.EngineService.ResolveBoard:output_type -> goap.engine.v1.ResolveBoardResponse
-	44, // 87: goap.engine.v1.EngineService.GetProcess:output_type -> goap.engine.v1.GetProcessResponse
-	46, // 88: goap.engine.v1.EngineService.GetProcessProgress:output_type -> goap.engine.v1.GetProcessProgressResponse
-	48, // 89: goap.engine.v1.EngineService.ExplainCondition:output_type -> goap.engine.v1.ExplainConditionResponse
-	54, // 90: goap.engine.v1.EngineService.ListProcesses:output_type -> goap.engine.v1.ListProcessesResponse
-	28, // 91: goap.engine.v1.EngineService.CheckAgents:output_type -> goap.engine.v1.CheckAgentsResponse
-	25, // 92: goap.engine.v1.EngineService.ListStartingPoints:output_type -> goap.engine.v1.ListStartingPointsResponse
-	39, // 93: goap.engine.v1.EngineService.AttachChange:output_type -> goap.engine.v1.AttachChangeResponse
-	42, // 94: goap.engine.v1.EngineService.GetProcessLog:output_type -> goap.engine.v1.GetProcessLogResponse
-	56, // 95: goap.engine.v1.EngineService.WatchEvents:output_type -> goap.engine.v1.WatchEventsResponse
-	2,  // 96: goap.engine.v1.EngineService.ListTriggers:output_type -> goap.engine.v1.ListTriggersResponse
-	4,  // 97: goap.engine.v1.EngineService.FireTrigger:output_type -> goap.engine.v1.FireTriggerResponse
-	79, // [79:98] is the sub-list for method output_type
-	60, // [60:79] is the sub-list for method input_type
-	60, // [60:60] is the sub-list for extension type_name
-	60, // [60:60] is the sub-list for extension extendee
-	0,  // [0:60] is the sub-list for field type_name
+	80, // 60: goap.engine.v1.MayCommitRequest.blackboard:type_name -> goap.graph.v1.GetBlackboardResponse
+	81, // 61: goap.engine.v1.MayCreateChildRequest.parent:type_name -> goap.graph.v1.Change
+	81, // 62: goap.engine.v1.MayCreateChildRequest.child:type_name -> goap.graph.v1.Change
+	81, // 63: goap.engine.v1.MayMoveRequest.family:type_name -> goap.graph.v1.Change
+	81, // 64: goap.engine.v1.MayEditRequest.change:type_name -> goap.graph.v1.Change
+	63, // 65: goap.engine.v1.EngineService.TransitionChange:input_type -> goap.engine.v1.TransitionChangeRequest
+	20, // 66: goap.engine.v1.EngineService.StartProcess:input_type -> goap.engine.v1.StartProcessRequest
+	30, // 67: goap.engine.v1.EngineService.AnswerIntent:input_type -> goap.engine.v1.AnswerIntentRequest
+	32, // 68: goap.engine.v1.EngineService.SubmitHumanInput:input_type -> goap.engine.v1.SubmitHumanInputRequest
+	34, // 69: goap.engine.v1.EngineService.ApproveAction:input_type -> goap.engine.v1.ApproveActionRequest
+	36, // 70: goap.engine.v1.EngineService.UnblockProcess:input_type -> goap.engine.v1.UnblockProcessRequest
+	57, // 71: goap.engine.v1.EngineService.RelaunchStep:input_type -> goap.engine.v1.RelaunchStepRequest
+	59, // 72: goap.engine.v1.EngineService.DecideFlow:input_type -> goap.engine.v1.DecideFlowRequest
+	61, // 73: goap.engine.v1.EngineService.ResolveBoard:input_type -> goap.engine.v1.ResolveBoardRequest
+	43, // 74: goap.engine.v1.EngineService.GetProcess:input_type -> goap.engine.v1.GetProcessRequest
+	45, // 75: goap.engine.v1.EngineService.GetProcessProgress:input_type -> goap.engine.v1.GetProcessProgressRequest
+	47, // 76: goap.engine.v1.EngineService.ExplainCondition:input_type -> goap.engine.v1.ExplainConditionRequest
+	53, // 77: goap.engine.v1.EngineService.ListProcesses:input_type -> goap.engine.v1.ListProcessesRequest
+	26, // 78: goap.engine.v1.EngineService.CheckAgents:input_type -> goap.engine.v1.CheckAgentsRequest
+	21, // 79: goap.engine.v1.EngineService.ListStartingPoints:input_type -> goap.engine.v1.ListStartingPointsRequest
+	38, // 80: goap.engine.v1.EngineService.AttachChange:input_type -> goap.engine.v1.AttachChangeRequest
+	41, // 81: goap.engine.v1.EngineService.GetProcessLog:input_type -> goap.engine.v1.GetProcessLogRequest
+	55, // 82: goap.engine.v1.EngineService.WatchEvents:input_type -> goap.engine.v1.WatchEventsRequest
+	1,  // 83: goap.engine.v1.EngineService.ListTriggers:input_type -> goap.engine.v1.ListTriggersRequest
+	3,  // 84: goap.engine.v1.EngineService.FireTrigger:input_type -> goap.engine.v1.FireTriggerRequest
+	65, // 85: goap.engine.v1.GuardianService.MayCommit:input_type -> goap.engine.v1.MayCommitRequest
+	67, // 86: goap.engine.v1.GuardianService.MayCreateChild:input_type -> goap.engine.v1.MayCreateChildRequest
+	69, // 87: goap.engine.v1.GuardianService.MayMove:input_type -> goap.engine.v1.MayMoveRequest
+	71, // 88: goap.engine.v1.GuardianService.MayEdit:input_type -> goap.engine.v1.MayEditRequest
+	64, // 89: goap.engine.v1.EngineService.TransitionChange:output_type -> goap.engine.v1.TransitionChangeResponse
+	29, // 90: goap.engine.v1.EngineService.StartProcess:output_type -> goap.engine.v1.StartProcessResponse
+	31, // 91: goap.engine.v1.EngineService.AnswerIntent:output_type -> goap.engine.v1.AnswerIntentResponse
+	33, // 92: goap.engine.v1.EngineService.SubmitHumanInput:output_type -> goap.engine.v1.SubmitHumanInputResponse
+	35, // 93: goap.engine.v1.EngineService.ApproveAction:output_type -> goap.engine.v1.ApproveActionResponse
+	37, // 94: goap.engine.v1.EngineService.UnblockProcess:output_type -> goap.engine.v1.UnblockProcessResponse
+	58, // 95: goap.engine.v1.EngineService.RelaunchStep:output_type -> goap.engine.v1.RelaunchStepResponse
+	60, // 96: goap.engine.v1.EngineService.DecideFlow:output_type -> goap.engine.v1.DecideFlowResponse
+	62, // 97: goap.engine.v1.EngineService.ResolveBoard:output_type -> goap.engine.v1.ResolveBoardResponse
+	44, // 98: goap.engine.v1.EngineService.GetProcess:output_type -> goap.engine.v1.GetProcessResponse
+	46, // 99: goap.engine.v1.EngineService.GetProcessProgress:output_type -> goap.engine.v1.GetProcessProgressResponse
+	48, // 100: goap.engine.v1.EngineService.ExplainCondition:output_type -> goap.engine.v1.ExplainConditionResponse
+	54, // 101: goap.engine.v1.EngineService.ListProcesses:output_type -> goap.engine.v1.ListProcessesResponse
+	28, // 102: goap.engine.v1.EngineService.CheckAgents:output_type -> goap.engine.v1.CheckAgentsResponse
+	25, // 103: goap.engine.v1.EngineService.ListStartingPoints:output_type -> goap.engine.v1.ListStartingPointsResponse
+	39, // 104: goap.engine.v1.EngineService.AttachChange:output_type -> goap.engine.v1.AttachChangeResponse
+	42, // 105: goap.engine.v1.EngineService.GetProcessLog:output_type -> goap.engine.v1.GetProcessLogResponse
+	56, // 106: goap.engine.v1.EngineService.WatchEvents:output_type -> goap.engine.v1.WatchEventsResponse
+	2,  // 107: goap.engine.v1.EngineService.ListTriggers:output_type -> goap.engine.v1.ListTriggersResponse
+	4,  // 108: goap.engine.v1.EngineService.FireTrigger:output_type -> goap.engine.v1.FireTriggerResponse
+	66, // 109: goap.engine.v1.GuardianService.MayCommit:output_type -> goap.engine.v1.MayCommitResponse
+	68, // 110: goap.engine.v1.GuardianService.MayCreateChild:output_type -> goap.engine.v1.MayCreateChildResponse
+	70, // 111: goap.engine.v1.GuardianService.MayMove:output_type -> goap.engine.v1.MayMoveResponse
+	72, // 112: goap.engine.v1.GuardianService.MayEdit:output_type -> goap.engine.v1.MayEditResponse
+	89, // [89:113] is the sub-list for method output_type
+	65, // [65:89] is the sub-list for method input_type
+	65, // [65:65] is the sub-list for extension type_name
+	65, // [65:65] is the sub-list for extension extendee
+	0,  // [0:65] is the sub-list for field type_name
 }
 
 func init() { file_goap_engine_v1_engine_proto_init() }
@@ -5381,9 +5930,9 @@ func file_goap_engine_v1_engine_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_engine_v1_engine_proto_rawDesc), len(file_goap_engine_v1_engine_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   68,
+			NumMessages:   78,
 			NumExtensions: 0,
-			NumServices:   1,
+			NumServices:   2,
 		},
 		GoTypes:           file_goap_engine_v1_engine_proto_goTypes,
 		DependencyIndexes: file_goap_engine_v1_engine_proto_depIdxs,

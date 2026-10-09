@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
+	"github.com/zimwip/goap/internal/pbconv"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -101,5 +102,37 @@ func TestChangeObjectsAreRoleGated(t *testing.T) {
 	}
 	if err := put("developer"); err != nil {
 		t.Fatalf("a member of the project: %v", err)
+	}
+}
+
+// A change object type flagged system (the state of a change, ADR 0098) is written by platform services only: a person
+// is refused, an administrator too; the engine, a platform service, writes it.
+func TestSystemChangeObjectTypes(t *testing.T) {
+	ctx := context.Background()
+	g := graph.New(graph.NewMemory())
+	authorizer, err := authz.NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "t", OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	put := func(subject, roles string) error {
+		r := connect.NewRequest(&graphv1.PutChangeObjectsRequest{ChangeId: string(c.ID), Objects: pbconv.ObjectWritesToPB([]domain.ObjectWrite{
+			{Type: "execution@State", Value: map[string]any{"lifecycle": "l", "state": "s"}}})})
+		r.Header().Set(identity.HeaderSubject, subject)
+		r.Header().Set(identity.HeaderRoles, roles)
+		_, err := h.PutChangeObjects(ctx, r)
+		return err
+	}
+	for _, roles := range []string{"developer", "admin"} {
+		if err := put("alice", roles); connect.CodeOf(err) != connect.CodePermissionDenied {
+			t.Fatalf("%s writes the state by hand: %v", roles, err)
+		}
+	}
+	if err := put(authz.System("engine").Subject, ""); err != nil {
+		t.Fatalf("the engine writes the state: %v", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/zimwip/goap/internal/connectors/builtin"
 	"github.com/zimwip/goap/internal/enginesvc"
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
@@ -57,7 +58,11 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		Tracer:    telemetry.NewEngineTracer(),
 		Log:       e.log,
 		Types:     func() def.TypeSet { return rp.types.Get() },
+		// the lifecycle of a change is its methodology's, run by the engine (ADR 0058, 0098)
+		Lifecycles:           rp.reg,
+		TransitionAuthorizer: graphsvc.ChangeTransitionAuthorizer(gp.authorizer),
 	}
+	e.guardian.set(engine.Guardian{Engine: eg, Next: registrysvc.Guardian{Service: rp.reg, Directory: gp.directory}})
 	// self-observation (methodology-improvement): journal, traces, drafts
 	selfimprove.Register(builtins, eg, telemetry.SelfImprovementFromEnv(registrysvc.Drafts{Service: rp.reg}))
 	triggers := &engine.TriggerManager{Engine: eg, Log: e.log}

@@ -6,6 +6,8 @@
 package blackboard
 
 import (
+	"cmp"
+	"slices"
 	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -137,4 +139,67 @@ func RecordRun(r RunRef) domain.ObjectWrite {
 		value["startedAt"] = r.StartedAt.UTC().Format(time.RFC3339)
 	}
 	return domain.ObjectWrite{Type: TypeRun, Key: r.ID, Value: value, Labels: map[string]string{"process": r.ID}}
+}
+
+// StateRef is the state of the change in the lifecycle of its methodology (execution@State, ADR 0058): the
+// methodology defines the lifecycle, the engine moves the state, the change knows neither.
+type StateRef struct {
+	Lifecycle string
+	State     string
+	// Version is the version of the change object: a move writes over it (domain.ObjectWrite.Expect).
+	Version int
+}
+
+// State is the state of the change; ok false while nothing recorded one (the change is then in the initial state of
+// its lifecycle).
+func (v View) State() (StateRef, bool) {
+	for _, o := range v.OfType(TypeState) {
+		if o.Workspace == "" {
+			return StateRef{Lifecycle: str(o.Value, "lifecycle"), State: str(o.Value, "state"), Version: o.Version}, true
+		}
+	}
+	return StateRef{}, false
+}
+
+// Move is a move of the lifecycle of the change (execution@Transition), at its position in the log of the change.
+type Move struct {
+	Key        string
+	Transition string
+	From, To   string
+	// Decision is the decision point that gated the move, when there was one: a point gates one move only.
+	Decision string
+	By       string
+	Seq      int64
+}
+
+// Moves are the moves of the lifecycle of the change, in the order they were made.
+func (v View) Moves() []Move {
+	var out []Move
+	for _, o := range v.OfType(TypeTransition) {
+		out = append(out, Move{Key: o.Key, Transition: str(o.Value, "transition"), From: str(o.Value, "from"), To: str(o.Value, "to"),
+			Decision: str(o.Value, "decision"), By: str(o.Value, "by"), Seq: o.Seq})
+	}
+	slices.SortFunc(out, func(a, b Move) int { return cmp.Compare(a.Seq, b.Seq) })
+	return out
+}
+
+// SetState is the write of the state of the change, over the version the writer read (StateRef.Version, 0: none).
+func SetState(lifecycle, state string, read int) domain.ObjectWrite {
+	return domain.ObjectWrite{Type: TypeState, Value: map[string]any{"lifecycle": lifecycle, "state": state}, Expect: &read}
+}
+
+// RecordMove is the write of a move of the lifecycle; unmet and reserve say which objectives it goes with reserve of
+// and the derogations that covered them (ADR 0075 §3).
+func RecordMove(m Move, unmet, reserve any) domain.ObjectWrite {
+	value := map[string]any{"transition": m.Transition, "from": m.From, "to": m.To}
+	if m.Decision != "" {
+		value["decision"] = m.Decision
+	}
+	if m.By != "" {
+		value["by"] = m.By
+	}
+	if unmet != nil {
+		value["unmet"], value["reserve"] = unmet, reserve
+	}
+	return domain.ObjectWrite{Type: TypeTransition, Value: value}
 }

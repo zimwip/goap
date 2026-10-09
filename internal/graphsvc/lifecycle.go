@@ -35,8 +35,9 @@ func TransitionAuthorizer(a authz.Authorizer) graph.TransitionAuthorizer {
 }
 
 // ChangeTransitionAuthorizer authorizes the transitions of the lifecycle of a change for the caller (ADR 0058): the
-// permission a transition declares, by default change:transition, checked on the project of the change.
-func ChangeTransitionAuthorizer(a authz.Authorizer) graph.ChangeTransitionAuthorizer {
+// permission a transition declares, by default change:transition, checked on the project of the change. The engine,
+// which moves the state of a change (ADR 0098), asks it (engine.Engine.TransitionAuthorizer).
+func ChangeTransitionAuthorizer(a authz.Authorizer) func(ctx context.Context, c domain.Change, t domain.Transition) error {
 	return func(ctx context.Context, c domain.Change, t domain.Transition) error {
 		who := authz.From(ctx)
 		if a == nil {

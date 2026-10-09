@@ -283,14 +283,14 @@ func changeObjectTypesToPB(ts []def.ChangeObjectType) []*registryv1.ChangeObject
 	var out []*registryv1.ChangeObjectType
 	for _, t := range ts {
 		out = append(out, &registryv1.ChangeObjectType{Name: t.Name, Description: t.Description, Key: keyTypeToPB(t.Key), Scope: t.Scope,
-			Attributes: attributesToPB(t.Attributes), Lifecycle: t.Lifecycle, Editor: t.Editor, Search: searchToPB(t.Search), AdditionalProperties: t.AdditionalProperties})
+			Attributes: attributesToPB(t.Attributes), Lifecycle: t.Lifecycle, Editor: t.Editor, Search: searchToPB(t.Search), AdditionalProperties: t.AdditionalProperties, System: t.System})
 	}
 	return out
 }
 
 func changeObjectTypeFromPB(t *registryv1.ChangeObjectType) def.ChangeObjectType {
 	return def.ChangeObjectType{Name: t.Name, Description: t.Description, Key: keyTypeFromPB(t.Key), Scope: t.Scope, Attributes: attributesFromPB(t.Attributes),
-		Lifecycle: t.Lifecycle, Editor: t.Editor, Search: searchFromPB(t.Search), AdditionalProperties: t.AdditionalProperties}
+		Lifecycle: t.Lifecycle, Editor: t.Editor, Search: searchFromPB(t.Search), AdditionalProperties: t.AdditionalProperties, System: t.System}
 }
 
 func keyTypeToPB(k def.KeyType) *registryv1.KeyType {

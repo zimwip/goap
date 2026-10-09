@@ -523,6 +523,14 @@ type testGuardian struct {
 	commit func(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error)
 	child  func(ctx context.Context, parent, child domain.Change) error
 	move   func(ctx context.Context, family []domain.Change, to string) error
+	edit   func(ctx context.Context, c domain.Change, impact domain.ChangeImpactID) error
+}
+
+func (gd *testGuardian) MayEdit(ctx context.Context, c domain.Change, impact domain.ChangeImpactID) error {
+	if gd.edit == nil {
+		return nil
+	}
+	return gd.edit(ctx, c, impact)
 }
 
 func (gd *testGuardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {

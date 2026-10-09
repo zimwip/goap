@@ -376,12 +376,6 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 		n["goap:accept"] = d.Accept
 		set(n, "rdfs:comment", d.Comment)
 	}
-	if it.Kind == domain.KindTransition {
-		// a move of the lifecycle of the change (ADR 0058), influenced by the decision point that gated it
-		if d, _ := it.Data["decision"].(string); d != "" {
-			add(n, "prov:wasInfluencedBy", ref(itemIRI(domain.ItemID(d))))
-		}
-	}
 	if it.Kind == verify.KindVerification {
 		b.verification(n, it)
 	}

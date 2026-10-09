@@ -280,7 +280,8 @@ func (g *Graph) storedDraft(ctx context.Context, tx Tx, ref domain.NodeRef) (dom
 // ImpactNodeResolve settles the conflicts a rebase left on a change impact of a sub-change by keeping the sub-change's
 // values (ADR 0082 §2): an updated event with {"resolved": true}. The impact is then reviewed as any.
 func (g *Graph) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, execution string) (cn domain.ChangeImpact, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	ctx = withEdits(ctx)
+	err = g.editTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, domain.MainFlow)
 		if err != nil {
 			return err

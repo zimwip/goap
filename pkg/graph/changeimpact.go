@@ -311,7 +311,7 @@ func (g *Graph) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b
 	if b.Item != nil {
 		it := *b.Item
 		switch it.Kind {
-		case domain.KindFlow, domain.KindTransition, domain.KindDecisionPoint:
+		case domain.KindFlow, domain.KindDecisionPoint:
 			return nil, fmt.Errorf("a %s item is recorded by its own operation, not by a review batch: %w", it.Kind, ErrInvalid)
 		}
 		if it.ID == "" {

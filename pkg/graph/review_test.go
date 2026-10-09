@@ -140,7 +140,7 @@ func testReviewBatchIsAtomic(t *testing.T, repo Repo) {
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewProposed, Comment: "x"}}},
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted}}},
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}, {Impact: imps[0].ID, Status: domain.ReviewRejected, Comment: "y"}}},
-		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}}, Item: &domain.ChangeItem{Kind: domain.KindTransition, Data: map[string]any{"to": "x"}}},
+		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}}, Item: &domain.ChangeItem{Kind: domain.KindFlow, Data: map[string]any{"to": "x"}}},
 	} {
 		if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, bad); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("%+v: %v", bad, err)

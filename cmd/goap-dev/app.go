@@ -6,7 +6,9 @@ import (
 	"sync/atomic"
 
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/review"
@@ -35,6 +37,7 @@ type env struct {
 	// triggers is the late binding of the trigger manager, which needs the engine, while the change and registry
 	// hooks it serves are wired before.
 	triggers *triggerRef
+	guardian *guardianRef
 }
 
 // newApp wires the whole platform in the order the composition needs (graphsvc/boot.go doc, docs/architecture.md
@@ -47,7 +50,7 @@ func newApp(parent context.Context, cfg config, log *slog.Logger) (*app, error) 
 	review.Register()
 	ctx, cancel := context.WithCancel(parent)
 	dev := cfg.Dev
-	e := &env{ctx: ctx, cfg: cfg, log: log, secrets: platform.NewSecrets(), dev: &dev, triggers: &triggerRef{}}
+	e := &env{ctx: ctx, cfg: cfg, log: log, secrets: platform.NewSecrets(), dev: &dev, triggers: &triggerRef{}, guardian: &guardianRef{}}
 	st, err := openStores(ctx, log)
 	if err != nil {
 		cancel()
@@ -124,4 +127,40 @@ func (f changePublisher) Publish(ctx context.Context, _ string, v any) error {
 		f(ctx, ev)
 	}
 	return nil
+}
+
+// guardianRef is the guardian of the changes (ADR 0098), bound late: the graph asks it from its bootstrap on, the engine
+// that holds the lifecycles of the methodologies exists after the registry. Until then the rules of the registry
+// answer alone.
+type guardianRef struct {
+	g atomic.Pointer[changeapi.Guardian]
+}
+
+func (r *guardianRef) set(g changeapi.Guardian) { r.g.Store(&g) }
+
+func (r *guardianRef) get() changeapi.Guardian {
+	if g := r.g.Load(); g != nil {
+		return *g
+	}
+	return registrysvc.Guardian{}
+}
+
+// MayCommit implements changeapi.Guardian.
+func (r *guardianRef) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	return r.get().MayCommit(ctx, c, bb)
+}
+
+// MayCreateChild implements changeapi.Guardian.
+func (r *guardianRef) MayCreateChild(ctx context.Context, parent, child domain.Change) error {
+	return r.get().MayCreateChild(ctx, parent, child)
+}
+
+// MayMove implements changeapi.Guardian.
+func (r *guardianRef) MayMove(ctx context.Context, family []domain.Change, to string) error {
+	return r.get().MayMove(ctx, family, to)
+}
+
+// MayEdit implements changeapi.Guardian.
+func (r *guardianRef) MayEdit(ctx context.Context, c domain.Change, impact domain.ChangeImpactID) error {
+	return r.get().MayEdit(ctx, c, impact)
 }

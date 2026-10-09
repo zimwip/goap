@@ -2,6 +2,8 @@ package registrysvc
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -9,6 +11,7 @@ import (
 
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -91,4 +94,34 @@ func (c *Client) Methodology(ctx context.Context, name string) (*methodology.Com
 	}
 	c.cache[k] = cm
 	return cm, nil
+}
+
+// Lifecycle implements engine.LifecyclePort for a remote engine: the lifecycle the latest published version of a
+// methodology names, defined by a domain (the one of its namespace first); nil when it names none.
+func (c *Client) Lifecycle(ctx context.Context, name string) (*domain.Lifecycle, error) {
+	m, err := c.Methodology(ctx, name)
+	if err != nil {
+		var unknown methodology.ErrUnknown
+		if errors.As(err, &unknown) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if m.Lifecycle == "" {
+		return nil, nil
+	}
+	ds, err := c.Domains(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var found *domain.Lifecycle
+	for _, d := range append(def.BuiltinDomains(), ds...) {
+		if lc := d.Lifecycle(m.Lifecycle); lc != nil && (found == nil || d.Name == m.Namespace) {
+			found = lc
+		}
+	}
+	if found == nil {
+		return nil, fmt.Errorf("methodology %s names lifecycle %q, which no domain defines: %w", m.Name, m.Lifecycle, ErrInvalid)
+	}
+	return found, nil
 }

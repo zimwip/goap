@@ -387,28 +387,7 @@ func (c *Client) BlackboardIn(ctx context.Context, id domain.ChangeID, flow stri
 	if err != nil {
 		return domain.Blackboard{}, rpcerr.FromConnect(err)
 	}
-	// the facets of the wire are the built-in ones: options, active option, decision points
-	var options []domain.Flow
-	for _, f := range r.Msg.Options {
-		options = append(options, pbconv.FlowFromPB(f))
-	}
-	var points []domain.DecisionPoint
-	for _, d := range r.Msg.DecisionPoints {
-		points = append(points, pbconv.DecisionPointFromPB(d))
-	}
-	bb := domain.Blackboard{Change: pbconv.ChangeFromPB(r.Msg.Change), Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
-		Facets: map[string]any{domain.FacetOptions: options, domain.FacetActiveOption: r.Msg.ActiveOption, domain.FacetDecisionPoints: points,
-			domain.FacetObjects: pbconv.ChangeObjectsFromPB(r.Msg.Objects)},
-		At: pbconv.FromTime(r.Msg.At)}
-	for _, v := range r.Msg.Nodes {
-		nv := pbconv.ViewFromPB(v)
-		bb.Nodes[nv.Ref()] = nv
-	}
-	for _, n := range r.Msg.Neighbors {
-		nn := pbconv.NodeFromPB(n)
-		bb.Neighbors[nn.Ref()] = nn
-	}
-	return bb, nil
+	return pbconv.BlackboardFromPB(r.Msg), nil
 }
 
 func (c *Client) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
@@ -519,15 +498,6 @@ func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName str
 		return domain.Baseline{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
-}
-
-// TransitionChange moves the state of a change along a transition of its lifecycle (ADR 0058).
-func (c *Client) TransitionChange(ctx context.Context, id domain.ChangeID, in graph.TransitionRequest) (domain.Change, error) {
-	r, err := c.chg.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: string(id), Transition: in.Transition, Decision: in.Decision}))
-	if err != nil {
-		return domain.Change{}, rpcerr.FromConnect(err)
-	}
-	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
 func (c *Client) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {

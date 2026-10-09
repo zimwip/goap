@@ -63,6 +63,10 @@ func ObjectWritesToPB(ws []domain.ObjectWrite) []*graphv1.ObjectWrite {
 	out := make([]*graphv1.ObjectWrite, len(ws))
 	for i, w := range ws {
 		out[i] = &graphv1.ObjectWrite{Type: w.Type, Key: w.Key, Value: Struct(w.Value), Merge: w.Merge, Transition: w.Transition, Workspace: w.Workspace, Labels: w.Labels}
+		if w.Expect != nil {
+			e := int32(*w.Expect)
+			out[i].Expect = &e
+		}
 	}
 	return out
 }
@@ -72,6 +76,10 @@ func ObjectWritesFromPB(ws []*graphv1.ObjectWrite) []domain.ObjectWrite {
 	out := make([]domain.ObjectWrite, len(ws))
 	for i, w := range ws {
 		out[i] = domain.ObjectWrite{Type: w.Type, Key: w.Key, Value: Map(w.Value), Merge: w.Merge, Transition: w.Transition, Workspace: w.Workspace, Labels: labelsOrNil(w.Labels)}
+		if w.Expect != nil {
+			e := int(*w.Expect)
+			out[i].Expect = &e
+		}
 	}
 	return out
 }

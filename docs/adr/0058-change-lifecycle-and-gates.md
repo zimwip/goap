@@ -1,6 +1,6 @@
 # ADR 0058 — A change may have a lifecycle; its transitions are gated by decisions and expected world state
 
-**Status**: accepted, mechanism implemented · **Date**: 2026-10 · Builds on ADR 0009, 0014, 0034, 0035, 0051, 0056.
+**Status**: accepted, mechanism implemented; the state of a change and its transitions moved from the graph to the engine (ADR 0098): `execution@State` / `execution@Transition` change objects, `EngineService.TransitionChange`, the freeze asked of the guardian · **Date**: 2026-10 · Builds on ADR 0009, 0014, 0034, 0035, 0051, 0056.
 
 ## Context
 

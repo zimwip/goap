@@ -22,7 +22,7 @@ import (
 //
 // Functions: hasRole(sub, role), hasAnyRole(sub, role...), hasRoleIn(sub, role, obj), onProject(sub) (holds a
 // role on the resource's project), mayRun(sub, obj) (holds one of obj.Roles, or any role when it lists none),
-// isAnonymous(sub).
+// isAnonymous(sub), isSystem(sub) (a platform service, authz.System).
 //
 // A request is allowed when at least one allow rule matches and no deny rule does.
 const Model = `
@@ -216,6 +216,10 @@ func newCasbin(adapter persist.Adapter) (*Casbin, error) {
 	e.AddFunction("isAnonymous", func(args ...any) (any, error) {
 		p, _ := args[0].(Principal)
 		return p.Anonymous(), nil
+	})
+	e.AddFunction("isSystem", func(args ...any) (any, error) {
+		p, _ := args[0].(Principal)
+		return p.System(), nil
 	})
 	return &Casbin{e: e}, nil
 }

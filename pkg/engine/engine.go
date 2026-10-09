@@ -42,6 +42,12 @@ type Engine struct {
 	// Scope is who and where: the organisation and project a process works in, what its principals may do there
 	// and the MCPs it binds (ADR 0063). Unset: an AuthzScope granting everything and binding no MCP.
 	Scope Scope
+	// Lifecycles resolves the lifecycle the changes of a methodology follow (ADR 0058, 0098): the engine moves the state
+	// of a change (TransitionChange) and guards its impacts (Guardian). Unset: no change follows a lifecycle.
+	Lifecycles LifecyclePort
+	// TransitionAuthorizer, when set, is asked before every transition of the lifecycle of a change: the permission the
+	// transition declares, by default change:transition, for the caller.
+	TransitionAuthorizer func(ctx context.Context, c domain.Change, t domain.Transition) error
 	// LLM serves DSL model calls (the model gateway).
 	LLM llm.Client
 	// Sandboxes isolates script actions (one sandbox per process run).
@@ -1399,6 +1405,9 @@ func (e *Engine) recordRun(ctx context.Context, p *Process) {
 		}
 		if ref.Name != "" {
 			writes = append(writes, blackboard.DeclareMethodology(ref))
+		}
+		if ref.Role == blackboard.RolePrimary {
+			e.ensureState(ctx, p.ChangeID, p.Methodology)
 		}
 	}
 	writes = append(writes, blackboard.RecordRun(blackboard.RunRef{ID: p.ID, Methodology: p.Methodology, Agent: p.Agent, Goal: p.Goal,

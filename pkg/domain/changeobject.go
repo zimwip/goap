@@ -66,6 +66,9 @@ type ObjectWrite struct {
 	Workspace string `json:"workspace,omitempty"`
 	// Labels are opaque labels recorded with the write.
 	Labels map[string]string `json:"labels,omitempty"`
+	// Expect, when set, is the version of the change object the writer read (0: none yet): a write over another
+	// version is a conflict, so two writers cannot both move it from the same version.
+	Expect *int `json:"expect,omitempty"`
 }
 
 // ObjectFilter selects the change objects of a change.

@@ -62,9 +62,8 @@ CREATE TABLE change (
     parent_id          uuid REFERENCES change(id),
     owner_org          text        NOT NULL CHECK (owner_org <> ''),
     project_id         text        NOT NULL CHECK (project_id <> ''),
-    lifecycle          text        NOT NULL DEFAULT '',
-    state              text        NOT NULL DEFAULT '',
-    -- the guardian the change asks before it lands, takes a sub-change or moves (ADR 0098); '': free
+    -- the guardian the change asks before it lands, takes a sub-change, moves or edits an impact (ADR 0098): the state
+    -- of the change in the lifecycle of its methodology is the guardian's; '': free
     guardian           text        NOT NULL DEFAULT ''
 );
 CREATE INDEX change_parent ON change (parent_id);

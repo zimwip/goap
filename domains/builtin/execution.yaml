@@ -26,19 +26,24 @@ changeObjectTypes:
       - {name: role, type: enum, enum: methodology-role, label: Role, default: primary}
       - {name: goal, type: string, label: Goal}
   - name: State
-    description: The state of the change in the lifecycle of its methodology (ADR 0058)
+    description: The state of the change in the lifecycle of its methodology (ADR 0058), written by the engine
     key: {kind: singleton}
+    system: true
     attributes:
       - {name: lifecycle, type: string, label: Lifecycle}
       - {name: state, type: string, label: State, asName: true}
   - name: Transition
-    description: A move of the lifecycle of the change, and the decision point that gated it
+    description: A move of the lifecycle of the change, and the decision point that gated it, written by the engine
     key: {kind: sequence, prefix: TR}
+    system: true
     attributes:
       - {name: transition, type: string, label: Transition, asName: true}
       - {name: from, type: string, label: From}
       - {name: to, type: string, label: To}
       - {name: decision, type: string, label: Decision point}
+      - {name: by, type: string, label: By}
+      - {name: unmet, type: json, label: Objectives not met}
+      - {name: reserve, type: json, label: Derogations covering them}
   - name: Fact
     description: A fact a run puts on the blackboard (a decision, an artifact, a signal...)
     key: {kind: sequence, prefix: FACT}

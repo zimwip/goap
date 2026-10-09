@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/graph/graphtest"
 )
 
-func blackboard(t *testing.T, withTest bool) domain.Blackboard {
+func boardOf(t *testing.T, withTest bool) domain.Blackboard {
 	t.Helper()
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
@@ -54,7 +54,7 @@ func TestEvaluate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := set.Evaluate(blackboard(t, false))
+	res := set.Evaluate(boardOf(t, false))
 	want := map[string]bool{"has_impacts": true, "req_impacted": true, "up_to_date": true, "tests_proposed": false}
 	for k, v := range want {
 		if got, ok := res.State[k]; !ok || got != v {
@@ -64,7 +64,7 @@ func TestEvaluate(t *testing.T) {
 	if _, ok := res.State["broken"]; ok || res.Errors["broken"] == "" {
 		t.Errorf("broken condition must be unknown")
 	}
-	res = set.Evaluate(blackboard(t, true))
+	res = set.Evaluate(boardOf(t, true))
 	if !res.State["tests_proposed"] {
 		t.Errorf("tests_proposed should hold: %v", res.Errors)
 	}
@@ -89,7 +89,7 @@ func TestChangeImpacts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := set.Evaluate(blackboard(t, true))
+	res := set.Evaluate(boardOf(t, true))
 	want := map[string]bool{"one_planned": true, "created_test": true, "all_reviewed": false, "linked": true}
 	for k, v := range want {
 		if got, ok := res.State[k]; !ok || got != v {

@@ -454,6 +454,31 @@ No methodology references a change object type yet (phase 5).
   `flow`, `merge` and the registered kinds) and the options and decision points of `pkg/graph`; the guardian is still the
   registry's.
 
+**Phase 5, the lifecycle (done)**: the change follows its methodology through its guardian.
+
+- The change knows only that it is open or closed: `Change.Lifecycle` / `State` (columns, proto fields 20 / 21 reserved),
+  `Graph.TransitionChange`, the phases, the freeze, the final-state check, `ChangeAuthorizer`, the `transition` item kind
+  and the lifecycle half of `ChangeLifecycles` (now `ChangeDefaults`, the default goal only) left `pkg/graph`.
+- The engine runs the lifecycle (`pkg/engine/lifecycle.go`): `Engine.TransitionChange` (RPC
+  `EngineService.TransitionChange`) checks the transition, `TransitionAuthorizer` (`change:transition`), the decision
+  point (consumed by the move), the guard, the vetos and the objectives over the compiled methodology, and writes one
+  `execution@Transition` and the `execution@State` singleton in one write, over the state read (`ObjectWrite.Expect`, a
+  concurrent move is a conflict), as `system:engine` (both types are flagged `system`: written by platform services
+  only, refused to anyone else, administrators included, by the graph service); a
+  move back reopens the reviews accepted since. The state of a change nothing moved is the initial one, recorded at the
+  first save of a run (`ensureState`); the conditions read it as `change.state` from the objects
+  (`blackboard.View.State`).
+- The guardian (`changeapi.Guardian`) gained `MayEdit`: the graph asks it before any operation on an impact the change
+  holds, outside its transaction (`Graph.editTx`: the operation stops at an impact not asked about, asks, runs again).
+  `engine.Guardian` (name `methodology`) freezes the impacts started in a state the change has left and lands a change
+  in a final state only, then asks `Next` (the registry's rules: Activity goals, `sub_activity`, moves). `goap-dev` binds
+  it in process (late, after the bootstrap); `cmd/graph` asks `engine.v1.GuardianService` (`enginesvc.GuardianClient`)
+  served by `cmd/engine`, without the registry's rules there.
+- The web reads the lifecycle from the methodology and the state from the change objects (`lifecycleState`), and moves
+  through `engine.transitionChange`; the assistant reads the state from the objects.
+- Not done: the methodology and goal columns of the header, the items, options and decision points; the guardian's
+  answers over RPC carry the change with its impacts (no lighter form yet).
+
 **Phase 6, first step (done)**: the declared change view.
 
 - The type catalogue of the web holds the change object types (`TypeCatalog.objects`, `objectType`, `objectNames`, from

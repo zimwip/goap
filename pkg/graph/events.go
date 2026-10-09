@@ -273,7 +273,7 @@ func (g *Graph) changeDocs(ctx context.Context, tx Tx, ot *observedTx) ([]publis
 			}
 		}
 		ev := domain.ChangeDocEvent{ID: c.ID, Title: c.Title, Intent: c.Intent, Goal: c.Goal, Methodology: c.Methodology, Namespace: c.Namespace,
-			Status: c.Status, State: c.State, ProjectID: c.ProjectID, OwnerOrg: c.OwnerOrg, ParentID: c.ParentID, Branch: c.Branch, CreatedAt: c.CreatedAt}
+			Status: c.Status, ProjectID: c.ProjectID, OwnerOrg: c.OwnerOrg, ParentID: c.ParentID, Branch: c.Branch, CreatedAt: c.CreatedAt}
 		impacts, err := tx.ChangeImpacts(ctx, id)
 		if err != nil {
 			return nil, err

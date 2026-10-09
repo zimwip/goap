@@ -178,10 +178,10 @@ message Change {
   // key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
   string project_id = 18;
   reserved 19;
-  // the lifecycle the change follows (named by its methodology) and its state (ADR 0058); empty: none
-  string lifecycle = 20;
-  string state = 21;
-  // the guardian the change asks before it lands, takes a sub-change or moves (ADR 0098); empty: free
+  // the lifecycle and the state of a change are its guardian's (ADR 0098): execution@State change objects
+  reserved 20, 21;
+  reserved "lifecycle", "state";
+  // the guardian the change asks before it lands, takes a sub-change, moves or edits an impact (ADR 0098); empty: free
   string guardian = 22;
 }
 
@@ -608,6 +608,8 @@ message ObjectWrite {
   // workspace of a workspace-scoped type (empty: the active option, else the main workspace)
   string workspace = 6;
   map<string, string> labels = 7;
+  // the version the writer read (0: none yet): a write over another version is a conflict
+  optional int32 expect = 8;
 }
 
 message PutChangeObjectsRequest {
@@ -785,18 +787,6 @@ message GetBlackboardResponse {
 message ApplyChangeRequest {
   string change_id = 1;
   string baseline_name = 2;
-}
-
-message TransitionChangeRequest {
-  string change_id = 1;
-  // name of the transition out of the current state
-  string transition = 2;
-  // the decision point that gates it, seen by the guard as change.decision; a point gates one transition only
-  string decision = 3;
-}
-
-message TransitionChangeResponse {
-  Change change = 1;
 }
 
 message DeleteChangeRequest {

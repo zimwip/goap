@@ -1,8 +1,33 @@
 // The lifecycle of a change and its transitions (ADR 0058), as the change tab and the assistant's `transition_change`
 // share them: which transitions leave the current state, what the definition says of their gate, which decision points
-// may gate one, and the single function that takes a transition. The server is the authority (CEL guard, vetos,
-// objectives, `change:transition`): nothing here evaluates a guard, it only shows what the definition says.
-import { errorMessage, registry, type Change, type ChangeItem, type DecisionPoint, type Lifecycle, type LifecycleTransition } from './api';
+// may gate one, and the single function that takes a transition. The methodology names the lifecycle, the engine moves
+// the state and records it as change objects of the change (execution@State, execution@Transition: ADR 0098); the
+// change itself knows none. The engine is the authority (CEL guard, vetos, objectives, `change:transition`): nothing
+// here evaluates a guard, it only shows what the definition says.
+import { errorMessage, registry, type Change, type ChangeObject, type DecisionPoint, type Lifecycle, type LifecycleTransition } from './api';
+
+/** The change object types the engine records the lifecycle of a change with (the built-in domain execution). */
+export const STATE_TYPE = 'execution@State';
+export const TRANSITION_TYPE = 'execution@Transition';
+
+/** Where a change is in the lifecycle of its methodology. */
+export interface ChangeLifecycleState {
+  /** the lifecycle the methodology of the change names; '' when it names none */
+  lifecycle: string;
+  /** the state the engine recorded, else the initial state of the lifecycle */
+  state: string;
+}
+
+const str = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+/** The state of a change: the execution@State object the engine wrote, else the initial state of the lifecycle the
+ * methodology names (nothing is recorded before the first move or run). */
+export function lifecycleState(objects: ChangeObject[] | undefined, lifecycle: string, lc?: Lifecycle): ChangeLifecycleState {
+  if (!lifecycle) return { lifecycle: '', state: '' };
+  const rec = (objects ?? []).find((o) => o.type === STATE_TYPE && !o.workspace);
+  const state = str(rec?.value?.state);
+  return { lifecycle, state: state || lc?.initial || '' };
+}
 
 export interface TransitionOffer {
   name: string;
@@ -18,7 +43,7 @@ export interface TransitionOffer {
 }
 
 /** The change can take a transition: it follows a lifecycle and is neither committed, applied nor abandoned. */
-export function movable(c: Pick<Change, 'lifecycle' | 'status'> | undefined): boolean {
+export function movable(c: { lifecycle?: string; status?: Change['status'] | string } | undefined): boolean {
   return !!c?.lifecycle && !['applied', 'abandoned', 'committed'].includes(c.status ?? '');
 }
 
@@ -52,19 +77,20 @@ export function availableTransitions(lc: Lifecycle | undefined, state: string | 
     }));
 }
 
-/** The decision points a transition already consumed (`transition` items of the change record the one that gated them). */
-export function consumedDecisions(items: ChangeItem[] | undefined): Set<string> {
+/** The decision points a transition already consumed (the execution@Transition objects record the one that gated
+ * each move). */
+export function consumedDecisions(objects: ChangeObject[] | undefined): Set<string> {
   const out = new Set<string>();
-  for (const it of items ?? []) {
-    const d = (it.kind === 'transition' ? (it.data as Record<string, unknown> | undefined)?.decision : undefined) as string | undefined;
+  for (const o of objects ?? []) {
+    const d = o.type === TRANSITION_TYPE ? str(o.value?.decision) : '';
     if (d) out.add(d);
   }
   return out;
 }
 
 /** The decided decision points that no transition has used yet: the ones that may gate a transition. */
-export function pickableDecisions(points: DecisionPoint[] | undefined, items: ChangeItem[] | undefined): DecisionPoint[] {
-  const used = consumedDecisions(items);
+export function pickableDecisions(points: DecisionPoint[] | undefined, objects: ChangeObject[] | undefined): DecisionPoint[] {
+  const used = consumedDecisions(objects);
   return (points ?? []).filter((p) => p.status === 'decided' && !!p.id && !used.has(p.id));
 }
 
@@ -105,14 +131,14 @@ export function parseRefusal(message: string): Refusal {
 
 export interface TransitionDeps {
   confirm: (o: { message: string; title?: string; confirmLabel?: string }) => Promise<boolean>;
-  call: (changeId: string, transition: string, decision: string) => Promise<{ change?: Change }>;
+  call: (changeId: string, transition: string, decision: string) => Promise<{ state?: string }>;
   /** read the change again (and what depends on it) */
   refresh: () => Promise<void>;
   notify: (message: string, kind: 'ok' | 'error') => void;
 }
 
 export interface TransitionRun {
-  change: Pick<Change, 'id' | 'lifecycle' | 'status' | 'state'>;
+  change: Pick<Change, 'id' | 'status'> & Partial<ChangeLifecycleState>;
   offer: TransitionOffer;
   decision?: DecisionPoint;
   /** the assistant's proposal card was the confirmation: no second dialog */
@@ -131,9 +157,9 @@ export async function runTransition(deps: TransitionDeps, run: TransitionRun): P
     return { ok: false, cancelled: true, message: 'Cancelled.' };
   }
   try {
-    const moved = (await deps.call(change.id, offer.name, run.decision?.id ?? '')).change;
+    const moved = await deps.call(change.id, offer.name, run.decision?.id ?? '');
     await deps.refresh();
-    const state = moved?.state ?? offer.to;
+    const state = moved?.state || offer.to;
     deps.notify(`Change moved to “${state}”.`, 'ok');
     return { ok: true, state };
   } catch (e) {

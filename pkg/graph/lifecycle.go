@@ -197,7 +197,7 @@ func (a *applier) checkTransition(n domain.Node, out []domain.Link, t domain.Tra
 			views = append(views, nodeView(c))
 		}
 		ok, err := gd.Check(nodeView(n), views, map[string]any{"id": string(a.change.ID), "title": a.change.Title,
-			"intent": a.change.Intent, "methodology": a.change.Methodology, "goal": a.change.Goal, "state": a.change.State, "status": string(a.change.Status)},
+			"intent": a.change.Intent, "methodology": a.change.Methodology, "goal": a.change.Goal, "status": string(a.change.Status)},
 			impactView(a.impact), draftView(a.draft))
 		if err != nil {
 			return nil, invalidf("guard of %s on %s: %v", t.Name, n.Key, err)

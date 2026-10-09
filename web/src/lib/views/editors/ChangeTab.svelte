@@ -30,7 +30,7 @@
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
   import { loadMoveOffer, moveChangeTo } from '../../changeMove';
-  import { availableTransitions, decisionLabel, findLifecycle, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
+  import { availableTransitions, decisionLabel, findLifecycle, lifecycleState, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
   import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
   import { movable } from '../../changeProject';
@@ -387,9 +387,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     }
   }
 
+  // the lifecycle the methodology of the change names; the engine records where the change is in it (ADR 0098)
+  const lcName = $derived(published.get(change?.methodology ?? '')?.lifecycle ?? '');
+  const chLc = $derived(lifecycleState(objects, lcName, lcDef));
   // the definition of the lifecycle the change follows (re-read when the lifecycle or the namespace changes)
   $effect(() => {
-    const name = change?.lifecycle ?? '';
+    const name = lcName;
     const ns = change?.namespace ?? '';
     lcDef = undefined;
     lcFailure = '';
@@ -411,8 +414,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       });
     return () => ctl.abort();
   });
-  const offers = $derived(lifecycleMovable(change) ? availableTransitions(lcDef, change?.state) : []);
-  const pickable = $derived(pickableDecisions(decisionPoints, change?.items));
+  const offers = $derived(lifecycleMovable({ lifecycle: chLc.lifecycle, status: change?.status }) ? availableTransitions(lcDef, chLc.state) : []);
+  const pickable = $derived(pickableDecisions(decisionPoints, objects));
 
   /** Takes a transition of the lifecycle: the button (with its confirmation) and the assistant (its card confirmed). */
   async function takeTransition(offer: TransitionOffer, decision?: DecisionPoint, skipConfirm = false): Promise<string | undefined> {
@@ -421,11 +424,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     error = '';
     try {
       const r = await runTransition(
-        { confirm: confirmDialog, call: (id, t, d) => graph.transitionChange(id, t, d), refresh: async () => {
+        { confirm: confirmDialog, call: (id, t, d) => engine.transitionChange(id, t, d), refresh: async () => {
             if (change?.id) await load(change.id);
           },
           notify },
-        { change: change ?? {}, offer, decision, skipConfirm },
+        { change: { id: change?.id, status: change?.status, ...chLc }, offer, decision, skipConfirm },
       );
       if (r.ok) return undefined;
       if (r.cancelled) return r.message;
@@ -880,7 +883,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
               kind: 'change',
               title: change.title || 'Untitled change',
               summary: changeSummary(
-                { title: change.title, status: change.status, lifecycle: change.lifecycle, state: change.state, project: change.projectId, methodology: change.methodology, namespace: change.namespace, parentId: change.parentId },
+                { title: change.title, status: change.status, lifecycle: chLc.lifecycle, state: chLc.state, project: change.projectId, methodology: change.methodology, namespace: change.namespace, parentId: change.parentId },
                 impactFacts,
                 { pane, scope, filter: impactFilter },
               ),
@@ -957,10 +960,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 {#if change}
   {@const ch = change}
   <ScopeBar changeId={ch.id ?? ''} {options} bind:scope {candidates} {mainImpacts} {closed} {writable} onchange={() => load(selected)} oncompare={() => (compareOpen = true)} />
-  {#if ch.lifecycle}
-    <ChangeLifecycleView lifecycle={ch.lifecycle} current={ch.state ?? ''} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
-      {#if lcDef && lifecycleMovable(ch)}
-        <ChangeTransitions current={ch.state ?? ''} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
+  {#if chLc.lifecycle}
+    <ChangeLifecycleView lifecycle={chLc.lifecycle} current={chLc.state} definition={lcDef} domain={lcDomain} loading={lcLoading} failure={lcFailure}>
+      {#if lcDef && lifecycleMovable({ lifecycle: chLc.lifecycle, status: ch.status })}
+        <ChangeTransitions current={chLc.state} {offers} {pickable} busy={transitioning} refusal={transitionRefusal} onmove={(o, d) => void takeTransition(o, d)} />
       {/if}
     </ChangeLifecycleView>
   {/if}
@@ -981,7 +984,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       {#if !closed}
         <select bind:value={addObjectType} onchange={() => startObjects(addObjectType)} aria-label="Add a change object" title="Add a change object of a type">
           <option value="">+ Change object…</option>
-          {#each typeCatalog.cat.objectNames() as t (t)}<option value={t}>{t}</option>{/each}
+          {#each typeCatalog.cat.objectNames().filter((t) => !typeCatalog.cat.objectType(t)?.system) as t (t)}<option value={t}>{t}</option>{/each}
         </select>
       {/if}
     {/snippet}

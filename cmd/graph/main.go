@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/devseed"
+	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/modelgw"
@@ -24,6 +25,7 @@ import (
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
+	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/review"
@@ -119,14 +121,18 @@ func main() {
 		platform.Fatal(log, "authorizer", err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
-	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
 	g.ProjectMoveGate = graphsvc.ProjectMoveGate(authorizer, directory)
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, llmcfg.ProtectedAliasValidator{}}
-	// the guardian of the changes (ADR 0098) and Lifecycles (ADR 0058) need the registry service itself (its methodology
-	// store): only goap-dev, which holds it in process, wires them; the registry client has no RPC for them
+	// the guardian of the changes (ADR 0098) is the engine, asked over its GuardianService: the lifecycle of the
+	// methodology of a change, what it freezes and when it lands. GOAP_GUARDIAN=off leaves the changes free.
+	if platform.Env("GOAP_GUARDIAN", "") != "off" {
+		g.Guardians = map[string]graph.Guardian{engine.GuardianName: enginesvc.NewGuardianClient(platform.H2CClient(),
+			platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), telemetry.ClientOptions()...)}
+		g.DefaultGuardian = engine.GuardianName
+	}
 	// the built-in domains (organisation, platform) are always there; the demo seed needs alm
 	var need []string
 	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"

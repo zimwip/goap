@@ -47,18 +47,18 @@ type Report struct {
 //     Options.Dev if any. Every step is idempotent, so a second call writes nothing.
 //  3. After Boot, the registry seeds the methodologies (Service.Seed): they need the model aliases of SeedModels.
 //
-// A composition without the registry in process cannot wire a guardian and Lifecycles: Boot logs one warning saying so.
+// A composition with no guardian of the changes (no engine to ask, ADR 0098): Boot logs one warning saying so.
 func Boot(ctx context.Context, g *graph.Graph, o Options) (Report, error) {
 	var r Report
-	if o.RequireHooks && (g.Authorizer == nil || g.ChangeAuthorizer == nil || len(g.Validators) == 0) {
-		panic("graphsvc.Boot: the graph hooks (Authorizer, ChangeAuthorizer, Validators) must be set before the bootstrap")
+	if o.RequireHooks && (g.Authorizer == nil || len(g.Validators) == 0) {
+		panic("graphsvc.Boot: the graph hooks (Authorizer, Validators) must be set before the bootstrap")
 	}
-	if len(g.Guardians) == 0 || g.Lifecycles == nil {
+	if len(g.Guardians) == 0 {
 		log := o.Log
 		if log == nil {
 			log = slog.Default()
 		}
-		log.Warn("change lifecycle and activity gating are not available in this composition (no registry in process)")
+		log.Warn("no guardian of the changes in this composition: the lifecycles and rules of the methodologies are not enforced on the changes")
 	}
 	// the seeds are the platform acting by itself: its transitions are authorized for it
 	ctx = System(ctx)

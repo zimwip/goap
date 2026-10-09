@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { availableTransitions, confirmMessage, consumedDecisions, gateSummary, movable, parseRefusal, pickableDecisions, resolveCall, runTransition, type TransitionDeps } from './changeTransition';
-import type { ChangeItem, Lifecycle } from './api';
+import { availableTransitions, confirmMessage, consumedDecisions, gateSummary, lifecycleState, movable, parseRefusal, pickableDecisions, resolveCall, runTransition, STATE_TYPE, TRANSITION_TYPE, type TransitionDeps } from './changeTransition';
+import type { ChangeObject, Lifecycle } from './api';
 
 const lc: Lifecycle = {
   name: 'change',
@@ -36,9 +36,19 @@ describe('transitions of a change lifecycle', () => {
   });
 
   it('offers the decided points no transition used yet', () => {
-    const items: ChangeItem[] = [{ id: 'T1', kind: 'transition', data: { transition: 'x', decision: 'D3' } }, { id: 'T2', kind: 'fact', data: { decision: 'D1' } }];
-    expect([...consumedDecisions(items)]).toEqual(['D3']);
-    expect(pickableDecisions(points, items).map((p) => p.id)).toEqual(['D1']);
+    const objects: ChangeObject[] = [
+      { type: TRANSITION_TYPE, key: 'TR-1', value: { transition: 'x', decision: 'D3' } },
+      { type: 'execution@Fact', key: 'FACT-1', value: { decision: 'D1' } },
+    ];
+    expect([...consumedDecisions(objects)]).toEqual(['D3']);
+    expect(pickableDecisions(points, objects).map((p) => p.id)).toEqual(['D1']);
+  });
+
+  it('reads the state the engine recorded, else the initial state of the lifecycle', () => {
+    const lcDef = { name: 'change', initial: 'draft' };
+    expect(lifecycleState([], 'change', lcDef)).toEqual({ lifecycle: 'change', state: 'draft' });
+    expect(lifecycleState([{ type: STATE_TYPE, key: '', value: { lifecycle: 'change', state: 'review' } }], 'change', lcDef)).toEqual({ lifecycle: 'change', state: 'review' });
+    expect(lifecycleState([{ type: STATE_TYPE, key: '', value: { state: 'review' } }], '', lcDef)).toEqual({ lifecycle: '', state: '' });
   });
 
   it('reads the refusal of the server', () => {
@@ -71,7 +81,7 @@ describe('transitions of a change lifecycle', () => {
 describe('runTransition', () => {
   const deps = (over: Partial<TransitionDeps> = {}) => ({
     confirm: vi.fn(async () => true),
-    call: vi.fn(async () => ({ change: { state: 'approved' } })),
+    call: vi.fn(async () => ({ state: 'approved' })),
     refresh: vi.fn(async () => {}),
     notify: vi.fn(),
     ...over,

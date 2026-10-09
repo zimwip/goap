@@ -8,21 +8,33 @@ import (
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
+	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/engine/blackboard"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/risk"
 )
 
-// End-to-end (ADR 0058): a methodology names a lifecycle of its domain; its changes start in the initial state, and
-// a gate of the lifecycle is a CEL guard over a decided decision point and the world state of the methodology,
-// where "state:<name>" is the generated condition of a state.
+// End-to-end (ADR 0058, 0098): a methodology names a lifecycle of its domain, resolved by the registry for the engine,
+// which moves the state of its changes (the change knows none): they start in the initial state, and a gate of the
+// lifecycle is a CEL guard over a decided decision point and the world state of the methodology, where
+// "state:<name>" is the generated condition of a state.
 func TestChangeLifecycleGate(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.Lifecycles = reg
+	g.Defaults = reg
 	g.DecisionPolicy = decision.Policy{}
+	eng := &engine.Engine{Graph: g, Methodologies: reg, Lifecycles: reg}
+	state := func(id domain.ChangeID) string {
+		objs, err := g.Objects(ctx, id, domain.ObjectFilter{Types: []string{blackboard.TypeState}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		st, _ := (blackboard.View{Objects: objs}).State()
+		return st.State
+	}
 
 	d := def.Domain{Name: "alm", Version: "1", Schema: def.Schema{Lifecycles: []domain.Lifecycle{{
 		Name: "maturity", Initial: "proposed",
@@ -61,17 +73,17 @@ func TestChangeLifecycleGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ch.Lifecycle != "maturity" || ch.State != "proposed" {
-		t.Fatalf("a change starts in the initial state: %q %q", ch.Lifecycle, ch.State)
+	if lc, err := reg.Lifecycle(ctx, ch.Methodology); err != nil || lc == nil || lc.Name != "maturity" || lc.Initial != "proposed" {
+		t.Fatalf("the lifecycle of the methodology: %+v %v", lc, err)
 	}
 	// the change starts with the main goal of its methodology: its first process here (ADR 0096)
 	if ch.Goal != "deliver" {
 		t.Fatalf("default goal %q", ch.Goal)
 	}
-	if other, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Title: "free", Methodology: "no-such", Namespace: "alm"}); err != nil || other.Lifecycle != "" {
-		t.Fatalf("a methodology without lifecycle leaves the change without state: %+v %v", other, err)
+	if lc, err := reg.Lifecycle(ctx, "no-such"); err != nil || lc != nil {
+		t.Fatalf("an unknown methodology names no lifecycle: %+v %v", lc, err)
 	}
-	if _, err := g.TransitionChange(ctx, ch.ID, graph.TransitionRequest{Transition: "analyse"}); err != nil {
+	if _, err := eng.TransitionChange(ctx, ch.ID, engine.TransitionRequest{Transition: "analyse"}); err != nil {
 		t.Fatal(err)
 	}
 	pt, err := g.OpenDecision(ctx, ch.ID, graph.OpenDecisionRequest{Question: "analysis complete?", Policy: map[string]any{decision.KeyDecider: decision.DeciderHuman}})
@@ -81,8 +93,8 @@ func TestChangeLifecycleGate(t *testing.T) {
 	if _, err := g.RuleDecision(ctx, ch.ID, graph.RuleRequest{Point: pt.ID, Outcome: domain.OutcomeDecided, Option: "go", Confidence: 1, Justification: "ok", Human: true}); err != nil {
 		t.Fatal(err)
 	}
-	implement := graph.TransitionRequest{Transition: "implement", Decision: pt.ID}
-	if _, err := g.TransitionChange(ctx, ch.ID, implement); !errors.Is(err, graph.ErrConflict) {
+	implement := engine.TransitionRequest{Transition: "implement", Decision: pt.ID}
+	if _, err := eng.TransitionChange(ctx, ch.ID, implement); !errors.Is(err, graph.ErrConflict) {
 		t.Fatalf("the expected world state is not reached: %v", err)
 	}
 	// the decision prevails over the world state once actions are taken to fill the gap
@@ -90,8 +102,8 @@ func TestChangeLifecycleGate(t *testing.T) {
 		Data: map[string]any{"key": "ACT-1", "title": "finish the analysis", "for": pt.ID}}}); err != nil {
 		t.Fatal(err)
 	}
-	got, err := g.TransitionChange(ctx, ch.ID, implement)
-	if err != nil || got.State != "implementing" {
+	got, err := eng.TransitionChange(ctx, ch.ID, implement)
+	if err != nil || got.State.State != "implementing" || state(ch.ID) != "implementing" {
 		t.Fatalf("gate: %+v %v", got, err)
 	}
 }

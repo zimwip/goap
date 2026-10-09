@@ -31,9 +31,6 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	if err := g.rebaseFirst(ctx, id); err != nil {
 		return result, err
 	}
-	if err := g.checkFinalState(ctx, id); err != nil {
-		return result, err
-	}
 	landing, err := g.askLandingGate(ctx, id)
 	if err != nil {
 		return result, err
@@ -84,9 +81,6 @@ func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID) error {
 // integrated; IntegrateChange does that. It returns the commit baseline.
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
-	if err := g.checkFinalState(ctx, id); err != nil {
-		return result, err
-	}
 	landing, err := g.askLandingGate(ctx, id)
 	if err != nil {
 		return result, err

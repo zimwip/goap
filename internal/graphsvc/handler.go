@@ -851,21 +851,7 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	out := &graphv1.GetBlackboardResponse{Change: pbconv.ChangeToPB(bb.Change), ActiveOption: domain.ActiveOptionOf(bb), At: pbconv.Time(bb.At),
-		Objects: pbconv.ChangeObjectsToPB(domain.ObjectsOf(bb))}
-	for _, f := range domain.OptionsOf(bb) {
-		out.Options = append(out.Options, pbconv.FlowToPB(f))
-	}
-	for _, d := range domain.DecisionPointsOf(bb) {
-		out.DecisionPoints = append(out.DecisionPoints, pbconv.DecisionPointToPB(d))
-	}
-	for _, v := range bb.Nodes {
-		out.Nodes = append(out.Nodes, pbconv.ViewToPB(v))
-	}
-	for _, n := range bb.Neighbors {
-		out.Neighbors = append(out.Neighbors, pbconv.NodeToPB(n))
-	}
-	return connect.NewResponse(out), nil
+	return connect.NewResponse(pbconv.BlackboardToPB(bb)), nil
 }
 
 func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.ApplyChangeRequest]) (*connect.Response[graphv1.ApplyChangeResponse], error) {
@@ -878,16 +864,6 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 		}
 	}
 	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
-}
-
-func (h *Handler) TransitionChange(ctx context.Context, r *connect.Request[graphv1.TransitionChangeRequest]) (*connect.Response[graphv1.TransitionChangeResponse], error) {
-	ctx = h.Identity.Context(ctx, r.Header()) // the transition is authorized for the caller
-	c, err := h.Graph.TransitionChange(ctx, domain.ChangeID(r.Msg.ChangeId), graph.TransitionRequest{Transition: r.Msg.Transition, Decision: r.Msg.Decision, By: authz.From(ctx).Subject})
-	if err != nil {
-		return nil, rpcerr.ToConnect(err)
-	}
-	c.Items = nil
-	return connect.NewResponse(&graphv1.TransitionChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
 func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.CreateBranchRequest]) (*connect.Response[graphv1.CreateBranchResponse], error) {

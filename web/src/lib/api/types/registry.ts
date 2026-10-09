@@ -128,6 +128,8 @@ export interface ChangeObjectTypeInfo {
   /** empty: the default object editor */
   editor?: string;
   additionalProperties?: boolean;
+  /** written by platform services only (the state of a change, ADR 0098): read, never written by hand */
+  system?: boolean;
 }
 
 /** Resolved model of a link type; an empty end accepts any node type. */
@@ -640,6 +642,8 @@ export interface Methodology {
   roles?: MethodologyRole[];
   /** transverse: its processes run alongside the changes of these methodologies (ADR 0036 §3) */
   appliesTo?: string[];
+  /** the lifecycle of a domain its changes follow (ADR 0058): the engine moves them along it (ADR 0098); empty: none */
+  lifecycle?: string;
   /** default criticality of its changes: C1, C2 or C3 (ADR 0075 §3); empty: C2 */
   criticality?: string;
   /** main goal: a goal or a process of the methodology; its changes start with it (ADR 0096); empty: the first goal or process */

@@ -5,11 +5,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	triggerevents "github.com/zimwip/goap/pkg/events"
 	"os"
 	"slices"
 	"sync/atomic"
 	"time"
+
+	triggerevents "github.com/zimwip/goap/pkg/events"
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
@@ -115,6 +116,9 @@ func main() {
 		Log:       log,
 		MaxSteps:  platform.EnvInt("GOAP_MAX_STEPS", 50),
 		Types:     func() def.TypeSet { return types.Get() },
+		// the lifecycle of a change is its methodology's, run by the engine (ADR 0058, 0098)
+		Lifecycles:           registry,
+		TransitionAuthorizer: graphsvc.ChangeTransitionAuthorizer(authorizer),
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	selfimprove.Register(builtins, e, telemetry.SelfImprovementFromEnv(registry))
@@ -189,7 +193,11 @@ func main() {
 	}
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Readiness(events.Ready)
-	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))
+	engineHandler := &enginesvc.Handler{Engine: e, Log: log, Authz: authorizer, Broker: broker, Triggers: triggers}
+	srv.Mount(enginev1connect.NewEngineServiceHandler(engineHandler, telemetry.HandlerOptions()...))
+	// the guardian of the changes, asked by the graph (ADR 0098); the rules of the registry (Activity goals, the
+	// sub_activity cascade, the projects a change moves between) need the registry in process: goap-dev only
+	srv.Mount(enginev1connect.NewGuardianServiceHandler(&enginesvc.GuardianHandler{Guardian: engine.Guardian{Engine: e}, Handler: engineHandler}, telemetry.HandlerOptions()...))
 	if runtime != nil {
 		// sandboxes call back the engine here (job token authentication)
 		srv.Mount(runtimev1connect.NewRuntimeServiceHandler(runtime, telemetry.HandlerOptions()...))

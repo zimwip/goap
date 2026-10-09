@@ -25,7 +25,7 @@ var File_goap_change_v1_change_proto protoreflect.FileDescriptor
 
 const file_goap_change_v1_change_proto_rawDesc = "" +
 	"\n" +
-	"\x1bgoap/change/v1/change.proto\x12\x0egoap.change.v1\x1a\x19goap/graph/v1/graph.proto2\xd15\n" +
+	"\x1bgoap/change/v1/change.proto\x12\x0egoap.change.v1\x1a\x19goap/graph/v1/graph.proto2\xec4\n" +
 	"\rChangeService\x12c\n" +
 	"\x10ListChangeEvents\x12&.goap.graph.v1.ListChangeEventsRequest\x1a'.goap.graph.v1.ListChangeEventsResponse\x12Z\n" +
 	"\rListChangeLog\x12#.goap.graph.v1.ListChangeLogRequest\x1a$.goap.graph.v1.ListChangeLogResponse\x12u\n" +
@@ -75,8 +75,7 @@ const file_goap_change_v1_change_proto_rawDesc = "" +
 	"\x13ReopenChangeImpacts\x12).goap.graph.v1.ReopenChangeImpactsRequest\x1a*.goap.graph.v1.ReopenChangeImpactsResponse\x12T\n" +
 	"\vCommitEdits\x12!.goap.graph.v1.CommitEditsRequest\x1a\".goap.graph.v1.CommitEditsResponse\x12Z\n" +
 	"\rGetBlackboard\x12#.goap.graph.v1.GetBlackboardRequest\x1a$.goap.graph.v1.GetBlackboardResponse\x12T\n" +
-	"\vApplyChange\x12!.goap.graph.v1.ApplyChangeRequest\x1a\".goap.graph.v1.ApplyChangeResponse\x12c\n" +
-	"\x10TransitionChange\x12&.goap.graph.v1.TransitionChangeRequest\x1a'.goap.graph.v1.TransitionChangeResponse\x12W\n" +
+	"\vApplyChange\x12!.goap.graph.v1.ApplyChangeRequest\x1a\".goap.graph.v1.ApplyChangeResponse\x12W\n" +
 	"\fDeleteChange\x12\".goap.graph.v1.DeleteChangeRequest\x1a#.goap.graph.v1.DeleteChangeResponse\x12T\n" +
 	"\vMergeChange\x12!.goap.graph.v1.MergeChangeRequest\x1a\".goap.graph.v1.MergeChangeResponse\x12]\n" +
 	"\x0eGetSharedNodes\x12$.goap.graph.v1.GetSharedNodesRequest\x1a%.goap.graph.v1.GetSharedNodesResponse\x12T\n" +
@@ -154,99 +153,97 @@ var file_goap_change_v1_change_proto_goTypes = []any{
 	(*v1.CommitEditsRequest)(nil),             // 43: goap.graph.v1.CommitEditsRequest
 	(*v1.GetBlackboardRequest)(nil),           // 44: goap.graph.v1.GetBlackboardRequest
 	(*v1.ApplyChangeRequest)(nil),             // 45: goap.graph.v1.ApplyChangeRequest
-	(*v1.TransitionChangeRequest)(nil),        // 46: goap.graph.v1.TransitionChangeRequest
-	(*v1.DeleteChangeRequest)(nil),            // 47: goap.graph.v1.DeleteChangeRequest
-	(*v1.MergeChangeRequest)(nil),             // 48: goap.graph.v1.MergeChangeRequest
-	(*v1.GetSharedNodesRequest)(nil),          // 49: goap.graph.v1.GetSharedNodesRequest
-	(*v1.SplitChangeRequest)(nil),             // 50: goap.graph.v1.SplitChangeRequest
-	(*v1.ListSubChangesRequest)(nil),          // 51: goap.graph.v1.ListSubChangesRequest
-	(*v1.OpenFlowRequest)(nil),                // 52: goap.graph.v1.OpenFlowRequest
-	(*v1.AdoptFlowRequest)(nil),               // 53: goap.graph.v1.AdoptFlowRequest
-	(*v1.DiscardFlowRequest)(nil),             // 54: goap.graph.v1.DiscardFlowRequest
-	(*v1.ListFlowsRequest)(nil),               // 55: goap.graph.v1.ListFlowsRequest
-	(*v1.ValidateBoardRequest)(nil),           // 56: goap.graph.v1.ValidateBoardRequest
-	(*v1.OpenOptionRequest)(nil),              // 57: goap.graph.v1.OpenOptionRequest
-	(*v1.ActivateOptionRequest)(nil),          // 58: goap.graph.v1.ActivateOptionRequest
-	(*v1.EvaluateOptionRequest)(nil),          // 59: goap.graph.v1.EvaluateOptionRequest
-	(*v1.SelectOptionRequest)(nil),            // 60: goap.graph.v1.SelectOptionRequest
-	(*v1.RejectOptionRequest)(nil),            // 61: goap.graph.v1.RejectOptionRequest
-	(*v1.ListOptionsRequest)(nil),             // 62: goap.graph.v1.ListOptionsRequest
-	(*v1.CompareOptionsRequest)(nil),          // 63: goap.graph.v1.CompareOptionsRequest
-	(*v1.DiffFlowsRequest)(nil),               // 64: goap.graph.v1.DiffFlowsRequest
-	(*v1.GetChangeViewRequest)(nil),           // 65: goap.graph.v1.GetChangeViewRequest
-	(*v1.OpenDecisionRequest)(nil),            // 66: goap.graph.v1.OpenDecisionRequest
-	(*v1.RuleDecisionRequest)(nil),            // 67: goap.graph.v1.RuleDecisionRequest
-	(*v1.AnswerQuestionRequest)(nil),          // 68: goap.graph.v1.AnswerQuestionRequest
-	(*v1.RatifyDecisionRequest)(nil),          // 69: goap.graph.v1.RatifyDecisionRequest
-	(*v1.ListDecisionPointsRequest)(nil),      // 70: goap.graph.v1.ListDecisionPointsRequest
-	(*v1.GetChangeGraphRequest)(nil),          // 71: goap.graph.v1.GetChangeGraphRequest
-	(*v1.AppendLogRequest)(nil),               // 72: goap.graph.v1.AppendLogRequest
-	(*v1.ListExecutionsRequest)(nil),          // 73: goap.graph.v1.ListExecutionsRequest
-	(*v1.ListChangeEventsResponse)(nil),       // 74: goap.graph.v1.ListChangeEventsResponse
-	(*v1.ListChangeLogResponse)(nil),          // 75: goap.graph.v1.ListChangeLogResponse
-	(*v1.ExportChangeProvenanceResponse)(nil), // 76: goap.graph.v1.ExportChangeProvenanceResponse
-	(*v1.CreateChangeResponse)(nil),           // 77: goap.graph.v1.CreateChangeResponse
-	(*v1.GetChangeResponse)(nil),              // 78: goap.graph.v1.GetChangeResponse
-	(*v1.ListChangesResponse)(nil),            // 79: goap.graph.v1.ListChangesResponse
-	(*v1.GetChangeImpactsResponse)(nil),       // 80: goap.graph.v1.GetChangeImpactsResponse
-	(*v1.UpdateChangeResponse)(nil),           // 81: goap.graph.v1.UpdateChangeResponse
-	(*v1.MoveChangeResponse)(nil),             // 82: goap.graph.v1.MoveChangeResponse
-	(*v1.AddItemsResponse)(nil),               // 83: goap.graph.v1.AddItemsResponse
-	(*v1.PutChangeObjectsResponse)(nil),       // 84: goap.graph.v1.PutChangeObjectsResponse
-	(*v1.ListChangeObjectsResponse)(nil),      // 85: goap.graph.v1.ListChangeObjectsResponse
-	(*v1.SubmitBatchResponse)(nil),            // 86: goap.graph.v1.SubmitBatchResponse
-	(*v1.RequestResponse)(nil),                // 87: goap.graph.v1.RequestResponse
-	(*v1.ListRequestsResponse)(nil),           // 88: goap.graph.v1.ListRequestsResponse
-	(*v1.ListRequestLogResponse)(nil),         // 89: goap.graph.v1.ListRequestLogResponse
-	(*v1.ProposeImpactResponse)(nil),          // 90: goap.graph.v1.ProposeImpactResponse
-	(*v1.ImpactNodeCreateResponse)(nil),       // 91: goap.graph.v1.ImpactNodeCreateResponse
-	(*v1.ImpactNodeCheckoutResponse)(nil),     // 92: goap.graph.v1.ImpactNodeCheckoutResponse
-	(*v1.ImpactNodeUpdateResponse)(nil),       // 93: goap.graph.v1.ImpactNodeUpdateResponse
-	(*v1.ImpactLinkCreateResponse)(nil),       // 94: goap.graph.v1.ImpactLinkCreateResponse
-	(*v1.ImpactLinkUpdateResponse)(nil),       // 95: goap.graph.v1.ImpactLinkUpdateResponse
-	(*v1.ImpactLinkDeleteResponse)(nil),       // 96: goap.graph.v1.ImpactLinkDeleteResponse
-	(*v1.ImpactNodeTransitionResponse)(nil),   // 97: goap.graph.v1.ImpactNodeTransitionResponse
-	(*v1.ImpactNodeCancelResponse)(nil),       // 98: goap.graph.v1.ImpactNodeCancelResponse
-	(*v1.ImpactNodeRestructureResponse)(nil),  // 99: goap.graph.v1.ImpactNodeRestructureResponse
-	(*v1.WithdrawImpactResponse)(nil),         // 100: goap.graph.v1.WithdrawImpactResponse
-	(*v1.RebaseChangeResponse)(nil),           // 101: goap.graph.v1.RebaseChangeResponse
-	(*v1.ImpactNodeResolveResponse)(nil),      // 102: goap.graph.v1.ImpactNodeResolveResponse
-	(*v1.GetRebaseStateResponse)(nil),         // 103: goap.graph.v1.GetRebaseStateResponse
-	(*v1.ImpactNodeReviewResponse)(nil),       // 104: goap.graph.v1.ImpactNodeReviewResponse
-	(*v1.ImpactNodeReviewBatchResponse)(nil),  // 105: goap.graph.v1.ImpactNodeReviewBatchResponse
-	(*v1.ReviewResponse)(nil),                 // 106: goap.graph.v1.ReviewResponse
-	(*v1.ReopenChangeImpactsResponse)(nil),    // 107: goap.graph.v1.ReopenChangeImpactsResponse
-	(*v1.CommitEditsResponse)(nil),            // 108: goap.graph.v1.CommitEditsResponse
-	(*v1.GetBlackboardResponse)(nil),          // 109: goap.graph.v1.GetBlackboardResponse
-	(*v1.ApplyChangeResponse)(nil),            // 110: goap.graph.v1.ApplyChangeResponse
-	(*v1.TransitionChangeResponse)(nil),       // 111: goap.graph.v1.TransitionChangeResponse
-	(*v1.DeleteChangeResponse)(nil),           // 112: goap.graph.v1.DeleteChangeResponse
-	(*v1.MergeChangeResponse)(nil),            // 113: goap.graph.v1.MergeChangeResponse
-	(*v1.GetSharedNodesResponse)(nil),         // 114: goap.graph.v1.GetSharedNodesResponse
-	(*v1.SplitChangeResponse)(nil),            // 115: goap.graph.v1.SplitChangeResponse
-	(*v1.ListSubChangesResponse)(nil),         // 116: goap.graph.v1.ListSubChangesResponse
-	(*v1.OpenFlowResponse)(nil),               // 117: goap.graph.v1.OpenFlowResponse
-	(*v1.AdoptFlowResponse)(nil),              // 118: goap.graph.v1.AdoptFlowResponse
-	(*v1.DiscardFlowResponse)(nil),            // 119: goap.graph.v1.DiscardFlowResponse
-	(*v1.ListFlowsResponse)(nil),              // 120: goap.graph.v1.ListFlowsResponse
-	(*v1.ValidateBoardResponse)(nil),          // 121: goap.graph.v1.ValidateBoardResponse
-	(*v1.OpenOptionResponse)(nil),             // 122: goap.graph.v1.OpenOptionResponse
-	(*v1.ActivateOptionResponse)(nil),         // 123: goap.graph.v1.ActivateOptionResponse
-	(*v1.EvaluateOptionResponse)(nil),         // 124: goap.graph.v1.EvaluateOptionResponse
-	(*v1.SelectOptionResponse)(nil),           // 125: goap.graph.v1.SelectOptionResponse
-	(*v1.RejectOptionResponse)(nil),           // 126: goap.graph.v1.RejectOptionResponse
-	(*v1.ListOptionsResponse)(nil),            // 127: goap.graph.v1.ListOptionsResponse
-	(*v1.CompareOptionsResponse)(nil),         // 128: goap.graph.v1.CompareOptionsResponse
-	(*v1.DiffFlowsResponse)(nil),              // 129: goap.graph.v1.DiffFlowsResponse
-	(*v1.GetChangeViewResponse)(nil),          // 130: goap.graph.v1.GetChangeViewResponse
-	(*v1.OpenDecisionResponse)(nil),           // 131: goap.graph.v1.OpenDecisionResponse
-	(*v1.RuleDecisionResponse)(nil),           // 132: goap.graph.v1.RuleDecisionResponse
-	(*v1.AnswerQuestionResponse)(nil),         // 133: goap.graph.v1.AnswerQuestionResponse
-	(*v1.RatifyDecisionResponse)(nil),         // 134: goap.graph.v1.RatifyDecisionResponse
-	(*v1.ListDecisionPointsResponse)(nil),     // 135: goap.graph.v1.ListDecisionPointsResponse
-	(*v1.GetChangeGraphResponse)(nil),         // 136: goap.graph.v1.GetChangeGraphResponse
-	(*v1.AppendLogResponse)(nil),              // 137: goap.graph.v1.AppendLogResponse
-	(*v1.ListExecutionsResponse)(nil),         // 138: goap.graph.v1.ListExecutionsResponse
+	(*v1.DeleteChangeRequest)(nil),            // 46: goap.graph.v1.DeleteChangeRequest
+	(*v1.MergeChangeRequest)(nil),             // 47: goap.graph.v1.MergeChangeRequest
+	(*v1.GetSharedNodesRequest)(nil),          // 48: goap.graph.v1.GetSharedNodesRequest
+	(*v1.SplitChangeRequest)(nil),             // 49: goap.graph.v1.SplitChangeRequest
+	(*v1.ListSubChangesRequest)(nil),          // 50: goap.graph.v1.ListSubChangesRequest
+	(*v1.OpenFlowRequest)(nil),                // 51: goap.graph.v1.OpenFlowRequest
+	(*v1.AdoptFlowRequest)(nil),               // 52: goap.graph.v1.AdoptFlowRequest
+	(*v1.DiscardFlowRequest)(nil),             // 53: goap.graph.v1.DiscardFlowRequest
+	(*v1.ListFlowsRequest)(nil),               // 54: goap.graph.v1.ListFlowsRequest
+	(*v1.ValidateBoardRequest)(nil),           // 55: goap.graph.v1.ValidateBoardRequest
+	(*v1.OpenOptionRequest)(nil),              // 56: goap.graph.v1.OpenOptionRequest
+	(*v1.ActivateOptionRequest)(nil),          // 57: goap.graph.v1.ActivateOptionRequest
+	(*v1.EvaluateOptionRequest)(nil),          // 58: goap.graph.v1.EvaluateOptionRequest
+	(*v1.SelectOptionRequest)(nil),            // 59: goap.graph.v1.SelectOptionRequest
+	(*v1.RejectOptionRequest)(nil),            // 60: goap.graph.v1.RejectOptionRequest
+	(*v1.ListOptionsRequest)(nil),             // 61: goap.graph.v1.ListOptionsRequest
+	(*v1.CompareOptionsRequest)(nil),          // 62: goap.graph.v1.CompareOptionsRequest
+	(*v1.DiffFlowsRequest)(nil),               // 63: goap.graph.v1.DiffFlowsRequest
+	(*v1.GetChangeViewRequest)(nil),           // 64: goap.graph.v1.GetChangeViewRequest
+	(*v1.OpenDecisionRequest)(nil),            // 65: goap.graph.v1.OpenDecisionRequest
+	(*v1.RuleDecisionRequest)(nil),            // 66: goap.graph.v1.RuleDecisionRequest
+	(*v1.AnswerQuestionRequest)(nil),          // 67: goap.graph.v1.AnswerQuestionRequest
+	(*v1.RatifyDecisionRequest)(nil),          // 68: goap.graph.v1.RatifyDecisionRequest
+	(*v1.ListDecisionPointsRequest)(nil),      // 69: goap.graph.v1.ListDecisionPointsRequest
+	(*v1.GetChangeGraphRequest)(nil),          // 70: goap.graph.v1.GetChangeGraphRequest
+	(*v1.AppendLogRequest)(nil),               // 71: goap.graph.v1.AppendLogRequest
+	(*v1.ListExecutionsRequest)(nil),          // 72: goap.graph.v1.ListExecutionsRequest
+	(*v1.ListChangeEventsResponse)(nil),       // 73: goap.graph.v1.ListChangeEventsResponse
+	(*v1.ListChangeLogResponse)(nil),          // 74: goap.graph.v1.ListChangeLogResponse
+	(*v1.ExportChangeProvenanceResponse)(nil), // 75: goap.graph.v1.ExportChangeProvenanceResponse
+	(*v1.CreateChangeResponse)(nil),           // 76: goap.graph.v1.CreateChangeResponse
+	(*v1.GetChangeResponse)(nil),              // 77: goap.graph.v1.GetChangeResponse
+	(*v1.ListChangesResponse)(nil),            // 78: goap.graph.v1.ListChangesResponse
+	(*v1.GetChangeImpactsResponse)(nil),       // 79: goap.graph.v1.GetChangeImpactsResponse
+	(*v1.UpdateChangeResponse)(nil),           // 80: goap.graph.v1.UpdateChangeResponse
+	(*v1.MoveChangeResponse)(nil),             // 81: goap.graph.v1.MoveChangeResponse
+	(*v1.AddItemsResponse)(nil),               // 82: goap.graph.v1.AddItemsResponse
+	(*v1.PutChangeObjectsResponse)(nil),       // 83: goap.graph.v1.PutChangeObjectsResponse
+	(*v1.ListChangeObjectsResponse)(nil),      // 84: goap.graph.v1.ListChangeObjectsResponse
+	(*v1.SubmitBatchResponse)(nil),            // 85: goap.graph.v1.SubmitBatchResponse
+	(*v1.RequestResponse)(nil),                // 86: goap.graph.v1.RequestResponse
+	(*v1.ListRequestsResponse)(nil),           // 87: goap.graph.v1.ListRequestsResponse
+	(*v1.ListRequestLogResponse)(nil),         // 88: goap.graph.v1.ListRequestLogResponse
+	(*v1.ProposeImpactResponse)(nil),          // 89: goap.graph.v1.ProposeImpactResponse
+	(*v1.ImpactNodeCreateResponse)(nil),       // 90: goap.graph.v1.ImpactNodeCreateResponse
+	(*v1.ImpactNodeCheckoutResponse)(nil),     // 91: goap.graph.v1.ImpactNodeCheckoutResponse
+	(*v1.ImpactNodeUpdateResponse)(nil),       // 92: goap.graph.v1.ImpactNodeUpdateResponse
+	(*v1.ImpactLinkCreateResponse)(nil),       // 93: goap.graph.v1.ImpactLinkCreateResponse
+	(*v1.ImpactLinkUpdateResponse)(nil),       // 94: goap.graph.v1.ImpactLinkUpdateResponse
+	(*v1.ImpactLinkDeleteResponse)(nil),       // 95: goap.graph.v1.ImpactLinkDeleteResponse
+	(*v1.ImpactNodeTransitionResponse)(nil),   // 96: goap.graph.v1.ImpactNodeTransitionResponse
+	(*v1.ImpactNodeCancelResponse)(nil),       // 97: goap.graph.v1.ImpactNodeCancelResponse
+	(*v1.ImpactNodeRestructureResponse)(nil),  // 98: goap.graph.v1.ImpactNodeRestructureResponse
+	(*v1.WithdrawImpactResponse)(nil),         // 99: goap.graph.v1.WithdrawImpactResponse
+	(*v1.RebaseChangeResponse)(nil),           // 100: goap.graph.v1.RebaseChangeResponse
+	(*v1.ImpactNodeResolveResponse)(nil),      // 101: goap.graph.v1.ImpactNodeResolveResponse
+	(*v1.GetRebaseStateResponse)(nil),         // 102: goap.graph.v1.GetRebaseStateResponse
+	(*v1.ImpactNodeReviewResponse)(nil),       // 103: goap.graph.v1.ImpactNodeReviewResponse
+	(*v1.ImpactNodeReviewBatchResponse)(nil),  // 104: goap.graph.v1.ImpactNodeReviewBatchResponse
+	(*v1.ReviewResponse)(nil),                 // 105: goap.graph.v1.ReviewResponse
+	(*v1.ReopenChangeImpactsResponse)(nil),    // 106: goap.graph.v1.ReopenChangeImpactsResponse
+	(*v1.CommitEditsResponse)(nil),            // 107: goap.graph.v1.CommitEditsResponse
+	(*v1.GetBlackboardResponse)(nil),          // 108: goap.graph.v1.GetBlackboardResponse
+	(*v1.ApplyChangeResponse)(nil),            // 109: goap.graph.v1.ApplyChangeResponse
+	(*v1.DeleteChangeResponse)(nil),           // 110: goap.graph.v1.DeleteChangeResponse
+	(*v1.MergeChangeResponse)(nil),            // 111: goap.graph.v1.MergeChangeResponse
+	(*v1.GetSharedNodesResponse)(nil),         // 112: goap.graph.v1.GetSharedNodesResponse
+	(*v1.SplitChangeResponse)(nil),            // 113: goap.graph.v1.SplitChangeResponse
+	(*v1.ListSubChangesResponse)(nil),         // 114: goap.graph.v1.ListSubChangesResponse
+	(*v1.OpenFlowResponse)(nil),               // 115: goap.graph.v1.OpenFlowResponse
+	(*v1.AdoptFlowResponse)(nil),              // 116: goap.graph.v1.AdoptFlowResponse
+	(*v1.DiscardFlowResponse)(nil),            // 117: goap.graph.v1.DiscardFlowResponse
+	(*v1.ListFlowsResponse)(nil),              // 118: goap.graph.v1.ListFlowsResponse
+	(*v1.ValidateBoardResponse)(nil),          // 119: goap.graph.v1.ValidateBoardResponse
+	(*v1.OpenOptionResponse)(nil),             // 120: goap.graph.v1.OpenOptionResponse
+	(*v1.ActivateOptionResponse)(nil),         // 121: goap.graph.v1.ActivateOptionResponse
+	(*v1.EvaluateOptionResponse)(nil),         // 122: goap.graph.v1.EvaluateOptionResponse
+	(*v1.SelectOptionResponse)(nil),           // 123: goap.graph.v1.SelectOptionResponse
+	(*v1.RejectOptionResponse)(nil),           // 124: goap.graph.v1.RejectOptionResponse
+	(*v1.ListOptionsResponse)(nil),            // 125: goap.graph.v1.ListOptionsResponse
+	(*v1.CompareOptionsResponse)(nil),         // 126: goap.graph.v1.CompareOptionsResponse
+	(*v1.DiffFlowsResponse)(nil),              // 127: goap.graph.v1.DiffFlowsResponse
+	(*v1.GetChangeViewResponse)(nil),          // 128: goap.graph.v1.GetChangeViewResponse
+	(*v1.OpenDecisionResponse)(nil),           // 129: goap.graph.v1.OpenDecisionResponse
+	(*v1.RuleDecisionResponse)(nil),           // 130: goap.graph.v1.RuleDecisionResponse
+	(*v1.AnswerQuestionResponse)(nil),         // 131: goap.graph.v1.AnswerQuestionResponse
+	(*v1.RatifyDecisionResponse)(nil),         // 132: goap.graph.v1.RatifyDecisionResponse
+	(*v1.ListDecisionPointsResponse)(nil),     // 133: goap.graph.v1.ListDecisionPointsResponse
+	(*v1.GetChangeGraphResponse)(nil),         // 134: goap.graph.v1.GetChangeGraphResponse
+	(*v1.AppendLogResponse)(nil),              // 135: goap.graph.v1.AppendLogResponse
+	(*v1.ListExecutionsResponse)(nil),         // 136: goap.graph.v1.ListExecutionsResponse
 }
 var file_goap_change_v1_change_proto_depIdxs = []int32{
 	0,   // 0: goap.change.v1.ChangeService.ListChangeEvents:input_type -> goap.graph.v1.ListChangeEventsRequest
@@ -295,110 +292,108 @@ var file_goap_change_v1_change_proto_depIdxs = []int32{
 	43,  // 43: goap.change.v1.ChangeService.CommitEdits:input_type -> goap.graph.v1.CommitEditsRequest
 	44,  // 44: goap.change.v1.ChangeService.GetBlackboard:input_type -> goap.graph.v1.GetBlackboardRequest
 	45,  // 45: goap.change.v1.ChangeService.ApplyChange:input_type -> goap.graph.v1.ApplyChangeRequest
-	46,  // 46: goap.change.v1.ChangeService.TransitionChange:input_type -> goap.graph.v1.TransitionChangeRequest
-	47,  // 47: goap.change.v1.ChangeService.DeleteChange:input_type -> goap.graph.v1.DeleteChangeRequest
-	48,  // 48: goap.change.v1.ChangeService.MergeChange:input_type -> goap.graph.v1.MergeChangeRequest
-	49,  // 49: goap.change.v1.ChangeService.GetSharedNodes:input_type -> goap.graph.v1.GetSharedNodesRequest
-	50,  // 50: goap.change.v1.ChangeService.SplitChange:input_type -> goap.graph.v1.SplitChangeRequest
-	51,  // 51: goap.change.v1.ChangeService.ListSubChanges:input_type -> goap.graph.v1.ListSubChangesRequest
-	52,  // 52: goap.change.v1.ChangeService.OpenFlow:input_type -> goap.graph.v1.OpenFlowRequest
-	53,  // 53: goap.change.v1.ChangeService.AdoptFlow:input_type -> goap.graph.v1.AdoptFlowRequest
-	54,  // 54: goap.change.v1.ChangeService.DiscardFlow:input_type -> goap.graph.v1.DiscardFlowRequest
-	55,  // 55: goap.change.v1.ChangeService.ListFlows:input_type -> goap.graph.v1.ListFlowsRequest
-	56,  // 56: goap.change.v1.ChangeService.ValidateBoard:input_type -> goap.graph.v1.ValidateBoardRequest
-	57,  // 57: goap.change.v1.ChangeService.OpenOption:input_type -> goap.graph.v1.OpenOptionRequest
-	58,  // 58: goap.change.v1.ChangeService.ActivateOption:input_type -> goap.graph.v1.ActivateOptionRequest
-	59,  // 59: goap.change.v1.ChangeService.EvaluateOption:input_type -> goap.graph.v1.EvaluateOptionRequest
-	60,  // 60: goap.change.v1.ChangeService.SelectOption:input_type -> goap.graph.v1.SelectOptionRequest
-	61,  // 61: goap.change.v1.ChangeService.RejectOption:input_type -> goap.graph.v1.RejectOptionRequest
-	62,  // 62: goap.change.v1.ChangeService.ListOptions:input_type -> goap.graph.v1.ListOptionsRequest
-	63,  // 63: goap.change.v1.ChangeService.CompareOptions:input_type -> goap.graph.v1.CompareOptionsRequest
-	64,  // 64: goap.change.v1.ChangeService.DiffFlows:input_type -> goap.graph.v1.DiffFlowsRequest
-	65,  // 65: goap.change.v1.ChangeService.GetChangeView:input_type -> goap.graph.v1.GetChangeViewRequest
-	66,  // 66: goap.change.v1.ChangeService.OpenDecision:input_type -> goap.graph.v1.OpenDecisionRequest
-	67,  // 67: goap.change.v1.ChangeService.RuleDecision:input_type -> goap.graph.v1.RuleDecisionRequest
-	68,  // 68: goap.change.v1.ChangeService.AnswerQuestion:input_type -> goap.graph.v1.AnswerQuestionRequest
-	69,  // 69: goap.change.v1.ChangeService.RatifyDecision:input_type -> goap.graph.v1.RatifyDecisionRequest
-	70,  // 70: goap.change.v1.ChangeService.ListDecisionPoints:input_type -> goap.graph.v1.ListDecisionPointsRequest
-	71,  // 71: goap.change.v1.ChangeService.GetChangeGraph:input_type -> goap.graph.v1.GetChangeGraphRequest
-	72,  // 72: goap.change.v1.ChangeService.AppendLog:input_type -> goap.graph.v1.AppendLogRequest
-	73,  // 73: goap.change.v1.ChangeService.ListExecutions:input_type -> goap.graph.v1.ListExecutionsRequest
-	74,  // 74: goap.change.v1.ChangeService.ListChangeEvents:output_type -> goap.graph.v1.ListChangeEventsResponse
-	75,  // 75: goap.change.v1.ChangeService.ListChangeLog:output_type -> goap.graph.v1.ListChangeLogResponse
-	76,  // 76: goap.change.v1.ChangeService.ExportChangeProvenance:output_type -> goap.graph.v1.ExportChangeProvenanceResponse
-	77,  // 77: goap.change.v1.ChangeService.CreateChange:output_type -> goap.graph.v1.CreateChangeResponse
-	78,  // 78: goap.change.v1.ChangeService.GetChange:output_type -> goap.graph.v1.GetChangeResponse
-	79,  // 79: goap.change.v1.ChangeService.ListChanges:output_type -> goap.graph.v1.ListChangesResponse
-	80,  // 80: goap.change.v1.ChangeService.GetChangeImpacts:output_type -> goap.graph.v1.GetChangeImpactsResponse
-	81,  // 81: goap.change.v1.ChangeService.UpdateChange:output_type -> goap.graph.v1.UpdateChangeResponse
-	82,  // 82: goap.change.v1.ChangeService.MoveChange:output_type -> goap.graph.v1.MoveChangeResponse
-	83,  // 83: goap.change.v1.ChangeService.AddItems:output_type -> goap.graph.v1.AddItemsResponse
-	84,  // 84: goap.change.v1.ChangeService.PutChangeObjects:output_type -> goap.graph.v1.PutChangeObjectsResponse
-	85,  // 85: goap.change.v1.ChangeService.ListChangeObjects:output_type -> goap.graph.v1.ListChangeObjectsResponse
-	86,  // 86: goap.change.v1.ChangeService.SubmitBatch:output_type -> goap.graph.v1.SubmitBatchResponse
-	87,  // 87: goap.change.v1.ChangeService.CreateRequest:output_type -> goap.graph.v1.RequestResponse
-	87,  // 88: goap.change.v1.ChangeService.GetRequest:output_type -> goap.graph.v1.RequestResponse
-	88,  // 89: goap.change.v1.ChangeService.ListRequests:output_type -> goap.graph.v1.ListRequestsResponse
-	87,  // 90: goap.change.v1.ChangeService.UpdateRequest:output_type -> goap.graph.v1.RequestResponse
-	87,  // 91: goap.change.v1.ChangeService.SetRequestStatus:output_type -> goap.graph.v1.RequestResponse
-	87,  // 92: goap.change.v1.ChangeService.LinkRequest:output_type -> goap.graph.v1.RequestResponse
-	87,  // 93: goap.change.v1.ChangeService.UnlinkRequest:output_type -> goap.graph.v1.RequestResponse
-	89,  // 94: goap.change.v1.ChangeService.ListRequestLog:output_type -> goap.graph.v1.ListRequestLogResponse
-	90,  // 95: goap.change.v1.ChangeService.ProposeImpact:output_type -> goap.graph.v1.ProposeImpactResponse
-	91,  // 96: goap.change.v1.ChangeService.ImpactNodeCreate:output_type -> goap.graph.v1.ImpactNodeCreateResponse
-	92,  // 97: goap.change.v1.ChangeService.ImpactNodeCheckout:output_type -> goap.graph.v1.ImpactNodeCheckoutResponse
-	93,  // 98: goap.change.v1.ChangeService.ImpactNodeUpdate:output_type -> goap.graph.v1.ImpactNodeUpdateResponse
-	94,  // 99: goap.change.v1.ChangeService.ImpactLinkCreate:output_type -> goap.graph.v1.ImpactLinkCreateResponse
-	95,  // 100: goap.change.v1.ChangeService.ImpactLinkUpdate:output_type -> goap.graph.v1.ImpactLinkUpdateResponse
-	96,  // 101: goap.change.v1.ChangeService.ImpactLinkDelete:output_type -> goap.graph.v1.ImpactLinkDeleteResponse
-	97,  // 102: goap.change.v1.ChangeService.ImpactNodeTransition:output_type -> goap.graph.v1.ImpactNodeTransitionResponse
-	98,  // 103: goap.change.v1.ChangeService.ImpactNodeCancel:output_type -> goap.graph.v1.ImpactNodeCancelResponse
-	99,  // 104: goap.change.v1.ChangeService.ImpactNodeMerge:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
-	99,  // 105: goap.change.v1.ChangeService.ImpactNodeSplit:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
-	100, // 106: goap.change.v1.ChangeService.WithdrawImpact:output_type -> goap.graph.v1.WithdrawImpactResponse
-	101, // 107: goap.change.v1.ChangeService.RebaseChange:output_type -> goap.graph.v1.RebaseChangeResponse
-	102, // 108: goap.change.v1.ChangeService.ImpactNodeResolve:output_type -> goap.graph.v1.ImpactNodeResolveResponse
-	103, // 109: goap.change.v1.ChangeService.GetRebaseState:output_type -> goap.graph.v1.GetRebaseStateResponse
-	104, // 110: goap.change.v1.ChangeService.ImpactNodeReview:output_type -> goap.graph.v1.ImpactNodeReviewResponse
-	105, // 111: goap.change.v1.ChangeService.ImpactNodeReviewBatch:output_type -> goap.graph.v1.ImpactNodeReviewBatchResponse
-	106, // 112: goap.change.v1.ChangeService.ReviewOpen:output_type -> goap.graph.v1.ReviewResponse
-	106, // 113: goap.change.v1.ChangeService.ReviewUpdate:output_type -> goap.graph.v1.ReviewResponse
-	106, // 114: goap.change.v1.ChangeService.ReviewSubmit:output_type -> goap.graph.v1.ReviewResponse
-	106, // 115: goap.change.v1.ChangeService.ReviewDiscard:output_type -> goap.graph.v1.ReviewResponse
-	107, // 116: goap.change.v1.ChangeService.ReopenChangeImpacts:output_type -> goap.graph.v1.ReopenChangeImpactsResponse
-	108, // 117: goap.change.v1.ChangeService.CommitEdits:output_type -> goap.graph.v1.CommitEditsResponse
-	109, // 118: goap.change.v1.ChangeService.GetBlackboard:output_type -> goap.graph.v1.GetBlackboardResponse
-	110, // 119: goap.change.v1.ChangeService.ApplyChange:output_type -> goap.graph.v1.ApplyChangeResponse
-	111, // 120: goap.change.v1.ChangeService.TransitionChange:output_type -> goap.graph.v1.TransitionChangeResponse
-	112, // 121: goap.change.v1.ChangeService.DeleteChange:output_type -> goap.graph.v1.DeleteChangeResponse
-	113, // 122: goap.change.v1.ChangeService.MergeChange:output_type -> goap.graph.v1.MergeChangeResponse
-	114, // 123: goap.change.v1.ChangeService.GetSharedNodes:output_type -> goap.graph.v1.GetSharedNodesResponse
-	115, // 124: goap.change.v1.ChangeService.SplitChange:output_type -> goap.graph.v1.SplitChangeResponse
-	116, // 125: goap.change.v1.ChangeService.ListSubChanges:output_type -> goap.graph.v1.ListSubChangesResponse
-	117, // 126: goap.change.v1.ChangeService.OpenFlow:output_type -> goap.graph.v1.OpenFlowResponse
-	118, // 127: goap.change.v1.ChangeService.AdoptFlow:output_type -> goap.graph.v1.AdoptFlowResponse
-	119, // 128: goap.change.v1.ChangeService.DiscardFlow:output_type -> goap.graph.v1.DiscardFlowResponse
-	120, // 129: goap.change.v1.ChangeService.ListFlows:output_type -> goap.graph.v1.ListFlowsResponse
-	121, // 130: goap.change.v1.ChangeService.ValidateBoard:output_type -> goap.graph.v1.ValidateBoardResponse
-	122, // 131: goap.change.v1.ChangeService.OpenOption:output_type -> goap.graph.v1.OpenOptionResponse
-	123, // 132: goap.change.v1.ChangeService.ActivateOption:output_type -> goap.graph.v1.ActivateOptionResponse
-	124, // 133: goap.change.v1.ChangeService.EvaluateOption:output_type -> goap.graph.v1.EvaluateOptionResponse
-	125, // 134: goap.change.v1.ChangeService.SelectOption:output_type -> goap.graph.v1.SelectOptionResponse
-	126, // 135: goap.change.v1.ChangeService.RejectOption:output_type -> goap.graph.v1.RejectOptionResponse
-	127, // 136: goap.change.v1.ChangeService.ListOptions:output_type -> goap.graph.v1.ListOptionsResponse
-	128, // 137: goap.change.v1.ChangeService.CompareOptions:output_type -> goap.graph.v1.CompareOptionsResponse
-	129, // 138: goap.change.v1.ChangeService.DiffFlows:output_type -> goap.graph.v1.DiffFlowsResponse
-	130, // 139: goap.change.v1.ChangeService.GetChangeView:output_type -> goap.graph.v1.GetChangeViewResponse
-	131, // 140: goap.change.v1.ChangeService.OpenDecision:output_type -> goap.graph.v1.OpenDecisionResponse
-	132, // 141: goap.change.v1.ChangeService.RuleDecision:output_type -> goap.graph.v1.RuleDecisionResponse
-	133, // 142: goap.change.v1.ChangeService.AnswerQuestion:output_type -> goap.graph.v1.AnswerQuestionResponse
-	134, // 143: goap.change.v1.ChangeService.RatifyDecision:output_type -> goap.graph.v1.RatifyDecisionResponse
-	135, // 144: goap.change.v1.ChangeService.ListDecisionPoints:output_type -> goap.graph.v1.ListDecisionPointsResponse
-	136, // 145: goap.change.v1.ChangeService.GetChangeGraph:output_type -> goap.graph.v1.GetChangeGraphResponse
-	137, // 146: goap.change.v1.ChangeService.AppendLog:output_type -> goap.graph.v1.AppendLogResponse
-	138, // 147: goap.change.v1.ChangeService.ListExecutions:output_type -> goap.graph.v1.ListExecutionsResponse
-	74,  // [74:148] is the sub-list for method output_type
-	0,   // [0:74] is the sub-list for method input_type
+	46,  // 46: goap.change.v1.ChangeService.DeleteChange:input_type -> goap.graph.v1.DeleteChangeRequest
+	47,  // 47: goap.change.v1.ChangeService.MergeChange:input_type -> goap.graph.v1.MergeChangeRequest
+	48,  // 48: goap.change.v1.ChangeService.GetSharedNodes:input_type -> goap.graph.v1.GetSharedNodesRequest
+	49,  // 49: goap.change.v1.ChangeService.SplitChange:input_type -> goap.graph.v1.SplitChangeRequest
+	50,  // 50: goap.change.v1.ChangeService.ListSubChanges:input_type -> goap.graph.v1.ListSubChangesRequest
+	51,  // 51: goap.change.v1.ChangeService.OpenFlow:input_type -> goap.graph.v1.OpenFlowRequest
+	52,  // 52: goap.change.v1.ChangeService.AdoptFlow:input_type -> goap.graph.v1.AdoptFlowRequest
+	53,  // 53: goap.change.v1.ChangeService.DiscardFlow:input_type -> goap.graph.v1.DiscardFlowRequest
+	54,  // 54: goap.change.v1.ChangeService.ListFlows:input_type -> goap.graph.v1.ListFlowsRequest
+	55,  // 55: goap.change.v1.ChangeService.ValidateBoard:input_type -> goap.graph.v1.ValidateBoardRequest
+	56,  // 56: goap.change.v1.ChangeService.OpenOption:input_type -> goap.graph.v1.OpenOptionRequest
+	57,  // 57: goap.change.v1.ChangeService.ActivateOption:input_type -> goap.graph.v1.ActivateOptionRequest
+	58,  // 58: goap.change.v1.ChangeService.EvaluateOption:input_type -> goap.graph.v1.EvaluateOptionRequest
+	59,  // 59: goap.change.v1.ChangeService.SelectOption:input_type -> goap.graph.v1.SelectOptionRequest
+	60,  // 60: goap.change.v1.ChangeService.RejectOption:input_type -> goap.graph.v1.RejectOptionRequest
+	61,  // 61: goap.change.v1.ChangeService.ListOptions:input_type -> goap.graph.v1.ListOptionsRequest
+	62,  // 62: goap.change.v1.ChangeService.CompareOptions:input_type -> goap.graph.v1.CompareOptionsRequest
+	63,  // 63: goap.change.v1.ChangeService.DiffFlows:input_type -> goap.graph.v1.DiffFlowsRequest
+	64,  // 64: goap.change.v1.ChangeService.GetChangeView:input_type -> goap.graph.v1.GetChangeViewRequest
+	65,  // 65: goap.change.v1.ChangeService.OpenDecision:input_type -> goap.graph.v1.OpenDecisionRequest
+	66,  // 66: goap.change.v1.ChangeService.RuleDecision:input_type -> goap.graph.v1.RuleDecisionRequest
+	67,  // 67: goap.change.v1.ChangeService.AnswerQuestion:input_type -> goap.graph.v1.AnswerQuestionRequest
+	68,  // 68: goap.change.v1.ChangeService.RatifyDecision:input_type -> goap.graph.v1.RatifyDecisionRequest
+	69,  // 69: goap.change.v1.ChangeService.ListDecisionPoints:input_type -> goap.graph.v1.ListDecisionPointsRequest
+	70,  // 70: goap.change.v1.ChangeService.GetChangeGraph:input_type -> goap.graph.v1.GetChangeGraphRequest
+	71,  // 71: goap.change.v1.ChangeService.AppendLog:input_type -> goap.graph.v1.AppendLogRequest
+	72,  // 72: goap.change.v1.ChangeService.ListExecutions:input_type -> goap.graph.v1.ListExecutionsRequest
+	73,  // 73: goap.change.v1.ChangeService.ListChangeEvents:output_type -> goap.graph.v1.ListChangeEventsResponse
+	74,  // 74: goap.change.v1.ChangeService.ListChangeLog:output_type -> goap.graph.v1.ListChangeLogResponse
+	75,  // 75: goap.change.v1.ChangeService.ExportChangeProvenance:output_type -> goap.graph.v1.ExportChangeProvenanceResponse
+	76,  // 76: goap.change.v1.ChangeService.CreateChange:output_type -> goap.graph.v1.CreateChangeResponse
+	77,  // 77: goap.change.v1.ChangeService.GetChange:output_type -> goap.graph.v1.GetChangeResponse
+	78,  // 78: goap.change.v1.ChangeService.ListChanges:output_type -> goap.graph.v1.ListChangesResponse
+	79,  // 79: goap.change.v1.ChangeService.GetChangeImpacts:output_type -> goap.graph.v1.GetChangeImpactsResponse
+	80,  // 80: goap.change.v1.ChangeService.UpdateChange:output_type -> goap.graph.v1.UpdateChangeResponse
+	81,  // 81: goap.change.v1.ChangeService.MoveChange:output_type -> goap.graph.v1.MoveChangeResponse
+	82,  // 82: goap.change.v1.ChangeService.AddItems:output_type -> goap.graph.v1.AddItemsResponse
+	83,  // 83: goap.change.v1.ChangeService.PutChangeObjects:output_type -> goap.graph.v1.PutChangeObjectsResponse
+	84,  // 84: goap.change.v1.ChangeService.ListChangeObjects:output_type -> goap.graph.v1.ListChangeObjectsResponse
+	85,  // 85: goap.change.v1.ChangeService.SubmitBatch:output_type -> goap.graph.v1.SubmitBatchResponse
+	86,  // 86: goap.change.v1.ChangeService.CreateRequest:output_type -> goap.graph.v1.RequestResponse
+	86,  // 87: goap.change.v1.ChangeService.GetRequest:output_type -> goap.graph.v1.RequestResponse
+	87,  // 88: goap.change.v1.ChangeService.ListRequests:output_type -> goap.graph.v1.ListRequestsResponse
+	86,  // 89: goap.change.v1.ChangeService.UpdateRequest:output_type -> goap.graph.v1.RequestResponse
+	86,  // 90: goap.change.v1.ChangeService.SetRequestStatus:output_type -> goap.graph.v1.RequestResponse
+	86,  // 91: goap.change.v1.ChangeService.LinkRequest:output_type -> goap.graph.v1.RequestResponse
+	86,  // 92: goap.change.v1.ChangeService.UnlinkRequest:output_type -> goap.graph.v1.RequestResponse
+	88,  // 93: goap.change.v1.ChangeService.ListRequestLog:output_type -> goap.graph.v1.ListRequestLogResponse
+	89,  // 94: goap.change.v1.ChangeService.ProposeImpact:output_type -> goap.graph.v1.ProposeImpactResponse
+	90,  // 95: goap.change.v1.ChangeService.ImpactNodeCreate:output_type -> goap.graph.v1.ImpactNodeCreateResponse
+	91,  // 96: goap.change.v1.ChangeService.ImpactNodeCheckout:output_type -> goap.graph.v1.ImpactNodeCheckoutResponse
+	92,  // 97: goap.change.v1.ChangeService.ImpactNodeUpdate:output_type -> goap.graph.v1.ImpactNodeUpdateResponse
+	93,  // 98: goap.change.v1.ChangeService.ImpactLinkCreate:output_type -> goap.graph.v1.ImpactLinkCreateResponse
+	94,  // 99: goap.change.v1.ChangeService.ImpactLinkUpdate:output_type -> goap.graph.v1.ImpactLinkUpdateResponse
+	95,  // 100: goap.change.v1.ChangeService.ImpactLinkDelete:output_type -> goap.graph.v1.ImpactLinkDeleteResponse
+	96,  // 101: goap.change.v1.ChangeService.ImpactNodeTransition:output_type -> goap.graph.v1.ImpactNodeTransitionResponse
+	97,  // 102: goap.change.v1.ChangeService.ImpactNodeCancel:output_type -> goap.graph.v1.ImpactNodeCancelResponse
+	98,  // 103: goap.change.v1.ChangeService.ImpactNodeMerge:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
+	98,  // 104: goap.change.v1.ChangeService.ImpactNodeSplit:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
+	99,  // 105: goap.change.v1.ChangeService.WithdrawImpact:output_type -> goap.graph.v1.WithdrawImpactResponse
+	100, // 106: goap.change.v1.ChangeService.RebaseChange:output_type -> goap.graph.v1.RebaseChangeResponse
+	101, // 107: goap.change.v1.ChangeService.ImpactNodeResolve:output_type -> goap.graph.v1.ImpactNodeResolveResponse
+	102, // 108: goap.change.v1.ChangeService.GetRebaseState:output_type -> goap.graph.v1.GetRebaseStateResponse
+	103, // 109: goap.change.v1.ChangeService.ImpactNodeReview:output_type -> goap.graph.v1.ImpactNodeReviewResponse
+	104, // 110: goap.change.v1.ChangeService.ImpactNodeReviewBatch:output_type -> goap.graph.v1.ImpactNodeReviewBatchResponse
+	105, // 111: goap.change.v1.ChangeService.ReviewOpen:output_type -> goap.graph.v1.ReviewResponse
+	105, // 112: goap.change.v1.ChangeService.ReviewUpdate:output_type -> goap.graph.v1.ReviewResponse
+	105, // 113: goap.change.v1.ChangeService.ReviewSubmit:output_type -> goap.graph.v1.ReviewResponse
+	105, // 114: goap.change.v1.ChangeService.ReviewDiscard:output_type -> goap.graph.v1.ReviewResponse
+	106, // 115: goap.change.v1.ChangeService.ReopenChangeImpacts:output_type -> goap.graph.v1.ReopenChangeImpactsResponse
+	107, // 116: goap.change.v1.ChangeService.CommitEdits:output_type -> goap.graph.v1.CommitEditsResponse
+	108, // 117: goap.change.v1.ChangeService.GetBlackboard:output_type -> goap.graph.v1.GetBlackboardResponse
+	109, // 118: goap.change.v1.ChangeService.ApplyChange:output_type -> goap.graph.v1.ApplyChangeResponse
+	110, // 119: goap.change.v1.ChangeService.DeleteChange:output_type -> goap.graph.v1.DeleteChangeResponse
+	111, // 120: goap.change.v1.ChangeService.MergeChange:output_type -> goap.graph.v1.MergeChangeResponse
+	112, // 121: goap.change.v1.ChangeService.GetSharedNodes:output_type -> goap.graph.v1.GetSharedNodesResponse
+	113, // 122: goap.change.v1.ChangeService.SplitChange:output_type -> goap.graph.v1.SplitChangeResponse
+	114, // 123: goap.change.v1.ChangeService.ListSubChanges:output_type -> goap.graph.v1.ListSubChangesResponse
+	115, // 124: goap.change.v1.ChangeService.OpenFlow:output_type -> goap.graph.v1.OpenFlowResponse
+	116, // 125: goap.change.v1.ChangeService.AdoptFlow:output_type -> goap.graph.v1.AdoptFlowResponse
+	117, // 126: goap.change.v1.ChangeService.DiscardFlow:output_type -> goap.graph.v1.DiscardFlowResponse
+	118, // 127: goap.change.v1.ChangeService.ListFlows:output_type -> goap.graph.v1.ListFlowsResponse
+	119, // 128: goap.change.v1.ChangeService.ValidateBoard:output_type -> goap.graph.v1.ValidateBoardResponse
+	120, // 129: goap.change.v1.ChangeService.OpenOption:output_type -> goap.graph.v1.OpenOptionResponse
+	121, // 130: goap.change.v1.ChangeService.ActivateOption:output_type -> goap.graph.v1.ActivateOptionResponse
+	122, // 131: goap.change.v1.ChangeService.EvaluateOption:output_type -> goap.graph.v1.EvaluateOptionResponse
+	123, // 132: goap.change.v1.ChangeService.SelectOption:output_type -> goap.graph.v1.SelectOptionResponse
+	124, // 133: goap.change.v1.ChangeService.RejectOption:output_type -> goap.graph.v1.RejectOptionResponse
+	125, // 134: goap.change.v1.ChangeService.ListOptions:output_type -> goap.graph.v1.ListOptionsResponse
+	126, // 135: goap.change.v1.ChangeService.CompareOptions:output_type -> goap.graph.v1.CompareOptionsResponse
+	127, // 136: goap.change.v1.ChangeService.DiffFlows:output_type -> goap.graph.v1.DiffFlowsResponse
+	128, // 137: goap.change.v1.ChangeService.GetChangeView:output_type -> goap.graph.v1.GetChangeViewResponse
+	129, // 138: goap.change.v1.ChangeService.OpenDecision:output_type -> goap.graph.v1.OpenDecisionResponse
+	130, // 139: goap.change.v1.ChangeService.RuleDecision:output_type -> goap.graph.v1.RuleDecisionResponse
+	131, // 140: goap.change.v1.ChangeService.AnswerQuestion:output_type -> goap.graph.v1.AnswerQuestionResponse
+	132, // 141: goap.change.v1.ChangeService.RatifyDecision:output_type -> goap.graph.v1.RatifyDecisionResponse
+	133, // 142: goap.change.v1.ChangeService.ListDecisionPoints:output_type -> goap.graph.v1.ListDecisionPointsResponse
+	134, // 143: goap.change.v1.ChangeService.GetChangeGraph:output_type -> goap.graph.v1.GetChangeGraphResponse
+	135, // 144: goap.change.v1.ChangeService.AppendLog:output_type -> goap.graph.v1.AppendLogResponse
+	136, // 145: goap.change.v1.ChangeService.ListExecutions:output_type -> goap.graph.v1.ListExecutionsResponse
+	73,  // [73:146] is the sub-list for method output_type
+	0,   // [0:73] is the sub-list for method input_type
 	0,   // [0:0] is the sub-list for extension type_name
 	0,   // [0:0] is the sub-list for extension extendee
 	0,   // [0:0] is the sub-list for field type_name

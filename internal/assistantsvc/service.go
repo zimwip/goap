@@ -80,6 +80,9 @@ type Graph interface {
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error)
 	LinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error)
+	// Objects reads change objects of a change: the state of the change in the lifecycle of its methodology is an
+	// execution@State object (ADR 0098).
+	Objects(ctx context.Context, id domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error)
 }
 
 // requestedChange records the request of the person (ADR 0098: the words they said, from the conversation), creates
