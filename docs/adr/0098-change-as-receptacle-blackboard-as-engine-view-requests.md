@@ -1,6 +1,6 @@
 # ADR 0098 — The change is a receptacle, the blackboard is the engine's view of it, requests are the origin of work
 
-**Status**: accepted; phases 1 to 4 implemented (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
+**Status**: accepted; phases 1 to 4 implemented, 5 and 6 begun (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
 impacts, event-sourced, one log), 0027 (node editors), 0031 (deferred change binding), 0055 (attributes), 0058 (change
 lifecycle and gates), 0065 / 0066 / 0067 (item kinds, facets, flow origin and decision policy out of the core), 0079
 (drafts and versions at landing), 0096 (goal of a change). Partly supersedes ADR 0033 §1 (the request as an intake
@@ -449,6 +449,22 @@ No methodology references a change object type yet (phase 5).
   transitions and gates (`Graph.TransitionChange`, `ChangeLifecycles`), the items (`decision`, `artifact`, `signal`,
   `flow`, `merge` and the registered kinds) and the options and decision points of `pkg/graph`; the guardian is still the
   registry's.
+
+**Phase 6, first step (done)**: the declared change view.
+
+- The type catalogue of the web holds the change object types (`TypeCatalog.objects`, `objectType`, `objectNames`, from
+  `ListTypes`). `web/src/lib/changeTabs.ts`: `registerChangeTab(name, component)`, `changeTabEditor`, `openChangeTab`,
+  the props of a tab (`ChangeTabProps`: change, types, change objects, read-only, workspace, `onchanged`).
+  `web/src/lib/changeObjects.ts` (pure, tested): the tabs of a change (`objectTabs`: the tabs the methodology declares,
+  shown while empty, then one per type of the change objects it holds or the person added, grouped by editor), keys,
+  writes (`createWrite`, `editWrite`), transitions of a type's lifecycle.
+- `ChangeObjects.svelte` is the default object editor: a table per type (key, state, the first attributes, version) and
+  the attribute form (`NodePropertyForm`, `submitLabel`) to add or edit one, the transitions of its lifecycle as buttons;
+  every save is `PutChangeObjects`. `ChangeTab.svelte` loads the change objects with the change, adds the object tabs to
+  its panes and an "Add a change object" menu offering every change object type.
+- Not done (phase 6): the existing use case panes (decisions, options, risks, verification, derogations, review) are
+  still the change view's own panes, not editors registered for change object types (they move with their data in
+  phase 5); the requests have no pane yet.
 
 ## Consequences
 

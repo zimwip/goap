@@ -11,6 +11,7 @@
     ITEM_SUPERSEDED,
     type ChangeItem,
     type Change,
+    type ChangeObject,
     type Flow,
     type DecisionPoint,
     type Lifecycle,
@@ -79,6 +80,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import NotFound from '../../shell/NotFound.svelte';
   import { loadMethodology, published } from '../../stores/catalog.svelte';
   import { goalInfo } from '../../changeGoal';
+  import ChangeObjects from '../../components/ChangeObjects.svelte';
+  import { OBJECT_PANE, objectTabs } from '../../changeObjects';
+  import { changeTabEditor } from '../../changeTabs';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -86,8 +90,25 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   // what its methodology says of the goal of the change (ADR 0096); a goal the methodology no longer declares is shown
   const goalNote = $derived(goalInfo(published.get(change?.methodology ?? ''), change?.goal ?? ''));
   $effect(() => {
-    if (change?.goal && change.methodology) void loadMethodology(change.methodology);
+    if (change?.methodology) void loadMethodology(change.methodology);
   });
+  // the change objects of the change (ADR 0098): a tab per type it holds, and the tabs its methodology declares
+  let objects = $state<ChangeObject[]>([]);
+  /** a type the person starts the first change object of (from the Add menu) */
+  let extraObjectTypes = $state<string[]>([]);
+  let addObjectType = $state('');
+  const declaredTabs = $derived(published.get(change?.methodology ?? '')?.additions?.tabs ?? []);
+  const objTabs = $derived(objectTabs(objects, declaredTabs, (t) => typeCatalog.cat.objectType(t)?.editor ?? '', extraObjectTypes));
+  async function reloadObjects() {
+    if (change?.id) objects = (await graph.listChangeObjects({ changeId: change.id })).objects ?? [];
+  }
+  function startObjects(type: string) {
+    if (!type) return;
+    const shown = objTabs.find((t) => t.types.includes(type));
+    if (!shown) extraObjectTypes = [...extraObjectTypes, type];
+    pane = shown?.id ?? OBJECT_PANE + type;
+    addObjectType = '';
+  }
   let nodes = $state<GraphNode[]>([]);
   let attached = $state<NodeRef[]>([]);
   let posts = $state<PostVersions>(new Map());
@@ -207,6 +228,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         graph.listSubChanges(id, signal).then((r) => r.changes ?? []),
         loadAncestors(c, signal),
         graph.listFlows(id, signal).then((r) => (flows = r.flows ?? [])),
+        graph.listChangeObjects({ changeId: id }, signal).then((r) => (objects = r.objects ?? [])),
       ]);
       nodes = baseNodes;
       nodesOf = baselineId;
@@ -488,6 +510,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     { id: 'risks', label: 'Risks & actions', badge: riskRegister(change?.items ?? []).filter(liveRisk).length || undefined },
     { id: 'verification', label: 'Verification', badge: verifications(change?.items ?? []).filter((v) => v.open).length || undefined },
     { id: 'derogations', label: 'Derogations', badge: derogationRegister(change?.items ?? []).filter(openDerogation).length || undefined },
+    ...objTabs.map((t) => ({ id: t.id, label: t.title, badge: t.count || undefined, title: t.types.join(', ') })),
     { id: 'changes', label: 'Changes', badge: subs.length + ancestors.length || undefined },
     { id: 'audit', label: 'Audit' },
   ]);
@@ -954,6 +977,14 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     />
   {/if}
   <EditorPanes {panes} bind:active={pane} label="Change sections">
+    {#snippet toolbar()}
+      {#if !closed}
+        <select bind:value={addObjectType} onchange={() => startObjects(addObjectType)} aria-label="Add a change object" title="Add a change object of a type">
+          <option value="">+ Change object…</option>
+          {#each typeCatalog.cat.objectNames() as t (t)}<option value={t}>{t}</option>{/each}
+        </select>
+      {/if}
+    {/snippet}
     {#snippet children(active)}
       {#if active === 'overview'}
       <section class="card">
@@ -1196,6 +1227,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         </details>
       {/if}
       </div>
+      {:else if active.startsWith(OBJECT_PANE)}
+        {@const ot = objTabs.find((t) => t.id === active)}
+        {#if ot}
+          {@const Editor = changeTabEditor(ot.editor)?.component ?? ChangeObjects}
+          <Editor changeId={ch.id ?? ''} types={ot.types} {objects} readonly={closed || ch.status === 'committed'} workspace={scope === MAIN_SCOPE ? '' : scope} onchanged={reloadObjects} />
+        {/if}
       {:else if active === 'audit'}
       <section class="card">
         <ChangeAudit change={ch} bind:process={auditProcess} bind:run={auditRun} onrun={(pid) => openTab({ kind: 'run', params: { id: pid } })} />

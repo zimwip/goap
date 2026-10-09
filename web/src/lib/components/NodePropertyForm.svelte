@@ -12,6 +12,7 @@
     typeName,
     open = false,
     busy = false,
+    submitLabel = 'Propose the changes',
     onsave,
     oncancel,
   }: {
@@ -23,6 +24,8 @@
     /** the type is free-form (`additionalProperties`): properties that are no attribute may be added */
     open?: boolean;
     busy?: boolean;
+    /** the label of the submit button */
+    submitLabel?: string;
     onsave: (patch: Record<string, unknown>) => Promise<boolean> | boolean;
     oncancel: () => void;
   } = $props();
@@ -152,7 +155,7 @@
   <p class="hint">Values are text; a property that already holds a number, boolean or list is edited as JSON. Only the changed properties are proposed.{#if !open} Only the attributes of {typeName} can be set.{/if}</p>
   {#if error}<div class="alert">{error}</div>{/if}
   <div class="row">
-    <button type="submit" class="primary" disabled={busy}>{busy ? 'Proposing…' : 'Propose the changes'}</button>
+    <button type="submit" class="primary" disabled={busy}>{busy ? 'Working…' : submitLabel}</button>
     <button type="button" onclick={oncancel}>Cancel</button>
   </div>
 </form>

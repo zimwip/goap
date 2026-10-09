@@ -1,7 +1,7 @@
 // The type catalogue in force (ADR 0012): the resolved node and link types of the published domains and of the
 // built-in domains, served by the registry. A type is referenced as "<namespace>@<name>". Loaded once, reloaded
 // after a domain is published from the IDE.
-import { registry, type AttributeInfo, type LinkTypeInfo, type Lifecycle, type TypeInfo } from '../api';
+import { registry, type AttributeInfo, type ChangeObjectTypeInfo, type LinkTypeInfo, type Lifecycle, type TypeInfo } from '../api';
 
 export const TYPE_SEP = '@';
 
@@ -20,11 +20,24 @@ export class TypeCatalog {
   readonly links: LinkTypeInfo[];
   /** namespace (domain) → version in force */
   readonly domains: Record<string, string>;
+  /** the change object types (ADR 0098), by reference */
+  readonly objects: Map<string, ChangeObjectTypeInfo>;
 
-  constructor(types: TypeInfo[] = [], links: LinkTypeInfo[] = [], domains: Record<string, string> = {}) {
+  constructor(types: TypeInfo[] = [], links: LinkTypeInfo[] = [], domains: Record<string, string> = {}, objects: ChangeObjectTypeInfo[] = []) {
     this.types = new Map(types.filter((t) => t.ref).map((t) => [t.ref ?? '', t]));
     this.links = links;
     this.domains = domains;
+    this.objects = new Map(objects.filter((t) => t.ref).map((t) => [t.ref ?? '', t]));
+  }
+
+  /** A change object type (ADR 0098). */
+  objectType(ref: string | undefined): ChangeObjectTypeInfo | undefined {
+    return this.objects.get(ref ?? '');
+  }
+
+  /** The qualified change object types, sorted. */
+  objectNames(): string[] {
+    return [...this.objects.keys()].sort();
   }
 
   type(ref: string | undefined): TypeInfo | undefined {
@@ -146,7 +159,7 @@ export function loadTypes(force = false): Promise<TypeCatalog> {
   const p = registry
     .listTypes()
     .then((res) => {
-      const cat = new TypeCatalog(res.types ?? [], res.linkTypes ?? [], res.domains ?? {});
+      const cat = new TypeCatalog(res.types ?? [], res.linkTypes ?? [], res.domains ?? {}, res.changeObjectTypes ?? []);
       typeCatalog.cat = cat;
       typeCatalog.loaded = true;
       typeCatalog.error = '';

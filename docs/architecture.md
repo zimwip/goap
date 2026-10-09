@@ -1259,6 +1259,10 @@ object is stored on its change (`Graph.PutObjects` / `Objects`): every write is 
 the log of the change (whose entries also carry opaque `labels`), the last version kept in the `change_object`
 projection; `Graph.Submit` writes impact operations, items and change objects in one transaction (RPCs
 `PutChangeObjects`, `ListChangeObjects`, `SubmitBatch`, ABAC `change-object:write`).
+The web's change view declares its tabs (`web/src/lib/changeTabs.ts`: `registerChangeTab`, `openChangeTab`): the tabs
+the methodology of the change declares (`additions.tabs`) and one per type of the change objects it holds or the person
+adds from its "Add a change object" menu; an editor unknown to the web gives the default object editor
+(`ChangeObjects.svelte`: a table per type, the attribute form, the transitions of the type's lifecycle).
 
 **Requests** ([ADR 0098](adr/0098-change-as-receptacle-blackboard-as-engine-view-requests.md)): the origin of a piece of
 work (who asks for what, from where) is a request, an object of the change component that may exist before any change
