@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/eventsvc"
@@ -158,7 +159,9 @@ func main() {
 		}
 	})
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}
-	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	graphOpts := append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))
+	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, graphOpts...))
+	srv.Mount(changev1connect.NewChangeServiceHandler(graphHandler, graphOpts...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -181,9 +182,10 @@ func TestMoveChangeRPC(t *testing.T) {
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
+	mux.Handle(changev1connect.NewChangeServiceHandler(h, connect.WithInterceptors(h.PersonalScope())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	cl := newRPCClient(srv.Client(), srv.URL)
 	as := func(p authz.Principal, r connect.AnyRequest) { identity.SetHeaders(p, r.Header()) }
 	dev := authz.Principal{Subject: "dev", Org: "team-a", Project: "PROJ-X"}
 	create := func(p authz.Principal, project string) *graphv1.Change {

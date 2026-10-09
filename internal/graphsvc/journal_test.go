@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -24,6 +25,7 @@ func TestJournalThroughTheService(t *testing.T) {
 	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
+	mux.Handle(changev1connect.NewChangeServiceHandler(&graphsvc.Handler{Graph: g}))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	cl := graphsvc.NewClient(srv.Client(), srv.URL)
@@ -55,7 +57,7 @@ func TestJournalThroughTheService(t *testing.T) {
 		t.Fatal("a fact was appended through the log")
 	}
 	// the web reads records
-	rpc := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	rpc := newRPCClient(srv.Client(), srv.URL)
 	r, err := rpc.ListExecutions(ctx, connect.NewRequest(&graphv1.ListExecutionsRequest{ChangeId: string(c.ID)}))
 	if err != nil || len(r.Msg.Records) != 1 || r.Msg.Records[0].Action != "a" {
 		t.Fatalf("ListExecutions: %+v %v", r, err)

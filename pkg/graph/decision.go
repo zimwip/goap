@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -16,32 +17,11 @@ import (
 // main flow; the state is its replay (domain.Change.DecisionPointsAt). When a ruling settles a point and when only a
 // person may rule it is the policy of Graph.DecisionPolicy (ADR 0067), not the graph's.
 
-// OpenDecisionRequest opens a decision point.
-type OpenDecisionRequest struct {
-	Question string
-	// Options are the options it chooses among; nil: the open options of the change, [] none (a free question).
-	Options  []string
-	Criteria []string
-	// Policy is the policy values the opener gives (who decides, a confidence threshold, a number of rounds, a
-	// duration: the keys of pkg/decision). The graph hands them to Graph.DecisionPolicy, which resolves them, and
-	// stores the result on the point.
-	Policy map[string]any
-	By     string
-}
+// OpenDecisionRequest is changeapi.OpenDecisionRequest (ADR 0098: the contract of the change, shared with the engine).
+type OpenDecisionRequest = changeapi.OpenDecisionRequest
 
-// RuleRequest is a ruling of a decision point.
-type RuleRequest struct {
-	Point string
-	// Outcome is decided (Option, Confidence) or undecidable (Questions: what blocks it).
-	Outcome       string
-	Option        string
-	Confidence    float64
-	Justification string
-	Questions     []string
-	// Human tells the ruling comes from a person: the only one a point reserved to a person accepts.
-	Human bool
-	By    string
-}
+// RuleRequest is changeapi.RuleRequest (ADR 0098: the contract of the change, shared with the engine).
+type RuleRequest = changeapi.RuleRequest
 
 // decisionPolicy is the policy of the graph, the minimal one when none was given.
 func (g *Graph) decisionPolicy() domain.DecisionPolicy {

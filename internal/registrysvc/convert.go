@@ -6,8 +6,8 @@ import (
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/planning"
 )
 
 // ToPB converts a stored record.
@@ -467,7 +467,7 @@ func ProcessGraphToPB(g methodology.ProcessGraph) *registryv1.ProcessGraph {
 }
 
 // PlanPreviewToPB converts the result of planning a goal from a (possibly overridden) world state.
-func PlanPreviewToPB(p *engine.PlanPreview) *registryv1.PlanPreview {
+func PlanPreviewToPB(p *planning.PlanPreview) *registryv1.PlanPreview {
 	out := &registryv1.PlanPreview{Agent: p.Agent, Goal: p.Goal, Planner: p.Planner, Reached: p.Reached, Cost: p.Cost, Awaiting: p.Awaiting}
 	for _, a := range p.Actions {
 		out.Actions = append(out.Actions, &registryv1.PlanStep{Name: a.Name, Step: a.Step, Kind: a.Kind, Cost: a.Cost})

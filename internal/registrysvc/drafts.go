@@ -12,14 +12,11 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
-	"github.com/zimwip/goap/pkg/selfimprove"
 )
 
 // Drafts adapts an in-process registry to selfimprove.MethodologyDrafts (the
 // self-observation agent saves improved versions as drafts).
 type Drafts struct{ Service *Service }
-
-var _ selfimprove.MethodologyDrafts = Drafts{}
 
 // Definition implements selfimprove.MethodologyDrafts.
 func (d Drafts) Definition(ctx context.Context, name, version string) (methodology.Methodology, bool, error) {
@@ -35,8 +32,6 @@ func (d Drafts) SaveDraft(ctx context.Context, m methodology.Methodology) (def.I
 	_, issues, err := d.Service.Save(ctx, m)
 	return issues, err
 }
-
-var _ selfimprove.MethodologyDrafts = (*Client)(nil)
 
 // withIdentity forwards the principal of ctx to the registry (service to
 // service calls inside the platform network, as the gateway does).

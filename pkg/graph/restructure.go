@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -17,59 +18,20 @@ import (
 // links to C and D. A and B stay in history, untouched; their change impacts carry Via, the impact of the parent that
 // realizes the move (ADR 0076 §3). The successors record their lineage (Node.Origins, on their first version).
 
-// NodeName names a node a merge or a split works on: a change impact, or a node (its id, or its key).
-type NodeName struct {
-	Impact domain.ChangeImpactID
-	Node   domain.NodeID
-	Key    string
-}
+// NodeName is changeapi.NodeName (ADR 0098: the contract of the change, shared with the engine).
+type NodeName = changeapi.NodeName
 
-// MergeInput is a merge (ImpactNodeMerge): Sources are replaced, in their parents, by the new node Into.
-type MergeInput struct {
-	Sources []NodeName
-	Into    NodeCreate
-	// Rationale says why, on the impacts the merge declares (the sources, the parents); empty: the one of Into.
-	Rationale string
-	// Flow and Execution replace the ones of Into (see NodeCreate).
-	Flow, Execution string
-	// Gate, when set, is asked about the type of every node the call writes or modifies, the parents it discovers
-	// included (the access nodes, ADR 0068, are not the caller's to change): its error refuses the call. It runs inside
-	// the transaction and must not read the graph.
-	Gate func(nodeType string) error
-}
+// MergeInput is changeapi.MergeInput (ADR 0098: the contract of the change, shared with the engine).
+type MergeInput = changeapi.MergeInput
 
-// SplitInput is a split (ImpactNodeSplit): Source is replaced, in its parents, by the new nodes Into.
-type SplitInput struct {
-	Source          NodeName
-	Into            []NodeCreate
-	Rationale       string
-	Flow, Execution string
-	// Gate is the one of MergeInput.
-	Gate func(nodeType string) error
-}
+// SplitInput is changeapi.SplitInput (ADR 0098: the contract of the change, shared with the engine).
+type SplitInput = changeapi.SplitInput
 
-// SuspectLink is a link of another node to a source that a split leaves as it is: which successor it should follow
-// is for the reviewer to say (ADR 0003: it becomes suspect).
-type SuspectLink struct {
-	From    domain.NodeRef
-	FromKey string
-	Type    string
-	To      domain.NodeRef
-	ToKey   string
-}
+// SuspectLink is changeapi.SuspectLink (ADR 0098: the contract of the change, shared with the engine).
+type SuspectLink = changeapi.SuspectLink
 
-// Restructured is what a merge or a split did to the change.
-type Restructured struct {
-	// Successors are the impacts of the new nodes (created, checked out, with their origins).
-	Successors []domain.ChangeImpact
-	// Sources are the impacts of the merged or split nodes, Via the impact of their parent.
-	Sources []domain.ChangeImpact
-	// Parents are the impacts of the nodes whose links moved (each checked out): the parents, and for a merge the nodes
-	// holding other links to the sources.
-	Parents []domain.ChangeImpact
-	// Suspect lists the links a split leaves to its source (see SuspectLink).
-	Suspect []SuspectLink
-}
+// Restructured is changeapi.Restructured (ADR 0098: the contract of the change, shared with the engine).
+type Restructured = changeapi.Restructured
 
 // ImpactNodeMerge merges nodes into a new one, in one transaction (see the top of the file). Every source needs a
 // parent: a node holding a link of a type flagged `compose` to it. The links of other types to the sources are moved

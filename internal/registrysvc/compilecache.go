@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
@@ -85,12 +84,12 @@ func contentHash(m methodology.Methodology) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Methodology implements engine.MethodologyPort for in-process use: the latest published version, compiled once for
+// Methodology implements methodology.Source for in-process use: the latest published version, compiled once for
 // as long as neither it nor the types in force change.
 func (s *Service) Methodology(ctx context.Context, name string) (*methodology.Compiled, error) {
 	r, err := s.Store.Get(ctx, name, "")
 	if err != nil {
-		return nil, engine.ErrUnknownMethodology{Name: name}
+		return nil, methodology.ErrUnknown{Name: name}
 	}
 	ds, err := s.Domains(ctx)
 	if err != nil {

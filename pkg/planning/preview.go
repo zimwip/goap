@@ -1,4 +1,8 @@
-package engine
+// Package planning is the planning shared by the engine and the registry (ADR 0098 §10): the planners that need no
+// model (goap, utility, hybrid), what a process that no plan reaches waits for, and the preview of a plan the
+// methodology editor shows. It runs nothing and knows no change: the registry previews a plan without importing the
+// engine.
+package planning
 
 import (
 	"errors"
@@ -76,16 +80,16 @@ func PreviewPlan(m *methodology.Compiled, bb domain.Blackboard, agent, goalName 
 	case "", methodology.PlannerGOAP:
 		plan, err = goap.Planner{}.Plan(world, actions, planningGoal)
 	case methodology.PlannerUtility:
-		plan, err = utilityPlan(world, actions, planningGoal, m.Utilities(bb))
+		plan, err = UtilityPlan(world, actions, planningGoal, m.Utilities(bb))
 	case methodology.PlannerHybrid:
-		plan, err = reweightPlan(goap.Planner{}, world, actions, planningGoal, m.Utilities(bb))
+		plan, err = ReweightPlan(goap.Planner{}, world, actions, planningGoal, m.Utilities(bb))
 	case methodology.PlannerLLM, methodology.PlannerLLMScoring:
 		return nil, ErrLivePlanner
 	default:
 		return nil, fmt.Errorf("unknown planner %q", ag.Planner)
 	}
 	if errors.Is(err, goap.ErrNoPlan) {
-		out.Awaiting = (&Engine{}).awaited(world, actions, actions, planningGoal)
+		out.Awaiting = Awaited(goap.Planner{}, world, actions, actions, planningGoal)
 		return out, nil
 	}
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/planning"
 )
 
 func plannerTestCompiled(t *testing.T) *methodology.Compiled {
@@ -110,7 +111,7 @@ func TestLLMScoringPlannerReweights(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := reweightPlan(goap.Planner{}, world, actions, goal, map[string]float64{"prep": 5})
+	want, err := planning.ReweightPlan(goap.Planner{}, world, actions, goal, map[string]float64{"prep": 5})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +149,7 @@ func TestHybridPlannerUnaffectedByReweightExtraction(t *testing.T) {
 	if len(calls) != 0 {
 		t.Fatalf("hybrid must not call an LLM: %+v", calls)
 	}
-	want, err := reweightPlan(goap.Planner{}, world, actions, goal, utilities)
+	want, err := planning.ReweightPlan(goap.Planner{}, world, actions, goal, utilities)
 	if err != nil {
 		t.Fatal(err)
 	}

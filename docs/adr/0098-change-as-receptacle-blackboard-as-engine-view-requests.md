@@ -1,6 +1,6 @@
 # ADR 0098 — The change is a receptacle, the blackboard is the engine's view of it, requests are the origin of work
 
-**Status**: accepted; phases 1 to 4 implemented, 5 and 6 begun (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
+**Status**: accepted; phases 1 to 4 and 7 implemented, 5 and 6 begun (see Implementation) · **Date**: 2026-10 · Builds on ADR 0001 (the change as blackboard), 0024 / 0029 / 0030 (change
 impacts, event-sourced, one log), 0027 (node editors), 0031 (deferred change binding), 0055 (attributes), 0058 (change
 lifecycle and gates), 0065 / 0066 / 0067 (item kinds, facets, flow origin and decision policy out of the core), 0079
 (drafts and versions at landing), 0096 (goal of a change). Partly supersedes ADR 0033 §1 (the request as an intake
@@ -469,6 +469,26 @@ No methodology references a change object type yet (phase 5).
 - Not done (phase 6): the existing use case panes (decisions, options, risks, verification, derogations, review) are
   still the change view's own panes, not editors registered for change object types (they move with their data in
   phase 5); the requests have no pane yet.
+
+**Phase 7 (done)**: the API split.
+
+- `change.v1`: `proto/goap/change/v1/change.proto` declares `ChangeService`, the 74 RPCs of the change (changes, impacts and
+  their review, change objects, `SubmitBatch`, log, flows / options / decision points, landing, the requests), reusing the
+  messages of `graph.v1` so the wire shapes do not change; `GraphService` keeps nodes, baselines, branches, tags,
+  structures, `ListNodeChanges` and `RepublishIndex`. One `graphsvc.Handler` serves both (same interceptors), mounted by
+  `cmd/graph` and `goap-dev`, routed by the gateway to the graph; `graphsvc.Client` holds a client of each; the web calls
+  `CHANGE` for the moved RPCs.
+- Ports: `pkg/changeapi` is the contract of the change (`NewChange`, `ChangesFilter`, `ChangePatch`, the node operation
+  inputs, `MergeInput` / `SplitInput` / `Restructured`, options, flows, decisions, `NewRequest`, `ErrNotFound` /
+  `ErrConflict` / `ErrInvalid`, `IsWorking`), aliased by `pkg/graph`; `engine.GraphPort` is `ChangePort` +
+  `GraphReadPort` over it and `pkg/domain`, and `pkg/engine` (with `pkg/engine/blackboard`) imports no `pkg/graph`.
+- The registry imports no engine: the model-free planners, `Awaited` and `PreviewPlan` are `pkg/planning`, the
+  methodology port is `methodology.Source` / `ErrUnknown` (`engine.MethodologyPort` / `ErrUnknownMethodology` alias them),
+  the registry's `Publisher` is its own.
+- `pkg/layering`: `pkg/engine`, `pkg/engine/blackboard` and `pkg/planning` do not reach `pkg/graph`; `pkg/changeapi` reaches
+  no engine, methodology, condition nor use case; `internal/registrysvc` does not reach `pkg/engine`.
+- Not done (phase 7): the change half of `pkg/graph` is not a `pkg/change` package of its own (it shares the repository
+  and the transaction of the graph); the engine still imports the use-case packages (`pkg/risk`, `pkg/verify`).
 
 ## Consequences
 

@@ -16,12 +16,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/engine/blackboard"
 	"github.com/zimwip/goap/pkg/goap"
-	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
@@ -512,12 +512,12 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		var err error
 		// asked by the identity the trigger runs as (system:trigger:<methodology>/<agent>/<trigger>)
 		requester := firstNonEmpty(authz.From(ctx).Subject, "system:trigger:"+p.Trigger)
-		if origin, err = e.Graph.CreateRequest(ctx, graph.NewRequest{Title: title, Text: intent, ProjectID: projectID, Requester: requester,
+		if origin, err = e.Graph.CreateRequest(ctx, changeapi.NewRequest{Title: title, Text: intent, ProjectID: projectID, Requester: requester,
 			Origin: domain.RequestOrigin{Kind: domain.OriginTrigger, Ref: p.Trigger}}); err != nil {
 			return "", fmt.Errorf("the request of trigger %s: %w", p.Trigger, err)
 		}
 	}
-	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID,
+	c, err := e.Graph.CreateChange(ctx, changeapi.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID,
 		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
 	if err != nil {
 		return "", err
@@ -1403,7 +1403,7 @@ func (e *Engine) recordRun(ctx context.Context, p *Process) {
 	}
 	writes = append(writes, blackboard.RecordRun(blackboard.RunRef{ID: p.ID, Methodology: p.Methodology, Agent: p.Agent, Goal: p.Goal,
 		Status: string(p.Status), StartedAt: p.CreatedAt}))
-	if _, err := e.Graph.PutObjects(ctx, p.ChangeID, writes); err != nil && !errors.Is(err, graph.ErrConflict) {
+	if _, err := e.Graph.PutObjects(ctx, p.ChangeID, writes); err != nil && !errors.Is(err, changeapi.ErrConflict) {
 		e.log().Debug("run not recorded on its change", "process", p.ID, "change", p.ChangeID, "err", err)
 		return
 	}

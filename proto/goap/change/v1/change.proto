@@ -1,0 +1,138 @@
+syntax = "proto3";
+
+package goap.change.v1;
+
+import "goap/graph/v1/graph.proto";
+
+// ChangeService is the change component (ADR 0098 §9): the receptacle of every modification of the graph, its
+// impacts and their review, its change objects, its log, its workspaces (flows and options) and decision points, its
+// landing, and the requests that are the origin of work. It shares its messages with goap.graph.v1, the graph service
+// serving both.
+service ChangeService {
+  // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
+  rpc ListChangeEvents(goap.graph.v1.ListChangeEventsRequest) returns (goap.graph.v1.ListChangeEventsResponse);
+  // The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
+  rpc ListChangeLog(goap.graph.v1.ListChangeLogRequest) returns (goap.graph.v1.ListChangeLogResponse);
+  // The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
+  rpc ExportChangeProvenance(goap.graph.v1.ExportChangeProvenanceRequest) returns (goap.graph.v1.ExportChangeProvenanceResponse);
+  // Change axis
+  rpc CreateChange(goap.graph.v1.CreateChangeRequest) returns (goap.graph.v1.CreateChangeResponse);
+  rpc GetChange(goap.graph.v1.GetChangeRequest) returns (goap.graph.v1.GetChangeResponse);
+  rpc ListChanges(goap.graph.v1.ListChangesRequest) returns (goap.graph.v1.ListChangesResponse);
+  // The versions a change starts from (the pre version of its change impacts), and the
+  // changes acting on a node (ADR 0024).
+  rpc GetChangeImpacts(goap.graph.v1.GetChangeImpactsRequest) returns (goap.graph.v1.GetChangeImpactsResponse);
+  rpc UpdateChange(goap.graph.v1.UpdateChangeRequest) returns (goap.graph.v1.UpdateChangeResponse);
+  rpc MoveChange(goap.graph.v1.MoveChangeRequest) returns (goap.graph.v1.MoveChangeResponse);
+  rpc AddItems(goap.graph.v1.AddItemsRequest) returns (goap.graph.v1.AddItemsResponse);
+  // Change objects (ADR 0098): what a change carries beyond its impacts, typed by the change object types of the domains.
+  rpc PutChangeObjects(goap.graph.v1.PutChangeObjectsRequest) returns (goap.graph.v1.PutChangeObjectsResponse);
+  rpc ListChangeObjects(goap.graph.v1.ListChangeObjectsRequest) returns (goap.graph.v1.ListChangeObjectsResponse);
+  // Impact operations, items and change objects written on a change in one transaction, all or none (ADR 0098).
+  rpc SubmitBatch(goap.graph.v1.SubmitBatchRequest) returns (goap.graph.v1.SubmitBatchResponse);
+  // Requests (ADR 0098): the origin of a piece of work, linked to the changes that answer it.
+  rpc CreateRequest(goap.graph.v1.CreateRequestRequest) returns (goap.graph.v1.RequestResponse);
+  rpc GetRequest(goap.graph.v1.GetRequestRequest) returns (goap.graph.v1.RequestResponse);
+  rpc ListRequests(goap.graph.v1.ListRequestsRequest) returns (goap.graph.v1.ListRequestsResponse);
+  rpc UpdateRequest(goap.graph.v1.UpdateRequestRequest) returns (goap.graph.v1.RequestResponse);
+  rpc SetRequestStatus(goap.graph.v1.SetRequestStatusRequest) returns (goap.graph.v1.RequestResponse);
+  rpc LinkRequest(goap.graph.v1.LinkRequestRequest) returns (goap.graph.v1.RequestResponse);
+  rpc UnlinkRequest(goap.graph.v1.UnlinkRequestRequest) returns (goap.graph.v1.RequestResponse);
+  rpc ListRequestLog(goap.graph.v1.ListRequestLogRequest) returns (goap.graph.v1.ListRequestLogResponse);
+  // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
+  // change branch, and accept or reject them (a comment is mandatory).
+  rpc ProposeImpact(goap.graph.v1.ProposeImpactRequest) returns (goap.graph.v1.ProposeImpactResponse);
+  // Node edits (ADR 0076, 0079): every write names a change, and a node has no version while the change works on it.
+  // ImpactNodeCreate and ImpactNodeCheckout give the node a draft (once per change and flow; the impact's post is the draft
+  // reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
+  // the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
+  // state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
+  // removes its impact). The versions are written when the change lands.
+  rpc ImpactNodeCreate(goap.graph.v1.ImpactNodeCreateRequest) returns (goap.graph.v1.ImpactNodeCreateResponse);
+  rpc ImpactNodeCheckout(goap.graph.v1.ImpactNodeCheckoutRequest) returns (goap.graph.v1.ImpactNodeCheckoutResponse);
+  rpc ImpactNodeUpdate(goap.graph.v1.ImpactNodeUpdateRequest) returns (goap.graph.v1.ImpactNodeUpdateResponse);
+  rpc ImpactLinkCreate(goap.graph.v1.ImpactLinkCreateRequest) returns (goap.graph.v1.ImpactLinkCreateResponse);
+  rpc ImpactLinkUpdate(goap.graph.v1.ImpactLinkUpdateRequest) returns (goap.graph.v1.ImpactLinkUpdateResponse);
+  rpc ImpactLinkDelete(goap.graph.v1.ImpactLinkDeleteRequest) returns (goap.graph.v1.ImpactLinkDeleteResponse);
+  rpc ImpactNodeTransition(goap.graph.v1.ImpactNodeTransitionRequest) returns (goap.graph.v1.ImpactNodeTransitionResponse);
+  rpc ImpactNodeCancel(goap.graph.v1.ImpactNodeCancelRequest) returns (goap.graph.v1.ImpactNodeCancelResponse);
+  // Merge nodes into a new one, split one into new ones, seen from the parent side (ADR 0077): the parents lose the
+  // links to the sources and gain the links to the successors, the sources stay untouched with the impact of their
+  // parent as via.
+  rpc ImpactNodeMerge(goap.graph.v1.ImpactNodeMergeRequest) returns (goap.graph.v1.ImpactNodeRestructureResponse);
+  rpc ImpactNodeSplit(goap.graph.v1.ImpactNodeSplitRequest) returns (goap.graph.v1.ImpactNodeRestructureResponse);
+  // Take a change impact out of the change, explicitly: its draft is dropped.
+  rpc WithdrawImpact(goap.graph.v1.WithdrawImpactRequest) returns (goap.graph.v1.WithdrawImpactResponse);
+  // Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
+  // the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
+  // conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
+  // ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
+  // own); GetRebaseState tells the impacts behind the parent and the conflicts to settle.
+  rpc RebaseChange(goap.graph.v1.RebaseChangeRequest) returns (goap.graph.v1.RebaseChangeResponse);
+  rpc ImpactNodeResolve(goap.graph.v1.ImpactNodeResolveRequest) returns (goap.graph.v1.ImpactNodeResolveResponse);
+  rpc GetRebaseState(goap.graph.v1.GetRebaseStateRequest) returns (goap.graph.v1.GetRebaseStateResponse);
+  rpc ImpactNodeReview(goap.graph.v1.ImpactNodeReviewRequest) returns (goap.graph.v1.ImpactNodeReviewResponse);
+  // The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
+  // own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
+  // open review is changed by its author or an administrator only; submitted and discarded reviews are final.
+  // The mechanism under it: reviews of several impacts applied in one transaction, all or none, each stamped with the
+  // review id, and an optional item written with them.
+  rpc ImpactNodeReviewBatch(goap.graph.v1.ImpactNodeReviewBatchRequest) returns (goap.graph.v1.ImpactNodeReviewBatchResponse);
+  rpc ReviewOpen(goap.graph.v1.ReviewOpenRequest) returns (goap.graph.v1.ReviewResponse);
+  rpc ReviewUpdate(goap.graph.v1.ReviewUpdateRequest) returns (goap.graph.v1.ReviewResponse);
+  rpc ReviewSubmit(goap.graph.v1.ReviewSubmitRequest) returns (goap.graph.v1.ReviewResponse);
+  // Drop a review that was never submitted (final).
+  rpc ReviewDiscard(goap.graph.v1.ReviewDiscardRequest) returns (goap.graph.v1.ReviewResponse);
+  rpc ReopenChangeImpacts(goap.graph.v1.ReopenChangeImpactsRequest) returns (goap.graph.v1.ReopenChangeImpactsResponse);
+  // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
+  rpc CommitEdits(goap.graph.v1.CommitEditsRequest) returns (goap.graph.v1.CommitEditsResponse);
+  rpc GetBlackboard(goap.graph.v1.GetBlackboardRequest) returns (goap.graph.v1.GetBlackboardResponse);
+  rpc ApplyChange(goap.graph.v1.ApplyChangeRequest) returns (goap.graph.v1.ApplyChangeResponse);
+  // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
+  // the expected world state) must hold, and it is journaled.
+  rpc TransitionChange(goap.graph.v1.TransitionChangeRequest) returns (goap.graph.v1.TransitionChangeResponse);
+  // Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
+  rpc DeleteChange(goap.graph.v1.DeleteChangeRequest) returns (goap.graph.v1.DeleteChangeResponse);
+  // Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
+  rpc MergeChange(goap.graph.v1.MergeChangeRequest) returns (goap.graph.v1.MergeChangeResponse);
+  // Nodes the change shares with other open changes (a merge will be needed).
+  rpc GetSharedNodes(goap.graph.v1.GetSharedNodesRequest) returns (goap.graph.v1.GetSharedNodesResponse);
+  // Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
+  rpc SplitChange(goap.graph.v1.SplitChangeRequest) returns (goap.graph.v1.SplitChangeResponse);
+  rpc ListSubChanges(goap.graph.v1.ListSubChangesRequest) returns (goap.graph.v1.ListSubChangesResponse);
+  // Action flow branches: a relaunched step forks the flow, a human adopts or discards the branch.
+  rpc OpenFlow(goap.graph.v1.OpenFlowRequest) returns (goap.graph.v1.OpenFlowResponse);
+  rpc AdoptFlow(goap.graph.v1.AdoptFlowRequest) returns (goap.graph.v1.AdoptFlowResponse);
+  rpc DiscardFlow(goap.graph.v1.DiscardFlowRequest) returns (goap.graph.v1.DiscardFlowResponse);
+  rpc ListFlows(goap.graph.v1.ListFlowsRequest) returns (goap.graph.v1.ListFlowsResponse);
+  // Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
+  // Consistency check of the blackboard as a process on a flow sees it.
+  rpc ValidateBoard(goap.graph.v1.ValidateBoardRequest) returns (goap.graph.v1.ValidateBoardResponse);
+  // Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
+  // where every call that names no flow goes ("main" names the main flow).
+  rpc OpenOption(goap.graph.v1.OpenOptionRequest) returns (goap.graph.v1.OpenOptionResponse);
+  rpc ActivateOption(goap.graph.v1.ActivateOptionRequest) returns (goap.graph.v1.ActivateOptionResponse);
+  rpc EvaluateOption(goap.graph.v1.EvaluateOptionRequest) returns (goap.graph.v1.EvaluateOptionResponse);
+  rpc SelectOption(goap.graph.v1.SelectOptionRequest) returns (goap.graph.v1.SelectOptionResponse);
+  rpc RejectOption(goap.graph.v1.RejectOptionRequest) returns (goap.graph.v1.RejectOptionResponse);
+  rpc ListOptions(goap.graph.v1.ListOptionsRequest) returns (goap.graph.v1.ListOptionsResponse);
+  rpc CompareOptions(goap.graph.v1.CompareOptionsRequest) returns (goap.graph.v1.CompareOptionsResponse);
+  // The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
+  // changes of a modified one; the identical ones are counted, not listed.
+  rpc DiffFlows(goap.graph.v1.DiffFlowsRequest) returns (goap.graph.v1.DiffFlowsResponse);
+  // The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
+  // the change reads (the active option's, else the reference baseline).
+  rpc GetChangeView(goap.graph.v1.GetChangeViewRequest) returns (goap.graph.v1.GetChangeViewResponse);
+  // Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
+  // answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
+  rpc OpenDecision(goap.graph.v1.OpenDecisionRequest) returns (goap.graph.v1.OpenDecisionResponse);
+  rpc RuleDecision(goap.graph.v1.RuleDecisionRequest) returns (goap.graph.v1.RuleDecisionResponse);
+  rpc AnswerQuestion(goap.graph.v1.AnswerQuestionRequest) returns (goap.graph.v1.AnswerQuestionResponse);
+  rpc RatifyDecision(goap.graph.v1.RatifyDecisionRequest) returns (goap.graph.v1.RatifyDecisionResponse);
+  rpc ListDecisionPoints(goap.graph.v1.ListDecisionPointsRequest) returns (goap.graph.v1.ListDecisionPointsResponse);
+  rpc GetChangeGraph(goap.graph.v1.GetChangeGraphRequest) returns (goap.graph.v1.GetChangeGraphResponse);
+  // The execution journal (ADR 0011, pkg/journal) is entries of the log of a change: appended with AppendLog, read as
+  // records with ListExecutions (or as entries with ListChangeLog)
+  rpc AppendLog(goap.graph.v1.AppendLogRequest) returns (goap.graph.v1.AppendLogResponse);
+  rpc ListExecutions(goap.graph.v1.ListExecutionsRequest) returns (goap.graph.v1.ListExecutionsResponse);
+}

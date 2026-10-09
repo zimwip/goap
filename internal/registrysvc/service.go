@@ -11,7 +11,6 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -25,7 +24,7 @@ type Service struct {
 	// domains too (MemoryStore).
 	DomainStore DomainStore
 	Authz       authz.Authorizer
-	Events      engine.Publisher
+	Events      Publisher
 	// MCPScopes gives the scope of each MCP of the platform (ADR 0028), checked against where a methodology
 	// declares them; nil: not checked.
 	MCPScopes func(ctx context.Context) (map[string]string, error)
@@ -277,7 +276,7 @@ func (s *Service) Seed(ctx context.Context, dir string) ([]string, error) {
 	return loaded, nil
 }
 
-// List implements engine.MethodologyPort: the latest published version of
+// List implements methodology.Source: the latest published version of
 // every methodology.
 func (s *Service) List(ctx context.Context) ([]*methodology.Compiled, error) {
 	rs, err := s.Store.List(ctx)
@@ -304,4 +303,9 @@ func (s *Service) List(ctx context.Context) ([]*methodology.Compiled, error) {
 // refused when the definition is validated or published, without an engine (ADR 0062).
 func resolve(m methodology.Methodology, types def.TypeSet) *methodology.Methodology {
 	return m.Resolve(types).WithBuiltins(builtins.Known{})
+}
+
+// Publisher publishes the events of the registry (NATS in services; engine.Publisher satisfies it).
+type Publisher interface {
+	Publish(ctx context.Context, subject string, v any) error
 }

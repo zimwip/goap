@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v5"
 
 	"github.com/zimwip/goap/gen/goap/assistant/v1/assistantv1connect"
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	"github.com/zimwip/goap/gen/goap/conversations/v1/conversationsv1connect"
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/events/v1/eventsv1connect"
@@ -63,7 +64,9 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	}
 
 	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: engine.Publishers{changePublisher(e.triggers.onChange), pp.indexSink, rp.bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
-	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	graphOpts := append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))
+	mount(graphv1connect.NewGraphServiceHandler(graphHandler, graphOpts...))
+	mount(changev1connect.NewChangeServiceHandler(graphHandler, graphOpts...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: rp.reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
 	whoami := func(ctx context.Context, p authz.Principal) (any, error) { return authorizer.Session(ctx, p) }
 	if authMW != nil {

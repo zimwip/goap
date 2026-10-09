@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"sort"
 	"time"
 
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
+	"github.com/zimwip/goap/pkg/planning"
 )
 
 // ErrPlannerAnswer flags an llm/llm-scoring planner answer that names an action
@@ -36,10 +35,10 @@ func (e *Engine) plan(ctx context.Context, m *methodology.Compiled, ag methodolo
 		p, err := e.Planner.Plan(world, actions, goal)
 		return p, nil, err
 	case methodology.PlannerUtility:
-		p, err := utilityPlan(world, actions, goal, utilities)
+		p, err := planning.UtilityPlan(world, actions, goal, utilities)
 		return p, nil, err
 	case methodology.PlannerHybrid:
-		p, err := reweightPlan(e.Planner, world, actions, goal, utilities)
+		p, err := planning.ReweightPlan(e.Planner, world, actions, goal, utilities)
 		return p, nil, err
 	case methodology.PlannerLLM:
 		return e.llmPlan(ctx, m, ag, world, actions, goal)
@@ -48,63 +47,10 @@ func (e *Engine) plan(ctx context.Context, m *methodology.Compiled, ag methodolo
 		if err != nil {
 			return nil, calls, err
 		}
-		p, err := reweightPlan(e.Planner, world, actions, goal, u)
+		p, err := planning.ReweightPlan(e.Planner, world, actions, goal, u)
 		return p, calls, err
 	}
 	return nil, nil, fmt.Errorf("unknown planner %q", ag.Planner)
-}
-
-func utilityPlan(world goap.WorldState, actions []goap.Action, goal goap.Goal, utilities map[string]float64) (*goap.Plan, error) {
-	if world.Satisfies(goal.Pre) {
-		return &goap.Plan{Goal: goal}, nil
-	}
-	var candidates []goap.Action
-	for _, a := range actions {
-		if world.Satisfies(a.Pre) && utilities[a.Name] > 0 && !world.Satisfies(a.Effects) {
-			candidates = append(candidates, a)
-		}
-	}
-	if len(candidates) == 0 {
-		return nil, goap.ErrNoPlan
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		ui, uj := utilities[candidates[i].Name], utilities[candidates[j].Name]
-		if ui != uj {
-			return ui > uj
-		}
-		if candidates[i].Cost != candidates[j].Cost {
-			return candidates[i].Cost < candidates[j].Cost
-		}
-		return candidates[i].Name < candidates[j].Name
-	})
-	best := candidates[0]
-	return &goap.Plan{Goal: goal, Actions: []goap.Action{best}, Cost: best.Cost}, nil
-}
-
-// reweightPlan divides each action's cost by its utility (useless actions, utility
-// <= 0, are excluded) and runs A* over the reweighted set. It is shared by hybrid
-// (utilities from CEL) and llm-scoring (utilities from an LLM call).
-func reweightPlan(planner goap.Planner, world goap.WorldState, actions []goap.Action, goal goap.Goal, utilities map[string]float64) (*goap.Plan, error) {
-	weighted := make([]goap.Action, len(actions))
-	for i, a := range actions {
-		u := utilities[a.Name]
-		if u <= 0 {
-			continue // useless actions are excluded
-		}
-		cost := a.Cost
-		if cost <= 0 {
-			cost = 1
-		}
-		a.Cost = cost / math.Max(u, 0.01)
-		weighted[i] = a
-	}
-	var kept []goap.Action
-	for _, a := range weighted {
-		if a.Name != "" {
-			kept = append(kept, a)
-		}
-	}
-	return planner.Plan(world, kept, goal)
 }
 
 // planRecorder wraps an llm.Client to record its calls the way Host.completeLLM

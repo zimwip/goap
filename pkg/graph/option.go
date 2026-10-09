@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -16,19 +17,8 @@ import (
 // no flow goes to it, "main" names the main flow). Selecting an option adopts its flow (its drafts become the
 // main flow's, ADR 0079) and rejects the other open ones; rejecting one discards its flow.
 
-// OpenOptionRequest opens an option of a change.
-type OpenOptionRequest struct {
-	Name       string
-	Hypothesis string
-	// Parent is the option this one is a sub-branch of ("" = forked from the main flow). Non-empty only makes
-	// sense with Intent refine: isolating narrower work within an already-open option.
-	Parent string
-	// Intent says why the option exists relative to Parent (derive, revise or refine; "" = unspecified).
-	Intent domain.OptionIntent
-	// Activate makes the new option the one the change works on.
-	Activate bool
-	By       string
-}
+// OpenOptionRequest is changeapi.OpenOptionRequest (ADR 0098: the contract of the change, shared with the engine).
+type OpenOptionRequest = changeapi.OpenOptionRequest
 
 // OpenOption opens an option: a flow branch of its own, forked from the main flow (or, with Parent set, from
 // another open option - refine), that invalidates nothing.
@@ -227,25 +217,11 @@ func optionOf(ctx context.Context, tx Tx, id domain.ChangeID, option string) (do
 	return f, nil
 }
 
-// OptionNode is a node written by at least one option, with its version in the main flow and in each option (nil:
-// not in the graph of that side, absent or retired; Version 0: the draft that side holds, ADR 0079).
-type OptionNode struct {
-	Node    domain.NodeID              `json:"node"`
-	Key     string                     `json:"key"`
-	Type    string                     `json:"type"`
-	Main    *domain.NodeRef            `json:"main,omitempty"`
-	Options map[string]*domain.NodeRef `json:"options"`
-	// Props are the properties of the node on each side: "main" or the option id.
-	Props map[string]map[string]any `json:"props,omitempty"`
-}
+// OptionNode is changeapi.OptionNode (ADR 0098: the contract of the change, shared with the engine).
+type OptionNode = changeapi.OptionNode
 
-// OptionComparison compares the open options of a change at a level (written or accepted): the nodes any of them
-// changed from the main flow, both sides forking from the same graph (ADR 0032 §6).
-type OptionComparison struct {
-	Level   string        `json:"level"`
-	Options []domain.Flow `json:"options"`
-	Nodes   []OptionNode  `json:"nodes"`
-}
+// OptionComparison is changeapi.OptionComparison (ADR 0098: the contract of the change, shared with the engine).
+type OptionComparison = changeapi.OptionComparison
 
 // CompareOptions compares the open options of a change (every option when all is set) at a level.
 func (g *Graph) CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (cmp OptionComparison, err error) {

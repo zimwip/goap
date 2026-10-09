@@ -9,15 +9,15 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
 
 // ExpireDerogations applies the expiry of the derogations of a change (ADR 0075 §2): for each one open and run out at
 // now (risk.Expired) it writes a closing version, sends the change impacts it covered back to proposed (a review event,
-// graph.ReopenImpacts) and starts their verification over (a produced entry), so what was accepted on a gap is reviewed
+// Graph.ReopenImpacts) and starts their verification over (a produced entry), so what was accepted on a gap is reviewed
 // again. It is a Change operation like any other, done by the platform (the principal system:derogation) when a
 // scheduler trigger fires the builtin derogation.expire; the graph reads no clock, now is the caller's. It returns the
 // keys of the derogations it closed.
@@ -85,7 +85,7 @@ func ExpireDerogations(ctx context.Context, g GraphPort, id domain.ChangeID, now
 // expireAllDerogations is the builtin derogation.expire: it applies the expiry to every live change that holds an
 // open derogation.
 func expireAllDerogations(ctx context.Context, ac ActionContext) (ActionResult, error) {
-	changes, err := ac.Graph.ListChanges(ctx, graph.ChangesFilter{Status: []domain.ChangeStatus{domain.ChangeActive}})
+	changes, err := ac.Graph.ListChanges(ctx, changeapi.ChangesFilter{Status: []domain.ChangeStatus{domain.ChangeActive}})
 	if err != nil {
 		return ActionResult{}, err
 	}

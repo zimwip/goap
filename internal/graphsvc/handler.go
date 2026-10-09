@@ -12,6 +12,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/identity"
@@ -29,7 +30,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// Handler implements graphv1connect.GraphServiceHandler.
+// Handler implements graphv1connect.GraphServiceHandler and changev1connect.ChangeServiceHandler (ADR 0098 §9: the
+// change service is served by the graph process).
 type Handler struct {
 	Graph  *graph.Graph
 	Events engine.Publisher
@@ -44,7 +46,10 @@ type Handler struct {
 	Identity identity.Extractor
 }
 
-var _ graphv1connect.GraphServiceHandler = (*Handler)(nil)
+var (
+	_ graphv1connect.GraphServiceHandler   = (*Handler)(nil)
+	_ changev1connect.ChangeServiceHandler = (*Handler)(nil)
+)
 
 func res[T any](m *T, err error) (*connect.Response[T], error) {
 	if err != nil {

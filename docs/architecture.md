@@ -704,7 +704,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
 | **registry** | Methodologies (graph data) and domains (its database), ADR 0023: editing (draft), validation, publishing, versions, the type catalogue, YAML import/export | Connect `registry.v1` | `registry` (`domain_version`) + the graph | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
-| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply) | Connect `graph.v1` | `graph` | 🟢 |
+| **graph** | Domain axis (versioned nodes, links, baselines, branches, tags) + the change component (changes, change impacts, change objects, workspaces, decision points, landing, requests: [ADR 0098](adr/0098-change-as-receptacle-blackboard-as-engine-view-requests.md)) | Connect `graph.v1` (domain axis) and `change.v1` (`ChangeService`, same process, same messages) | `graph` | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces; `Suggest`, the stateless contextual helper over the `helper` alias (ADR 0086); the **one ledger of LLM calls**: `ListUsage` / `UsageSummary` (ADR 0089) | Connect `model.v1` | `modelgw` (quota counters and the ledger of LLM calls, ADR 0089; the configuration is graph data, ADR 0021) | 🟢 core |
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0085-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
@@ -1462,6 +1462,8 @@ pkg/goap/                    A* planner
 pkg/condition/               CEL compilation/evaluation, `expects` compilation
 pkg/intent/                  intent loop (lexical Ranker, LLM Ranker)
 pkg/engine/                  processes, agents and planners, action executors, DSL host, sub-agents, events
+pkg/changeapi/               the contract of the change (ADR 0098): the inputs and results of its operations, its errors, `IsWorking`; aliased by `pkg/graph`, used by the engine's `ChangePort` / `GraphReadPort` (the engine imports no `pkg/graph`)
+pkg/planning/                planning with no model shared by the engine and the registry: the goap / utility / hybrid planners, `Awaited`, `PreviewPlan` (the registry imports no engine)
 pkg/dsl/                     script action DSL (ctx API, JavaScript and Go interpreters); the adapter script context too (`RunAdapter`)
 pkg/algo/                    generic algorithm model of the domains (usages, typed params, instances, binding); knows no MCP, connector or secret
 pkg/mcp/                     MCP definition (tools, scopes, call context); knows no connector, adapter or organisation

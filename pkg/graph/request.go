@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -15,18 +16,8 @@ import (
 // links, its project (set when it is first linked, followed by the moves of its changes) and its log; who may see or act
 // on one is the service's.
 
-// NewRequest is a request to create.
-type NewRequest struct {
-	Title string
-	// Text is the voice of the requester: never rewritten.
-	Text string
-	// Requester is the subject who asks; empty: the caller.
-	Requester string
-	// ProjectID is the project of the request when it is known; empty: untriaged.
-	ProjectID string
-	// Origin says where the request comes from; an empty kind is manual.
-	Origin domain.RequestOrigin
-}
+// NewRequest is changeapi.NewRequest (ADR 0098: the contract of the change, shared with the engine).
+type NewRequest = changeapi.NewRequest
 
 // Kinds of the change log entries of the links of a change to its requests (stream change).
 const (

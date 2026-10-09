@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 )
@@ -100,6 +101,10 @@ func TestSmoke(t *testing.T) {
 	}
 	if !found["organisation"] || !found["platform"] {
 		t.Fatalf("namespaces = %v", ns.Msg.Namespaces)
+	}
+	// the change service is mounted next to it (ADR 0098 §9)
+	if _, err := changev1connect.NewChangeServiceClient(ts.Client(), ts.URL).ListChanges(context.Background(), connect.NewRequest(&graphv1.ListChangesRequest{})); err != nil {
+		t.Fatalf("ListChanges: %v", err)
 	}
 }
 

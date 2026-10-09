@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -13,14 +14,11 @@ import (
 // of the nodes it checks out, forked from what it sees; what the relaunched steps wrote is stale; adopting the flow
 // installs its drafts on the main flow, and resets the drafts the stale runs wrote to what the others left.
 
-func flowBranchName(flow string) string { return "flow-" + shortID(flow) }
+func flowBranchName(flow string) string { return changeapi.FlowBranchName(flow) }
 
-// IsWorking reports whether a node as a call of the change reads it is the draft of the flow itself (ADR 0077, 0079):
-// a draft (no version), whose branch is the one the flow names (flow "": the active option, else the main flow). The
-// draft of a parent flow is not: the flow checks the node out to write its own. Callers use it to decide between a
-// checkout and an update.
+// IsWorking is changeapi.IsWorking.
 func IsWorking(c domain.Change, flow string, n domain.Node) bool {
-	return n.IsDraft() && domain.BranchOf(n.Branch) == draftBranch(c, c.ResolveFlow(flow))
+	return changeapi.IsWorking(c, flow, n)
 }
 
 // flowChain lists the flows from f up to the main flow (excluded), innermost first.

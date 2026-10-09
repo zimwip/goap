@@ -15,7 +15,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/planning"
 )
 
 // Handler implements registryv1connect.RegistryServiceHandler.
@@ -123,12 +123,12 @@ func (h *Handler) PreviewPlan(ctx context.Context, r *connect.Request[registryv1
 	if c == nil {
 		return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(issues)}), nil
 	}
-	p, err := engine.PreviewPlan(c, domain.Blackboard{}, r.Msg.Agent, r.Msg.Goal, r.Msg.Overrides)
+	p, err := planning.PreviewPlan(c, domain.Blackboard{}, r.Msg.Agent, r.Msg.Goal, r.Msg.Overrides)
 	if err != nil {
 		if issues.HasErrors() { // the agent or goal may be one the draft's issues dropped: tell the issues
 			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(issues)}), nil
 		}
-		if errors.Is(err, engine.ErrLivePlanner) {
+		if errors.Is(err, planning.ErrLivePlanner) {
 			return connect.NewResponse(&registryv1.PreviewPlanResponse{Issues: IssuesToPB(def.Issues{{Message: err.Error()}})}), nil
 		}
 		return nil, connect.NewError(connect.CodeNotFound, err)

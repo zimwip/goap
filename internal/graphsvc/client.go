@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/identity"
@@ -21,6 +22,8 @@ import (
 // Client adapts the graph Connect client to engine.GraphPort.
 type Client struct {
 	rpc graphv1connect.GraphServiceClient
+	// chg is the change service (ADR 0098 §9), served by the same process.
+	chg changev1connect.ChangeServiceClient
 }
 
 var _ engine.GraphPort = (*Client)(nil)
@@ -32,7 +35,8 @@ var _ engine.GraphPort = (*Client)(nil)
 // A request whose context carries no principal (a directory refreshing its snapshot in the background) goes as the
 // service client, a named principal with no role: the graph refuses anonymous requests (Handler.Identify).
 func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *Client {
-	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, append([]connect.ClientOption{identity.Forward(), serviceIdentity()}, opts...)...)}
+	opts = append([]connect.ClientOption{identity.Forward(), serviceIdentity()}, opts...)
+	return &Client{rpc: graphv1connect.NewGraphServiceClient(hc, baseURL, opts...), chg: changev1connect.NewChangeServiceClient(hc, baseURL, opts...)}
 }
 
 // ClientPrincipal is the identity of a graph client acting for no one in particular.
@@ -60,7 +64,7 @@ func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 }
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
-	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
+	r, err := c.chg.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
 		Methodology: in.Methodology, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Data: pbconv.Struct(in.Data)}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
@@ -70,7 +74,7 @@ func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.C
 
 // MoveChange moves a root change, with its open sub-changes, to another project (ADR 0091).
 func (c *Client) MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error) {
-	r, err := c.rpc.MoveChange(ctx, connect.NewRequest(&graphv1.MoveChangeRequest{ChangeId: string(id), ProjectId: project}))
+	r, err := c.chg.MoveChange(ctx, connect.NewRequest(&graphv1.MoveChangeRequest{ChangeId: string(id), ProjectId: project}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}
@@ -83,7 +87,7 @@ func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.C
 		s := string(*p.Status)
 		req.Status = &s
 	}
-	r, err := c.rpc.UpdateChange(ctx, connect.NewRequest(req))
+	r, err := c.chg.UpdateChange(ctx, connect.NewRequest(req))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}
@@ -91,7 +95,7 @@ func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.C
 }
 
 func (c *Client) AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
-	r, err := c.rpc.AddItems(ctx, connect.NewRequest(&graphv1.AddItemsRequest{ChangeId: string(id), Items: pbconv.ItemsToPB(items)}))
+	r, err := c.chg.AddItems(ctx, connect.NewRequest(&graphv1.AddItemsRequest{ChangeId: string(id), Items: pbconv.ItemsToPB(items)}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -100,7 +104,7 @@ func (c *Client) AddItems(ctx context.Context, id domain.ChangeID, items []domai
 
 // ProposeImpact implements engine.GraphPort.
 func (c *Client) ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error) {
-	r, err := c.rpc.ProposeImpact(ctx, connect.NewRequest(&graphv1.ProposeImpactRequest{ChangeId: string(id), Nodes: pbconv.ChangeImpactsToPB(nodes)}))
+	r, err := c.chg.ProposeImpact(ctx, connect.NewRequest(&graphv1.ProposeImpactRequest{ChangeId: string(id), Nodes: pbconv.ChangeImpactsToPB(nodes)}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -114,7 +118,7 @@ func (c *Client) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in gr
 	for _, l := range in.Links {
 		req.Links = append(req.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
 	}
-	r, err := c.rpc.ImpactNodeCreate(ctx, connect.NewRequest(req))
+	r, err := c.chg.ImpactNodeCreate(ctx, connect.NewRequest(req))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
 	}
@@ -139,7 +143,7 @@ func (c *Client) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in gra
 	for _, s := range in.Sources {
 		req.Sources = append(req.Sources, nameToPB(s))
 	}
-	r, err := c.rpc.ImpactNodeMerge(ctx, connect.NewRequest(req))
+	r, err := c.chg.ImpactNodeMerge(ctx, connect.NewRequest(req))
 	if err != nil {
 		return graph.Restructured{}, rpcerr.FromConnect(err)
 	}
@@ -152,7 +156,7 @@ func (c *Client) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in gra
 	for _, s := range in.Into {
 		req.Into = append(req.Into, specToPB(s))
 	}
-	r, err := c.rpc.ImpactNodeSplit(ctx, connect.NewRequest(req))
+	r, err := c.chg.ImpactNodeSplit(ctx, connect.NewRequest(req))
 	if err != nil {
 		return graph.Restructured{}, rpcerr.FromConnect(err)
 	}
@@ -170,7 +174,7 @@ func (c *Client) DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain
 
 // ImpactNodeCheckout implements engine.GraphPort.
 func (c *Client) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graph.NodeCheckout) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
+	r, err := c.chg.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
 		Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
@@ -180,7 +184,7 @@ func (c *Client) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in 
 
 // ImpactNodeUpdate implements engine.GraphPort.
 func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graph.NodeUpdate) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Props: pbconv.Struct(in.Properties),
+	r, err := c.chg.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Props: pbconv.Struct(in.Properties),
 		Owner: in.Owner, Flow: in.Flow, Execution: in.Execution}))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
@@ -190,7 +194,7 @@ func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impac
 
 // ImpactLinkCreate implements engine.GraphPort.
 func (c *Client) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graph.LinkWrite, flow, execution string) (domain.Link, error) {
-	r, err := c.rpc.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Type: l.Type, To: pbconv.RefToPB(l.To),
+	r, err := c.chg.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Type: l.Type, To: pbconv.RefToPB(l.To),
 		Props: pbconv.Struct(l.Properties), Flow: flow, Execution: execution}))
 	if err != nil {
 		return domain.Link{}, rpcerr.FromConnect(err)
@@ -200,7 +204,7 @@ func (c *Client) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impac
 
 // ImpactLinkUpdate replaces the properties of a link of a draft.
 func (c *Client) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link domain.LinkID, props map[string]any, flow, execution string) (domain.Link, error) {
-	r, err := c.rpc.ImpactLinkUpdate(ctx, connect.NewRequest(&graphv1.ImpactLinkUpdateRequest{ChangeId: string(id), LinkId: string(link), Props: pbconv.Struct(props), Flow: flow, Execution: execution}))
+	r, err := c.chg.ImpactLinkUpdate(ctx, connect.NewRequest(&graphv1.ImpactLinkUpdateRequest{ChangeId: string(id), LinkId: string(link), Props: pbconv.Struct(props), Flow: flow, Execution: execution}))
 	if err != nil {
 		return domain.Link{}, rpcerr.FromConnect(err)
 	}
@@ -209,13 +213,13 @@ func (c *Client) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link 
 
 // ImpactLinkDelete implements engine.GraphPort.
 func (c *Client) ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error {
-	_, err := c.rpc.ImpactLinkDelete(ctx, connect.NewRequest(&graphv1.ImpactLinkDeleteRequest{ChangeId: string(id), LinkId: string(link), Flow: flow, Execution: execution}))
+	_, err := c.chg.ImpactLinkDelete(ctx, connect.NewRequest(&graphv1.ImpactLinkDeleteRequest{ChangeId: string(id), LinkId: string(link), Flow: flow, Execution: execution}))
 	return rpcerr.FromConnect(err)
 }
 
 // ImpactNodeTransition implements engine.GraphPort.
 func (c *Client) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graph.NodeTransition) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeTransition(ctx, connect.NewRequest(&graphv1.ImpactNodeTransitionRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
+	r, err := c.chg.ImpactNodeTransition(ctx, connect.NewRequest(&graphv1.ImpactNodeTransitionRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
 		State: in.To, Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
@@ -225,7 +229,7 @@ func (c *Client) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, i
 
 // ImpactNodeCancel implements engine.GraphPort.
 func (c *Client) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeCancel(ctx, connect.NewRequest(&graphv1.ImpactNodeCancelRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))
+	r, err := c.chg.ImpactNodeCancel(ctx, connect.NewRequest(&graphv1.ImpactNodeCancelRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
 	}
@@ -234,7 +238,7 @@ func (c *Client) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impac
 
 // RebaseChange brings a sub-change up to date with its parent (ADR 0082).
 func (c *Client) RebaseChange(ctx context.Context, id domain.ChangeID) (graph.RebaseResult, error) {
-	r, err := c.rpc.RebaseChange(ctx, connect.NewRequest(&graphv1.RebaseChangeRequest{ChangeId: string(id)}))
+	r, err := c.chg.RebaseChange(ctx, connect.NewRequest(&graphv1.RebaseChangeRequest{ChangeId: string(id)}))
 	if err != nil {
 		return graph.RebaseResult{}, rpcerr.FromConnect(err)
 	}
@@ -247,7 +251,7 @@ func (c *Client) RebaseChange(ctx context.Context, id domain.ChangeID) (graph.Re
 
 // ImpactNodeResolve keeps the sub-change's values for the conflicts a rebase left on a change impact (ADR 0082).
 func (c *Client) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, execution string) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeResolve(ctx, connect.NewRequest(&graphv1.ImpactNodeResolveRequest{ChangeId: string(id), ChangeImpactId: string(impact), Execution: execution}))
+	r, err := c.chg.ImpactNodeResolve(ctx, connect.NewRequest(&graphv1.ImpactNodeResolveRequest{ChangeId: string(id), ChangeImpactId: string(impact), Execution: execution}))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
 	}
@@ -256,7 +260,7 @@ func (c *Client) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impa
 
 // RebaseState tells where a sub-change stands against its parent (ADR 0082).
 func (c *Client) RebaseState(ctx context.Context, id domain.ChangeID) (graph.RebaseState, error) {
-	r, err := c.rpc.GetRebaseState(ctx, connect.NewRequest(&graphv1.GetRebaseStateRequest{ChangeId: string(id)}))
+	r, err := c.chg.GetRebaseState(ctx, connect.NewRequest(&graphv1.GetRebaseStateRequest{ChangeId: string(id)}))
 	if err != nil {
 		return graph.RebaseState{}, rpcerr.FromConnect(err)
 	}
@@ -272,13 +276,13 @@ func (c *Client) RebaseState(ctx context.Context, id domain.ChangeID) (graph.Reb
 
 // WithdrawImpact implements engine.GraphPort.
 func (c *Client) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
-	_, err := c.rpc.WithdrawImpact(ctx, connect.NewRequest(&graphv1.WithdrawImpactRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))
+	_, err := c.chg.WithdrawImpact(ctx, connect.NewRequest(&graphv1.WithdrawImpactRequest{ChangeId: string(id), ChangeImpactId: string(impact), Flow: flow, Execution: execution}))
 	return rpcerr.FromConnect(err)
 }
 
 // ImpactNodeReviewOn implements engine.GraphPort (the reviewer is the principal of the request).
 func (c *Client) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, _, comment string) (domain.ChangeImpact, error) {
-	r, err := c.rpc.ImpactNodeReview(ctx, connect.NewRequest(&graphv1.ImpactNodeReviewRequest{ChangeId: string(id), ChangeImpactId: string(node),
+	r, err := c.chg.ImpactNodeReview(ctx, connect.NewRequest(&graphv1.ImpactNodeReviewRequest{ChangeId: string(id), ChangeImpactId: string(node),
 		Accept: status == domain.ReviewAccepted, Comment: comment, Flow: flow, Execution: execution}))
 	if err != nil {
 		return domain.ChangeImpact{}, rpcerr.FromConnect(err)
@@ -295,7 +299,7 @@ func (c *Client) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, 
 	if b.Item != nil {
 		req.Item = pbconv.ItemToPB(*b.Item)
 	}
-	r, err := c.rpc.ImpactNodeReviewBatch(ctx, connect.NewRequest(req))
+	r, err := c.chg.ImpactNodeReviewBatch(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -312,7 +316,7 @@ func (c *Client) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts 
 	for _, i := range impacts {
 		req.ChangeImpactIds = append(req.ChangeImpactIds, string(i))
 	}
-	r, err := c.rpc.ReopenChangeImpacts(ctx, connect.NewRequest(req))
+	r, err := c.chg.ReopenChangeImpacts(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -325,7 +329,7 @@ func (c *Client) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts 
 
 // Changes lists every change known to the graph service.
 func (c *Client) Changes(ctx context.Context) ([]domain.Change, error) {
-	r, err := c.rpc.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{}))
+	r, err := c.chg.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -338,7 +342,7 @@ func (c *Client) Changes(ctx context.Context) ([]domain.Change, error) {
 
 // Change implements engine.GraphPort.
 func (c *Client) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	r, err := c.rpc.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(id)}))
+	r, err := c.chg.GetChange(ctx, connect.NewRequest(&graphv1.GetChangeRequest{Id: string(id)}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}
@@ -351,7 +355,7 @@ func (c *Client) ListChanges(ctx context.Context, f graph.ChangesFilter) ([]doma
 	for _, s := range f.Status {
 		req.Status = append(req.Status, string(s))
 	}
-	r, err := c.rpc.ListChanges(ctx, connect.NewRequest(req))
+	r, err := c.chg.ListChanges(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -364,7 +368,7 @@ func (c *Client) ListChanges(ctx context.Context, f graph.ChangesFilter) ([]doma
 
 // Commit runs a change of node edits in the graph service (see graph.Commit).
 func (c *Client) Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error) {
-	r, err := c.rpc.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,
+	r, err := c.chg.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,
 		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), BaselineId: string(in.Baseline), BaselineName: in.BaselineName, Edits: pbconv.EditsToPB(in.Edits),
 		OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID}))
 	if err != nil {
@@ -379,7 +383,7 @@ func (c *Client) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Bla
 
 // BlackboardIn is the blackboard seen from a flow branch.
 func (c *Client) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (domain.Blackboard, error) {
-	r, err := c.rpc.GetBlackboard(ctx, connect.NewRequest(&graphv1.GetBlackboardRequest{ChangeId: string(id), Flow: flow}))
+	r, err := c.chg.GetBlackboard(ctx, connect.NewRequest(&graphv1.GetBlackboardRequest{ChangeId: string(id), Flow: flow}))
 	if err != nil {
 		return domain.Blackboard{}, rpcerr.FromConnect(err)
 	}
@@ -417,7 +421,7 @@ func (c *Client) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]dom
 
 // ChangeView implements engine.GraphPort.
 func (c *Client) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error) {
-	r, err := c.rpc.GetChangeView(ctx, connect.NewRequest(&graphv1.GetChangeViewRequest{ChangeId: string(id), Flow: flow, Level: level}))
+	r, err := c.chg.GetChangeView(ctx, connect.NewRequest(&graphv1.GetChangeViewRequest{ChangeId: string(id), Flow: flow, Level: level}))
 	if err != nil {
 		return domain.Baseline{}, rpcerr.FromConnect(err)
 	}
@@ -426,7 +430,7 @@ func (c *Client) ChangeView(ctx context.Context, id domain.ChangeID, flow, level
 
 // OpenOption implements engine.GraphPort (the principal comes from the request identity).
 func (c *Client) OpenOption(ctx context.Context, id domain.ChangeID, in graph.OpenOptionRequest) (domain.Flow, error) {
-	r, err := c.rpc.OpenOption(ctx, connect.NewRequest(&graphv1.OpenOptionRequest{ChangeId: string(id), Name: in.Name, Hypothesis: in.Hypothesis, Activate: in.Activate}))
+	r, err := c.chg.OpenOption(ctx, connect.NewRequest(&graphv1.OpenOptionRequest{ChangeId: string(id), Name: in.Name, Hypothesis: in.Hypothesis, Activate: in.Activate}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
 	}
@@ -435,7 +439,7 @@ func (c *Client) OpenOption(ctx context.Context, id domain.ChangeID, in graph.Op
 
 // ActivateOption implements engine.GraphPort.
 func (c *Client) ActivateOption(ctx context.Context, id domain.ChangeID, option, _ string) (string, error) {
-	r, err := c.rpc.ActivateOption(ctx, connect.NewRequest(&graphv1.ActivateOptionRequest{ChangeId: string(id), Option: option}))
+	r, err := c.chg.ActivateOption(ctx, connect.NewRequest(&graphv1.ActivateOptionRequest{ChangeId: string(id), Option: option}))
 	if err != nil {
 		return "", rpcerr.FromConnect(err)
 	}
@@ -444,7 +448,7 @@ func (c *Client) ActivateOption(ctx context.Context, id domain.ChangeID, option,
 
 // EvaluateOption implements engine.GraphPort.
 func (c *Client) EvaluateOption(ctx context.Context, id domain.ChangeID, option, _, comment string) (domain.Flow, error) {
-	r, err := c.rpc.EvaluateOption(ctx, connect.NewRequest(&graphv1.EvaluateOptionRequest{ChangeId: string(id), Option: option, Comment: comment}))
+	r, err := c.chg.EvaluateOption(ctx, connect.NewRequest(&graphv1.EvaluateOptionRequest{ChangeId: string(id), Option: option, Comment: comment}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
 	}
@@ -453,7 +457,7 @@ func (c *Client) EvaluateOption(ctx context.Context, id domain.ChangeID, option,
 
 // Options implements engine.GraphPort.
 func (c *Client) Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow, error) {
-	r, err := c.rpc.ListOptions(ctx, connect.NewRequest(&graphv1.ListOptionsRequest{ChangeId: string(id)}))
+	r, err := c.chg.ListOptions(ctx, connect.NewRequest(&graphv1.ListOptionsRequest{ChangeId: string(id)}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -466,7 +470,7 @@ func (c *Client) Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow
 
 // DiffFlows compares the impacts two flows of a change see (ADR 0083).
 func (c *Client) DiffFlows(ctx context.Context, id domain.ChangeID, left, right, level string) (domain.FlowDiff, error) {
-	r, err := c.rpc.DiffFlows(ctx, connect.NewRequest(&graphv1.DiffFlowsRequest{ChangeId: string(id), Left: left, Right: right, Level: level}))
+	r, err := c.chg.DiffFlows(ctx, connect.NewRequest(&graphv1.DiffFlowsRequest{ChangeId: string(id), Left: left, Right: right, Level: level}))
 	if err != nil {
 		return domain.FlowDiff{}, rpcerr.FromConnect(err)
 	}
@@ -475,7 +479,7 @@ func (c *Client) DiffFlows(ctx context.Context, id domain.ChangeID, left, right,
 
 // CompareOptions implements engine.GraphPort.
 func (c *Client) CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error) {
-	r, err := c.rpc.CompareOptions(ctx, connect.NewRequest(&graphv1.CompareOptionsRequest{ChangeId: string(id), Level: level, All: all}))
+	r, err := c.chg.CompareOptions(ctx, connect.NewRequest(&graphv1.CompareOptionsRequest{ChangeId: string(id), Level: level, All: all}))
 	if err != nil {
 		return graph.OptionComparison{}, rpcerr.FromConnect(err)
 	}
@@ -502,7 +506,7 @@ func (c *Client) CompareOptions(ctx context.Context, id domain.ChangeID, level s
 
 // ChangeGraph implements engine.GraphPort.
 func (c *Client) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string) ([]domain.Node, []domain.Link, error) {
-	r, err := c.rpc.GetChangeGraph(ctx, connect.NewRequest(&graphv1.GetChangeGraphRequest{ChangeId: string(id), Flow: flow}))
+	r, err := c.chg.GetChangeGraph(ctx, connect.NewRequest(&graphv1.GetChangeGraphRequest{ChangeId: string(id), Flow: flow}))
 	if err != nil {
 		return nil, nil, rpcerr.FromConnect(err)
 	}
@@ -510,7 +514,7 @@ func (c *Client) ChangeGraph(ctx context.Context, id domain.ChangeID, flow strin
 }
 
 func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	r, err := c.rpc.ApplyChange(ctx, connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
+	r, err := c.chg.ApplyChange(ctx, connect.NewRequest(&graphv1.ApplyChangeRequest{ChangeId: string(id), BaselineName: baselineName}))
 	if err != nil {
 		return domain.Baseline{}, rpcerr.FromConnect(err)
 	}
@@ -519,7 +523,7 @@ func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName str
 
 // TransitionChange moves the state of a change along a transition of its lifecycle (ADR 0058).
 func (c *Client) TransitionChange(ctx context.Context, id domain.ChangeID, in graph.TransitionRequest) (domain.Change, error) {
-	r, err := c.rpc.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: string(id), Transition: in.Transition, Decision: in.Decision}))
+	r, err := c.chg.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: string(id), Transition: in.Transition, Decision: in.Decision}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}
@@ -544,7 +548,7 @@ func (c *Client) AppendLog(ctx context.Context, entries []domain.LogEntry) error
 	for _, e := range entries {
 		req.Entries = append(req.Entries, pbconv.LogEntryToPB(e))
 	}
-	_, err := c.rpc.AppendLog(ctx, connect.NewRequest(req))
+	_, err := c.chg.AppendLog(ctx, connect.NewRequest(req))
 	return rpcerr.FromConnect(err)
 }
 
@@ -559,7 +563,7 @@ func (c *Client) ChangeLog(ctx context.Context, f domain.LogFilter) ([]domain.Lo
 		}
 		req.Flows = append(req.Flows, fl)
 	}
-	r, err := c.rpc.ListChangeLog(ctx, connect.NewRequest(req))
+	r, err := c.chg.ListChangeLog(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, nil, rpcerr.FromConnect(err)
 	}
@@ -627,7 +631,7 @@ func (c *Client) DeleteTag(ctx context.Context, id domain.TagID) error {
 
 // OpenFlow implements engine.GraphPort.
 func (c *Client) OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error) {
-	r, err := c.rpc.OpenFlow(ctx, connect.NewRequest(&graphv1.OpenFlowRequest{ChangeId: string(id), Parent: in.Parent, ForkAfter: string(in.ForkAfter),
+	r, err := c.chg.OpenFlow(ctx, connect.NewRequest(&graphv1.OpenFlowRequest{ChangeId: string(id), Parent: in.Parent, ForkAfter: string(in.ForkAfter),
 		Seeds: seedsToPB(in.Seeds), StaleRuns: in.StaleRuns, Origin: pbconv.Struct(in.Origin), Items: pbconv.ItemsToPB(in.Items)}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
@@ -645,7 +649,7 @@ func seedsToPB(ids []domain.ItemID) []string {
 
 // AdoptFlow implements engine.GraphPort (the adopting principal comes from the request identity).
 func (c *Client) AdoptFlow(ctx context.Context, id domain.ChangeID, flow, _ string) (domain.Flow, error) {
-	r, err := c.rpc.AdoptFlow(ctx, connect.NewRequest(&graphv1.AdoptFlowRequest{ChangeId: string(id), Flow: flow}))
+	r, err := c.chg.AdoptFlow(ctx, connect.NewRequest(&graphv1.AdoptFlowRequest{ChangeId: string(id), Flow: flow}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
 	}
@@ -654,7 +658,7 @@ func (c *Client) AdoptFlow(ctx context.Context, id domain.ChangeID, flow, _ stri
 
 // DiscardFlow implements engine.GraphPort.
 func (c *Client) DiscardFlow(ctx context.Context, id domain.ChangeID, flow, _ string) (domain.Flow, error) {
-	r, err := c.rpc.DiscardFlow(ctx, connect.NewRequest(&graphv1.DiscardFlowRequest{ChangeId: string(id), Flow: flow}))
+	r, err := c.chg.DiscardFlow(ctx, connect.NewRequest(&graphv1.DiscardFlowRequest{ChangeId: string(id), Flow: flow}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
 	}
@@ -663,7 +667,7 @@ func (c *Client) DiscardFlow(ctx context.Context, id domain.ChangeID, flow, _ st
 
 // ValidateBoard implements engine.GraphPort.
 func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error) {
-	r, err := c.rpc.ValidateBoard(ctx, connect.NewRequest(&graphv1.ValidateBoardRequest{ChangeId: string(id), Flow: flow}))
+	r, err := c.chg.ValidateBoard(ctx, connect.NewRequest(&graphv1.ValidateBoardRequest{ChangeId: string(id), Flow: flow}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -678,7 +682,7 @@ func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow str
 func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graph.OpenDecisionRequest) (domain.DecisionPoint, error) {
 	req := &graphv1.OpenDecisionRequest{ChangeId: string(id), Question: in.Question, Options: in.Options, AllOptions: in.Options == nil,
 		Criteria: in.Criteria, Policy: pbconv.Struct(in.Policy)}
-	r, err := c.rpc.OpenDecision(ctx, connect.NewRequest(req))
+	r, err := c.chg.OpenDecision(ctx, connect.NewRequest(req))
 	if err != nil {
 		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
 	}
@@ -687,7 +691,7 @@ func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graph.
 
 // RuleDecision implements engine.GraphPort.
 func (c *Client) RuleDecision(ctx context.Context, id domain.ChangeID, in graph.RuleRequest) (domain.DecisionPoint, error) {
-	r, err := c.rpc.RuleDecision(ctx, connect.NewRequest(&graphv1.RuleDecisionRequest{ChangeId: string(id), Point: in.Point, Outcome: in.Outcome,
+	r, err := c.chg.RuleDecision(ctx, connect.NewRequest(&graphv1.RuleDecisionRequest{ChangeId: string(id), Point: in.Point, Outcome: in.Outcome,
 		Option: in.Option, Confidence: in.Confidence, Justification: in.Justification, Questions: in.Questions, Agent: !in.Human}))
 	if err != nil {
 		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
@@ -697,7 +701,7 @@ func (c *Client) RuleDecision(ctx context.Context, id domain.ChangeID, in graph.
 
 // AnswerQuestion implements engine.GraphPort.
 func (c *Client) AnswerQuestion(ctx context.Context, id domain.ChangeID, question, answer, process, _ string) (domain.DecisionPoint, error) {
-	r, err := c.rpc.AnswerQuestion(ctx, connect.NewRequest(&graphv1.AnswerQuestionRequest{ChangeId: string(id), Question: question, Answer: answer, Process: process}))
+	r, err := c.chg.AnswerQuestion(ctx, connect.NewRequest(&graphv1.AnswerQuestionRequest{ChangeId: string(id), Question: question, Answer: answer, Process: process}))
 	if err != nil {
 		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
 	}
@@ -706,7 +710,7 @@ func (c *Client) AnswerQuestion(ctx context.Context, id domain.ChangeID, questio
 
 // RatifyDecision implements engine.GraphPort.
 func (c *Client) RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, _, comment string) (domain.DecisionPoint, error) {
-	r, err := c.rpc.RatifyDecision(ctx, connect.NewRequest(&graphv1.RatifyDecisionRequest{ChangeId: string(id), Point: point, Accept: accept, Comment: comment}))
+	r, err := c.chg.RatifyDecision(ctx, connect.NewRequest(&graphv1.RatifyDecisionRequest{ChangeId: string(id), Point: point, Accept: accept, Comment: comment}))
 	if err != nil {
 		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
 	}
@@ -715,7 +719,7 @@ func (c *Client) RatifyDecision(ctx context.Context, id domain.ChangeID, point s
 
 // DecisionPoints implements engine.GraphPort.
 func (c *Client) DecisionPoints(ctx context.Context, id domain.ChangeID) ([]domain.DecisionPoint, error) {
-	r, err := c.rpc.ListDecisionPoints(ctx, connect.NewRequest(&graphv1.ListDecisionPointsRequest{ChangeId: string(id)}))
+	r, err := c.chg.ListDecisionPoints(ctx, connect.NewRequest(&graphv1.ListDecisionPointsRequest{ChangeId: string(id)}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -728,7 +732,7 @@ func (c *Client) DecisionPoints(ctx context.Context, id domain.ChangeID) ([]doma
 
 // PutObjects writes change objects on a change (ADR 0098).
 func (c *Client) PutObjects(ctx context.Context, id domain.ChangeID, writes []domain.ObjectWrite) ([]domain.ChangeObject, error) {
-	r, err := c.rpc.PutChangeObjects(ctx, connect.NewRequest(&graphv1.PutChangeObjectsRequest{ChangeId: string(id), Objects: pbconv.ObjectWritesToPB(writes)}))
+	r, err := c.chg.PutChangeObjects(ctx, connect.NewRequest(&graphv1.PutChangeObjectsRequest{ChangeId: string(id), Objects: pbconv.ObjectWritesToPB(writes)}))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -747,7 +751,7 @@ func (c *Client) Objects(ctx context.Context, id domain.ChangeID, f domain.Objec
 			req.Workspaces = append(req.Workspaces, w)
 		}
 	}
-	r, err := c.rpc.ListChangeObjects(ctx, connect.NewRequest(req))
+	r, err := c.chg.ListChangeObjects(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -777,7 +781,7 @@ func (c *Client) Submit(ctx context.Context, id domain.ChangeID, b graph.Batch) 
 		req.Links = append(req.Links, &graphv1.ImpactLinkCreateRequest{ChangeImpactId: string(in.Impact), Type: in.Link.Type, To: pbconv.RefToPB(in.Link.To),
 			Props: pbconv.Struct(in.Link.Properties), Flow: in.Flow, Execution: in.Execution})
 	}
-	r, err := c.rpc.SubmitBatch(ctx, connect.NewRequest(req))
+	r, err := c.chg.SubmitBatch(ctx, connect.NewRequest(req))
 	if err != nil {
 		return graph.BatchResult{}, rpcerr.FromConnect(err)
 	}
@@ -790,7 +794,7 @@ func (c *Client) Submit(ctx context.Context, id domain.ChangeID, b graph.Batch) 
 
 // CreateRequest records a request of the caller (ADR 0098).
 func (c *Client) CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error) {
-	r, err := c.rpc.CreateRequest(ctx, connect.NewRequest(&graphv1.CreateRequestRequest{Title: in.Title, Text: in.Text, ProjectId: in.ProjectID,
+	r, err := c.chg.CreateRequest(ctx, connect.NewRequest(&graphv1.CreateRequestRequest{Title: in.Title, Text: in.Text, ProjectId: in.ProjectID,
 		OriginKind: in.Origin.Kind, OriginRef: in.Origin.Ref}))
 	if err != nil {
 		return domain.Request{}, rpcerr.FromConnect(err)
@@ -800,7 +804,7 @@ func (c *Client) CreateRequest(ctx context.Context, in graph.NewRequest) (domain
 
 // Request reads a request.
 func (c *Client) Request(ctx context.Context, id domain.RequestID) (domain.Request, error) {
-	r, err := c.rpc.GetRequest(ctx, connect.NewRequest(&graphv1.GetRequestRequest{RequestId: string(id)}))
+	r, err := c.chg.GetRequest(ctx, connect.NewRequest(&graphv1.GetRequestRequest{RequestId: string(id)}))
 	if err != nil {
 		return domain.Request{}, rpcerr.FromConnect(err)
 	}
@@ -816,7 +820,7 @@ func (c *Client) Requests(ctx context.Context, f domain.RequestFilter) ([]domain
 	for _, s := range f.Statuses {
 		req.Statuses = append(req.Statuses, string(s))
 	}
-	r, err := c.rpc.ListRequests(ctx, connect.NewRequest(req))
+	r, err := c.chg.ListRequests(ctx, connect.NewRequest(req))
 	if err != nil {
 		return nil, rpcerr.FromConnect(err)
 	}
@@ -829,7 +833,7 @@ func (c *Client) Requests(ctx context.Context, f domain.RequestFilter) ([]domain
 
 // LinkRequest links a request to a change that answers it.
 func (c *Client) LinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error) {
-	r, err := c.rpc.LinkRequest(ctx, connect.NewRequest(&graphv1.LinkRequestRequest{RequestId: string(id), ChangeId: string(change), Role: string(role)}))
+	r, err := c.chg.LinkRequest(ctx, connect.NewRequest(&graphv1.LinkRequestRequest{RequestId: string(id), ChangeId: string(change), Role: string(role)}))
 	if err != nil {
 		return domain.Request{}, rpcerr.FromConnect(err)
 	}
@@ -838,7 +842,7 @@ func (c *Client) LinkRequest(ctx context.Context, id domain.RequestID, change do
 
 // UnlinkRequest removes the link of a request to a change.
 func (c *Client) UnlinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID) (domain.Request, error) {
-	r, err := c.rpc.UnlinkRequest(ctx, connect.NewRequest(&graphv1.UnlinkRequestRequest{RequestId: string(id), ChangeId: string(change)}))
+	r, err := c.chg.UnlinkRequest(ctx, connect.NewRequest(&graphv1.UnlinkRequestRequest{RequestId: string(id), ChangeId: string(change)}))
 	if err != nil {
 		return domain.Request{}, rpcerr.FromConnect(err)
 	}
@@ -847,7 +851,7 @@ func (c *Client) UnlinkRequest(ctx context.Context, id domain.RequestID, change 
 
 // SetRequestStatus closes, rejects or withdraws a request.
 func (c *Client) SetRequestStatus(ctx context.Context, id domain.RequestID, status domain.RequestStatus, comment string) (domain.Request, error) {
-	r, err := c.rpc.SetRequestStatus(ctx, connect.NewRequest(&graphv1.SetRequestStatusRequest{RequestId: string(id), Status: string(status), Comment: comment}))
+	r, err := c.chg.SetRequestStatus(ctx, connect.NewRequest(&graphv1.SetRequestStatusRequest{RequestId: string(id), Status: string(status), Comment: comment}))
 	if err != nil {
 		return domain.Request{}, rpcerr.FromConnect(err)
 	}

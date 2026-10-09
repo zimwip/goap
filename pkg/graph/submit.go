@@ -75,7 +75,7 @@ func (g *Graph) Submit(ctx context.Context, id domain.ChangeID, b Batch) (res Ba
 			res.Impacts = append(res.Impacts, cn)
 		}
 		for _, in := range b.Checkouts {
-			w, err := g.resolve(ctx, tx, id, in.target())
+			w, err := g.resolve(ctx, tx, id, targetOf(in))
 			if err != nil {
 				return err
 			}

@@ -1,13 +1,31 @@
-package engine
+package planning
 
 import (
 	"errors"
+	"os"
 	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/methodology"
 )
+
+func loadMethodology(t *testing.T, file string) *methodology.Compiled {
+	t.Helper()
+	path := "../../methodologies/" + file
+	if _, err := os.Stat(path); err != nil { // the examples are not seeded at start: they live in methodologies/examples
+		path = "../../methodologies/examples/" + file
+	}
+	m, err := methodology.LoadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
+}
 
 // TestPreviewPlanGOAP exercises the plain A* planner (test-designer, goap): from an empty world it chains
 // collect_scope -> design_tests -> summarize to reach "designed".

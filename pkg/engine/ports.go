@@ -4,16 +4,38 @@ import (
 	"context"
 	"sort"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// GraphPort is what the engine needs from the graph service. *graph.Graph
-// implements it in-process; the engine service uses a connect client.
+// GraphPort is what the engine needs from the graph service: the change (ChangePort) and the reads of the graph
+// (GraphReadPort, ADR 0098 §9). *graph.Graph implements it in-process; the engine service uses a connect client. Its
+// types are the contract of the change (pkg/changeapi) and the neutral ones of pkg/domain: the engine imports no
+// pkg/graph.
 type GraphPort interface {
-	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
-	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error)
+	ChangePort
+	GraphReadPort
+}
+
+// GraphReadPort is what the engine reads of the graph outside a change: baselines, branch heads, the structures of the
+// organisation and the access types.
+type GraphReadPort interface {
+	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
+	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
+	// BranchHead gives the head of a branch: the state the last change left, the empty state (empty id) before any.
+	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
+	// Structures are the organisation and project hierarchies in force (ADR 0054); AdminOnlyType tells a node type
+	// platform administrators alone write (ADR 0068).
+	Structures(ctx context.Context) (domain.Structures, error)
+	AdminOnlyType(ctx context.Context, typ string) (bool, error)
+}
+
+// ChangePort is what the engine does on changes and requests (ADR 0098): the change, its impacts, its log, its change
+// objects, its workspaces (flows, options), decision points and the requests linked to it.
+type ChangePort interface {
+	CreateChange(ctx context.Context, in changeapi.NewChange) (domain.Change, error)
+	UpdateChange(ctx context.Context, id domain.ChangeID, p changeapi.ChangePatch) (domain.Change, error)
 	// MoveChange moves a root change to another project, with its open sub-changes (ADR 0091).
 	MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error)
 	// Change is the change as stored, its items of every flow included (the blackboard is a view of one flow).
@@ -22,17 +44,17 @@ type GraphPort interface {
 	// Change impacts (ADR 0024, 0076, 0079): declare the nodes a change acts on, check them out, edit their draft,
 	// review and move them.
 	ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
-	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error)
-	ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graph.NodeCheckout) (domain.ChangeImpact, error)
-	ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graph.NodeUpdate) (domain.ChangeImpact, error)
-	ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graph.LinkWrite, flow, execution string) (domain.Link, error)
+	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in changeapi.NodeCreate) (domain.ChangeImpact, error)
+	ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in changeapi.NodeCheckout) (domain.ChangeImpact, error)
+	ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in changeapi.NodeUpdate) (domain.ChangeImpact, error)
+	ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l changeapi.LinkWrite, flow, execution string) (domain.Link, error)
 	ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
-	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graph.NodeTransition) (domain.ChangeImpact, error)
+	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in changeapi.NodeTransition) (domain.ChangeImpact, error)
 	ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error)
 	WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error
 	// ImpactNodeMerge and ImpactNodeSplit replace nodes by successors from the side of their parents (ADR 0077).
-	ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in graph.MergeInput) (graph.Restructured, error)
-	ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in graph.SplitInput) (graph.Restructured, error)
+	ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in changeapi.MergeInput) (changeapi.Restructured, error)
+	ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in changeapi.SplitInput) (changeapi.Restructured, error)
 	ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error)
 	// ImpactNodeReviewBatch applies reviews together, all or none (ADR 0080: the submission of a review).
 	ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error)
@@ -42,12 +64,11 @@ type GraphPort interface {
 	// BlackboardIn is the blackboard of a flow branch ("" = main); OpenFlow /
 	// AdoptFlow / DiscardFlow relaunch a step on a new branch and decide it.
 	BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (domain.Blackboard, error)
-	OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error)
+	OpenFlow(ctx context.Context, id domain.ChangeID, in changeapi.OpenFlowRequest) (domain.Flow, error)
 	AdoptFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
 	DiscardFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
 	// ValidateBoard checks the consistency of the blackboard seen from a flow.
 	ValidateBoard(ctx context.Context, id domain.ChangeID, flow string) ([]domain.BoardIssue, error)
-	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	// ChangeGraph is the graph a call on a change reads: the active option's (or the option flow names), else the
 	// reference baseline of the change (ADR 0032 §6).
 	ChangeGraph(ctx context.Context, id domain.ChangeID, flow string) ([]domain.Node, []domain.Link, error)
@@ -55,40 +76,33 @@ type GraphPort interface {
 	ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error)
 	// Options of a change (ADR 0009 §3, ADR 0032 §6): open, activate, evaluate, list and compare them. Selecting and
 	// rejecting one is a decision, made through the graph service.
-	OpenOption(ctx context.Context, id domain.ChangeID, in graph.OpenOptionRequest) (domain.Flow, error)
+	OpenOption(ctx context.Context, id domain.ChangeID, in changeapi.OpenOptionRequest) (domain.Flow, error)
 	ActivateOption(ctx context.Context, id domain.ChangeID, option, by string) (string, error)
 	EvaluateOption(ctx context.Context, id domain.ChangeID, option, by, comment string) (domain.Flow, error)
 	Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow, error)
-	CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error)
+	CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (changeapi.OptionComparison, error)
 	// Decision points (ADR 0009 §4): the item operations of kind decisionPoint and decision.investigate go through them.
-	OpenDecision(ctx context.Context, id domain.ChangeID, in graph.OpenDecisionRequest) (domain.DecisionPoint, error)
-	RuleDecision(ctx context.Context, id domain.ChangeID, in graph.RuleRequest) (domain.DecisionPoint, error)
+	OpenDecision(ctx context.Context, id domain.ChangeID, in changeapi.OpenDecisionRequest) (domain.DecisionPoint, error)
+	RuleDecision(ctx context.Context, id domain.ChangeID, in changeapi.RuleRequest) (domain.DecisionPoint, error)
 	AnswerQuestion(ctx context.Context, id domain.ChangeID, question, answer, process, by string) (domain.DecisionPoint, error)
 	RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, by, comment string) (domain.DecisionPoint, error)
 	DecisionPoints(ctx context.Context, id domain.ChangeID) ([]domain.DecisionPoint, error)
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
-	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// AppendLog / ChangeLog are the log of the changes, where the execution journal lives (ADR 0011, pkg/journal).
 	AppendLog(ctx context.Context, entries []domain.LogEntry) error
 	ChangeLog(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, map[string]int, error)
-	// BranchHead gives the head of a branch: the state the last change left, the empty state (empty id) before any.
-	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
-	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
+	ListChanges(ctx context.Context, f changeapi.ChangesFilter) ([]domain.Change, error)
 	// Change objects (ADR 0098): the engine records its own (the methodologies a change carries, its runs) as change
 	// objects of the built-in domain execution, written and read through the change (pkg/engine/blackboard).
 	PutObjects(ctx context.Context, id domain.ChangeID, writes []domain.ObjectWrite) ([]domain.ChangeObject, error)
 	Objects(ctx context.Context, id domain.ChangeID, f domain.ObjectFilter) ([]domain.ChangeObject, error)
 	// Requests (ADR 0098): the origin of a piece of work, linked to the changes that answer it.
-	CreateRequest(ctx context.Context, in graph.NewRequest) (domain.Request, error)
+	CreateRequest(ctx context.Context, in changeapi.NewRequest) (domain.Request, error)
 	LinkRequest(ctx context.Context, id domain.RequestID, change domain.ChangeID, role domain.LinkRole) (domain.Request, error)
 	Request(ctx context.Context, id domain.RequestID) (domain.Request, error)
 	Requests(ctx context.Context, f domain.RequestFilter) ([]domain.Request, error)
-	// Structures are the organisation and project hierarchies in force (ADR 0054); AdminOnlyType tells a node type
-	// platform administrators alone write (ADR 0068).
-	Structures(ctx context.Context) (domain.Structures, error)
-	AdminOnlyType(ctx context.Context, typ string) (bool, error)
 }
 
 // readGraph is the graph a process reads: the graph of its change on its flow (the active option when it runs on
@@ -100,12 +114,8 @@ func readGraph(ctx context.Context, g GraphPort, change domain.ChangeID, flow st
 	return g.BaselineGraph(ctx, baseline)
 }
 
-// MethodologyPort resolves methodologies (the registry): the latest
-// published version of one, or of every methodology.
-type MethodologyPort interface {
-	Methodology(ctx context.Context, name string) (*methodology.Compiled, error)
-	List(ctx context.Context) ([]*methodology.Compiled, error)
-}
+// MethodologyPort resolves methodologies (the registry): methodology.Source.
+type MethodologyPort = methodology.Source
 
 // Publisher publishes process events (NATS in services).
 type Publisher interface {
@@ -134,7 +144,5 @@ func (s StaticMethodologies) List(context.Context) ([]*methodology.Compiled, err
 	return out, nil
 }
 
-// ErrUnknownMethodology is returned for unknown methodologies.
-type ErrUnknownMethodology struct{ Name string }
-
-func (e ErrUnknownMethodology) Error() string { return "unknown methodology " + e.Name }
+// ErrUnknownMethodology is returned for unknown methodologies: methodology.ErrUnknown.
+type ErrUnknownMethodology = methodology.ErrUnknown

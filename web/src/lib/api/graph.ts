@@ -4,6 +4,8 @@ import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite
 import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ChangeObject, ChangeObjectQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, ObjectWrite, Request, RequestEntry, RequestQuery, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
+/** The change service (ADR 0098 §9): the changes, their impacts, objects, workspaces and the requests. */
+const CHANGE = 'goap.change.v1.ChangeService';
 
 /** The wire form of the edit of an open review: a field is written only when the edit names it (proto3 has no
  * unset: set_comment / set_outcome say which ones). */
@@ -62,14 +64,14 @@ export const graph = {
     ),
   /** The impact log of a change (ADR 0029): every operation on its change impacts, with its caller. */
   listChangeEvents: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { events?: ImpactEvent[] }>(GRAPH, 'ListChangeEvents', { changeId }, signal),
+    rpc<{ changeId: string }, { events?: ImpactEvent[] }>(CHANGE, 'ListChangeEvents', { changeId }, signal),
   /** The log of a change (ADR 0030), filtered on its columns; counts: entries per type without the types filter. */
   listChangeLog: (req: ChangeLogQuery, signal?: AbortSignal) =>
-    rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(GRAPH, 'ListChangeLog', req, signal),
+    rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(CHANGE, 'ListChangeLog', req, signal),
   /** The whole log of a change as W3C PROV-O provenance, a JSON-LD document (ADR 0057). */
   exportChangeProvenance: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { document?: string; filename?: string; mediaType?: string }>(
-      GRAPH,
+      CHANGE,
       'ExportChangeProvenance',
       { changeId },
       signal,
@@ -77,9 +79,9 @@ export const graph = {
   /** The namespaces holding at least one node. */
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   listChanges: (signal?: AbortSignal) =>
-    rpc<Empty, { changes?: Change[] }>(GRAPH, 'ListChanges', {}, signal),
+    rpc<Empty, { changes?: Change[] }>(CHANGE, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
-    rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal),
+    rpc<{ id: string }, { change?: Change }>(CHANGE, 'GetChange', { id }, signal),
   getBranch: (namespace: string, name: string, signal?: AbortSignal) =>
     rpc<{ namespace: string; name: string }, { branch?: Branch; head?: Baseline }>(GRAPH, 'GetBranch', { namespace, name }, signal),
   listBranches: (namespace: string, signal?: AbortSignal) =>
@@ -112,7 +114,7 @@ export const graph = {
    * into its free-form data (the criticality, ADR 0075 §3: raising it is free, lowering it asks a permission).
    */
   updateChange: (id: string, patch: { title?: string; intent?: string; goal?: string; status?: string; data?: Struct }) =>
-    rpc<{ id: string; title?: string; intent?: string; goal?: string; status?: string; data?: Struct }, { change?: Change }>(GRAPH, 'UpdateChange', { id, ...patch }),
+    rpc<{ id: string; title?: string; intent?: string; goal?: string; status?: string; data?: Struct }, { change?: Change }>(CHANGE, 'UpdateChange', { id, ...patch }),
   createChange: (req: {
     title: string;
     intent?: string;
@@ -127,75 +129,75 @@ export const graph = {
     ownerOrg?: string;
     /** key of the project the change acts in: required unless a parent change gives it (ADR 0091) */
     projectId?: string;
-  }) => rpc<typeof req, { change?: Change }>(GRAPH, 'CreateChange', req),
+  }) => rpc<typeof req, { change?: Change }>(CHANGE, 'CreateChange', req),
   /**
    * Moves a root change, draft or active, with its open sub-changes, to another project whose methodologies include the
    * change's (ADR 0091); the nodes it already acts on keep their project.
    */
   moveChange: (changeId: string, projectId: string) =>
-    rpc<{ changeId: string; projectId: string }, { change?: Change }>(GRAPH, 'MoveChange', { changeId, projectId }),
+    rpc<{ changeId: string; projectId: string }, { change?: Change }>(CHANGE, 'MoveChange', { changeId, projectId }),
   /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
   splitChange: (changeId: string) =>
-    rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
+    rpc<{ changeId: string }, { changes?: Change[] }>(CHANGE, 'SplitChange', { changeId }),
   listSubChanges: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
+    rpc<{ changeId: string }, { changes?: Change[] }>(CHANGE, 'ListSubChanges', { changeId }, signal),
   /** Integrates a committed change that waits for a resolution; resolutions are by node id. */
   mergeChange: (changeId: string, resolutions: Record<string, Resolution> = {}) =>
     rpc<
       { changeId: string; resolutions: Record<string, Resolution> },
       { change?: Change }
-    >(GRAPH, 'MergeChange', { changeId, resolutions }),
+    >(CHANGE, 'MergeChange', { changeId, resolutions }),
   /** Flow branches of a change (relaunched steps). */
   validateBoard: (changeId: string, flow = '', signal?: AbortSignal) =>
-    rpc<{ changeId: string; flow: string }, { issues?: BoardIssue[] }>(GRAPH, 'ValidateBoard', { changeId, flow }, signal),
+    rpc<{ changeId: string; flow: string }, { issues?: BoardIssue[] }>(CHANGE, 'ValidateBoard', { changeId, flow }, signal),
   listFlows: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { flows?: Flow[] }>(GRAPH, 'ListFlows', { changeId }, signal),
+    rpc<{ changeId: string }, { flows?: Flow[] }>(CHANGE, 'ListFlows', { changeId }, signal),
   /** Adopts an open flow branch straight on the graph (prefer engine.decideFlow when the run is known). */
   adoptFlow: (changeId: string, flow: string) =>
-    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'AdoptFlow', { changeId, flow }),
+    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(CHANGE, 'AdoptFlow', { changeId, flow }),
   /** Discards an open flow branch straight on the graph (its candidates are rejected, its graph branch abandoned). */
   discardFlow: (changeId: string, flow: string) =>
-    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(GRAPH, 'DiscardFlow', { changeId, flow }),
+    rpc<{ changeId: string; flow: string }, { flow?: Flow }>(CHANGE, 'DiscardFlow', { changeId, flow }),
   /** Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
    * where every call that names no flow goes. */
   listOptions: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { options?: Flow[]; active?: string }>(GRAPH, 'ListOptions', { changeId }, signal),
+    rpc<{ changeId: string }, { options?: Flow[]; active?: string }>(CHANGE, 'ListOptions', { changeId }, signal),
   openOption: (changeId: string, name: string, hypothesis: string, activate: boolean) =>
-    rpc<{ changeId: string; name: string; hypothesis: string; activate: boolean }, { option?: Flow }>(GRAPH, 'OpenOption', { changeId, name, hypothesis, activate }),
+    rpc<{ changeId: string; name: string; hypothesis: string; activate: boolean }, { option?: Flow }>(CHANGE, 'OpenOption', { changeId, name, hypothesis, activate }),
   /** Works on an option; '' or 'main': back to the main flow. */
   activateOption: (changeId: string, option: string) =>
-    rpc<{ changeId: string; option: string }, { active?: string }>(GRAPH, 'ActivateOption', { changeId, option }),
+    rpc<{ changeId: string; option: string }, { active?: string }>(CHANGE, 'ActivateOption', { changeId, option }),
   evaluateOption: (changeId: string, option: string, comment: string) =>
-    rpc<{ changeId: string; option: string; comment: string }, { option?: Flow }>(GRAPH, 'EvaluateOption', { changeId, option, comment }),
+    rpc<{ changeId: string; option: string; comment: string }, { option?: Flow }>(CHANGE, 'EvaluateOption', { changeId, option, comment }),
   /** Selects an option: its versions join the change branch, the other open options are rejected. */
   selectOption: (changeId: string, option: string) =>
-    rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'SelectOption', { changeId, option }),
+    rpc<{ changeId: string; option: string }, { option?: Flow }>(CHANGE, 'SelectOption', { changeId, option }),
   rejectOption: (changeId: string, option: string) =>
-    rpc<{ changeId: string; option: string }, { option?: Flow }>(GRAPH, 'RejectOption', { changeId, option }),
+    rpc<{ changeId: string; option: string }, { option?: Flow }>(CHANGE, 'RejectOption', { changeId, option }),
   /** The impacts two flows of a change see, compared (ADR 0083): 'main' or an option id on each side; level written or
    * accepted. Added, removed and modified impacts are listed, the identical ones counted. */
   diffFlows: (changeId: string, left: string, right: string, level: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string; left: string; right: string; level: string }, FlowDiff>(GRAPH, 'DiffFlows', { changeId, left, right, level }, signal),
+    rpc<{ changeId: string; left: string; right: string; level: string }, FlowDiff>(CHANGE, 'DiffFlows', { changeId, left, right, level }, signal),
   /** Decision points of a change (ADR 0009 §4). */
   listDecisionPoints: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { points?: DecisionPoint[] }>(GRAPH, 'ListDecisionPoints', { changeId }, signal),
+    rpc<{ changeId: string }, { points?: DecisionPoint[] }>(CHANGE, 'ListDecisionPoints', { changeId }, signal),
   openDecision: (req: { changeId: string; question: string; allOptions: boolean; options?: string[]; criteria?: string[]; policy?: { decider?: string; threshold?: number; maxRounds?: number; maxDuration?: string } }) =>
-    rpc<typeof req, { point?: DecisionPoint }>(GRAPH, 'OpenDecision', req),
+    rpc<typeof req, { point?: DecisionPoint }>(CHANGE, 'OpenDecision', req),
   /** A ruling from the IDE is a person's: it needs no ratification. */
   ruleDecision: (req: { changeId: string; point: string; outcome: string; option?: string; confidence?: number; justification: string; questions?: string[] }) =>
-    rpc<typeof req, { point?: DecisionPoint }>(GRAPH, 'RuleDecision', req),
+    rpc<typeof req, { point?: DecisionPoint }>(CHANGE, 'RuleDecision', req),
   answerQuestion: (changeId: string, question: string, answer: string) =>
-    rpc<{ changeId: string; question: string; answer: string }, { point?: DecisionPoint }>(GRAPH, 'AnswerQuestion', { changeId, question, answer }),
+    rpc<{ changeId: string; question: string; answer: string }, { point?: DecisionPoint }>(CHANGE, 'AnswerQuestion', { changeId, question, answer }),
   ratifyDecision: (changeId: string, point: string, accept: boolean, comment: string) =>
-    rpc<{ changeId: string; point: string; accept: boolean; comment: string }, { point?: DecisionPoint }>(GRAPH, 'RatifyDecision', { changeId, point, accept, comment }),
+    rpc<{ changeId: string; point: string; accept: boolean; comment: string }, { point?: DecisionPoint }>(CHANGE, 'RatifyDecision', { changeId, point, accept, comment }),
   /** The graph of a change at a level (written, accepted, landed) on a flow (ADR 0032 §5). */
   getChangeView: (changeId: string, flow: string, level: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string; flow: string; level: string }, { baseline?: Baseline }>(GRAPH, 'GetChangeView', { changeId, flow, level }, signal),
+    rpc<{ changeId: string; flow: string; level: string }, { baseline?: Baseline }>(CHANGE, 'GetChangeView', { changeId, flow, level }, signal),
   /** What merging a branch into another would do. */
   planMerge: (namespace: string, from: string, into: string, signal?: AbortSignal) =>
     rpc<{ namespace: string; from: string; into: string }, { plan?: MergePlan }>(GRAPH, 'PlanMerge', { namespace, from, into }, signal),
   getSharedNodes: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { nodes?: SharedNode[] }>(GRAPH, 'GetSharedNodes', { changeId }, signal),
+    rpc<{ changeId: string }, { nodes?: SharedNode[] }>(CHANGE, 'GetSharedNodes', { changeId }, signal),
   /** A node version with its outgoing and incoming links (version 0: the latest). With a scope, the node as that change
    * sees it on a flow (ADR 0079): a draft reference `{id, version: 0}` reads the draft the change holds (draft: true,
    * version 0, its links with their ids), a node without a draft its stored version; a key is resolved through the
@@ -216,34 +218,34 @@ export const graph = {
     rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),
   /** The versions the change starts from (the pre version of its change impacts). */
   getChangeImpacts: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, { nodes?: NodeRef[] }>(GRAPH, 'GetChangeImpacts', { changeId }, signal),
+    rpc<{ changeId: string }, { nodes?: NodeRef[] }>(CHANGE, 'GetChangeImpacts', { changeId }, signal),
   /** Declare the nodes a change acts on (an impact: pre, intent, rationale). */
   proposeImpact: (changeId: string, nodes: ChangeImpact[]) =>
-    rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(GRAPH, 'ProposeImpact', { changeId, nodes }),
+    rpc<{ changeId: string; nodes: ChangeImpact[] }, { nodes?: ChangeImpact[] }>(CHANGE, 'ProposeImpact', { changeId, nodes }),
   // The node operations of a change (ADR 0076): a node is created or checked out in a change (a draft: the node has
   // no version until the change lands, ADR 0079), edited in place (properties, owner, outgoing links), moved along its
   // lifecycle (a transition on a node with no draft checks it out first). An edit never reviews: the review is explicit. flow: the flow or
   // option written on ('main' names the main flow, '' is the active option).
   /** Creates a node in a change: the impact (intent created) and its draft. */
   impactNodeCreate: (changeId: string, n: { key: string; type: string; props?: Struct; owner?: string; rationale: string; links?: LinkWrite[] }, flow = '') =>
-    rpc<typeof n & { changeId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCreate', { changeId, ...n, flow }),
+    rpc<typeof n & { changeId: string; flow: string }, { node?: ChangeImpact }>(CHANGE, 'ImpactNodeCreate', { changeId, ...n, flow }),
   /** Merges nodes into a new one, from the side of their parents (ADR 0077): the parents lose the links to the sources and gain one to the new node; the sources stay as they are, their impacts carry the impact of their parent as via. */
   impactNodeMerge: (changeId: string, m: { sources: NodeName[]; into: NodeCreateSpec; rationale?: string }, flow = '') =>
-    rpc<typeof m & { changeId: string; flow: string }, Restructured>(GRAPH, 'ImpactNodeMerge', { changeId, ...m, flow }),
+    rpc<typeof m & { changeId: string; flow: string }, Restructured>(CHANGE, 'ImpactNodeMerge', { changeId, ...m, flow }),
   /** Splits a node into new ones, from the side of its parents; the other links to it are returned as suspect. */
   impactNodeSplit: (changeId: string, s: { source: NodeName; into: NodeCreateSpec[]; rationale?: string }, flow = '') =>
-    rpc<typeof s & { changeId: string; flow: string }, Restructured>(GRAPH, 'ImpactNodeSplit', { changeId, ...s, flow }),
+    rpc<typeof s & { changeId: string; flow: string }, Restructured>(CHANGE, 'ImpactNodeSplit', { changeId, ...s, flow }),
   /** The first versions of the nodes that derive from a node (ADR 0077); version 0 (or none): any version. */
   derivedNodes: (ref: NodeRef, signal?: AbortSignal) => rpc<{ ref: NodeRef }, { nodes?: GraphNode[] }>(GRAPH, 'DerivedNodes', { ref }, signal),
   /** Checks out a node (by its impact, or by the node: the impact is declared) for editing: the draft of the flow; refused (conflict 'already checked out') while the flow already holds its own (update it). A draft held by a parent flow is not the flow's own. */
   impactNodeCheckout: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, rationale = '', flow = '') =>
-    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCheckout', { changeId, ...target, rationale, flow }),
+    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; rationale: string; flow: string }, { node?: ChangeImpact }>(CHANGE, 'ImpactNodeCheckout', { changeId, ...target, rationale, flow }),
   /** Merges properties into (and transfers the owner of) a draft, in place; an accepted review goes back to proposed. */
   impactNodeUpdate: (changeId: string, changeImpactId: string, u: { props?: Struct; owner?: string }, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; props?: Struct; owner?: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeUpdate', { changeId, changeImpactId, ...u, flow }),
+    rpc<{ changeId: string; changeImpactId: string; props?: Struct; owner?: string; flow: string }, { node?: ChangeImpact }>(CHANGE, 'ImpactNodeUpdate', { changeId, changeImpactId, ...u, flow }),
   /** Adds an outgoing link to a draft, in place. `to` is an exact version, or a draft reference {id, version: 0} of a node the change holds a draft of. */
   impactLinkCreate: (changeId: string, changeImpactId: string, l: LinkWrite, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; type: string; to: NodeRef; props?: Struct; flow: string }, { link?: Link }>(GRAPH, 'ImpactLinkCreate', {
+    rpc<{ changeId: string; changeImpactId: string; type: string; to: NodeRef; props?: Struct; flow: string }, { link?: Link }>(CHANGE, 'ImpactLinkCreate', {
       changeId,
       changeImpactId,
       type: l.type,
@@ -252,13 +254,13 @@ export const graph = {
       flow,
     }),
   impactLinkUpdate: (changeId: string, linkId: string, props: Struct, flow = '') =>
-    rpc<{ changeId: string; linkId: string; props: Struct; flow: string }, { link?: Link }>(GRAPH, 'ImpactLinkUpdate', { changeId, linkId, props, flow }),
+    rpc<{ changeId: string; linkId: string; props: Struct; flow: string }, { link?: Link }>(CHANGE, 'ImpactLinkUpdate', { changeId, linkId, props, flow }),
   /** Removes an outgoing link of a draft (id: a link of the draft view, or of the stored version it was checked out from) (removing a child is a modification of its parent). */
   impactLinkDelete: (changeId: string, linkId: string, flow = '') =>
-    rpc<{ changeId: string; linkId: string; flow: string }, Empty>(GRAPH, 'ImpactLinkDelete', { changeId, linkId, flow }),
+    rpc<{ changeId: string; linkId: string; flow: string }, Empty>(CHANGE, 'ImpactLinkDelete', { changeId, linkId, flow }),
   /** Moves a node along its lifecycle (by its impact, or by the node: the impact is declared): always on the draft (a node with none is checked out first); never changes the review. */
   impactNodeTransition: (changeId: string, target: { changeImpactId?: string; nodeId?: string }, state: string, rationale = '', flow = '') =>
-    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; state: string; rationale: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeTransition', {
+    rpc<{ changeId: string; changeImpactId?: string; nodeId?: string; state: string; rationale: string; flow: string }, { node?: ChangeImpact }>(CHANGE, 'ImpactNodeTransition', {
       changeId,
       ...target,
       state,
@@ -267,90 +269,90 @@ export const graph = {
     }),
   /** Drops the draft of an impact (a creation never accepted leaves no node). */
   impactNodeCancel: (changeId: string, changeImpactId: string, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCancel', { changeId, changeImpactId, flow }),
+    rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(CHANGE, 'ImpactNodeCancel', { changeId, changeImpactId, flow }),
   /** Takes an impact out of the change (its draft is dropped); refused once its version has landed. */
   withdrawImpact: (changeId: string, changeImpactId: string, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
+    rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(CHANGE, 'WithdrawImpact', { changeId, changeImpactId, flow }),
   /** Brings a sub-change up to date with its parent (ADR 0082): a three-way merge of the drafts the parent changed; the fields changed on both sides are conflicts. */
   rebaseChange: (changeId: string) =>
-    rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[] }>(GRAPH, 'RebaseChange', { changeId }),
+    rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[] }>(CHANGE, 'RebaseChange', { changeId }),
   /** Keeps the sub-change's values for the conflicts a rebase left on an impact (an edit of a field settles its own). */
   impactNodeResolve: (changeId: string, changeImpactId: string) =>
-    rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeResolve', { changeId, changeImpactId }),
+    rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(CHANGE, 'ImpactNodeResolve', { changeId, changeImpactId }),
   /** Where a sub-change stands against its parent: the impacts behind it, the conflicts to settle. */
   getRebaseState: (changeId: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string }, RebaseState>(GRAPH, 'GetRebaseState', { changeId }, signal),
+    rpc<{ changeId: string }, RebaseState>(CHANGE, 'GetRebaseState', { changeId }, signal),
   /** Sends accepted or rejected impacts back to proposed (a rejected one is reworked); the comment is mandatory. */
   reopenChangeImpacts: (changeId: string, changeImpactIds: string[], comment: string) =>
-    rpc<{ changeId: string; changeImpactIds: string[]; comment: string }, { reopened?: string[] }>(GRAPH, 'ReopenChangeImpacts', { changeId, changeImpactIds, comment }),
+    rpc<{ changeId: string; changeImpactIds: string[]; comment: string }, { reopened?: string[] }>(CHANGE, 'ReopenChangeImpacts', { changeId, changeImpactIds, comment }),
   /** Accept or reject a change impact; the comment is mandatory. */
   /** flow: the flow or option the review is made on ('main' names the main flow; '' is the active option). */
   impactNodeReview: (changeId: string, changeImpactId: string, accept: boolean, comment: string, flow = '') =>
-    rpc<{ changeId: string; changeImpactId: string; accept: boolean; comment: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeReview', { changeId, changeImpactId, accept, comment, flow }),
+    rpc<{ changeId: string; changeImpactId: string; accept: boolean; comment: string; flow: string }, { node?: ChangeImpact }>(CHANGE, 'ImpactNodeReview', { changeId, changeImpactId, accept, comment, flow }),
   /** The review object (ADR 0080): open one (flow: 'main' names the main flow; '' is the active option). */
   reviewOpen: (changeId: string, comment = '', flow = '') =>
-    rpc<{ changeId: string; flow: string; comment: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewOpen', { changeId, flow, comment }),
+    rpc<{ changeId: string; flow: string; comment: string }, { review?: ReviewRecord }>(CHANGE, 'ReviewOpen', { changeId, flow, comment }),
   /** Change an open review: its author or an administrator only. Every field is optional. */
   reviewUpdate: (changeId: string, key: string, edit: ReviewEdit) =>
-    rpc<ReturnType<typeof reviewUpdateRequest>, { review?: ReviewRecord }>(GRAPH, 'ReviewUpdate', reviewUpdateRequest(changeId, key, edit)),
+    rpc<ReturnType<typeof reviewUpdateRequest>, { review?: ReviewRecord }>(CHANGE, 'ReviewUpdate', reviewUpdateRequest(changeId, key, edit)),
   /** Submit an open review: every entry reviewed in one transaction, all or none. */
-  reviewSubmit: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewSubmit', { changeId, key }),
+  reviewSubmit: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(CHANGE, 'ReviewSubmit', { changeId, key }),
   /** Discard a review that was never submitted. */
-  reviewDiscard: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(GRAPH, 'ReviewDiscard', { changeId, key }),
+  reviewDiscard: (changeId: string, key: string) => rpc<{ changeId: string; key: string }, { review?: ReviewRecord }>(CHANGE, 'ReviewDiscard', { changeId, key }),
   /** The change as a flow or an option sees it: its change impacts (with the post versions of that flow) and items. */
   getBlackboard: (changeId: string, flow: string, signal?: AbortSignal) =>
-    rpc<{ changeId: string; flow: string }, { change?: Change; options?: Flow[]; activeOption?: string; decisionPoints?: DecisionPoint[] }>(GRAPH, 'GetBlackboard', { changeId, flow }, signal),
+    rpc<{ changeId: string; flow: string }, { change?: Change; options?: Flow[]; activeOption?: string; decisionPoints?: DecisionPoint[] }>(CHANGE, 'GetBlackboard', { changeId, flow }, signal),
   /** Create a change, write the edits on its branch, accept and check them in and apply it (one call). */
   commitEdits: (req: { namespace: string; title: string; intent: string; baselineId: string; methodology?: string; edits: NodeEdit[] }) =>
-    rpc<typeof req, { changeId?: string }>(GRAPH, 'CommitEdits', req),
+    rpc<typeof req, { changeId?: string }>(CHANGE, 'CommitEdits', req),
   addItems: (changeId: string, items: ChangeItem[]) =>
-    rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(GRAPH, 'AddItems', { changeId, items }),
+    rpc<{ changeId: string; items: ChangeItem[] }, { items?: ChangeItem[] }>(CHANGE, 'AddItems', { changeId, items }),
   /** Writes change objects on a change (ADR 0098), in order and as one write. */
   putChangeObjects: (changeId: string, objects: ObjectWrite[]) =>
-    rpc<{ changeId: string; objects: ObjectWrite[] }, { objects?: ChangeObject[] }>(GRAPH, 'PutChangeObjects', { changeId, objects }),
+    rpc<{ changeId: string; objects: ObjectWrite[] }, { objects?: ChangeObject[] }>(CHANGE, 'PutChangeObjects', { changeId, objects }),
   /** Records a request of the caller (ADR 0098): the origin of a piece of work. */
   createRequest: (req: { title: string; text?: string; projectId?: string; originKind?: string; originRef?: string }) =>
-    rpc<typeof req, { request?: Request }>(GRAPH, 'CreateRequest', req),
-  getRequest: (requestId: string, signal?: AbortSignal) => rpc<{ requestId: string }, { request?: Request }>(GRAPH, 'GetRequest', { requestId }, signal),
+    rpc<typeof req, { request?: Request }>(CHANGE, 'CreateRequest', req),
+  getRequest: (requestId: string, signal?: AbortSignal) => rpc<{ requestId: string }, { request?: Request }>(CHANGE, 'GetRequest', { requestId }, signal),
   /** The requests the caller may view matching the query. */
-  listRequests: (req: RequestQuery, signal?: AbortSignal) => rpc<RequestQuery, { requests?: Request[] }>(GRAPH, 'ListRequests', req, signal),
-  updateRequest: (requestId: string, title: string) => rpc<{ requestId: string; title: string }, { request?: Request }>(GRAPH, 'UpdateRequest', { requestId, title }),
+  listRequests: (req: RequestQuery, signal?: AbortSignal) => rpc<RequestQuery, { requests?: Request[] }>(CHANGE, 'ListRequests', req, signal),
+  updateRequest: (requestId: string, title: string) => rpc<{ requestId: string; title: string }, { request?: Request }>(CHANGE, 'UpdateRequest', { requestId, title }),
   /** Closes, rejects or withdraws a request. */
   setRequestStatus: (requestId: string, status: 'closed' | 'rejected' | 'withdrawn', comment = '') =>
-    rpc<{ requestId: string; status: string; comment: string }, { request?: Request }>(GRAPH, 'SetRequestStatus', { requestId, status, comment }),
+    rpc<{ requestId: string; status: string; comment: string }, { request?: Request }>(CHANGE, 'SetRequestStatus', { requestId, status, comment }),
   /** Links a request to a change that answers it (origin, amends, covers). */
   linkRequest: (requestId: string, changeId: string, role: 'origin' | 'amends' | 'covers') =>
-    rpc<{ requestId: string; changeId: string; role: string }, { request?: Request }>(GRAPH, 'LinkRequest', { requestId, changeId, role }),
+    rpc<{ requestId: string; changeId: string; role: string }, { request?: Request }>(CHANGE, 'LinkRequest', { requestId, changeId, role }),
   unlinkRequest: (requestId: string, changeId: string) =>
-    rpc<{ requestId: string; changeId: string }, { request?: Request }>(GRAPH, 'UnlinkRequest', { requestId, changeId }),
+    rpc<{ requestId: string; changeId: string }, { request?: Request }>(CHANGE, 'UnlinkRequest', { requestId, changeId }),
   listRequestLog: (requestId: string, signal?: AbortSignal) =>
-    rpc<{ requestId: string }, { entries?: RequestEntry[] }>(GRAPH, 'ListRequestLog', { requestId }, signal),
+    rpc<{ requestId: string }, { entries?: RequestEntry[] }>(CHANGE, 'ListRequestLog', { requestId }, signal),
   /** The change objects of a change: the last version of each, or the versions in force at a position of the log. */
   listChangeObjects: (req: ChangeObjectQuery, signal?: AbortSignal) =>
-    rpc<ChangeObjectQuery, { objects?: ChangeObject[] }>(GRAPH, 'ListChangeObjects', req, signal),
+    rpc<ChangeObjectQuery, { objects?: ChangeObject[] }>(CHANGE, 'ListChangeObjects', req, signal),
   /** Execution journal of a change, optionally restricted to given processes. */
   listExecutions: (changeId: string, processIds: string[] = [], signal?: AbortSignal) =>
     rpc<{ changeId: string; processIds?: string[] }, { records?: ExecutionRecord[] }>(
-      GRAPH,
+      CHANGE,
       'ListExecutions',
       processIds.length ? { changeId, processIds } : { changeId },
       signal,
     ),
   /** Removes a change that landed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
-  deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DeleteChange', { changeId }),
+  deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(CHANGE, 'DeleteChange', { changeId }),
   /**
    * Moves the change along a transition of its lifecycle (ADR 0058). `decision` is the decision point that gates it
    * (seen by the guard as change.decision, consumed by the move). A refusal comes as an error whose message names the
    * vetos or the objectives not met (`parseRefusal` of `changeTransition.ts`).
    */
   transitionChange: (changeId: string, transition: string, decision = '') =>
-    rpc<{ changeId: string; transition: string; decision?: string }, { change?: Change }>(GRAPH, 'TransitionChange', {
+    rpc<{ changeId: string; transition: string; decision?: string }, { change?: Change }>(CHANGE, 'TransitionChange', {
       changeId,
       transition,
       ...(decision ? { decision } : {}),
     }),
   applyChange: (changeId: string, baselineName: string) =>
-    rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'ApplyChange', {
+    rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(CHANGE, 'ApplyChange', {
       changeId,
       baselineName,
     }),

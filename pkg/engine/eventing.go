@@ -4,8 +4,8 @@ import (
 	"context"
 	"github.com/zimwip/goap/pkg/events"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
 )
 
 // EventingGraph wraps an in-process GraphPort and reports change lifecycle
@@ -30,7 +30,7 @@ func (g EventingGraph) emit(ctx context.Context, typ string, id domain.ChangeID,
 }
 
 // CreateChange implements GraphPort.
-func (g EventingGraph) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
+func (g EventingGraph) CreateChange(ctx context.Context, in changeapi.NewChange) (domain.Change, error) {
 	c, err := g.GraphPort.CreateChange(ctx, in)
 	if err == nil {
 		g.emit(ctx, events.ChangeCreated, c.ID, nil, nil)

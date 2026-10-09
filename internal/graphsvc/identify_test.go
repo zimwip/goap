@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -24,12 +25,15 @@ import (
 func TestAnonymousCallsAreRefused(t *testing.T) {
 	g := typedGraph(t)
 	h := &graphsvc.Handler{Graph: g}
-	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.Identify()))
 	mux := http.NewServeMux()
-	mux.Handle(path, handler)
+	mux.Handle(graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.Identify())))
+	mux.Handle(changev1connect.NewChangeServiceHandler(h, connect.WithInterceptors(h.Identify())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	cl := newRPCClient(srv.Client(), srv.URL)
+	if _, err := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL).ListNamespaces(context.Background(), connect.NewRequest(&graphv1.ListNamespacesRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("ListNamespaces: %v", err)
+	}
 	ctx := context.Background()
 
 	refused := func(err error) bool { return connect.CodeOf(err) == connect.CodeUnauthenticated }
@@ -70,9 +74,10 @@ func TestServiceSubjectsDoNotTakeTheFirstAdminGrant(t *testing.T) {
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.Identify(), h.EnsureCaller()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
+	mux.Handle(changev1connect.NewChangeServiceHandler(h, connect.WithInterceptors(h.Identify(), h.EnsureCaller())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	cl := newRPCClient(srv.Client(), srv.URL)
 	as := func(subject string) {
 		req := connect.NewRequest(&graphv1.ListChangesRequest{})
 		identity.SetHeaders(authz.Principal{Subject: subject}, req.Header())

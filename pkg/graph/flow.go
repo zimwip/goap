@@ -5,28 +5,12 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// OpenFlowRequest relaunches a step of the action flow on a new flow branch.
-type OpenFlowRequest struct {
-	// Parent is the flow the relaunched step ran on ("" = the main flow).
-	Parent string
-	// ForkAfter is the last item of the parent's view before the step ("" = none).
-	ForkAfter domain.ItemID
-	// Seeds are the items produced by the relaunched step and by what followed
-	// it; the items derived from them are invalidated too.
-	Seeds []domain.ItemID
-	// StaleRuns are opaque producer ids (the Execution of change impacts and node versions) of the
-	// relaunched step and of what followed it: what they produced is stale until the branch is adopted
-	// (ADR 0025).
-	StaleRuns []string
-	// Origin is an opaque record the opener keeps on the flow (the graph stores and returns it, never reads it).
-	Origin map[string]any
-	// Items are written on the new flow at creation (a note for whoever works on it): the graph gives each
-	// the flow, an id, a time and, unset, the accepted status.
-	Items []domain.ChangeItem
-}
+// OpenFlowRequest is changeapi.OpenFlowRequest (ADR 0098: the contract of the change, shared with the engine).
+type OpenFlowRequest = changeapi.OpenFlowRequest
 
 // openFlowEvent appends a flow event to the log of a change.
 func (g *Graph) flowEvent(ctx context.Context, tx Tx, id domain.ChangeID, e domain.FlowEvent) error {

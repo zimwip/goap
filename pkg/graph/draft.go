@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/zimwip/goap/pkg/changeapi"
 	"github.com/zimwip/goap/pkg/domain"
 )
 
@@ -17,12 +18,7 @@ import (
 
 // draftBranch names the branch a flow's versions would be written on: the change branch for the main flow. It is the
 // Branch of the node view of a draft, which says whose draft it is (IsWorking); no branch of that name is created.
-func draftBranch(c domain.Change, flow string) string {
-	if flow == "" {
-		return domain.BranchOf(c.Branch)
-	}
-	return flowBranchName(flow)
-}
+func draftBranch(c domain.Change, flow string) string { return changeapi.DraftBranch(c, flow) }
 
 // draftNode is the draft seen as a node: no version (Version 0), the namespace of the change, the branch of its flow.
 func draftNode(c domain.Change, d domain.Draft) domain.Node {

@@ -18,22 +18,28 @@ const mod = "github.com/zimwip/goap/"
 
 // forbidden lists, by package, the packages it must not depend on, directly or not.
 var forbidden = map[string][]string{
-	"pkg/mcp":         {"pkg/adapter", "pkg/mcpbuiltin", "pkg/access", "pkg/algo", "pkg/domain", "pkg/graph"},
-	"pkg/algo":        {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
-	"pkg/dsl":         {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
-	"pkg/domain/def":  {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
-	"pkg/access":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
-	"pkg/llmcfg":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
-	"pkg/engine":      {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove", "internal/assistantsvc"},
-	"pkg/builtins":    {"pkg/methodology", "pkg/engine", "pkg/domain"},
-	"pkg/adapter":     {"pkg/mcpbuiltin", "pkg/access"},
-	"pkg/domain":      {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "pkg/review"},
-	"pkg/criticality": {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
-	"pkg/verify":      {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition"},
-	"pkg/decision":    {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal"},
-	"pkg/journal":     {"pkg/graph", "pkg/engine", "pkg/methodology"},
-	"pkg/graph":       {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "pkg/review", "internal/registrysvc", "internal/assistantsvc"},
-	"pkg/review":      {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
+	"pkg/mcp":        {"pkg/adapter", "pkg/mcpbuiltin", "pkg/access", "pkg/algo", "pkg/domain", "pkg/graph"},
+	"pkg/algo":       {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
+	"pkg/dsl":        {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
+	"pkg/domain/def": {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
+	"pkg/access":     {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
+	"pkg/llmcfg":     {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
+	"pkg/engine":     {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove", "internal/assistantsvc", "pkg/graph"},
+	// ADR 0098 §10: the contract of the change knows no engine, methodology, condition nor use case; the engine talks
+	// to the change through it, never through pkg/graph; the registry previews plans without the engine.
+	"pkg/changeapi":         {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/condition", "pkg/risk", "pkg/verify", "pkg/review", "pkg/criticality", "pkg/journal", "pkg/decision"},
+	"pkg/engine/blackboard": {"pkg/graph"},
+	"pkg/planning":          {"pkg/engine", "pkg/graph"},
+	"internal/registrysvc":  {"pkg/engine"},
+	"pkg/builtins":          {"pkg/methodology", "pkg/engine", "pkg/domain"},
+	"pkg/adapter":           {"pkg/mcpbuiltin", "pkg/access"},
+	"pkg/domain":            {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "pkg/review"},
+	"pkg/criticality":       {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
+	"pkg/verify":            {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition"},
+	"pkg/decision":          {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal"},
+	"pkg/journal":           {"pkg/graph", "pkg/engine", "pkg/methodology"},
+	"pkg/graph":             {"pkg/risk", "pkg/methodology", "pkg/journal", "pkg/decision", "pkg/verify", "pkg/criticality", "pkg/review", "internal/registrysvc", "internal/assistantsvc"},
+	"pkg/review":            {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
 }
 
 // The graph core names no concept of the methodology namespace (ADR 0066: the Activity a change is scoped to lives in

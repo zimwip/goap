@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
@@ -133,6 +134,7 @@ func TestStructuresThroughTheService(t *testing.T) {
 	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
+	mux.Handle(changev1connect.NewChangeServiceHandler(&graphsvc.Handler{Graph: g}))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 	got, err := graphsvc.NewClient(srv.Client(), srv.URL).Structures(context.Background())

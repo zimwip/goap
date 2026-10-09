@@ -5,9 +5,9 @@ package goap.graph.v1;
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
-// GraphService exposes the two axes of the knowledge graph: the domain axis
-// (versioned nodes, version-to-version links, baselines) and the change axis
-// (changes and their items, i.e. the blackboards of agent processes).
+// GraphService exposes the domain axis of the knowledge graph: versioned nodes, version-to-version links, baselines,
+// branches and tags. The change axis (changes, their impacts, objects, workspaces and the requests) is the
+// ChangeService of goap.change.v1 (ADR 0098 §9).
 service GraphService {
   // Domain axis
   rpc GetNode(GetNodeRequest) returns (GetNodeResponse);
@@ -27,93 +27,7 @@ service GraphService {
   rpc GetStructures(GetStructuresRequest) returns (GetStructuresResponse);
   // Whether a node type is written by platform administrators only (`adminOnly:` on the node type, ADR 0068).
   rpc IsAdminOnlyType(IsAdminOnlyTypeRequest) returns (IsAdminOnlyTypeResponse);
-  // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
-  rpc ListChangeEvents(ListChangeEventsRequest) returns (ListChangeEventsResponse);
-  // The log of a change (ADR 0030): its facts, journal records and impact events in one order, filtered on columns.
-  rpc ListChangeLog(ListChangeLogRequest) returns (ListChangeLogResponse);
-  // The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
-  rpc ExportChangeProvenance(ExportChangeProvenanceRequest) returns (ExportChangeProvenanceResponse);
-
-  // Change axis
-  rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
-  rpc GetChange(GetChangeRequest) returns (GetChangeResponse);
-  rpc ListChanges(ListChangesRequest) returns (ListChangesResponse);
-  // The versions a change starts from (the pre version of its change impacts), and the
-  // changes acting on a node (ADR 0024).
-  rpc GetChangeImpacts(GetChangeImpactsRequest) returns (GetChangeImpactsResponse);
   rpc ListNodeChanges(ListNodeChangesRequest) returns (ListNodeChangesResponse);
-  rpc UpdateChange(UpdateChangeRequest) returns (UpdateChangeResponse);
-  rpc MoveChange(MoveChangeRequest) returns (MoveChangeResponse);
-  rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
-  // Change objects (ADR 0098): what a change carries beyond its impacts, typed by the change object types of the domains.
-  rpc PutChangeObjects(PutChangeObjectsRequest) returns (PutChangeObjectsResponse);
-  rpc ListChangeObjects(ListChangeObjectsRequest) returns (ListChangeObjectsResponse);
-  // Impact operations, items and change objects written on a change in one transaction, all or none (ADR 0098).
-  rpc SubmitBatch(SubmitBatchRequest) returns (SubmitBatchResponse);
-  // Requests (ADR 0098): the origin of a piece of work, linked to the changes that answer it.
-  rpc CreateRequest(CreateRequestRequest) returns (RequestResponse);
-  rpc GetRequest(GetRequestRequest) returns (RequestResponse);
-  rpc ListRequests(ListRequestsRequest) returns (ListRequestsResponse);
-  rpc UpdateRequest(UpdateRequestRequest) returns (RequestResponse);
-  rpc SetRequestStatus(SetRequestStatusRequest) returns (RequestResponse);
-  rpc LinkRequest(LinkRequestRequest) returns (RequestResponse);
-  rpc UnlinkRequest(UnlinkRequestRequest) returns (RequestResponse);
-  rpc ListRequestLog(ListRequestLogRequest) returns (ListRequestLogResponse);
-  // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
-  // change branch, and accept or reject them (a comment is mandatory).
-  rpc ProposeImpact(ProposeImpactRequest) returns (ProposeImpactResponse);
-  // Node edits (ADR 0076, 0079): every write names a change, and a node has no version while the change works on it.
-  // ImpactNodeCreate and ImpactNodeCheckout give the node a draft (once per change and flow; the impact's post is the draft
-  // reference, version 0); ImpactNodeUpdate and the link operations edit it; an edit never reviews, an accepted review runs
-  // the checks of a version on the draft and writes nothing; ImpactNodeTransition moves a node along its lifecycle (the
-  // state of its draft, the node checked out first when it has none); ImpactNodeCancel drops the draft (a creation cancelled
-  // removes its impact). The versions are written when the change lands.
-  rpc ImpactNodeCreate(ImpactNodeCreateRequest) returns (ImpactNodeCreateResponse);
-  rpc ImpactNodeCheckout(ImpactNodeCheckoutRequest) returns (ImpactNodeCheckoutResponse);
-  rpc ImpactNodeUpdate(ImpactNodeUpdateRequest) returns (ImpactNodeUpdateResponse);
-  rpc ImpactLinkCreate(ImpactLinkCreateRequest) returns (ImpactLinkCreateResponse);
-  rpc ImpactLinkUpdate(ImpactLinkUpdateRequest) returns (ImpactLinkUpdateResponse);
-  rpc ImpactLinkDelete(ImpactLinkDeleteRequest) returns (ImpactLinkDeleteResponse);
-  rpc ImpactNodeTransition(ImpactNodeTransitionRequest) returns (ImpactNodeTransitionResponse);
-  rpc ImpactNodeCancel(ImpactNodeCancelRequest) returns (ImpactNodeCancelResponse);
-  // Merge nodes into a new one, split one into new ones, seen from the parent side (ADR 0077): the parents lose the
-  // links to the sources and gain the links to the successors, the sources stay untouched with the impact of their
-  // parent as via.
-  rpc ImpactNodeMerge(ImpactNodeMergeRequest) returns (ImpactNodeRestructureResponse);
-  rpc ImpactNodeSplit(ImpactNodeSplitRequest) returns (ImpactNodeRestructureResponse);
-  // Take a change impact out of the change, explicitly: its draft is dropped.
-  rpc WithdrawImpact(WithdrawImpactRequest) returns (WithdrawImpactResponse);
-  // Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
-  // the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
-  // conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
-  // ImpactNodeResolve keeps the sub-change's values for the conflicts left on an impact (an edit of a field settles its
-  // own); GetRebaseState tells the impacts behind the parent and the conflicts to settle.
-  rpc RebaseChange(RebaseChangeRequest) returns (RebaseChangeResponse);
-  rpc ImpactNodeResolve(ImpactNodeResolveRequest) returns (ImpactNodeResolveResponse);
-  rpc GetRebaseState(GetRebaseStateRequest) returns (GetRebaseStateResponse);
-  rpc ImpactNodeReview(ImpactNodeReviewRequest) returns (ImpactNodeReviewResponse);
-  // The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
-  // own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
-  // open review is changed by its author or an administrator only; submitted and discarded reviews are final.
-  // The mechanism under it: reviews of several impacts applied in one transaction, all or none, each stamped with the
-  // review id, and an optional item written with them.
-  rpc ImpactNodeReviewBatch(ImpactNodeReviewBatchRequest) returns (ImpactNodeReviewBatchResponse);
-  rpc ReviewOpen(ReviewOpenRequest) returns (ReviewResponse);
-  rpc ReviewUpdate(ReviewUpdateRequest) returns (ReviewResponse);
-  rpc ReviewSubmit(ReviewSubmitRequest) returns (ReviewResponse);
-  // Drop a review that was never submitted (final).
-  rpc ReviewDiscard(ReviewDiscardRequest) returns (ReviewResponse);
-  rpc ReopenChangeImpacts(ReopenChangeImpactsRequest) returns (ReopenChangeImpactsResponse);
-  // Producers: a whole change of node edits (change impacts, versions, reviews, apply) in one call.
-  rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
-  rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
-  rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
-  // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
-  // the expected world state) must hold, and it is journaled.
-  rpc TransitionChange(TransitionChangeRequest) returns (TransitionChangeResponse);
-  // Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
-  rpc DeleteChange(DeleteChangeRequest) returns (DeleteChangeResponse);
-
   // Version branches (ADR 0009)
   rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
@@ -128,50 +42,6 @@ service GraphService {
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
   // What going from a baseline to another changes, node by node (same namespace).
   rpc DiffBaselines(DiffBaselinesRequest) returns (DiffBaselinesResponse);
-  // Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
-  rpc MergeChange(MergeChangeRequest) returns (MergeChangeResponse);
-  // Nodes the change shares with other open changes (a merge will be needed).
-  rpc GetSharedNodes(GetSharedNodesRequest) returns (GetSharedNodesResponse);
-  // Splits a change along organisational boundaries: one sub-change per unit owning impacted nodes.
-  rpc SplitChange(SplitChangeRequest) returns (SplitChangeResponse);
-  rpc ListSubChanges(ListSubChangesRequest) returns (ListSubChangesResponse);
-  // Action flow branches: a relaunched step forks the flow, a human adopts or discards the branch.
-  rpc OpenFlow(OpenFlowRequest) returns (OpenFlowResponse);
-  rpc AdoptFlow(AdoptFlowRequest) returns (AdoptFlowResponse);
-  rpc DiscardFlow(DiscardFlowRequest) returns (DiscardFlowResponse);
-  rpc ListFlows(ListFlowsRequest) returns (ListFlowsResponse);
-  // Applies the proposals of a flow on a graph branch of its own (a preview, merged when the flow is adopted).
-  // Consistency check of the blackboard as a process on a flow sees it.
-  rpc ValidateBoard(ValidateBoardRequest) returns (ValidateBoardResponse);
-  // Options of a change (ADR 0009 §3, ADR 0032 §6): hypotheses explored on flows of their own; the active one is
-  // where every call that names no flow goes ("main" names the main flow).
-  rpc OpenOption(OpenOptionRequest) returns (OpenOptionResponse);
-  rpc ActivateOption(ActivateOptionRequest) returns (ActivateOptionResponse);
-  rpc EvaluateOption(EvaluateOptionRequest) returns (EvaluateOptionResponse);
-  rpc SelectOption(SelectOptionRequest) returns (SelectOptionResponse);
-  rpc RejectOption(RejectOptionRequest) returns (RejectOptionResponse);
-  rpc ListOptions(ListOptionsRequest) returns (ListOptionsResponse);
-  rpc CompareOptions(CompareOptionsRequest) returns (CompareOptionsResponse);
-  // The impacts two flows of a change see, compared (ADR 0083): added, removed or modified, with the attribute-level
-  // changes of a modified one; the identical ones are counted, not listed.
-  rpc DiffFlows(DiffFlowsRequest) returns (DiffFlowsResponse);
-  // The graph a change sees at a level (written, accepted, landed) on a flow (ADR 0032 §5), and the graph a call on
-  // the change reads (the active option's, else the reference baseline).
-  rpc GetChangeView(GetChangeViewRequest) returns (GetChangeViewResponse);
-  // Decision points of a change (ADR 0009 §4): opened, ruled (decided or undecidable with questions), their questions
-  // answered, an agent ruling below the threshold ratified by a person; a decided point selects its option.
-  rpc OpenDecision(OpenDecisionRequest) returns (OpenDecisionResponse);
-  rpc RuleDecision(RuleDecisionRequest) returns (RuleDecisionResponse);
-  rpc AnswerQuestion(AnswerQuestionRequest) returns (AnswerQuestionResponse);
-  rpc RatifyDecision(RatifyDecisionRequest) returns (RatifyDecisionResponse);
-  rpc ListDecisionPoints(ListDecisionPointsRequest) returns (ListDecisionPointsResponse);
-  rpc GetChangeGraph(GetChangeGraphRequest) returns (GetChangeGraphResponse);
-
-  // The execution journal (ADR 0011, pkg/journal) is entries of the log of a change: appended with AppendLog, read as
-  // records with ListExecutions (or as entries with ListChangeLog)
-  rpc AppendLog(AppendLogRequest) returns (AppendLogResponse);
-  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse);
-
   // Node index (ADR 0026): publishes again the event of every node version and the head of main, to
   // rebuild an index. Requires `admin` on the `platform` resource.
   rpc RepublishIndex(RepublishIndexRequest) returns (RepublishIndexResponse);

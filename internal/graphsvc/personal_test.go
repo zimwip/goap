@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/zimwip/goap/gen/goap/change/v1/changev1connect"
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -33,9 +34,10 @@ func TestPersonalChange(t *testing.T) {
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
+	mux.Handle(changev1connect.NewChangeServiceHandler(h, connect.WithInterceptors(h.PersonalScope())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	cl := newRPCClient(srv.Client(), srv.URL)
 	as := func(subject string) func(r connect.AnyRequest) {
 		return func(r connect.AnyRequest) { identity.SetHeaders(authz.Principal{Subject: subject}, r.Header()) }
 	}
@@ -134,9 +136,10 @@ func TestUserCreatedAutomatically(t *testing.T) {
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope(), h.EnsureCaller()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
+	mux.Handle(changev1connect.NewChangeServiceHandler(h, connect.WithInterceptors(h.PersonalScope(), h.EnsureCaller())))
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	cl := newRPCClient(srv.Client(), srv.URL)
 
 	// bob only lists changes (no @me, no personal change involved): he still gets a User node.
 	list := connect.NewRequest(&graphv1.ListChangesRequest{})
