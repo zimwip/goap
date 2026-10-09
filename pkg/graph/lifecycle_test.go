@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -94,14 +95,14 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 	}
 }
 
-// A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
-// (the guardian of the change, Guardian.MayCommit, ADR 0098), not the node-type lifecycle's landable-state floor: the activity's call on content/state
-// maturity replaces the blanket "state cannot land" check, rather than adding to it.
-func TestActivityGoalsGateReplacesLandableFloor(t *testing.T) {
-	forEachRepo(t, testActivityGoalsGateReplacesLandableFloor)
+// The rules of the graph are never lifted by the guardian of a change (ADR 0098): a change scoped to an Activity
+// (architecture plan "Activity concept") is gated by its own goal condition (Guardian.MayCommit) on top of the landable
+// state floor of the node lifecycles (ADR 0078), never instead of it.
+func TestGuardianAddsToTheLandableFloor(t *testing.T) {
+	forEachRepo(t, testGuardianAddsToTheLandableFloor)
 }
 
-func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
+func testGuardianAddsToTheLandableFloor(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newLifecycleWorld(t, repo)
 	gd := &testGuardian{}
@@ -118,29 +119,24 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	}
 	w.accept(t, c)
 
-	// a guardian that does not decide: the landable-state floor still applies
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot land") {
-		t.Fatalf("no hook: landable floor must still apply: %v", err)
-	}
-
 	var gotRef string
 	var gotBB domain.Blackboard
 	met := false
-	gd.commit = func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
-		ref, _ := c.Data["scope"].(string)
-		if ref == "" {
-			return false, false, nil
+	gd.commit = func(_ context.Context, c domain.Change, bb domain.Blackboard) error {
+		gotRef, _ = c.Data["scope"].(string)
+		gotBB = bb
+		if !met {
+			return fmt.Errorf("the goal of the activity is not met: %w", ErrInvalid)
 		}
-		gotRef, gotBB = ref, bb
-		return true, met, nil
+		return nil
 	}
 
-	// the hook says no: refused, by the activity's own message, not the landable-state one
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "refuses its landing") {
-		t.Fatalf("hook unmet: %v", err)
+	// the guardian says no: refused, by its own message
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "goal of the activity") {
+		t.Fatalf("guardian unmet: %v", err)
 	}
 	if gotRef != "deliver/draft-requirement" || len(gotBB.Change.Nodes) != 1 || gotBB.Change.Nodes[0].ID != id {
-		t.Fatalf("hook arguments: ref=%q change=%+v", gotRef, gotBB.Change)
+		t.Fatalf("guardian arguments: ref=%q change=%+v", gotRef, gotBB.Change)
 	}
 	// the blackboard is hydrated with the pending write this Apply is about to land, including its draft state
 	post := gotBB.Change.Nodes[0].Post
@@ -151,13 +147,21 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 		t.Fatalf("blackboard must see this change's own pending write: %+v, ok=%v", v, ok)
 	}
 
-	// the hook says yes: applies even though REQ-2 is left in the not landable "draft" state
+	// the guardian says yes: REQ-2 is still left in the not landable "draft" state, which the graph refuses
 	met = true
-	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatalf("hook met: the activity goal replaces the landable floor: %v", err)
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "cannot land") {
+		t.Fatalf("the landable floor is not lifted by the guardian: %v", err)
 	}
-	if n, err := stateOf(t, w.g, w.req2.ID); err != nil || n.State != "draft" {
-		t.Fatalf("REQ-2 must land in draft: %+v %v", n, err)
+	// moved to a landable state, it lands
+	if err := w.write(c, id, edit{State: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+	w.accept(t, c)
+	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
+		t.Fatalf("both rules hold: %v", err)
+	}
+	if n, err := stateOf(t, w.g, w.req2.ID); err != nil || n.State != "approved" {
+		t.Fatalf("REQ-2 lands approved: %+v %v", n, err)
 	}
 }
 
@@ -520,7 +524,7 @@ func testChangeStatusMachine(t *testing.T, repo Repo) {
 
 // testGuardian is a guardian (ADR 0098) whose answers the tests set; an unset answer accepts and decides nothing.
 type testGuardian struct {
-	commit func(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error)
+	commit func(ctx context.Context, c domain.Change, bb domain.Blackboard) error
 	child  func(ctx context.Context, parent, child domain.Change) error
 	move   func(ctx context.Context, family []domain.Change, to string) error
 	edit   func(ctx context.Context, c domain.Change, impact domain.ChangeImpactID) error
@@ -533,9 +537,9 @@ func (gd *testGuardian) MayEdit(ctx context.Context, c domain.Change, impact dom
 	return gd.edit(ctx, c, impact)
 }
 
-func (gd *testGuardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+func (gd *testGuardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) error {
 	if gd.commit == nil {
-		return false, false, nil
+		return nil
 	}
 	return gd.commit(ctx, c, bb)
 }

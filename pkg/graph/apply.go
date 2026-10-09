@@ -130,8 +130,8 @@ func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselin
 // writes (the stores are not reentrant).
 var errCollected = errors.New("transitions collected")
 
-// landingDecision is what the guardian of a change answered about its landing (Guardian.MayCommit).
-type landingDecision struct{ decided, ok bool }
+// landingDecision says the guardian of a change accepted its landing (Guardian.MayCommit), asked before the transaction.
+type landingDecision struct{}
 
 // askLandingGate asks the guardian of the change (ADR 0098) about its landing before the transaction that applies it:
 // the guardian may read the graph itself, which a transaction held by the apply would block (the stores are not
@@ -181,11 +181,10 @@ func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing
 	if !haveBB {
 		return nil, nil
 	}
-	decided, ok, err := gd.MayCommit(ctx, change, bb)
-	if err != nil {
+	if err := gd.MayCommit(ctx, change, bb); err != nil {
 		return nil, err
 	}
-	return &landingDecision{decided: decided, ok: ok}, nil
+	return &landingDecision{}, nil
 }
 
 // pendingMove is a lifecycle transition, from the state of node.

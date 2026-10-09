@@ -662,10 +662,10 @@ message MayCommitRequest {
   goap.graph.v1.GetBlackboardResponse blackboard = 1;
 }
 
+// a refusal is an error of the call; the guardian only adds to the rules of the graph, it lifts none
 message MayCommitResponse {
-  // decided: ok replaces the floor of the landable states; not decided leaves it in force
-  bool decided = 1;
-  bool ok = 2;
+  reserved 1, 2;
+  reserved "decided", "ok";
 }
 
 message MayCreateChildRequest {

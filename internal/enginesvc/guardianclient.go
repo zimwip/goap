@@ -31,13 +31,10 @@ func NewGuardianClient(hc *http.Client, baseURL string, opts ...connect.ClientOp
 }
 
 // MayCommit implements changeapi.Guardian.
-func (c *GuardianClient) MayCommit(ctx context.Context, ch domain.Change, bb domain.Blackboard) (bool, bool, error) {
+func (c *GuardianClient) MayCommit(ctx context.Context, ch domain.Change, bb domain.Blackboard) error {
 	bb.Change = ch
-	r, err := c.rpc.MayCommit(ctx, connect.NewRequest(&enginev1.MayCommitRequest{Blackboard: pbconv.BlackboardToPB(bb)}))
-	if err != nil {
-		return false, false, rpcerr.FromConnect(err)
-	}
-	return r.Msg.Decided, r.Msg.Ok, nil
+	_, err := c.rpc.MayCommit(ctx, connect.NewRequest(&enginev1.MayCommitRequest{Blackboard: pbconv.BlackboardToPB(bb)}))
+	return rpcerr.FromConnect(err)
 }
 
 // MayCreateChild implements changeapi.Guardian.

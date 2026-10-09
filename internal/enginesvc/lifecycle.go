@@ -48,11 +48,10 @@ func (g *GuardianHandler) ctx(ctx context.Context, r connect.AnyRequest) context
 // MayCommit implements enginev1connect.GuardianServiceHandler.
 func (g *GuardianHandler) MayCommit(ctx context.Context, r *connect.Request[enginev1.MayCommitRequest]) (*connect.Response[enginev1.MayCommitResponse], error) {
 	bb := pbconv.BlackboardFromPB(r.Msg.Blackboard)
-	decided, ok, err := g.Guardian.MayCommit(g.ctx(ctx, r), bb.Change, bb)
-	if err != nil {
+	if err := g.Guardian.MayCommit(g.ctx(ctx, r), bb.Change, bb); err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&enginev1.MayCommitResponse{Decided: decided, Ok: ok}), nil
+	return connect.NewResponse(&enginev1.MayCommitResponse{}), nil
 }
 
 // MayCreateChild implements enginev1connect.GuardianServiceHandler.

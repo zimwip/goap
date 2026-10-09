@@ -355,9 +355,6 @@ func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing
 	if c.Guardian != "" && landing == nil {
 		return fmt.Errorf("change %s: its guardian was not asked before this transaction: %w", c.ID, ErrInvalid)
 	}
-	if landing != nil && landing.decided && !landing.ok {
-		return invalidf("the guardian of the change refuses its landing")
-	}
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
 	if err != nil {
 		return err

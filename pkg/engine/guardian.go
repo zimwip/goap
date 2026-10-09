@@ -16,8 +16,9 @@ const GuardianName = "methodology"
 // Guardian is the guardian of the changes governed by a methodology (changeapi.Guardian, ADR 0098): the methodology
 // defines the lifecycle of a change and its rules, the change follows them through its guardian. It freezes the
 // impacts started in a state the change has left (MayEdit) and lands a change only in a final state of its lifecycle
-// (MayCommit); Next adds the rules of the registry (the goal of the Activity a change is scoped to, the sub_activity
-// cascade of its sub-changes, the projects a change may move between); nil: none.
+// (MayCommit, on top of the rules of the graph, which no guardian lifts); Next adds the rules of the registry (the goal
+// of the Activity a change is scoped to, the sub_activity cascade of its sub-changes, the projects a change may move
+// between); nil: none.
 type Guardian struct {
 	Engine *Engine
 	Next   changeapi.Guardian
@@ -64,22 +65,22 @@ func (gd Guardian) MayEdit(ctx context.Context, c domain.Change, impact domain.C
 }
 
 // MayCommit implements changeapi.Guardian: a change following a lifecycle lands in a final state of it (ADR 0058 §4).
-func (gd Guardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {
+func (gd Guardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) error {
 	lc, v, err := gd.lifecycle(ctx, c)
 	if err != nil {
-		return false, false, err
+		return err
 	}
 	if lc != nil {
 		cur := stateOf(v, lc)
 		if s, found := lc.State(cur.State); !found || !s.Final {
-			return false, false, fmt.Errorf("change %s is in state %s of lifecycle %s: it can be applied once it is in a final state: %w",
+			return fmt.Errorf("change %s is in state %s of lifecycle %s: it can be applied once it is in a final state: %w",
 				c.ID, cur.State, lc.Name, changeapi.ErrConflict)
 		}
 	}
 	if gd.Next != nil {
 		return gd.Next.MayCommit(ctx, c, bb)
 	}
-	return false, false, nil
+	return nil
 }
 
 // MayCreateChild implements changeapi.Guardian.

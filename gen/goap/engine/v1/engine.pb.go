@@ -4882,11 +4882,9 @@ func (x *MayCommitRequest) GetBlackboard() *v1.GetBlackboardResponse {
 	return nil
 }
 
+// a refusal is an error of the call; the guardian only adds to the rules of the graph, it lifts none
 type MayCommitResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// decided: ok replaces the floor of the landable states; not decided leaves it in force
-	Decided       bool `protobuf:"varint,1,opt,name=decided,proto3" json:"decided,omitempty"`
-	Ok            bool `protobuf:"varint,2,opt,name=ok,proto3" json:"ok,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4919,20 +4917,6 @@ func (x *MayCommitResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use MayCommitResponse.ProtoReflect.Descriptor instead.
 func (*MayCommitResponse) Descriptor() ([]byte, []int) {
 	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{66}
-}
-
-func (x *MayCommitResponse) GetDecided() bool {
-	if x != nil {
-		return x.Decided
-	}
-	return false
-}
-
-func (x *MayCommitResponse) GetOk() bool {
-	if x != nil {
-		return x.Ok
-	}
-	return false
 }
 
 type MayCreateChildRequest struct {
@@ -5655,10 +5639,8 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x10MayCommitRequest\x12D\n" +
 	"\n" +
 	"blackboard\x18\x01 \x01(\v2$.goap.graph.v1.GetBlackboardResponseR\n" +
-	"blackboard\"=\n" +
-	"\x11MayCommitResponse\x12\x18\n" +
-	"\adecided\x18\x01 \x01(\bR\adecided\x12\x0e\n" +
-	"\x02ok\x18\x02 \x01(\bR\x02ok\"s\n" +
+	"blackboard\",\n" +
+	"\x11MayCommitResponseJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03R\adecidedR\x02ok\"s\n" +
 	"\x15MayCreateChildRequest\x12-\n" +
 	"\x06parent\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06parent\x12+\n" +
 	"\x05child\x18\x02 \x01(\v2\x15.goap.graph.v1.ChangeR\x05child\"\x18\n" +

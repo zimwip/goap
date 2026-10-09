@@ -157,13 +157,19 @@ one generic port and does not know what is checked:
 
 ```go
 type Guardian interface {
-    // decided replaces the floor of the landable states (ADR 0078) by ok; not decided leaves it in force
-    MayCommit(ctx context.Context, c Change, bb Blackboard) (decided, ok bool, err error)
+    // a refusal only: the rules of the graph stand whatever the guardian says
+    MayCommit(ctx context.Context, c Change, bb Blackboard) error
     MayCreateChild(ctx context.Context, parent, child Change) error
     MayMove(ctx context.Context, family []Change, to string) error
+    // an operation on an impact the change holds (an edit, a link, a transition, a cancellation, a withdrawal)
+    MayEdit(ctx context.Context, c Change, impact ChangeImpactID) error
 }
 ```
 
+- **The rules of the graph are plumbing, and no guardian lifts them**: a change lands only when none of its impacts
+  awaits a review (the accepted ones land, the rejected ones are left out of the result), and only when every node it
+  lands is in a landable state of its lifecycle (ADR 0078). The guardian only adds rules: the maturity of the work,
+  which the methodology moves forward (its lifecycle, its gates, the goal of an Activity).
 - The change asks the guardian named in its header; an unknown or unreachable guardian refuses (fail closed).
 - A change with no guardian is free (manual editing, seeds, administration).
 - The engine is the guardian `"engine"`: it sets the name in the same `Submit` as the first methodology change object of the
@@ -385,7 +391,8 @@ No methodology references a change object type yet (phase 5).
 
 **Phase 3 (done)**: the guardian port.
 
-- `graph.Guardian` (`pkg/graph/guardian.go`) with `MayCommit(c, bb) (decided, ok)`, `MayCreateChild`, `MayMove(family,
+- `graph.Guardian` (`pkg/graph/guardian.go`) with `MayCommit(c, bb)` (it first answered `(decided, ok)`, a decision
+  that could replace the landable floor; it is a refusal only since phase 5), `MayCreateChild`, `MayMove(family,
   to)`; `Change.Guardian` (column `guardian` in both dialects, `graph.v1` `Change.guardian`, web type), set by
   `NewChange.Guardian`, else the parent's for a sub-change, else `Graph.DefaultGuardian` for a root change.
   `Graph.Guardians` resolves the name; a name it cannot resolve refuses the landing, the sub-changes and the moves of the
@@ -476,6 +483,9 @@ No methodology references a change object type yet (phase 5).
   served by `cmd/engine`, without the registry's rules there.
 - The web reads the lifecycle from the methodology and the state from the change objects (`lifecycleState`), and moves
   through `engine.transitionChange`; the assistant reads the state from the objects.
+- `MayCommit` only refuses: the graph keeps its own rules (no impact awaiting a review, the landable states of ADR
+  0078), which the guardian adds to and never lifts; the goal of an Activity (`registrysvc.Service.LandingGate`) is
+  checked on top of the landable floor, no longer instead of it.
 - Not done: the methodology and goal columns of the header, the items, options and decision points; the guardian's
   answers over RPC carry the change with its impacts (no lighter form yet).
 

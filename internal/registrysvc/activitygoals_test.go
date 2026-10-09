@@ -44,7 +44,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	}
 
 	// the process's goal ("signed") is not yet met: Apply refuses with the activity's own message
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "refuses its landing") {
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "goal of activity") {
 		t.Fatalf("goal unmet: %v", err)
 	}
 
@@ -52,7 +52,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "note", Status: domain.ItemAccepted}}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "refuses its landing") {
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "goal of activity") {
 		t.Fatalf("unrelated artifact: %v", err)
 	}
 

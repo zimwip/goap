@@ -146,7 +146,7 @@ func (r *guardianRef) get() changeapi.Guardian {
 }
 
 // MayCommit implements changeapi.Guardian.
-func (r *guardianRef) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+func (r *guardianRef) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) error {
 	return r.get().MayCommit(ctx, c, bb)
 }
 

@@ -323,10 +323,11 @@ func IsWorking(c domain.Change, flow string, n domain.Node) bool {
 // guardian a change names (Change.Guardian) and refuses the operation when it cannot reach it. Every method runs
 // outside any transaction of the change and may read it.
 type Guardian interface {
-	// MayCommit decides whether c lands, on the blackboard its landing builds (the change and its impacts hydrated with
-	// the versions it writes): decided replaces the floor of the landable states (ADR 0078) by ok; not decided leaves
-	// the floor in force; an error refuses the landing.
-	MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+	// MayCommit accepts or refuses the landing of c, on the blackboard its landing builds (the change and its impacts
+	// hydrated with the versions it writes). It only adds to the rules of the graph, which no guardian lifts: every
+	// impact reviewed (the accepted ones land, the rejected ones are left out) and every node in a landable state of its
+	// lifecycle (ADR 0078).
+	MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) error
 	// MayCreateChild accepts or refuses a sub-change of parent, before it is stored.
 	MayCreateChild(ctx context.Context, parent, child domain.Change) error
 	// MayMove accepts or refuses the move of a family of changes (a root change and its open sub-changes) to project to

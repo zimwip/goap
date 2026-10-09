@@ -1,6 +1,6 @@
 # ADR 0066 — Activity, execution journal and blackboard facets out of the graph core
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0011, 0030, 0059, 0065.
+**Status**: accepted, implemented; `LandingGate` became the guardian of the change (ADR 0098), which adds to the landable floor and no longer replaces it · **Date**: 2026-10 · Builds on ADR 0011, 0030, 0059, 0065.
 
 ## Context
 

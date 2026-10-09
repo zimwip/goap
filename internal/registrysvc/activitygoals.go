@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -22,15 +23,21 @@ func ActivityOf(c domain.Change) string {
 }
 
 // LandingGate is the landing rule of the guardian of the registry (Guardian.MayCommit, ADR 0098): a change scoped to an
-// Activity (DataActivity) is gated at landing by that activity's own goal condition instead of the node-type
-// lifecycle's landable-state floor; any other change is not decided.
-func (s *Service) LandingGate(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {
+// Activity (DataActivity) lands once that activity's own goal condition holds, on top of the rules of the graph (every
+// impact reviewed, every node in a landable state), which it never lifts; any other change is not held to it.
+func (s *Service) LandingGate(ctx context.Context, c domain.Change, bb domain.Blackboard) error {
 	ref := ActivityOf(c)
 	if ref == "" {
-		return false, false, nil
+		return nil
 	}
-	ok, err = s.ActivityGoalsMet(ctx, ref, bb)
-	return err == nil, ok, err
+	ok, err := s.ActivityGoalsMet(ctx, ref, bb)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return fmt.Errorf("the goal of activity %s is not met: the change cannot land yet: %w", ref, graph.ErrInvalid)
+	}
+	return nil
 }
 
 // ActivityGoalsMet: given an Activity's node key, it loads and compiles that activity's own methodology version,

@@ -228,7 +228,8 @@ func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 	return nil
 }
 
-// settleChangeImpacts decides what the walk found: the guardian of the change, else the states left that cannot land.
+// settleChangeImpacts decides what the walk found: the states left that cannot land refuse the landing, whatever the
+// guardian of the change said (it only adds rules: ADR 0098).
 func (a *applier) settleChangeImpacts(stuck []string) error {
 	// The guardian of the change (ADR 0098) may itself need to read the graph, which this transaction would block (the
 	// stores are not reentrant): askLandingGate asks it in its own rolled-back pass before this transaction opens, and
@@ -240,12 +241,7 @@ func (a *applier) settleChangeImpacts(stuck []string) error {
 	if a.change.Guardian != "" && a.landing == nil {
 		return fmt.Errorf("change %s: its guardian was not asked before this transaction: %w", a.change.ID, ErrInvalid)
 	}
-	switch {
-	case a.landing != nil && a.landing.decided:
-		if !a.landing.ok {
-			return invalidf("the guardian of the change refuses its landing")
-		}
-	case len(stuck) > 0:
+	if len(stuck) > 0 {
 		return invalidf("the change leaves nodes in a state that cannot land, move them to a landable state first: %s", joinSorted(stuck))
 	}
 	return nil

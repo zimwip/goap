@@ -64,9 +64,9 @@ func testGuardians(t *testing.T, repo Repo) {
 		t.Fatalf("the landing of a change whose guardian is missing: %v", err)
 	}
 	// a free change lands without asking anyone
-	gd.commit = func(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
+	gd.commit = func(context.Context, domain.Change, domain.Blackboard) error {
 		t.Fatal("a free change asks no guardian")
-		return false, false, nil
+		return nil
 	}
 	must[domain.Baseline](t)(g.Apply(ctx, free.ID, ""))
 }

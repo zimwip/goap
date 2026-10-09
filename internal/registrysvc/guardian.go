@@ -26,7 +26,10 @@ type Guardian struct {
 var _ graph.Guardian = Guardian{}
 
 // MayCommit implements graph.Guardian.
-func (gd Guardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error) {
+func (gd Guardian) MayCommit(ctx context.Context, c domain.Change, bb domain.Blackboard) error {
+	if gd.Service == nil {
+		return nil
+	}
 	return gd.Service.LandingGate(ctx, c, bb)
 }
 

@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -378,9 +379,12 @@ func testSubChangeLandingGate(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.accept(ctx, sub.ID, child.ID, "reviewer", "ok"))
 	allow := false
 	var seen domain.Blackboard
-	gd.commit = func(_ context.Context, _ domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	gd.commit = func(_ context.Context, _ domain.Change, bb domain.Blackboard) error {
 		seen = bb
-		return true, allow, nil
+		if !allow {
+			return fmt.Errorf("refused: %w", ErrInvalid)
+		}
+		return nil
 	}
 	if _, err := g.Apply(ctx, sub.ID, ""); err == nil {
 		t.Fatal("a gate that refuses keeps the sub-change from committing")

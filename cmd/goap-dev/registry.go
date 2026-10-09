@@ -36,9 +36,9 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
 	// the guardian of the changes (ADR 0098), the engine once it exists (buildEngine): the lifecycle of the methodology
-	// of a change and what it freezes, then the rules of the registry: a change scoped to an Activity is gated by its own
-	// goal condition at Apply, not the node-type lifecycle's landable-state floor (architecture plan "Activity concept"),
-	// its sub-changes stay in its activity and it moves only between projects applying its methodology
+	// of a change and what it freezes, then the rules of the registry: a change scoped to an Activity lands once its own
+	// goal condition holds, on top of the rules of the graph (reviews, landable states), never instead of them; its
+	// sub-changes stay in its activity and it moves only between projects applying its methodology
 	e.guardian.set(registrysvc.Guardian{Service: reg, Directory: gp.directory})
 	g.Guardians = map[string]graph.Guardian{engine.GuardianName: e.guardian}
 	g.DefaultGuardian = engine.GuardianName
