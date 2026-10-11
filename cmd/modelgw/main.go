@@ -33,7 +33,8 @@ func main() {
 	// providers, models and aliases are nodes of the graph; API keys are references resolved here
 	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphsvc.NewClient(hc, graphURL, telemetry.ClientOptions()...)}, store, secrets.Resolve, log)
 	svc.Vault = secrets.Put
-	svc.Router.Instrument = telemetry.NewGenAI().Instrument
+	genai := telemetry.NewGenAI()
+	svc.Router.Instrument, svc.Router.InstrumentEmbed = genai.Instrument, genai.InstrumentEmbed
 	if err := svc.Reload(ctx); err != nil {
 		log.Warn("model configuration not read yet", "err", err)
 	}

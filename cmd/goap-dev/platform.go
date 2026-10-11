@@ -36,7 +36,8 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	e.secrets.Dir = st.dir
 	gw := modelgw.NewService(&llmcfg.Directory{Graph: g}, st.models, e.secrets.Resolve, e.log)
 	gw.Vault = e.secrets.Put
-	gw.Router.Instrument = telemetry.NewGenAI().Instrument
+	genai := telemetry.NewGenAI()
+	gw.Router.Instrument, gw.Router.InstrumentEmbed = genai.Instrument, genai.InstrumentEmbed
 	gw.Authz = gp.authorizer // the roles a model requires are held on the caller's project (ADR 0043)
 	if err := gw.Reload(e.ctx); err != nil {
 		return nil, wrap("models", err)

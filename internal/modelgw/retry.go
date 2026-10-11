@@ -34,6 +34,20 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("%d %s: %s", e.Code, http.StatusText(e.Code), e.Msg)
 }
 
+// ErrorType implements the classification of llm.ErrorType: the HTTP status.
+func (e *StatusError) ErrorType() string { return strconv.Itoa(e.Code) }
+
+// sdkError is an error of a provider SDK that retries on its own: classified by its HTTP status like a StatusError,
+// never retried by the router.
+type sdkError struct {
+	code int
+	err  error
+}
+
+func (e *sdkError) Error() string     { return e.err.Error() }
+func (e *sdkError) Unwrap() error     { return e.err }
+func (e *sdkError) ErrorType() string { return strconv.Itoa(e.code) }
+
 func statusErrorOf(resp *http.Response, body string) *StatusError {
 	e := &StatusError{Code: resp.StatusCode, Msg: body}
 	if s := resp.Header.Get("Retry-After"); s != "" {
@@ -87,7 +101,9 @@ func (r *Router) completeWithRetry(ctx context.Context, p Provider, model string
 		if err == nil || !ok || attempt >= retries {
 			return resp, err
 		}
-		t := time.NewTimer(r.backoff(attempt, asked))
+		wait := r.backoff(attempt, asked)
+		llm.RetryObserverFrom(ctx)(attempt+1, err, wait)
+		t := time.NewTimer(wait)
 		select {
 		case <-ctx.Done():
 			t.Stop()

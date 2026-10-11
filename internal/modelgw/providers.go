@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -77,10 +78,14 @@ func (a *Anthropic) Complete(ctx context.Context, model string, req llm.Request)
 	}
 	msg, err := a.client.Beta.Messages.New(ctx, params)
 	if err != nil {
+		var apiErr *anthropic.Error
+		if errors.As(err, &apiErr) {
+			err = &sdkError{code: apiErr.StatusCode, err: err}
+		}
 		return llm.Response{}, err
 	}
 	if msg.StopReason == anthropic.BetaStopReasonRefusal {
-		return llm.Response{}, fmt.Errorf("model refused the request")
+		return llm.Response{}, llm.ErrRefusal
 	}
 	var text strings.Builder
 	for _, block := range msg.Content {

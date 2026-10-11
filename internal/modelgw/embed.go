@@ -29,14 +29,26 @@ func (r *Router) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedResp
 	if !ok {
 		return llm.EmbedResponse{}, fmt.Errorf("%s/%s: the provider cannot embed", t.Provider, t.Model)
 	}
-	vecs, tokens, err := e.Embed(ctx, t.Model, req.Texts)
+	call := func(ctx context.Context) (llm.EmbedResponse, error) {
+		vecs, tokens, err := e.Embed(ctx, t.Model, req.Texts)
+		if err != nil {
+			return llm.EmbedResponse{}, err
+		}
+		if len(vecs) != len(req.Texts) {
+			return llm.EmbedResponse{}, fmt.Errorf("%d vectors for %d texts", len(vecs), len(req.Texts))
+		}
+		return llm.EmbedResponse{Vectors: vecs, Provider: t.Provider, Model: t.Model, Tokens: tokens}, nil
+	}
+	var resp llm.EmbedResponse
+	if r.InstrumentEmbed != nil {
+		resp, err = r.InstrumentEmbed(ctx, t.Provider, t.Model, len(req.Texts), call)
+	} else {
+		resp, err = call(ctx)
+	}
 	if err != nil {
 		return llm.EmbedResponse{}, fmt.Errorf("%s/%s: %w", t.Provider, t.Model, err)
 	}
-	if len(vecs) != len(req.Texts) {
-		return llm.EmbedResponse{}, fmt.Errorf("%s/%s: %d vectors for %d texts", t.Provider, t.Model, len(vecs), len(req.Texts))
-	}
-	return llm.EmbedResponse{Vectors: vecs, Provider: t.Provider, Model: t.Model, Tokens: tokens}, nil
+	return resp, nil
 }
 
 // Embed implements Embedder on an OpenAI-compatible /embeddings endpoint.

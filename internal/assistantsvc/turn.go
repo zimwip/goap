@@ -47,6 +47,8 @@ type turn struct {
 	// holds so far
 	uiTools            map[string]UITool
 	effects, proposals int
+	// rounds and toolCalls count the model calls and the tools run, for the span of the turn
+	rounds, toolCalls int
 }
 
 type toolCall struct {
@@ -66,7 +68,9 @@ func (t *turn) run(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, TurnTimeout)
 	defer cancel()
 	defer t.s.timed(ctx, "turn", time.Now())
+	ctx, end := t.startTurn(ctx)
 	text, err := t.loop(ctx)
+	end(err)
 	c := convsvc.Content{Text: text, Actions: t.actions, Status: convsvc.StatusDone}
 	if err != nil {
 		t.s.log().Warn("assistant turn failed", "conversation", t.conversation, "subject", t.p.Subject, "err", err)
@@ -115,6 +119,7 @@ func (t *turn) loop(ctx context.Context) (string, error) {
 		t0 := time.Now()
 		sys := systemPrompt(t.in.Context, t.project, t.in.UITools)
 		// the rounds of a turn send the same system text and history again: cache them
+		t.rounds = round
 		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: sys, Messages: slices.Clone(d), JSON: true, MaxTokens: 2048, Cache: true})
 		t.s.timed(ctx, "turn.model", t0, "round", round, "system_bytes", len(sys), "history_bytes", d.size())
 		if err != nil {
@@ -188,7 +193,10 @@ func (t *turn) runTools(ctx context.Context, calls []toolCall) (string, bool) {
 			err = fmt.Errorf("too many tool calls in one round (at most %d)", MaxToolCalls)
 		default:
 			t0 := time.Now()
-			r.Result, err = t.tool(ctx, c)
+			tctx, end := startTool(ctx, c.Name)
+			r.Result, err = t.tool(tctx, c)
+			end(err)
+			t.toolCalls++
 			t.s.timed(ctx, "turn.tool", t0, "tool", c.Name, "failed", err != nil)
 		}
 		if err != nil {

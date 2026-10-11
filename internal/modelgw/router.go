@@ -37,6 +37,8 @@ func parseTarget(s string) (Target, bool) {
 type Router struct {
 	// Instrument wraps every provider call (OpenTelemetry GenAI spans and metrics).
 	Instrument func(ctx context.Context, provider, model string, req llm.Request, call func(context.Context) (llm.Response, error)) (llm.Response, error)
+	// InstrumentEmbed wraps every provider embedding call (OpenTelemetry GenAI spans and metrics).
+	InstrumentEmbed func(ctx context.Context, provider, model string, texts int, call func(context.Context) (llm.EmbedResponse, error)) (llm.EmbedResponse, error)
 	// Retries bounds the retries of a transient provider failure (retry.go): 0 is DefaultRetries, negative none.
 	Retries int
 	// RetryBase is the first backoff (0: one second); the next ones double it, with jitter.

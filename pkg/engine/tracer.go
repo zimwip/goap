@@ -28,6 +28,19 @@ func (nopTracer) StartTool(ctx context.Context, _ *Process, _, _ string) (contex
 }
 func (nopTracer) TraceID(context.Context) string { return "" }
 
+// EventTracer is a Tracer that also records events on the span of ctx (optional): what happens inside an action
+// that is not a span of its own (a repaired answer of the model, a refused tool call).
+type EventTracer interface {
+	Event(ctx context.Context, name string, attrs map[string]any)
+}
+
+// event records an event on the span of ctx when the tracer records events.
+func (e *Engine) event(ctx context.Context, name string, attrs map[string]any) {
+	if t, ok := e.tracer().(EventTracer); ok {
+		t.Event(ctx, name, attrs)
+	}
+}
+
 func (e *Engine) tracer() Tracer {
 	if e.Tracer == nil {
 		return nopTracer{}

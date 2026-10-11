@@ -889,13 +889,26 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
   PostgreSQL (pgx), NATS (headers), sandboxes (the runner continues the action's trace);
 - **one process = one trace**: root span `process <agent>` (the `traceparent` is kept in the
   process, background executions continue it), an `action <name>` span per action;
-- **LLM calls**: span `chat <model>` (GenAI semantic conventions: `gen_ai.system` and its successor
-  `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens` /
-  `cache_read.input_tokens` / `cache_creation.input_tokens`, `gen_ai.response.finish_reasons`…; one span per call,
-  the gateway's retries of a transient failure included) attributed to the process, the
-  agent, and the action via **baggage** propagated from the engine to the model gateway; metrics
-  `gen_ai.client.token.usage` and `gen_ai.client.operation.duration`;
-- **tools**: span `execute_tool <name>` (`gen_ai.tool.name`);
+- **LLM calls** (`internal/telemetry/genai.go`, wired on `Router.Instrument` / `InstrumentEmbed` by `cmd/modelgw` and
+  `goap-dev`): span `chat <model>` per completion and `embeddings <model>` per embedding call (GenAI semantic conventions:
+  `gen_ai.system` and its successor `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.output.type`,
+  `gen_ai.usage.input_tokens` / `output_tokens` / `cache_read.input_tokens` / `cache_creation.input_tokens`,
+  `gen_ai.response.finish_reasons`, `gen_ai.conversation.id`, `error.type`: the HTTP status, `timeout`, `canceled`,
+  `refusal` or `_OTHER`, `llm.ErrorType`), plus `goap.llm.source` / `goap.change.id` (the caller's `llm.CallMeta`),
+  `goap.llm.json` / `cache` / `messages` / `behaviors`; one span per call, its retries being `gen_ai.retry` events
+  (`goap.llm.attempt`, `error.type`, `goap.llm.retry_wait_ms`; `llm.WithRetryObserver`). Attributed to the process, the
+  agent and the action via **baggage** propagated from the engine to the model gateway. Metrics
+  `gen_ai.client.token.usage`, `gen_ai.client.operation.duration`, `goap.llm.cache_tokens` (`goap.cache.op` read / write)
+  and `goap.llm.retries`, by provider, model, source, agent and action. The prompt and the answer
+  (`gen_ai.system_instructions`, `gen_ai.input.messages`, `gen_ai.output.messages`, 16 KiB each) are recorded only when
+  `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=true`: the change log and the ledger keep them otherwise;
+- **tools**: span `execute_tool <name>` (`gen_ai.tool.name`, `gen_ai.tool.type`, `goap.mcp`, `error.type`, the Connect
+  code of an RPC error), metrics `goap.tool.calls` and `goap.tool.duration` by tool, MCP, agent and error; events on the
+  `action` span (`engine.EventTracer`): `llm.repair` (an unreadable answer given back), `tool.refused` (a tool past
+  `MaxToolFailures`) and `llm.answer` (`goap.llm.tool_rounds`, `goap.llm.repairs`, `goap.tool_calls`, `goap.items`);
+- **assistant**: span `invoke_agent assistant` per turn (`gen_ai.agent.name`, `gen_ai.conversation.id`, `enduser.id`,
+  `goap.project`, `goap.assistant.rounds` / `actions` / `proposals`, `goap.tool_calls`), with the gateway's `chat` spans
+  of its rounds and an `execute_tool <name>` span per tool (`gen_ai.tool.type` `extension` for a screen tool);
 - metrics `goap.actions`, `goap.action.duration`, `goap.tokens` (by agent / action / result);
 - **timing logs** (`GOAP_LOG_LEVEL=debug`): every unary Connect call logs `rpc` with `procedure`, `duration_ms`, `code`
   (warn from `telemetry.SlowRPC`, 1 s); the assistant logs `assistant phase` lines (`send`, `send.available`,

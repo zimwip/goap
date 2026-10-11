@@ -275,6 +275,7 @@ func runTools(ctx context.Context, h *Host, calls []toolCall, tools []mcp.ToolIn
 	for i, c := range calls {
 		runs[i].call = c
 		if failures[c.Name] >= MaxToolFailures {
+			h.e.event(ctx, "tool.refused", map[string]any{"gen_ai.tool.name": c.Name, "goap.tool.failures": failures[c.Name]})
 			runs[i].err = fmt.Errorf("tool %s failed %d times: do not call it again in this task; answer with what you have or use another tool", c.Name, failures[c.Name])
 			continue
 		}
@@ -371,6 +372,9 @@ func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, syst
 			if resp.Truncated() {
 				err = fmt.Errorf("the answer was cut by the output limit: %w", err)
 			}
+			if ac.Host != nil {
+				ac.Host.e.event(ctx, "llm.repair", map[string]any{"goap.llm.repair": repairs + 1, "goap.llm.truncated": resp.Truncated(), "error": err.Error()})
+			}
 			if repairs >= MaxRepairs {
 				return ActionResult{Output: resp.Text}, fmt.Errorf("unreadable answer after %d repairs: %w", repairs, err)
 			}
@@ -380,6 +384,10 @@ func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, syst
 			continue
 		}
 		if len(out.ToolCalls) == 0 || len(tools) == 0 {
+			if ac.Host != nil {
+				ac.Host.e.event(ctx, "llm.answer", map[string]any{"goap.llm.tool_rounds": round, "goap.llm.repairs": repairs,
+					"goap.tool_calls": calls, "goap.items": len(out.Items)})
+			}
 			return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items, %d tool calls", resp.Provider, resp.Model, len(out.Items), calls)}, nil
 		}
 		if round >= MaxToolRounds {

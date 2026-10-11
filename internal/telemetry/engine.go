@@ -3,8 +3,13 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"fmt"
+	"maps"
+	"slices"
+	"strings"
 	"time"
 
+	"connectrpc.com/connect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -13,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/llm"
 )
 
 const scope = "github.com/zimwip/goap"
@@ -25,9 +31,14 @@ type EngineTracer struct {
 	actions metric.Int64Counter
 	actDur  metric.Float64Histogram
 	tokens  metric.Int64Counter
+	tools   metric.Int64Counter
+	toolDur metric.Float64Histogram
 }
 
-var _ engine.Tracer = (*EngineTracer)(nil)
+var (
+	_ engine.Tracer      = (*EngineTracer)(nil)
+	_ engine.EventTracer = (*EngineTracer)(nil)
+)
 
 // NewEngineTracer returns the engine instrumentation.
 func NewEngineTracer() *EngineTracer {
@@ -36,6 +47,8 @@ func NewEngineTracer() *EngineTracer {
 	t.actions, _ = m.Int64Counter("goap.actions", metric.WithDescription("Executed actions"), metric.WithUnit("{action}"))
 	t.actDur, _ = m.Float64Histogram("goap.action.duration", metric.WithDescription("Action duration"), metric.WithUnit("s"))
 	t.tokens, _ = m.Int64Counter("goap.tokens", metric.WithDescription("LLM tokens consumed by actions"), metric.WithUnit("{token}"))
+	t.tools, _ = m.Int64Counter("goap.tool.calls", metric.WithDescription("Tool calls of actions"), metric.WithUnit("{call}"))
+	t.toolDur, _ = m.Float64Histogram("goap.tool.duration", metric.WithDescription("Tool call duration"), metric.WithUnit("s"))
 	return t
 }
 
@@ -111,18 +124,54 @@ func (t *EngineTracer) StartAction(ctx context.Context, p *engine.Process, actio
 	}
 }
 
-// StartTool implements engine.Tracer (GenAI "execute_tool" span).
+// StartTool implements engine.Tracer (GenAI "execute_tool" span; goap.tool.calls and goap.tool.duration by tool
+// and outcome).
 func (t *EngineTracer) StartTool(ctx context.Context, p *engine.Process, action, tool string) (context.Context, func(error)) {
+	mcpName, _, _ := strings.Cut(tool, "/")
 	ctx, span := t.tracer.Start(ctx, "execute_tool "+tool, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(
 		attribute.String("gen_ai.operation.name", "execute_tool"), attribute.String("gen_ai.tool.name", tool),
+		attribute.String("gen_ai.tool.type", "extension"), attribute.String("goap.mcp", mcpName),
 		attribute.String("goap.process.id", p.ID), attribute.String("goap.agent", p.Agent), attribute.String("goap.action", action)))
+	start := time.Now()
 	return ctx, func(err error) {
+		ma := []attribute.KeyValue{attribute.String("gen_ai.tool.name", tool), attribute.String("goap.mcp", mcpName), attribute.String("goap.agent", p.Agent)}
 		if err != nil {
+			typ := errorType(err)
 			span.RecordError(err)
 			span.SetStatus(codes.Error, err.Error())
+			span.SetAttributes(attribute.String("error.type", typ))
+			ma = append(ma, attribute.String("error.type", typ))
 		}
+		t.tools.Add(ctx, 1, metric.WithAttributes(ma...))
+		t.toolDur.Record(ctx, time.Since(start).Seconds(), metric.WithAttributes(ma...))
 		span.End()
 	}
+}
+
+// Event implements engine.EventTracer: an event on the span of ctx.
+func (t *EngineTracer) Event(ctx context.Context, name string, attrs map[string]any) {
+	span := trace.SpanFromContext(ctx)
+	if !span.IsRecording() {
+		return
+	}
+	kv := make([]attribute.KeyValue, 0, len(attrs))
+	for _, k := range slices.Sorted(maps.Keys(attrs)) {
+		switch v := attrs[k].(type) {
+		case string:
+			kv = append(kv, attribute.String(k, v))
+		case bool:
+			kv = append(kv, attribute.Bool(k, v))
+		case int:
+			kv = append(kv, attribute.Int(k, v))
+		case int64:
+			kv = append(kv, attribute.Int64(k, v))
+		case float64:
+			kv = append(kv, attribute.Float64(k, v))
+		default:
+			kv = append(kv, attribute.String(k, fmt.Sprint(v)))
+		}
+	}
+	span.AddEvent(name, trace.WithAttributes(kv...))
 }
 
 // TraceID implements engine.Tracer.
@@ -143,4 +192,15 @@ func (t *EngineTracer) SpanID(ctx context.Context) string {
 		return sc.SpanID().String()
 	}
 	return ""
+}
+
+// errorType is llm.ErrorType, with the Connect code of an RPC error (a tool of the hub, another service).
+func errorType(err error) string {
+	typ := llm.ErrorType(err)
+	if typ == "_OTHER" {
+		if code := connect.CodeOf(err); code != connect.CodeUnknown {
+			return code.String()
+		}
+	}
+	return typ
 }
