@@ -114,7 +114,8 @@ func (t *turn) loop(ctx context.Context) (string, error) {
 	for round := 1; ; round++ {
 		t0 := time.Now()
 		sys := systemPrompt(t.in.Context, t.project, t.in.UITools)
-		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: sys, Messages: slices.Clone(d), JSON: true, MaxTokens: 2048})
+		// the rounds of a turn send the same system text and history again: cache them
+		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: sys, Messages: slices.Clone(d), JSON: true, MaxTokens: 2048, Cache: true})
 		t.s.timed(ctx, "turn.model", t0, "round", round, "system_bytes", len(sys), "history_bytes", d.size())
 		if err != nil {
 			return "", err

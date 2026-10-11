@@ -889,8 +889,10 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
   PostgreSQL (pgx), NATS (headers), sandboxes (the runner continues the action's trace);
 - **one process = one trace**: root span `process <agent>` (the `traceparent` is kept in the
   process, background executions continue it), an `action <name>` span per action;
-- **LLM calls**: span `chat <model>` (GenAI semantic conventions: `gen_ai.system`,
-  `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens`…) attributed to the process, the
+- **LLM calls**: span `chat <model>` (GenAI semantic conventions: `gen_ai.system` and its successor
+  `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.usage.input_tokens` / `output_tokens` /
+  `cache_read.input_tokens` / `cache_creation.input_tokens`, `gen_ai.response.finish_reasons`…; one span per call,
+  the gateway's retries of a transient failure included) attributed to the process, the
   agent, and the action via **baggage** propagated from the engine to the model gateway; metrics
   `gen_ai.client.token.usage` and `gen_ai.client.operation.duration`;
 - **tools**: span `execute_tool <name>` (`gen_ai.tool.name`);
@@ -996,7 +998,14 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   the MCPs it declares and, for `llm` / `script` actions, those declared by its agent (`agents[].mcps`).
 - **LLM actions** with MCPs may call the tools in a bounded loop (`MaxToolRounds`), exchanged as JSON on top
   of any model (`{"tool_calls":[...]}`, then `{"items":[...]}`); every call is journaled with its duration and
-  error. Calls run with the principal of the process initiator (`tool:call` permission).
+  error. Calls run with the principal of the process initiator (`tool:call` permission). The calls of one answer run
+  at the same time, and their results go back to the model marked as data, not instructions. A failed call goes back
+  with guidance to correct it (`failure n of MaxToolFailures`). After `MaxToolFailures` failures the tool is refused in
+  that action without being called, and a tool the action cannot use is refused with the list of those it can. An
+  answer that cannot be read (not the JSON asked for, or cut by the output limit, `llm.Response.Truncated`) goes back
+  with the reason, up to `MaxRepairs` times, before the action fails. A tool loop asks for the prompt cache
+  (`llm.Request.Cache`). The hub checks the arguments of a call against the tool's input schema (`mcp.Tool.CheckArgs`:
+  required, type and enum of each top-level property, unknown ones when `additionalProperties: false`).
 - **Web**: *Connectors* (registry, read-only), *MCPs* (platform nodes), *Adapters* (adapter definitions, with a template generated from an MCP and a connector) and *Organisation* (units; the *MCP* pane of
   a unit lists the MCPs it can use, own or inherited, built in or not, with their allowed tools, attaches or overrides
   them with an instance of an adapter definition and its parameter values, and restricts them). A new organisation
@@ -1511,6 +1520,13 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   token quota (per day / month / total, shared by all users) and the roles allowed to call the model (none =
   any signed-in user; `admin` always). Only enabled catalog models can be called; calls without identity
   (engine, in-process) are trusted and skip the role check but still count toward the quota.
+- **Provider calls** (`Router.Complete`): a transient failure (408, 409, 429, 5xx, 529, a dropped connection) is retried
+  `Router.Retries` times (`DefaultRetries` 3) with exponential backoff and jitter, honouring `Retry-After`
+  (`internal/modelgw/retry.go`; the Anthropic SDK retries on its own, `anthropicRetries`). `llm.Request.Cache` (set by
+  callers that send the same prefix again: a tool loop, the assistant's rounds) marks the system text and the
+  conversation as a cache prefix on Anthropic; OpenAI and Gemini cache on their own. `llm.Usage.InputTokens` is the
+  whole prompt, cached or not, with `CacheReadTokens` / `CacheWriteTokens` beside it; `llm.Response.StopReason` is
+  normalised (`end`, `max_tokens`, else the provider's word).
 - **Aliases** (`default`, `fast`…) point to catalog models; the router follows the graph. The RPCs of the gateway are read-only
   (`ListProviders`, `ListCatalog`, `ListBehaviors`, `PreviewBehaviors`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
 - **Ledger of LLM calls** (ADR 0089): every call the gateway serves or refuses (completion or embedding, whoever asked:

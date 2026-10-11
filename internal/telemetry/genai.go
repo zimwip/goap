@@ -83,7 +83,8 @@ func (g *GenAI) Instrument(ctx context.Context, provider, model string, req llm.
 	}
 	attrs := append([]attribute.KeyValue{
 		attribute.String("gen_ai.operation.name", "chat"),
-		attribute.String("gen_ai.system", provider),
+		attribute.String("gen_ai.system", provider), // kept for the dashboards; gen_ai.provider.name is its successor
+		attribute.String("gen_ai.provider.name", provider),
 		attribute.String("gen_ai.request.model", model),
 		attribute.Int("gen_ai.request.max_tokens", req.MaxTokens),
 	}, caller...)
@@ -105,7 +106,12 @@ func (g *GenAI) Instrument(ctx context.Context, provider, model string, req llm.
 	} else {
 		span.SetAttributes(attribute.String("gen_ai.response.model", resp.Model),
 			attribute.Int("gen_ai.usage.input_tokens", resp.Usage.InputTokens),
-			attribute.Int("gen_ai.usage.output_tokens", resp.Usage.OutputTokens))
+			attribute.Int("gen_ai.usage.output_tokens", resp.Usage.OutputTokens),
+			attribute.Int("gen_ai.usage.cache_read.input_tokens", resp.Usage.CacheReadTokens),
+			attribute.Int("gen_ai.usage.cache_creation.input_tokens", resp.Usage.CacheWriteTokens))
+		if resp.StopReason != "" {
+			span.SetAttributes(attribute.StringSlice("gen_ai.response.finish_reasons", []string{resp.StopReason}))
+		}
 		ma := metric.WithAttributes(append(metricAttrs, attribute.String("gen_ai.response.model", resp.Model))...)
 		g.tokens.Record(ctx, int64(resp.Usage.InputTokens), ma, metric.WithAttributes(attribute.String("gen_ai.token.type", "input")))
 		g.tokens.Record(ctx, int64(resp.Usage.OutputTokens), ma, metric.WithAttributes(attribute.String("gen_ai.token.type", "output")))

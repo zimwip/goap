@@ -8,7 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"math"
+	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 )
 
@@ -141,7 +145,10 @@ func DefFromProps(props map[string]any) (Def, error) {
 }
 
 // CheckArgs checks the arguments of a call against the tool's input schema: the required
-// properties must be present.
+// properties must be present, a property the schema types must have that type (and be one of its
+// enum when it has one), and a property the schema does not declare is refused when the schema says
+// additionalProperties: false. Only the top level is checked; the error names what is expected, so
+// a model calling the tool can correct its call.
 func (t Tool) CheckArgs(args map[string]any) error {
 	req, _ := t.InputSchema["required"].([]any)
 	for _, r := range req {
@@ -151,7 +158,60 @@ func (t Tool) CheckArgs(args map[string]any) error {
 			}
 		}
 	}
+	props, _ := t.InputSchema["properties"].(map[string]any)
+	closed := t.InputSchema["additionalProperties"] == false
+	for _, name := range slices.Sorted(maps.Keys(args)) {
+		p, declared := props[name].(map[string]any)
+		if !declared {
+			if closed {
+				return fmt.Errorf("tool %s: unknown argument %q (expected: %s): %w", t.Name, name, strings.Join(slices.Sorted(maps.Keys(props)), ", "), ErrInvalid)
+			}
+			continue
+		}
+		v := args[name]
+		if v == nil {
+			continue
+		}
+		if typ, _ := p["type"].(string); typ != "" && !hasType(v, typ) {
+			return fmt.Errorf("tool %s: argument %q must be of type %s, got %T: %w", t.Name, name, typ, v, ErrInvalid)
+		}
+		if enum, ok := p["enum"].([]any); ok && len(enum) > 0 && !slices.ContainsFunc(enum, func(e any) bool { return fmt.Sprint(e) == fmt.Sprint(v) }) {
+			return fmt.Errorf("tool %s: argument %q must be one of %v: %w", t.Name, name, enum, ErrInvalid)
+		}
+	}
 	return nil
+}
+
+// hasType says whether a decoded JSON value (or its Go equivalent) is of the JSON schema type typ.
+func hasType(v any, typ string) bool {
+	switch typ {
+	case "string":
+		_, ok := v.(string)
+		return ok
+	case "boolean":
+		_, ok := v.(bool)
+		return ok
+	case "number", "integer":
+		rv := reflect.ValueOf(v)
+		switch rv.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+			reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			return true
+		case reflect.Float32, reflect.Float64:
+			return typ == "number" || rv.Float() == math.Trunc(rv.Float())
+		}
+		if n, ok := v.(json.Number); ok {
+			_, err := n.Int64()
+			return typ == "number" || err == nil
+		}
+		return false
+	case "object":
+		return reflect.ValueOf(v).Kind() == reflect.Map
+	case "array":
+		k := reflect.ValueOf(v).Kind()
+		return k == reflect.Slice || k == reflect.Array
+	}
+	return true // a type this check does not know
 }
 
 func viaJSON(from, to any) error {

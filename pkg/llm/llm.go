@@ -24,12 +24,19 @@ type Request struct {
 	MaxTokens int       `json:"maxTokens,omitempty"`
 	// JSON asks the provider for a single JSON object answer.
 	JSON bool `json:"json,omitempty"`
+	// Cache says the caller will send the same prefix again (a tool loop, a conversation): a provider that caches
+	// prompts only on request marks the system text and the messages as a cache prefix. Providers that cache on their
+	// own ignore it. Writing a cache entry costs more than a plain read, so a single-shot call leaves it unset.
+	Cache bool `json:"cache,omitempty"`
 }
 
-// Usage reports token consumption.
+// Usage reports token consumption. InputTokens is the whole prompt, cached or not; CacheReadTokens and
+// CacheWriteTokens are the parts of it read from and written to the provider's prompt cache.
 type Usage struct {
-	InputTokens  int `json:"inputTokens"`
-	OutputTokens int `json:"outputTokens"`
+	InputTokens      int `json:"inputTokens"`
+	OutputTokens     int `json:"outputTokens"`
+	CacheReadTokens  int `json:"cacheReadTokens,omitempty"`
+	CacheWriteTokens int `json:"cacheWriteTokens,omitempty"`
 }
 
 // Response is a completion result.
@@ -38,6 +45,8 @@ type Response struct {
 	Provider string `json:"provider"`
 	Model    string `json:"model"`
 	Usage    Usage  `json:"usage"`
+	// StopReason is why the model stopped, normalised: StopEnd, StopMaxTokens, or the provider's own word.
+	StopReason string `json:"stopReason,omitempty"`
 	// Behaviors names the global behaviours the gateway added to the instructions of the call (ADR 0093; a name with a
 	// leading "!" was dropped by the cap), and BehaviorTokens estimates the tokens they added. The caller's request is
 	// never changed: the gateway reports what it added here.
@@ -46,6 +55,15 @@ type Response struct {
 	// BehaviorsEstimated says BehaviorTokens is the byte estimate, not a cost measured on the model.
 	BehaviorsEstimated bool `json:"behaviorsEstimated,omitempty"`
 }
+
+// Normalised stop reasons of Response.StopReason.
+const (
+	StopEnd       = "end"
+	StopMaxTokens = "max_tokens"
+)
+
+// Truncated says the answer was cut by the output token limit.
+func (r Response) Truncated() bool { return r.StopReason == StopMaxTokens }
 
 // Client completes prompts.
 type Client interface {

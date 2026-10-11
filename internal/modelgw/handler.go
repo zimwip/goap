@@ -66,7 +66,7 @@ func (h *Handler) guard(ctx context.Context, hdr http.Header) (context.Context, 
 func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.CompleteRequest]) (*connect.Response[modelv1.CompleteResponse], error) {
 	// callers without identity headers (and no dev default) are trusted internal services
 	ctx = llm.WithMeta(h.Identity.Context(ctx, r.Header()), metaFromPB(r.Msg.Meta))
-	req := llm.Request{Model: r.Msg.Model, System: r.Msg.System, MaxTokens: int(r.Msg.MaxTokens), JSON: r.Msg.Json}
+	req := llm.Request{Model: r.Msg.Model, System: r.Msg.System, MaxTokens: int(r.Msg.MaxTokens), JSON: r.Msg.Json, Cache: r.Msg.Cache}
 	for _, m := range r.Msg.Messages {
 		req.Messages = append(req.Messages, llm.Message{Role: m.Role, Content: m.Content})
 	}
@@ -77,8 +77,9 @@ func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.Compl
 		}
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
-	return connect.NewResponse(&modelv1.CompleteResponse{Text: resp.Text, Provider: resp.Provider, Model: resp.Model,
-		Usage:     &modelv1.Usage{InputTokens: int32(resp.Usage.InputTokens), OutputTokens: int32(resp.Usage.OutputTokens)},
+	return connect.NewResponse(&modelv1.CompleteResponse{Text: resp.Text, Provider: resp.Provider, Model: resp.Model, StopReason: resp.StopReason,
+		Usage: &modelv1.Usage{InputTokens: int32(resp.Usage.InputTokens), OutputTokens: int32(resp.Usage.OutputTokens),
+			CacheReadTokens: int32(resp.Usage.CacheReadTokens), CacheWriteTokens: int32(resp.Usage.CacheWriteTokens)},
 		Behaviors: resp.Behaviors, BehaviorTokens: int32(resp.BehaviorTokens), BehaviorsEstimated: resp.BehaviorsEstimated}), nil
 }
 
@@ -308,7 +309,7 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 
 // Complete implements llm.Client.
 func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
-	in := &modelv1.CompleteRequest{Model: req.Model, System: req.System, MaxTokens: int32(req.MaxTokens), Json: req.JSON, Meta: metaToPB(ctx)}
+	in := &modelv1.CompleteRequest{Model: req.Model, System: req.System, MaxTokens: int32(req.MaxTokens), Json: req.JSON, Cache: req.Cache, Meta: metaToPB(ctx)}
 	for _, m := range req.Messages {
 		in.Messages = append(in.Messages, &modelv1.Message{Role: m.Role, Content: m.Content})
 	}
@@ -316,9 +317,10 @@ func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 	if err != nil {
 		return llm.Response{}, err
 	}
-	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model, Behaviors: r.Msg.Behaviors, BehaviorTokens: int(r.Msg.BehaviorTokens), BehaviorsEstimated: r.Msg.BehaviorsEstimated}
+	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model, StopReason: r.Msg.StopReason, Behaviors: r.Msg.Behaviors, BehaviorTokens: int(r.Msg.BehaviorTokens), BehaviorsEstimated: r.Msg.BehaviorsEstimated}
 	if u := r.Msg.Usage; u != nil {
-		out.Usage = llm.Usage{InputTokens: int(u.InputTokens), OutputTokens: int(u.OutputTokens)}
+		out.Usage = llm.Usage{InputTokens: int(u.InputTokens), OutputTokens: int(u.OutputTokens),
+			CacheReadTokens: int(u.CacheReadTokens), CacheWriteTokens: int(u.CacheWriteTokens)}
 	}
 	return out, nil
 }

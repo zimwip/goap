@@ -26,9 +26,13 @@ type Anthropic struct {
 	client anthropic.Client
 }
 
+// anthropicRetries is the retries of the SDK on a transient failure (it honours Retry-After), DefaultRetries + 1
+// like the router's own (retry.go), which never retries an SDK error.
+const anthropicRetries = DefaultRetries + 1
+
 // NewAnthropic returns a Claude provider.
 func NewAnthropic(apiKey, baseURL string) *Anthropic {
-	opts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	opts := []option.RequestOption{option.WithAPIKey(apiKey), option.WithMaxRetries(anthropicRetries)}
 	if baseURL != "" {
 		opts = append(opts, option.WithBaseURL(baseURL))
 	}
@@ -54,9 +58,17 @@ func (a *Anthropic) Complete(ctx context.Context, model string, req llm.Request)
 	}
 	if system != "" {
 		params.System = []anthropic.BetaTextBlockParam{{Text: system}}
+		if req.Cache {
+			params.System[0].CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+		}
 	}
-	for _, m := range req.Messages {
+	for i, m := range req.Messages {
 		block := anthropic.NewBetaTextBlock(m.Content)
+		if req.Cache && i == len(req.Messages)-1 {
+			// two breakpoints: the system text (shared by every round and turn) and the last block of the
+			// conversation (the prefix the next round repeats)
+			block.OfText.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+		}
 		if m.Role == "assistant" {
 			params.Messages = append(params.Messages, anthropic.BetaMessageParam{Role: anthropic.BetaMessageParamRoleAssistant, Content: []anthropic.BetaContentBlockParamUnion{block}})
 		} else {
@@ -76,8 +88,11 @@ func (a *Anthropic) Complete(ctx context.Context, model string, req llm.Request)
 			text.WriteString(t.Text)
 		}
 	}
+	u := msg.Usage
 	return llm.Response{Text: text.String(), Provider: "anthropic", Model: string(msg.Model),
-		Usage: llm.Usage{InputTokens: int(msg.Usage.InputTokens), OutputTokens: int(msg.Usage.OutputTokens)}}, nil
+		StopReason: stopReason(string(msg.StopReason), "end_turn", "max_tokens"),
+		Usage: llm.Usage{InputTokens: int(u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens), OutputTokens: int(u.OutputTokens),
+			CacheReadTokens: int(u.CacheReadInputTokens), CacheWriteTokens: int(u.CacheCreationInputTokens)}}, nil
 }
 
 // ---- OpenAI-compatible (Ollama, vLLM, Mistral, OpenAI…) -------------------
@@ -130,7 +145,11 @@ func (o *OpenAICompatible) Complete(ctx context.Context, model string, req llm.R
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
-		return llm.Response{}, fmt.Errorf("chat/completions: %s: %s", resp.Status, raw)
+		msg := strings.TrimSpace(string(raw))
+		if len(msg) > 400 {
+			msg = msg[:400] + "…"
+		}
+		return llm.Response{}, fmt.Errorf("chat/completions: %w", statusErrorOf(resp, msg))
 	}
 	var out struct {
 		Model   string `json:"model"`
@@ -138,10 +157,14 @@ func (o *OpenAICompatible) Complete(ctx context.Context, model string, req llm.R
 			Message struct {
 				Content string `json:"content"`
 			} `json:"message"`
+			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
 		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
+			PromptTokens        int `json:"prompt_tokens"`
+			CompletionTokens    int `json:"completion_tokens"`
+			PromptTokensDetails struct {
+				CachedTokens int `json:"cached_tokens"`
+			} `json:"prompt_tokens_details"`
 		} `json:"usage"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil {
@@ -151,7 +174,21 @@ func (o *OpenAICompatible) Complete(ctx context.Context, model string, req llm.R
 		return llm.Response{}, fmt.Errorf("chat/completions: no choice")
 	}
 	return llm.Response{Text: out.Choices[0].Message.Content, Model: out.Model,
-		Usage: llm.Usage{InputTokens: out.Usage.PromptTokens, OutputTokens: out.Usage.CompletionTokens}}, nil
+		StopReason: stopReason(out.Choices[0].FinishReason, "stop", "length"),
+		Usage: llm.Usage{InputTokens: out.Usage.PromptTokens, OutputTokens: out.Usage.CompletionTokens,
+			CacheReadTokens: out.Usage.PromptTokensDetails.CachedTokens}}, nil
+}
+
+// stopReason normalises a provider's stop reason: its words for a natural end and for the output token limit
+// become llm.StopEnd and llm.StopMaxTokens, any other is kept as is.
+func stopReason(got, end, maxTokens string) string {
+	switch got {
+	case end:
+		return llm.StopEnd
+	case maxTokens:
+		return llm.StopMaxTokens
+	}
+	return got
 }
 
 // ---- Fake -------------------------------------------------------------------

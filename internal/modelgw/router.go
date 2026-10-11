@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -36,6 +37,10 @@ func parseTarget(s string) (Target, bool) {
 type Router struct {
 	// Instrument wraps every provider call (OpenTelemetry GenAI spans and metrics).
 	Instrument func(ctx context.Context, provider, model string, req llm.Request, call func(context.Context) (llm.Response, error)) (llm.Response, error)
+	// Retries bounds the retries of a transient provider failure (retry.go): 0 is DefaultRetries, negative none.
+	Retries int
+	// RetryBase is the first backoff (0: one second); the next ones double it, with jitter.
+	RetryBase time.Duration
 
 	mu        sync.RWMutex
 	providers map[string]Provider
@@ -100,7 +105,7 @@ func (r *Router) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 		return llm.Response{}, err
 	}
 	call := func(ctx context.Context) (llm.Response, error) {
-		resp, err := p.Complete(ctx, t.Model, req)
+		resp, err := r.completeWithRetry(ctx, p, t.Model, req)
 		if resp.Provider == "" {
 			resp.Provider = t.Provider
 		}

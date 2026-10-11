@@ -179,13 +179,15 @@ func (x *CallMeta) GetCall() int32 {
 }
 
 type CompleteRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Model         string                 `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
-	System        string                 `protobuf:"bytes,2,opt,name=system,proto3" json:"system,omitempty"`
-	Messages      []*Message             `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
-	MaxTokens     int32                  `protobuf:"varint,4,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"`
-	Json          bool                   `protobuf:"varint,5,opt,name=json,proto3" json:"json,omitempty"`
-	Meta          *CallMeta              `protobuf:"bytes,6,opt,name=meta,proto3" json:"meta,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Model     string                 `protobuf:"bytes,1,opt,name=model,proto3" json:"model,omitempty"`
+	System    string                 `protobuf:"bytes,2,opt,name=system,proto3" json:"system,omitempty"`
+	Messages  []*Message             `protobuf:"bytes,3,rep,name=messages,proto3" json:"messages,omitempty"`
+	MaxTokens int32                  `protobuf:"varint,4,opt,name=max_tokens,json=maxTokens,proto3" json:"max_tokens,omitempty"`
+	Json      bool                   `protobuf:"varint,5,opt,name=json,proto3" json:"json,omitempty"`
+	Meta      *CallMeta              `protobuf:"bytes,6,opt,name=meta,proto3" json:"meta,omitempty"`
+	// the caller sends the same prefix again (a tool loop, a conversation): cache it where the provider caches on request
+	Cache         bool `protobuf:"varint,7,opt,name=cache,proto3" json:"cache,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -262,12 +264,23 @@ func (x *CompleteRequest) GetMeta() *CallMeta {
 	return nil
 }
 
+func (x *CompleteRequest) GetCache() bool {
+	if x != nil {
+		return x.Cache
+	}
+	return false
+}
+
 type Usage struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	InputTokens   int32                  `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
-	OutputTokens  int32                  `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the whole prompt, cached or not
+	InputTokens  int32 `protobuf:"varint,1,opt,name=input_tokens,json=inputTokens,proto3" json:"input_tokens,omitempty"`
+	OutputTokens int32 `protobuf:"varint,2,opt,name=output_tokens,json=outputTokens,proto3" json:"output_tokens,omitempty"`
+	// the parts of the prompt read from and written to the provider's prompt cache
+	CacheReadTokens  int32 `protobuf:"varint,3,opt,name=cache_read_tokens,json=cacheReadTokens,proto3" json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens int32 `protobuf:"varint,4,opt,name=cache_write_tokens,json=cacheWriteTokens,proto3" json:"cache_write_tokens,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Usage) Reset() {
@@ -314,6 +327,20 @@ func (x *Usage) GetOutputTokens() int32 {
 	return 0
 }
 
+func (x *Usage) GetCacheReadTokens() int32 {
+	if x != nil {
+		return x.CacheReadTokens
+	}
+	return 0
+}
+
+func (x *Usage) GetCacheWriteTokens() int32 {
+	if x != nil {
+		return x.CacheWriteTokens
+	}
+	return 0
+}
+
 type CompleteResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Text     string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
@@ -326,8 +353,10 @@ type CompleteResponse struct {
 	BehaviorTokens int32    `protobuf:"varint,6,opt,name=behavior_tokens,json=behaviorTokens,proto3" json:"behavior_tokens,omitempty"`
 	// behavior_tokens is the byte estimate, not a measured cost
 	BehaviorsEstimated bool `protobuf:"varint,7,opt,name=behaviors_estimated,json=behaviorsEstimated,proto3" json:"behaviors_estimated,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// why the model stopped: end | max_tokens | the provider's own word
+	StopReason    string `protobuf:"bytes,8,opt,name=stop_reason,json=stopReason,proto3" json:"stop_reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CompleteResponse) Reset() {
@@ -407,6 +436,13 @@ func (x *CompleteResponse) GetBehaviorsEstimated() bool {
 		return x.BehaviorsEstimated
 	}
 	return false
+}
+
+func (x *CompleteResponse) GetStopReason() string {
+	if x != nil {
+		return x.StopReason
+	}
+	return ""
 }
 
 type EmbedRequest struct {
@@ -3593,7 +3629,7 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x04step\x18\x05 \x01(\x05R\x04step\x12\x16\n" +
 	"\x06action\x18\x06 \x01(\tR\x06action\x12\x14\n" +
 	"\x05agent\x18\a \x01(\tR\x05agent\x12\x12\n" +
-	"\x04call\x18\b \x01(\x05R\x04call\"\xd3\x01\n" +
+	"\x04call\x18\b \x01(\x05R\x04call\"\xe9\x01\n" +
 	"\x0fCompleteRequest\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12\x16\n" +
 	"\x06system\x18\x02 \x01(\tR\x06system\x122\n" +
@@ -3601,10 +3637,13 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\n" +
 	"max_tokens\x18\x04 \x01(\x05R\tmaxTokens\x12\x12\n" +
 	"\x04json\x18\x05 \x01(\bR\x04json\x12+\n" +
-	"\x04meta\x18\x06 \x01(\v2\x17.goap.model.v1.CallMetaR\x04meta\"O\n" +
+	"\x04meta\x18\x06 \x01(\v2\x17.goap.model.v1.CallMetaR\x04meta\x12\x14\n" +
+	"\x05cache\x18\a \x01(\bR\x05cache\"\xa9\x01\n" +
 	"\x05Usage\x12!\n" +
 	"\finput_tokens\x18\x01 \x01(\x05R\vinputTokens\x12#\n" +
-	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\"\xfc\x01\n" +
+	"\routput_tokens\x18\x02 \x01(\x05R\foutputTokens\x12*\n" +
+	"\x11cache_read_tokens\x18\x03 \x01(\x05R\x0fcacheReadTokens\x12,\n" +
+	"\x12cache_write_tokens\x18\x04 \x01(\x05R\x10cacheWriteTokens\"\x9d\x02\n" +
 	"\x10CompleteResponse\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x1a\n" +
 	"\bprovider\x18\x02 \x01(\tR\bprovider\x12\x14\n" +
@@ -3612,7 +3651,9 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x05usage\x18\x04 \x01(\v2\x14.goap.model.v1.UsageR\x05usage\x12\x1c\n" +
 	"\tbehaviors\x18\x05 \x03(\tR\tbehaviors\x12'\n" +
 	"\x0fbehavior_tokens\x18\x06 \x01(\x05R\x0ebehaviorTokens\x12/\n" +
-	"\x13behaviors_estimated\x18\a \x01(\bR\x12behaviorsEstimated\"g\n" +
+	"\x13behaviors_estimated\x18\a \x01(\bR\x12behaviorsEstimated\x12\x1f\n" +
+	"\vstop_reason\x18\b \x01(\tR\n" +
+	"stopReason\"g\n" +
 	"\fEmbedRequest\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12\x14\n" +
 	"\x05texts\x18\x02 \x03(\tR\x05texts\x12+\n" +

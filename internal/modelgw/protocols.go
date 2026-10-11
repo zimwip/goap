@@ -196,7 +196,7 @@ func httpJSON(ctx context.Context, hc *http.Client, method, u string, headers ma
 		if len(msg) > 400 {
 			msg = msg[:400] + "…"
 		}
-		return fmt.Errorf("%s: %s", resp.Status, msg)
+		return statusErrorOf(resp, msg)
 	}
 	return json.Unmarshal(raw, out)
 }
@@ -342,8 +342,9 @@ func (g *Gemini) Complete(ctx context.Context, model string, req llm.Request) (l
 			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
 		UsageMetadata struct {
-			PromptTokenCount     int `json:"promptTokenCount"`
-			CandidatesTokenCount int `json:"candidatesTokenCount"`
+			PromptTokenCount        int `json:"promptTokenCount"`
+			CandidatesTokenCount    int `json:"candidatesTokenCount"`
+			CachedContentTokenCount int `json:"cachedContentTokenCount"`
 		} `json:"usageMetadata"`
 		ModelVersion string `json:"modelVersion"`
 	}
@@ -358,6 +359,8 @@ func (g *Gemini) Complete(ctx context.Context, model string, req llm.Request) (l
 	for _, p := range out.Candidates[0].Content.Parts {
 		text.WriteString(p.Text)
 	}
+	um := out.UsageMetadata
 	return llm.Response{Text: text.String(), Model: out.ModelVersion,
-		Usage: llm.Usage{InputTokens: out.UsageMetadata.PromptTokenCount, OutputTokens: out.UsageMetadata.CandidatesTokenCount}}, nil
+		StopReason: stopReason(out.Candidates[0].FinishReason, "STOP", "MAX_TOKENS"),
+		Usage:      llm.Usage{InputTokens: um.PromptTokenCount, OutputTokens: um.CandidatesTokenCount, CacheReadTokens: um.CachedContentTokenCount}}, nil
 }

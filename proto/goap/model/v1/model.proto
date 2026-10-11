@@ -78,11 +78,17 @@ message CompleteRequest {
   int32 max_tokens = 4;
   bool json = 5;
   CallMeta meta = 6;
+  // the caller sends the same prefix again (a tool loop, a conversation): cache it where the provider caches on request
+  bool cache = 7;
 }
 
 message Usage {
+  // the whole prompt, cached or not
   int32 input_tokens = 1;
   int32 output_tokens = 2;
+  // the parts of the prompt read from and written to the provider's prompt cache
+  int32 cache_read_tokens = 3;
+  int32 cache_write_tokens = 4;
 }
 
 message CompleteResponse {
@@ -96,6 +102,8 @@ message CompleteResponse {
   int32 behavior_tokens = 6;
   // behavior_tokens is the byte estimate, not a measured cost
   bool behaviors_estimated = 7;
+  // why the model stopped: end | max_tokens | the provider's own word
+  string stop_reason = 8;
 }
 
 message EmbedRequest {
