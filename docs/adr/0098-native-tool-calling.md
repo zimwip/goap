@@ -53,11 +53,21 @@ capped at its share of `maxToolResult`. The final answer is still `{"items": [..
 that writes `{"tool_calls": [...]}` in its text is still honoured, its results then go back as text: some models do it
 even with native tools, and the scripted clients of the tests rely on it.
 
+### The assistant (`internal/assistantsvc/toolspecs.go`, `turn.go`)
+
+The assistant declares its seven server tools (`serverTools`: what each does and the JSON schema of its arguments,
+moved out of the system text, which keeps the rules of their use) and the screen tools of the turn (`uiToolSpec`:
+`ui.<name>`, the schema built from the descriptor's arguments, the level and guidance in the description, plus a
+`rationale` argument: the reason a proposal shows, which `readAnswer` takes out of the arguments before they are
+checked against the descriptor). Its answer is plain text; the calls come back natively and their results go back as
+`ToolResults` by call id (`toolResults`, each capped at its share of `maxToolResult`); the settling shortcut, the caps
+per round and the proposals are unchanged. An answer written as the former JSON `{message, tool_calls}` is still read,
+its results going back as text. The system prompt lists the screen tools by name, level, guidance and target only.
+
 ## Consequences
 
 - The tool protocol no longer costs prompt tokens on native providers; calls and results are structured end to end.
 - Not done: provider-side constrained output (a response schema) for the final answer: the item union is broad and the
   OpenAI-compatible servers differ in what they accept; the answer is still read and repaired by the engine.
-  The assistant (ADR 0087) keeps its own `{message, tool_calls}` protocol (its screen tools, rationales and proposals);
-  moving it to `Request.Tools` is a follow-up.
+  The assistant (ADR 0087) moved too (see "The assistant" below).
 - `textToolsOnly` is per process: a restart probes a refusing model once more.

@@ -29,11 +29,13 @@ import (
 
 type fakeModel struct {
 	answers []string
-	err     error
-	aliases []modelgw.AliasEntry
-	got     []llm.Request
-	who     []authz.Principal
-	metas   []llm.CallMeta
+	// responses, when set, are answered instead of answers (native tool calls, ADR 0098)
+	responses []llm.Response
+	err       error
+	aliases   []modelgw.AliasEntry
+	got       []llm.Request
+	who       []authz.Principal
+	metas     []llm.CallMeta
 }
 
 func (m *fakeModel) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
@@ -44,6 +46,9 @@ func (m *fakeModel) Complete(ctx context.Context, req llm.Request) (llm.Response
 		return llm.Response{}, m.err
 	}
 	i := len(m.got) - 1
+	if m.responses != nil {
+		return m.responses[min(i, len(m.responses)-1)], nil
+	}
 	if i >= len(m.answers) {
 		i = len(m.answers) - 1
 	}
@@ -216,7 +221,7 @@ func TestSendAnswersAndStoresTheTurn(t *testing.T) {
 		t.Fatalf("%d model calls", len(e.model.got))
 	}
 	first, second := e.model.got[0], e.model.got[1]
-	if first.Model != "assistant" || !first.JSON || !strings.Contains(first.System, `"element":{"type":"change","id":"CHG-1"}`) || !strings.Contains(first.System, `"activeProject":"PROJ-A"`) {
+	if first.Model != "assistant" || first.JSON || len(first.Tools) != len(Tools()) || !strings.Contains(first.System, `"element":{"type":"change","id":"CHG-1"}`) || !strings.Contains(first.System, `"activeProject":"PROJ-A"`) {
 		t.Fatalf("request %+v", first)
 	}
 	for _, m := range e.model.metas { // the ledger of the gateway names the assistant and its conversation (ADR 0089)

@@ -610,9 +610,17 @@ func TestToolsAreSeven(t *testing.T) {
 	if got := Tools(); len(got) != 7 {
 		t.Fatalf("%v", got)
 	}
+	// each is declared to the model with what it does and the schema of its arguments (ADR 0098), and nothing else is
+	if len(serverTools) != len(Tools()) {
+		t.Fatalf("%d declared", len(serverTools))
+	}
 	for _, name := range Tools() {
-		if !strings.Contains(systemRules, name+":") {
-			t.Errorf("the prompt does not describe %s", name)
+		i := slices.IndexFunc(serverTools, func(s llm.ToolSpec) bool { return s.Name == name })
+		if i < 0 || serverTools[i].Description == "" || serverTools[i].InputSchema["type"] != "object" {
+			t.Errorf("%s is not declared", name)
+		}
+		if !strings.Contains(systemRules, name) {
+			t.Errorf("the prompt does not name %s", name)
 		}
 	}
 }

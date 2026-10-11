@@ -439,7 +439,7 @@ func TestMethodologyQueryLeavesTheOtherToolsAlone(t *testing.T) {
 			t.Errorf("%s", n)
 		}
 	}
-	if !strings.Contains(systemRules, "methodology_query:") || !strings.Contains(systemRules, "Always start narrow") {
+	if !strings.Contains(systemRules, "methodology_query") || !strings.Contains(systemRules, "Always start narrow") {
 		t.Fatal("prompt")
 	}
 }
