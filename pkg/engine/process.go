@@ -33,11 +33,13 @@ const (
 	// StatusSuperseded: the run was replaced by a relaunched flow that was adopted,
 	// or it is the relaunched flow itself that was discarded.
 	StatusSuperseded Status = "superseded"
+	// StatusCancelled: a person who answers for the run stopped it (Engine.Cancel); its live sub-processes with it.
+	StatusCancelled Status = "cancelled"
 )
 
 // Terminal reports whether the process has ended. A stuck process has not: a person can always unblock it.
 func (s Status) Terminal() bool {
-	return s == StatusCompleted || s == StatusFailed || s == StatusSuperseded
+	return s == StatusCompleted || s == StatusFailed || s == StatusSuperseded || s == StatusCancelled
 }
 
 // Process is an agent process working on a change.

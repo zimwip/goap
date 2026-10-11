@@ -132,7 +132,7 @@ func endRecord(p *Process) journal.Record {
 	disabled := slices.Sorted(maps.Keys(p.Disabled))
 	return journal.Record{Kind: journal.KindProcessEnded, Error: p.Error, Step: len(p.Steps),
 		InputTokens: p.Usage.InputTokens, OutputTokens: p.Usage.OutputTokens,
-		Data: map[string]any{"steps": len(p.Steps), "llmCalls": p.Usage.LLMCalls, "toolCalls": p.Usage.ToolCalls,
+		Data: map[string]any{"status": string(p.Status), "steps": len(p.Steps), "llmCalls": p.Usage.LLMCalls, "toolCalls": p.Usage.ToolCalls,
 			"disabled": disabled, "trigger": p.Trigger},
 		StartedAt: p.CreatedAt}
 }

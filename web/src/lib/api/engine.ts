@@ -33,6 +33,9 @@ export const engine = {
       conditions,
       reason,
     }),
+  /** Stops a run that has not ended (whoever answers for it may): a run in flight is interrupted, its live sub-runs are cancelled with it. */
+  cancelProcess: (processId: string, reason = '') =>
+    rpc<{ processId: string; reason: string }, { process?: Process }>(ENGINE, 'CancelProcess', { processId, reason }),
   /** Restarts a run from one of its steps on a new flow branch; returns the new process. */
   relaunchStep: (processId: string, step: number, reason: string, guidance = '') =>
     rpc<{ processId: string; step: number; reason: string; guidance: string }, { process?: Process }>(ENGINE, 'RelaunchStep', {

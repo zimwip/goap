@@ -6,7 +6,7 @@ import type { DocumentReference, PlannerKind, Responsibilities, TriggerType } fr
 
 // --- engine -----------------------------------------------------------------
 
-export type ProcessStatus = 'clarifying' | 'running' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'superseded';
+export type ProcessStatus = 'clarifying' | 'running' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'superseded' | 'cancelled';
 
 export interface Turn {
   role?: string;
@@ -560,7 +560,7 @@ export interface ProcessLogEntry {
   at?: string;
 }
 
-export type EventType = 'started' | 'intent' | 'step' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'log';
+export type EventType = 'started' | 'intent' | 'step' | 'waiting' | 'completed' | 'stuck' | 'failed' | 'cancelled' | 'log';
 
 /** Message on the WatchEvents stream. */
 export interface WatchEvent {

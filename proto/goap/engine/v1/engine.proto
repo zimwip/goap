@@ -17,6 +17,9 @@ service EngineService {
   // A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
   // conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
   rpc UnblockProcess(UnblockProcessRequest) returns (UnblockProcessResponse);
+  // Stops a process that has not ended (whoever answers for the run may): a run in flight is interrupted, the process
+  // and its live sub-processes are cancelled.
+  rpc CancelProcess(CancelProcessRequest) returns (CancelProcessResponse);
   // Restarts a run from one of its steps on a new flow branch of the change; the
   // outputs of that step and of what followed are marked stale until a human decides.
   rpc RelaunchStep(RelaunchStepRequest) returns (RelaunchStepResponse);
@@ -426,6 +429,16 @@ message UnblockProcessRequest {
   repeated string conditions = 3;
   // required to waive or abandon
   string reason = 4;
+}
+
+message CancelProcessRequest {
+  string process_id = 1;
+  // why, optional
+  string reason = 2;
+}
+
+message CancelProcessResponse {
+  Process process = 1;
 }
 
 message UnblockProcessResponse {

@@ -596,7 +596,13 @@ told from a genuinely **stuck** one (nothing established outside would unblock i
 again when the change moves (`Engine.Accompany`, fed by the trigger manager's events). Neither is an end: a person who
 answers for the run (its initiator, the accountable role of its step, a member of its organisation) can always unblock
 it (`Engine.Unblock`): waive conditions (a `waiver` item on the change, with its reason, applied to that run only),
-retry the actions it gave up on, or abandon it. A transverse methodology has no namespace of its own.
+retry the actions it gave up on, or abandon it. The same person can **cancel** any run that has not ended
+(`Engine.Cancel`, RPC `CancelProcess`, "Cancel run" on the run tab): a run in flight is interrupted through its context
+(its model and tool calls end; `Engine.Run` keeps the cancel function of each run in flight and stops without failing
+when a cancellation was asked), then the process is `cancelled` (terminal, `Error` "cancelled by <subject>: <reason>",
+what it waited for dropped, `process.ended` journaled with its status), and so are its live sub-processes, the parent
+first so that it is not woken by them; a parent waiting on a cancelled sub-process resumes as for a failed one, and a
+cancelled companion run is not brought back by the events of its change. A transverse methodology has no namespace of its own.
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
 are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
 

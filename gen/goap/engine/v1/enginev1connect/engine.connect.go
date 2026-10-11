@@ -48,6 +48,9 @@ const (
 	// EngineServiceUnblockProcessProcedure is the fully-qualified name of the EngineService's
 	// UnblockProcess RPC.
 	EngineServiceUnblockProcessProcedure = "/goap.engine.v1.EngineService/UnblockProcess"
+	// EngineServiceCancelProcessProcedure is the fully-qualified name of the EngineService's
+	// CancelProcess RPC.
+	EngineServiceCancelProcessProcedure = "/goap.engine.v1.EngineService/CancelProcess"
 	// EngineServiceRelaunchStepProcedure is the fully-qualified name of the EngineService's
 	// RelaunchStep RPC.
 	EngineServiceRelaunchStepProcedure = "/goap.engine.v1.EngineService/RelaunchStep"
@@ -103,6 +106,9 @@ type EngineServiceClient interface {
 	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
 	// conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
 	UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error)
+	// Stops a process that has not ended (whoever answers for the run may): a run in flight is interrupted, the process
+	// and its live sub-processes are cancelled.
+	CancelProcess(context.Context, *connect.Request[v1.CancelProcessRequest]) (*connect.Response[v1.CancelProcessResponse], error)
 	// Restarts a run from one of its steps on a new flow branch of the change; the
 	// outputs of that step and of what followed are marked stale until a human decides.
 	RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error)
@@ -179,6 +185,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+EngineServiceUnblockProcessProcedure,
 			connect.WithSchema(engineServiceMethods.ByName("UnblockProcess")),
+			connect.WithClientOptions(opts...),
+		),
+		cancelProcess: connect.NewClient[v1.CancelProcessRequest, v1.CancelProcessResponse](
+			httpClient,
+			baseURL+EngineServiceCancelProcessProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("CancelProcess")),
 			connect.WithClientOptions(opts...),
 		),
 		relaunchStep: connect.NewClient[v1.RelaunchStepRequest, v1.RelaunchStepResponse](
@@ -275,6 +287,7 @@ type engineServiceClient struct {
 	submitHumanInput   *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
 	approveAction      *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
 	unblockProcess     *connect.Client[v1.UnblockProcessRequest, v1.UnblockProcessResponse]
+	cancelProcess      *connect.Client[v1.CancelProcessRequest, v1.CancelProcessResponse]
 	relaunchStep       *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
 	decideFlow         *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
 	resolveBoard       *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
@@ -314,6 +327,11 @@ func (c *engineServiceClient) ApproveAction(ctx context.Context, req *connect.Re
 // UnblockProcess calls goap.engine.v1.EngineService.UnblockProcess.
 func (c *engineServiceClient) UnblockProcess(ctx context.Context, req *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error) {
 	return c.unblockProcess.CallUnary(ctx, req)
+}
+
+// CancelProcess calls goap.engine.v1.EngineService.CancelProcess.
+func (c *engineServiceClient) CancelProcess(ctx context.Context, req *connect.Request[v1.CancelProcessRequest]) (*connect.Response[v1.CancelProcessResponse], error) {
+	return c.cancelProcess.CallUnary(ctx, req)
 }
 
 // RelaunchStep calls goap.engine.v1.EngineService.RelaunchStep.
@@ -397,6 +415,9 @@ type EngineServiceHandler interface {
 	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
 	// conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
 	UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error)
+	// Stops a process that has not ended (whoever answers for the run may): a run in flight is interrupted, the process
+	// and its live sub-processes are cancelled.
+	CancelProcess(context.Context, *connect.Request[v1.CancelProcessRequest]) (*connect.Response[v1.CancelProcessResponse], error)
 	// Restarts a run from one of its steps on a new flow branch of the change; the
 	// outputs of that step and of what followed are marked stale until a human decides.
 	RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error)
@@ -469,6 +490,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		EngineServiceUnblockProcessProcedure,
 		svc.UnblockProcess,
 		connect.WithSchema(engineServiceMethods.ByName("UnblockProcess")),
+		connect.WithHandlerOptions(opts...),
+	)
+	engineServiceCancelProcessHandler := connect.NewUnaryHandler(
+		EngineServiceCancelProcessProcedure,
+		svc.CancelProcess,
+		connect.WithSchema(engineServiceMethods.ByName("CancelProcess")),
 		connect.WithHandlerOptions(opts...),
 	)
 	engineServiceRelaunchStepHandler := connect.NewUnaryHandler(
@@ -567,6 +594,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceApproveActionHandler.ServeHTTP(w, r)
 		case EngineServiceUnblockProcessProcedure:
 			engineServiceUnblockProcessHandler.ServeHTTP(w, r)
+		case EngineServiceCancelProcessProcedure:
+			engineServiceCancelProcessHandler.ServeHTTP(w, r)
 		case EngineServiceRelaunchStepProcedure:
 			engineServiceRelaunchStepHandler.ServeHTTP(w, r)
 		case EngineServiceDecideFlowProcedure:
@@ -622,6 +651,10 @@ func (UnimplementedEngineServiceHandler) ApproveAction(context.Context, *connect
 
 func (UnimplementedEngineServiceHandler) UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.UnblockProcess is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) CancelProcess(context.Context, *connect.Request[v1.CancelProcessRequest]) (*connect.Response[v1.CancelProcessResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.CancelProcess is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) RelaunchStep(context.Context, *connect.Request[v1.RelaunchStepRequest]) (*connect.Response[v1.RelaunchStepResponse], error) {

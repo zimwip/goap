@@ -60,8 +60,12 @@ type Engine struct {
 	Types func() def.TypeSet
 
 	locks sync.Map // process id -> *sync.Mutex
-	now   func() time.Time
-	bg    sync.WaitGroup
+	// running holds the cancel function of every run in flight (process id -> *runHandle), cancelling the
+	// cancellations asked for (process id -> subject): Cancel interrupts the run, Run then stops without failing.
+	running    sync.Map
+	cancelling sync.Map
+	now        func() time.Time
+	bg         sync.WaitGroup
 }
 
 // background runs f in a tracked goroutine (see Drain).
@@ -590,6 +594,14 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 // Run executes cycles until the process completes, blocks or fails.
 func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	defer e.lock(id)()
+	// the run can be interrupted by Cancel: its model and tool calls end with the context
+	ctx, cancel := context.WithCancel(ctx)
+	h := &runHandle{cancel: cancel}
+	e.running.Store(id, h)
+	defer func() {
+		e.running.CompareAndDelete(id, h)
+		cancel()
+	}()
 	p, err := e.Store.Get(ctx, id)
 	if err != nil {
 		return nil, err
@@ -624,6 +636,9 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 		maxSteps = 50
 	}
 	for p.Status == StatusRunning {
+		if e.cancelRequested(id) {
+			return p, nil // Cancel ends the process once the run let go of it
+		}
 		if err := ctx.Err(); err != nil {
 			return p, err
 		}
@@ -634,7 +649,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 		// fallback for a deferred process that only attaches mid-loop, after the
 		// check above already ran once with ChangeID still empty.
 		e.journalStarted(ctx, p)
-		if err := e.cycle(ctx, p, m); err != nil {
+		if err := e.cycle(ctx, p, m); err != nil && !e.cancelRequested(id) {
 			e.fail(p, err)
 		}
 		if err := e.save(ctx, p, eventOf(p)); err != nil {
@@ -935,7 +950,7 @@ func (e *Engine) runChildStep(ctx context.Context, h *Host, key, methodologyName
 	}
 	res := dsl.AgentResult{Status: string(child.Status), Goal: child.Goal, ProcessID: child.ID}
 	switch child.Status {
-	case StatusCompleted, StatusFailed:
+	case StatusCompleted, StatusFailed, StatusCancelled:
 		return res, nil // a stuck child is not an end: the step waits until a person unblocks it
 	}
 	h.mu.Lock()

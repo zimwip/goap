@@ -17,6 +17,7 @@
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
   import IntentDialogue from './IntentDialogue.svelte';
   import { provideActions } from '../../shell/workbench.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import {
     engine,
@@ -81,10 +82,27 @@
    * slow check here; polling every 2s is only used on failure.
    */
   const IDLE_POLL_MS = 10_000;
-  const TERMINAL = ['completed', 'failed'];
+  const TERMINAL = ['completed', 'failed', 'cancelled', 'superseded'];
 
   function set(p: Process | undefined) {
     if (p) ingestProcess(p);
+  }
+
+  async function cancelRun() {
+    if (!process?.id) return;
+    const ok = await confirmDialog({
+      title: 'Cancel this run?',
+      message: 'The run stops now: an action in progress is interrupted and its sub-runs are cancelled with it. What it already wrote on the change stays.',
+      confirmLabel: 'Cancel run',
+      cancelLabel: 'Keep running',
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      set((await engine.cancelProcess(process.id)).process);
+    } catch (e) {
+      error = errorMessage(e);
+    }
   }
 
   /** a finished run that is not a sub-agent can be restarted from one of its steps */
@@ -236,6 +254,14 @@
         title: process?.changeId ? 'Ticks, actions and model calls of this process, in the change audit' : 'Process without a change',
         run: () =>
           openTab({ kind: 'change', params: { id: process?.changeId ?? '', pane: 'audit', process: process?.id ?? '', run: '' } }, { pin: true }),
+      },
+      {
+        id: 'cancel',
+        label: 'Cancel run',
+        icon: 'stop',
+        disabled: !process || TERMINAL.includes(process.status ?? ''),
+        title: 'Stop this run (and its sub-runs): an action in progress is interrupted',
+        run: () => void cancelRun(),
       },
       {
         id: 'parent',

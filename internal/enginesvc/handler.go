@@ -317,6 +317,14 @@ func (h *Handler) UnblockProcess(ctx context.Context, r *connect.Request[enginev
 	return connect.NewResponse(&enginev1.UnblockProcessResponse{Process: ProcessToPB(p)}), nil
 }
 
+func (h *Handler) CancelProcess(ctx context.Context, r *connect.Request[enginev1.CancelProcessRequest]) (*connect.Response[enginev1.CancelProcessResponse], error) {
+	p, err := h.Engine.Cancel(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Reason)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.CancelProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
 func (h *Handler) RelaunchStep(ctx context.Context, r *connect.Request[enginev1.RelaunchStepRequest]) (*connect.Response[enginev1.RelaunchStepResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "relaunch"); err != nil {

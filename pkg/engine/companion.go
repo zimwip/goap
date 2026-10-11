@@ -123,6 +123,9 @@ func (e *Engine) accompany(ctx context.Context, m *methodology.Compiled, process
 		if p.ChangeID != changeID || p.Trigger != key {
 			continue
 		}
+		if p.Status == StatusCancelled {
+			return nil // a person stopped it: the events of the change do not bring it back
+		}
 		if p.Status == StatusCompleted || p.Status == StatusStuck || p.Status == StatusFailed || p.WaitsForConditions() {
 			return e.rerun(ctx, p.ID, event)
 		}
