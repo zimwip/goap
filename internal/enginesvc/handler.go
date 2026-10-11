@@ -387,6 +387,19 @@ func (h *Handler) ResolveMerge(ctx context.Context, r *connect.Request[enginev1.
 	return connect.NewResponse(&enginev1.ResolveMergeResponse{Process: ProcessToPB(p)}), nil
 }
 
+func (h *Handler) ResolveRebase(ctx context.Context, r *connect.Request[enginev1.ResolveRebaseRequest]) (*connect.Response[enginev1.ResolveRebaseResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.ResolveRebase(ctx, r.Msg.ProcessId, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.ResolveRebaseResponse{Process: ProcessToPB(p)}), nil
+}
+
 func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
@@ -662,6 +675,12 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		}
 		if m := t.Merge; m != nil {
 			out.Pending.Merge = mergeTaskToPB(m)
+		}
+		if rb := t.Rebase; rb != nil {
+			out.Pending.Rebase = &enginev1.RebaseTask{Branch: rb.Branch, Onto: rb.Onto}
+			for _, c := range rb.Impacts {
+				out.Pending.Rebase.Impacts = append(out.Pending.Rebase.Impacts, &enginev1.RebaseConflict{Impact: c.Impact, Key: c.Key, Conflicts: c.Conflicts})
+			}
 		}
 		if pr := t.Proposal; pr != nil {
 			rp := &enginev1.RelaunchProposal{Process: pr.Process, Step: int32(pr.Step), Action: pr.Action, Reason: pr.Reason}

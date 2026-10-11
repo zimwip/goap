@@ -139,11 +139,21 @@ export interface MergeConflict {
   properties?: { name?: string; base?: JsonValue; ours?: JsonValue; theirs?: JsonValue; proposed?: JsonValue }[];
 }
 
+/** The conflicts the rebase of a change left, which stopped its apply (ADR 0101): the impacts and the names of what conflicts. */
+export interface RebaseTask {
+  /** the branch the change was rebased onto (a sub-change: its parent change), and the head baseline or parent id */
+  branch?: string;
+  onto?: string;
+  impacts?: { impact?: string; key?: string; conflicts?: string[] }[];
+}
+
 export interface HumanTask {
   /** input: enter items · approval: approve or reject · agent: waiting on a sub-agent · flow: adopt or discard a relaunched flow · board: inconsistent blackboard · relaunched: waiting for a relaunched flow · condition: waiting for conditions established outside the process */
-  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | 'merge' | 'condition' | 'unblock' | string;
+  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | 'merge' | 'rebase' | 'condition' | 'unblock' | string;
   /** kind "merge": the change is committed, its merge waits for these conflicts to be settled */
   merge?: MergeTask;
+  /** kind "rebase": the apply stopped on the conflicts of the rebase of the change */
+  rebase?: RebaseTask;
   /** kind "condition": the conditions awaited; "unblock" (stuck): those that would unblock it ("name" expected true, "!name" expected false) */
   conditions?: string[];
   /** kind "board": what is wrong, and the step to restart from (absent when none can be) */

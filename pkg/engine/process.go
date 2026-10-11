@@ -142,7 +142,28 @@ const (
 	// nodes both sides changed the same way apart (Merge): a person picks a side per property (the change's value is
 	// proposed), then the merge completes and the process goes on (Engine.ResolveMerge).
 	TaskMerge = "merge"
+	// TaskRebase: the apply of the change stopped because rebasing it onto what it builds on (its target branch, or
+	// its parent change) left conflicts (Rebase): a person settles them and reviews the impacts again, then the
+	// process goes on and applies again (Engine.ResolveRebase, ADR 0101).
+	TaskRebase = "rebase"
 )
+
+// RebaseTask is what a person needs to settle after the rebase of a change found conflicts (ADR 0101).
+type RebaseTask struct {
+	// Branch is the branch the change was rebased onto (for a sub-change, its parent change's), Onto the head
+	// baseline or parent change it was rebased onto.
+	Branch  string           `json:"branch,omitempty"`
+	Onto    string           `json:"onto,omitempty"`
+	Impacts []RebaseConflict `json:"impacts"`
+}
+
+// RebaseConflict is a change impact the rebase left conflicts on: their names are `props.<name>`, `owner`, `state`,
+// `link:<type>:<node>` and `node`.
+type RebaseConflict struct {
+	Impact    string   `json:"impact"`
+	Key       string   `json:"key"`
+	Conflicts []string `json:"conflicts"`
+}
 
 // MergeTask is what a person needs to settle the merge a change waits for (ADR 0056).
 type MergeTask struct {
@@ -196,6 +217,8 @@ type HumanTask struct {
 	Proposal *RelaunchProposal   `json:"proposal,omitempty"`
 	// Merge: what a TaskMerge asks a person to settle.
 	Merge *MergeTask `json:"merge,omitempty"`
+	// Rebase: what a TaskRebase asks a person to settle.
+	Rebase *RebaseTask `json:"rebase,omitempty"`
 	// FlowID is the flow a TaskRelaunched waits for.
 	FlowID string `json:"flowId,omitempty"`
 	// Context is the step of a process the task belongs to (ADR 0034, ADR 0035 §2): what to do and how.

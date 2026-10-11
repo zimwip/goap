@@ -882,6 +882,14 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 			Description: fmt.Sprintf("The change is committed on %s; merging it into %s needs your decision on %d node(s) changed on both sides: keep the value of %s or take the change's.", t.From, t.Into, len(t.Conflicts), t.Into)}
 		return nil
 	}
+	if t := res.Rebase; t != nil {
+		// not applied: the rebase left conflicts, a person settles them and the apply is tried again
+		step.EndedAt = e.clock()
+		p.Status = StatusWaiting
+		p.Pending = &HumanTask{Kind: TaskRebase, Action: action.Name, Step: i, Rebase: t, Context: sc,
+			Description: fmt.Sprintf("The change was rebased onto %s; %d impact(s) conflict: settle them (edit or keep your values), review them again, then continue.", t.target(), len(t.Impacts))}
+		return nil
+	}
 	e.forgetChildren(p, action.Name)
 	if res.Wait {
 		p.Status = StatusWaiting

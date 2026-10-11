@@ -29,6 +29,8 @@ service EngineService {
   rpc ResolveBoard(ResolveBoardRequest) returns (ResolveBoardResponse);
   // Settles the conflicts of the merge a committed change waits for, completes the merge and goes on with the run.
   rpc ResolveMerge(ResolveMergeRequest) returns (ResolveMergeResponse);
+  // Continues a run whose apply stopped on the conflicts of a rebase, once they are settled and the impacts reviewed again.
+  rpc ResolveRebase(ResolveRebaseRequest) returns (ResolveRebaseResponse);
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
   // Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
   rpc GetProcessProgress(GetProcessProgressRequest) returns (GetProcessProgressResponse);
@@ -172,6 +174,32 @@ message HumanTask {
   repeated string conditions = 13;
   // kind "merge": the change is committed but its merge waits for these conflicts to be settled (ResolveMerge)
   MergeTask merge = 14;
+  // kind "rebase": the apply stopped on the conflicts the rebase of the change left (ResolveRebase)
+  RebaseTask rebase = 15;
+}
+
+// The conflicts a rebase left on a change before it lands (ADR 0101).
+message RebaseTask {
+  // the branch the change was rebased onto (a sub-change: its parent change), and the head baseline or parent id
+  string branch = 1;
+  string onto = 2;
+  repeated RebaseConflict impacts = 3;
+}
+
+message RebaseConflict {
+  string impact = 1;
+  string key = 2;
+  // props.<name>, owner, state, link:<type>:<node>, node
+  repeated string conflicts = 3;
+}
+
+message ResolveRebaseRequest {
+  string process_id = 1;
+  string comment = 2;
+}
+
+message ResolveRebaseResponse {
+  Process process = 1;
 }
 
 // The merge a committed change waits for: the properties both branches changed apart, node by node.

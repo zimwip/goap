@@ -86,8 +86,18 @@ The history tab (`BaselineBranchGraph`) must say how each baseline came to be, n
   fast-forward named on the row (§4).
 - A change that has to wait for a release branch (ADR 0056, two-step apply) rebases onto that branch's head, which is its
   target, not main.
-- Not done: rebasing a committed change (it would drop and rewrite its versions); a run that turns the conflicts of a
-  rebase into a human task (the `graph.apply` action fails with the `ErrConflict` message, as for a sub-change today).
+- Not done: rebasing a committed change (it would drop and rewrite its versions).
+
+## The `rebase` task of a run
+
+When the `graph.apply` action stops because the rebase left conflicts (`ErrConflict` and `Graph.RebaseState` lists
+conflicts; root changes and sub-changes alike), the process does not fail: it waits on a human task of kind `rebase`
+(`engine.RebaseTask`: the branch or parent change it was rebased onto and, per impact, its key and the conflict names
+`props.<name>`, `owner`, `state`, `link:<type>:<node>`, `node`). Any other `ErrConflict` (impacts awaiting their review)
+stays an ordinary error. A person settles the conflicts and reviews the impacts again in the change tab (the task panel
+embeds the sync pane), then `Engine.ResolveRebase` (RPC `ResolveRebase`) continues the run: it refuses while a conflict
+or an impact awaiting its review remains, and the planner applies again (which rebases again, and may raise a new task
+if the target moved meanwhile).
 
 ## Plan
 

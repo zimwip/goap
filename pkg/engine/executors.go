@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -56,6 +58,8 @@ type ActionResult struct {
 	VarsSet map[string]any
 	// Merge: the action committed the change but its merge waits for a person to settle conflicts (TaskMerge).
 	Merge *MergeTask
+	// Rebase: the apply stopped on the conflicts of the rebase; a person settles them (TaskRebase).
+	Rebase *RebaseTask
 	// Method is the method a step chose to carry it out (ADR 0035 §1), recorded as the step's specialization.
 	Method string
 }
@@ -610,6 +614,12 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	c := ac.Blackboard.Change
 	b, err := ac.Graph.Apply(ctx, c.ID, name)
 	if err != nil {
+		// the rebase before landing left conflicts: a person settles them (TaskRebase); any other refusal is an error
+		if errors.Is(err, graph.ErrConflict) {
+			if task := rebaseTaskOf(ctx, ac.Graph, c.ID); task != nil {
+				return ActionResult{Rebase: task, Output: fmt.Sprintf("rebase found conflicts on %d impact(s) to settle", len(task.Impacts))}, nil
+			}
+		}
 		return ActionResult{}, err
 	}
 	// Apply commits and merges; a merge that finds nodes both sides changed apart leaves the change committed: the

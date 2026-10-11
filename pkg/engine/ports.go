@@ -72,6 +72,8 @@ type GraphPort interface {
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
 	PlanMerge(ctx context.Context, namespace, from, into string) (graph.MergePlan, error)
 	IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graph.Resolution) (domain.Change, error)
+	// RebaseState tells where a change stands against what it builds on: the conflicts a rebase left to settle (ADR 0101).
+	RebaseState(ctx context.Context, id domain.ChangeID) (graph.RebaseState, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// AppendLog / ChangeLog are the log of the changes, where the execution journal lives (ADR 0011, pkg/journal).
 	AppendLog(ctx context.Context, entries []domain.LogEntry) error

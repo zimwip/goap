@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { behindLine, conflictLabel, syncVisible } from './rebase';
+import { behindLine, conflictLabel, conflictLines, rebasedOnto, syncVisible } from './rebase';
 
 describe('conflictLabel', () => {
   it('reads the conflict names of a rebase', () => {
@@ -25,5 +25,19 @@ describe('root change behind its target (ADR 0101)', () => {
     expect(syncVisible({ ...none, conflicts: 1 })).toBe(true);
     expect(syncVisible({ ...none, isSub: true, onto: 'T1' })).toBe(false);
     expect(syncVisible({ ...none, isSub: true, behind: 1 })).toBe(true);
+  });
+});
+
+describe('rebase task of a run', () => {
+  it('lists the conflicts per impact', () => {
+    expect(conflictLines([{ key: 'REQ-1', conflicts: ['props.title', 'owner'] }, { impact: 'abc', conflicts: ['state'] }])).toEqual([
+      'REQ-1: property “title”, owner',
+      'abc: lifecycle state',
+    ]);
+  });
+  it('names where the change was rebased onto', () => {
+    expect(rebasedOnto({ branch: 'main', onto: 'T1T1T1T1-22' })).toBe('main (T1T1T1T1)');
+    expect(rebasedOnto({ branch: 'main' })).toBe('main');
+    expect(rebasedOnto({})).toBe('its target');
   });
 });

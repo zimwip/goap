@@ -13,6 +13,7 @@
   import FlowDecisionPanel from '../../components/FlowDecisionPanel.svelte';
   import BoardIssuesPanel from '../../components/BoardIssuesPanel.svelte';
   import MergeTaskPanel from '../../components/MergeTaskPanel.svelte';
+import RebaseTaskPanel from '../../components/RebaseTaskPanel.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
@@ -430,6 +431,8 @@
           <BoardIssuesPanel {process} {flows} ondecided={set} onopen={(pid) => openRun(pid)} />
         {:else if process.pending.kind === 'merge'}
           <MergeTaskPanel {process} ondecided={set} />
+        {:else if process.pending.kind === 'rebase'}
+          <RebaseTaskPanel {process} ondecided={set} />
         {:else if process.pending.kind === 'relaunched'}
           {@const awaited = [...processes.values()].find((q) => q.flow === process.pending?.flowId)}
           <section class="card waiting-agent">

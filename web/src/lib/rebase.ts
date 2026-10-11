@@ -25,3 +25,14 @@ export function behindLine(branch: string, onto: string, keys: string[]): string
 export function syncVisible(s: { isSub: boolean; behind: number; onto: string; conflicts: number; error: string }): boolean {
   return (s.isSub ? s.behind > 0 : !!s.onto) || s.conflicts > 0 || !!s.error;
 }
+
+/** What a "rebase" task of a run says conflicts, one line per impact: "REQ-1: property “title”, owner". */
+export function conflictLines(impacts: { key?: string; impact?: string; conflicts?: string[] }[]): string[] {
+  return impacts.map((i) => `${i.key || shortId(i.impact ?? '')}: ${(i.conflicts ?? []).map(conflictLabel).join(', ')}`);
+}
+
+/** Where the change was rebased onto, as the task shows it. */
+export function rebasedOnto(t: { branch?: string; onto?: string }): string {
+  if (t.branch && t.onto) return `${t.branch} (${shortId(t.onto)})`;
+  return t.branch || (t.onto ? shortId(t.onto) : 'its target');
+}

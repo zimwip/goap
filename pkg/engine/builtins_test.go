@@ -2,6 +2,8 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -109,5 +111,81 @@ func TestResolveMergeCompletesTheMergeAndResumes(t *testing.T) {
 	}
 	if _, err := e.ResolveMerge(ctx, "p1", nil, ""); err == nil {
 		t.Fatal("nothing pending any more")
+	}
+}
+
+// rebaseStub is a GraphPort whose Apply stops on the rebase: conflicts left to settle, impacts still to review.
+type rebaseStub struct {
+	GraphPort
+	applyErr  error
+	conflicts []graph.ImpactConflicts
+	proposed  bool
+}
+
+func (s *rebaseStub) AppendLog(context.Context, []domain.LogEntry) error { return nil }
+
+func (s *rebaseStub) Apply(context.Context, domain.ChangeID, string) (domain.Baseline, error) {
+	return domain.Baseline{}, s.applyErr
+}
+
+func (s *rebaseStub) RebaseState(context.Context, domain.ChangeID) (graph.RebaseState, error) {
+	return graph.RebaseState{Branch: "main", Conflicts: s.conflicts}, nil
+}
+
+func (s *rebaseStub) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
+	c := domain.Change{ID: id, Status: domain.ChangeActive, Nodes: []domain.ChangeImpact{{ID: "i1", Key: "REQ-1", Review: domain.ReviewAccepted}}}
+	if s.proposed {
+		c.Nodes[0].Review = domain.ReviewProposed
+	}
+	return c, nil
+}
+
+func TestApplyChangeWaitsOnTheConflictsOfTheRebase(t *testing.T) {
+	conflict := fmt.Errorf("change c1 rebased: %w", graph.ErrConflict)
+	run := func(s *rebaseStub) (ActionResult, error) {
+		return ApplyChange(context.Background(), ActionContext{Graph: s, Blackboard: domain.Blackboard{Change: domain.Change{ID: "c1"}}})
+	}
+	r, err := run(&rebaseStub{applyErr: conflict, conflicts: []graph.ImpactConflicts{{Impact: "i1", Key: "REQ-1", Conflicts: []string{"props.title", "owner"}}}})
+	if err != nil || r.Rebase == nil {
+		t.Fatalf("a rebase conflict is a task: %v %+v", err, r)
+	}
+	if r.Rebase.Branch != "main" || len(r.Rebase.Impacts) != 1 || r.Rebase.Impacts[0].Key != "REQ-1" || len(r.Rebase.Impacts[0].Conflicts) != 2 {
+		t.Fatalf("the task: %+v", r.Rebase)
+	}
+	// a conflict without any rebase conflict (impacts awaiting their review, say) stays an error
+	if r, err := run(&rebaseStub{applyErr: conflict}); !errors.Is(err, graph.ErrConflict) || r.Rebase != nil {
+		t.Fatalf("an ordinary conflict: %v %+v", err, r)
+	}
+	if _, err := run(&rebaseStub{applyErr: errors.New("boom"), conflicts: []graph.ImpactConflicts{{Impact: "i1"}}}); err == nil {
+		t.Fatal("another error stays an error")
+	}
+}
+
+func TestResolveRebaseNeedsTheConflictsSettledAndReviewed(t *testing.T) {
+	ctx := context.Background()
+	g := &rebaseStub{conflicts: []graph.ImpactConflicts{{Impact: "i1", Key: "REQ-1", Conflicts: []string{"props.title"}}}}
+	e := &Engine{Graph: g, Store: NewMemoryStore()}
+	p := &Process{ID: "p1", ChangeID: "c1", Status: StatusWaiting, Steps: []Step{{Index: 0, Action: "apply"}},
+		Pending: &HumanTask{Kind: TaskRebase, Action: "apply", Step: 0, Rebase: &RebaseTask{Branch: "main", Impacts: []RebaseConflict{{Impact: "i1", Key: "REQ-1", Conflicts: []string{"props.title"}}}}}}
+	if err := e.Store.Put(ctx, p); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.ResolveRebase(ctx, "p1", ""); !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "REQ-1") {
+		t.Fatalf("a conflict remains: %v", err)
+	}
+	g.conflicts, g.proposed = nil, true
+	if _, err := e.ResolveRebase(ctx, "p1", ""); !errors.Is(err, ErrInvalidState) || !strings.Contains(err.Error(), "review") {
+		t.Fatalf("an impact awaits its review: %v", err)
+	}
+	g.proposed = false
+	got, err := e.ResolveRebase(ctx, "p1", "ok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != StatusRunning || got.Pending != nil {
+		t.Fatalf("the run goes on: %s %+v", got.Status, got.Pending)
+	}
+	if _, err := e.ResolveRebase(ctx, "p1", ""); !errors.Is(err, ErrInvalidState) {
+		t.Fatalf("nothing pending any more: %v", err)
 	}
 }

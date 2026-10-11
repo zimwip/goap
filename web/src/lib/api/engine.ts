@@ -65,6 +65,9 @@ export const engine = {
       resolutions,
       comment,
     }),
+  /** Continues a run whose apply stopped on the conflicts of a rebase, once they are settled and the impacts reviewed again. */
+  resolveRebase: (processId: string, comment = '') =>
+    rpc<{ processId: string; comment: string }, { process?: Process }>(ENGINE, 'ResolveRebase', { processId, comment }),
   getProcess: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
   getProcessProgress: (id: string, signal?: AbortSignal) =>
