@@ -1,8 +1,8 @@
-SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs goap-dev goap-runner
+SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs goap-dev goap-runner goap-eval
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: all build test web-test test-pg lint generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image
+.PHONY: all build test web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image
 
 all: generate build test
 
@@ -35,6 +35,11 @@ test-pg: ## every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a t
 	  trap "docker stop $$c >/dev/null" EXIT; \
 	  until [ "$$(docker logs $$c 2>&1 | grep -c 'ready to accept connections')" -ge 2 ]; do sleep 1; done; \
 	  GOAP_TEST_PG_DSN="postgres://goap:goap@localhost:$(PGTEST_PORT)/goap?sslmode=disable" go test -count=1 ./...; fi
+
+# offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
+EVAL ?= evals
+eval:
+	go run ./cmd/goap-eval $(EVAL)
 
 lint:
 	go vet ./...

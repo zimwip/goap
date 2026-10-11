@@ -41,6 +41,8 @@ const (
 	SourceHelper    = "helper"
 	SourceIndexer   = "indexer"
 	SourceIntent    = "intent"
+	// SourceEval is the offline evaluation harness (pkg/eval, cmd/goap-eval).
+	SourceEval = "eval"
 )
 
 // SourceCalibration is the source of the gateway's own calls that measure what a behaviour costs on a model (ADR 0093,

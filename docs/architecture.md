@@ -1552,6 +1552,10 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   `NativeTools` (Anthropic, OpenAI-compatible, Gemini) through its tool API, under names every API accepts (mapped back);
   any other provider, or an OpenAI-compatible model that refuses tools (remembered, `textToolsOnly`), gets the text
   protocol run by the gateway. The exchange of a call keeps the calls and results as text (`llm.Message.Transcript`).
+- **Offline evaluation** (ADR 0099): `pkg/eval` runs YAML cases (`evals/`: a prompt, mocked tools, expected items,
+  tool trajectory, a judge's rubric) through the tool loop of an engine LLM action, several runs each, and reports pass
+  rate, tokens and latency; `cmd/goap-eval` (`make eval`) runs them through the gateway as the user of `GOAP_TOKEN`
+  (source `eval` in the ledger).
 - **Aliases** (`default`, `fast`…) point to catalog models; the router follows the graph. The RPCs of the gateway are read-only
   (`ListProviders`, `ListCatalog`, `ListBehaviors`, `PreviewBehaviors`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
 - **Ledger of LLM calls** (ADR 0089): every call the gateway serves or refuses (completion or embedding, whoever asked:

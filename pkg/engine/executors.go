@@ -90,6 +90,15 @@ Decision points of the change (a question to settle, usually which option) are i
 A write edits the draft of the node: the first write checks it out, the next ones edit it (no version exists until the change lands). A write never reviews: a review is an operation of its own, and a write after an accepted review sends the review back to proposed. A lifecycle state is a transition of the draft. A node is written in any state of its lifecycle; a change lands only when its nodes rest in landable states (a state flagged notLandable blocks it): move a node to a landable state with a transition once its review is accepted. A node is never deleted: removing a child is a write of its parent without the link.
 Reference nodes by their key. Reference items and change impacts created in the same answer by "#<ref>".`
 
+// ActionSystem is the system text every LLM action starts from (the item protocol), and the note added when the action
+// has tools: what the offline evaluation (pkg/eval, prompt "engine") puts before the system text of a case.
+func ActionSystem(withTools bool) string {
+	if withTools {
+		return llmSystem + toolsNote
+	}
+	return llmSystem
+}
+
 // PromptData is exposed to prompt templates.
 type PromptData struct {
 	Change    domain.Change

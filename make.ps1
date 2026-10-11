@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'gateway', 'mcp', 'connector-localfs', 'goap-dev', 'goap-runner'
+$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'gateway', 'mcp', 'connector-localfs', 'goap-dev', 'goap-runner', 'goap-eval'
 $Compose = @('compose', '-f', 'deploy/compose/docker-compose.yml')
 $Exe = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
 
@@ -75,6 +75,12 @@ function TestPg {
         finally { Remove-Item Env:GOAP_TEST_PG_DSN -ErrorAction SilentlyContinue }
     }
     finally { & docker stop $c | Out-Null }
+}
+
+# offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
+function Eval {
+    $cases = if ($env:EVAL) { $env:EVAL } else { 'evals' }
+    Run go run ./cmd/goap-eval $cases
 }
 
 function Lint {
@@ -152,6 +158,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   test-pg           every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away
                     pgvector container on PGTEST_PORT, 55432)
   lint              go vet + gofmt + dsl.md sync check
+  eval              offline evaluation cases of evals\ (or $env:EVAL) against a running gateway, as GOAP_TOKEN
   dev               single process, in-memory, demo data: http://localhost:8080
   devlocal          no docker: SQLite (.goap\goap.db), backend + IDE both reload on code change:
                     http://localhost:5173
@@ -173,6 +180,7 @@ switch ($Target) {
     'web-test'         { WebTest }
     'test-pg'          { TestPg }
     'lint'             { Lint }
+    'eval'             { Eval }
     'dev'              { Dev }
     'devlocal'         { DevLocal }
     'devlocal-backend' { DevLocalBackend }

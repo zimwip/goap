@@ -1,0 +1,49 @@
+# Offline evaluation cases (ADR 0099): run with `make eval` (or `goap-eval evals/`) against a running goap-dev or
+# gateway, with GOAP_TOKEN set to the token of the user the calls are made as.
+cases:
+  - name: register-a-read-document
+    description: An LLM action with a document tool reads what it is asked to and registers it as an artifact.
+    prompt: engine
+    system: You register the documents the change needs.
+    messages:
+      - role: user
+        content: Read the specification spec/payments.md and register it as an artifact of type "spec" whose data holds its title.
+    json: true
+    runs: 3
+    minPassRate: 0.67
+    tools:
+      - name: document-repository/read
+        description: Read a document of the repository by its path.
+        inputSchema:
+          type: object
+          properties: {path: {type: string, description: the path of the document}}
+          required: [path]
+        error: no such document
+        responses:
+          - args: {path: spec/payments.md}
+            result: {text: "# Payments API v2\nThe PSP moves to signed webhooks."}
+    expect:
+      items:
+        - {kind: artifact, type: spec}
+      trajectory: {match: in_order, tools: [document-repository/read]}
+      maxToolCalls: 3
+      noToolErrors: true
+    judge:
+      rubric: The artifact's data holds the title of the document that was read ("Payments API v2"), not an invented one.
+
+  - name: no-tool-when-none-is-needed
+    description: An action whose prompt holds everything it needs answers without calling a tool.
+    prompt: engine
+    messages:
+      - role: user
+        content: 'Register an artifact of type "note" whose data has text "release frozen until Monday".'
+    json: true
+    tools:
+      - name: document-repository/read
+        description: Read a document of the repository by its path.
+        inputSchema: {type: object, properties: {path: {type: string}}, required: [path]}
+        result: {text: unrelated}
+    expect:
+      items:
+        - {kind: artifact, type: note, data: {text: release frozen until Monday}}
+      trajectory: {match: exact, tools: []}
