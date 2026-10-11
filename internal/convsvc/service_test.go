@@ -369,3 +369,52 @@ func TestMessageContext(t *testing.T) {
 		})
 	}
 }
+
+func TestRollingSummary(t *testing.T) {
+	ctx := context.Background()
+	for name, st := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			s := newService(st)
+			c, err := s.Create(ctx, alice, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if sum, err := s.Summary(ctx, system, c.ID); err != nil || sum.Text != "" || sum.UpTo != 0 {
+				t.Fatalf("none yet: %+v %v", sum, err)
+			}
+			// only a platform service writes it
+			if err := s.SetSummary(ctx, alice, c.ID, "x", 2); !errors.Is(err, convsvc.ErrForbidden) {
+				t.Fatalf("owner writes: %v", err)
+			}
+			if err := s.SetSummary(ctx, system, c.ID, strings.Repeat("x", convsvc.MaxSummaryBytes+1), 2); !errors.Is(err, convsvc.ErrInvalid) {
+				t.Fatalf("too long: %v", err)
+			}
+			if err := s.SetSummary(ctx, system, c.ID, "first four", 4); err != nil {
+				t.Fatal(err)
+			}
+			// a summary covering fewer messages does not replace it; one covering more does
+			if err := s.SetSummary(ctx, system, c.ID, "first two", 2); err != nil {
+				t.Fatal(err)
+			}
+			if sum, _ := s.Summary(ctx, alice, c.ID); sum.Text != "first four" || sum.UpTo != 4 {
+				t.Fatalf("kept %+v", sum)
+			}
+			if err := s.SetSummary(ctx, system, c.ID, "first six", 6); err != nil {
+				t.Fatal(err)
+			}
+			if sum, _ := s.Summary(ctx, system, c.ID); sum.Text != "first six" || sum.UpTo != 6 {
+				t.Fatalf("grown %+v", sum)
+			}
+			// someone else's conversation is not found; deleting the conversation drops its summary
+			if _, err := s.Summary(ctx, bob, c.ID); !errors.Is(err, convsvc.ErrNotFound) {
+				t.Fatalf("other subject: %v", err)
+			}
+			if err := s.Delete(ctx, alice, c.ID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.Summary(ctx, c.ID); !errors.Is(err, convsvc.ErrNotFound) {
+				t.Fatalf("after delete: %v", err)
+			}
+		})
+	}
+}

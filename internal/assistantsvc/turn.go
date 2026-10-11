@@ -49,6 +49,10 @@ type turn struct {
 	effects, proposals int
 	// rounds and toolCalls count the model calls and the tools run, for the span of the turn
 	rounds, toolCalls int
+	// summary covers the conversation before the history (compact.go); older are the messages to fold into it once
+	// the turn is answered
+	summary convsvc.Summary
+	older   []convsvc.Message
 }
 
 type toolCall struct {
@@ -117,7 +121,7 @@ func (t *turn) loop(ctx context.Context) (string, error) {
 	d.add("user", t.in.Text)
 	for round := 1; ; round++ {
 		t0 := time.Now()
-		sys := systemPrompt(t.in.Context, t.project, t.in.UITools)
+		sys := systemPrompt(t.in.Context, t.project, t.in.UITools, t.summary.Text)
 		// the rounds of a turn send the same system text and history again: cache them
 		t.rounds = round
 		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: sys, Messages: slices.Clone(d), JSON: true, MaxTokens: 2048, Cache: true})

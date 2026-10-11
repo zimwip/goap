@@ -65,6 +65,15 @@ type Message struct {
 	CreatedAt time.Time
 }
 
+// Summary is the rolling summary of the older part of a conversation (compaction): the messages up to the seq UpTo
+// are summarised in Text.
+type Summary struct {
+	ConversationID string
+	Text           string
+	UpTo           int
+	UpdatedAt      time.Time
+}
+
 // Cursor is the position after which a page of conversations starts (zero: the first page).
 type Cursor struct {
 	UpdatedAt time.Time
@@ -98,6 +107,10 @@ type Store interface {
 	Append(ctx context.Context, m Message, maxMessages int) (Message, error)
 	// UpdateMessage reads a message, lets fn change it, stores the result and touches the conversation, atomically.
 	UpdateMessage(ctx context.Context, id string, now time.Time, fn func(Message) (Message, error)) (Message, error)
+	// Summary returns the summary of a conversation (ErrNotFound when it has none); SetSummary stores one unless the
+	// stored one already covers as many messages (UpTo only grows).
+	Summary(ctx context.Context, conversationID string) (Summary, error)
+	SetSummary(ctx context.Context, sum Summary) error
 }
 
 // micros is the stored form of a time.
@@ -119,13 +132,14 @@ type MemoryStore struct {
 	mu    sync.Mutex
 	convs map[string]Conversation
 	msgs  map[string][]Message // conversation id -> messages in order
+	sums  map[string]Summary
 }
 
 var _ Store = (*MemoryStore)(nil)
 
 // NewMemoryStore returns an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{convs: map[string]Conversation{}, msgs: map[string][]Message{}}
+	return &MemoryStore{convs: map[string]Conversation{}, msgs: map[string][]Message{}, sums: map[string]Summary{}}
 }
 
 func cloneMessage(m Message) Message {
@@ -136,6 +150,29 @@ func cloneMessage(m Message) Message {
 		m.Actions = out
 	}
 	return m
+}
+
+func (s *MemoryStore) Summary(_ context.Context, id string) (Summary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sum, ok := s.sums[id]
+	if !ok {
+		return Summary{}, ErrNotFound
+	}
+	return sum, nil
+}
+
+func (s *MemoryStore) SetSummary(_ context.Context, sum Summary) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.convs[sum.ConversationID]; !ok {
+		return ErrNotFound
+	}
+	if cur, ok := s.sums[sum.ConversationID]; ok && cur.UpTo >= sum.UpTo {
+		return nil
+	}
+	s.sums[sum.ConversationID] = sum
+	return nil
 }
 
 func (s *MemoryStore) Create(_ context.Context, c Conversation, maxPerSubject int) error {
@@ -202,6 +239,7 @@ func (s *MemoryStore) Delete(_ context.Context, id string) error {
 	defer s.mu.Unlock()
 	delete(s.convs, id)
 	delete(s.msgs, id)
+	delete(s.sums, id)
 	return nil
 }
 
@@ -346,6 +384,26 @@ func notFound(err error) error {
 	return err
 }
 
+func (s SQLStore) Summary(ctx context.Context, id string) (Summary, error) {
+	sum := Summary{ConversationID: id}
+	var updated int64
+	err := s.DB.QueryRowContext(ctx, s.q(`SELECT summary, up_to, updated_at FROM conversation_summary WHERE conversation_id = ?`), id).
+		Scan(&sum.Text, &sum.UpTo, &updated)
+	if err != nil {
+		return Summary{}, notFound(err)
+	}
+	sum.UpdatedAt = fromMicros(updated)
+	return sum, nil
+}
+
+func (s SQLStore) SetSummary(ctx context.Context, sum Summary) error {
+	// UpTo only grows: two compactions racing keep the one that covers more
+	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO conversation_summary (conversation_id, summary, up_to, updated_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT (conversation_id) DO UPDATE SET summary = excluded.summary, up_to = excluded.up_to, updated_at = excluded.updated_at
+		WHERE conversation_summary.up_to < excluded.up_to`), sum.ConversationID, sum.Text, sum.UpTo, micros(sum.UpdatedAt))
+	return err
+}
+
 func (s SQLStore) Create(ctx context.Context, c Conversation, maxPerSubject int) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
@@ -415,6 +473,9 @@ func (s SQLStore) Delete(ctx context.Context, id string) error {
 	defer func() { _ = tx.Rollback() }()
 	// explicit: SQLite enforces foreign keys only when asked to
 	if _, err := tx.ExecContext(ctx, s.q(`DELETE FROM conversation_message WHERE conversation_id = ?`), id); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, s.q(`DELETE FROM conversation_summary WHERE conversation_id = ?`), id); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, s.q(`DELETE FROM conversation WHERE id = ?`), id); err != nil {

@@ -31,7 +31,9 @@ const (
 	MaxTextBytes               = 64 << 10
 	MaxActionsBytes            = 64 << 10
 	MaxTitleBytes              = 200
-	MaxErrorBytes              = 4 << 10
+	// MaxSummaryBytes caps the rolling summary of a conversation.
+	MaxSummaryBytes = 8 << 10
+	MaxErrorBytes   = 4 << 10
 	// MaxContextBytes caps the description of the context of a user message.
 	MaxContextBytes = 300
 	DefaultPageSize = 50
@@ -314,6 +316,39 @@ func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id strin
 		return m, nil
 	})
 	return out, s.storeErr(err)
+}
+
+// Summary returns the rolling summary of a conversation (the zero Summary when it has none) to a platform service (the
+// assistant, which writes it) or to the owner of the conversation.
+func (s *Service) Summary(ctx context.Context, p authz.Principal, id string) (Summary, error) {
+	if p.Anonymous() {
+		return Summary{}, ErrAnonymous
+	}
+	if !p.System() {
+		if _, err := s.owned(ctx, p, id); err != nil {
+			return Summary{}, err
+		}
+	}
+	sum, err := s.Store.Summary(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return Summary{ConversationID: id}, nil
+	}
+	return sum, err
+}
+
+// SetSummary stores the rolling summary of a conversation (a platform service only): the messages up to the seq upTo
+// are summarised in text. A summary covering fewer messages than the stored one is ignored.
+func (s *Service) SetSummary(ctx context.Context, p authz.Principal, id, text string, upTo int) error {
+	if p.Anonymous() {
+		return ErrAnonymous
+	}
+	if !p.System() {
+		return ErrForbidden
+	}
+	if len(text) > MaxSummaryBytes || upTo < 1 {
+		return fmt.Errorf("%w: a summary of at most %d bytes covering at least one message", ErrInvalid, MaxSummaryBytes)
+	}
+	return s.storeErr(s.Store.SetSummary(ctx, Summary{ConversationID: id, Text: text, UpTo: upTo, UpdatedAt: s.now()}))
 }
 
 // ErrActionMissing is returned by UpdateAction when the message has no action at that index.

@@ -574,7 +574,7 @@ func TestTheDecisionIsInTheNextHistory(t *testing.T) {
 		e := newEnv(t)
 		m := e.propose(t, newChangeArg, inProject("PROJ-A"))
 		// before the decision: nothing was started
-		if h := historyOf(e.messages(t)); !strings.Contains(h[len(h)-1].Content, "has not decided yet, nothing was started") {
+		if h, _ := historyOf(e.messages(t)); !strings.Contains(h[len(h)-1].Content, "has not decided yet, nothing was started") {
 			t.Fatalf("%+v", h)
 		}
 		if _, err := e.confirm(m, decision); err != nil {

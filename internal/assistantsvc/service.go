@@ -258,7 +258,11 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 			return user, pending, ErrBusy
 		}
 	}
-	history := historyOf(msgs)
+	history, from := historyOf(msgs)
+	summary, err := s.Convs.Summary(ctx, Principal, in.ConversationID)
+	if err != nil {
+		return user, pending, err
+	}
 	user, err = s.Convs.Append(ctx, p, in.ConversationID, convsvc.RoleUser, convsvc.Content{Text: in.Text, Context: in.Context.describe()})
 	if err != nil {
 		return user, pending, err
@@ -271,10 +275,13 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 	if in.Context.App.Project != "" {
 		p.Project = in.Context.App.Project
 	}
-	t := &turn{s: s, p: p, conversation: in.ConversationID, message: pending.ID, in: in, history: history, project: p.Project, uiTools: toolIndex(in.UITools)}
+	t := &turn{s: s, p: p, conversation: in.ConversationID, message: pending.ID, in: in, history: history, project: p.Project,
+		uiTools: toolIndex(in.UITools), summary: summary, older: compactable(msgs[:from], summary.UpTo)}
 	run := func() {
-		defer s.release(in.ConversationID)
-		t.run(authz.With(context.WithoutCancel(ctx), p))
+		tctx := authz.With(context.WithoutCancel(ctx), p)
+		t.run(tctx)
+		s.release(in.ConversationID) // the next message need not wait for the summary
+		t.compact(tctx)
 	}
 	started = true
 	if s.Go != nil {
@@ -286,10 +293,11 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 }
 
 // historyOf is what is sent of the conversation before the new message: its last messages that fit the caps, oldest
-// first, the pending and the empty ones left out.
-func historyOf(msgs []convsvc.Message) []llm.Message {
-	var out []llm.Message
+// first, the pending and the empty ones left out. from is the index in msgs of the oldest message the window holds
+// (len(msgs) when none): the ones before are the summary's (compact.go).
+func historyOf(msgs []convsvc.Message) (out []llm.Message, from int) {
 	size := 0
+	var at []int // the index in msgs of each message of out
 	for i := len(msgs) - 1; i >= 0 && len(out) < MaxHistoryMessages-1; i-- {
 		m := msgs[i]
 		text := strings.TrimSpace(m.Text)
@@ -306,9 +314,19 @@ func historyOf(msgs []convsvc.Message) []llm.Message {
 			break
 		}
 		out = append(out, llm.Message{Role: m.Role, Content: text})
+		at = append(at, i)
+	}
+	// the window starts with a person's message (providers want a user turn first): an assistant message at its start
+	// is left to the summary rather than dropped
+	for len(out) > 0 && out[len(out)-1].Role != convsvc.RoleUser {
+		out, at = out[:len(out)-1], at[:len(at)-1]
+	}
+	from = len(msgs)
+	if len(at) > 0 {
+		from = at[len(at)-1]
 	}
 	slices.Reverse(out)
-	return out
+	return out, from
 }
 
 func clip(s string, n int) string {
