@@ -2,6 +2,7 @@
   // The attributes of a node type or link type: code, label, type, widget, enum, default, section, tooltip, and the
   // property validators plugged on each one. What the user interface displays and edits a node from.
   import { emptyAttribute, moveItem, type AttributeForm } from '../methodologyForm';
+  import ValidatorList from './ValidatorList.svelte';
   import RowTools from './RowTools.svelte';
 
   let {
@@ -100,23 +101,9 @@
           {#if node}
             <label class="check" title="The attribute is the display name of the node"><input type="checkbox" bind:checked={a.asName} onchange={() => setAsName(a)} disabled={readonly} /> display name of the node</label>
           {/if}
-          <div class="validators" data-path="{ap}.validators">
-            <span class="label">Validators <span class="hint">(property validators run in this order when a node is created or modified)</span></span>
-            {#each a.validators as v, k}
-              <div class="vrow" data-path="{ap}.validators[{k}]">
-                <select aria-label="Validator instance" bind:value={a.validators[k]} class:bad={bad(`${ap}.validators[${k}]`)} disabled={readonly}>
-                  <option value="">— validator —</option>
-                  {#if v && !validatorInstances.includes(v)}<option value={v}>{v} (unknown)</option>{/if}
-                  {#each validatorInstances as inst (inst)}<option value={inst}>{inst}</option>{/each}
-                </select>
-                {#if !readonly}
-                  <RowTools index={k} count={a.validators.length} label="the validator" onmove={(delta) => moveItem(a.validators, k, delta)} onremove={() => a.validators.splice(k, 1)} />
-                {/if}
-              </div>
-            {/each}
-            {#if !readonly}
-              <button type="button" class="small" disabled={!validatorInstances.length} title={validatorInstances.length ? '' : 'Create a property_validator instance first (Algorithms)'} onclick={() => a.validators.push('')}>+ Validator</button>
-            {/if}
+          <div class="field" data-path="{ap}.validators">
+            <span class="label">Validators <span class="hint">(property validators, run in this order when the draft is accepted and at landing)</span></span>
+            <ValidatorList bind:list={a.validators} instances={validatorInstances} usage="property_validator" {bad} {readonly} path="{ap}.validators" />
           </div>
         </div>
       {/if}
@@ -148,16 +135,6 @@
     margin: 0.3rem 0 0.6rem 0.6rem;
     padding-left: 0.6rem;
     border-left: 2px solid var(--border);
-  }
-  .vrow {
-    display: flex;
-    gap: 0.4rem;
-    align-items: center;
-    margin: 0.2rem 0;
-  }
-  .vrow select {
-    width: auto;
-    min-width: 11rem;
   }
   .label {
     font-size: 0.85rem;

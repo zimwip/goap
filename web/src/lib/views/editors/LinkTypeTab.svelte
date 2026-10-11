@@ -5,6 +5,8 @@
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import AttributeEditor from '../../components/AttributeEditor.svelte';
+  import LinkEnds from '../../components/LinkEnds.svelte';
+  import ValidatorList from '../../components/ValidatorList.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { closeWhere } from '../../shell/tabs.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
@@ -24,6 +26,8 @@
   const enumNames = $derived(f.enums.map((e) => e.name.trim()).filter(Boolean));
   const instancesOf = (usage: string) =>
     f.instances.filter((i) => i.name.trim() && f.algorithms.find((a) => a.name === i.algorithm)?.type === usage).map((i) => i.name.trim());
+
+  const linkValidators = $derived(instancesOf('link_validator'));
 
   $effect(() => {
     if (!x) return;
@@ -111,10 +115,20 @@
 </fieldset>
       <section class="card">
         <h3>Attributes</h3>
-        <p class="hint">What a link of this type carries. Their validators are checked by the domain; they are not yet run when a link is written.</p>
+        <p class="hint">What a link of this type carries. Their property validators run when the draft is accepted and at landing.</p>
         <AttributeEditor bind:attrs={f.linkTypes[index].attributes} enums={enumNames} validatorInstances={instancesOf('property_validator')} node={false} bad={(p) => d.bad(p)} readonly={d.readonly} {path} />
       </section>
 
+      <section class="card" data-path="{path}.validators">
+        <h3>Validators</h3>
+        <p class="hint">Link validators check a link as a whole, with the node it leaves and the node it reaches, when the draft is accepted and at landing, after the attribute validators. Run in this order.</p>
+        <ValidatorList bind:list={f.linkTypes[index].validators} instances={linkValidators} usage="link_validator" noun="link validator" bad={(p) => d.bad(p)} readonly={d.readonly} path="{path}.validators" />
+      </section>
+      <section class="card">
+        <h3>Source and target</h3>
+        <p class="hint">The node types at both ends of this link type, with their hierarchy and the link types around them. A view only: each is edited in its own tab.</p>
+        <LinkEnds {d} {index} />
+      </section>
   {/if}
 </div>
 

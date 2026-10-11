@@ -47,12 +47,18 @@ func TestProtectedAliasProps(t *testing.T) {
 	if _, has := (Alias{Alias: "x", Target: "a/b"}).Props()["protected"]; has {
 		t.Fatal("an unprotected alias carries no flag")
 	}
-	// only a protected alias may point to nothing
+	// the target rule is the domain's (validator alias-needs-target of platform@LlmAlias, tested in graphsvc): reading an
+	// alias checks its name only
 	if _, err := AliasFromProps(Alias{Alias: HelperAlias, Protected: true}.Props()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := AliasFromProps(Alias{Alias: "x"}.Props()); err == nil {
-		t.Fatal("an unprotected alias needs a target")
+	if _, err := AliasFromProps(Alias{Alias: "Bad Name"}.Props()); err == nil {
+		t.Fatal("an alias needs a valid name")
+	}
+	// an unprotected alias with no target cannot land; read anyway it resolves to no model and is reported as such
+	s0 := BuildSnapshot("", []domain.Node{node(AliasKey("x"), NodeTypeAlias, Alias{Alias: "x"}.Props())}, nil)
+	if len(s0.Aliases) != 0 || len(s0.Problems) != 1 {
+		t.Fatalf("%+v", s0)
 	}
 	// a protected alias whose model is gone stays in the snapshot, no problem
 	s := BuildSnapshot("", []domain.Node{node(AliasKey(HelperAlias), NodeTypeAlias, Alias{Alias: HelperAlias, Target: "gone/m", Protected: true}.Props())}, nil)

@@ -294,6 +294,9 @@ func ChangeImpactToPB(cn domain.ChangeImpact) *graphv1.ChangeImpact {
 		Pre: RefPtrToPB(cn.Pre), Post: RefPtrToPB(cn.Post), Landed: RefPtrToPB(cn.Landed), Review: string(cn.Review),
 		Via: string(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: Time(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
+	if v := cn.Validation; v != nil {
+		out.Validation = &graphv1.ImpactValidation{Valid: v.Valid, Message: v.Message}
+	}
 	for _, r := range cn.Reviews {
 		out.Reviews = append(out.Reviews, &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded, ReviewId: r.ReviewID})
 	}
@@ -314,6 +317,9 @@ func ChangeImpactFromPB(cn *graphv1.ChangeImpact) domain.ChangeImpact {
 		Pre: RefPtrFromPB(cn.Pre), Post: RefPtrFromPB(cn.Post), Landed: RefPtrFromPB(cn.Landed), Review: domain.NodeReview(cn.Review),
 		Via: domain.ChangeImpactID(cn.Via), Recheck: cn.Recheck, ProducedBy: cn.ProducedBy, Execution: cn.Execution, CreatedAt: FromTime(cn.CreatedAt),
 		Flow: cn.Flow, Superseded: cn.Superseded}
+	if v := cn.Validation; v != nil {
+		out.Validation = &domain.ImpactValidation{Valid: v.Valid, Message: v.Message}
+	}
 	for _, r := range cn.Reviews {
 		out.Reviews = append(out.Reviews, domain.Review{Status: domain.NodeReview(r.Status), By: r.By, Comment: r.Comment, At: FromTime(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded, ReviewID: r.ReviewId})
 	}

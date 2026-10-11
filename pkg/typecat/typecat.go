@@ -95,6 +95,10 @@ type LinkType struct {
 	Compose bool
 	// Attributes are what a link of the type carries.
 	Attributes []Attribute
+	// AttributeValidators are the property validators of the attributes, bound to the attribute, in call order.
+	AttributeValidators []algo.Bound
+	// Validators are the link validators of the type, in call order. A link type has no inheritance.
+	Validators []algo.Bound
 }
 
 // Catalog is the set of the types in force.
@@ -173,6 +177,7 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 		for _, l := range d.LinkTypes {
 			ref := domain.TypeRef{Namespace: d.Name, Name: l.Name}
 			lt := &LinkType{Ref: ref, Compose: l.Compose}
+			lt.AttributeValidators, lt.Validators = d.OwnBoundLinkValidators(l)
 			for _, a := range l.Attributes {
 				ra := Attribute{Attribute: a}
 				for _, e := range d.Enums {
@@ -195,7 +200,8 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 			}
 			if _, dup := c.links[ref]; dup {
 				// a link type declared for several pairs of ends: it accepts any pair
-				c.links[ref] = &LinkType{Ref: ref, Compose: l.Compose || c.links[ref].Compose, Attributes: c.links[ref].Attributes}
+				c.links[ref] = &LinkType{Ref: ref, Compose: l.Compose || c.links[ref].Compose, Attributes: c.links[ref].Attributes,
+					AttributeValidators: c.links[ref].AttributeValidators, Validators: c.links[ref].Validators}
 				continue
 			}
 			c.links[ref] = lt
@@ -455,6 +461,23 @@ func (c *Catalog) LinkAttributeChecks(typ string) []domain.AttributeCheck {
 		return nil
 	}
 	return attributeChecks(l.Attributes)
+}
+
+// LinkAttributeValidators are the property validators plugged on the attributes of a link type, in call order, each
+// bound to its attribute (graph.TypeCatalog).
+func (c *Catalog) LinkAttributeValidators(typ string) []algo.Bound {
+	if l, ok := c.LinkType(typ); ok {
+		return l.AttributeValidators
+	}
+	return nil
+}
+
+// LinkTypeValidators are the link validators of a link type, in call order (graph.TypeCatalog).
+func (c *Catalog) LinkTypeValidators(typ string) []algo.Bound {
+	if l, ok := c.LinkType(typ); ok {
+		return l.Validators
+	}
+	return nil
 }
 
 func attributeChecks(as []Attribute) []domain.AttributeCheck {

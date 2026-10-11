@@ -20,6 +20,8 @@ export const DSL_FUNCTIONS: DslFunction[] = [
   { name: 'param', args: ['name'], returns: 'JSON value', doc: "Action parameter.", group: 'read' },
   { name: 'var', args: ['name'], returns: 'JSON value', doc: 'Process variable (vars from StartProcess).', group: 'read' },
   { name: 'items', args: ['kind'], returns: 'Item[]', doc: 'Items of the change of this kind ("" = all).', group: 'read' },
+  { name: 'options', args: [], returns: 'Option[]', doc: 'Options of the change: hypotheses explored on a flow of their own.', group: 'read' },
+  { name: 'decisionPoints', args: [], returns: 'DecisionPoint[]', doc: 'Decision points of the change: questions it must settle.', group: 'read' },
   { name: 'node', args: ['key'], returns: 'Node', doc: 'Node from the reference baseline.', group: 'read' },
   { name: 'nodes', args: ['type'], returns: 'Node[]', doc: 'Nodes of this type ("" = all).', group: 'read' },
   {
@@ -43,6 +45,11 @@ export const DSL_FUNCTIONS: DslFunction[] = [
     group: 'write',
   },
   { name: 'impactNodeReview', args: ['node', 'accept', 'comment'], returns: '', doc: 'Accept or reject a change impact; the comment is mandatory. An acceptance runs the validations on the draft; it is always a separate, explicit action (an edit never reviews).', group: 'write' },
+  { name: 'impactNodeReviewWithReserve', args: ['node', 'derogation', 'comment'], returns: '', doc: 'Accept a change impact with a reserve: derogation is the key of an open derogation in force. The review policy still applies (the reviewer is not the producer).', group: 'write' },
+  { name: 'openDecision', args: ['question', '{options, criteria, decider, threshold, maxRounds, maxDuration}'], returns: '"#dN"', doc: 'Open a decision point; options are names or ids (none = the open options), every other key is a policy value. Applied after the change impacts.', group: 'write' },
+  { name: 'decide', args: ['point', 'option', 'confidence', 'justification'], returns: '', doc: 'Rule a point decided (point: id, #dN, or "" for the only pending one; confidence 0 to 1). Below the point\'s threshold the ruling waits for a person.', group: 'write' },
+  { name: 'undecidable', args: ['point', 'justification', 'questions'], returns: '', doc: 'Rule a point undecidable: why, and the questions to answer first (they block it).', group: 'write' },
+  { name: 'answer', args: ['questionId', 'answer'], returns: '', doc: 'Answer an open question of a decision point.', group: 'write' },
   { name: 'impactNodeTransition', args: ['node', 'state'], returns: '', doc: 'Move a node along its lifecycle: always on the draft (a node with none is checked out first), never changing the review; authorized and guarded when it is taken.', group: 'write' },
   { name: 'impactNodeCancel', args: ['node'], returns: '', doc: 'Drop the working version of a node (a node the change created and not accepted yet goes away).', group: 'write' },
   { name: 'withdrawImpact', args: ['node'], returns: '', doc: 'Take a node out of the change (its working version is dropped); refused once its accepted review froze a version of it.', group: 'write' },
@@ -73,6 +80,36 @@ export const DSL_FIELDS: Record<string, string[]> = {
   Link: ['id', 'type', 'from', 'to'],
 };
 
+/** Objects the ctx API returns, as the help panel shows them (docs/dsl.md "Reading"). */
+export interface DslShape {
+  name: string;
+  summary: string;
+  fields: string[];
+}
+
+export const DSL_SHAPES: Record<string, DslShape> = {
+  Item: { name: 'Item', summary: 'An artifact or decision recorded on the change.', fields: ['id', 'kind', 'type', 'status', 'data', 'producedBy'] },
+  Node: { name: 'Node', summary: 'A graph node: from the reference baseline in an action, as it will be after the change in an algorithm.', fields: ['id', 'version', 'key', 'type', 'state', 'props'] },
+  Link: { name: 'Link', summary: 'A link between two nodes; from / to are {id, version, key, type}.', fields: ['id', 'type', 'from', 'to'] },
+  ChangeImpact: {
+    name: 'ChangeImpact',
+    summary: 'A node the change reads, modifies or creates. pre / post / landed are Nodes or null; post is the draft (version 0) while the change holds one.',
+    fields: ['id', 'key', 'type', 'intent', 'rationale', 'review', 'planned', 'drafted', 'pre', 'post', 'landed', 'links'],
+  },
+  Option: {
+    name: 'Option',
+    summary: 'A hypothesis explored on a flow of its own; status is exploring, evaluated, selected or rejected.',
+    fields: ['id', 'name', 'hypothesis', 'status', 'active', 'evaluation'],
+  },
+  DecisionPoint: {
+    name: 'DecisionPoint',
+    summary: 'A question the change must settle; status is open, blocked, ratifying, escalated or decided.',
+    fields: ['id', 'question', 'options', 'criteria', 'policy', 'status', 'questions', 'option'],
+  },
+  Change: { name: 'Change', summary: 'The change being applied.', fields: ['id', 'title', 'intent', 'methodology', 'goal'] },
+  Transition: { name: 'Transition', summary: 'The lifecycle transition being taken.', fields: ['name', 'from', 'to'] },
+};
+
 export function goName(name: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
@@ -101,7 +138,7 @@ func Run(ctx *dsl.Ctx) error {
 // `ctx`: a JavaScript algorithm is the BODY of a function of ctx (it may `return`), a Go
 // algorithm declares `func Run(ctx *dsl.<Ctx>) error`. They are pure: no blackboard, LLM or tool calls.
 
-export type AlgorithmUsage = 'property_validator' | 'node_validator' | 'transition_guard' | 'transition_action' | 'adapter';
+export type AlgorithmUsage = 'property_validator' | 'node_validator' | 'link_validator' | 'transition_guard' | 'transition_action' | 'adapter';
 
 export interface AlgorithmUsageInfo {
   usage: AlgorithmUsage;
@@ -127,6 +164,7 @@ const metaFns: DslFunction[] = [
   { name: 'algorithm', args: [], returns: 'string', doc: 'Name of the algorithm.', group: 'read' },
 ];
 const nodeFn: DslFunction = { name: 'node', args: [], returns: 'Node', doc: 'The node concerned: {id, version, key, type, state, props}.', group: 'read' };
+const impactFn: DslFunction = { name: 'impact', args: [], returns: '{intent, review}', doc: 'The impact of the node in the change: why it is in it and the state of its review (a transition that requires a review checks it).', group: 'read' };
 const groupFns: DslFunction[] = [
   { name: 'children', args: [], returns: 'Node[]', doc: 'Nodes a document contains, as they are in the result of the change.', group: 'read' },
   { name: 'change', args: [], returns: '{id, title, intent, methodology, goal}', doc: 'The change being applied.', group: 'read' },
@@ -161,12 +199,33 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
     sample: { node: { key: 'REQ-1', type: 'Requirement', state: 'draft', props: { title: 'Card payment', start: '2026-01-01', end: '2026-02-01' } } },
   },
   {
+    usage: 'link_validator',
+    title: 'Link validator',
+    goCtx: 'LinkValidatorCtx',
+    description: 'Checks a link as a whole, with the node it leaves and the node it reaches, when the draft is accepted and at landing, after the validators of the link attributes.',
+    contract: 'Rejects with ctx.fail(msg), a throw (Go: a returned error), or by returning false / a message (JavaScript).',
+    functions: [
+      paramFn,
+      { name: 'link', args: [], returns: '{type, props}', doc: 'The link checked: its type and properties.', group: 'read' },
+      { name: 'from', args: [], returns: 'Node', doc: 'The node the link leaves, as it will be.', group: 'read' },
+      { name: 'to', args: [], returns: 'Node', doc: 'The node the link reaches, as it will be.', group: 'read' },
+      failFn,
+      ...metaFns,
+      ...logFns,
+    ],
+    sample: {
+      link: { type: 'refines', props: {} },
+      from: { key: 'REQ-1', type: 'Requirement', state: 'draft', props: { title: 'Card payment' } },
+      to: { key: 'REQ-2', type: 'Requirement', state: 'approved', props: { title: 'Payment' } },
+    },
+  },
+  {
     usage: 'transition_guard',
     title: 'Transition guard',
     goCtx: 'GuardCtx',
     description: 'Decides whether a lifecycle transition is allowed; checked when the change is applied, after the CEL guard.',
     contract: 'Refuses with ctx.fail(msg), a throw / returned error, or by returning false / a message (JavaScript).',
-    functions: [paramFn, nodeFn, ...groupFns, failFn, ...metaFns, ...logFns],
+    functions: [paramFn, nodeFn, ...groupFns, impactFn, failFn, ...metaFns, ...logFns],
     sample: {
       node: { key: 'SPEC-1', type: 'Spec', state: 'released', props: { title: 'Spec' } },
       children: [{ key: 'REQ-1', type: 'Requirement', state: 'approved', props: {} }, { key: 'REQ-2', type: 'Requirement', state: 'draft', props: {} }],
@@ -264,6 +323,24 @@ func Run(ctx *dsl.NodeValidatorCtx) error {
 	end, _ := p["end"].(string)
 	if start != "" && end != "" && end < start {
 		ctx.Fail("end must not be before start")
+	}
+	return nil
+}
+`,
+  },
+  link_validator: {
+    javascript: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
+if (ctx.from().state === "approved" && ctx.to().state === "draft") {
+  ctx.fail(ctx.from().key + " is approved but refines the draft " + ctx.to().key);
+}
+`,
+    go: `package validator
+
+import "github.com/zimwip/goap/pkg/dsl"
+
+func Run(ctx *dsl.LinkValidatorCtx) error {
+	if ctx.From().State == "approved" && ctx.To().State == "draft" {
+		ctx.Fail(ctx.From().Key + " is approved but refines the draft " + ctx.To().Key)
 	}
 	return nil
 }

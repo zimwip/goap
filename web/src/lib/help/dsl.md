@@ -119,6 +119,7 @@ is the call order. Action code is not an algorithm: it stays in the action decla
 |---|---|---|
 | `property_validator` | `nodeTypes[].attributes[].validators: [instance]` | accepts / rejects the value of an attribute, when the draft is accepted (its accepted review) and when the change lands (a draft may be incomplete; the attributes, their types and enums are checked on every edit, ADR 0076, 0079) |
 | `node_validator` | `nodeTypes[].validators: [instance]` | accepts / rejects a node as a whole (rules across attributes), after the attribute validators, at the same moments |
+| `link_validator` | `linkTypes[].validators: [instance]` | accepts / rejects a link as a whole, with the node it leaves and the node it reaches (rules across both ends and the link's properties), after the validators of the link's attributes (which run too, ADR 0100), at the same moments |
 | `transition_guard` | `lifecycles[].transitions[].guards: [instance]` | allows / refuses the transition, when it is taken (`ImpactNodeTransition`, ADR 0076) |
 | `transition_action` | `lifecycles[].transitions[].actions: [instance]` | changes properties of the node that moved, when the transition is taken |
 
@@ -138,6 +139,8 @@ error, or (JavaScript) by returning `false` or a message string.
 | `ctx.log(msg)` / `ctx.warn(msg)` | `Log(msg)` / `Warn(msg)` | all |
 | `ctx.property()` / `ctx.value()` | `Property()` / `Value()` | validator (`value()` is `null` when absent) |
 | `ctx.node()` | `Node()` | all: `{id, version, key, type, state, props}`, as it will be after the change |
+| `ctx.link()` | `Link()` | link validator: `{type, props}` of the link checked |
+| `ctx.from()` / `ctx.to()` | `From()` / `To()` | link validator: the nodes the link leaves and reaches (`Node`, as they will be); a target that cannot be resolved skips the validator |
 | `ctx.children()` | `Children()` | guard, action: the nodes a document contains (`Node[]`) |
 | `ctx.change()` | `Change()` | guard, action: `{id, title, intent, methodology, goal}` |
 | `ctx.transition()` | `Transition()` | guard, action: `{name, from, to}` |
@@ -150,6 +153,13 @@ const v = ctx.value();
 if (v === undefined || v === null || v === "") return;
 if (!new RegExp(ctx.param("pattern")).test(String(v))) {
   ctx.fail(ctx.param("message") || (ctx.property() + " must match " + ctx.param("pattern")));
+}
+```
+
+```js
+// link_validator "same-project": a requirement refines a requirement of its own project
+if (ctx.from().props.project !== ctx.to().props.project) {
+  ctx.fail(ctx.link().type + " must stay inside a project: " + ctx.from().key + " -> " + ctx.to().key);
 }
 ```
 

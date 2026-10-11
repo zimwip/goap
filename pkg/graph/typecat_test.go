@@ -164,6 +164,8 @@ func (ts testTypes) Search(typ string) []domain.SearchProperty {
 
 func (ts testTypes) AttributeChecks(string) []domain.AttributeCheck     { return nil }
 func (ts testTypes) LinkAttributeChecks(string) []domain.AttributeCheck { return nil }
+func (ts testTypes) LinkAttributeValidators(string) []algo.Bound        { return nil }
+func (ts testTypes) LinkTypeValidators(string) []algo.Bound             { return nil }
 func (ts testTypes) AttributeNames(string) ([]string, bool)             { return nil, true }
 
 func (ts testTypes) CheckNode(_, typ string) error {

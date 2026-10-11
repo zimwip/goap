@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -78,9 +79,44 @@ func (g *Graph) checkRequiredLinks(n domain.Node, links []domain.Link) error {
 	return nil
 }
 
+// nodeResolver reads the node a link of a draft or of a written version reaches, as it will be: the draft for a draft
+// reference, else the stored version. ok is false when it cannot be found.
+type nodeResolver func(ref domain.NodeRef) (n domain.Node, ok bool, err error)
+
+// storedResolver resolves exact versions from the store: the links of a version written by a landing, whose drafts
+// references have been replaced by the versions it writes.
+func storedResolver(ctx context.Context, tx Tx) nodeResolver {
+	return func(ref domain.NodeRef) (domain.Node, bool, error) {
+		n, err := tx.Node(ctx, ref)
+		if errors.Is(err, ErrNotFound) {
+			return domain.Node{}, false, nil
+		}
+		return n, err == nil, err
+	}
+}
+
+// draftResolver resolves the references of a draft through the drafts the reader holds (the change's own, and the ones
+// of its parents), else the store.
+func draftResolver(ctx context.Context, tx Tx, r *draftReader) nodeResolver {
+	stored := storedResolver(ctx, tx)
+	return func(ref domain.NodeRef) (domain.Node, bool, error) {
+		ref = r.normalize(ref)
+		if ref.IsDraft() {
+			d, ok := r.byNode[ref.ID]
+			if !ok {
+				return domain.Node{}, false, nil
+			}
+			return r.draftNode(d), true, nil
+		}
+		return stored(ref)
+	}
+}
+
 // checkVersion is what a draft must satisfy to be accepted and the version written from it to land (ADR 0076, 0079): its
-// properties (attributes and validators of its type), the links its type requires and the attributes of its links.
-func (g *Graph) checkVersion(ctx context.Context, ix *typeIndex, n domain.Node, links []domain.Link) error {
+// properties (attributes, attribute validators and node validators of its type), the links its type requires, and for
+// each outgoing link its attributes, their validators and the link validators of its type. A link whose target cannot
+// be resolved is not given to the link validators: a dangling link is reported by the checks of the links themselves.
+func (g *Graph) checkVersion(ctx context.Context, ix *typeIndex, n domain.Node, links []domain.Link, resolve nodeResolver) error {
 	if err := g.validateProps(ctx, ix, n, n.Properties); err != nil {
 		return err
 	}
@@ -90,6 +126,9 @@ func (g *Graph) checkVersion(ctx context.Context, ix *typeIndex, n domain.Node, 
 	for _, l := range links {
 		if err := ix.checkLinkAttributes(l.Type, l.Properties); err != nil {
 			return fmt.Errorf("%s: %w", n.Key, err)
+		}
+		if err := g.runLinkValidators(ctx, ix, n, l, resolve); err != nil {
+			return err
 		}
 	}
 	return nil
@@ -101,12 +140,12 @@ func (g *Graph) checkWritten(ctx context.Context, tx Tx, ix *typeIndex, n domain
 	if err != nil {
 		return err
 	}
-	return g.checkVersion(ctx, ix, n, links)
+	return g.checkVersion(ctx, ix, n, links, storedResolver(ctx, tx))
 }
 
 // checkDraft checks a draft as the version written from it will be.
-func (g *Graph) checkDraft(ctx context.Context, ix *typeIndex, c domain.Change, d domain.Draft) error {
-	return g.checkVersion(ctx, ix, draftNode(c, d), d.OutLinks())
+func (g *Graph) checkDraft(ctx context.Context, ix *typeIndex, c domain.Change, d domain.Draft, resolve nodeResolver) error {
+	return g.checkVersion(ctx, ix, draftNode(c, d), d.OutLinks(), resolve)
 }
 
 // prepareSubChange applies the rules of a sub-change to c: its parent must be
@@ -367,6 +406,11 @@ func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing
 		return err
 	}
 	impacts := slices.DeleteFunc(slices.Clone(c.Nodes), func(cn domain.ChangeImpact) bool { return cn.Flow != "" || cn.Superseded })
+	reader, err := g.newDraftReader(ctx, tx, c, "", impacts)
+	if err != nil {
+		return err
+	}
+	resolve := draftResolver(ctx, tx, reader)
 	for _, cn := range impacts {
 		if len(cn.Items) > 0 {
 			continue
@@ -387,7 +431,7 @@ func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing
 		if err := g.checkOrigins(impacts, cn, d); err != nil {
 			return err
 		}
-		if err := g.checkDraft(ctx, ix, c, *d); err != nil {
+		if err := g.checkDraft(ctx, ix, c, *d, resolve); err != nil {
 			return err
 		}
 	}

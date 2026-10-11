@@ -41,7 +41,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, acceptAllProposed, writeNodeInChange, removeFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -540,23 +540,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     try {
       await graph.impactNodeReview(change.id, row.impact.id, accept, comment, scope || MAIN_SCOPE);
       recordAction(`${accept ? 'accepted' : 'rejected'} the impact of ${row.node.key}`);
-      await load(change.id);
-      return true;
-    } catch (e) {
-      error = errorMessage(e);
-      return false;
-    } finally {
-      moving = '';
-    }
-  }
-
-  /** Accepts every impact awaiting its review, on the scope: an explicit button, one review each with the given comment. */
-  async function acceptAll(comment: string): Promise<boolean> {
-    if (!change?.id) return false;
-    moving = 'review-all';
-    error = '';
-    try {
-      await acceptAllProposed(change.id, view?.nodes ?? [], comment, scope || MAIN_SCOPE, true);
       await load(change.id);
       return true;
     } catch (e) {
@@ -1099,7 +1082,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         {#if awaiting.length}
           <div class="alert" role="status" style="margin: 0.75rem 0 0">
             Apply is blocked: {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
-            <button type="button" class="link" onclick={() => (pane = 'impacts')}>Review them</button>
+            <button type="button" class="link" onclick={() => (pane = 'reviews')}>Review them</button>
           </div>
         {/if}
         {#if applied}
@@ -1150,8 +1133,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         keys={takenKeys}
         oncreate={createNode}
         onremove={removeNode}
-        onreview={reviewRow}
-        onacceptall={acceptAll}
+        onopenreviews={() => (pane = 'reviews')}
         onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
         onopennode={(r) => openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: ch.id ?? '', flow: scope || MAIN_SCOPE })}
         onadd={addImpact}

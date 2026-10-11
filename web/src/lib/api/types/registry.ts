@@ -161,7 +161,7 @@ export interface SearchProperty {
 }
 
 /** Fixed algorithm types: the extension points of the platform. */
-export type AlgorithmType = 'property_validator' | 'node_validator' | 'transition_guard' | 'transition_action' | 'adapter';
+export type AlgorithmType = 'property_validator' | 'node_validator' | 'link_validator' | 'transition_guard' | 'transition_action' | 'adapter';
 export type AlgorithmParamType = 'string' | 'number' | 'boolean' | 'regex' | 'enum' | 'strings' | 'json' | 'secret';
 
 export interface AlgorithmParam {
@@ -214,6 +214,8 @@ export interface LinkType {
   attributes?: Attribute[];
   /** composition link: the target is a part of the source, shown as its child */
   compose?: boolean;
+  /** link_validator instances checking a link as a whole, in call order (ADR 0100) */
+  validators?: string[];
 }
 
 export interface Condition {

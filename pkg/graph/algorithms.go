@@ -105,6 +105,54 @@ func (g *Graph) validateProps(ctx context.Context, ix *typeIndex, n domain.Node,
 	return nil
 }
 
+// runLinkValidators runs what the link type of l plugs: the property validators of its attributes (the value is the link
+// property of that name, the node the one the link leaves), then its link validators (given the link and both of its
+// ends). A target that cannot be resolved skips the link validators of that link. The first rejection is ErrInvalid.
+func (g *Graph) runLinkValidators(ctx context.Context, ix *typeIndex, n domain.Node, l domain.Link, resolve nodeResolver) error {
+	if ix == nil || ix.cat == nil {
+		return nil
+	}
+	avs, lvs := ix.cat.LinkAttributeValidators(l.Type), ix.cat.LinkTypeValidators(l.Type)
+	if len(avs) == 0 && len(lvs) == 0 {
+		return nil
+	}
+	from := dslNode(n, n.Properties)
+	for _, v := range avs {
+		out, err := dsl.RunAlgorithm(ctx, v, dsl.AlgorithmInput{Node: from, Property: v.Property, Value: l.Properties[v.Property]})
+		if err != nil {
+			return invalidf("%s: link %s: property %q: %v", n.Key, l.Type, v.Property, err)
+		}
+		if !out.OK() {
+			return invalidf("%s: link %s: property %q is invalid: %s (validator %s)", n.Key, l.Type, v.Property, out.Failures[0], v.Instance)
+		}
+	}
+	if len(lvs) == 0 || resolve == nil {
+		return nil
+	}
+	target, ok, err := resolve(l.To)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return nil
+	}
+	props := l.Properties
+	if props == nil {
+		props = map[string]any{}
+	}
+	in := dsl.AlgorithmInput{Link: dsl.LinkInfo{Type: l.Type, Props: props}, From: from, To: dslNode(target, target.Properties)}
+	for _, v := range lvs {
+		out, err := dsl.RunAlgorithm(ctx, v, in)
+		if err != nil {
+			return invalidf("%s: link %s to %s: link validator %s: %v", n.Key, l.Type, target.Key, v.Instance, err)
+		}
+		if !out.OK() {
+			return invalidf("%s: link %s to %s is invalid: %s (validator %s)", n.Key, l.Type, target.Key, out.Failures[0], v.Instance)
+		}
+	}
+	return nil
+}
+
 // checkAttributeValue checks a value against the type of its attribute. A missing or empty value is accepted
 // (requiring one is the job of a validator), and so is any value of an attribute that names no type.
 func checkAttributeValue(a domain.AttributeCheck, v any) error {

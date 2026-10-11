@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -14,8 +15,8 @@ import (
 
 // ensureAliasStubs finds every LLM alias an agent or action of m references and, for any
 // that names no platform@LlmAlias node yet, opens a pending ChangeImpact on the platform
-// namespace proposing it as a stub (no target: "needs fixing"), so an administrator sees it
-// in the change-review queue and fills in the real target (ADR 0021). Best-effort: an error
+// namespace proposing it as a stub (no target yet), so an administrator sees it
+// in the change-review queue and sets the target of the draft before accepting it: the domain refuses an alias with none (ADR 0018, ADR 0021). Best-effort: an error
 // here is never returned - it must never block a publish.
 // graphBacked is satisfied by *GraphStore and by anything embedding it (Go promotes the method) - it exposes the
 // underlying graph so ensureAliasStubs can propose alias stubs on the platform namespace, separate from wherever
@@ -25,6 +26,9 @@ type graphBacked interface {
 }
 
 func (s *Service) ensureAliasStubs(ctx context.Context, m *methodology.Methodology) {
+	// check-then-create must not interleave: methodologies are seeded and published concurrently
+	s.aliasMu.Lock()
+	defer s.aliasMu.Unlock()
 	gb, ok := s.Store.(graphBacked)
 	if !ok {
 		return // no graph behind this registry (e.g. MemoryStore in dev/tests): nothing to stub
@@ -47,7 +51,13 @@ func (s *Service) ensureAliasStubs(ctx context.Context, m *methodology.Methodolo
 		stubs = append(stubs, alias)
 	}
 	if len(stubs) > 0 {
-		_ = createAliasStubs(ctx, g, stubs, m.Name)
+		if err := createAliasStubs(ctx, g, stubs, m.Name); err != nil {
+			log := s.Log
+			if log == nil {
+				log = slog.Default()
+			}
+			log.Warn("registry: could not propose the alias stubs", "methodology", m.Name, "aliases", stubs, "err", err)
+		}
 	}
 }
 
@@ -101,8 +111,9 @@ func missingAliases(ctx context.Context, g StoreGraph, aliases []string) ([]stri
 }
 
 // hasPendingStub reports whether an open (not applied/abandoned) platform-namespace change
-// already proposes alias as a pending (not yet reviewed) LlmAlias node - avoids creating a
+// already holds the LlmAlias node of alias, whatever the state of its review - avoids creating a
 // duplicate stub when a methodology referencing it is republished before an administrator acts.
+// (Change.Nodes is the impact projection, filled by Graph.Changes.)
 func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, error) {
 	changes, err := g.Changes(ctx)
 	if err != nil {
@@ -118,7 +129,7 @@ func hasPendingStub(ctx context.Context, g StoreGraph, alias string) (bool, erro
 			continue
 		}
 		for _, cn := range c.Nodes {
-			if cn.Key == key && cn.Type == typ && cn.Review == domain.ReviewProposed {
+			if cn.Key == key && cn.Type == typ {
 				return true, nil
 			}
 		}
@@ -142,8 +153,8 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 	c, err := g.CreateChange(ctx, graph.NewChange{
 		Namespace:  llmcfg.NamespacePlatform,
 		ProjectID:  root,
-		Title:      fmt.Sprintf("Aliases needed by %s (%s)", methodologyName, strings.Join(aliases, ", ")),
-		Intent:     "configure the model aliases referenced by a methodology",
+		Title:      fmt.Sprintf("Model aliases needed by %s (%s)", methodologyName, strings.Join(aliases, ", ")),
+		Intent:     fmt.Sprintf("methodology %s references the model aliases %s: each needs a target (provider/model) before this change can be accepted", methodologyName, strings.Join(aliases, ", ")),
 		BaselineID: head.ID,
 		OwnBranch:  true,
 	})
@@ -153,7 +164,7 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 	for _, alias := range aliases {
 		// a draft, its review proposed (ADR 0076, 0079): the change stays open
 		if _, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: llmcfg.AliasKey(alias), Type: llmcfg.NodeTypeAlias, Properties: map[string]any{"alias": alias},
-			Rationale: fmt.Sprintf("referenced by methodology %s but not configured yet", methodologyName), ProducedBy: "methodology-load"}); err != nil {
+			Rationale: fmt.Sprintf("alias %s needs a target provider/model before this change can be accepted (referenced by methodology %s)", alias, methodologyName), ProducedBy: "methodology-load"}); err != nil {
 			return err
 		}
 	}

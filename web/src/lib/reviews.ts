@@ -90,6 +90,13 @@ export function awaitingImpacts(nodes: ChangeImpact[], reviews: ReviewRecord[], 
   return nodes.filter((n) => !!n.id && !n.superseded && (n.review === 'proposed' || !n.review) && !held.has(n.id!));
 }
 
+/** Why the impact cannot be accepted yet: the validation rule its draft fails (the graph checks every draft as it stands,
+ * the same gate as the accept); empty when it may be. */
+export const invalidReason = (n: ChangeImpact | undefined): string => (n?.validation && !n.validation.valid ? n.validation.message || 'the draft fails a validation rule' : '');
+
+/** The impacts of a list that pass their validation (or are not checked): the ones a review may accept. */
+export const validImpacts = (list: ChangeImpact[]): ChangeImpact[] => list.filter((n) => !invalidReason(n));
+
 /** The comment the review of an impact keeps once submitted: the entry's own, then the global one (the server's
  * review.EffectiveComment). Empty only when both are. */
 export function effectiveComment(global: string, entry: string): string {
@@ -102,13 +109,15 @@ export function effectiveComment(global: string, entry: string): string {
 
 /** What stops an open review from being submitted, in words; empty when it may be. ignore: entries left out (the stale
  * ones, which the panel removes before it submits). */
-export function submitProblems(r: ReviewRecord, ignore: Set<string> = new Set()): string[] {
+export function submitProblems(r: ReviewRecord, ignore: Set<string> = new Set(), nodes: ChangeImpact[] = []): string[] {
+  const byId = new Map(nodes.map((n) => [n.id ?? '', n]));
   const entries = (r.entries ?? []).filter((e) => !ignore.has(e.changeImpactId));
   const out: string[] = [];
   if (r.status !== 'open') return ['the review is final'];
   if (!entries.length) out.push('add at least one impact');
   for (const e of entries) {
     if (e.outcome !== 'accept' && e.outcome !== 'reject') out.push(`${e.changeImpactId}: accept or reject it`);
+    else if (e.outcome === 'accept' && invalidReason(byId.get(e.changeImpactId))) out.push(`${e.changeImpactId}: cannot be accepted, ${invalidReason(byId.get(e.changeImpactId))}`);
     else if (!effectiveComment(r.comment ?? '', e.comment ?? '')) out.push(`${e.changeImpactId}: a comment is needed, its own or the review's`);
   }
   return out;
@@ -116,7 +125,7 @@ export function submitProblems(r: ReviewRecord, ignore: Set<string> = new Set())
 
 /** Whether an open review may be submitted: an entry at least and an outcome on every one (a comment on each, its own
  * or the global one). */
-export const canSubmit = (r: ReviewRecord, ignore?: Set<string>): boolean => submitProblems(r, ignore).length === 0;
+export const canSubmit = (r: ReviewRecord, ignore?: Set<string>, nodes?: ChangeImpact[]): boolean => submitProblems(r, ignore, nodes).length === 0;
 
 /** A line of the table of a review: a change impact, in the review (included) or only awaiting one. */
 export interface ReviewRow {

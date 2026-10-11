@@ -25,6 +25,10 @@ type TypeCatalog interface {
 	AttributeChecks(typ string) []domain.AttributeCheck
 	// LinkAttributeChecks are the attributes of a link type, to check the properties of its links.
 	LinkAttributeChecks(typ string) []domain.AttributeCheck
+	// LinkAttributeValidators are the property validators plugged on the attributes of a link type (each bound to its
+	// attribute), LinkTypeValidators its link validators, both in call order.
+	LinkAttributeValidators(typ string) []algo.Bound
+	LinkTypeValidators(typ string) []algo.Bound
 	// AttributeNames are the names of the attributes of a node type, ancestors included, and whether the type is open
 	// (`additionalProperties: true`, or unknown to the catalogue): the properties of a node of a closed type are
 	// attributes only.
@@ -128,6 +132,8 @@ type Graph struct {
 	DraftCacheSize int
 	// draftStates caches the drafts folded from the impact logs.
 	draftStates draftCache
+	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.
+	validations validationCache
 }
 
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
@@ -432,6 +438,27 @@ func (g *Graph) Change(ctx context.Context, id domain.ChangeID) (c domain.Change
 	return
 }
 
+// ChangeChecked is Change with the validation of each impact carrying a draft (ImpactValidation): what the change
+// impacts look like to a person who reviews them. Each impact is checked on the flow that declared it.
+func (g *Graph) ChangeChecked(ctx context.Context, id domain.ChangeID) (c domain.Change, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		flows := map[string]bool{}
+		for _, cn := range c.Nodes {
+			flows[cn.Flow] = true
+		}
+		nodes := slices.Clone(c.Nodes)
+		for flow := range flows {
+			g.attachValidation(ctx, tx, c, flow, nodes, func(cn domain.ChangeImpact) bool { return cn.Flow == flow })
+		}
+		c.Nodes = nodes
+		return nil
+	})
+	return
+}
+
 // Changes lists changes.
 func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { cs, err = tx.Changes(ctx); return err })
@@ -701,7 +728,8 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		facets := g.facets(c, now)
 		full := c // the drafts are read with the flows of the change, the view of a flow has none
 		c = c.View(flow)
-		c.Nodes = nodes
+		c.Nodes = slices.Clone(nodes)
+		g.attachValidation(ctx, tx, full, flow, c.Nodes, nil)
 		bb = domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}, Neighbors: map[domain.NodeRef]domain.Node{},
 			Facets: facets, At: now}
 		ix, err := g.typesAt(ctx, tx, c.BaselineID)

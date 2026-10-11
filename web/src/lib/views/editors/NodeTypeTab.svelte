@@ -4,12 +4,14 @@
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
+  import ValidatorList from '../../components/ValidatorList.svelte';
   import NodeTypeMeta from '../../components/NodeTypeMeta.svelte';
   import AttributeEditor from '../../components/AttributeEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { closeWhere } from '../../shell/tabs.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { algorithmToolbar, domainDraftOf, nodeTypeIndex, openLifecycle } from './domainTabs';
+  import { linksOf } from './typeLinks';
+  import { algorithmToolbar, domainDraftOf, nodeTypeIndex, openLifecycle, openLinkType } from './domainTabs';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -66,6 +68,9 @@
   const instancesOf = (usage: string) =>
     f.instances.filter((i) => i.name.trim() && f.algorithms.find((a) => a.name === i.algorithm)?.type === usage).map((i) => i.name.trim());
 
+  const outgoing = $derived(x ? linksOf(f.nodeTypes, f.linkTypes, x.name, 'from') : []);
+  const ingoing = $derived(x ? linksOf(f.nodeTypes, f.linkTypes, x.name, 'to') : []);
+
   function openLifecycleNamed(name: string) {
     const i = f.lifecycles.findIndex((l) => l.name === name);
     if (i >= 0) openLifecycle(d, i);
@@ -117,7 +122,7 @@
     {/if}
 
     <fieldset class="plain" disabled={d.readonly}>
-      <section class="card">
+      <section class="card" data-path={path}>
         <h3>General</h3>
         <div class="grid">
           <div class="field">
@@ -148,14 +153,52 @@
         <p class="hint">What the nodes carry, and what the interface needs to display and edit them. Each attribute holds its own validators.</p>
         <AttributeEditor bind:attrs={f.nodeTypes[index].attributes} enums={enumNames} validatorInstances={instancesOf('property_validator')} inherited={inheritedNames} bad={(p) => d.bad(p)} readonly={d.readonly} {path} />
       </section>
-      <section class="card" data-path={path}>
+      <section class="card" data-path="{path}.validators">
+        <h3>Validators</h3>
+        <p class="hint">Node validators check a node as a whole, across its attributes, when the draft is accepted and at landing, after the attribute validators and those of the parent types. Run in this order.</p>
+        <ValidatorList bind:list={f.nodeTypes[index].validators} instances={instancesOf('node_validator')} usage="node_validator" noun="node validator" bad={(p) => d.bad(p)} readonly={d.readonly} path="{path}.validators" />
+      </section>
+      <section class="card">
+        <h3>Links</h3>
+        <p class="hint">The link types that leave or reach this node type, including those of its parent types. A view only: each link type is edited in its own tab.</p>
+        <h4>Outgoing</h4>
+        {#if outgoing.length}
+          <ul class="plain-list">
+            {#each outgoing as o (o.index)}
+              <li>
+                <code>{o.name}</code> → <code>{o.other || '(any)'}</code>
+                {#if o.compose}<span class="hint">· composition</span>{/if}
+                {#if o.inheritedFrom}<span class="hint">· inherited from {o.inheritedFrom}</span>{/if}
+                <button type="button" class="small link" title="Open the link type {o.name}" onclick={() => openLinkType(d, o.index)}>Open ↗</button>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="hint">No link type leaves this node type.</p>
+        {/if}
+        <h4>Ingoing</h4>
+        {#if ingoing.length}
+          <ul class="plain-list">
+            {#each ingoing as o (o.index)}
+              <li>
+                <code>{o.other || '(any)'}</code> <span class="hint">via</span> <code>{o.name}</code>
+                {#if o.compose}<span class="hint">· composition (this type is a part)</span>{/if}
+                {#if o.inheritedFrom}<span class="hint">· inherited from {o.inheritedFrom}</span>{/if}
+                <button type="button" class="small link" title="Open the link type {o.name}" onclick={() => openLinkType(d, o.index)}>Open ↗</button>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="hint">No link type reaches this node type.</p>
+        {/if}
+      </section>
+      <section class="card">
         <NodeTypeMeta
           bind:n={f.nodeTypes[index]}
           lifecycles={lifecycleNames}
           typeNames={d.nodeTypeNames}
           {inherited}
           onopenLifecycle={openLifecycleNamed}
-          validatorInstances={instancesOf('node_validator')}
           bad={(p) => d.bad(p)}
           readonly={d.readonly}
           {path}

@@ -45,6 +45,16 @@ func (s Schema) HasAlgorithms() bool {
 			}
 		}
 	}
+	for _, l := range s.LinkTypes {
+		if len(l.Validators) > 0 {
+			return true
+		}
+		for _, a := range l.Attributes {
+			if len(a.Validators) > 0 {
+				return true
+			}
+		}
+	}
 	for _, l := range s.Lifecycles {
 		for _, t := range l.Transitions {
 			if len(t.Guards) > 0 || len(t.Actions) > 0 {

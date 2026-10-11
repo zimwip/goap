@@ -342,6 +342,15 @@ message ChangeImpact {
   // flow branch that declared the change impact (empty: the main flow), replaced by an adopted flow (ADR 0025)
   string flow = 18;
   bool superseded = 19;
+  // a read model, never stored: what the accepted-review gate would say of the draft as it stands (empty: not checked
+  // or no draft); filled by GetChange and GetBlackboard
+  ImpactValidation validation = 20;
+}
+
+// The outcome of checking a draft as an accepted review would: valid, or the first failure (readable message).
+message ImpactValidation {
+  bool valid = 1;
+  string message = 2;
 }
 
 

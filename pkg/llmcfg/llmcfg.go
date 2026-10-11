@@ -140,12 +140,8 @@ func (a Alias) Validate() error {
 	if !ValidName(a.Alias) {
 		return fmt.Errorf("alias must be 1-40 characters of a-z, 0-9, - or _")
 	}
-	if a.Protected && a.Target == "" {
-		return nil
-	}
-	if _, _, ok := SplitTarget(a.Target); !ok {
-		return fmt.Errorf("alias %s: target must be provider/model", a.Alias)
-	}
+	// the target (provider/model, except for a protected alias) is the domain's rule: the node validator
+	// alias-needs-target of platform@LlmAlias, enforced at review and at landing.
 	return nil
 }
 

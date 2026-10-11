@@ -144,6 +144,9 @@ func (s *Service) RunAlgorithm(ctx context.Context, a algo.Algorithm, values map
 		Node       dsl.Node           `json:"node"`
 		Property   string             `json:"property"`
 		Value      any                `json:"value"`
+		Link       dsl.LinkInfo       `json:"link"`
+		From       dsl.Node           `json:"from"`
+		To         dsl.Node           `json:"to"`
 		Children   []dsl.Node         `json:"children"`
 		Transition dsl.TransitionInfo `json:"transition"`
 		Change     dsl.ChangeInfo     `json:"change"`
@@ -155,7 +158,15 @@ func (s *Service) RunAlgorithm(ctx context.Context, a algo.Algorithm, values map
 	if sample.Node.Props == nil {
 		sample.Node.Props = map[string]any{}
 	}
+	for _, n := range []*dsl.Node{&sample.From, &sample.To} {
+		if n.Props == nil {
+			n.Props = map[string]any{}
+		}
+	}
+	if sample.Link.Props == nil {
+		sample.Link.Props = map[string]any{}
+	}
 	b := algo.Bound{Instance: "try", Algorithm: a.Name, Type: a.Type, Language: a.Language, Code: a.Code, Params: params}
-	return dsl.RunAlgorithm(ctx, b, dsl.AlgorithmInput{Node: sample.Node, Property: sample.Property, Value: sample.Value,
+	return dsl.RunAlgorithm(ctx, b, dsl.AlgorithmInput{Node: sample.Node, Property: sample.Property, Value: sample.Value, Link: sample.Link, From: sample.From, To: sample.To,
 		Children: sample.Children, Change: sample.Change, Transition: sample.Transition})
 }

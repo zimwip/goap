@@ -219,10 +219,14 @@ type LinkType struct {
 	From        string `yaml:"from,omitempty" json:"from,omitempty"`
 	To          string `yaml:"to,omitempty" json:"to,omitempty"`
 	// Attributes define what a link of this type carries. The user interface edits a link from them; the graph checks
-	// the type and enum of the values on every link edit, when the draft is accepted and at landing (ADR 0076, 0079); their validators are
-	// checked by the domain but not yet run. "specializes" declares when/priority this way: the generic Activity-specialization
+	// the type and enum of the values on every link edit, when the draft is accepted and at landing (ADR 0076, 0079); their validators
+	// (property_validator instances, the value being the link property) run at those two moments too. "specializes" declares when/priority this way: the generic Activity-specialization
 	// condition (architecture plan "Activity concept") a link of that type would carry once one is created.
 	Attributes []Attribute `yaml:"attributes,omitempty" json:"attributes,omitempty"`
+	// Validators plug link_validator instances on the link type: rules on a link as a whole, seen with the node it
+	// leaves and the node it reaches, in call order. They run, like the validators of its attributes, when the draft of
+	// the node the link leaves is accepted and when the version lands.
+	Validators []string `yaml:"validators,omitempty" json:"validators,omitempty"`
 	// Compose flags a composition link: the target is a part of the source (an aggregate), so a browser or
 	// editor shows the targets as the children of the source. It is the semantics the editors read from the
 	// domain instead of knowing the link by name ("defines", "sub_activity").

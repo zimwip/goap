@@ -10,6 +10,7 @@ import NodeTab from './editors/NodeTab.svelte';
 import { draftGroup, findStep, KIND_SECTION, SECTION_ICON } from './editors/methodologyTabs';
 import { activeDraft } from './bottom/activeDraft';
 import { domainGroup } from './editors/domainTabs';
+import { actionHelp, adapterHelp, algorithmHelp, domainHelp, instanceHelp, methodologyHelp } from './editors/dslTargets';
 import './nodeEditors';
 
 import MethodologyExplorer from './nav/MethodologyExplorer.svelte';
@@ -146,6 +147,7 @@ registerView({
   groupDirty,
   group: draftGroup,
   discard: discardGroup,
+  help: methodologyHelp,
   properties: (t) => {
     const d = peekDraft(draftGroup(t));
     if (!d || d.isNew) return undefined;
@@ -190,6 +192,7 @@ registerView({
   groupDirty: domainGroupDirty,
   group: domainGroup,
   discard: discardDomain,
+  help: domainHelp,
   properties: (t) => {
     const d = peekDomainDraft(domainGroup(t));
     if (!d || d.isNew) return undefined;
@@ -341,6 +344,7 @@ registerView({
   groupDirty: domainGroupDirty,
   group: domainGroup,
   discard: discardDomain,
+  help: algorithmHelp,
   properties: algorithmProps('algorithm'),
 });
 
@@ -352,6 +356,7 @@ registerView({
   component: AdapterTab,
   key: (p) => p.name || 'new',
   tabTitle: (t) => (t.params.name ? `Adapter ${t.params.name}` : 'New adapter'),
+  help: adapterHelp,
 });
 
 registerView({
@@ -367,6 +372,7 @@ registerView({
   groupDirty: domainGroupDirty,
   group: domainGroup,
   discard: discardDomain,
+  help: instanceHelp,
   properties: algorithmProps('instance'),
 });
 
@@ -397,6 +403,7 @@ for (const kind of ['agent', 'action', 'condition', 'goal', 'process', 'method']
     groupDirty,
     group: draftGroup,
     discard: discardGroup,
+    help: kind === 'action' ? actionHelp : undefined,
     properties: (t) => {
       const x = itemOf(t);
       if (!x) return undefined;

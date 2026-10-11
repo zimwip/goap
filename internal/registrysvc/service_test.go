@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"reflect"
+	"sync"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
@@ -243,5 +244,39 @@ func TestPublishStubsMissingAlias(t *testing.T) {
 	}
 	if impacts := pendingAliasImpacts(t, g, "unconfigured-test-alias"); len(impacts) != 1 {
 		t.Fatalf("expected the pending stub not to be duplicated, got %+v", impacts)
+	}
+}
+
+// Two methodologies referencing the same missing alias, published concurrently, leave exactly one open stub.
+func TestPublishStubsMissingAliasOnce(t *testing.T) {
+	g := graph.New(graph.NewMemory())
+	s := &Service{Store: graphWithDomains{NewGraphStore(g), NewMemoryStore()}}
+	withALM(t, s)
+	ctx := as("admin")
+	var srcs [][]byte
+	for _, name := range []string{"stub-once-a", "stub-once-b"} {
+		m := example(t)
+		m.Name = name
+		m.Version = "9.0.0"
+		m.Agents = []methodology.Agent{{Name: "plannertest", Planner: methodology.PlannerLLMScoring, Model: "shared-test-alias"}}
+		src, err := m.YAML()
+		if err != nil {
+			t.Fatal(err)
+		}
+		srcs = append(srcs, src)
+	}
+	var wg sync.WaitGroup
+	for _, src := range srcs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, _, err := s.Import(ctx, src, true); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if impacts := pendingAliasImpacts(t, g, "shared-test-alias"); len(impacts) != 1 {
+		t.Fatalf("expected exactly one open stub, got %+v", impacts)
 	}
 }

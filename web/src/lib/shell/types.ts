@@ -2,6 +2,7 @@
 // tabs, and toolbar contextual actions.
 import type { Component } from 'svelte';
 import type { IconName } from './Icon.svelte';
+import type { DslTarget } from '../dslHelp';
 
 export type Zone = 'left' | 'right' | 'bottom' | 'editor';
 
@@ -78,6 +79,8 @@ export interface EditorView extends BaseView {
   /** discards the group's changes (close without saving) */
   discard?: (tab: Tab) => void;
   properties?: (tab: Tab) => Properties | undefined;
+  /** the script the tab holds, for the "DSL Help" panel (unset: the tab holds none) */
+  help?: (tab: Tab) => DslTarget | undefined;
 }
 
 export type View = PanelView | EditorView;

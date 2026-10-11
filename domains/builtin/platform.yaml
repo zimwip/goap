@@ -1,5 +1,5 @@
 name: platform
-version: 2.5.0
+version: 2.6.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -57,6 +57,7 @@ nodeTypes:
   - name: LlmAlias
     description: "Name (default, fast, ...) of a model, as provider/model"
     lifecycle: config
+    validators: [alias-needs-target]
     attributes:
       - {name: alias, label: Alias, description: "Name callers use (default, fast…)", type: string, section: Identity, order: 1, asName: true}
       - {name: target, label: Target, description: "The model, as provider/model", type: string, section: Identity, order: 2}
@@ -102,3 +103,19 @@ lifecycles:
     transitions:
       - {name: retire, description: Take the entry out of the configuration, from: active, to: retired}
       - {name: restore, description: Put a retired entry back in force, from: retired, to: active}
+# Algorithms (ADR 0018): the rule an alias must satisfy to be accepted and to land.
+algorithms:
+  - name: alias-target
+    description: An alias names a model as provider/model, except a protected one (assistant, helper), which may stay unconfigured
+    type: node_validator
+    language: javascript
+    code: |
+      const p = ctx.node().props || {};
+      if (p.protected === true) return;
+      const t = typeof p.target === "string" ? p.target : "";
+      const i = t.indexOf("/");
+      if (i <= 0 || i === t.length - 1) {
+        ctx.fail("alias " + (p.alias || ctx.node().key) + " needs a target (provider/model)");
+      }
+algorithmInstances:
+  - {name: alias-needs-target, description: An alias needs a target as provider/model unless it is protected, algorithm: alias-target}

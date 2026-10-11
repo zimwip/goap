@@ -88,16 +88,10 @@ const alreadyCheckedOut = (e: unknown) => /already checked out/i.test(e instance
 export const awaitingReview = (cns: ChangeImpact[], scoped = false): ChangeImpact[] =>
   cns.filter((c) => live(c, scoped) && !!c.id && (c.review === 'proposed' || !c.review) && !!c.post?.id);
 
-/** Accepts every impact awaiting its review, one explicit review each with the comment given: an explicit user action
- * (the "Accept all proposed" button), never a side effect of an edit (ADR 0079 / requirement: no automatic review). */
-export async function acceptAllProposed(changeId: string, cns: ChangeImpact[], comment: string, flow = '', scoped = false): Promise<void> {
-  for (const c of awaitingReview(cns, scoped)) await graph.impactNodeReview(changeId, c.id!, true, comment, flow);
-}
-
 /** Writes a node of the change (ADR 0076, 0079): created, or checked out when the flow holds no draft of it, its
  * properties and links edited in place on the DRAFT; a state is a transition (on the draft: a node with none is checked
  * out first). Nothing here reviews: an edit leaves the impact `proposed` (an edit sends an accepted one back to
- * proposed) and the review is a separate explicit action (ChangeLifecycle, acceptAllProposed). The version is written
+ * proposed) and the review is a separate explicit action (the Reviews tab). The version is written
  * when the change lands. A node is never deleted: a node the change created is taken out of it (removeFromChange), one
  * no parent holds is retired by its lifecycle. */
 export async function writeNodeInChange(

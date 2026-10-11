@@ -19,6 +19,8 @@ import (
 // A JavaScript algorithm is the body of a function of ctx, so it may `return`.
 //
 //	property_validator   ctx: ValidatorCtx    func Run(ctx *dsl.ValidatorCtx) error
+//	node_validator       ctx: NodeValidatorCtx func Run(ctx *dsl.NodeValidatorCtx) error
+//	link_validator       ctx: LinkValidatorCtx func Run(ctx *dsl.LinkValidatorCtx) error
 //	transition_guard     ctx: GuardCtx        func Run(ctx *dsl.GuardCtx) error
 //	transition_action    ctx: TransitionCtx   func Run(ctx *dsl.TransitionCtx) error
 //
@@ -52,6 +54,12 @@ type ImpactInfo struct {
 	Review string `json:"review"`
 }
 
+// LinkInfo is the link a link validator checks: its type and properties.
+type LinkInfo struct {
+	Type  string         `json:"type"`
+	Props map[string]any `json:"props"`
+}
+
 // AlgorithmInput is what an algorithm is run on. Only the fields of its usage are read.
 type AlgorithmInput struct {
 	// Node is the node concerned (after the change for a validator; the moved node, in its new state, for a transition).
@@ -59,6 +67,9 @@ type AlgorithmInput struct {
 	// Property and Value: the property a validator checks.
 	Property string
 	Value    any
+	// Link, From and To: the link a link validator checks and the nodes it leaves and reaches, as they will be.
+	Link     LinkInfo
+	From, To Node
 	// Children: the nodes a document contains (transitions).
 	Children   []Node
 	Change     ChangeInfo
@@ -139,6 +150,30 @@ func (v *NodeValidatorCtx) Fail(msg string)  { v.c.Fail(msg) }
 func (v *NodeValidatorCtx) Log(msg string)   { v.c.Log(msg) }
 func (v *NodeValidatorCtx) Warn(msg string)  { v.c.Warn(msg) }
 func (v *NodeValidatorCtx) logf(l, m string) { v.c.logf(l, m) }
+
+// LinkValidatorCtx is the context of a link validator: it checks a link as a whole, with both of its ends.
+type LinkValidatorCtx struct {
+	c  *common
+	in AlgorithmInput
+}
+
+// Param returns a parameter value of the instance.
+func (v *LinkValidatorCtx) Param(name string) any { return v.c.Param(name) }
+
+// Link is the link being validated: its type and properties.
+func (v *LinkValidatorCtx) Link() LinkInfo { return v.in.Link }
+
+// From is the node the link leaves, as it will be once the change is applied.
+func (v *LinkValidatorCtx) From() Node { return v.in.From }
+
+// To is the node the link reaches, as it will be once the change is applied.
+func (v *LinkValidatorCtx) To() Node { return v.in.To }
+
+// Fail rejects the link with a message.
+func (v *LinkValidatorCtx) Fail(msg string)  { v.c.Fail(msg) }
+func (v *LinkValidatorCtx) Log(msg string)   { v.c.Log(msg) }
+func (v *LinkValidatorCtx) Warn(msg string)  { v.c.Warn(msg) }
+func (v *LinkValidatorCtx) logf(l, m string) { v.c.logf(l, m) }
 
 // GuardCtx is the context of a transition guard.
 type GuardCtx struct {
@@ -255,6 +290,17 @@ func RunAlgorithm(ctx context.Context, b algo.Bound, in AlgorithmInput) (Outcome
 			run, ok := entry.(func(*NodeValidatorCtx) error)
 			if !ok {
 				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.NodeValidatorCtx) error, got %T", entry)
+			}
+			return func() error { return run(x) }, nil
+		}
+		out = func() Outcome { return Outcome{Failures: c.failures, Logs: c.logs} }
+	case algo.UsageLinkValidator:
+		x := &LinkValidatorCtx{c: c, in: in}
+		obj, jsObj = x, x
+		bind = func(entry any) (func() error, error) {
+			run, ok := entry.(func(*LinkValidatorCtx) error)
+			if !ok {
+				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.LinkValidatorCtx) error, got %T", entry)
 			}
 			return func() error { return run(x) }, nil
 		}

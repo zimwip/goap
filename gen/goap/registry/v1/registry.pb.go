@@ -783,7 +783,7 @@ type Algorithm struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// property_validator | node_validator | transition_guard | transition_action
+	// property_validator | node_validator | link_validator | transition_guard | transition_action
 	Type string `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
 	// javascript | go
 	Language      string            `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
@@ -1338,8 +1338,10 @@ type LinkType struct {
 	// composition link: the target is a part of the source, shown as its child
 	Compose bool `protobuf:"varint,4,opt,name=compose,proto3" json:"compose,omitempty"`
 	// what a link of the type carries
-	Attributes    []*Attribute `protobuf:"bytes,5,rep,name=attributes,proto3" json:"attributes,omitempty"`
-	Description   string       `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	Attributes  []*Attribute `protobuf:"bytes,5,rep,name=attributes,proto3" json:"attributes,omitempty"`
+	Description string       `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	// link_validator instances (ADR 0100) checking a link of the type as a whole, in call order
+	Validators    []string `protobuf:"bytes,7,rep,name=validators,proto3" json:"validators,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1414,6 +1416,13 @@ func (x *LinkType) GetDescription() string {
 		return x.Description
 	}
 	return ""
+}
+
+func (x *LinkType) GetValidators() []string {
+	if x != nil {
+		return x.Validators
+	}
+	return nil
 }
 
 type Condition struct {
@@ -7564,7 +7573,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x04expr\x18\x02 \x01(\tR\x04expr\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\"*\n" +
 	"\fDocumentSpec\x12\x1a\n" +
-	"\bcontains\x18\x01 \x03(\tR\bcontains\"\xbb\x01\n" +
+	"\bcontains\x18\x01 \x03(\tR\bcontains\"\xdb\x01\n" +
 	"\bLinkType\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04from\x18\x02 \x01(\tR\x04from\x12\x0e\n" +
@@ -7573,7 +7582,10 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\x05 \x03(\v2\x1b.goap.registry.v1.AttributeR\n" +
 	"attributes\x12 \n" +
-	"\vdescription\x18\x06 \x01(\tR\vdescription\"U\n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x1e\n" +
+	"\n" +
+	"validators\x18\a \x03(\tR\n" +
+	"validators\"U\n" +
 	"\tCondition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +

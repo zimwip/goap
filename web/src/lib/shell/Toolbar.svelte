@@ -2,17 +2,12 @@
   // Toolbar: contextual actions of the active editor, then
   // global actions and panel toggles.
   import Icon from './Icon.svelte';
-  import { tabActions, focusRequests } from './workbench.svelte';
+  import { tabActions } from './workbench.svelte';
   import { tabsState } from './tabs.svelte';
-  import { layout, showTool } from './layout.svelte';
+  import { layout } from './layout.svelte';
   import type { ToolbarAction } from './types';
 
   const actions = $derived<ToolbarAction[]>(tabActions.get(tabsState.active) ?? []);
-
-  function newTest() {
-    showTool('right', 'tester');
-    focusRequests.tester += 1;
-  }
 
   let running = $state('');
   async function run(a: ToolbarAction) {
@@ -43,10 +38,6 @@
     {/each}
   </div>
   <div class="group global">
-    <button type="button" class="tb" title="New intent test" onclick={newTest}>
-      <Icon name="flask" size={14} /><span class="lbl">New intent test</span>
-    </button>
-    <span class="sep" aria-hidden="true"></span>
     <button
       type="button"
       class="tb icon"
@@ -128,16 +119,5 @@
   }
   .tb.icon[aria-pressed='true'] {
     color: var(--text);
-  }
-  .sep {
-    width: 1px;
-    height: 18px;
-    background: var(--border);
-    margin: 0 0.3rem;
-  }
-  @media (max-width: 1180px) {
-    .global .lbl {
-      display: none;
-    }
   }
 </style>

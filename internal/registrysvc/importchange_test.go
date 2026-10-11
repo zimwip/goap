@@ -45,7 +45,7 @@ goals: [{name: g, pre: {c: true}}]
 		switch {
 		case strings.HasPrefix(c.Title, "Methodology imp"):
 			methodologies++
-		case strings.HasPrefix(c.Title, "Aliases needed by imp"):
+		case strings.HasPrefix(c.Title, "Model aliases needed by imp"):
 			aliases++
 			if len(c.Nodes) != 2 {
 				t.Fatalf("both aliases in the one change: %d", len(c.Nodes))

@@ -109,3 +109,39 @@ func TestAlgorithmErrors(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestLinkValidatorBoth(t *testing.T) {
+	in := AlgorithmInput{
+		Link: LinkInfo{Type: "d@refs", Props: map[string]any{"weight": 3}},
+		From: Node{Key: "A", Props: map[string]any{"colour": "red"}},
+		To:   Node{Key: "B", Props: map[string]any{"colour": "blue"}},
+	}
+	js := bound(algo.UsageLinkValidator, "javascript", `
+		if (ctx.from().props.colour !== ctx.to().props.colour) ctx.fail(ctx.link().type + " " + ctx.from().key + "->" + ctx.to().key + " w" + ctx.link().props.weight + " " + ctx.param("p"));`,
+		map[string]any{"p": "x"})
+	out, err := RunAlgorithm(context.Background(), js, in)
+	if err != nil || len(out.Failures) != 1 || out.Failures[0] != "d@refs A->B w3 x" {
+		t.Fatalf("js: %v %v", err, out.Failures)
+	}
+	code := `package v
+
+import "github.com/zimwip/goap/pkg/dsl"
+
+func Run(ctx *dsl.LinkValidatorCtx) error {
+	if ctx.From().Props["colour"] != ctx.To().Props["colour"] {
+		ctx.Fail(ctx.Link().Type + " " + ctx.From().Key + "->" + ctx.To().Key)
+	}
+	return nil
+}`
+	g := bound(algo.UsageLinkValidator, "go", code, nil)
+	out, err = RunAlgorithm(context.Background(), g, in)
+	if err != nil || len(out.Failures) != 1 || out.Failures[0] != "d@refs A->B" {
+		t.Fatalf("go: %v %v", err, out.Failures)
+	}
+	in.To.Props["colour"] = "red"
+	for _, b := range []algo.Bound{js, g} {
+		if out, err := RunAlgorithm(context.Background(), b, in); err != nil || !out.OK() {
+			t.Fatalf("%s accepted link rejected: %v %v", b.Language, err, out.Failures)
+		}
+	}
+}

@@ -9,7 +9,7 @@
   import type { Lifecycle } from '../api';
   import StatusBadge from './StatusBadge.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
-  import { assistField, assistTarget } from '../assist/registry.svelte';
+  import { assistTarget } from '../assist/registry.svelte';
 
   let {
     rows,
@@ -28,9 +28,8 @@
     onopennode,
     impacts = false,
     scope = '',
-    onreview,
     selected = '',
-    onacceptall,
+    onopenreviews,
   }: {
     rows: LifecycleRow[];
     /** nodes the change could take on */
@@ -59,33 +58,19 @@
     impacts?: boolean;
     /** the flow the rows are the view of: 'main' or an option id (ADR 0032 §6) */
     scope?: string;
-    /** accepts or rejects the change impact of a row; the comment is mandatory */
-    onreview?: (row: LifecycleRow, accept: boolean, comment: string) => Promise<boolean> | boolean;
     /** the impact the assistant (or the person) points at: outlined in the table */
     selected?: string;
-    /** accepts every impact still awaiting its review: an explicit action, the comment is mandatory */
-    onacceptall?: (comment: string) => Promise<boolean> | boolean;
+    /** opens the Reviews tab, where the impacts are reviewed */
+    onopenreviews?: () => void;
   } = $props();
 
   const onOption = $derived(impacts && !!scope && scope !== 'main');
   // a draft reference has no version (ADR 0079): the node gets one when the change lands
   const version = (r?: { id?: string; version?: number }) => (r?.id ? (isDraft(r) ? 'draft' : `v${r.version}`) : '—');
-  let reviewing = $state('');
-  let reviewComment = $state('');
   let rationale = $state('');
-  async function review(r: LifecycleRow, accept: boolean) {
-    if (onreview && (await onreview(r, accept, reviewComment.trim()))) {
-      reviewing = '';
-      reviewComment = '';
-    }
-  }
   // Reviews are never automatic (ADR 0079): an edit leaves its impact proposed, and the graph refuses to land the change
   // while one awaits its review.
   const awaiting = $derived(impacts ? rows.filter((r) => r.impact && !r.impact.superseded && r.impact.post?.id && (r.impact.review === 'proposed' || !r.impact.review)) : []);
-  let allComment = $state('');
-  async function acceptAll() {
-    if (onacceptall && (await onacceptall(allComment.trim()))) allComment = '';
-  }
   const openable = (r: LifecycleRow) => !r.created || !!r.impact?.post?.id;
 
   async function remove(r: LifecycleRow) {
@@ -215,13 +200,8 @@
   {#if awaiting.length}
     <div class="alert" role="status" id="awaiting-review">
       <strong>Awaiting review: {awaiting.map((r) => r.node.key).join(', ')}.</strong>
-      The change cannot land while an impact awaits its review: accept or reject each one below (Review…), or accept them all.
-      {#if !disabled && onacceptall}
-        <div class="row">
-          <input type="text" class="grow" placeholder="Comment (mandatory)" aria-label="Comment for accepting all proposed impacts" bind:value={allComment} />
-          <button type="button" class="small primary" disabled={!allComment.trim() || busy !== ''} onclick={acceptAll}>Accept all proposed ({awaiting.length})</button>
-        </div>
-      {/if}
+      The change cannot land while an impact awaits its review.
+      {#if onopenreviews}<button type="button" class="link" onclick={onopenreviews}>Review them in the Reviews tab</button>{/if}
     </div>
   {/if}
 
@@ -261,10 +241,8 @@
               <td>
                 {#if r.impact}
                   <StatusBadge status={r.impact.review} />
+                  {#if r.impact.validation && !r.impact.validation.valid}<div class="invalid" role="alert" title="The review of this impact is blocked until its draft passes the validation rules">Validation failed: {r.impact.validation.message || 'the draft fails a validation rule'}</div>{/if}
                   {#if r.impact.reviews?.length}<div class="hint">{r.impact.reviews.at(-1)?.by}: {r.impact.reviews.at(-1)?.comment}</div>{/if}
-                  {#if !disabled && onreview && r.impact.review === 'proposed' && !r.impact.superseded}
-                    <button type="button" class="link small" onclick={() => ((reviewing = reviewing === r.impact?.id ? '' : (r.impact?.id ?? '')), (reviewComment = ''))}>Review…</button>
-                  {/if}
                 {/if}
               </td>
             {/if}
@@ -313,25 +291,6 @@
               {/if}
             </td>
           </tr>
-          {#if impacts && reviewing && reviewing === r.impact?.id && !disabled}
-            <tr class="editrow">
-              <td colspan="6">
-                <div class="row review">
-                  <input
-                    type="text"
-                    class="grow"
-                    placeholder="Comment (mandatory)"
-                    aria-label="Review comment"
-                    bind:value={reviewComment}
-                    use:assistField={{ id: 'review_comment', label: 'Review comment', type: 'string', required: true, get: () => reviewComment, set: (v) => (reviewComment = String(v)) }}
-                  />
-                  <button type="button" class="small primary" disabled={!reviewComment.trim() || busy !== ''} onclick={() => review(r, true)}>Accept</button>
-                  <button type="button" class="small danger" disabled={!reviewComment.trim() || busy !== ''} onclick={() => review(r, false)}>Reject</button>
-                  <button type="button" class="small" onclick={() => (reviewing = '')}>Cancel</button>
-                </div>
-              </td>
-            </tr>
-          {/if}
           {#if editing === r.node.id && !disabled}
             <tr class="editrow">
               <td colspan={impacts ? 6 : 3}>
@@ -425,6 +384,10 @@
 </section>
 
 <style>
+  .invalid {
+    color: var(--danger, #c0392b);
+    font-size: 0.85rem;
+  }
   tr.selected td {
     background: var(--accent-soft);
   }
@@ -510,10 +473,6 @@
   }
   .add .why-input {
     width: 16rem;
-  }
-  .review .grow {
-    flex: 1;
-    min-width: 14rem;
   }
   .editrow td {
     background: var(--surface-2);

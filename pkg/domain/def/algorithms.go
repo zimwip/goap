@@ -92,6 +92,9 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 		}
 	}
 	for i, l := range s.LinkTypes {
+		for j, v := range l.Validators {
+			plug(fmt.Sprintf(prefix+"linkTypes[%d].validators[%d]", i, j), v, algo.UsageLinkValidator)
+		}
 		for j, a := range l.Attributes {
 			for k, v := range a.Validators {
 				plug(fmt.Sprintf(prefix+"linkTypes[%d].attributes[%d].validators[%d]", i, j, k), v, algo.UsagePropertyValidator)
@@ -163,6 +166,27 @@ func (s Schema) OwnBoundValidators(t NodeType) []algo.Bound {
 		}
 	}
 	return out
+}
+
+// OwnBoundLinkValidators resolves the validators of a link type: the property validators of its attributes (bound to
+// the attribute, the value checked being the link property of that name) and its link validators. Instances that do
+// not resolve are left out (Validate reports them).
+func (s Schema) OwnBoundLinkValidators(l LinkType) (attributes, links []algo.Bound) {
+	set := s.algorithms()
+	for _, a := range l.Attributes {
+		for _, v := range a.Validators {
+			if b, err := set.Bind(v, algo.UsagePropertyValidator); err == nil {
+				b.Property = a.Name
+				attributes = append(attributes, b)
+			}
+		}
+	}
+	for _, v := range l.Validators {
+		if b, err := set.Bind(v, algo.UsageLinkValidator); err == nil {
+			links = append(links, b)
+		}
+	}
+	return attributes, links
 }
 
 // BindLifecycle returns a copy of the lifecycle with the guard and action

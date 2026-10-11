@@ -174,7 +174,7 @@ message AlgorithmParam {
 message Algorithm {
   string name = 1;
   string description = 2;
-  // property_validator | node_validator | transition_guard | transition_action
+  // property_validator | node_validator | link_validator | transition_guard | transition_action
   string type = 3;
   // javascript | go
   string language = 4;
@@ -251,6 +251,8 @@ message LinkType {
   // what a link of the type carries
   repeated Attribute attributes = 5;
   string description = 6;
+  // link_validator instances (ADR 0100) checking a link of the type as a whole, in call order
+  repeated string validators = 7;
 }
 
 message Condition {

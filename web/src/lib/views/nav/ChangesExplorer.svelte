@@ -9,8 +9,7 @@
   import { project, inActiveProject } from '../../stores/project.svelte';
   import { changes, refreshChanges } from '../../stores/catalog.svelte';
   import { live, processes, refreshProcesses } from '../../stores/live.svelte';
-  import { showTool } from '../../shell/layout.svelte';
-  import { select as select, focusRequests } from '../../shell/workbench.svelte';
+  import { select as select } from '../../shell/workbench.svelte';
   import { openTab, tabsState } from '../../shell/tabs.svelte';
   import { formatDate, formatInt, shortId, int, type Change, type Process } from '../../api';
 
@@ -100,11 +99,6 @@
         ['Created', formatDate(p.createdAt)],
       ],
     });
-  }
-
-  function newTest() {
-    showTool('right', 'tester');
-    focusRequests.tester += 1;
   }
 
   const STATUSES = [
@@ -241,9 +235,6 @@
     <input type="search" placeholder="Filter…" aria-label="Filter changes" bind:value={filter} data-no-pin />
     <button type="button" class="ghost small" title="New change (by hand, no methodology needed)" aria-label="New change" aria-pressed={creating} onclick={() => (creating = !creating)}
       ><Icon name="plus" size={14} /></button
-    >
-    <button type="button" class="ghost small" title="New intent test" aria-label="New intent test" onclick={newTest}
-      ><Icon name="flask" size={14} /></button
     >
     <button
       type="button"

@@ -7,7 +7,7 @@
   // write: the answer is put over what the change shows until the platform stream brings the new version.
   import { graph, errorMessage, formatDate, shortId, type Change, type ChangeImpact, type ReviewEdit, type ReviewRecord } from '../api';
   import { MAIN_SCOPE } from '../changeScope';
-  import { awaitingImpacts, canSubmit, foldReviews, mayEdit, overlay, reviewOrder, reviewRows, staleEntries, submitProblems, tally, OUTCOMES } from '../reviews';
+  import { awaitingImpacts, canSubmit, foldReviews, invalidReason, validImpacts, mayEdit, overlay, reviewOrder, reviewRows, staleEntries, submitProblems, tally, OUTCOMES } from '../reviews';
   import { can, me } from '../stores/session.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
   import StatusBadge from './StatusBadge.svelte';
@@ -58,9 +58,12 @@
     }
   }
 
-  /** opens a review prefilled with every impact awaiting review (two calls: the review, then its entries) */
+  /** impacts awaiting a review that fail a validation rule: they cannot be accepted until their draft is fixed */
+  const waiting = $derived(awaitingImpacts(nodes, all, scope));
+  const blocked = $derived(waiting.filter((n) => invalidReason(n)));
+  /** opens a review prefilled with every impact awaiting review that passes its validation (two calls: the review, then its entries) */
   async function open() {
-    const ids = awaitingImpacts(nodes, all, scope).map((n) => n.id ?? '');
+    const ids = validImpacts(awaitingImpacts(nodes, all, scope)).map((n) => n.id ?? '');
     let key = '';
     const ok = await run('open', async () => {
       const res = await graph.reviewOpen(change.id ?? '', '', scope || MAIN_SCOPE);
@@ -73,8 +76,14 @@
   const setComment = (r: ReviewRecord, comment: string) => comment.trim() !== (r.comment ?? '') && update(r, { comment });
   const setEntry = (r: ReviewRecord, id: string, patch: { comment?: string; outcome?: string }) => update(r, { entries: [{ changeImpactId: id, ...patch }] });
   const include = (r: ReviewRecord, id: string, on: boolean) => update(r, on ? { add: [id] } : { remove: [id] });
+  /** an outcome for every included entry; accepting skips the impacts that fail a validation rule */
   const setAll = (r: ReviewRecord, outcome: string) =>
-    update(r, { entries: rowsOf(r).filter((x) => x.included).map((x) => ({ changeImpactId: x.id, outcome })) });
+    update(r, { entries: rowsOf(r).filter((x) => x.included && (outcome !== 'accept' || !invalidReason(x.node))).map((x) => ({ changeImpactId: x.id, outcome })) });
+  /** includes every impact awaiting a review that passes its validation, accepting it: the invalid ones stay out */
+  const addValid = (r: ReviewRecord) => {
+    const ids = rowsOf(r).filter((x) => !x.included && !invalidReason(x.node)).map((x) => x.id);
+    return update(r, { add: ids, entries: ids.map((id) => ({ changeImpactId: id, outcome: 'accept' })) });
+  };
   const setEntryComment = (r: ReviewRecord, id: string, comment: string, was: string) => comment.trim() !== was.trim() && setEntry(r, id, { comment });
   /** the entries the impacts no longer await are taken out first, so that the submit does not review them */
   async function submit(r: ReviewRecord) {
@@ -108,6 +117,34 @@
   {#if error}<div class="alert">{error}</div>{/if}
   {#if !reviews.length}
     <p class="empty">No review yet. A review gathers impacts, each with its own comment and outcome, and reviews them all when it is submitted.</p>
+  {/if}
+
+  {#if waiting.length}
+    <div class="waiting" aria-label="Impacts awaiting a review">
+      <h4>Awaiting a review <span class="hint">{waiting.length} impact{waiting.length > 1 ? 's' : ''} · {waiting.length - blocked.length} can be reviewed now{blocked.length ? ` · ${blocked.length} blocked by a validation rule` : ''}</span></h4>
+      <table class="reg">
+        <thead><tr><th>Impact</th><th>Why</th><th>Validation</th></tr></thead>
+        <tbody>
+          {#each waiting as n (n.id)}
+            <tr>
+              <td>
+                <button type="button" class="link mono" title="Open the impact" onclick={() => onopenimpact?.(n.id ?? '')}>{label(n.id ?? '')}</button>
+                <div class="hint">{[n.type, n.intent].filter(Boolean).join(' · ')}</div>
+              </td>
+              <td class="hint" title={n.rationale ?? ''}>{n.rationale || '—'}</td>
+              <td>{#if invalidReason(n)}<span class="invalid" role="alert">Failed: {invalidReason(n)}</span>{:else}<span class="ok">{n.validation ? 'valid' : 'not checked'}</span>{/if}</td>
+            </tr>
+          {/each}
+        </tbody>
+      </table>
+      {#if !closed}
+        <div class="row actions">
+          <button type="button" class="primary" disabled={!!busy || waiting.length === blocked.length} title="Opens a review holding the impacts that pass their validation; the others stay here until their draft is fixed" onclick={open}>
+            Review the {waiting.length - blocked.length} valid impact{waiting.length - blocked.length > 1 ? 's' : ''}
+          </button>
+        </div>
+      {/if}
+    </div>
   {/if}
 
   {#each reviews as r (r.key)}
@@ -150,7 +187,7 @@
                 Outcome
                 {#if mine}
                   <span class="bulk">
-                    <button type="button" class="small" disabled={!!busy || !rows.some((x) => x.included)} onclick={() => setAll(r, 'accept')}>Accept all</button>
+                    <button type="button" class="small" disabled={!!busy || !rows.some((x) => x.included)} onclick={() => setAll(r, 'accept')} title="Accept every included impact that passes its validation">Accept all valid</button>
                     <button type="button" class="small" disabled={!!busy || !rows.some((x) => x.included)} onclick={() => setAll(r, 'reject')}>Reject all</button>
                   </span>
                 {/if}
@@ -171,6 +208,7 @@
                   <button type="button" class="link mono" title="Open the impact" onclick={() => onopenimpact?.(x.id)}>{label(x.id)}</button>
                   <div class="hint">{[n?.type, n?.intent].filter(Boolean).join(' · ')}</div>
                   {#if n?.rationale}<div class="hint" title={n.rationale}>{n.rationale}</div>{/if}
+                  {#if invalidReason(n)}<div class="invalid" role="alert">Validation failed: {invalidReason(n)}</div>{/if}
                 </td>
                 <td>
                   {#if mine}
@@ -185,7 +223,7 @@
                   {#if mine}
                     {#each OUTCOMES as o (o.id)}
                       <label class="radio {o.id}">
-                        <input type="radio" name="outcome-{r.key}-{x.id}" value={o.id} checked={x.outcome === o.id} disabled={!!busy || !x.included} onchange={() => setEntry(r, x.id, { outcome: o.id })} />
+                        <input type="radio" name="outcome-{r.key}-{x.id}" value={o.id} checked={x.outcome === o.id} disabled={!!busy || !x.included || (o.id === 'accept' && !!invalidReason(n))} title={o.id === 'accept' && invalidReason(n) ? `Cannot be accepted: ${invalidReason(n)}` : ''} onchange={() => setEntry(r, x.id, { outcome: o.id })} />
                         {o.label}
                       </label>
                     {/each}
@@ -206,9 +244,10 @@
       {/if}
 
       {#if mine}
-        {@const problems = submitProblems(r, stale)}
+        {@const problems = submitProblems(r, stale, nodes)}
         <div class="row actions">
-          <button type="button" class="primary" disabled={!!busy || !canSubmit(r, stale)} title={problems.join('\n')} onclick={() => submit(r)}>Submit review</button>
+          <button type="button" class="primary" disabled={!!busy || !canSubmit(r, stale, nodes)} title={problems.join('\n')} onclick={() => submit(r)}>Submit review</button>
+          <button type="button" disabled={!!busy || !rows.some((x) => !x.included && !invalidReason(x.node))} title="Include every impact that awaits a review and passes its validation, accepted" onclick={() => addValid(r)}>Add and accept all valid</button>
           <button type="button" disabled={!!busy} onclick={() => discard(r)}>Discard</button>
           {#if problems.length}<span class="hint">{problems.length} thing(s) to settle before it can be submitted</span>{/if}
         </div>
@@ -220,6 +259,20 @@
 </section>
 
 <style>
+  .waiting {
+    margin: 0.5rem 0 1rem;
+  }
+  .waiting h4 {
+    margin: 0 0 0.3rem;
+  }
+  .ok {
+    color: var(--muted);
+    font-size: 0.85rem;
+  }
+  .invalid {
+    color: var(--danger, #c0392b);
+    font-size: 0.85rem;
+  }
   .review {
     border: 1px solid var(--border);
     border-radius: 8px;

@@ -335,6 +335,19 @@ func TestRunAlgorithm(t *testing.T) {
 	}
 }
 
+func TestRunLinkValidator(t *testing.T) {
+	enf, _ := authz.NewCasbin(nil)
+	s := &Service{Store: NewMemoryStore(), Authz: enf}
+	a := algo.Algorithm{Name: "same-state", Type: algo.UsageLinkValidator, Language: "javascript",
+		Code: `if (ctx.from().state !== ctx.to().state) ctx.fail(ctx.link().type + ": " + ctx.from().state + " vs " + ctx.to().state)`}
+	in := map[string]any{"link": map[string]any{"type": "refines"},
+		"from": map[string]any{"key": "A", "state": "draft"}, "to": map[string]any{"key": "B", "state": "done"}}
+	out, err := s.RunAlgorithm(as("admin"), a, nil, in)
+	if err != nil || out.OK() || out.Failures[0] != "refines: draft vs done" {
+		t.Fatalf("%v %+v", err, out)
+	}
+}
+
 func TestDomainNodeTypeEditors(t *testing.T) {
 	src, err := os.ReadFile(filepath.Join("..", "..", "domains", "builtin", "platform.yaml"))
 	if err != nil {

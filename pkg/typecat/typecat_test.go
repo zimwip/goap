@@ -7,6 +7,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 )
@@ -302,5 +303,38 @@ linkTypes:
 		if !slices.Contains(paths, want) {
 			t.Errorf("no issue on %s: %v", want, paths)
 		}
+	}
+}
+
+func TestLinkTypeValidatorsResolved(t *testing.T) {
+	d, err := def.ParseDomain([]byte(`
+name: lv
+version: 1.0.0
+algorithms:
+  - {name: pv, type: property_validator, language: javascript, code: "return"}
+  - {name: lv, type: link_validator, language: javascript, code: "return"}
+algorithmInstances:
+  - {name: v1, algorithm: pv}
+  - {name: l1, algorithm: lv}
+nodeTypes: [{name: A}]
+linkTypes:
+  - {name: r, from: A, to: A, validators: [l1], attributes: [{name: w, validators: [v1]}]}
+  - {name: plain, from: A, to: A}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := New(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if vs := c.LinkTypeValidators("lv@r"); len(vs) != 1 || vs[0].Instance != "l1" || vs[0].Type != algo.UsageLinkValidator {
+		t.Fatalf("link validators: %+v", vs)
+	}
+	if vs := c.LinkAttributeValidators("lv@r"); len(vs) != 1 || vs[0].Instance != "v1" || vs[0].Property != "w" {
+		t.Fatalf("attribute validators: %+v", vs)
+	}
+	if len(c.LinkTypeValidators("lv@plain")) != 0 || len(c.LinkAttributeValidators("lv@nope")) != 0 {
+		t.Fatal("none declared, none unknown")
 	}
 }

@@ -84,3 +84,44 @@ nodeTypes:
 		}
 	}
 }
+
+func TestLinkValidatorsPlugAndBind(t *testing.T) {
+	src := `
+name: m
+version: "1"
+nodeTypes: [{name: A}]
+algorithms:
+  - {name: pv, type: property_validator, language: javascript, code: "return"}
+  - {name: lv, type: link_validator, language: javascript, code: "return"}
+algorithmInstances:
+  - {name: v1, algorithm: pv}
+  - {name: l1, algorithm: lv}
+linkTypes:
+  - {name: r, from: A, to: A, validators: [l1], attributes: [{name: w, validators: [v1]}]}
+`
+	d, err := ParseDomain([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if is := d.Validate(); len(is) > 0 {
+		t.Fatalf("valid domain: %+v", is)
+	}
+	if !d.HasAlgorithms() {
+		t.Fatal("a link type plugging validators has algorithms")
+	}
+	attrs, links := d.OwnBoundLinkValidators(d.LinkTypes[0])
+	if len(attrs) != 1 || attrs[0].Property != "w" || attrs[0].Type != algo.UsagePropertyValidator || len(links) != 1 || links[0].Type != algo.UsageLinkValidator {
+		t.Fatalf("bound: %+v %+v", attrs, links)
+	}
+	// a plug of the wrong type, or of an unknown instance, is an issue
+	got := domainIssues(t, strings.Replace(src, "validators: [l1], attributes: [{name: w, validators: [v1]}]", "validators: [v1, ghost], attributes: [{name: w, validators: [l1]}]", 1))
+	for _, want := range []string{
+		"linkTypes[0].validators[0]: instance v1 is of type property_validator, expected link_validator",
+		"linkTypes[0].validators[1]: unknown algorithm instance ghost",
+		"linkTypes[0].attributes[0].validators[0]: instance l1 is of type link_validator, expected property_validator",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in\n%s", want, got)
+		}
+	}
+}

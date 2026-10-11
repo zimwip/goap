@@ -26,6 +26,9 @@ const (
 	// UsageNodeValidator checks a node as a whole (rules across several attributes), once the
 	// attribute validators accepted.
 	UsageNodeValidator Usage = "node_validator"
+	// UsageLinkValidator checks a link as a whole, with the node it leaves and the node it reaches (rules across
+	// both ends and the link's properties), once the attribute validators of the link accepted.
+	UsageLinkValidator Usage = "link_validator"
 	// UsageTransitionGuard decides whether a lifecycle transition is allowed.
 	UsageTransitionGuard Usage = "transition_guard"
 	// UsageTransitionAction runs when a lifecycle transition is taken and may
@@ -35,7 +38,7 @@ const (
 
 // Usages lists every usage.
 func Usages() []Usage {
-	return []Usage{UsageAction, UsagePropertyValidator, UsageNodeValidator, UsageTransitionGuard, UsageTransitionAction}
+	return []Usage{UsageAction, UsagePropertyValidator, UsageNodeValidator, UsageLinkValidator, UsageTransitionGuard, UsageTransitionAction}
 }
 
 // Pluggable tells whether algorithms of this type can be declared and plugged.

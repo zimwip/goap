@@ -664,10 +664,10 @@ JavaScript: no `require`), with a timeout. The code runs in the process's **sand
 ### 2.13 Algorithms: the DSL plugged into the domain ([ADR 0018](adr/0018-algorithms.md))
 
 The DSL is a generic capability tied to a **usage** (which fixes the `ctx` the code sees): `action`
-(§2.10, code inline in the agent's action) and four *pluggable* usages of the domain —
-`property_validator`, `node_validator`, `transition_guard`, `transition_action`. A domain declares
+(§2.10, code inline in the agent's action) and five *pluggable* usages of the domain —
+`property_validator`, `node_validator`, `link_validator`, `transition_guard`, `transition_action`. A domain declares
 **algorithms** (JavaScript or Go, with typed parameters) and **instances** (parameter values);
-attributes plug property validator instances, node types plug node validator instances (checked on the node as a whole, after the attributes'), lifecycle transitions plug guard and action
+attributes plug property validator instances, node types plug node validator instances (checked on the node as a whole, after the attributes'), link types plug link validator instances (checked on the link as a whole with both of its ends, after the validators of the link's attributes; [ADR 0100](adr/0100-validation-at-three-levels.md)), lifecycle transitions plug guard and action
 instances, in call order. The type catalogue (the graph's copy of the registry's model) resolves the plugged instances (like the lifecycle, ADR 0014): validators run when items are added and when a change is applied, guards and
 actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the *Algorithms* group of a domain version.
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { acceptAllProposed, awaitingReview, holdsOwnDraft, lifecycleRows, loadPosts, postKey, writeNodeInChange } from './lifecycle';
+import { awaitingReview, holdsOwnDraft, lifecycleRows, loadPosts, postKey, writeNodeInChange } from './lifecycle';
 import { graph, isDraft, type ChangeImpact, type Lifecycle } from './api';
 import type { TypeCatalog } from './stores/types.svelte';
 
@@ -114,12 +114,10 @@ describe('the edit flow never reviews (ADR 0079)', () => {
     expect(posts.get(postKey({ id: 'n1', version: 0 }))?.draft).toBe(true);
   });
 
-  it('lists the impacts awaiting a review and accepts them only on explicit request', async () => {
+  it('lists the impacts awaiting a review', async () => {
     const accepted: ChangeImpact = { id: 'i2', post: { id: 'n2', version: 0 }, review: 'accepted' };
     const planned: ChangeImpact = { id: 'i3', pre: { id: 'n3', version: 1 }, review: 'proposed' };
     expect(awaitingReview([drafted, accepted, planned]).map((c) => c.id)).toEqual(['i1']);
-    await acceptAllProposed('c1', [drafted, accepted, planned], 'all good', 'main');
-    expect(calls.map((c) => c.split(':')[0])).toEqual(['review']);
   });
 
   it('holds its own draft only on the flow that declared the impact', () => {

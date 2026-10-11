@@ -93,6 +93,7 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 				batch[i].ID = domain.ChangeImpactID(g.newID())
 			}
 			batch[i].Flow = c.ResolveFlow(batch[i].Flow) // no flow: the active option (ADR 0032 §6)
+			batch[i].Validation = nil                    // a read model, never stored
 			known[batch[i].ID] = true
 		}
 		for _, cn := range batch {

@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/zimwip/goap/pkg/authz"
@@ -32,6 +34,10 @@ type Service struct {
 	now       func() time.Time
 	// compiled caches the compiled methodologies (ADR 0072).
 	compiled compileCache
+	// aliasMu serializes ensureAliasStubs (check, then create).
+	aliasMu sync.Mutex
+	// Log reports what a best-effort step could not do; nil: slog.Default.
+	Log *slog.Logger
 }
 
 // ErrInvalid wraps validation issues.

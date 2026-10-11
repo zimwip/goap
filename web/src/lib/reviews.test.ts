@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { awaitingImpacts, canSubmit, reviewRows, staleEntries, effectiveComment, foldReviews, mayEdit, overlay, reviewOrder, submitProblems, tally } from './reviews';
+import { awaitingImpacts, canSubmit, invalidReason, validImpacts, reviewRows, staleEntries, effectiveComment, foldReviews, mayEdit, overlay, reviewOrder, submitProblems, tally } from './reviews';
 import type { ChangeImpact, ChangeItem, ReviewRecord } from './api';
 
 const item = (id: string, data: Record<string, unknown>, extra: Partial<ChangeItem> = {}): ChangeItem => ({ id, kind: 'review', status: 'proposed', producedBy: 'alice', data: data as ChangeItem['data'], ...extra });
@@ -134,5 +134,30 @@ describe('the table of a review', () => {
   it('shows a final review as it was reviewed', () => {
     const done = rec({ status: 'submitted', entries: [{ changeImpactId: 'b', outcome: 'reject', comment: 'no' }] });
     expect(reviewRows(nodes, [done], done).map((r) => [r.id, r.included, r.outcome])).toEqual([['b', true, 'reject']]);
+  });
+});
+
+describe('validation of an impact', () => {
+  const ok: ChangeImpact = { id: 'a', review: 'proposed', validation: { valid: true } };
+  const bad: ChangeImpact = { id: 'b', review: 'proposed', validation: { valid: false, message: 'alias reasoning needs a target (provider/model)' } };
+  const unchecked: ChangeImpact = { id: 'c', review: 'proposed' };
+
+  it('says why an impact cannot be accepted, and nothing for a valid or unchecked one', () => {
+    expect(invalidReason(bad)).toBe('alias reasoning needs a target (provider/model)');
+    expect(invalidReason(ok)).toBe('');
+    expect(invalidReason(unchecked)).toBe('');
+    expect(invalidReason({ id: 'd', validation: { valid: false } })).not.toBe('');
+  });
+
+  it('keeps the impacts that pass', () => {
+    expect(validImpacts([ok, bad, unchecked]).map((n) => n.id)).toEqual(['a', 'c']);
+  });
+
+  it('refuses to submit an entry that accepts an invalid impact', () => {
+    const r = rec({ comment: 'ok', entries: [{ changeImpactId: 'b', outcome: 'accept' }] });
+    expect(canSubmit(r, undefined, [ok, bad])).toBe(false);
+    expect(submitProblems(r, new Set(), [ok, bad])[0]).toContain('alias reasoning needs a target');
+    expect(canSubmit(rec({ comment: 'ok', entries: [{ changeImpactId: 'b', outcome: 'reject' }] }), undefined, [ok, bad])).toBe(true);
+    expect(canSubmit(rec({ comment: 'ok', entries: [{ changeImpactId: 'a', outcome: 'accept' }] }), undefined, [ok, bad])).toBe(true);
   });
 });

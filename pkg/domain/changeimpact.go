@@ -77,6 +77,16 @@ type ChangeImpact struct {
 	Flow       string    `json:"flow,omitempty"`
 	Superseded bool      `json:"superseded,omitempty"`
 	CreatedAt  time.Time `json:"createdAt"`
+	// Validation is a read model: what the accepted-review gate would say of the draft as it stands. The graph fills
+	// it when it reads the change impacts for display (Graph.ChangeChecked, BlackboardIn); it is never stored and no
+	// event carries it. Nil: not checked, or nothing to check (no draft).
+	Validation *ImpactValidation `json:"validation,omitempty"`
+}
+
+// ImpactValidation is the outcome of checking a draft as an accepted review would: Valid, or the first failure.
+type ImpactValidation struct {
+	Valid   bool   `json:"valid"`
+	Message string `json:"message,omitempty"`
 }
 
 // Planned reports whether the change impact has no post yet: its node is not checked out, no draft exists.

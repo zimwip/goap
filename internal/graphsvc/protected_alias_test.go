@@ -1,8 +1,12 @@
 package graphsvc_test
 
 import (
+	"net/http"
+	"net/http/httptest"
+
 	"context"
 	"errors"
+	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"strings"
 	"testing"
 
@@ -182,5 +186,85 @@ func TestBootSeedsTerseBehaviorOnce(t *testing.T) {
 	}
 	if n2, _ := g.NodeByKey(ctx, domain.NamespacePlatform, llmcfg.BehaviorKey("terse")); n2.State != llmcfg.StateRetired {
 		t.Fatalf("the seed restored a retired behaviour: %q", n2.State)
+	}
+}
+
+// The domain refuses an alias with no usable target when its draft is accepted or lands (validator alias-needs-target of
+// platform@LlmAlias); a protected one may stay unconfigured.
+func TestAliasNeedsTarget(t *testing.T) {
+	ctx := graphsvc.System(context.Background())
+	g := typedGraph(t)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	land := func(a llmcfg.Alias) error {
+		return graphsvc.SeedChange(ctx, g, domain.NamespacePlatform, "alias "+a.Alias, []graph.NodeEdit{
+			graphsvc.SeedNode(llmcfg.AliasKey(a.Alias), llmcfg.NodeTypeAlias, a.Props())})
+	}
+	for _, target := range []string{"", "nomodel", "/m", "p/"} {
+		err := land(llmcfg.Alias{Alias: "bad", Target: target})
+		if !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "alias bad needs a target (provider/model)") {
+			t.Errorf("target %q: err = %v", target, err)
+		}
+	}
+	if err := land(llmcfg.Alias{Alias: "unset", Protected: true}); err != nil {
+		t.Errorf("protected without target: %v", err)
+	}
+	if err := land(llmcfg.Alias{Alias: "good", Target: "p/m"}); err != nil {
+		t.Errorf("valid target: %v", err)
+	}
+}
+
+// The views of a change tell, on the impact itself, that an alias with no usable target would be refused at its review,
+// in process and through the service (ImpactValidation); the review gives the same message.
+func TestAliasNeedsTargetShownOnTheImpact(t *testing.T) {
+	ctx := graphsvc.System(context.Background())
+	g := typedGraph(t)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	mux := http.NewServeMux()
+	mux.Handle(path, handler)
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	cl := graphsvc.NewClient(srv.Client(), srv.URL)
+
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: domain.NamespacePlatform, Title: "alias"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cn, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Rationale: "r", Key: llmcfg.AliasKey("bad"), Type: llmcfg.NodeTypeAlias, Properties: llmcfg.Alias{Alias: "bad", Target: "nomodel"}.Props()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, reviewErr := g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "r", "ok")
+	if !errors.Is(reviewErr, graph.ErrInvalid) {
+		t.Fatalf("review: %v", reviewErr)
+	}
+	want := strings.TrimSuffix(reviewErr.Error(), ": "+graph.ErrInvalid.Error())
+	if !strings.Contains(want, "alias bad needs a target (provider/model)") {
+		t.Fatalf("message = %q", want)
+	}
+	got, err := cl.Change(ctx, c.ID)
+	if err != nil || len(got.Nodes) != 1 {
+		t.Fatalf("client change = %+v, %v", got, err)
+	}
+	if v := got.Nodes[0].Validation; v == nil || v.Valid || v.Message != want {
+		t.Fatalf("through the service: %+v, want %q", v, want)
+	}
+	bb, err := cl.Blackboard(ctx, c.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := bb.Change.Nodes[0].Validation; v == nil || v.Valid || v.Message != want {
+		t.Fatalf("blackboard through the service: %+v", v)
+	}
+	// fixed, the next view says so
+	if _, err := g.ImpactNodeUpdate(ctx, c.ID, cn.ID, graph.NodeUpdate{Properties: map[string]any{"target": "p/m"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ = cl.Change(ctx, c.ID); got.Nodes[0].Validation == nil || !got.Nodes[0].Validation.Valid {
+		t.Fatalf("fixed: %+v", got.Nodes[0].Validation)
 	}
 }

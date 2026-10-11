@@ -337,6 +337,11 @@ export interface NodeEdit {
   owner?: string;
 }
 
+export interface ImpactValidation {
+  valid: boolean;
+  message?: string;
+}
+
 export interface ChangeImpact {
   id?: string;
   key?: string;
@@ -351,6 +356,8 @@ export interface ChangeImpact {
   landed?: NodeRef;
   review?: 'proposed' | 'accepted' | 'rejected' | string;
   reviews?: NodeReview[];
+  /** whether the draft, as it stands, passes the gate of an accepted review (derived by the graph, not stored): `valid: false` blocks the Accept, `message` is the rule that failed; absent: not checked */
+  validation?: ImpactValidation;
   via?: string;
   recheck?: boolean;
   producedBy?: string;

@@ -671,10 +671,21 @@ func (g *Graph) checkAccepted(ctx context.Context, tx Tx, id domain.ChangeID, fl
 	if err != nil || d == nil {
 		return err
 	}
-	if err := g.checkOrigins(w.seen, w.vcn, d); err != nil {
+	return g.checkDraftOf(ctx, tx, w.c, w.flow, w.ix, w.seen, w.vcn, d)
+}
+
+// checkDraftOf is the check of an accepted review on one draft, writing nothing: the origins gate over the change
+// impacts the flow sees, then what a version must satisfy. It serves the review (checkAccepted) and the validation the
+// views carry (ImpactValidation).
+func (g *Graph) checkDraftOf(ctx context.Context, tx Tx, c domain.Change, flow string, ix *typeIndex, seen []domain.ChangeImpact, cn domain.ChangeImpact, d *domain.Draft) error {
+	if err := g.checkOrigins(seen, cn, d); err != nil {
 		return err
 	}
-	return g.checkDraft(ctx, w.ix, w.c, *d)
+	r, err := g.newDraftReader(ctx, tx, c, flow, seen)
+	if err != nil {
+		return err
+	}
+	return g.checkDraft(ctx, ix, c, *d, draftResolver(ctx, tx, r))
 }
 
 // editedAgain sends an accepted review back to proposed when its draft is edited again (ADR 0077): what was accepted
