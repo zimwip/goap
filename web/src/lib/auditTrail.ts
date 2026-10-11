@@ -5,6 +5,7 @@
 // flow branches fork from it (a relaunch, alternatives to compare), and are merged back (adopted) or dropped
 // (discarded); the entries carry these marks so the trail can be drawn as branches.
 import { foldReviews, tally } from './reviews';
+import { isEphemeralBranch } from './namespace';
 import { decodeLogEntry, int, isDraft, shortId, type Change, type ChangeItem, type ExecutionRecord, type ImpactEvent, type JsonValue, type LogEntry, type NodeRef } from './api';
 
 export type AuditSource = 'change' | 'process' | 'schedule' | 'plan' | 'action' | 'approval' | 'impact' | 'fact' | 'flow';
@@ -212,7 +213,8 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
       summary = `flow ${shortId(e.flow)} adopted${e.stale?.length ? `, replaces ${e.stale.length} run${e.stale.length > 1 ? 's' : ''}` : ''}`;
       break;
     case 'landed':
-      summary = `draft landed as ${v(e.landed)}${e.branch ? ` on branch ${e.branch}` : ''}`;
+      // first on the change's own branch (commit), then on the branch it was forked from (merge)
+      summary = e.branch && isEphemeralBranch(e.branch) ? `draft committed as ${v(e.landed)} on branch ${e.branch}` : `draft merged as ${v(e.landed)}${e.branch ? ` into ${e.branch}` : ''}`;
       break;
     case 'rebased':
       summary = `pre moved to ${v(e.pre)}, to re-check`;

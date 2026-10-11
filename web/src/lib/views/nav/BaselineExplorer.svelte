@@ -7,7 +7,8 @@
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { loadRaw, save } from '../../shell/storage';
   import { graph, errorMessage, formatDate, type Baseline, type Branch } from '../../api';
-  import { isEphemeralBranch } from '../../namespace';
+  import { changeOfBranch, isChangeBranch, shownBranches } from '../../branchFilter';
+  import { openTab } from '../../shell/tabs.svelte';
   import { loadTypes as loadCatalog, typeCatalog } from '../../stores/types.svelte';
   import { refreshBaselines } from '../../stores/catalog.svelte';
   import { baselineTool, selectNamespace, selectBranch, refreshBranches } from '../../stores/baselineTool.svelte';
@@ -48,13 +49,7 @@
       .catch((e) => (error = errorMessage(e)));
   });
 
-  const internal = (b: Branch) => !!b.name && isEphemeralBranch(b.name);
-  const rank = (b: Branch) => (b.status === 'open' ? 0 : b.status === 'merged' ? 1 : 2);
-  const shown = $derived(
-    [...branches]
-      .filter((b) => !internal(b) && (showClosed || b.status === 'open'))
-      .sort((a, b) => rank(a) - rank(b) || (a.name === 'main' ? -1 : b.name === 'main' ? 1 : (a.name ?? '').localeCompare(b.name ?? ''))),
-  );
+  const shown = $derived(shownBranches(branches, showClosed));
 
   $effect(() => {
     void reload;
@@ -145,12 +140,16 @@
 
   function menu(e: MouseEvent, b: Branch) {
     const items: ContextMenuItem[] = [{ label: 'Open branch from here…', icon: 'branch', disabled: !headOf(b)?.id, run: () => openFrom(b) }];
-    if (b.name !== 'main' && !internal(b)) {
+    if (isChangeBranch(b)) {
+      // a change's branch is merged by its change (IntegrateChange), never by hand
+      const change = changeOfBranch(b);
+      if (change) items.push({ label: 'Open change', icon: 'branch', run: () => openTab({ kind: 'change', params: { id: change } }, { pin: true }) });
+    } else if (b.name !== 'main') {
       if (b.status === 'open') {
         for (const target of branches.filter((x) => x.status === 'open' && x.name !== b.name))
           items.push({ label: `Merge into ${target.name}`, icon: 'branch', run: () => openMergeDialog(baselineTool.namespace, b.name ?? '', target.name ?? '') });
         items.push({ label: 'Abandon', icon: 'trash', danger: true, run: () => abandon(b.name ?? '') });
-      } else if (b.status === 'abandoned') {
+      } else {
         items.push({ label: 'Reopen', icon: 'refresh', run: () => setStatus(b.name ?? '', 'open') });
       }
       items.push({ label: 'Edit description…', run: () => editDescription(b) });

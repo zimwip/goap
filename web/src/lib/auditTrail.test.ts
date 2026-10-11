@@ -29,7 +29,12 @@ describe('buildTrail', () => {
   });
 
   it('shows the version written at landing', () => {
-    expect(trail[4].summary).toBe('draft landed as v3 on branch main');
+    expect(trail[4].summary).toBe('draft merged as v3 into main');
+  });
+
+  it('says a landing on the change branch is a commit', () => {
+    const own = buildTrail({ nodes: [] }, [entry(1, { op: 'landed', landed: { id: 'n1', version: 3 }, branch: 'change-ab12cd34' })], new Map(), false);
+    expect(own[0].summary).toBe('draft committed as v3 on branch change-ab12cd34');
   });
 });
 
