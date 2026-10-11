@@ -300,20 +300,13 @@ type Gemini struct {
 
 // Complete implements Provider.
 func (g *Gemini) Complete(ctx context.Context, model string, req llm.Request) (llm.Response, error) {
-	type part struct {
-		Text string `json:"text"`
-	}
 	type content struct {
-		Role  string `json:"role,omitempty"`
-		Parts []part `json:"parts"`
+		Role  string           `json:"role,omitempty"`
+		Parts []map[string]any `json:"parts"`
 	}
 	body := map[string]any{}
-	system := req.System
-	if req.JSON {
-		system += jsonInstruction
-	}
-	if system != "" {
-		body["systemInstruction"] = content{Parts: []part{{Text: system}}}
+	if system := req.System + jsonInstructionOf(req); system != "" {
+		body["systemInstruction"] = content{Parts: []map[string]any{{"text": system}}}
 	}
 	var contents []content
 	for _, m := range req.Messages {
@@ -321,14 +314,44 @@ func (g *Gemini) Complete(ctx context.Context, model string, req llm.Request) (l
 		if m.Role == "assistant" {
 			role = "model"
 		}
-		contents = append(contents, content{Role: role, Parts: []part{{Text: m.Content}}})
+		var parts []map[string]any
+		for _, r := range m.ToolResults {
+			key := "content"
+			if r.IsError {
+				key = "error"
+			}
+			parts = append(parts, map[string]any{"functionResponse": map[string]any{"name": r.Name, "response": map[string]any{key: r.Content}}})
+		}
+		if m.Content != "" || (len(m.ToolCalls) == 0 && len(m.ToolResults) == 0) {
+			parts = append(parts, map[string]any{"text": m.Content})
+		}
+		for _, c := range m.ToolCalls {
+			args := c.Arguments
+			if args == nil {
+				args = map[string]any{}
+			}
+			parts = append(parts, map[string]any{"functionCall": map[string]any{"name": c.Name, "args": args}})
+		}
+		contents = append(contents, content{Role: role, Parts: parts})
 	}
 	body["contents"] = contents
+	if len(req.Tools) > 0 {
+		decls := make([]map[string]any, len(req.Tools))
+		for i, t := range req.Tools {
+			d := map[string]any{"name": t.Name, "description": t.Description}
+			if t.InputSchema != nil {
+				d["parametersJsonSchema"] = t.InputSchema
+			}
+			decls[i] = d
+		}
+		body["tools"] = []map[string]any{{"functionDeclarations": decls}}
+	}
 	cfg := map[string]any{}
 	if req.MaxTokens > 0 {
 		cfg["maxOutputTokens"] = req.MaxTokens
 	}
-	if req.JSON {
+	if req.JSON && len(req.Tools) == 0 {
+		// a JSON mime type is refused with function calling: the instruction asks for JSON then
 		cfg["responseMimeType"] = "application/json"
 	}
 	if len(cfg) > 0 {
@@ -337,7 +360,13 @@ func (g *Gemini) Complete(ctx context.Context, model string, req llm.Request) (l
 	var out struct {
 		Candidates []struct {
 			Content struct {
-				Parts []part `json:"parts"`
+				Parts []struct {
+					Text         string `json:"text"`
+					FunctionCall *struct {
+						Name string         `json:"name"`
+						Args map[string]any `json:"args"`
+					} `json:"functionCall"`
+				} `json:"parts"`
 			} `json:"content"`
 			FinishReason string `json:"finishReason"`
 		} `json:"candidates"`
@@ -356,11 +385,23 @@ func (g *Gemini) Complete(ctx context.Context, model string, req llm.Request) (l
 		return llm.Response{}, fmt.Errorf("generateContent: no candidate")
 	}
 	var text strings.Builder
+	var calls []llm.ToolCall
 	for _, p := range out.Candidates[0].Content.Parts {
 		text.WriteString(p.Text)
+		if p.FunctionCall != nil {
+			// Gemini gives no call ids: the position in the answer is one
+			calls = append(calls, llm.ToolCall{ID: fmt.Sprintf("call_%d", len(calls)+1), Name: p.FunctionCall.Name, Arguments: argsOf(p.FunctionCall.Args)})
+		}
 	}
 	um := out.UsageMetadata
-	return llm.Response{Text: text.String(), Model: out.ModelVersion,
+	r := llm.Response{Text: text.String(), ToolCalls: calls, Model: out.ModelVersion,
 		StopReason: stopReason(out.Candidates[0].FinishReason, "STOP", "MAX_TOKENS"),
-		Usage:      llm.Usage{InputTokens: um.PromptTokenCount, OutputTokens: um.CandidatesTokenCount, CacheReadTokens: um.CachedContentTokenCount}}, nil
+		Usage:      llm.Usage{InputTokens: um.PromptTokenCount, OutputTokens: um.CandidatesTokenCount, CacheReadTokens: um.CachedContentTokenCount}}
+	if len(calls) > 0 {
+		r.StopReason = llm.StopToolUse
+	}
+	return r, nil
 }
+
+// NativeTools implements NativeTools: generateContent takes function declarations.
+func (g *Gemini) NativeTools() bool { return true }

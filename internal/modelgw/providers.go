@@ -47,10 +47,7 @@ func (a *Anthropic) Complete(ctx context.Context, model string, req llm.Request)
 	if maxTokens <= 0 {
 		maxTokens = 16000
 	}
-	system := req.System
-	if req.JSON {
-		system += jsonInstruction
-	}
+	system := req.System + jsonInstructionOf(req)
 	params := anthropic.BetaMessageNewParams{
 		Model:     anthropic.Model(model),
 		MaxTokens: maxTokens,
@@ -63,17 +60,20 @@ func (a *Anthropic) Complete(ctx context.Context, model string, req llm.Request)
 			params.System[0].CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
 		}
 	}
+	for _, t := range req.Tools {
+		params.Tools = append(params.Tools, anthropic.BetaToolUnionParam{OfTool: anthropicTool(t)})
+	}
 	for i, m := range req.Messages {
-		block := anthropic.NewBetaTextBlock(m.Content)
-		if req.Cache && i == len(req.Messages)-1 {
+		blocks := anthropicBlocks(m)
+		if req.Cache && i == len(req.Messages)-1 && len(blocks) > 0 {
 			// two breakpoints: the system text (shared by every round and turn) and the last block of the
 			// conversation (the prefix the next round repeats)
-			block.OfText.CacheControl = anthropic.NewBetaCacheControlEphemeralParam()
+			cacheBlock(blocks[len(blocks)-1])
 		}
 		if m.Role == "assistant" {
-			params.Messages = append(params.Messages, anthropic.BetaMessageParam{Role: anthropic.BetaMessageParamRoleAssistant, Content: []anthropic.BetaContentBlockParamUnion{block}})
+			params.Messages = append(params.Messages, anthropic.BetaMessageParam{Role: anthropic.BetaMessageParamRoleAssistant, Content: blocks})
 		} else {
-			params.Messages = append(params.Messages, anthropic.NewBetaUserMessage(block))
+			params.Messages = append(params.Messages, anthropic.BetaMessageParam{Role: anthropic.BetaMessageParamRoleUser, Content: blocks})
 		}
 	}
 	msg, err := a.client.Beta.Messages.New(ctx, params)
@@ -88,16 +88,133 @@ func (a *Anthropic) Complete(ctx context.Context, model string, req llm.Request)
 		return llm.Response{}, llm.ErrRefusal
 	}
 	var text strings.Builder
+	var calls []llm.ToolCall
 	for _, block := range msg.Content {
-		if t, ok := block.AsAny().(anthropic.BetaTextBlock); ok {
-			text.WriteString(t.Text)
+		switch b := block.AsAny().(type) {
+		case anthropic.BetaTextBlock:
+			text.WriteString(b.Text)
+		case anthropic.BetaToolUseBlock:
+			calls = append(calls, llm.ToolCall{ID: b.ID, Name: b.Name, Arguments: argsOf(b.Input)})
 		}
 	}
 	u := msg.Usage
-	return llm.Response{Text: text.String(), Provider: "anthropic", Model: string(msg.Model),
-		StopReason: stopReason(string(msg.StopReason), "end_turn", "max_tokens"),
+	stop := stopReason(string(msg.StopReason), "end_turn", "max_tokens")
+	if stop == string(anthropic.BetaStopReasonToolUse) {
+		stop = llm.StopToolUse
+	}
+	return llm.Response{Text: text.String(), ToolCalls: calls, Provider: "anthropic", Model: string(msg.Model),
+		StopReason: stop,
 		Usage: llm.Usage{InputTokens: int(u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens), OutputTokens: int(u.OutputTokens),
 			CacheReadTokens: int(u.CacheReadInputTokens), CacheWriteTokens: int(u.CacheCreationInputTokens)}}, nil
+}
+
+// NativeTools implements NativeTools: Claude calls tools through its API.
+func (a *Anthropic) NativeTools() bool { return true }
+
+// anthropicTool is a tool of the Messages API.
+func anthropicTool(t llm.ToolSpec) *anthropic.BetaToolParam {
+	schema := anthropic.BetaToolInputSchemaParam{ExtraFields: map[string]any{}}
+	for k, v := range t.InputSchema {
+		switch k {
+		case "type":
+		case "properties":
+			schema.Properties = v
+		case "required":
+			for _, r := range anySlice(v) {
+				if s, ok := r.(string); ok {
+					schema.Required = append(schema.Required, s)
+				}
+			}
+		default:
+			schema.ExtraFields[k] = v
+		}
+	}
+	if schema.Properties == nil {
+		schema.Properties = map[string]any{}
+	}
+	tool := &anthropic.BetaToolParam{Name: t.Name, InputSchema: schema}
+	if t.Description != "" {
+		tool.Description = anthropic.String(t.Description)
+	}
+	return tool
+}
+
+// anthropicBlocks are the content blocks of a turn: the tool results first (the API wants them at the start of the
+// user turn that follows the calls), the text, then the tool calls.
+func anthropicBlocks(m llm.Message) []anthropic.BetaContentBlockParamUnion {
+	var blocks []anthropic.BetaContentBlockParamUnion
+	for _, r := range m.ToolResults {
+		blocks = append(blocks, anthropic.NewBetaToolResultBlock(r.CallID, r.Content, r.IsError))
+	}
+	if m.Content != "" || (len(m.ToolCalls) == 0 && len(m.ToolResults) == 0) {
+		blocks = append(blocks, anthropic.NewBetaTextBlock(m.Content))
+	}
+	for _, c := range m.ToolCalls {
+		args := c.Arguments
+		if args == nil {
+			args = map[string]any{}
+		}
+		blocks = append(blocks, anthropic.NewBetaToolUseBlock(c.ID, args, c.Name))
+	}
+	return blocks
+}
+
+// cacheBlock marks a block as a cache breakpoint.
+func cacheBlock(b anthropic.BetaContentBlockParamUnion) {
+	cc := anthropic.NewBetaCacheControlEphemeralParam()
+	switch {
+	case b.OfText != nil:
+		b.OfText.CacheControl = cc
+	case b.OfToolResult != nil:
+		b.OfToolResult.CacheControl = cc
+	case b.OfToolUse != nil:
+		b.OfToolUse.CacheControl = cc
+	}
+}
+
+// argsOf reads the arguments of a call (a decoded JSON object, or its raw text).
+func argsOf(v any) map[string]any {
+	var raw []byte
+	switch x := v.(type) {
+	case map[string]any:
+		return x
+	case json.RawMessage:
+		raw = x
+	case string:
+		raw = []byte(x)
+	default:
+		raw, _ = json.Marshal(x)
+	}
+	var m map[string]any
+	if json.Unmarshal(raw, &m) != nil || m == nil {
+		m = map[string]any{}
+	}
+	return m
+}
+
+func anySlice(v any) []any {
+	switch x := v.(type) {
+	case []any:
+		return x
+	case []string:
+		out := make([]any, len(x))
+		for i, s := range x {
+			out[i] = s
+		}
+		return out
+	}
+	return nil
+}
+
+// jsonInstructionOf is the instruction asking for a JSON answer, worded for a call that may also call tools.
+func jsonInstructionOf(req llm.Request) string {
+	switch {
+	case !req.JSON:
+		return ""
+	case len(req.Tools) > 0:
+		return "\n\nWhen you answer without calling a tool, respond with a single JSON object and nothing else."
+	}
+	return jsonInstruction
 }
 
 // ---- OpenAI-compatible (Ollama, vLLM, Mistral, OpenAI…) -------------------
@@ -111,19 +228,26 @@ type OpenAICompatible struct {
 
 // Complete implements Provider.
 func (o *OpenAICompatible) Complete(ctx context.Context, model string, req llm.Request) (llm.Response, error) {
-	type msg struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	}
 	body := map[string]any{"model": model}
-	var msgs []msg
+	var msgs []map[string]any
 	if req.System != "" {
-		msgs = append(msgs, msg{Role: "system", Content: req.System})
+		msgs = append(msgs, map[string]any{"role": "system", "content": req.System})
 	}
 	for _, m := range req.Messages {
-		msgs = append(msgs, msg{Role: m.Role, Content: m.Content})
+		msgs = append(msgs, openAIMessages(m)...)
 	}
 	body["messages"] = msgs
+	if len(req.Tools) > 0 {
+		tools := make([]map[string]any, len(req.Tools))
+		for i, t := range req.Tools {
+			params := t.InputSchema
+			if params == nil {
+				params = map[string]any{"type": "object", "properties": map[string]any{}}
+			}
+			tools[i] = map[string]any{"type": "function", "function": map[string]any{"name": t.Name, "description": t.Description, "parameters": params}}
+		}
+		body["tools"] = tools
+	}
 	if req.MaxTokens > 0 {
 		body["max_tokens"] = req.MaxTokens
 	}
@@ -160,7 +284,14 @@ func (o *OpenAICompatible) Complete(ctx context.Context, model string, req llm.R
 		Model   string `json:"model"`
 		Choices []struct {
 			Message struct {
-				Content string `json:"content"`
+				Content   string `json:"content"`
+				ToolCalls []struct {
+					ID       string `json:"id"`
+					Function struct {
+						Name      string `json:"name"`
+						Arguments string `json:"arguments"`
+					} `json:"function"`
+				} `json:"tool_calls"`
 			} `json:"message"`
 			FinishReason string `json:"finish_reason"`
 		} `json:"choices"`
@@ -178,10 +309,58 @@ func (o *OpenAICompatible) Complete(ctx context.Context, model string, req llm.R
 	if len(out.Choices) == 0 {
 		return llm.Response{}, fmt.Errorf("chat/completions: no choice")
 	}
-	return llm.Response{Text: out.Choices[0].Message.Content, Model: out.Model,
-		StopReason: stopReason(out.Choices[0].FinishReason, "stop", "length"),
+	choice := out.Choices[0]
+	r := llm.Response{Text: choice.Message.Content, Model: out.Model,
+		StopReason: stopReason(choice.FinishReason, "stop", "length"),
 		Usage: llm.Usage{InputTokens: out.Usage.PromptTokens, OutputTokens: out.Usage.CompletionTokens,
-			CacheReadTokens: out.Usage.PromptTokensDetails.CachedTokens}}, nil
+			CacheReadTokens: out.Usage.PromptTokensDetails.CachedTokens}}
+	for i, c := range choice.Message.ToolCalls {
+		id := c.ID
+		if id == "" {
+			id = fmt.Sprintf("call_%d", i+1)
+		}
+		r.ToolCalls = append(r.ToolCalls, llm.ToolCall{ID: id, Name: c.Function.Name, Arguments: argsOf(c.Function.Arguments)})
+	}
+	if r.StopReason == "tool_calls" || len(r.ToolCalls) > 0 {
+		r.StopReason = llm.StopToolUse
+	}
+	return r, nil
+}
+
+// NativeTools implements NativeTools: /chat/completions takes "tools". A server whose model has none refuses them,
+// and the gateway then falls back on its text protocol (tools.go).
+func (o *OpenAICompatible) NativeTools() bool { return true }
+
+// openAIMessages are the chat messages of a turn: an assistant turn with its tool_calls, the results of a user turn
+// as "tool" messages, then its text.
+func openAIMessages(m llm.Message) []map[string]any {
+	var out []map[string]any
+	if m.Role == "assistant" && len(m.ToolCalls) > 0 {
+		calls := make([]map[string]any, len(m.ToolCalls))
+		for i, c := range m.ToolCalls {
+			args, _ := json.Marshal(c.Arguments)
+			if c.Arguments == nil {
+				args = []byte("{}")
+			}
+			calls[i] = map[string]any{"id": c.ID, "type": "function", "function": map[string]any{"name": c.Name, "arguments": string(args)}}
+		}
+		msg := map[string]any{"role": "assistant", "tool_calls": calls, "content": nil}
+		if m.Content != "" {
+			msg["content"] = m.Content
+		}
+		return append(out, msg)
+	}
+	for _, r := range m.ToolResults {
+		content := r.Content
+		if r.IsError {
+			content = "error: " + content
+		}
+		out = append(out, map[string]any{"role": "tool", "tool_call_id": r.CallID, "content": content})
+	}
+	if m.Content != "" || len(m.ToolResults) == 0 {
+		out = append(out, map[string]any{"role": m.Role, "content": m.Content})
+	}
+	return out
 }
 
 // stopReason normalises a provider's stop reason: its words for a natural end and for the output token limit

@@ -149,3 +149,43 @@ func (h *blockingHub) CallTool(ctx context.Context, org, name string, args map[s
 }
 
 var _ ToolPort = (*blockingHub)(nil)
+
+func TestLLMActionCallsToolsNatively(t *testing.T) {
+	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}}
+	var mu sync.Mutex
+	var reqs []llm.Request
+	client := llm.ClientFunc(func(_ context.Context, r llm.Request) (llm.Response, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		reqs = append(reqs, r)
+		if len(reqs) == 1 {
+			return llm.Response{Text: "Reading it.", StopReason: llm.StopToolUse, ToolCalls: []llm.ToolCall{
+				{ID: "c1", Name: "document-repository/read", Arguments: map[string]any{"path": "spec.txt"}},
+				{ID: "c2", Name: "ticketing/create", Arguments: map[string]any{"path": "x"}},
+			}}, nil
+		}
+		return llm.Response{Text: docItems}, nil
+	})
+	e, base := mcpEngine(t, hub, client)
+	e.Methodologies.(StaticMethodologies)["docs"] = parseDocs(t, docsAsLLM)
+	p := runDocs(t, e, base, "acme")
+	if p.Status != StatusCompleted || len(reqs) != 2 {
+		t.Fatalf("status %s %s after %d calls", p.Status, p.Error, len(reqs))
+	}
+	if len(reqs[0].Tools) != 1 || reqs[0].Tools[0].Name != "document-repository/read" || strings.Contains(reqs[0].System, "Available tools") {
+		t.Fatalf("tools %+v", reqs[0].Tools)
+	}
+	msgs := reqs[1].Messages
+	call, results := msgs[len(msgs)-2], msgs[len(msgs)-1]
+	if call.Role != "assistant" || len(call.ToolCalls) != 2 || call.Content != "Reading it." {
+		t.Fatalf("assistant turn %+v", call)
+	}
+	r := results.ToolResults
+	if len(r) != 2 || r[0].CallID != "c1" || r[0].IsError || !strings.Contains(r[0].Content, "contents of spec.txt") ||
+		r[1].CallID != "c2" || !r[1].IsError || !strings.Contains(r[1].Content, "the tools you can call are document-repository/read") {
+		t.Fatalf("results %+v", r)
+	}
+	if len(hub.calls) != 1 {
+		t.Fatalf("hub calls %v", hub.calls)
+	}
+}

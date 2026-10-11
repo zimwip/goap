@@ -1009,9 +1009,11 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   `<mcp>/<tool>`). It is available to the planner only when the unit holding the change resolves an adapter for each
   of them; otherwise it is left out (and a specialization needing one is skipped). An action can call the tools of
   the MCPs it declares and, for `llm` / `script` actions, those declared by its agent (`agents[].mcps`).
-- **LLM actions** with MCPs may call the tools in a bounded loop (`MaxToolRounds`), exchanged as JSON on top
-  of any model (`{"tool_calls":[...]}`, then `{"items":[...]}`); every call is journaled with its duration and
-  error. Calls run with the principal of the process initiator (`tool:call` permission). The calls of one answer run
+- **LLM actions** with MCPs may call the tools in a bounded loop (`MaxToolRounds`): the tools are given to the model
+  as tools of the call (`llm.Request.Tools`, ADR 0098; the gateway passes them natively or through its text protocol),
+  the calls come back in `llm.Response.ToolCalls` and their results go back as `llm.ToolResult`s, then the model
+  answers `{"items":[...]}`; a `{"tool_calls":[...]}` written in the text is still honoured. Every call is journaled
+  with its duration and error. Calls run with the principal of the process initiator (`tool:call` permission). The calls of one answer run
   at the same time, and their results go back to the model marked as data, not instructions. A failed call goes back
   with guidance to correct it (`failure n of MaxToolFailures`). After `MaxToolFailures` failures the tool is refused in
   that action without being called, and a tool the action cannot use is refused with the list of those it can. An
@@ -1540,6 +1542,10 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   conversation as a cache prefix on Anthropic; OpenAI and Gemini cache on their own. `llm.Usage.InputTokens` is the
   whole prompt, cached or not, with `CacheReadTokens` / `CacheWriteTokens` beside it; `llm.Response.StopReason` is
   normalised (`end`, `max_tokens`, else the provider's word).
+- **Tool calling** (ADR 0098, `internal/modelgw/tools.go`): `llm.Request.Tools` reach a provider implementing
+  `NativeTools` (Anthropic, OpenAI-compatible, Gemini) through its tool API, under names every API accepts (mapped back);
+  any other provider, or an OpenAI-compatible model that refuses tools (remembered, `textToolsOnly`), gets the text
+  protocol run by the gateway. The exchange of a call keeps the calls and results as text (`llm.Message.Transcript`).
 - **Aliases** (`default`, `fast`…) point to catalog models; the router follows the graph. The RPCs of the gateway are read-only
   (`ListProviders`, `ListCatalog`, `ListBehaviors`, `PreviewBehaviors`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
 - **Ledger of LLM calls** (ADR 0089): every call the gateway serves or refuses (completion or embedding, whoever asked:

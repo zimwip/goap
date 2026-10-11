@@ -225,7 +225,7 @@ func (s *Service) complete(ctx context.Context, req llm.Request, calibration boo
 	rec.behaved(ap, price.Tokens, price.Estimated)
 	resp, err := s.Router.Complete(ctx, req)
 	resp.Behaviors, resp.BehaviorTokens, resp.BehaviorsEstimated = behaviorNames(ap), price.Tokens, price.Estimated
-	rec.answer(resp.Text)
+	rec.answer(resp.Transcript())
 	s.recordUsage(ctx, t, m, period, int64(resp.Usage.InputTokens+resp.Usage.OutputTokens))
 	rec.finish(ctx, t.Provider, t.Model, resp.Usage.InputTokens, resp.Usage.OutputTokens, err)
 	return resp, err

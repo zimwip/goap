@@ -245,10 +245,14 @@ func TestLLMActionCallsToolsThenAnswers(t *testing.T) {
 		bound: map[string][]string{"acme": {"document-repository"}},
 		tools: []mcp.ToolInfo{{Name: "document-repository/read", Description: "Read a document."}, {Name: "ticketing/create"}},
 	}
-	var systems []string
+	var toolsSeen [][]string
 	var last string
 	client := llm.ClientFunc(func(_ context.Context, r llm.Request) (llm.Response, error) {
-		systems = append(systems, r.System)
+		var names []string
+		for _, t := range r.Tools {
+			names = append(names, t.Name)
+		}
+		toolsSeen = append(toolsSeen, names)
 		last = r.Messages[len(r.Messages)-1].Content
 		if len(r.Messages) == 1 {
 			return llm.Response{Text: `{"tool_calls":[{"name":"document-repository/read","arguments":{"path":"spec.txt"}},{"name":"ticketing/create","arguments":{"path":"x"}}]}`}, nil
@@ -270,8 +274,8 @@ func TestLLMActionCallsToolsThenAnswers(t *testing.T) {
 	if p.Status != StatusCompleted || len(p.Steps) != 1 {
 		t.Fatalf("status %s %s steps=%+v", p.Status, p.Error, p.Steps)
 	}
-	if !strings.Contains(systems[0], "document-repository/read") || strings.Contains(systems[0], "ticketing/create") {
-		t.Fatalf("the model must see the declared MCP's tools only:\n%s", systems[0])
+	if !slices.Equal(toolsSeen[0], []string{"document-repository/read"}) {
+		t.Fatalf("the model must see the declared MCP's tools only: %v", toolsSeen[0])
 	}
 	// the undeclared MCP call is refused, and the model is told so; the declared one went through
 	if len(hub.calls) != 1 || !strings.HasPrefix(hub.calls[0], "acme|document-repository/read") {

@@ -107,7 +107,7 @@ func (r *Router) Complete(ctx context.Context, req llm.Request) (llm.Response, e
 		return llm.Response{}, err
 	}
 	call := func(ctx context.Context) (llm.Response, error) {
-		resp, err := r.completeWithRetry(ctx, p, t.Model, req)
+		resp, err := r.completeTools(ctx, t, p, req)
 		if resp.Provider == "" {
 			resp.Provider = t.Provider
 		}

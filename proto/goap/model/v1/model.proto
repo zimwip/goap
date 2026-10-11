@@ -54,6 +54,30 @@ service ModelService {
 message Message {
   string role = 1;
   string content = 2;
+  // the tools an assistant turn called, and the results a user turn gives back (ADR 0098)
+  repeated ToolCall tool_calls = 3;
+  repeated ToolResult tool_results = 4;
+}
+
+// a tool the model may call: its arguments' JSON schema as JSON text (ADR 0098)
+message ToolSpec {
+  string name = 1;
+  string description = 2;
+  string input_schema_json = 3;
+}
+
+message ToolCall {
+  string id = 1;
+  string name = 2;
+  // the arguments, a JSON object as text
+  string arguments_json = 3;
+}
+
+message ToolResult {
+  string call_id = 1;
+  string name = 2;
+  string content = 3;
+  bool is_error = 4;
 }
 
 // What the caller declares about a call, for the ledger (accounting only: never an authorisation input; the subject
@@ -80,6 +104,8 @@ message CompleteRequest {
   CallMeta meta = 6;
   // the caller sends the same prefix again (a tool loop, a conversation): cache it where the provider caches on request
   bool cache = 7;
+  // the tools the model may call (ADR 0098)
+  repeated ToolSpec tools = 8;
 }
 
 message Usage {
@@ -104,6 +130,8 @@ message CompleteResponse {
   bool behaviors_estimated = 7;
   // why the model stopped: end | max_tokens | the provider's own word
   string stop_reason = 8;
+  // the tools the model asks to call
+  repeated ToolCall tool_calls = 9;
 }
 
 message EmbedRequest {

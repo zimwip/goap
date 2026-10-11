@@ -77,7 +77,7 @@ func (x Exchange) capped() Exchange {
 	x.System, x.Response = cut(x.System), cut(x.Response)
 	msgs := make([]llm.Message, len(x.Messages))
 	for i, m := range x.Messages {
-		msgs[i] = llm.Message{Role: m.Role, Content: cut(m.Content)}
+		msgs[i] = llm.Message{Role: m.Role, Content: cut(m.Transcript())} // tool calls and results as text (ADR 0098)
 	}
 	x.Messages = msgs
 	return x

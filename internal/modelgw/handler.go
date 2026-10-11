@@ -2,6 +2,7 @@ package modelgw
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -66,10 +67,8 @@ func (h *Handler) guard(ctx context.Context, hdr http.Header) (context.Context, 
 func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.CompleteRequest]) (*connect.Response[modelv1.CompleteResponse], error) {
 	// callers without identity headers (and no dev default) are trusted internal services
 	ctx = llm.WithMeta(h.Identity.Context(ctx, r.Header()), metaFromPB(r.Msg.Meta))
-	req := llm.Request{Model: r.Msg.Model, System: r.Msg.System, MaxTokens: int(r.Msg.MaxTokens), JSON: r.Msg.Json, Cache: r.Msg.Cache}
-	for _, m := range r.Msg.Messages {
-		req.Messages = append(req.Messages, llm.Message{Role: m.Role, Content: m.Content})
-	}
+	req := llm.Request{Model: r.Msg.Model, System: r.Msg.System, MaxTokens: int(r.Msg.MaxTokens), JSON: r.Msg.Json, Cache: r.Msg.Cache,
+		Messages: messagesFromPB(r.Msg.Messages), Tools: toolsFromPB(r.Msg.Tools)}
 	resp, err := h.Service.Complete(ctx, req)
 	if err != nil {
 		if errors.Is(err, ErrForbidden) || errors.Is(err, ErrQuotaExceeded) || errors.Is(err, ErrModelDisabled) || errors.Is(err, ErrInvalid) {
@@ -78,6 +77,7 @@ func (h *Handler) Complete(ctx context.Context, r *connect.Request[modelv1.Compl
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	return connect.NewResponse(&modelv1.CompleteResponse{Text: resp.Text, Provider: resp.Provider, Model: resp.Model, StopReason: resp.StopReason,
+		ToolCalls: callsToPB(resp.ToolCalls),
 		Usage: &modelv1.Usage{InputTokens: int32(resp.Usage.InputTokens), OutputTokens: int32(resp.Usage.OutputTokens),
 			CacheReadTokens: int32(resp.Usage.CacheReadTokens), CacheWriteTokens: int32(resp.Usage.CacheWriteTokens)},
 		Behaviors: resp.Behaviors, BehaviorTokens: int32(resp.BehaviorTokens), BehaviorsEstimated: resp.BehaviorsEstimated}), nil
@@ -309,15 +309,13 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 
 // Complete implements llm.Client.
 func (c *Client) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
-	in := &modelv1.CompleteRequest{Model: req.Model, System: req.System, MaxTokens: int32(req.MaxTokens), Json: req.JSON, Cache: req.Cache, Meta: metaToPB(ctx)}
-	for _, m := range req.Messages {
-		in.Messages = append(in.Messages, &modelv1.Message{Role: m.Role, Content: m.Content})
-	}
+	in := &modelv1.CompleteRequest{Model: req.Model, System: req.System, MaxTokens: int32(req.MaxTokens), Json: req.JSON, Cache: req.Cache, Meta: metaToPB(ctx),
+		Messages: messagesToPB(req.Messages), Tools: toolsToPB(req.Tools)}
 	r, err := c.rpc.Complete(ctx, connect.NewRequest(in))
 	if err != nil {
 		return llm.Response{}, err
 	}
-	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model, StopReason: r.Msg.StopReason, Behaviors: r.Msg.Behaviors, BehaviorTokens: int(r.Msg.BehaviorTokens), BehaviorsEstimated: r.Msg.BehaviorsEstimated}
+	out := llm.Response{Text: r.Msg.Text, Provider: r.Msg.Provider, Model: r.Msg.Model, StopReason: r.Msg.StopReason, ToolCalls: callsFromPB(r.Msg.ToolCalls), Behaviors: r.Msg.Behaviors, BehaviorTokens: int(r.Msg.BehaviorTokens), BehaviorsEstimated: r.Msg.BehaviorsEstimated}
 	if u := r.Msg.Usage; u != nil {
 		out.Usage = llm.Usage{InputTokens: int(u.InputTokens), OutputTokens: int(u.OutputTokens),
 			CacheReadTokens: int(u.CacheReadTokens), CacheWriteTokens: int(u.CacheWriteTokens)}
@@ -477,4 +475,79 @@ func (h *Handler) GetCallExchange(ctx context.Context, r *connect.Request[modelv
 		out.Messages = append(out.Messages, &modelv1.ExchangeMessage{Role: m.Role, Content: m.Content})
 	}
 	return connect.NewResponse(out), nil
+}
+
+// ---- tools over the wire (ADR 0098) ---------------------------------------
+
+func jsonText(v any) string {
+	if v == nil {
+		return ""
+	}
+	b, _ := json.Marshal(v)
+	return string(b)
+}
+
+func jsonObject(s string) map[string]any {
+	if s == "" {
+		return nil
+	}
+	var m map[string]any
+	_ = json.Unmarshal([]byte(s), &m)
+	return m
+}
+
+func callsToPB(calls []llm.ToolCall) []*modelv1.ToolCall {
+	var out []*modelv1.ToolCall
+	for _, c := range calls {
+		out = append(out, &modelv1.ToolCall{Id: c.ID, Name: c.Name, ArgumentsJson: jsonText(c.Arguments)})
+	}
+	return out
+}
+
+func callsFromPB(calls []*modelv1.ToolCall) []llm.ToolCall {
+	var out []llm.ToolCall
+	for _, c := range calls {
+		out = append(out, llm.ToolCall{ID: c.Id, Name: c.Name, Arguments: jsonObject(c.ArgumentsJson)})
+	}
+	return out
+}
+
+func messagesToPB(msgs []llm.Message) []*modelv1.Message {
+	var out []*modelv1.Message
+	for _, m := range msgs {
+		pm := &modelv1.Message{Role: m.Role, Content: m.Content, ToolCalls: callsToPB(m.ToolCalls)}
+		for _, r := range m.ToolResults {
+			pm.ToolResults = append(pm.ToolResults, &modelv1.ToolResult{CallId: r.CallID, Name: r.Name, Content: r.Content, IsError: r.IsError})
+		}
+		out = append(out, pm)
+	}
+	return out
+}
+
+func messagesFromPB(msgs []*modelv1.Message) []llm.Message {
+	var out []llm.Message
+	for _, m := range msgs {
+		lm := llm.Message{Role: m.Role, Content: m.Content, ToolCalls: callsFromPB(m.ToolCalls)}
+		for _, r := range m.ToolResults {
+			lm.ToolResults = append(lm.ToolResults, llm.ToolResult{CallID: r.CallId, Name: r.Name, Content: r.Content, IsError: r.IsError})
+		}
+		out = append(out, lm)
+	}
+	return out
+}
+
+func toolsToPB(tools []llm.ToolSpec) []*modelv1.ToolSpec {
+	var out []*modelv1.ToolSpec
+	for _, t := range tools {
+		out = append(out, &modelv1.ToolSpec{Name: t.Name, Description: t.Description, InputSchemaJson: jsonText(t.InputSchema)})
+	}
+	return out
+}
+
+func toolsFromPB(tools []*modelv1.ToolSpec) []llm.ToolSpec {
+	var out []llm.ToolSpec
+	for _, t := range tools {
+		out = append(out, llm.ToolSpec{Name: t.Name, Description: t.Description, InputSchema: jsonObject(t.InputSchemaJson)})
+	}
+	return out
 }
