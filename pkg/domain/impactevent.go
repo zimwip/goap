@@ -95,7 +95,7 @@ type ImpactEvent struct {
 	// Draft is, on created, checkedOut and an adopting transitioned, the draft the event installs for (impact, flow):
 	// its initial state, so the log alone rebuilds the drafts (ADR 0079).
 	Draft  *Draft   `json:"draft,omitempty"`
-	Pre    *NodeRef `json:"pre,omitempty"` // rebased
+	Pre    *NodeRef `json:"pre,omitempty"` // rebased; transitioned: the rebase of a draft moved its pre (ADR 0101)
 	Landed *NodeRef `json:"landed,omitempty"`
 	// Baseline is, on landed, the baseline of the branch the version landed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
@@ -197,6 +197,10 @@ func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 		if e.Flow == "" || e.Flow == cn.Flow {
 			p := *e.Post
 			cn.Post = &p
+			if e.Pre != nil && e.Op == ImpactTransitioned {
+				pre := *e.Pre // a rebase moved the draft (and its pre) onto the head of the target (ADR 0101)
+				cn.Pre = &pre
+			}
 		}
 	case ImpactReviewed:
 		cn.Reviews = append(cn.Reviews, *e.Review)

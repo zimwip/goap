@@ -11,6 +11,7 @@ import (
 	"sort"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
@@ -22,6 +23,7 @@ import (
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -368,6 +370,23 @@ func (h *Handler) ResolveBoard(ctx context.Context, r *connect.Request[enginev1.
 	return connect.NewResponse(out), nil
 }
 
+func (h *Handler) ResolveMerge(ctx context.Context, r *connect.Request[enginev1.ResolveMergeRequest]) (*connect.Response[enginev1.ResolveMergeResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	resolutions := map[domain.NodeID]graph.Resolution{}
+	for id, rs := range r.Msg.Resolutions {
+		resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(rs.GetProps()), Skip: rs.GetSkip()}
+	}
+	p, err := h.Engine.ResolveMerge(ctx, r.Msg.ProcessId, resolutions, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.ResolveMergeResponse{Process: ProcessToPB(p)}), nil
+}
+
 func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
 	ctx = h.principal(ctx, r.Header())
 	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
@@ -641,6 +660,9 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		for _, i := range t.Issues {
 			out.Pending.Issues = append(out.Pending.Issues, &enginev1.BoardIssue{Item: string(i.Item), Culprit: string(i.Culprit), Code: i.Code, Message: i.Message, Severity: i.Severity})
 		}
+		if m := t.Merge; m != nil {
+			out.Pending.Merge = mergeTaskToPB(m)
+		}
 		if pr := t.Proposal; pr != nil {
 			rp := &enginev1.RelaunchProposal{Process: pr.Process, Step: int32(pr.Step), Action: pr.Action, Reason: pr.Reason}
 			for _, c := range pr.Culprits {
@@ -673,4 +695,25 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		out.Steps = append(out.Steps, ps)
 	}
 	return out
+}
+
+func mergeTaskToPB(m *engine.MergeTask) *enginev1.MergeTask {
+	out := &enginev1.MergeTask{Namespace: m.Namespace, From: m.From, Into: m.Into}
+	for _, c := range m.Conflicts {
+		mc := &enginev1.MergeConflict{Node: c.Node, Key: c.Key, Deleted: c.Deleted}
+		for _, p := range c.Properties {
+			mc.Properties = append(mc.Properties, &enginev1.MergeProperty{Name: p.Name, Base: value(p.Base), Ours: value(p.Ours), Theirs: value(p.Theirs), Proposed: value(p.Proposed)})
+		}
+		out.Conflicts = append(out.Conflicts, mc)
+	}
+	return out
+}
+
+// value converts a property value; an unrepresentable one is shown as null.
+func value(v any) *structpb.Value {
+	pv, err := structpb.NewValue(v)
+	if err != nil {
+		return structpb.NewNullValue()
+	}
+	return pv
 }

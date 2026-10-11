@@ -23,7 +23,9 @@ CREATE TABLE baseline (
     gap         integer     NOT NULL DEFAULT 0,
     -- commit | merge | fast-forward | snapshot: how the state follows from the change (ADR 0056)
     kind        text        NOT NULL DEFAULT 'snapshot',
-    merged_from uuid REFERENCES baseline(id)
+    merged_from uuid REFERENCES baseline(id),
+    -- the baseline the change was forked from before its rebase onto the head of its target (ADR 0101); NULL: never rebased
+    rebased_from uuid REFERENCES baseline(id)
 );
 CREATE INDEX baseline_namespace ON baseline (namespace, created_at);
 
@@ -38,6 +40,8 @@ CREATE TABLE branch (
     created_at    timestamptz NOT NULL,
     description   text        NOT NULL DEFAULT '',
     intent        text        NOT NULL DEFAULT '',
+    -- the first fork baseline of a change branch the change was rebased from (ADR 0101); NULL: never rebased
+    rebased_from  uuid REFERENCES baseline(id),
     PRIMARY KEY (namespace, name)
 );
 

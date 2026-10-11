@@ -874,6 +874,14 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 		p.Pending = &HumanTask{Kind: TaskAgent, Action: action.Name, Description: action.Description, Step: i, ChildProcessID: res.Child, WakeOn: res.WakeOn, Context: sc}
 		return nil
 	}
+	if t := res.Merge; t != nil {
+		// committed, not merged: a person settles the conflicts, the process goes on once the merge completes
+		step.EndedAt = e.clock()
+		p.Status = StatusWaiting
+		p.Pending = &HumanTask{Kind: TaskMerge, Action: action.Name, Step: i, Merge: t, Context: sc,
+			Description: fmt.Sprintf("The change is committed on %s; merging it into %s needs your decision on %d node(s) changed on both sides: keep the value of %s or take the change's.", t.From, t.Into, len(t.Conflicts), t.Into)}
+		return nil
+	}
 	e.forgetChildren(p, action.Name)
 	if res.Wait {
 		p.Status = StatusWaiting

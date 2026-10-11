@@ -172,11 +172,11 @@ func (d dialect) linkCols() string {
 	return d.cols(su("id"), sc("type"), su("from_id"), sc("from_version"), su("to_id"), sc("to_version"), sc("props"), su("change_id"))
 }
 
-const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent`
+const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s`
 
 // branchCols is the select list of a branch.
 func (d dialect) branchCols() string {
-	return fmt.Sprintf(branchColsText, d.idOr("coalesce", "fork_baseline"), d.idOr("coalesce", "head_baseline"))
+	return fmt.Sprintf(branchColsText, d.idOr("coalesce", "fork_baseline"), d.idOr("coalesce", "head_baseline"), d.idOr("coalesce", "rebased_from"))
 }
 
 // sqlBranch reads a branch.
@@ -362,6 +362,6 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 var (
 	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
-	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind"}
+	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind", "rebased_from"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "at", "payload"}
 )

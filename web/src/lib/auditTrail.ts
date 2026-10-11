@@ -191,11 +191,16 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
       break;
     case 'transitioned': {
       // a transition is always taken on the draft (a node with none is checked out first) and writes no version (ADR 0079)
-      const p = e.patch as { state?: { from?: string; to?: string }; rebased?: { change?: string }; conflicts?: string[] | null } | undefined;
+      const p = e.patch as { state?: { from?: string; to?: string }; rebased?: { change?: string; branch?: string; baseline?: string }; conflicts?: string[] | null } | undefined;
       const st = p?.state;
       if (p?.rebased) {
         // a sub-change brought up to date with its parent's draft (ADR 0082)
         const conflicts = p.conflicts ?? [];
+        if (!p.rebased.change && p.rebased.branch) {
+          // a root change brought up to date with the head of its target branch (ADR 0101)
+          summary = `${v(e.post)} rebased onto ${p.rebased.branch} (${conflicts.length ? `conflicts: ${conflicts.join(', ')}` : 'merged'})`;
+          break;
+        }
         summary = `${v(e.post)} rebased onto parent change ${shortId(p.rebased.change)}${conflicts.length ? ` — conflicts: ${conflicts.join(', ')}` : ''}`;
         break;
       }
@@ -247,18 +252,24 @@ const fieldName = (k: string): string => (k === 'projectId' ? 'project' : k);
 
 /** An edit of the header of the change (title, intent, goal, status, data, project): what each field went from and to. */
 function fromHeader(l: LogEntry): Entry {
-  const fields = decodeLogEntry<{ fields?: Record<string, { from?: JsonValue; to?: JsonValue }> }>(l).fields ?? {};
+  const payload = decodeLogEntry<{ fields?: Record<string, { from?: JsonValue; to?: JsonValue }>; branch?: string }>(l);
+  const fields = payload.fields ?? {};
+  const rebase = fields.baselineId;
   const show = (x: JsonValue | undefined) => {
     const t = typeof x === 'string' ? x : JSON.stringify(x ?? '');
     return t.length > 60 ? `${t.slice(0, 57)}…` : t;
   };
+  const rebased = Object.keys(fields).length === 1 && rebase;
   return {
     key: `h:${l.id}`,
     at: l.at ?? '',
     source: 'change',
-    label: Object.keys(fields).length === 1 && fields.projectId ? 'moved' : 'edited',
+    label: rebased ? 'rebased' : Object.keys(fields).length === 1 && fields.projectId ? 'moved' : 'edited',
     subject: Object.keys(fields).map(fieldName).join(', '),
-    summary: Object.entries(fields)
+    summary: rebased
+      ? // ADR 0101: the change moved to the head of its target branch
+        `rebased onto ${payload.branch || 'the target branch'} head (${shortId(str(rebase.to))})${rebase.from ? `, was ${shortId(str(rebase.from))}` : ''}`
+      : Object.entries(fields)
       .map(([k, f]) => `${fieldName(k)}: ${f.from === undefined || f.from === '' ? '' : `${show(f.from)} → `}${show(f.to)}`)
       .join(' · '),
     flow: '',

@@ -302,23 +302,25 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	if head.Properties["title"] != "A" || head.Properties["owner"] != "carol" || head.ChangeID != c.ID {
 		t.Fatalf("disjoint changes must merge: %+v", head)
 	}
-	// b changes the same property as a: a merge is required
+	// b changes the same property as a: the apply rebases it and stops on the conflict (ADR 0101)
+	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("conflicting change must stop: %v", err)
+	}
+	if ch, _ := g.Change(ctx, b.ID); ch.Status != domain.ChangeActive {
+		t.Fatalf("conflicting change must stay active, is %s", ch.Status)
+	}
+	before := head.Ref()
+	settle(t, g, b.ID)
 	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
-		t.Fatal(err)
-	}
-	if ch, _ := g.Change(ctx, b.ID); ch.Status != domain.ChangeCommitted {
-		t.Fatalf("conflicting change must be committed, is %s", ch.Status)
-	}
-	if _, err := g.IntegrateChange(ctx, b.ID, map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "A+B", "owner": "carol"}}}); err != nil {
 		t.Fatal(err)
 	}
 	head, _ = g.Node(ctx, domain.NodeRef{ID: f.req.ID})
 	list, _ := g.ListChangeImpacts(ctx, b.ID)
-	if head.Properties["title"] != "A+B" || head.ChangeID != b.ID || list[0].Landed == nil || *list[0].Landed != head.Ref() {
-		t.Fatalf("resolved merge must land as the version of b: %+v %+v", head, list)
+	if head.Properties["title"] != "B" || head.Properties["owner"] != "carol" || head.ChangeID != b.ID || list[0].Landed == nil || *list[0].Landed != head.Ref() {
+		t.Fatalf("the rebased change must land as the version of b: %+v %+v", head, list)
 	}
-	if len(head.Parents) != 2 {
-		t.Fatalf("a merge version has two parents: %+v", head.Parents)
+	if len(head.Parents) != 1 || head.Parents[0] != before.Version {
+		t.Fatalf("a rebased version is parented to the version on main: %+v", head.Parents)
 	}
 }
 

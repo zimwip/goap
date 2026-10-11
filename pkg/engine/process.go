@@ -138,7 +138,39 @@ const (
 	// change), retries the actions it gave up on, or abandons it (Engine.Unblock). The same decision answers a
 	// TaskCondition: a person may always unblock a run instead of waiting.
 	TaskUnblock = "unblock"
+	// TaskMerge: the change is committed on its own branch but its merge into the branch it was forked from found
+	// nodes both sides changed the same way apart (Merge): a person picks a side per property (the change's value is
+	// proposed), then the merge completes and the process goes on (Engine.ResolveMerge).
+	TaskMerge = "merge"
 )
+
+// MergeTask is what a person needs to settle the merge a change waits for (ADR 0056).
+type MergeTask struct {
+	Namespace string `json:"namespace"`
+	// From is the branch of the change, Into the branch it is merged into.
+	From      string          `json:"from"`
+	Into      string          `json:"into"`
+	Conflicts []MergeConflict `json:"conflicts"`
+}
+
+// MergeConflict is a node both branches changed: only the properties changed on both sides, and differently, are
+// listed (the others merged by themselves, three-way).
+type MergeConflict struct {
+	Node       string          `json:"node"`
+	Key        string          `json:"key"`
+	Deleted    bool            `json:"deleted,omitempty"`
+	Properties []MergeProperty `json:"properties"`
+}
+
+// MergeProperty is one property of a conflict: the common ancestor's value, the target branch's (ours), the change's
+// (theirs) and the proposed one, the change's.
+type MergeProperty struct {
+	Name     string `json:"name"`
+	Base     any    `json:"base,omitempty"`
+	Ours     any    `json:"ours,omitempty"`
+	Theirs   any    `json:"theirs,omitempty"`
+	Proposed any    `json:"proposed,omitempty"`
+}
 
 // HumanTask is a pending human action or approval.
 type HumanTask struct {
@@ -162,6 +194,8 @@ type HumanTask struct {
 	// TaskBoard: what is wrong, and the earliest step to restart from (nil when none can be).
 	Issues   []domain.BoardIssue `json:"issues,omitempty"`
 	Proposal *RelaunchProposal   `json:"proposal,omitempty"`
+	// Merge: what a TaskMerge asks a person to settle.
+	Merge *MergeTask `json:"merge,omitempty"`
 	// FlowID is the flow a TaskRelaunched waits for.
 	FlowID string `json:"flowId,omitempty"`
 	// Context is the step of a process the task belongs to (ADR 0034, ADR 0035 §2): what to do and how.

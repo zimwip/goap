@@ -273,7 +273,7 @@ export const graph = {
     rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
   /** Brings a sub-change up to date with its parent (ADR 0082): a three-way merge of the drafts the parent changed; the fields changed on both sides are conflicts. */
   rebaseChange: (changeId: string) =>
-    rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[] }>(GRAPH, 'RebaseChange', { changeId }),
+    rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[]; branch?: string; from?: string; onto?: string }>(GRAPH, 'RebaseChange', { changeId }),
   /** Keeps the sub-change's values for the conflicts a rebase left on an impact (an edit of a field settles its own). */
   impactNodeResolve: (changeId: string, changeImpactId: string) =>
     rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeResolve', { changeId, changeImpactId }),
@@ -325,6 +325,12 @@ export const graph = {
       changeId,
       transition,
       ...(decision ? { decision } : {}),
+    }),
+  /** Step one of apply (ADR 0056): the versions are written on the change's own branch; mergeChange integrates them. */
+  commitChange: (changeId: string, baselineName: string) =>
+    rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'CommitChange', {
+      changeId,
+      baselineName,
     }),
   applyChange: (changeId: string, baselineName: string) =>
     rpc<{ changeId: string; baselineName: string }, { baseline?: Baseline }>(GRAPH, 'ApplyChange', {

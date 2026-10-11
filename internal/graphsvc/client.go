@@ -232,15 +232,15 @@ func (c *Client) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impac
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
-// RebaseChange brings a sub-change up to date with its parent (ADR 0082).
+// RebaseChange brings a sub-change up to date with its parent (ADR 0082), a root change with the head of its target branch (ADR 0101).
 func (c *Client) RebaseChange(ctx context.Context, id domain.ChangeID) (graph.RebaseResult, error) {
 	r, err := c.rpc.RebaseChange(ctx, connect.NewRequest(&graphv1.RebaseChangeRequest{ChangeId: string(id)}))
 	if err != nil {
 		return graph.RebaseResult{}, rpcerr.FromConnect(err)
 	}
-	out := graph.RebaseResult{Parent: domain.ChangeID(r.Msg.ParentId)}
+	out := graph.RebaseResult{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, From: domain.BaselineID(r.Msg.From), Onto: domain.BaselineID(r.Msg.Onto)}
 	for _, i := range r.Msg.Impacts {
-		out.Impacts = append(out.Impacts, graph.RebasedImpact{Impact: domain.ChangeImpactID(i.ChangeImpactId), Key: i.Key, Changed: i.Changed, Conflicts: i.Conflicts})
+		out.Impacts = append(out.Impacts, graph.RebasedImpact{Impact: domain.ChangeImpactID(i.ChangeImpactId), Key: i.Key, Changed: i.Changed, Merged: i.Merged, Conflicts: i.Conflicts})
 	}
 	return out, nil
 }
@@ -254,13 +254,13 @@ func (c *Client) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impa
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
-// RebaseState tells where a sub-change stands against its parent (ADR 0082).
+// RebaseState tells where a change stands against its parent or its target branch (ADR 0082, 0101).
 func (c *Client) RebaseState(ctx context.Context, id domain.ChangeID) (graph.RebaseState, error) {
 	r, err := c.rpc.GetRebaseState(ctx, connect.NewRequest(&graphv1.GetRebaseStateRequest{ChangeId: string(id)}))
 	if err != nil {
 		return graph.RebaseState{}, rpcerr.FromConnect(err)
 	}
-	out := graph.RebaseState{Parent: domain.ChangeID(r.Msg.ParentId)}
+	out := graph.RebaseState{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, Onto: domain.BaselineID(r.Msg.Onto)}
 	for _, id := range r.Msg.BehindImpactIds {
 		out.Behind = append(out.Behind, domain.ChangeImpactID(id))
 	}
@@ -514,6 +514,33 @@ func (c *Client) Apply(ctx context.Context, id domain.ChangeID, baselineName str
 		return domain.Baseline{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.BaselineFromPB(r.Msg.Baseline), nil
+}
+
+// Branch implements engine.GraphPort.
+func (c *Client) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
+	r, err := c.rpc.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: namespace, Name: name}))
+	if err != nil {
+		return domain.Branch{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.BranchFromPB(r.Msg.Branch), nil
+}
+
+// PlanMerge implements engine.GraphPort.
+func (c *Client) PlanMerge(ctx context.Context, namespace, from, into string) (graph.MergePlan, error) {
+	r, err := c.rpc.PlanMerge(ctx, connect.NewRequest(&graphv1.PlanMergeRequest{Namespace: namespace, From: from, Into: into}))
+	if err != nil {
+		return graph.MergePlan{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.MergePlanFromPB(r.Msg.Plan), nil
+}
+
+// IntegrateChange implements engine.GraphPort (MergeChange over RPC).
+func (c *Client) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graph.Resolution) (domain.Change, error) {
+	r, err := c.rpc.MergeChange(ctx, connect.NewRequest(&graphv1.MergeChangeRequest{ChangeId: string(id), Resolutions: pbconv.ResolutionsToPB(resolutions)}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
 // TransitionChange moves the state of a change along a transition of its lifecycle (ADR 0058).

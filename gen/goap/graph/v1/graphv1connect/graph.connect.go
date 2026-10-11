@@ -169,6 +169,9 @@ const (
 	// GraphServiceApplyChangeProcedure is the fully-qualified name of the GraphService's ApplyChange
 	// RPC.
 	GraphServiceApplyChangeProcedure = "/goap.graph.v1.GraphService/ApplyChange"
+	// GraphServiceCommitChangeProcedure is the fully-qualified name of the GraphService's CommitChange
+	// RPC.
+	GraphServiceCommitChangeProcedure = "/goap.graph.v1.GraphService/CommitChange"
 	// GraphServiceTransitionChangeProcedure is the fully-qualified name of the GraphService's
 	// TransitionChange RPC.
 	GraphServiceTransitionChangeProcedure = "/goap.graph.v1.GraphService/TransitionChange"
@@ -366,6 +369,9 @@ type GraphServiceClient interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch (status
+	// committed). MergeChange is the second step, merging that branch into the one the change was forked from.
+	CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error)
 	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
 	// the expected world state) must hold, and it is journaled.
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
@@ -731,6 +737,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
 			connect.WithClientOptions(opts...),
 		),
+		commitChange: connect.NewClient[v1.CommitChangeRequest, v1.CommitChangeResponse](
+			httpClient,
+			baseURL+GraphServiceCommitChangeProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("CommitChange")),
+			connect.WithClientOptions(opts...),
+		),
 		transitionChange: connect.NewClient[v1.TransitionChangeRequest, v1.TransitionChangeResponse](
 			httpClient,
 			baseURL+GraphServiceTransitionChangeProcedure,
@@ -1018,6 +1030,7 @@ type graphServiceClient struct {
 	commitEdits            *connect.Client[v1.CommitEditsRequest, v1.CommitEditsResponse]
 	getBlackboard          *connect.Client[v1.GetBlackboardRequest, v1.GetBlackboardResponse]
 	applyChange            *connect.Client[v1.ApplyChangeRequest, v1.ApplyChangeResponse]
+	commitChange           *connect.Client[v1.CommitChangeRequest, v1.CommitChangeResponse]
 	transitionChange       *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
 	deleteChange           *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
 	createBranch           *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
@@ -1297,6 +1310,11 @@ func (c *graphServiceClient) GetBlackboard(ctx context.Context, req *connect.Req
 // ApplyChange calls goap.graph.v1.GraphService.ApplyChange.
 func (c *graphServiceClient) ApplyChange(ctx context.Context, req *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
 	return c.applyChange.CallUnary(ctx, req)
+}
+
+// CommitChange calls goap.graph.v1.GraphService.CommitChange.
+func (c *graphServiceClient) CommitChange(ctx context.Context, req *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error) {
+	return c.commitChange.CallUnary(ctx, req)
 }
 
 // TransitionChange calls goap.graph.v1.GraphService.TransitionChange.
@@ -1580,6 +1598,9 @@ type GraphServiceHandler interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
+	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch (status
+	// committed). MergeChange is the second step, merging that branch into the one the change was forked from.
+	CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error)
 	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
 	// the expected world state) must hold, and it is journaled.
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
@@ -1941,6 +1962,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("ApplyChange")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceCommitChangeHandler := connect.NewUnaryHandler(
+		GraphServiceCommitChangeProcedure,
+		svc.CommitChange,
+		connect.WithSchema(graphServiceMethods.ByName("CommitChange")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceTransitionChangeHandler := connect.NewUnaryHandler(
 		GraphServiceTransitionChangeProcedure,
 		svc.TransitionChange,
@@ -2273,6 +2300,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetBlackboardHandler.ServeHTTP(w, r)
 		case GraphServiceApplyChangeProcedure:
 			graphServiceApplyChangeHandler.ServeHTTP(w, r)
+		case GraphServiceCommitChangeProcedure:
+			graphServiceCommitChangeHandler.ServeHTTP(w, r)
 		case GraphServiceTransitionChangeProcedure:
 			graphServiceTransitionChangeHandler.ServeHTTP(w, r)
 		case GraphServiceDeleteChangeProcedure:
@@ -2550,6 +2579,10 @@ func (UnimplementedGraphServiceHandler) GetBlackboard(context.Context, *connect.
 
 func (UnimplementedGraphServiceHandler) ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ApplyChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.CommitChange is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error) {

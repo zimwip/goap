@@ -12,6 +12,7 @@
   import UnblockPanel from '../../components/UnblockPanel.svelte';
   import FlowDecisionPanel from '../../components/FlowDecisionPanel.svelte';
   import BoardIssuesPanel from '../../components/BoardIssuesPanel.svelte';
+  import MergeTaskPanel from '../../components/MergeTaskPanel.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
@@ -427,6 +428,8 @@
           <FlowDecisionPanel {process} step={restartedStepNumber(process, processes)} ondecided={set} />
         {:else if process.pending.kind === 'board'}
           <BoardIssuesPanel {process} {flows} ondecided={set} onopen={(pid) => openRun(pid)} />
+        {:else if process.pending.kind === 'merge'}
+          <MergeTaskPanel {process} ondecided={set} />
         {:else if process.pending.kind === 'relaunched'}
           {@const awaited = [...processes.values()].find((q) => q.flow === process.pending?.flowId)}
           <section class="card waiting-agent">

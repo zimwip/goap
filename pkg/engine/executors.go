@@ -54,6 +54,8 @@ type ActionResult struct {
 	// VarsSet holds process-private variables set by the action (engine-owned
 	// execution state, not a graph write) — merged into Process.Vars.
 	VarsSet map[string]any
+	// Merge: the action committed the change but its merge waits for a person to settle conflicts (TaskMerge).
+	Merge *MergeTask
 	// Method is the method a step chose to carry it out (ADR 0035 §1), recorded as the step's specialization.
 	Method string
 }
@@ -609,6 +611,17 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	b, err := ac.Graph.Apply(ctx, c.ID, name)
 	if err != nil {
 		return ActionResult{}, err
+	}
+	// Apply commits and merges; a merge that finds nodes both sides changed apart leaves the change committed: the
+	// action has not done what its effects promise, a person settles the conflicts (TaskMerge)
+	if cur, err := ac.Graph.Change(ctx, c.ID); err != nil {
+		return ActionResult{}, err
+	} else if cur.Status == domain.ChangeCommitted {
+		task, err := mergeTaskOf(ctx, ac.Graph, cur)
+		if err != nil {
+			return ActionResult{}, err
+		}
+		return ActionResult{Merge: task, Output: fmt.Sprintf("committed on %s; merge into %s waits for %d node(s) to settle", task.From, task.Into, len(task.Conflicts))}, nil
 	}
 	if c.ParentID != "" {
 		// a sub-change leaves no baseline: rebased onto its parent, it is integrated into its log (ADR 0081, 0082)

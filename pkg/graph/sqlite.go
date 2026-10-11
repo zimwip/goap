@@ -158,7 +158,7 @@ func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Nod
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent))
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom))
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
@@ -189,9 +189,10 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent))
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description,
+			fork_baseline = excluded.fork_baseline, rebased_from = excluded.rebased_from`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)))
 	return sqliteErr(err, "branch "+b.Name)
 }
 
@@ -272,14 +273,15 @@ func (t *sqliteTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Li
 
 func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
-	var parent, mergedFrom, change sql.NullString
+	var parent, mergedFrom, change, rebased sql.NullString
 	var created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, merged_from, change_id, created_at, branch, namespace, gap, kind FROM baseline WHERE id = ?`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &created, &b.Branch, &b.Namespace, &b.Gap, &b.Kind)
+	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, merged_from, change_id, created_at, branch, namespace, gap, kind, rebased_from FROM baseline WHERE id = ?`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &created, &b.Branch, &b.Namespace, &b.Gap, &b.Kind, &rebased)
 	if err != nil {
 		return b, sqliteErr(err, "baseline "+string(id))
 	}
 	b.ParentID, b.MergedFrom, b.ChangeID, b.CreatedAt = domain.BaselineID(parent.String), domain.BaselineID(mergedFrom.String), domain.ChangeID(change.String), tsParse(created)
+	b.RebasedFrom = domain.BaselineID(rebased.String)
 	b.Nodes = map[domain.NodeID]domain.Version{}
 	if b.Gap > 0 {
 		return b, nil // only the header is stored
@@ -455,7 +457,7 @@ func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 		depth, entries = 0, nil
 	}
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("baseline", baselineColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b))
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b), nullUUID(string(b.RebasedFrom)))
 	if err != nil {
 		return sqliteErr(err, "baseline")
 	}

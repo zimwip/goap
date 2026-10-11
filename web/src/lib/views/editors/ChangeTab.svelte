@@ -663,6 +663,26 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       if (parent) applied = undefined;
       notify(parent ? `Integrated into parent change ${shortId(parent)}.` : `Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
     } catch (e) {
+      const message = errorMessage(e);
+      // a rebase that met conflicts stopped the apply: read the change again so the sync pane lists them (ADR 0101)
+      if (change?.id) await load(change.id).catch(() => undefined);
+      error = message;
+    } finally {
+      applying = false;
+    }
+  }
+
+  /** Step one of apply (ADR 0056): the versions are written on the change's own branch; the merge into the branch it
+   * was forked from stays a separate act (the "Committed" box below), e.g. when a release branch collects changes. */
+  async function commit() {
+    if (!change?.id) return;
+    applying = true;
+    error = '';
+    try {
+      await graph.commitChange(change.id, baselineName.trim());
+      await load(change.id);
+      notify(`Committed on ${change.branch || 'its own branch'}; not merged yet.`, 'ok');
+    } catch (e) {
       error = errorMessage(e);
     } finally {
       applying = false;
@@ -1023,7 +1043,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
         {#if ch.status === 'committed'}
           <div class="alert warn" style="margin: 0.75rem 0">
-            <p>Committed on its own branch; the integration into {mergeInto || 'the parent branch'} waits: resolve the nodes changed on both sides.</p>
+            <p>Committed on {ch.branch || 'its own branch'}; not merged into {mergeInto || 'the parent branch'} yet. Merge it when ready, resolving the nodes changed on both sides.</p>
             {#if mergeInto}
               <MergeResolver namespace={namespaceOf(ch.namespace)} from={ch.branch ?? ''} into={mergeInto} onmerge={merge} />
             {/if}
@@ -1075,7 +1095,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
               <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
             </div>
           {/if}
-          <button class="primary" onclick={apply} disabled={isApplied || applying || unnamed || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : ''}>
+          {#if !isSub}
+            <button onclick={commit} disabled={isApplied || ch.status === 'committed' || applying || unnamed || stuckNotLandable || awaiting.length > 0} title="Write the versions on the change's own branch, merge them later">
+              Commit
+            </button>
+          {/if}
+          <button class="primary" onclick={apply} disabled={isApplied || ch.status === 'committed' || applying || unnamed || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : 'Commit and merge into ' + (ch.branch ? 'the branch the change was forked from' : 'its branch')}>
             {applying ? 'Applying…' : isSub ? 'Integrate into parent' : 'Apply'}
           </button>
         </div>

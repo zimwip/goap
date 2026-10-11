@@ -10,7 +10,6 @@
   import { changeOfBranch, isChangeBranch, shownBranches } from '../../branchFilter';
   import { openTab } from '../../shell/tabs.svelte';
   import { loadTypes as loadCatalog, typeCatalog } from '../../stores/types.svelte';
-  import { refreshBaselines } from '../../stores/catalog.svelte';
   import { baselineTool, selectNamespace, selectBranch, refreshBranches } from '../../stores/baselineTool.svelte';
   import { openContextMenu, type ContextMenuItem } from '../../shell/contextMenuState.svelte';
   import { openFieldDialog } from '../../shell/fieldDialogState.svelte';
@@ -49,7 +48,7 @@
       .catch((e) => (error = errorMessage(e)));
   });
 
-  const shown = $derived(shownBranches(branches, showClosed));
+  const shown = $derived(shownBranches(branches, showClosed, baselinesById.values()));
 
   $effect(() => {
     void reload;

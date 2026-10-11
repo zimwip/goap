@@ -27,6 +27,8 @@ service EngineService {
   rpc DecideFlow(DecideFlowRequest) returns (DecideFlowResponse);
   // Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
   rpc ResolveBoard(ResolveBoardRequest) returns (ResolveBoardResponse);
+  // Settles the conflicts of the merge a committed change waits for, completes the merge and goes on with the run.
+  rpc ResolveMerge(ResolveMergeRequest) returns (ResolveMergeResponse);
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
   // Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
   rpc GetProcessProgress(GetProcessProgressRequest) returns (GetProcessProgressResponse);
@@ -168,6 +170,51 @@ message HumanTask {
   // kind "condition": the conditions the process waits for; "unblock": those that would unblock it
   // ("name" expected true, "!name" expected false)
   repeated string conditions = 13;
+  // kind "merge": the change is committed but its merge waits for these conflicts to be settled (ResolveMerge)
+  MergeTask merge = 14;
+}
+
+// The merge a committed change waits for: the properties both branches changed apart, node by node.
+message MergeTask {
+  string namespace = 1;
+  // the branch of the change, and the branch it is merged into
+  string from = 2;
+  string into = 3;
+  repeated MergeConflict conflicts = 4;
+}
+
+message MergeConflict {
+  string node = 1;
+  string key = 2;
+  bool deleted = 3;
+  repeated MergeProperty properties = 4;
+}
+
+// base: the common ancestor's value; ours: the target branch's; theirs: the change's; proposed: the change's.
+message MergeProperty {
+  string name = 1;
+  google.protobuf.Value base = 2;
+  google.protobuf.Value ours = 3;
+  google.protobuf.Value theirs = 4;
+  google.protobuf.Value proposed = 5;
+}
+
+message MergeResolution {
+  // the properties to keep for the node (by name: the value chosen); empty with skip false: the change's version
+  google.protobuf.Struct props = 1;
+  // keep the target branch's version unchanged
+  bool skip = 2;
+}
+
+message ResolveMergeRequest {
+  string process_id = 1;
+  // by node id: every conflict of the task needs one
+  map<string, MergeResolution> resolutions = 2;
+  string comment = 3;
+}
+
+message ResolveMergeResponse {
+  Process process = 1;
 }
 
 message StepContext {

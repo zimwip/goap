@@ -56,10 +56,23 @@ func (g EventingGraph) AddItems(ctx context.Context, id domain.ChangeID, items [
 // Apply implements GraphPort.
 func (g EventingGraph) Apply(ctx context.Context, id domain.ChangeID, name string) (domain.Baseline, error) {
 	b, err := g.GraphPort.Apply(ctx, id, name)
-	if err == nil {
+	if err != nil {
+		return b, err
+	}
+	// a merge waiting for a resolution leaves the change committed, not applied
+	if c, cerr := g.GraphPort.Change(ctx, id); cerr != nil || c.Status != domain.ChangeCommitted {
 		g.emit(ctx, events.ChangeApplied, id, &b, nil)
 	}
-	return b, err
+	return b, nil
+}
+
+// IntegrateChange implements GraphPort: a merge that completes applies the change.
+func (g EventingGraph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graph.Resolution) (domain.Change, error) {
+	c, err := g.GraphPort.IntegrateChange(ctx, id, resolutions)
+	if err == nil && c.Status == domain.ChangeApplied {
+		g.emit(ctx, events.ChangeApplied, id, nil, nil)
+	}
+	return c, err
 }
 
 // TriggerEventOf converts a change event.

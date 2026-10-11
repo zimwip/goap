@@ -289,12 +289,12 @@ func testLifecycleParallelChangesConflict(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, cs[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	// the second one changes the same property: a merge is needed
-	if _, err := w.g.Apply(ctx, cs[1].ID, ""); err != nil {
-		t.Fatal(err)
+	// the second one changes the same property: rebased onto the first, it waits for its conflict to be settled
+	if _, err := w.g.Apply(ctx, cs[1].ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("the second change must stop on the conflict: %v", err)
 	}
-	if got, _ := w.g.Change(ctx, cs[1].ID); got.Status != domain.ChangeCommitted {
-		t.Fatalf("the second change must wait for a merge: %s", got.Status)
+	if got, _ := w.g.Change(ctx, cs[1].ID); got.Status != domain.ChangeActive {
+		t.Fatalf("the second change must wait for its conflict: %s", got.Status)
 	}
 }
 

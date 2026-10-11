@@ -717,13 +717,13 @@ func (h *Handler) WithdrawImpact(ctx context.Context, r *connect.Request[graphv1
 	return res(&graphv1.WithdrawImpactResponse{}, err)
 }
 
-// RebaseChange brings a sub-change up to date with its parent (ADR 0082).
+// RebaseChange brings a sub-change up to date with its parent (ADR 0082), a root change with the head of its target branch (ADR 0101).
 func (h *Handler) RebaseChange(ctx context.Context, r *connect.Request[graphv1.RebaseChangeRequest]) (*connect.Response[graphv1.RebaseChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	rb, err := h.Graph.RebaseChange(ctx, domain.ChangeID(r.Msg.ChangeId))
-	out := &graphv1.RebaseChangeResponse{ParentId: string(rb.Parent)}
+	out := &graphv1.RebaseChangeResponse{ParentId: string(rb.Parent), Branch: rb.Branch, From: string(rb.From), Onto: string(rb.Onto)}
 	for _, i := range rb.Impacts {
-		out.Impacts = append(out.Impacts, &graphv1.RebasedImpact{ChangeImpactId: string(i.Impact), Key: i.Key, Changed: i.Changed, Conflicts: i.Conflicts})
+		out.Impacts = append(out.Impacts, &graphv1.RebasedImpact{ChangeImpactId: string(i.Impact), Key: i.Key, Changed: i.Changed, Merged: i.Merged, Conflicts: i.Conflicts})
 	}
 	return res(out, err)
 }
@@ -739,10 +739,10 @@ func (h *Handler) ImpactNodeResolve(ctx context.Context, r *connect.Request[grap
 	return res(&graphv1.ImpactNodeResolveResponse{Node: pbconv.ChangeImpactToPB(cn)}, err)
 }
 
-// GetRebaseState tells where a sub-change stands against its parent (ADR 0082).
+// GetRebaseState tells where a change stands against its parent or its target branch (ADR 0082, 0101).
 func (h *Handler) GetRebaseState(ctx context.Context, r *connect.Request[graphv1.GetRebaseStateRequest]) (*connect.Response[graphv1.GetRebaseStateResponse], error) {
 	st, err := h.Graph.RebaseState(ctx, domain.ChangeID(r.Msg.ChangeId))
-	out := &graphv1.GetRebaseStateResponse{ParentId: string(st.Parent)}
+	out := &graphv1.GetRebaseStateResponse{ParentId: string(st.Parent), Branch: st.Branch, Onto: string(st.Onto)}
 	for _, id := range st.Behind {
 		out.BehindImpactIds = append(out.BehindImpactIds, string(id))
 	}
@@ -866,12 +866,21 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
 	b, err := h.Graph.Apply(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
 	if err == nil {
-		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
+		// a merge waiting for a resolution leaves the change committed, not applied
+		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil && c.Status != domain.ChangeCommitted {
 			c.Items = nil
 			h.publish(ctx, events.ChangeSubject(r.Msg.ChangeId, events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &b})
 		}
 	}
 	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
+}
+
+// CommitChange is the first step of ApplyChange: the versions are written on the change's own branch, its integration
+// (MergeChange) is a later, separate act. The change header write publishes change.updated by itself.
+func (h *Handler) CommitChange(ctx context.Context, r *connect.Request[graphv1.CommitChangeRequest]) (*connect.Response[graphv1.CommitChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
+	b, err := h.Graph.CommitChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
+	return res(&graphv1.CommitChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 
 func (h *Handler) TransitionChange(ctx context.Context, r *connect.Request[graphv1.TransitionChangeRequest]) (*connect.Response[graphv1.TransitionChangeResponse], error) {

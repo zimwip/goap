@@ -194,13 +194,13 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, c2.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	// a third change from B1 writes another value of the same property: a merge is needed
+	// a third change from B1 writes another value of the same property: the apply rebases it and stops on the conflict
 	c3 := change("c3", 2, true)
-	if _, err := g.Apply(ctx, c3.ID, ""); err != nil {
-		t.Fatal(err)
+	if _, err := g.Apply(ctx, c3.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected a conflict, got %v", err)
 	}
-	if c3b, _ := g.Change(ctx, c3.ID); c3b.Status != domain.ChangeCommitted {
-		t.Fatalf("expected committed, got %s", c3b.Status)
+	if c3b, _ := g.Change(ctx, c3.ID); c3b.Status != domain.ChangeActive {
+		t.Fatalf("expected active, got %s", c3b.Status)
 	}
 }
 

@@ -60,6 +60,9 @@ const (
 	// EngineServiceResolveBoardProcedure is the fully-qualified name of the EngineService's
 	// ResolveBoard RPC.
 	EngineServiceResolveBoardProcedure = "/goap.engine.v1.EngineService/ResolveBoard"
+	// EngineServiceResolveMergeProcedure is the fully-qualified name of the EngineService's
+	// ResolveMerge RPC.
+	EngineServiceResolveMergeProcedure = "/goap.engine.v1.EngineService/ResolveMerge"
 	// EngineServiceGetProcessProcedure is the fully-qualified name of the EngineService's GetProcess
 	// RPC.
 	EngineServiceGetProcessProcedure = "/goap.engine.v1.EngineService/GetProcess"
@@ -116,6 +119,8 @@ type EngineServiceClient interface {
 	DecideFlow(context.Context, *connect.Request[v1.DecideFlowRequest]) (*connect.Response[v1.DecideFlowResponse], error)
 	// Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
 	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
+	// Settles the conflicts of the merge a committed change waits for, completes the merge and goes on with the run.
+	ResolveMerge(context.Context, *connect.Request[v1.ResolveMergeRequest]) (*connect.Response[v1.ResolveMergeResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	// Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
 	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
@@ -211,6 +216,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("ResolveBoard")),
 			connect.WithClientOptions(opts...),
 		),
+		resolveMerge: connect.NewClient[v1.ResolveMergeRequest, v1.ResolveMergeResponse](
+			httpClient,
+			baseURL+EngineServiceResolveMergeProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("ResolveMerge")),
+			connect.WithClientOptions(opts...),
+		),
 		getProcess: connect.NewClient[v1.GetProcessRequest, v1.GetProcessResponse](
 			httpClient,
 			baseURL+EngineServiceGetProcessProcedure,
@@ -291,6 +302,7 @@ type engineServiceClient struct {
 	relaunchStep       *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
 	decideFlow         *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
 	resolveBoard       *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
+	resolveMerge       *connect.Client[v1.ResolveMergeRequest, v1.ResolveMergeResponse]
 	getProcess         *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
 	getProcessProgress *connect.Client[v1.GetProcessProgressRequest, v1.GetProcessProgressResponse]
 	explainCondition   *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
@@ -347,6 +359,11 @@ func (c *engineServiceClient) DecideFlow(ctx context.Context, req *connect.Reque
 // ResolveBoard calls goap.engine.v1.EngineService.ResolveBoard.
 func (c *engineServiceClient) ResolveBoard(ctx context.Context, req *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error) {
 	return c.resolveBoard.CallUnary(ctx, req)
+}
+
+// ResolveMerge calls goap.engine.v1.EngineService.ResolveMerge.
+func (c *engineServiceClient) ResolveMerge(ctx context.Context, req *connect.Request[v1.ResolveMergeRequest]) (*connect.Response[v1.ResolveMergeResponse], error) {
+	return c.resolveMerge.CallUnary(ctx, req)
 }
 
 // GetProcess calls goap.engine.v1.EngineService.GetProcess.
@@ -425,6 +442,8 @@ type EngineServiceHandler interface {
 	DecideFlow(context.Context, *connect.Request[v1.DecideFlowRequest]) (*connect.Response[v1.DecideFlowResponse], error)
 	// Answers a blackboard inconsistency found before an action: relaunch the proposed step or ignore.
 	ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error)
+	// Settles the conflicts of the merge a committed change waits for, completes the merge and goes on with the run.
+	ResolveMerge(context.Context, *connect.Request[v1.ResolveMergeRequest]) (*connect.Response[v1.ResolveMergeResponse], error)
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	// Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
 	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
@@ -516,6 +535,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("ResolveBoard")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceResolveMergeHandler := connect.NewUnaryHandler(
+		EngineServiceResolveMergeProcedure,
+		svc.ResolveMerge,
+		connect.WithSchema(engineServiceMethods.ByName("ResolveMerge")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceGetProcessHandler := connect.NewUnaryHandler(
 		EngineServiceGetProcessProcedure,
 		svc.GetProcess,
@@ -602,6 +627,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceDecideFlowHandler.ServeHTTP(w, r)
 		case EngineServiceResolveBoardProcedure:
 			engineServiceResolveBoardHandler.ServeHTTP(w, r)
+		case EngineServiceResolveMergeProcedure:
+			engineServiceResolveMergeHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessProcedure:
 			engineServiceGetProcessHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessProgressProcedure:
@@ -667,6 +694,10 @@ func (UnimplementedEngineServiceHandler) DecideFlow(context.Context, *connect.Re
 
 func (UnimplementedEngineServiceHandler) ResolveBoard(context.Context, *connect.Request[v1.ResolveBoardRequest]) (*connect.Response[v1.ResolveBoardResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ResolveBoard is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) ResolveMerge(context.Context, *connect.Request[v1.ResolveMergeRequest]) (*connect.Response[v1.ResolveMergeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.ResolveMerge is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error) {

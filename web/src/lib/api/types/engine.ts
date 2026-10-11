@@ -123,9 +123,27 @@ export interface RelaunchProposal {
   culprits?: string[];
 }
 
+/** The merge a committed change waits for: only what both branches changed apart (the rest merged by itself). */
+export interface MergeTask {
+  namespace?: string;
+  /** the branch of the change, and the branch it is merged into */
+  from?: string;
+  into?: string;
+  conflicts?: MergeConflict[];
+}
+
+export interface MergeConflict {
+  node?: string;
+  key?: string;
+  deleted?: boolean;
+  properties?: { name?: string; base?: JsonValue; ours?: JsonValue; theirs?: JsonValue; proposed?: JsonValue }[];
+}
+
 export interface HumanTask {
   /** input: enter items · approval: approve or reject · agent: waiting on a sub-agent · flow: adopt or discard a relaunched flow · board: inconsistent blackboard · relaunched: waiting for a relaunched flow · condition: waiting for conditions established outside the process */
-  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | 'condition' | 'unblock' | string;
+  kind?: 'input' | 'approval' | 'agent' | 'flow' | 'board' | 'relaunched' | 'merge' | 'condition' | 'unblock' | string;
+  /** kind "merge": the change is committed, its merge waits for these conflicts to be settled */
+  merge?: MergeTask;
   /** kind "condition": the conditions awaited; "unblock" (stuck): those that would unblock it ("name" expected true, "!name" expected false) */
   conditions?: string[];
   /** kind "board": what is wrong, and the step to restart from (absent when none can be) */

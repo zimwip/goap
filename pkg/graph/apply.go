@@ -19,16 +19,20 @@ import (
 //     merge, a baseline on that branch, `landed` again on it), and the change is `applied`. Conflicts without a
 //     resolution leave it committed: the integration waits.
 //
+// Both first bring the change up to date: a root change is rebased onto the head of its target branch, so that its
+// integration is a fast-forward (ADR 0101); only a target that moves in between falls back to the three-way merge.
+//
 // Apply is both, in one transaction. The branch of a change is its workspace: a change without one gets it when it is
 // committed (a change that wrote a node has it already).
 
 // Apply commits a change and integrates it into the branch it was forked from; it returns the baseline the change
-// left on the target branch, or its commit baseline when the integration waits for a resolution. A sub-change is first
-// rebased onto its parent, then integrated into it as a fast-forward and leaves no baseline (ADR 0081, 0082): the result
+// left on the target branch, or its commit baseline when the integration waits for a resolution. A root change is first
+// rebased onto the head of its target branch (ADR 0101), in a transaction of its own: its conflicts stop the apply
+// (ErrConflict). A sub-change is first rebased onto its parent, then integrated into it as a fast-forward and leaves no baseline (ADR 0081, 0082): the result
 // is empty.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
-	if err := g.rebaseFirst(ctx, id); err != nil {
+	if err := g.rebaseFirst(ctx, id, false); err != nil {
 		return result, err
 	}
 	if err := g.checkFinalState(ctx, id); err != nil {
@@ -63,12 +67,21 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	return result, err
 }
 
-// rebaseFirst rebases a sub-change onto its parent before Apply (ADR 0082 §3), in a transaction of its own: a rebase that
-// changed a draft stays, and Apply stops on it (ErrConflict), naming what is to be reviewed again and settled.
-func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID) error {
+// rebaseFirst rebases a change before it lands, in a transaction of its own: a sub-change onto its parent (ADR 0082 §3), a
+// root change onto the head of its target branch (ADR 0101 §3), so that its integration is a fast-forward. A rebase that
+// changed a draft of a sub-change, or left conflicts on a root change, stays, and the apply stops on it (ErrConflict),
+// naming what is to be reviewed again and settled. A committed or closed root change is left to the commit, which refuses
+// it (its versions are written, ADR 0101 §1); a sub-change is rebased by Apply only (rootOnly: CommitChange).
+func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID, rootOnly bool) error {
 	c, err := g.Change(ctx, id)
-	if err != nil || c.ParentID == "" {
+	if err != nil {
 		return err
+	}
+	if c.ParentID != "" && rootOnly {
+		return nil
+	}
+	if c.ParentID == "" && c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
+		return nil
 	}
 	res, err := g.RebaseChange(ctx, id)
 	if err != nil {
@@ -84,6 +97,9 @@ func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID) error {
 // integrated; IntegrateChange does that. It returns the commit baseline.
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
+	if err := g.rebaseFirst(ctx, id, true); err != nil {
+		return result, err
+	}
 	if err := g.checkFinalState(ctx, id); err != nil {
 		return result, err
 	}
@@ -251,6 +267,12 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 		baselineName = c.Title
 	}
 	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit, Nodes: a.target, CreatedAt: g.now()}
+	// the commit of a rebased change keeps where it was forked from before (ADR 0101 §4)
+	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
+		return domain.Baseline{}, err
+	} else if ok {
+		result.RebasedFrom = own.RebasedFrom
+	}
 	if err := tx.PutBaseline(ctx, result); err != nil {
 		return domain.Baseline{}, err
 	}

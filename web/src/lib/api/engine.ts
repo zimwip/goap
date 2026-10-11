@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty } from './types/common';
-import type { AttachChangeRequest, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, StartProcessRequest, StartingPointsResponse, TriggerState } from './types/engine';
+import type { AttachChangeRequest, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, Resolution, StartProcessRequest, StartingPointsResponse, TriggerState } from './types/engine';
 
 const ENGINE = 'goap.engine.v1.EngineService';
 
@@ -58,6 +58,13 @@ export const engine = {
       'ResolveBoard',
       { processId, relaunch, comment },
     ),
+  /** Settles the conflicts of the merge a committed change waits for (by node id), completes it and goes on. */
+  resolveMerge: (processId: string, resolutions: Record<string, Resolution>, comment = '') =>
+    rpc<{ processId: string; resolutions: Record<string, Resolution>; comment: string }, { process?: Process }>(ENGINE, 'ResolveMerge', {
+      processId,
+      resolutions,
+      comment,
+    }),
   getProcess: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
   getProcessProgress: (id: string, signal?: AbortSignal) =>

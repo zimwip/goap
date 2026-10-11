@@ -1,12 +1,13 @@
 <script lang="ts">
-  // History of one branch: the baseline chain of a single branch (git log --graph, one lane), plus a single anchor
-  // dot where it forks from (or merges with) another branch — the only two moments a second lane is informative
-  // (ADR 0032). Unlike a namespace-wide graph, a branch never runs as a parallel lane for its whole life here.
+  // History of one branch (git log --graph): its own baselines in one lane, and a lane for the branch of each change
+  // that landed on it, from where the change started to the commit the merge joined (baselineHistory.ts), so two
+  // changes started from the same baseline show as two lanes forking from it. Other branches appear only as the dot
+  // where this one forks from or merges with them.
   import type { Baseline } from '../api';
   import { formatDate, shortId } from '../api';
-  import { MAIN_BRANCH, isEphemeralBranch } from '../namespace';
+  import { badgesOf, historyEntries } from '../baselineHistory';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
-  import HistoryGraph, { type LaneEntry } from './HistoryGraph.svelte';
+  import HistoryGraph from './HistoryGraph.svelte';
 
   if (!changes.loaded) void refreshChanges();
 
@@ -33,64 +34,20 @@
     onopen?: (id: string) => void;
   } = $props();
 
-  const branchOf = (b: Baseline) => b.branch || MAIN_BRANCH;
   const changeLabel = (b: Baseline) => (b.changeId ? `change ${b.changeId.slice(0, 8)}` : undefined);
   // the baseline's name is a user-editable override of the change title at apply time (ChangeTab "New baseline
   // name"): show the change's own title so a renamed baseline still reads as what produced it.
   const titleOf = (b: Baseline) =>
     (b.changeId && changes.items.find((c) => c.id === b.changeId)?.title) || b.name || shortId(b.id);
 
-  const own = $derived(baselines.filter((b) => branchOf(b) === branch));
-  const byId = $derived(new Map(baselines.map((b) => [b.id, b])));
-
-  /** a merge from a change's own scratch branch (ADR 0032): plumbing, not a branch worth showing as its own row */
-  const ephemeralSource = (b: Baseline) => {
-    const src = b.mergedFrom && byId.get(b.mergedFrom);
-    return !!src && isEphemeralBranch(branchOf(src));
+  const kindTitle: Record<string, string> = {
+    commit: 'the versions of a change, written on its own branch',
+    'fast-forward': 'the target branch moved to the commit of a change (linear history)',
+    merge: 'a three-way merge of a branch',
   };
-  /** the change's own starting baseline, when it differs from the plain previous head (a real 3-way merge that
-   * needed rework, not just the structural wrapper every change's own branch uses to land) */
-  const startOf = (b: Baseline) => {
-    if (!ephemeralSource(b)) return undefined;
-    const start = b.changeId && changes.items.find((c) => c.id === b.changeId)?.baselineId;
-    return start && start !== b.parentId ? start : undefined;
-  };
+  const badges = (b: Baseline) => badgesOf(b, baselines);
 
-  /** a parent/mergedFrom id that isn't itself on this branch: the branch's fork point, or a (named-branch) merge source */
-  const ghosts = $derived.by(() => {
-    const ownIds = new Set(own.map((b) => b.id));
-    const ids = new Set<string>();
-    if (forkBaseline && !ownIds.has(forkBaseline)) ids.add(forkBaseline);
-    for (const b of own) {
-      if (b.parentId && !ownIds.has(b.parentId)) ids.add(b.parentId);
-      if (b.mergedFrom && !ownIds.has(b.mergedFrom) && !ephemeralSource(b)) ids.add(b.mergedFrom);
-    }
-    return [...ids].map((id) => byId.get(id)).filter((b): b is Baseline => !!b);
-  });
-
-  const entries = $derived<LaneEntry<Baseline>[]>(
-    [
-      ...own.map((h) => {
-        const start = startOf(h);
-        // a branch merged back with no changes of its own has parentId === mergedFrom (or === start): dedupe by
-        // id so the same edge is never listed twice (a keyed each block would throw on the duplicate key)
-        const seen = new Set<string>();
-        const parents = [
-          ...(h.parentId ? [{ id: h.parentId, label: changeLabel(h) }] : []),
-          ...(h.mergedFrom && !ephemeralSource(h) ? [{ id: h.mergedFrom, label: changeLabel(h) }] : []),
-          ...(start ? [{ id: start, label: changeLabel(h), dashed: true }] : []),
-        ].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
-        return {
-          id: h.id ?? '',
-          // what descends a baseline from another is the change that produced it: the edge, not the dot
-          parents,
-          lane: branch,
-          item: h,
-        };
-      }),
-      ...ghosts.map((h) => ({ id: h.id ?? '', parents: [], lane: branchOf(h), item: h })),
-    ].sort((a, b) => (b.item.createdAt ?? '').localeCompare(a.item.createdAt ?? '')),
-  );
+  const entries = $derived(historyEntries(baselines, branch, forkBaseline, changeLabel));
 </script>
 
 {#if entries.length}
@@ -102,9 +59,13 @@
           <span class="hline1">
             <span class="hname">{titleOf(h)}</span>
             {#if head}<span class="ref" style={`--c:${color}`}>{entry.lane}</span>{/if}
+            {#if badges(h).kind !== 'snapshot'}<span class="kind" data-kind={badges(h).kind} title={kindTitle[badges(h).kind]}>{badges(h).kind}</span>{/if}
+            {#if badges(h).rebased}<span class="kind rebased" title={badges(h).rebased}>rebased</span>{/if}
           </span>
           <span class="hline2">
             {#if h.changeId}<span class="hchange">change {h.changeId.slice(0, 8)}</span>{/if}
+            {#if badges(h).rebased}<span class="hnote">{badges(h).rebased}</span>{/if}
+            {#if badges(h).merged}<span class="hnote">{badges(h).merged}</span>{/if}
             <span class="hdate">{formatDate(h.createdAt)}</span>
           </span>
         </span>
@@ -161,6 +122,26 @@
     font-size: 0.78rem;
     font-family: var(--mono);
     flex: none;
+  }
+  .kind {
+    border: 1px solid var(--muted);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 0 0.4rem;
+    font-size: 0.72rem;
+    flex: none;
+  }
+  .kind.rebased {
+    border-color: var(--warn);
+    color: var(--warn);
+  }
+  .hnote {
+    color: var(--muted);
+    font-size: 0.78em;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
   .empty.small {
     font-size: 0.85em;

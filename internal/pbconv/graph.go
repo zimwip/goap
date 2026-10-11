@@ -185,7 +185,7 @@ func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
 		nodes[string(id)] = int32(v)
 	}
 	return &graphv1.Baseline{Id: string(b.ID), Name: b.Name, ParentId: string(b.ParentID), ChangeId: string(b.ChangeID), Nodes: nodes, CreatedAt: Time(b.CreatedAt),
-		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace), MergedFrom: string(b.MergedFrom)}
+		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace), MergedFrom: string(b.MergedFrom), Kind: b.Kind, RebasedFrom: string(b.RebasedFrom)}
 }
 
 func TagToPB(t domain.Tag) *graphv1.Tag {
@@ -202,7 +202,7 @@ func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
 		nodes[domain.NodeID(id)] = domain.Version(v)
 	}
 	return domain.Baseline{ID: domain.BaselineID(b.Id), Name: b.Name, ParentID: domain.BaselineID(b.ParentId), ChangeID: domain.ChangeID(b.ChangeId), Nodes: nodes, CreatedAt: FromTime(b.CreatedAt),
-		Branch: b.Branch, Namespace: b.Namespace}
+		Branch: b.Branch, Namespace: b.Namespace, MergedFrom: domain.BaselineID(b.MergedFrom), Kind: b.Kind, RebasedFrom: domain.BaselineID(b.RebasedFrom)}
 }
 
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
@@ -286,7 +286,7 @@ func ChangeFromPB(c *graphv1.Change) domain.Change {
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {
 	return &graphv1.Branch{Name: b.Name, Parent: b.Parent, ForkBaseline: string(b.ForkBaseline), Head: string(b.Head),
-		Origin: b.Origin, Status: b.Status, CreatedAt: Time(b.CreatedAt), Namespace: b.Namespace, Description: b.Description}
+		Origin: b.Origin, Status: b.Status, CreatedAt: Time(b.CreatedAt), Namespace: b.Namespace, Description: b.Description, RebasedFrom: string(b.RebasedFrom)}
 }
 
 func ChangeImpactToPB(cn domain.ChangeImpact) *graphv1.ChangeImpact {

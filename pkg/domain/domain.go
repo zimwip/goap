@@ -166,7 +166,10 @@ type Baseline struct {
 	// (ADR 0032): a baseline has at most one such second parent, ParentID being the first (the target branch's
 	// previous head).
 	MergedFrom BaselineID `json:"mergedFrom,omitempty"`
-	ChangeID   ChangeID   `json:"changeId,omitempty"`
+	// RebasedFrom is the baseline the change was forked from before it was rebased onto the head of its target (ADR 0101),
+	// on the commit baseline of a rebased change: the first fork, when it was rebased several times.
+	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
+	ChangeID    ChangeID   `json:"changeId,omitempty"`
 	// Kind says how the state of the baseline follows from the change that produced it (ADR 0056): BaselineCommit,
 	// BaselineMerge, BaselineFastForward or BaselineSnapshot.
 	Kind string `json:"kind,omitempty"`
@@ -242,8 +245,10 @@ type Branch struct {
 	Namespace    string     `json:"namespace,omitempty"`
 	Parent       string     `json:"parent"`
 	ForkBaseline BaselineID `json:"forkBaseline"`
-	Head         BaselineID `json:"head,omitempty"`   // latest baseline of the branch
-	Origin       string     `json:"origin,omitempty"` // change / option that opened it
+	Head         BaselineID `json:"head,omitempty"` // latest baseline of the branch
+	// RebasedFrom is the first fork baseline of a change branch moved by a rebase (ADR 0101), set once.
+	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
+	Origin      string     `json:"origin,omitempty"` // change / option that opened it
 	// Intent says why the branch exists relative to its parent (derive/revise/refine, same vocabulary as an
 	// Option's, architecture plan "exploration branches"): derive, a new independent line of work (a sub-change
 	// of a sub-activity, the common case); revise, a correction of what the parent already has; refine, a

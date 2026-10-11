@@ -66,36 +66,46 @@ func testChangeBranch(t *testing.T, repo Repo) {
 		t.Fatalf("main not updated: %v", n.Properties)
 	}
 
-	// B changes the same property from the same base: merge required
-	if _, err := g.Apply(ctx, b.ID, ""); err != nil {
-		t.Fatal(err)
+	// B changes the same property from the same base: the apply rebases it onto A and stops on the conflict (ADR 0101)
+	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("apply with a conflict: %v", err)
 	}
 	bc, _ := g.Change(ctx, b.ID)
-	if bc.Status != domain.ChangeCommitted {
-		t.Fatalf("B = %s, want committed", bc.Status)
+	if bc.Status != domain.ChangeActive || bc.BaselineID != ba.ID {
+		t.Fatalf("B = %s on %s, want active, rebased onto %s", bc.Status, bc.BaselineID, ba.ID)
 	}
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "A title" {
 		t.Fatalf("pending change leaked on main: %v", n.Properties)
 	}
-	// the change branch is visible to the change, not on main
-	if n, err := g.NodeByKeyOn(ctx, "", b.Branch, "REQ-1"); err != nil || n.Properties["title"] != "B title" {
-		t.Fatalf("NodeByKeyOn(branch) = %v, %v", n.Properties, err)
-	}
-	if n, err := g.NodeByKeyOn(ctx, "", "main", "REQ-1"); err != nil || n.Properties["title"] != "A title" {
-		t.Fatalf("NodeByKeyOn(main) = %v, %v", n.Properties, err)
-	}
-	if _, err := g.IntegrateChange(ctx, b.ID, nil); !errors.Is(err, ErrConflict) {
-		t.Fatalf("merge without resolution: %v", err)
-	}
-	bc, err = g.IntegrateChange(ctx, b.ID, map[domain.NodeID]Resolution{f.req.ID: {Props: map[string]any{"title": "merged", "owner": "x"}}})
+	// the author settles it (B keeps its values) and applies: a fast-forward on top of A
+	settle(t, g, b.ID)
+	bb, err := g.Apply(ctx, b.ID, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bc.Status != domain.ChangeApplied {
-		t.Fatalf("B = %s", bc.Status)
+	if bb.Kind != domain.BaselineFastForward || bb.ParentID != ba.ID {
+		t.Fatalf("B's baseline = %s on %s, want a fast-forward of %s", bb.Kind, bb.ParentID, ba.ID)
 	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "merged" {
-		t.Fatalf("resolution not applied: %v", n.Properties)
+	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "B title" || len(n.Parents) != 1 {
+		t.Fatalf("B not landed on A: %v %v", n.Properties, n.Parents)
+	}
+}
+
+// settle keeps the values of a change in its conflicts (ImpactNodeResolve) and accepts what is proposed again.
+func settle(t *testing.T, g *Graph, id domain.ChangeID) {
+	t.Helper()
+	ctx := context.Background()
+	st, err := g.RebaseState(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range st.Conflicts {
+		if _, err := g.ImpactNodeResolve(ctx, id, c.Impact, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := g.acceptAll(ctx, id); err != nil {
+		t.Fatal(err)
 	}
 }
 

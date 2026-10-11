@@ -104,6 +104,8 @@ export interface RebasedImpact {
   key?: string;
   /** the merged draft differs from the sub-change's: its review went back to proposed */
   changed?: boolean;
+  /** the draft took values from the target (a root change, ADR 0101) */
+  merged?: boolean;
   /** the fields changed on both sides: props.<key>, owner, state, link:<type>:<node>, node */
   conflicts?: string[];
 }
@@ -122,6 +124,9 @@ export interface RebaseState {
   /** the impacts whose draft the parent changed since the sub-change took it */
   behindImpactIds?: string[];
   conflicts?: ImpactConflicts[];
+  /** a root change behind the head of its target branch (ADR 0101): the branch and the head a rebase moves it to */
+  branch?: string;
+  onto?: string;
 }
 
 /** An operation on the change impacts of a change (ADR 0029). */
@@ -192,6 +197,10 @@ export interface Baseline {
   branch?: string;
   /** the namespace this baseline snapshots (a baseline holds one namespace's nodes) */
   namespace?: string;
+  /** commit | merge | fast-forward | snapshot (ADR 0056) */
+  kind?: string;
+  /** the baseline the change was forked from before its rebase onto the head of its target (ADR 0101) */
+  rebasedFrom?: string;
 }
 
 /** A name given to the state an applied change leaves (ADR 0056); not unique. */
@@ -216,6 +225,8 @@ export interface Branch {
   status?: string;
   createdAt?: string;
   description?: string;
+  /** the first fork baseline of a change branch moved by a rebase (ADR 0101) */
+  rebasedFrom?: string;
 }
 
 export interface Decision {

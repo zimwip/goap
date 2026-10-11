@@ -193,7 +193,7 @@ func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branc
 	var b domain.Branch
 	q, args := dialectPG.sqlBranch(namespace, name)
 	err := t.tx.QueryRow(ctx, q, args...).
-		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent))
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom))
 	return b, mapErr(err, "branch "+name)
 }
 
@@ -205,16 +205,17 @@ func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch,
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent))
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom))
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent))
+	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description,
+			fork_baseline = EXCLUDED.fork_baseline, rebased_from = EXCLUDED.rebased_from`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)))
 	return mapErr(err, "branch "+b.Name)
 }
 
@@ -305,13 +306,14 @@ func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, 
 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
-	var parent, mergedFrom, change *string
-	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, merged_from::text, change_id::text, created_at, branch, namespace, gap, kind FROM baseline WHERE id = $1`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &b.CreatedAt, &b.Branch, &b.Namespace, &b.Gap, &b.Kind)
+	var parent, mergedFrom, change, rebased *string
+	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, merged_from::text, change_id::text, created_at, branch, namespace, gap, kind, rebased_from::text FROM baseline WHERE id = $1`, string(id)).
+		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &b.CreatedAt, &b.Branch, &b.Namespace, &b.Gap, &b.Kind, &rebased)
 	if err != nil {
 		return b, mapErr(err, "baseline "+string(id))
 	}
 	b.ParentID, b.MergedFrom, b.ChangeID = domain.BaselineID(str(parent)), domain.BaselineID(str(mergedFrom)), domain.ChangeID(str(change))
+	b.RebasedFrom = domain.BaselineID(str(rebased))
 	b.Nodes = map[domain.NodeID]domain.Version{}
 	if b.Gap > 0 {
 		return b, nil // only the header is stored
@@ -476,7 +478,7 @@ func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 		depth, entries = 0, nil
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("baseline", baselineColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b))
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b), nullUUID(string(b.RebasedFrom)))
 	if err != nil {
 		return mapErr(err, "baseline")
 	}

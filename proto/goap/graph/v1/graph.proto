@@ -94,6 +94,9 @@ service GraphService {
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
   rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
+  // First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch (status
+  // committed). MergeChange is the second step, merging that branch into the one the change was forked from.
+  rpc CommitChange(CommitChangeRequest) returns (CommitChangeResponse);
   // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
   // the expected world state) must hold, and it is journaled.
   rpc TransitionChange(TransitionChangeRequest) returns (TransitionChangeResponse);
@@ -239,6 +242,10 @@ message Baseline {
   string namespace = 8;
   // the head of the branch merged in, when this baseline is the result of a merge (a second parent)
   string merged_from = 9;
+  // commit | merge | fast-forward | snapshot (ADR 0056)
+  string kind = 10;
+  // the baseline the change was forked from before its rebase onto the head of its target (ADR 0101)
+  string rebased_from = 11;
 }
 
 message Decision {
@@ -717,6 +724,16 @@ message ApplyChangeRequest {
   string baseline_name = 2;
 }
 
+message CommitChangeRequest {
+  string change_id = 1;
+  string baseline_name = 2;
+}
+
+message CommitChangeResponse {
+  // the commit baseline, on the change's own branch
+  Baseline baseline = 1;
+}
+
 message TransitionChangeRequest {
   string change_id = 1;
   // name of the transition out of the current state
@@ -754,6 +771,8 @@ message Branch {
   google.protobuf.Timestamp created_at = 7;
   string namespace = 8;
   string description = 9;
+  // the first fork baseline of a change branch moved by a rebase (ADR 0101)
+  string rebased_from = 10;
 }
 
 message CreateBranchRequest {
@@ -1224,11 +1243,18 @@ message RebasedImpact {
   // the fields changed on both sides: props.<key>, owner, state, link:<type>:<node>, node (the parent rejected or
   // withdrew its impact)
   repeated string conflicts = 4;
+  // the draft took values from the target (a root change, ADR 0101)
+  bool merged = 5;
 }
 
 message RebaseChangeResponse {
+  // the parent change of a sub-change, "" for a root change
   string parent_id = 1;
   repeated RebasedImpact impacts = 2;
+  // a root change (ADR 0101): the target branch, the baseline it was forked from and the head it moved to
+  string branch = 3;
+  string from = 4;
+  string onto = 5;
 }
 
 message ImpactNodeResolveRequest {
@@ -1258,6 +1284,9 @@ message GetRebaseStateResponse {
   // the change impacts whose draft the parent changed since the sub-change took it
   repeated string behind_impact_ids = 2;
   repeated ImpactConflicts conflicts = 3;
+  // a root change behind the head of its target branch (ADR 0101): the branch and the head a rebase moves it to
+  string branch = 4;
+  string onto = 5;
 }
 
 message ImpactNodeReviewRequest {
