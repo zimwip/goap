@@ -41,7 +41,7 @@
   import ChangeLifecycle from '../../components/ChangeLifecycle.svelte';
 import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
-  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
+  import { lifecycleRows, reopenable, nodeTypeNames, lifecycleResolver, loadPosts, awaitingReview, writeNodeInChange, removeFromChange, removeManyFromChange, type PostVersions, type LifecycleRow } from '../../lifecycle';
   import { loadTypes, typeCatalog } from '../../stores/types.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -592,6 +592,25 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     error = '';
     try {
       await removeFromChange(change.id, row.impact, scope || MAIN_SCOPE);
+      await load(change.id);
+      return true;
+    } catch (e) {
+      error = errorMessage(e);
+      return false;
+    } finally {
+      moving = '';
+    }
+  }
+
+  /** Takes the selected nodes out of the change at once: all of them or none. */
+  async function removeNodes(rows: LifecycleRow[]): Promise<boolean> {
+    const impacts = rows.map((r) => r.impact).filter((i): i is NonNullable<typeof i> => !!i?.id);
+    if (!change?.id || !impacts.length) return false;
+    moving = 'remove-selected';
+    error = '';
+    try {
+      await removeManyFromChange(change.id, impacts, scope || MAIN_SCOPE);
+      recordAction(`took ${impacts.length} impact${impacts.length > 1 ? 's' : ''} out of the change`);
       await load(change.id);
       return true;
     } catch (e) {
@@ -1183,6 +1202,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         keys={takenKeys}
         oncreate={createNode}
         onremove={removeNode}
+        onremovemany={removeNodes}
         onopenreviews={() => (pane = 'reviews')}
         onhistory={(r) => openNode(r.node, { pin: true, generic: true, pane: 'history' })}
         onopennode={(r) => openNode({ id: r.impact?.post?.id ?? r.node.id ?? '', key: r.node.key ?? '' }, { pin: true, change: ch.id ?? '', flow: scope || MAIN_SCOPE })}

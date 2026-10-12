@@ -761,6 +761,21 @@ func (h *Handler) WithdrawImpact(ctx context.Context, r *connect.Request[graphv1
 	return res(&graphv1.WithdrawImpactResponse{}, err)
 }
 
+// WithdrawImpacts takes several impacts out of the change in one transaction; each is gated like WithdrawImpact.
+func (h *Handler) WithdrawImpacts(ctx context.Context, r *connect.Request[graphv1.WithdrawImpactsRequest]) (*connect.Response[graphv1.WithdrawImpactsResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m := r.Msg
+	impacts := make([]domain.ChangeImpactID, 0, len(m.ChangeImpactIds))
+	for _, id := range m.ChangeImpactIds {
+		if err := h.gateImpact(ctx, m.ChangeId, id, ""); err != nil {
+			return nil, err
+		}
+		impacts = append(impacts, domain.ChangeImpactID(id))
+	}
+	err := h.Graph.WithdrawImpacts(ctx, domain.ChangeID(m.ChangeId), impacts, m.Flow, m.Execution)
+	return res(&graphv1.WithdrawImpactsResponse{}, err)
+}
+
 // RebaseChange brings a sub-change up to date with its parent (ADR 0082), a root change with the head of its target branch (ADR 0101).
 func (h *Handler) RebaseChange(ctx context.Context, r *connect.Request[graphv1.RebaseChangeRequest]) (*connect.Response[graphv1.RebaseChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())

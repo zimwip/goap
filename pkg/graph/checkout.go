@@ -916,9 +916,42 @@ func (g *Graph) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact d
 		return err
 	}
 	return g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.workOn(ctx, tx, id, flow)
-		if err != nil {
-			return err
+		return g.withdrawTx(ctx, tx, id, []domain.ChangeImpactID{impact}, flow, execution)
+	})
+}
+
+// WithdrawImpacts takes several change impacts out of the change at once, in one transaction: all of them or none.
+// Each is withdrawn as WithdrawImpact does (the impacts via one of them leave with it); an impact named twice, or
+// leaving already with another one of the list, is withdrawn once.
+func (g *Graph) WithdrawImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, flow, execution string) error {
+	if len(impacts) == 0 {
+		return invalidf("no change impact to withdraw")
+	}
+	if err := g.allow(ctx, id, operations.ImpactWithdraw); err != nil {
+		return err
+	}
+	return g.repo.InTx(ctx, func(tx Tx) error {
+		return g.withdrawTx(ctx, tx, id, impacts, flow, execution)
+	})
+}
+
+// withdrawTx emits the withdrawal of the impacts and of the impacts via them, each once.
+func (g *Graph) withdrawTx(ctx context.Context, tx Tx, id domain.ChangeID, impacts []domain.ChangeImpactID, flow, execution string) error {
+	w, err := g.workOn(ctx, tx, id, flow)
+	if err != nil {
+		return err
+	}
+	gone := map[domain.ChangeImpactID]bool{}
+	var events []domain.ImpactEvent
+	withdraw := func(impact domain.ChangeImpactID) {
+		if !gone[impact] {
+			gone[impact] = true
+			events = append(events, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactWithdrawn, Flow: w.flow, Execution: execution})
+		}
+	}
+	for _, impact := range impacts {
+		if gone[impact] {
+			continue
 		}
 		if err := g.impact(ctx, tx, w, impact); err != nil {
 			return err
@@ -926,13 +959,12 @@ func (g *Graph) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact d
 		if w.cn.Flow != w.flow {
 			return fmt.Errorf("change impact %s was declared on another flow: %w", impact, ErrConflict)
 		}
-		var events []domain.ImpactEvent
 		for _, o := range w.c.Nodes {
 			if o.Via == impact {
-				events = append(events, domain.ImpactEvent{Change: id, Impact: o.ID, Op: domain.ImpactWithdrawn, Flow: w.flow, Execution: execution})
+				withdraw(o.ID)
 			}
 		}
-		events = append(events, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactWithdrawn, Flow: w.flow, Execution: execution})
-		return g.emit(ctx, tx, events...)
-	})
+		withdraw(impact)
+	}
+	return g.emit(ctx, tx, events...)
 }

@@ -64,6 +64,40 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 	}
 }
 
+// Several impacts are withdrawn at once, in one transaction: all of them or none; one named twice is withdrawn once.
+func TestWithdrawImpacts(t *testing.T) { forEachRepo(t, testWithdrawImpacts) }
+
+func testWithdrawImpacts(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "bulk", BaselineID: f.base.ID}))
+	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
+	test := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.test.ID, Rationale: "v2"}))
+	created := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "REQ-NEW", Type: "Requirement", Rationale: "new"}))
+
+	if err := g.WithdrawImpacts(ctx, c.ID, nil, "", ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("nothing to withdraw is refused: %v", err)
+	}
+	if err := g.WithdrawImpacts(ctx, c.ID, []domain.ChangeImpactID{req.ID, "CI-UNKNOWN"}, "", ""); err == nil {
+		t.Fatalf("an unknown impact refuses the whole batch")
+	}
+	if got := must[domain.Change](t)(g.Change(ctx, c.ID)); len(got.Nodes) != 3 {
+		t.Fatalf("a refused batch withdraws nothing: %+v", got.Nodes)
+	}
+
+	if err := g.WithdrawImpacts(ctx, c.ID, []domain.ChangeImpactID{req.ID, created.ID, req.ID}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	got := must[domain.Change](t)(g.Change(ctx, c.ID))
+	if len(got.Nodes) != 1 || got.Nodes[0].ID != test.ID {
+		t.Fatalf("only the impact left out of the batch stays: %+v", got.Nodes)
+	}
+	if _, err := g.NodeByKey(ctx, "", "REQ-NEW"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("the created node is gone: %v", err)
+	}
+}
+
 // The links a type requires (the parent of a unit, ADR 0054) are checked when the draft is accepted and when the version
 // lands, whatever operations built it; a draft may be on its way there.
 func TestRequiredLinksAtAccept(t *testing.T) { forEachRepo(t, testRequiredLinksAtAccept) }

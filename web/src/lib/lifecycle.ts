@@ -148,6 +148,12 @@ export async function removeFromChange(changeId: string, cn: ChangeImpact, flow 
   if (cn.id) await graph.withdrawImpact(changeId, cn.id, flow);
 }
 
+/** Takes several nodes out of the change at once (all of them or none). */
+export async function removeManyFromChange(changeId: string, impacts: ChangeImpact[], flow = ''): Promise<void> {
+  const ids = impacts.map((cn) => cn.id ?? '').filter((id) => id);
+  if (ids.length) await graph.withdrawImpacts(changeId, ids, flow);
+}
+
 /** Qualified node types a change of the namespace can create (all of them without a namespace). */
 export function nodeTypeNames(cat: TypeCatalog, namespace = ''): string[] {
   return cat.names(namespace);

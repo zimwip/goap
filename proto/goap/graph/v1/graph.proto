@@ -73,6 +73,8 @@ service GraphService {
   rpc ImpactNodeSplit(ImpactNodeSplitRequest) returns (ImpactNodeRestructureResponse);
   // Take a change impact out of the change, explicitly: its draft is dropped.
   rpc WithdrawImpact(WithdrawImpactRequest) returns (WithdrawImpactResponse);
+  // Take several change impacts out of the change at once, in one transaction: all of them or none.
+  rpc WithdrawImpacts(WithdrawImpactsRequest) returns (WithdrawImpactsResponse);
   // Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
   // the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
   // conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
@@ -1281,6 +1283,15 @@ message WithdrawImpactRequest {
 }
 
 message WithdrawImpactResponse {}
+
+message WithdrawImpactsRequest {
+  string change_id = 1;
+  repeated string change_impact_ids = 2;
+  string flow = 3;
+  string execution = 4;
+}
+
+message WithdrawImpactsResponse {}
 
 message RebaseChangeRequest {
   string change_id = 1;

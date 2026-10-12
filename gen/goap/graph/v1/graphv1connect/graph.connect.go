@@ -137,6 +137,9 @@ const (
 	// GraphServiceWithdrawImpactProcedure is the fully-qualified name of the GraphService's
 	// WithdrawImpact RPC.
 	GraphServiceWithdrawImpactProcedure = "/goap.graph.v1.GraphService/WithdrawImpact"
+	// GraphServiceWithdrawImpactsProcedure is the fully-qualified name of the GraphService's
+	// WithdrawImpacts RPC.
+	GraphServiceWithdrawImpactsProcedure = "/goap.graph.v1.GraphService/WithdrawImpacts"
 	// GraphServiceRebaseChangeProcedure is the fully-qualified name of the GraphService's RebaseChange
 	// RPC.
 	GraphServiceRebaseChangeProcedure = "/goap.graph.v1.GraphService/RebaseChange"
@@ -357,6 +360,8 @@ type GraphServiceClient interface {
 	ImpactNodeSplit(context.Context, *connect.Request[v1.ImpactNodeSplitRequest]) (*connect.Response[v1.ImpactNodeRestructureResponse], error)
 	// Take a change impact out of the change, explicitly: its draft is dropped.
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
+	// Take several change impacts out of the change at once, in one transaction: all of them or none.
+	WithdrawImpacts(context.Context, *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error)
 	// Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
 	// the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
 	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
@@ -686,6 +691,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceWithdrawImpactProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("WithdrawImpact")),
+			connect.WithClientOptions(opts...),
+		),
+		withdrawImpacts: connect.NewClient[v1.WithdrawImpactsRequest, v1.WithdrawImpactsResponse](
+			httpClient,
+			baseURL+GraphServiceWithdrawImpactsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("WithdrawImpacts")),
 			connect.WithClientOptions(opts...),
 		),
 		rebaseChange: connect.NewClient[v1.RebaseChangeRequest, v1.RebaseChangeResponse](
@@ -1054,6 +1065,7 @@ type graphServiceClient struct {
 	impactNodeMerge        *connect.Client[v1.ImpactNodeMergeRequest, v1.ImpactNodeRestructureResponse]
 	impactNodeSplit        *connect.Client[v1.ImpactNodeSplitRequest, v1.ImpactNodeRestructureResponse]
 	withdrawImpact         *connect.Client[v1.WithdrawImpactRequest, v1.WithdrawImpactResponse]
+	withdrawImpacts        *connect.Client[v1.WithdrawImpactsRequest, v1.WithdrawImpactsResponse]
 	rebaseChange           *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
 	impactNodeResolve      *connect.Client[v1.ImpactNodeResolveRequest, v1.ImpactNodeResolveResponse]
 	getRebaseState         *connect.Client[v1.GetRebaseStateRequest, v1.GetRebaseStateResponse]
@@ -1293,6 +1305,11 @@ func (c *graphServiceClient) ImpactNodeSplit(ctx context.Context, req *connect.R
 // WithdrawImpact calls goap.graph.v1.GraphService.WithdrawImpact.
 func (c *graphServiceClient) WithdrawImpact(ctx context.Context, req *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error) {
 	return c.withdrawImpact.CallUnary(ctx, req)
+}
+
+// WithdrawImpacts calls goap.graph.v1.GraphService.WithdrawImpacts.
+func (c *graphServiceClient) WithdrawImpacts(ctx context.Context, req *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error) {
+	return c.withdrawImpacts.CallUnary(ctx, req)
 }
 
 // RebaseChange calls goap.graph.v1.GraphService.RebaseChange.
@@ -1630,6 +1647,8 @@ type GraphServiceHandler interface {
 	ImpactNodeSplit(context.Context, *connect.Request[v1.ImpactNodeSplitRequest]) (*connect.Response[v1.ImpactNodeRestructureResponse], error)
 	// Take a change impact out of the change, explicitly: its draft is dropped.
 	WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error)
+	// Take several change impacts out of the change at once, in one transaction: all of them or none.
+	WithdrawImpacts(context.Context, *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error)
 	// Sub-changes (ADR 0081, 0082): a sub-change lands in its parent's log, by a fast-forward. RebaseChange brings the drafts
 	// the parent changed since the sub-change took them up to date (a three-way merge; the fields changed on both sides are
 	// conflicts, the sub-change's value kept; a changed impact is to be reviewed again); ApplyChange rebases first.
@@ -1955,6 +1974,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceWithdrawImpactProcedure,
 		svc.WithdrawImpact,
 		connect.WithSchema(graphServiceMethods.ByName("WithdrawImpact")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceWithdrawImpactsHandler := connect.NewUnaryHandler(
+		GraphServiceWithdrawImpactsProcedure,
+		svc.WithdrawImpacts,
+		connect.WithSchema(graphServiceMethods.ByName("WithdrawImpacts")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceRebaseChangeHandler := connect.NewUnaryHandler(
@@ -2357,6 +2382,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceImpactNodeSplitHandler.ServeHTTP(w, r)
 		case GraphServiceWithdrawImpactProcedure:
 			graphServiceWithdrawImpactHandler.ServeHTTP(w, r)
+		case GraphServiceWithdrawImpactsProcedure:
+			graphServiceWithdrawImpactsHandler.ServeHTTP(w, r)
 		case GraphServiceRebaseChangeProcedure:
 			graphServiceRebaseChangeHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeResolveProcedure:
@@ -2620,6 +2647,10 @@ func (UnimplementedGraphServiceHandler) ImpactNodeSplit(context.Context, *connec
 
 func (UnimplementedGraphServiceHandler) WithdrawImpact(context.Context, *connect.Request[v1.WithdrawImpactRequest]) (*connect.Response[v1.WithdrawImpactResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.WithdrawImpact is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) WithdrawImpacts(context.Context, *connect.Request[v1.WithdrawImpactsRequest]) (*connect.Response[v1.WithdrawImpactsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.WithdrawImpacts is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error) {

@@ -278,6 +278,9 @@ export const graph = {
    * by the next commit. */
   withdrawImpact: (changeId: string, changeImpactId: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
+  /** Takes several impacts out of the change at once, in one transaction: all of them or none. */
+  withdrawImpacts: (changeId: string, changeImpactIds: string[], flow = '') =>
+    rpc<{ changeId: string; changeImpactIds: string[]; flow: string }, Empty>(GRAPH, 'WithdrawImpacts', { changeId, changeImpactIds, flow }),
   /** Rebases a change onto the head of the branch it was forked from (ADR 0101; a sub-change: its parent's branch, ADR 0103): the nodes changed on both sides are merged three-way, the fields changed on both sides are conflicts. */
   rebaseChange: (changeId: string) =>
     rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[]; branch?: string; from?: string; onto?: string }>(GRAPH, 'RebaseChange', { changeId }),

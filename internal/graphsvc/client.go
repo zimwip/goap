@@ -276,6 +276,16 @@ func (c *Client) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact 
 	return rpcerr.FromConnect(err)
 }
 
+// WithdrawImpacts takes several change impacts out of the change at once (all or none).
+func (c *Client) WithdrawImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, flow, execution string) error {
+	ids := make([]string, len(impacts))
+	for i, impact := range impacts {
+		ids[i] = string(impact)
+	}
+	_, err := c.rpc.WithdrawImpacts(ctx, connect.NewRequest(&graphv1.WithdrawImpactsRequest{ChangeId: string(id), ChangeImpactIds: ids, Flow: flow, Execution: execution}))
+	return rpcerr.FromConnect(err)
+}
+
 // ImpactNodeReviewOn implements engine.GraphPort (the reviewer is the principal of the request).
 func (c *Client) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, _, comment string) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeReview(ctx, connect.NewRequest(&graphv1.ImpactNodeReviewRequest{ChangeId: string(id), ChangeImpactId: string(node),

@@ -24,6 +24,7 @@
     keys,
     oncreate,
     onremove,
+    onremovemany,
     onhistory,
     onopennode,
     impacts = false,
@@ -50,6 +51,8 @@
     oncreate: (key: string, type: string, state: string) => Promise<boolean> | boolean;
     /** takes a node out of the change (a node the change creates is discarded) */
     onremove: (row: LifecycleRow) => Promise<boolean> | boolean;
+    /** takes the selected nodes out of the change at once (all of them or none); with impacts, rows get a checkbox */
+    onremovemany?: (rows: LifecycleRow[]) => Promise<boolean> | boolean;
     /** opens the history of a stored node */
     onhistory: (row: LifecycleRow) => void;
     /** opens the node editor on a stored node */
@@ -78,6 +81,37 @@
       ? `Discard the new node ${r.node.key}? It is taken out of the change.`
       : `Take ${r.node.key} (${r.node.type}) out of this change? Its draft is dropped; a node is never deleted (ADR 0076).`;
     if (await confirmDialog({ message: what, danger: true })) void onremove(r);
+  }
+
+  // Bulk withdraw: check the rows, then take them out of the change in one go, after a confirmation.
+  const removable = (r: LifecycleRow) => !!r.impact?.id && !r.impact.superseded;
+  const bulk = $derived(impacts && !!onremovemany && !disabled);
+  let checked = $state<string[]>([]);
+  const removableRows = $derived(rows.filter(removable));
+  const checkedRows = $derived(removableRows.filter((r) => checked.includes(r.impact?.id ?? '')));
+  const allChecked = $derived(removableRows.length > 0 && checkedRows.length === removableRows.length);
+  const columns = $derived((impacts ? 6 : 3) + (bulk ? 1 : 0));
+
+  function toggle(r: LifecycleRow, on: boolean) {
+    const id = r.impact?.id ?? '';
+    checked = on ? [...checked.filter((c) => c !== id), id] : checked.filter((c) => c !== id);
+  }
+
+  function toggleAll(on: boolean) {
+    checked = on ? removableRows.map((r) => r.impact?.id ?? '') : [];
+  }
+
+  async function removeChecked() {
+    const picked = checkedRows;
+    if (!picked.length || !onremovemany) return;
+    const created = picked.filter((r) => r.created).length;
+    const what =
+      `Take ${picked.length} node${picked.length > 1 ? 's' : ''} out of this change? ` +
+      `${picked.map((r) => r.node.key).join(', ')}. Their drafts are dropped` +
+      (created ? `; ${created} new node${created > 1 ? 's are' : ' is'} discarded` : '') +
+      '; a node is never deleted (ADR 0076).';
+    if (!(await confirmDialog({ message: what, danger: true }))) return;
+    if (await onremovemany(picked)) checked = [];
   }
 
   let newNodeKey = $state('');
@@ -206,11 +240,31 @@
   {/if}
 
   {#if rows.length}
+    {#if bulk && removableRows.length}
+      <div class="bulk" role="toolbar" aria-label="Selected impacts">
+        <span class="hint">{checkedRows.length ? `${checkedRows.length} selected` : 'Select impacts to act on several at once'}</span>
+        <button
+          type="button"
+          class="small danger"
+          disabled={busy !== '' || !checkedRows.length}
+          title="Take the selected nodes out of the change, all at once: ones committed already are reverted by the next commit"
+          onclick={removeChecked}
+        >
+          Remove selected from change
+        </button>
+        {#if checkedRows.length}<button type="button" class="small ghost" onclick={() => toggleAll(false)}>Clear selection</button>{/if}
+      </div>
+    {/if}
     <table>
-      <thead><tr><th>Node</th>{#if impacts}<th>Why</th><th>Versions</th>{/if}<th>State</th>{#if impacts}<th>Review</th>{/if}<th>Actions</th></tr></thead>
+      <thead><tr>{#if bulk}<th class="pick"><input type="checkbox" aria-label="Select every impact" disabled={!removableRows.length} checked={allChecked} onchange={(e) => toggleAll(e.currentTarget.checked)} /></th>{/if}<th>Node</th>{#if impacts}<th>Why</th><th>Versions</th>{/if}<th>State</th>{#if impacts}<th>Review</th>{/if}<th>Actions</th></tr></thead>
       <tbody>
         {#each rows as r (r.node.id)}
           <tr use:assistTarget={`impact:${r.impact?.id ?? ''}`} class:selected={!!selected && r.impact?.id === selected} data-impact={r.impact?.id}>
+            {#if bulk}
+              <td class="pick">
+                {#if removable(r)}<input type="checkbox" aria-label={`Select ${r.node.key}`} checked={checked.includes(r.impact?.id ?? '')} onchange={(e) => toggle(r, e.currentTarget.checked)} />{/if}
+              </td>
+            {/if}
             <td>
               {#if !openable(r)}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor, as this change has it" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
@@ -293,7 +347,7 @@
           </tr>
           {#if editing === r.node.id && !disabled}
             <tr class="editrow">
-              <td colspan={impacts ? 6 : 3}>
+              <td colspan={columns}>
                 <form
                   class="edit"
                   onsubmit={(e) => {
@@ -387,6 +441,16 @@
   .invalid {
     color: var(--danger, #c0392b);
     font-size: 0.85rem;
+  }
+  .bulk {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    margin: 0.4rem 0;
+  }
+  .pick {
+    width: 1.5rem;
   }
   tr.selected td {
     background: var(--accent-soft);
