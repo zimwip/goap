@@ -15,6 +15,8 @@ export interface ImpactFacts {
   landable?: boolean;
   /** the node was created by the change */
   created?: boolean;
+  /** false: the impact modifies nothing (a candidate, a draft equal to its base), never accepted (ADR 0102) */
+  modifies?: boolean;
 }
 
 /** An impact is awaiting its review (a draft not reviewed yet). */
@@ -29,6 +31,7 @@ export function impactEntities(impacts: ImpactFacts[]): AssistantEntity[] {
     if (i.intent) props.intent = i.intent;
     if (i.state) props.nodeState = i.state;
     if (i.landable === false) props.landable = 'no';
+    if (i.modifies === false) props.modifies = 'no';
     return { type: 'impact', id: i.id, label: i.key, state: i.review || 'proposed', ...(Object.keys(props).length ? { props } : {}) };
   });
 }
@@ -42,6 +45,8 @@ export interface ChangeFacts {
   methodology?: string;
   namespace?: string;
   parentId?: string;
+  /** what the change can commit and merge (ADR 0102, graph.getCommitState); unknown: left out of the summary */
+  commit?: { canCommit?: boolean; canMerge?: boolean; committed?: boolean; mergeInto?: string; mergeWhy?: string };
 }
 
 /** One sentence on a change and what its screen shows. */
@@ -55,11 +60,23 @@ export function changeSummary(c: ChangeFacts, impacts: ImpactFacts[], view: { pa
     c.namespace ? `namespace ${c.namespace}` : '',
     c.parentId ? 'a sub-change' : '',
     `${impacts.length} impact${impacts.length === 1 ? '' : 's'}, ${awaiting} awaiting review`,
+    ...commitParts(c),
     view.pane ? `pane ${view.pane}` : '',
     view.scope && view.scope !== 'main' ? `scope ${view.scope}` : '',
     view.filter && view.filter !== 'all' ? `filtered to ${view.filter}` : '',
   ];
   return parts.filter(Boolean).join('; ') + '.';
+}
+
+/** The commit and merge state of a change, in the words of the summary. */
+function commitParts(c: ChangeFacts): string[] {
+  const st = c.commit;
+  if (!st) return [];
+  return [
+    st.committed ? 'committed on its branch' : '',
+    st.canCommit ? 'commit possible' : 'nothing to commit',
+    st.canMerge ? `merge possible${st.mergeInto ? ` into ${st.mergeInto}` : ''}` : `merge not possible${st.mergeWhy ? ` (${st.mergeWhy})` : ''}`,
+  ];
 }
 
 export interface TransitionFacts {

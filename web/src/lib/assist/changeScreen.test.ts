@@ -21,6 +21,20 @@ describe('change screen facts', () => {
     expect(changeSummary({ title: 'T' }, [], {})).toBe('Change “T”, unknown; 0 impacts, 0 awaiting review.');
   });
 
+  it('flags the impacts that modify nothing, so the model withdraws them rather than accept them', () => {
+    expect(impactEntities([{ id: 'I9', key: 'REQ-9', review: 'proposed', modifies: false }])[0].props).toEqual({ modifies: 'no' });
+    expect(impactEntities([{ id: 'I9', key: 'REQ-9', modifies: true }])[0].props).toBeUndefined();
+  });
+
+  it('tells what the change can commit and merge (ADR 0102)', () => {
+    expect(changeSummary({ title: 'T', status: 'active', commit: { canCommit: true, canMerge: false, mergeWhy: 'Nothing committed on the branch of the change yet' } }, [])).toBe(
+      'Change “T”, active; 0 impacts, 0 awaiting review; commit possible; merge not possible (Nothing committed on the branch of the change yet).',
+    );
+    expect(changeSummary({ title: 'T', status: 'active', commit: { committed: true, canMerge: true, mergeInto: 'parent change C1' } }, [])).toBe(
+      'Change “T”, active; 0 impacts, 0 awaiting review; committed on its branch; nothing to commit; merge possible into parent change C1.',
+    );
+  });
+
   it('summarises a diff by property names, never values', () => {
     const d = diffSummary({ a: 1, b: 'x', c: 'gone' }, { a: 1, b: 'y', d: 'new' });
     expect(d).toBe('Edits: adds d; changes b; clears c.');

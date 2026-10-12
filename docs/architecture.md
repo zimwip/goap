@@ -1273,7 +1273,7 @@ conversation replays nothing; each shows as a chip that repeats it. A proposal (
 accepted write runs through the screen's registered tool and is reported, an accepted write never reported shows "accepted, not
 applied" with a Retry while the tool is registered, a started agent shows the status of its run read from the process.
 **Screens register themselves** (`assist/registry.svelte.ts`): per tab and for as long as a view is mounted, a screen and a
-focus provider, tools (implementations of the catalog, run through the screen's own edit path, never when not registered; the change tab registers `transition_change` when its lifecycle offers a transition, `changeTransition.ts` being shared with the Move button) and
+focus provider, tools (implementations of the catalog, run through the screen's own edit path, never when not registered; the change tab registers `transition_change` when its lifecycle offers a transition, `changeTransition.ts` being shared with the Move button, and `commit_change` / `merge_change` when `getCommitState` allows them (ADR 0102, 0103: the summary says what can be committed and merged) and `withdraw_impacts` (several at once, all or none; an impact entity that modifies nothing carries `modifies: no`, never accepted)) and
 fields (`use:assistField`, shared with the helper of ADR 0086); `assist/capture.ts` keeps the selection and focus from before
 the person went to the assistant, `assist/recorder.ts` the last action. The
 current conversation is kept in memory only (ADR 0052): a new page opens the most recent one. The whole interface depends

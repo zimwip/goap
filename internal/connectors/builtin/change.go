@@ -46,7 +46,7 @@ var changeOps = []op{
 	{"merge", "Merge nodes into a new one, seen from their parents (the sources stay as they are): {successors, sources, parents, suspect}", schema(map[string]string{"change": "string", "sources": "array", "key": "string", "type": "string", "properties": "object", "rationale": "string"}, "sources", "key", "type", "rationale")},
 	{"split", "Split a node into new ones, seen from its parents (the node stays as it is): {successors, sources, parents, suspect}", schema(map[string]string{"change": "string", "source": "string", "into": "array"}, "source", "into")},
 	{"cancel", "Cancel the checkout of a node of the change: its draft is dropped (a node created by the change goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
-	{"remove", "Take a node out of the change (its draft is dropped): {removed}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
+	{"remove", "Take a node out of the change (its draft is dropped), or several at once with keys (all or none): {removed}", schema(map[string]string{"change": "string", "key": "string", "keys": "array"})},
 	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
 	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
@@ -250,14 +250,35 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		}
 		return nodeResult(out)
 	case "remove":
-		imp, ok := w.impact(a.str("key"))
-		if !ok {
-			return nil, fmt.Errorf("%s is not in the change", a.str("key"))
+		keys := asStrings(a["keys"])
+		if k := a.str("key"); k != "" {
+			keys = append([]string{k}, keys...)
 		}
-		if err := c.p.Graph.WithdrawImpact(ctx, id, imp.ID, "", ""); err != nil {
+		if len(keys) == 0 {
+			return nil, errors.New(`argument "key" or "keys" is required`)
+		}
+		ids, removed := make([]domain.ChangeImpactID, 0, len(keys)), make([]string, 0, len(keys))
+		for _, k := range keys {
+			imp, ok := w.impact(k)
+			if !ok {
+				return nil, fmt.Errorf("%s is not in the change", k)
+			}
+			if slices.Contains(ids, imp.ID) {
+				continue
+			}
+			ids, removed = append(ids, imp.ID), append(removed, imp.Key)
+		}
+		if len(ids) == 1 {
+			if err := c.p.Graph.WithdrawImpact(ctx, id, ids[0], "", ""); err != nil {
+				return nil, err
+			}
+			return map[string]any{"removed": removed[0]}, nil
+		}
+		// several at once: all of them or none (a5a144d)
+		if err := c.p.Graph.WithdrawImpacts(ctx, id, ids, "", ""); err != nil {
 			return nil, err
 		}
-		return map[string]any{"removed": imp.Key}, nil
+		return map[string]any{"removed": removed}, nil
 	case "merge", "split":
 		return c.restructure(ctx, w, op, a)
 	case "unlink":

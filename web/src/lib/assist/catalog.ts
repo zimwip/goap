@@ -36,7 +36,7 @@ export const TOOLS = {
   },
   review_impact: {
     description: 'Accept or reject the change impact that awaits its review.',
-    guidance: 'Needs the impact id, accept or reject, and a comment naming what was checked (1-3 sentences). Only for impacts awaiting review.',
+    guidance: 'impactId, accept or reject, a comment naming what was checked (1-3 sentences). Only impacts awaiting review; never accept one with props.modifies no.',
     level: 'write',
     args: {
       properties: {
@@ -46,6 +46,23 @@ export const TOOLS = {
       },
       required: ['impactId', 'outcome', 'comment'],
     },
+  },
+  withdraw_impacts: {
+    description: 'Take impacts out of this change at once (all or none): their drafts are dropped, a node the change created goes away.',
+    guidance: 'impactIds: ids of impact entities; withdraw the ones that modify nothing (props.modifies no) rather than accept them.',
+    level: 'write',
+    args: { properties: { impactIds: { type: 'array', items: { type: 'string', description: 'an impact id' }, description: 'the impacts to withdraw' } }, required: ['impactIds'] },
+  },
+  commit_change: {
+    description: 'Commit this change: write its accepted modifications on its own branch; the change stays open.',
+    guidance: 'Only when the summary says commit is possible. name: the name of the commit (default: the change title).',
+    level: 'write',
+    args: { properties: { name: str('the name of the commit, optional') } },
+  },
+  merge_change: {
+    description: 'Merge the commits of this change into the branch it was forked from (a sub-change: into its parent); closes it.',
+    guidance: 'Only when the summary says merge is possible: committed, every impact settled, the lifecycle in a final state.',
+    level: 'write',
   },
   rename_change: {
     description: 'Rename this change.',

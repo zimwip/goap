@@ -326,6 +326,16 @@ func TestChangeTools(t *testing.T) {
 	if trace := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/trace", map[string]any{"ref": "REQ-2"})["trace"].(string); !strings.Contains(trace, "NODE REQ-2") {
 		t.Fatalf("trace of a node:\n%s", trace)
 	}
+	// several nodes taken out at once (all or none): an unknown key refuses the whole call
+	if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/remove", map[string]any{"keys": []any{"REQ-9", "REQ-404"}}); err == nil {
+		t.Fatal("remove of a node not in the change accepted")
+	}
+	if got := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/remove", map[string]any{"keys": []any{"REQ-9", "REQ-2"}})["removed"]; len(got.([]any)) != 2 {
+		t.Fatalf("removed = %v", got)
+	}
+	if nodes := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/read", nil)["nodes"]; nodes != nil && len(nodes.([]any)) != 0 {
+		t.Fatalf("nodes left = %v", nodes)
+	}
 }
 
 // Options through goap-change (ADR 0032 §6): an agent opens two hypotheses, works on each in turn (the edits go to

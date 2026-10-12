@@ -73,7 +73,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { verifications, derogationRegister, openDerogation } from '../../verification';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
-  import { commitButtons, notAcceptableWhy } from '../../changeCommit';
+  import { commitButtons, modifies, notAcceptableWhy } from '../../changeCommit';
   import MergeResolver from '../../components/MergeResolver.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeTabTitle, scopeWritable } from '../../changeScope';
 
@@ -665,8 +665,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   /** Merges the branch of the change into the branch it was forked from (ADR 0102): rebased first when that branch
    * moved (conflicts stop it: settle them, commit, merge again), held by the methodology (final state, landing gate). */
-  async function mergeBranch() {
-    if (!change?.id) return;
+  async function mergeBranch(): Promise<string | undefined> {
+    if (!change?.id) return 'No change is open.';
     applying = true;
     error = '';
     try {
@@ -675,12 +675,16 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       if (res.change?.status === 'applied') {
         notify(`Merged into ${mergeTarget}.`, 'ok');
         recordAction('merged the change');
-      } else notify('The merge waits for its conflicts to be resolved.', 'info');
+        return undefined;
+      }
+      notify('The merge waits for its conflicts to be resolved.', 'info');
+      return 'The merge waits for its conflicts to be resolved.';
     } catch (e) {
       const message = errorMessage(e);
       // a rebase that met conflicts stopped the merge: read the change again so the sync pane lists them
       if (change?.id) await load(change.id).catch(() => undefined);
       error = message;
+      return message;
     } finally {
       applying = false;
     }
@@ -723,8 +727,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; the merge into the branch it
    * was forked from stays a separate act (the "Committed" box below), e.g. when a release branch collects changes. */
-  async function commit() {
-    if (!change?.id) return;
+  async function commit(): Promise<string | undefined> {
+    if (!change?.id) return 'No change is open.';
     applying = true;
     error = '';
     try {
@@ -732,8 +736,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       await load(change.id);
       notify(`Committed on ${change.branch || 'its own branch'}: the change stays open, merge it when ready.`, 'ok');
       recordAction('committed the change on its branch');
+      return undefined;
     } catch (e) {
       error = errorMessage(e);
+      return error;
     } finally {
       applying = false;
     }
@@ -775,7 +781,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const impactFacts = $derived<ImpactFacts[]>(
     lcRows.flatMap((r) =>
       r.impact?.id && !r.impact.superseded
-        ? [{ id: r.impact.id, key: r.node.key ?? '', type: r.node.type, intent: r.impact.intent, review: r.impact.review, state: r.effective || undefined, landable: r.landable, created: !!r.created }]
+        ? [{ id: r.impact.id, key: r.node.key ?? '', type: r.node.type, intent: r.impact.intent, review: r.impact.review, state: r.effective || undefined, landable: r.landable, created: !!r.created, modifies: modifies(r.impact) }]
         : [],
     ),
   );
@@ -868,6 +874,39 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       },
     },
     {
+      name: 'withdraw_impacts',
+      enabled: () => !!change && writable && !closed && impactFacts.length > 0,
+      describe: (base) => {
+        const list = impactFacts.map((i) => i.id);
+        const items = list.length && list.length <= 30 ? { type: 'enum' as const, enum: list, description: 'an impact id' } : { type: 'string' as const, description: 'an impact id' };
+        return { ...base, args: { ...base.args, properties: { impactIds: { type: 'array', items, description: 'the impacts to withdraw' } } } };
+      },
+      run: async (a) => {
+        const ids = Array.isArray(a.impactIds) ? a.impactIds.map(String) : [];
+        if (!ids.length) return 'Name at least one impact to withdraw.';
+        const rows = ids.map(rowOfImpact);
+        const missing = ids.filter((_, i) => !rows[i]);
+        if (missing.length) return `Not in this change: ${missing.join(', ')}.`;
+        return (await removeNodes(rows as LifecycleRow[])) ? undefined : error || 'The impacts could not be withdrawn.';
+      },
+    },
+    {
+      name: 'commit_change',
+      enabled: () => !!change && !closed && !applying && commits.canCommit,
+      run: async (a) => {
+        if (!commits.canCommit) return commits.commitWhy ?? 'Nothing to commit.';
+        const name = String(a.name ?? '').trim();
+        if (name) baselineName = name;
+        if (!baselineName.trim()) baselineName = change?.title || `change-${shortId(change?.id)}`;
+        return commit();
+      },
+    },
+    {
+      name: 'merge_change',
+      enabled: () => !!change && !closed && !applying && commits.canMerge,
+      run: () => (commits.canMerge ? mergeBranch() : (commits.mergeWhy ?? 'The change cannot be merged yet.')),
+    },
+    {
       name: 'rename_change',
       enabled: () => !!change && !closed && !defining,
       run: async (a) => {
@@ -910,7 +949,17 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
               kind: 'change',
               title: change.title || 'Untitled change',
               summary: changeSummary(
-                { title: change.title, status: change.status, lifecycle: change.lifecycle, state: change.state, project: change.projectId, methodology: change.methodology, namespace: change.namespace, parentId: change.parentId },
+                {
+                  title: change.title,
+                  status: change.status,
+                  lifecycle: change.lifecycle,
+                  state: change.state,
+                  project: change.projectId,
+                  methodology: change.methodology,
+                  namespace: change.namespace,
+                  parentId: change.parentId,
+                  commit: commitInfo && !closed ? { canCommit: commits.canCommit, canMerge: commits.canMerge, committed: committedOnBranch, mergeInto: commits.canMerge ? mergeTarget : undefined, mergeWhy: commits.mergeWhy } : undefined,
+                },
                 impactFacts,
                 { pane, scope, filter: impactFilter },
               ),
@@ -930,7 +979,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           element: sel ? { type: 'impact', id: sel.id, label: sel.key } : undefined,
           dialogKind: compareOpen ? 'compare' : defining ? 'edit' : moveOpen ? 'move' : undefined,
           dialogTitle: compareOpen ? 'Compare and decide options' : defining ? 'Edit the title and intent of the change' : moveOpen ? 'Move the change to another project' : undefined,
-          pendingAction: defining ? 'editing the title and intent of the change' : moveOpen ? 'choosing the project to move the change to' : applying ? 'applying the change' : undefined,
+          pendingAction: defining ? 'editing the title and intent of the change' : moveOpen ? 'choosing the project to move the change to' : applying ? 'committing or merging the change' : undefined,
           errors: [error, checkError].filter(Boolean),
         };
       },
@@ -957,7 +1006,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         primary: true,
         disabled: !change || applying || !commits.canMerge,
         title: commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved)`,
-        run: mergeBranch,
+        run: () => void mergeBranch(),
       },
     ],
   );
@@ -1141,10 +1190,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <label for="bname">Name of the new baseline</label>
             <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
           </div>
-          <button onclick={commit} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
+          <button onclick={() => void commit()} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
             {applying ? 'Working…' : 'Commit'}
           </button>
-          <button class="primary" onclick={mergeBranch} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved); closes the change`}>
+          <button class="primary" onclick={() => void mergeBranch()} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved); closes the change`}>
             {applying ? 'Working…' : isSub ? 'Merge into parent' : 'Merge'}
           </button>
         </div>
