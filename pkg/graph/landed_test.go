@@ -116,21 +116,23 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 		t.Fatal(err)
 	}
 	got := must[domain.Change](t)(g.Change(ctx, c.ID))
-	if got.Status != domain.ChangeCommitted || got.ResultBaselineID != commit.ID || commit.Kind != domain.BaselineCommit ||
+	if got.Status != domain.ChangeActive || got.ResultBaselineID != commit.ID || commit.Kind != domain.BaselineCommit ||
 		commit.Branch != got.Branch || commit.Branch == domain.MainBranch || commit.ChangeID != c.ID {
 		t.Fatalf("committed change %+v, commit baseline %+v", got, commit)
 	}
 	if now := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch)); now.ID != head.ID {
 		t.Fatalf("committing moved main: %s then %s", head.ID, now.ID)
 	}
-	if _, err := g.CommitChange(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("committing twice: %v", err)
+	if _, err := g.CommitChange(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("committing again with nothing new: %v", err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("applying a committed change: %v", err)
+	// a committed change stays open (ADR 0102): it takes impacts again
+	late, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-2", Type: "Design", Rationale: "late"}})
+	if err != nil {
+		t.Fatalf("a committed change takes more impacts: %v", err)
 	}
-	if _, err := g.proposeOrCreate(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "S-2", Type: "Design", Rationale: "late"}}); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a committed change takes no more impact: %v", err)
+	if err := g.WithdrawImpact(ctx, c.ID, late[0].ID, "", ""); err != nil {
+		t.Fatal(err)
 	}
 	// integrated: applied, a fast-forward onto main
 	done, err := g.IntegrateChange(ctx, c.ID, nil)
@@ -148,15 +150,9 @@ func testCommitThenIntegrate(t *testing.T, repo Repo) {
 		t.Fatalf("integrating an applied change: %v", err)
 	}
 
-	// a change that wrote nothing gets its branch when committed
+	// a change that wrote nothing has nothing to commit (ADR 0102)
 	empty := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "nothing", BaselineID: onMain.ID}))
-	if empty.Branch != domain.MainBranch {
-		t.Fatalf("a change that wrote nothing has no branch yet: %q", empty.Branch)
-	}
-	if _, err := g.CommitChange(ctx, empty.ID, ""); err != nil {
-		t.Fatal(err)
-	}
-	if got := must[domain.Change](t)(g.Change(ctx, empty.ID)); got.Branch == domain.MainBranch || got.Status != domain.ChangeCommitted {
-		t.Fatalf("committed empty change %+v", got)
+	if _, err := g.CommitChange(ctx, empty.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("an empty change is not committed: %v", err)
 	}
 }

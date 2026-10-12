@@ -45,6 +45,9 @@ type Draft struct {
 	Origins []NodeRef `json:"origins,omitempty"`
 	// Base is the version the draft was checked out from (nil for a creation).
 	Base *NodeRef `json:"base,omitempty"`
+	// MergedWith is, for the draft a rebase of a committed change merged (ADR 0102), the version on the head of the target
+	// branch it was merged with: the second parent of the version it lands as.
+	MergedWith *NodeRef `json:"mergedWith,omitempty"`
 	// Execution is the action run that checked the node out (what a relaunch of a step marks stale, ADR 0025).
 	Execution string      `json:"execution,omitempty"`
 	Links     []DraftLink `json:"links,omitempty"`
@@ -71,6 +74,10 @@ func (d Draft) Clone() Draft {
 	if d.Base != nil {
 		b := *d.Base
 		d.Base = &b
+	}
+	if d.MergedWith != nil {
+		m := *d.MergedWith
+		d.MergedWith = &m
 	}
 	if d.Inherited != nil {
 		o := *d.Inherited

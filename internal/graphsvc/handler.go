@@ -969,8 +969,9 @@ func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.Me
 	for id, rs := range r.Msg.Resolutions {
 		resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(rs.GetProps()), Skip: rs.GetSkip()}
 	}
+	ctx = h.Identity.Context(ctx, r.Header()) // the merge asks the change's methodology for the caller (ADR 0102)
 	c, err := h.Graph.IntegrateChange(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
-	if err == nil {
+	if err == nil && c.Status == domain.ChangeApplied { // a merge waiting for a resolution leaves the change committed
 		c.Items = nil
 		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c})
 	}

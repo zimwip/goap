@@ -34,6 +34,7 @@ func (a *applier) prepareChangeImpacts() error {
 	}
 	var todo []landing
 	impacts := a.mainImpacts()
+	strict := !isBulk(a.ctx) // ADR 0102: only modifications land; the bulk producer path confirms as before
 	for _, cn := range a.change.Nodes {
 		if len(cn.Items) > 0 {
 			continue // derived from items: their proposals are applied above
@@ -41,13 +42,27 @@ func (a *applier) prepareChangeImpacts() error {
 		if cn.Flow != "" || cn.Superseded {
 			continue // a candidate of a flow that is not adopted, or replaced by one that is
 		}
+		d := ownDraft(rows, cn.ID, "")
+		if strict {
+			// a candidate (no draft: an impact identified, or committed already and not checked out again) and a draft
+			// left as it was checked out stay in the change as they are: nothing of theirs is committed (ADR 0102)
+			if d == nil {
+				continue
+			}
+			if ok, err := a.g.draftModifies(a.ctx, a.tx, d); err != nil {
+				return err
+			} else if !ok {
+				continue
+			}
+		} else if d == nil && cn.Landed != nil {
+			continue // committed already
+		}
 		switch cn.Review {
 		case domain.ReviewRejected:
 			continue
 		case domain.ReviewProposed:
 			return fmt.Errorf("change impact %s (%s) awaits its review: %w", cn.Key, cn.ID, ErrConflict)
 		}
-		d := ownDraft(rows, cn.ID, "")
 		if d == nil {
 			if cn.Intent == domain.IntentModified {
 				continue // an impact confirmed, with no new version to write
@@ -58,6 +73,10 @@ func (a *applier) prepareChangeImpacts() error {
 			return err
 		}
 		todo = append(todo, landing{cn, *d})
+	}
+	// a change of items only (facts, decisions) commits as before; one that names nodes must modify one
+	if strict && len(todo) == 0 && (len(impacts) > 0 || len(a.change.Items) == 0) {
+		return invalidf("nothing to commit: no change impact of change %s modifies a node (check a node out and change it)", a.change.ID)
 	}
 	// 1. the versions: the next version of each node, whatever the branch it was written on
 	written := map[domain.NodeID]domain.Version{}
@@ -71,9 +90,8 @@ func (a *applier) prepareChangeImpacts() error {
 		nodes[i] = n
 		written[n.ID] = n.Version
 		if l.d.Base != nil {
-			from[n.ID] = l.d.Base.Version
-		}
-		if l.cn.Pre != nil {
+			from[n.ID] = l.d.Base.Version // after an earlier commit of the change: the version it wrote (ADR 0102)
+		} else if l.cn.Pre != nil {
 			from[n.ID] = l.cn.Pre.Version
 		}
 	}
@@ -128,6 +146,9 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		return n, err
 	}
 	n.Version, n.Parents, n.Reason = domain.Version(len(vs)+1), []domain.Version{d.Base.Version}, domain.ReasonDerive
+	if d.MergedWith != nil && d.MergedWith.Version != d.Base.Version {
+		n.Parents = append(n.Parents, d.MergedWith.Version) // a rebase merged it with the target's version (ADR 0102)
+	}
 	if on, err := onBranch(a.ctx, a.tx, *d.Base, a.branch); err != nil {
 		return n, err
 	} else if on {
@@ -234,7 +255,7 @@ func (a *applier) settleChangeImpacts(stuck []string) error {
 	// reentrant): askLandingGate asks it in its own rolled-back pass before this transaction opens, and passes the
 	// answer in as a.landing. a.collect means this call IS that earlier pass: nothing to check yet, just leave the
 	// blackboard (landingBlackboard) for the caller to evaluate outside it.
-	if a.collect {
+	if a.collect || a.noGate {
 		return nil
 	}
 	if a.g.LandingGate != nil && a.landing == nil {
@@ -295,14 +316,18 @@ func joinSorted(s []string) string {
 // same nodes to the new head, to be re-checked.
 func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID) error {
 	for _, cn := range c.Nodes {
-		if cn.Post == nil || cn.Review != domain.ReviewAccepted || cn.Flow != "" || cn.Superseded {
+		if cn.Post == nil || (cn.Review != domain.ReviewAccepted && cn.Landed == nil) || cn.Flow != "" || cn.Superseded {
 			continue
 		}
-		head, err := tx.LatestOn(ctx, cn.Post.ID, domain.BranchOf(own.Parent))
+		post := *cn.Post
+		if post.IsDraft() && cn.Landed != nil {
+			post = *cn.Landed // checked out again after its commit, left as it was (ADR 0102)
+		}
+		head, err := tx.LatestOn(ctx, post.ID, domain.BranchOf(own.Parent))
 		if err != nil {
 			return err
 		}
-		if head.ChangeID != mergeChange && head.Ref() != *cn.Post {
+		if head.ChangeID != mergeChange && head.Ref() != post {
 			continue // left as is on the target: nothing of this change landed
 		}
 		ref := head.Ref()

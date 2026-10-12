@@ -14,7 +14,8 @@ import (
 //   - CommitChange validates it: every rule of a change (reviews, properties, lifecycle and transitions, validators,
 //     the activity goals) is checked against the versions its accepted change impacts wrote, and the state it leaves
 //     is recorded on its own branch (its commit baseline, one `landed` event per impact). That depends on the change
-//     alone. The change is then `committed`.
+//     alone. A root change stays open (ADR 0102): edited and committed again, merged by IntegrateChange, which asks the
+//     methodology (final state, landing gate) and rebases the committed branch first (rebase_committed.go).
 //   - IntegrateChange integrates a committed change into the branch it was forked from (fast-forward or 3-way
 //     merge, a baseline on that branch, `landed` again on it), and the change is `applied`. Conflicts without a
 //     resolution leave it committed: the integration waits.
@@ -32,6 +33,11 @@ import (
 // is empty.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
+	if c, err := g.Change(ctx, id); err != nil {
+		return result, err
+	} else if hasCommits(c) {
+		return g.applyCommitted(ctx, id, baselineName)
+	}
 	if err := g.rebaseFirst(ctx, id, false); err != nil {
 		return result, err
 	}
@@ -43,7 +49,7 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		if result, err = g.commitTx(ctx, tx, id, baselineName, landing); err != nil {
+		if result, err = g.commitTx(ctx, tx, id, baselineName, landing, true); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, id)
@@ -67,6 +73,42 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	return result, err
 }
 
+// applyCommitted applies a change that committed on its own branch already (ADR 0102): what it holds uncommitted is
+// committed, then its branch is merged (mergeRoot).
+func (g *Graph) applyCommitted(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	var result domain.Baseline
+	var pending []string
+	if err := g.repo.InTx(ctx, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
+		}
+		pending, err = g.uncommitted(ctx, tx, c)
+		return err
+	}); err != nil {
+		return result, err
+	}
+	if len(pending) > 0 {
+		if _, err := g.CommitChange(ctx, id, baselineName); err != nil {
+			return result, err
+		}
+	}
+	c, err := g.mergeRoot(ctx, id, nil)
+	if err != nil {
+		return result, err
+	}
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if result, err = tx.Baseline(ctx, c.ResultBaselineID); err != nil {
+			return err
+		}
+		if c.Status == domain.ChangeApplied && baselineName != "" && baselineName != c.Title {
+			_, err = g.tagTx(ctx, tx, c, baselineName, "")
+		}
+		return err
+	})
+	return result, err
+}
+
 // rebaseFirst rebases a change before it lands, in a transaction of its own: a sub-change onto its parent (ADR 0082 §3), a
 // root change onto the head of its target branch (ADR 0101 §3), so that its integration is a fast-forward. A rebase that
 // changed a draft of a sub-change, or left conflicts on a root change, stays, and the apply stops on it (ErrConflict),
@@ -80,8 +122,8 @@ func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID, rootOnly bo
 	if c.ParentID != "" && rootOnly {
 		return nil
 	}
-	if c.ParentID == "" && c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
-		return nil
+	if c.ParentID == "" && (c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive || hasCommits(c)) {
+		return nil // a change that committed already is rebased when it is merged (ADR 0102)
 	}
 	res, err := g.RebaseChange(ctx, id)
 	if err != nil {
@@ -95,27 +137,37 @@ func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID, rootOnly bo
 
 // CommitChange validates a change and records the state it leaves on its own branch: the change is committed, not
 // integrated; IntegrateChange does that. It returns the commit baseline.
+//
+// A root change stays open once committed (ADR 0102): it is edited and committed again, as often as needed, and merged
+// by IntegrateChange; its methodology (the final state of its lifecycle, the landing gate) is asked at the merge. A
+// commit that modifies nothing is refused. A sub-change is checked as before (ADR 0081): it is committed, then integrated.
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
-	if err := g.rebaseFirst(ctx, id, true); err != nil {
-		return result, err
-	}
-	if err := g.checkFinalState(ctx, id); err != nil {
-		return result, err
-	}
-	landing, err := g.askLandingGate(ctx, id)
+	c, err := g.Change(ctx, id)
 	if err != nil {
 		return result, err
 	}
+	if err := g.rebaseFirst(ctx, id, true); err != nil {
+		return result, err
+	}
+	var landing *landingDecision
+	if c.ParentID != "" {
+		if err := g.checkFinalState(ctx, id); err != nil {
+			return result, err
+		}
+		if landing, err = g.askLandingGate(ctx, id); err != nil {
+			return result, err
+		}
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		result, err = g.commitTx(ctx, tx, id, baselineName, landing)
+		result, err = g.commitTx(ctx, tx, id, baselineName, landing, c.ParentID != "")
 		return err
 	})
 	return result, err
 }
 
 // commitTx validates a change and records its commit baseline on its own branch.
-func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision) (domain.Baseline, error) {
+func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision, gate bool) (domain.Baseline, error) {
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return domain.Baseline{}, err
@@ -145,7 +197,7 @@ func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselin
 			return domain.Baseline{}, err
 		}
 	}
-	return g.commitOnBranch(ctx, tx, id, baselineName, landing)
+	return g.commitOnBranch(ctx, tx, id, baselineName, landing, gate)
 }
 
 // errCollected rolls back a pass that only reads what an authorization or a hook needs before the transaction that
@@ -247,12 +299,12 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 }
 
 // commitOnBranch validates a change on its own branch and records its commit baseline there.
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision) (domain.Baseline, error) {
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision, gate bool) (domain.Baseline, error) {
 	a, parentBaseline, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, err
 	}
-	a.landing = landing
+	a.landing, a.noGate = landing, !gate
 	c := a.change
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
@@ -287,7 +339,10 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 			return domain.Baseline{}, err
 		}
 	}
-	c.Status = domain.ChangeCommitted
+	// the change stays open (ADR 0102): it is edited and committed again until it is merged
+	if c.Status == domain.ChangeDraft {
+		c.Status = domain.ChangeActive
+	}
 	c.ResultBaselineID = result.ID
 	return result, tx.PutChange(ctx, c)
 }
@@ -328,6 +383,9 @@ type applier struct {
 	cposts []cpost
 	// collect marks the rolled-back pass of askLandingGate, which only builds the blackboard the gate decides against
 	collect bool
+	// noGate marks the commit of a root change on its own branch (CommitChange, ADR 0102): the methodology's gate and the
+	// landable states are asked when it is merged, not when it is committed.
+	noGate bool
 	// landing is the answer of LandingGate, asked by askLandingGate's rolled-back pass before this transaction (the
 	// hook may itself read the graph).
 	landing *landingDecision

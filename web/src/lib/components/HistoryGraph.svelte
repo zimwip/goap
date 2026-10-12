@@ -20,6 +20,8 @@
     deleted?: boolean;
     /** scratch work (e.g. a change's own throwaway branch, not a branch a person opened): drawn dashed */
     ephemeral?: boolean;
+    /** no commit yet: the open head of a lane, drawn as a transparent dot (only its outline) */
+    pending?: boolean;
     /** the caller's own item, handed back to `row` */
     item: T;
   }
@@ -183,7 +185,7 @@
       {#if e.parents.length > 1}
         <circle {cx} cy={y(i)} r={R + 2.5} class="ring" style={`stroke:${c}`} />
       {/if}
-      <circle {cx} cy={y(i)} r={R} class:hollow={e.deleted} class:ephemeral={e.ephemeral} class:sel={selected === e.id} style={`stroke:${c};fill:${e.deleted ? 'var(--surface)' : c}`} />
+      <circle {cx} cy={y(i)} r={R} class:hollow={e.deleted} class:ephemeral={e.ephemeral} class:pending={e.pending} class:sel={selected === e.id} style={`stroke:${c};fill:${e.deleted ? 'var(--surface)' : e.pending ? 'transparent' : c}`} />
     {/each}
   </svg>
   <ul aria-label="History">
@@ -233,6 +235,10 @@
   path.ephemeral {
     stroke-dasharray: 4 3;
     opacity: 0.7;
+  }
+  circle.pending {
+    stroke-dasharray: 2 2;
+    opacity: 0.6;
   }
   circle.sel {
     stroke: var(--text) !important;

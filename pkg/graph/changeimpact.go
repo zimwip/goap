@@ -275,6 +275,9 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, e
 		if err := g.checkSettled(ctx, tx, c, node); err != nil {
 			return cn, err
 		}
+		if err := g.checkModifies(ctx, tx, c, flow, seen); err != nil {
+			return cn, err
+		}
 	}
 	if status == domain.ReviewAccepted && seen.Post != nil {
 		if err := g.checkAccepted(ctx, tx, id, flow, node); err != nil {
@@ -416,4 +419,25 @@ func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts [
 		return nil
 	})
 	return
+}
+
+// checkModifies refuses to accept a change impact that modifies nothing (ADR 0102): a candidate never checked out, or a
+// draft left as it was checked out. Only a modification is reviewed; the bulk producer path is exempt (withBulk).
+func (g *Graph) checkModifies(ctx context.Context, tx Tx, c domain.Change, flow string, cn domain.ChangeImpact) error {
+	if isBulk(ctx) || len(cn.Items) > 0 || cn.Via != "" {
+		return nil // a source of a merge or a split is changed by its parent's draft (ADR 0077)
+	}
+	d, err := g.seenDraft(ctx, tx, c, flow, cn.ID)
+	if err != nil {
+		return err
+	}
+	if d == nil {
+		return invalidf("change impact %s (%s) modifies nothing: check the node out and change it, or withdraw the impact", cn.Key, cn.ID)
+	}
+	if ok, err := g.draftModifies(ctx, tx, d); err != nil {
+		return err
+	} else if !ok {
+		return invalidf("change impact %s (%s) modifies nothing: its draft is the version it was checked out from", cn.Key, cn.ID)
+	}
+	return nil
 }

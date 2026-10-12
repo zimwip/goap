@@ -61,7 +61,9 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	}
 	for _, cand := range plan.Conflicting() {
 		if _, ok := resolutions[cand.Node]; !ok {
-			return c, nil
+			// the merge waits for a resolution: the change is committed, frozen until it is integrated
+			c.Status = domain.ChangeCommitted
+			return c, tx.PutChange(ctx, c)
 		}
 	}
 	res, err := g.mergeBranchTx(ctx, tx, MergeRequest{From: own.Name, Into: own.Parent, Title: "merge " + c.Title,
@@ -80,7 +82,16 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 // IntegrateChange completes the integration of a committed change that waited for a resolution: its branch is
 // merged into the branch it was forked from with the given resolutions of the conflicts; a sub-change is integrated
 // into its parent change, as a fast-forward that takes no resolution (ADR 0081, 0082).
+//
+// A root change still open that committed on its own branch (ADR 0102) is merged: rebased first onto the head of its
+// target when it moved, then held by its methodology (mergeRoot).
 func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
+	if c, err = g.Change(ctx, id); err != nil {
+		return c, err
+	}
+	if c.ParentID == "" && (c.Status == domain.ChangeDraft || c.Status == domain.ChangeActive) {
+		return g.mergeRoot(ctx, id, resolutions)
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err

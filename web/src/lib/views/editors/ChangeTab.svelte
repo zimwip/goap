@@ -73,6 +73,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { verifications, derogationRegister, openDerogation } from '../../verification';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
+  import { commitState, hasCommits, notAcceptableWhy } from '../../changeCommit';
   import MergeResolver from '../../components/MergeResolver.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeTabTitle, scopeWritable } from '../../changeScope';
 
@@ -479,6 +480,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   // the graph refuses to land a change with an impact awaiting its review (ADR 0079: edits never review)
   const awaiting = $derived(awaitingReview(view?.nodes ?? [], true));
   const stuckNotLandable = $derived(lcRows.some((r) => r.lifecycle && !r.landable));
+  // ADR 0102: a commit writes the accepted modifications on the change's branch and leaves it open; the merge takes the
+  // branch into the one it was forked from once it holds a commit, and closes the change
+  const commits = $derived(commitState(change, change?.nodes ?? [], awaiting));
+  const committedOnBranch = $derived(hasCommits(change));
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
     { id: 'impacts', label: 'Impacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
@@ -535,6 +540,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   /** Accepts or rejects the change impact of a row, on the scope. */
   async function reviewRow(row: LifecycleRow, accept: boolean, comment: string): Promise<boolean> {
     if (!change?.id || !row.impact?.id) return false;
+    const why = accept ? notAcceptableWhy(row.impact) : undefined;
+    if (why) {
+      error = `${row.node.key} cannot be accepted: ${why}`;
+      return false;
+    }
     moving = `${row.node.id}:review`;
     error = '';
     try {
@@ -601,7 +611,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   $effect(() => {
     const ch = change;
     mergeInto = '';
-    if (ch?.status !== 'committed' || !ch.branch) return;
+    if ((ch?.status !== 'committed' && !hasCommits(ch)) || !ch?.branch) return;
     graph
       .getBranch(namespaceOf(ch.namespace), ch.branch)
       .then((r) => (mergeInto = r.branch?.parent || 'main'))
@@ -614,6 +624,29 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     await load(change.id);
     notify('Change merged.', 'ok');
     return true;
+  }
+
+  /** Merges the branch of the change into the branch it was forked from (ADR 0102): rebased first when that branch
+   * moved (conflicts stop it: settle them, commit, merge again), held by the methodology (final state, landing gate). */
+  async function mergeBranch() {
+    if (!change?.id) return;
+    applying = true;
+    error = '';
+    try {
+      const res = await graph.mergeChange(change.id, {});
+      await load(change.id);
+      if (res.change?.status === 'applied') {
+        notify(`Merged into ${mergeInto || 'its parent branch'}.`, 'ok');
+        recordAction('merged the change');
+      } else notify('The merge waits for its conflicts to be resolved.', 'info');
+    } catch (e) {
+      const message = errorMessage(e);
+      // a rebase that met conflicts stopped the merge: read the change again so the sync pane lists them
+      if (change?.id) await load(change.id).catch(() => undefined);
+      error = message;
+    } finally {
+      applying = false;
+    }
   }
 
   function startDefine() {
@@ -681,7 +714,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     try {
       await graph.commitChange(change.id, baselineName.trim());
       await load(change.id);
-      notify(`Committed on ${change.branch || 'its own branch'}; not merged yet.`, 'ok');
+      notify(`Committed on ${change.branch || 'its own branch'}: the change stays open, merge it when ready.`, 'ok');
+      recordAction('committed the change on its branch');
     } catch (e) {
       error = errorMessage(e);
     } finally {
@@ -900,15 +934,25 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         title: 'Ticks, actions, model calls, decisions and impacts of this change',
         run: () => openAudit(),
       },
-      {
-        id: 'apply',
-        label: applying ? 'Applying…' : 'Apply',
-        icon: 'check',
-        primary: true,
-        disabled: !change || isApplied || applying || unnamed || stuckNotLandable,
-        title: stuckNotLandable ? 'Move the nodes to a landable state first' : isSub ? 'Integrate the change into its parent change' : 'Create a new baseline from the change',
-        run: apply,
-      },
+      isSub
+        ? {
+            id: 'apply',
+            label: applying ? 'Integrating…' : 'Integrate',
+            icon: 'check',
+            primary: true,
+            disabled: !change || isApplied || applying || stuckNotLandable,
+            title: stuckNotLandable ? 'Move the nodes to a landable state first' : 'Integrate the change into its parent change',
+            run: apply,
+          }
+        : {
+            id: 'merge',
+            label: applying ? 'Merging…' : 'Merge',
+            icon: 'check',
+            primary: true,
+            disabled: !change || applying || !commits.canMerge,
+            title: commits.mergeWhy ?? `Merge the commits of the change into ${mergeInto || 'the branch it was forked from'} (rebased first when it moved)`,
+            run: mergeBranch,
+          },
     ],
   );
 </script>
@@ -1096,17 +1140,26 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             </div>
           {/if}
           {#if !isSub}
-            <button onclick={commit} disabled={isApplied || ch.status === 'committed' || applying || unnamed || stuckNotLandable || awaiting.length > 0} title="Write the versions on the change's own branch, merge them later">
-              Commit
+            <button onclick={commit} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? "Write the accepted modifications on the change's own branch: the change stays open"}>
+              {applying ? 'Working…' : 'Commit'}
+            </button>
+            <button class="primary" onclick={mergeBranch} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeInto || 'the branch it was forked from'} (rebased first when it moved); closes the change`}>
+              {applying ? 'Working…' : 'Merge'}
+            </button>
+          {:else}
+            <button class="primary" onclick={apply} disabled={isApplied || ch.status === 'committed' || applying || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : 'Integrate into the parent change'}>
+              {applying ? 'Integrating…' : 'Integrate into parent'}
             </button>
           {/if}
-          <button class="primary" onclick={apply} disabled={isApplied || ch.status === 'committed' || applying || unnamed || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : 'Commit and merge into ' + (ch.branch ? 'the branch the change was forked from' : 'its branch')}>
-            {applying ? 'Applying…' : isSub ? 'Integrate into parent' : 'Apply'}
-          </button>
         </div>
+        {#if !isSub && committedOnBranch && !closed}
+          <p class="hint" style="margin: 0.5rem 0 0">
+            Committed on {ch.branch}: the change stays open, edit and commit again, then merge it into {mergeInto || 'the branch it was forked from'}.
+          </p>
+        {/if}
         {#if awaiting.length}
           <div class="alert" role="status" style="margin: 0.75rem 0 0">
-            Apply is blocked: {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
+            {isSub ? 'Integration' : 'Commit'} is blocked: {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
             <button type="button" class="link" onclick={() => (pane = 'reviews')}>Review them</button>
           </div>
         {/if}

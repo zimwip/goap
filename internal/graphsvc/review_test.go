@@ -54,6 +54,13 @@ func TestReviewRPCs(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		// each impact modifies its node: only a modification is accepted (ADR 0102)
+		if _, err := g.ImpactNodeCheckout(ctx, c.ID, graph.NodeCheckout{Impact: out[0].ID}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := g.ImpactNodeUpdate(ctx, c.ID, out[0].ID, graph.NodeUpdate{Properties: map[string]any{"title": "changed"}}); err != nil {
+			t.Fatal(err)
+		}
 		imps = append(imps, string(out[0].ID))
 	}
 	as := func(subject, roles string, r interface{ Header() http.Header }) {

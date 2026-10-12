@@ -133,7 +133,8 @@ func (g *Graph) acceptImpact(ctx context.Context, id domain.ChangeID, impact dom
 		return err
 	}
 	if seen.Review == domain.ReviewProposed {
-		if _, err := g.ImpactNodeReviewOn(ctx, id, flow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
+		// a fixture confirms as a producer does (withBulk): what the change modifies is the subject of modification_test.go
+		if _, err := g.ImpactNodeReviewOn(withBulk(ctx), id, flow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
 			return err
 		}
 	}
@@ -244,7 +245,8 @@ func (g *Graph) accept(ctx context.Context, id domain.ChangeID, impact domain.Ch
 
 // acceptOn accepts a change impact on a flow, freezing its working version there.
 func (g *Graph) acceptOn(ctx context.Context, id domain.ChangeID, flow, execution string, impact domain.ChangeImpactID, by, comment string) (domain.ChangeImpact, error) {
-	if _, err := g.ImpactNodeReviewOn(ctx, id, flow, execution, impact, domain.ReviewAccepted, by, comment); err != nil {
+	// a fixture confirms as a producer does (withBulk): what the change modifies is the subject of modification_test.go
+	if _, err := g.ImpactNodeReviewOn(withBulk(ctx), id, flow, execution, impact, domain.ReviewAccepted, by, comment); err != nil {
 		return domain.ChangeImpact{}, err
 	}
 	return g.seenImpact(ctx, id, impact, flow)

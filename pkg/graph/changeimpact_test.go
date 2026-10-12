@@ -74,6 +74,10 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("landing needs an accepted review, got %v", err)
 	}
+	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a draft that modifies nothing is not accepted (ADR 0102), got %v", err)
+	}
+	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, got[0].ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}}))
 	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}

@@ -57,8 +57,8 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 	if err := g.WithdrawImpact(ctx, c.ID, cn.ID, "", ""); err != nil {
 		t.Fatalf("an accepted draft is dropped with its impact: %v", err)
 	}
-	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatal(err)
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a change left with nothing that modifies a node is not committed (ADR 0102): %v", err)
 	}
 }
 

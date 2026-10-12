@@ -139,7 +139,8 @@ export const graph = {
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
   listSubChanges: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'ListSubChanges', { changeId }, signal),
-  /** Integrates a committed change that waits for a resolution; resolutions are by node id. */
+  /** Merges the branch of a change that committed into the branch it was forked from, rebased first (ADR 0102); or
+   * integrates a committed change that waits for a resolution (resolutions are by node id). */
   mergeChange: (changeId: string, resolutions: Record<string, Resolution> = {}) =>
     rpc<
       { changeId: string; resolutions: Record<string, Resolution> },

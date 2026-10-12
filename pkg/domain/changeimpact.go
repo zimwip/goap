@@ -87,6 +87,9 @@ type ChangeImpact struct {
 type ImpactValidation struct {
 	Valid   bool   `json:"valid"`
 	Message string `json:"message,omitempty"`
+	// Modified: the draft differs from the version it was checked out from (or creates a node); only a modification is
+	// accepted and committed (ADR 0102).
+	Modified bool `json:"modified,omitempty"`
 }
 
 // Planned reports whether the change impact has no post yet: its node is not checked out, no draft exists.

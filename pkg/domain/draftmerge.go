@@ -260,3 +260,41 @@ func stringsOf(v any) []string {
 	}
 	return nil
 }
+
+// DraftChanged reports whether a draft modifies the version it was checked out from (base, the stored version seen as a
+// draft): a property set, changed or unset, the owner, the state, or an outgoing link added, removed or with other
+// properties (identified by its type and target node; its target version is not a modification: a link to a node the
+// change also drafts points at that draft). A draft with no base (a creation) is always a modification.
+func DraftChanged(base *Draft, d Draft) bool {
+	if base == nil || d.Base == nil {
+		return true
+	}
+	if len(base.Properties) != len(d.Properties) {
+		return true
+	}
+	for k, v := range d.Properties {
+		b, ok := base.Properties[k]
+		if !sameValue(v, true, b, ok) {
+			return true
+		}
+	}
+	if (d.Owner != "" && d.Owner != base.Owner) || d.State != base.State {
+		return true
+	}
+	if len(base.Links) != len(d.Links) {
+		return true
+	}
+	count := map[string]int{}
+	for _, l := range base.Links {
+		count[linkKey(l)]++
+	}
+	props := linksByKey(base.Links)
+	for _, l := range d.Links {
+		k := linkKey(l)
+		if count[k] == 0 || !(len(l.Properties) == 0 && len(props[k].Properties) == 0 || sameValue(l.Properties, true, props[k].Properties, true)) {
+			return true
+		}
+		count[k]--
+	}
+	return false
+}

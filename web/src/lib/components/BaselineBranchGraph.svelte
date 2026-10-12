@@ -3,9 +3,9 @@
   // that landed on it, from where the change started to the commit the merge joined (baselineHistory.ts), so two
   // changes started from the same baseline show as two lanes forking from it. Other branches appear only as the dot
   // where this one forks from or merges with them.
-  import type { Baseline } from '../api';
+  import type { Baseline, Branch } from '../api';
   import { formatDate, shortId } from '../api';
-  import { badgesOf, historyEntries } from '../baselineHistory';
+  import { badgesOf, historyEntries, OPEN_KIND } from '../baselineHistory';
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import HistoryGraph from './HistoryGraph.svelte';
 
@@ -13,6 +13,7 @@
 
   let {
     baselines,
+    branches = [],
     branch,
     forkBaseline,
     selected,
@@ -23,6 +24,8 @@
   }: {
     /** every baseline of the namespace, any order */
     baselines: Baseline[];
+    /** the branches of the namespace: the open ones forked from `branch` get a lane, committed or not (ADR 0102) */
+    branches?: Branch[];
     /** the branch whose own activity to show */
     branch: string;
     /** the branch's fork point (Branch.forkBaseline): anchors the graph even before the branch has a baseline of its own */
@@ -39,15 +42,18 @@
   // name"): show the change's own title so a renamed baseline still reads as what produced it.
   const titleOf = (b: Baseline) =>
     (b.changeId && changes.items.find((c) => c.id === b.changeId)?.title) || b.name || shortId(b.id);
+  const isOpen = (b: Baseline) => b.kind === OPEN_KIND;
 
   const kindTitle: Record<string, string> = {
     commit: 'the versions of a change, written on its own branch',
     'fast-forward': 'the target branch moved to the commit of a change (linear history)',
     merge: 'a three-way merge of a branch',
+    rebase: 'the branch of a change moved onto the head of its target before its merge',
+    open: 'a branch forked from here, open, with no commit yet',
   };
   const badges = (b: Baseline) => badgesOf(b, baselines);
 
-  const entries = $derived(historyEntries(baselines, branch, forkBaseline, changeLabel));
+  const entries = $derived(historyEntries(baselines, branch, forkBaseline, changeLabel, branches));
 </script>
 
 {#if entries.length}
@@ -63,10 +69,11 @@
             {#if badges(h).rebased}<span class="kind rebased" title={badges(h).rebased}>rebased</span>{/if}
           </span>
           <span class="hline2">
+            {#if isOpen(h)}<span class="hnote">{h.branch}: open, no commit yet</span>{/if}
             {#if h.changeId}<span class="hchange">change {h.changeId.slice(0, 8)}</span>{/if}
             {#if badges(h).rebased}<span class="hnote">{badges(h).rebased}</span>{/if}
             {#if badges(h).merged}<span class="hnote">{badges(h).merged}</span>{/if}
-            <span class="hdate">{formatDate(h.createdAt)}</span>
+            {#if h.createdAt}<span class="hdate">{formatDate(h.createdAt)}</span>{/if}
           </span>
         </span>
       {/snippet}

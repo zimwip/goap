@@ -148,24 +148,6 @@ func testLandingWritesOneVersionPerDraft(t *testing.T, repo Repo) {
 	}
 }
 
-// A draft equal to the version it was checked out from still lands a version of its own (an accepted checkout is a
-// decision of the reviewer: no comparison of the content is made).
-func TestUnchangedDraftStillLands(t *testing.T) { forEachRepo(t, testUnchangedDraftStillLands) }
-
-func testUnchangedDraftStillLands(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "touch", BaselineID: f.base.ID, OwnBranch: true}))
-	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "look"}))
-	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, cn.ID, "bob", "unchanged"))
-	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
-	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
-	if n.Version != f.req.Version+1 || res.Nodes[f.req.ID] != n.Version || n.Properties["title"] != f.req.Properties["title"] || n.Comment != "unchanged" {
-		t.Fatalf("a version of its own, identical: %+v", n)
-	}
-}
-
 // A flow checks a node out once: its draft is a copy of what the flow sees, the draft of its parent flow when that one
 // holds one (not the stored version), and the parent's later edits do not reach it (ADR 0079).
 func TestChildFlowForksTheParentDraft(t *testing.T) { forEachRepo(t, testChildFlowForksTheParentDraft) }

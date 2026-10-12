@@ -19,9 +19,9 @@ type ChangeStatus string
 const (
 	ChangeDraft  ChangeStatus = "draft"
 	ChangeActive ChangeStatus = "active"
-	// ChangeCommitted: validated, and the state it leaves is recorded on its own branch; it is not integrated into the
-	// branch it was forked from yet (a conflict of the merge waits for a resolution, ADR 0056). No impact can be
-	// added to it any more.
+	// ChangeCommitted: its integration into the branch it was forked from waits for the resolution of a three-way merge
+	// (ADR 0056); no impact can be added to it any more. A root change that committed on its own branch stays active
+	// (ADR 0102: ResultBaselineID names its last commit) until it is merged; a sub-change is committed, then integrated.
 	ChangeCommitted ChangeStatus = "committed"
 	// ChangeApplied: committed and integrated into the branch it was forked from.
 	ChangeApplied   ChangeStatus = "applied"

@@ -291,7 +291,15 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 // node on the change branch); nil for a creation. A sub-change copies the draft its parent holds first (ADR 0081).
 func (w *work) base(ctx context.Context, tx Tx) (*domain.Node, error) {
 	if w.cn.Pre == nil {
-		return nil, nil
+		if w.cn.Landed == nil {
+			return nil, nil
+		}
+		// a node the change created and committed: checked out again from the version it wrote (ADR 0102)
+		n, err := tx.LatestOn(ctx, nodeOf(w.cn), w.branch)
+		if errors.Is(err, ErrNotFound) {
+			return nil, nil
+		}
+		return &n, err
 	}
 	n, err := tx.Node(ctx, *w.cn.Pre)
 	if err != nil {
@@ -723,7 +731,11 @@ func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact
 		}
 		// what the flow falls back to: the draft of its parent flows
 		var back *domain.NodeRef
-		if ids := flowIDs(flowChain(w.c, w.flow)); w.flow != "" {
+		if w.flow == "" && w.cn.Landed != nil {
+			// committed already (ADR 0102): the impact falls back to the version the change wrote
+			r := *w.cn.Landed
+			back = &r
+		} else if ids := flowIDs(flowChain(w.c, w.flow)); w.flow != "" {
 			for _, f := range append(ids[1:], "") {
 				if ownDraft(rows, impact, f) != nil {
 					r := d.Ref()

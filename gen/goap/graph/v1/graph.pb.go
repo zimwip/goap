@@ -1377,9 +1377,12 @@ func (x *ChangeImpact) GetValidation() *ImpactValidation {
 
 // The outcome of checking a draft as an accepted review would: valid, or the first failure (readable message).
 type ImpactValidation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Valid         bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Valid   bool                   `protobuf:"varint,1,opt,name=valid,proto3" json:"valid,omitempty"`
+	Message string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	// the draft differs from the version it was checked out from (or creates a node): only a modification is accepted
+	// and committed (ADR 0102)
+	Modified      bool `protobuf:"varint,3,opt,name=modified,proto3" json:"modified,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1426,6 +1429,13 @@ func (x *ImpactValidation) GetMessage() string {
 		return x.Message
 	}
 	return ""
+}
+
+func (x *ImpactValidation) GetModified() bool {
+	if x != nil {
+		return x.Modified
+	}
+	return false
 }
 
 type GetNodeRequest struct {
@@ -14823,10 +14833,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"superseded\x12?\n" +
 	"\n" +
 	"validation\x18\x14 \x01(\v2\x1f.goap.graph.v1.ImpactValidationR\n" +
-	"validation\"B\n" +
+	"validation\"^\n" +
 	"\x10ImpactValidation\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x9b\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1a\n" +
+	"\bmodified\x18\x03 \x01(\bR\bmodified\"\x9b\x01\n" +
 	"\x0eGetNodeRequest\x12(\n" +
 	"\x03ref\x18\x01 \x01(\v2\x16.goap.graph.v1.NodeRefR\x03ref\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x1c\n" +

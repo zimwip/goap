@@ -273,6 +273,16 @@ func (g *Graph) rebaseRootTx(ctx context.Context, tx Tx, c domain.Change) (Rebas
 	if c.Status == domain.ChangeCommitted {
 		return res, fmt.Errorf("change %s is committed: its versions are written, it is integrated, not rebased: %w", c.ID, ErrConflict)
 	}
+	if hasCommits(c) {
+		// its branch holds its commits: the branch moves onto the head of its target (ADR 0102)
+		own, ok, err := ownBranch(ctx, tx, c)
+		if err != nil {
+			return res, err
+		}
+		if ok {
+			return g.rebaseCommittedTx(ctx, tx, c, own)
+		}
+	}
 	target, own, hasOwn, err := rebaseTarget(ctx, tx, c)
 	if err != nil {
 		return res, err
@@ -560,6 +570,14 @@ func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseS
 func (g *Graph) rootBehind(ctx context.Context, tx Tx, c domain.Change, rows []domain.Draft, st *RebaseState) error {
 	if c.Status == domain.ChangeCommitted {
 		return nil // its versions are written: it is integrated, not rebased
+	}
+	if hasCommits(c) {
+		if own, ok, err := ownBranch(ctx, tx, c); err != nil || ok {
+			if err != nil {
+				return err
+			}
+			return g.committedBehind(ctx, tx, c, own, st)
+		}
 	}
 	target, _, _, err := rebaseTarget(ctx, tx, c)
 	if errors.Is(err, ErrConflict) {

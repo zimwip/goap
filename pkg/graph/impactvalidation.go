@@ -109,12 +109,18 @@ func (g *Graph) impactValidations(ctx context.Context, tx Tx, c domain.Change, f
 		if cn.Superseded || !cn.Drafted() || !ok {
 			continue
 		}
-		err := g.checkDraftOf(ctx, tx, c, flow, ix, seen, cn, &d)
+		modified, err := g.draftModifies(ctx, tx, &d)
+		if err != nil {
+			slog.Debug("impact validation skipped", "change", c.ID, "impact", cn.ID, "err", err)
+			complete = false
+			continue
+		}
+		err = g.checkDraftOf(ctx, tx, c, flow, ix, seen, cn, &d)
 		switch {
 		case err == nil:
-			out[cn.ID] = &domain.ImpactValidation{Valid: true}
+			out[cn.ID] = &domain.ImpactValidation{Valid: true, Modified: modified}
 		case errors.Is(err, ErrInvalid) || errors.Is(err, ErrConflict):
-			out[cn.ID] = &domain.ImpactValidation{Message: validationMessage(err)}
+			out[cn.ID] = &domain.ImpactValidation{Message: validationMessage(err), Modified: modified}
 		default:
 			slog.Debug("impact validation skipped", "change", c.ID, "impact", cn.ID, "err", err)
 			complete = false

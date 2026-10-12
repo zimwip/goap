@@ -169,7 +169,8 @@ func TestSDLCDelivery(t *testing.T) {
 	var decisions []engine.ItemInput
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed {
-			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
+			// a candidate the run did not modify is turned down (ADR 0102)
+			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: n.Post != nil, Comment: "reviewed"}})
 		}
 		if n.Intent == domain.IntentCreated {
 			count[n.Type]++
@@ -354,7 +355,8 @@ func TestSDLCProcess(t *testing.T) {
 	var decisions []engine.ItemInput
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed {
-			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
+			// a candidate the run did not modify is turned down (ADR 0102)
+			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: n.Post != nil, Comment: "reviewed"}})
 		}
 	}
 	if _, err = e.Submit(ctx, train.ID, decisions); err != nil {

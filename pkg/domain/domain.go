@@ -189,6 +189,9 @@ const (
 	BaselineMerge = "merge"
 	// BaselineFastForward is the state of a branch after a change was fast-forwarded into it.
 	BaselineFastForward = "fast-forward"
+	// BaselineRebase is the state of the branch of a committed change moved onto the head of its target (ADR 0102): that
+	// head with what the change committed; stored whole (not derived).
+	BaselineRebase = "rebase"
 	// BaselineSnapshot is a state nothing derives (the bootstrap, a fixture): always stored.
 	BaselineSnapshot = "snapshot"
 )

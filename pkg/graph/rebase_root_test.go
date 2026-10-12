@@ -268,47 +268,50 @@ func testRebaseRootCreationCollision(t *testing.T, repo Repo) {
 		t.Fatalf("state = %+v", st)
 	}
 	must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, t2.ID, i2, "", ""))
-	if _, err := g.Apply(ctx, t2.ID, ""); err != nil {
-		t.Fatal(err)
+	if _, err := g.Apply(ctx, t2.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("test2 is left with nothing to commit (ADR 0102): %v", err)
 	}
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "REQ-9")); n.Properties["title"] != "test1" || n.ChangeID != t1.ID {
 		t.Fatalf("REQ-9 stays test1's: %+v", n)
 	}
 }
 
-// A committed change is not rebased: its versions are written. Its integration stays the three-way merge of the branches.
-func TestRebaseRootCommittedNotRebased(t *testing.T) {
-	forEachRepo(t, testRebaseRootCommittedNotRebased)
+// ADR 0102: a committed change stays open; when the target moved, its merge rebases its branch first (the nodes changed on
+// both sides merged into drafts, committed when clean) and lands as a fast-forward.
+func TestRebaseRootCommittedRebasedAtMerge(t *testing.T) {
+	forEachRepo(t, testRebaseRootCommittedRebasedAtMerge)
 }
 
-func testRebaseRootCommittedNotRebased(t *testing.T, repo Repo) {
+func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := f.g
 	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"a": 1})
 	t2, _ := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"b": 2})
 	c2 := must[domain.Baseline](t)(g.CommitChange(ctx, t2.ID, ""))
+	if ch := must[domain.Change](t)(g.Change(ctx, t2.ID)); ch.Status != domain.ChangeActive || ch.ResultBaselineID != c2.ID {
+		t.Fatalf("a committed change stays open: %+v", ch)
+	}
 	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
 
-	if _, err := g.RebaseChange(ctx, t2.ID); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a committed change is not rebased: %v", err)
-	}
-	if st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID)); len(st.Behind) != 0 || st.Onto != "" {
-		t.Fatalf("a committed change is never behind: %+v", st)
-	}
-	if ch := must[domain.Change](t)(g.Change(ctx, t2.ID)); ch.BaselineID != f.base.ID || ch.Status != domain.ChangeCommitted {
-		t.Fatalf("test2 untouched: %+v", ch)
-	}
-	if c2.RebasedFrom != "" {
-		t.Fatalf("commit of a change never rebased: %+v", c2)
+	st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID))
+	if st.Onto != b1.ID || len(st.Behind) != 1 {
+		t.Fatalf("test2 is behind test1 on REQ-1: %+v", st)
 	}
 	ch, err := g.IntegrateChange(ctx, t2.ID, nil)
 	if err != nil || ch.Status != domain.ChangeApplied {
-		t.Fatalf("integration: %+v %v", ch, err)
+		t.Fatalf("merge: %+v %v", ch, err)
 	}
 	res := must[domain.Baseline](t)(g.Baseline(ctx, ch.ResultBaselineID))
-	if res.Kind != domain.BaselineMerge || res.ParentID != b1.ID {
-		t.Fatalf("a committed change integrates by a merge: %+v", res)
+	if res.Kind != domain.BaselineFastForward || res.ParentID != b1.ID {
+		t.Fatalf("the merge of a rebased branch is a fast-forward: %+v", res)
+	}
+	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
+	if n.Properties["a"] == nil || n.Properties["b"] == nil || len(n.Parents) != 2 {
+		t.Fatalf("REQ-1 holds both changes, merged from both versions: %+v", n)
+	}
+	if rb := baselineOfChange(t, g, t2.ID, domain.BaselineRebase); rb.RebasedFrom != f.base.ID || rb.ParentID != c2.ID || rb.MergedFrom != b1.ID {
+		t.Fatalf("the rebase of the branch: %+v", rb)
 	}
 }
 
@@ -331,7 +334,7 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	}
 	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, "")) // ...then the target moves before test2 lands
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := g.commitTx(ctx, tx, t2.ID, "", nil); err != nil {
+		if _, err := g.commitTx(ctx, tx, t2.ID, "", nil, true); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, t2.ID)

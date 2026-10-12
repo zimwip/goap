@@ -3,6 +3,7 @@
 // the whole record of its data.key (the server's review.Reviews); this module folds the items and holds the pure rules
 // the panel shows: which impacts await a review, when a review may be submitted, the comment each impact keeps.
 import type { ChangeImpact, ChangeItem, ReviewEntry, ReviewRecord } from './api';
+import { notAcceptableWhy } from './changeCommit';
 
 export const REVIEW_KIND = 'review';
 export type Outcome = 'accept' | 'reject';
@@ -91,8 +92,13 @@ export function awaitingImpacts(nodes: ChangeImpact[], reviews: ReviewRecord[], 
 }
 
 /** Why the impact cannot be accepted yet: the validation rule its draft fails (the graph checks every draft as it stands,
- * the same gate as the accept); empty when it may be. */
-export const invalidReason = (n: ChangeImpact | undefined): string => (n?.validation && !n.validation.valid ? n.validation.message || 'the draft fails a validation rule' : '');
+ * the same gate as the accept), or that it modifies nothing (a candidate, a draft left as it was checked out: ADR 0102);
+ * empty when it may be. */
+export const invalidReason = (n: ChangeImpact | undefined): string => {
+  if (!n) return '';
+  if (n.validation && !n.validation.valid) return n.validation.message || 'the draft fails a validation rule';
+  return notAcceptableWhy(n) ?? '';
+};
 
 /** The impacts of a list that pass their validation (or are not checked): the ones a review may accept. */
 export const validImpacts = (list: ChangeImpact[]): ChangeImpact[] => list.filter((n) => !invalidReason(n));

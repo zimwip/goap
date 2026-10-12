@@ -369,8 +369,9 @@ type GraphServiceClient interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
-	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch (status
-	// committed). MergeChange is the second step, merging that branch into the one the change was forked from.
+	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch. A root change
+	// stays open (ADR 0102): edited and committed again; MergeChange merges that branch into the one the change was forked
+	// from (rebased first), once it holds a commit.
 	CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error)
 	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
 	// the expected world state) must hold, and it is journaled.
@@ -1598,8 +1599,9 @@ type GraphServiceHandler interface {
 	CommitEdits(context.Context, *connect.Request[v1.CommitEditsRequest]) (*connect.Response[v1.CommitEditsResponse], error)
 	GetBlackboard(context.Context, *connect.Request[v1.GetBlackboardRequest]) (*connect.Response[v1.GetBlackboardResponse], error)
 	ApplyChange(context.Context, *connect.Request[v1.ApplyChangeRequest]) (*connect.Response[v1.ApplyChangeResponse], error)
-	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch (status
-	// committed). MergeChange is the second step, merging that branch into the one the change was forked from.
+	// First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch. A root change
+	// stays open (ADR 0102): edited and committed again; MergeChange merges that branch into the one the change was forked
+	// from (rebased first), once it holds a commit.
 	CommitChange(context.Context, *connect.Request[v1.CommitChangeRequest]) (*connect.Response[v1.CommitChangeResponse], error)
 	// Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
 	// the expected world state) must hold, and it is journaled.

@@ -138,15 +138,19 @@ describe('the table of a review', () => {
 });
 
 describe('validation of an impact', () => {
-  const ok: ChangeImpact = { id: 'a', review: 'proposed', validation: { valid: true } };
-  const bad: ChangeImpact = { id: 'b', review: 'proposed', validation: { valid: false, message: 'alias reasoning needs a target (provider/model)' } };
-  const unchecked: ChangeImpact = { id: 'c', review: 'proposed' };
+  const draft = { id: 'n', version: 0 };
+  const ok: ChangeImpact = { id: 'a', review: 'proposed', post: draft, validation: { valid: true, modified: true } };
+  const bad: ChangeImpact = { id: 'b', review: 'proposed', post: draft, validation: { valid: false, message: 'alias reasoning needs a target (provider/model)' } };
+  const unchecked: ChangeImpact = { id: 'c', review: 'proposed', post: draft };
 
   it('says why an impact cannot be accepted, and nothing for a valid or unchecked one', () => {
     expect(invalidReason(bad)).toBe('alias reasoning needs a target (provider/model)');
     expect(invalidReason(ok)).toBe('');
     expect(invalidReason(unchecked)).toBe('');
     expect(invalidReason({ id: 'd', validation: { valid: false } })).not.toBe('');
+    // ADR 0102: a candidate or a draft that modifies nothing is not accepted
+    expect(invalidReason({ id: 'e', review: 'proposed', pre: { id: 'n', version: 1 } })).toMatch(/modifies nothing/);
+    expect(invalidReason({ ...ok, validation: { valid: true, modified: false } })).toMatch(/modifies nothing/);
   });
 
   it('keeps the impacts that pass', () => {

@@ -42,9 +42,9 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// the process's goal ("signed") is not yet met: Apply refuses with the activity's own message
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
-		t.Fatalf("goal unmet: %v", err)
+	// an empty change has nothing to commit (ADR 0102)
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) {
+		t.Fatalf("empty change: %v", err)
 	}
 
 	// an unrelated artifact still doesn't satisfy it

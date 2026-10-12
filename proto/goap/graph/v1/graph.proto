@@ -94,8 +94,9 @@ service GraphService {
   rpc CommitEdits(CommitEditsRequest) returns (CommitEditsResponse);
   rpc GetBlackboard(GetBlackboardRequest) returns (GetBlackboardResponse);
   rpc ApplyChange(ApplyChangeRequest) returns (ApplyChangeResponse);
-  // First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch (status
-  // committed). MergeChange is the second step, merging that branch into the one the change was forked from.
+  // First step of ApplyChange (ADR 0056): validates the change and writes its versions on its own branch. A root change
+  // stays open (ADR 0102): edited and committed again; MergeChange merges that branch into the one the change was forked
+  // from (rebased first), once it holds a commit.
   rpc CommitChange(CommitChangeRequest) returns (CommitChangeResponse);
   // Move the state of a change along a transition of its lifecycle (ADR 0058): its guard (a decided decision point,
   // the expected world state) must hold, and it is journaled.
@@ -358,6 +359,9 @@ message ChangeImpact {
 message ImpactValidation {
   bool valid = 1;
   string message = 2;
+  // the draft differs from the version it was checked out from (or creates a node): only a modification is accepted
+  // and committed (ADR 0102)
+  bool modified = 3;
 }
 
 

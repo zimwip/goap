@@ -366,8 +366,12 @@ func testLifecycleDocumentValidatesChildren(t *testing.T, repo Repo) {
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatalf("spec release with approved children: %v", err)
 	}
-	if n, _ := stateOf(t, w.g, w.spec.ID); n.State != "released" || n.ChangeID != c.ID {
+	// the spec went back to the state it was in: not a modification, no version of it (ADR 0102); REQ-2 lands
+	if n, _ := stateOf(t, w.g, w.spec.ID); n.State != "released" || n.ChangeID == c.ID {
 		t.Fatalf("spec: %+v", n)
+	}
+	if n, _ := stateOf(t, w.g, w.req2.ID); n.State != "approved" || n.ChangeID != c.ID {
+		t.Fatalf("req2: %+v", n)
 	}
 }
 
@@ -490,8 +494,9 @@ func testLifecycleGuardRequiresAReview(t *testing.T, repo Repo) {
 	if n, _ := w.g.ChangeNode(ctx, c.ID, "", *cn.Post); n.State != "approved" || !n.IsDraft() {
 		t.Fatalf("the transition moves the draft: %+v", n)
 	}
-	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
-		t.Fatal(err)
+	// back in the state it was checked out in: nothing to commit (ADR 0102)
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a node back where it was is not a modification: %v", err)
 	}
 }
 

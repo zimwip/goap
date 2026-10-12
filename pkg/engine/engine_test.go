@@ -115,7 +115,9 @@ func reviewAll(t *testing.T, g *graph.Graph, id domain.ChangeID) []ItemInput {
 	var out []ItemInput
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed && len(n.Items) == 0 {
-			out = append(out, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}})
+			// a candidate the run did not modify is not accepted (ADR 0102): the reviewer turns it down
+			accept := n.Post != nil
+			out = append(out, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: accept, Comment: "reviewed"}})
 		}
 	}
 	if len(out) == 0 {

@@ -1,8 +1,10 @@
 // The history of a branch as lanes (BaselineBranchGraph): its own baselines in its lane, and, for each change that
 // landed on it, the change's own branch as a lane of its own, from the baseline the change started on to the commit
 // the merge joined. Two changes started from the same baseline and applied one after the other read as two lanes
-// forking from the same dot, the second joining by a merge.
-import { shortId, type Baseline } from './api';
+// forking from the same dot, the second joining by a merge. The branches forked from the branch shown and still open
+// have a lane too (ADR 0102): their commits, or, before the first one, an open head drawn as a transparent dot on the
+// lane leaving the baseline it forked from.
+import { shortId, type Baseline, type Branch } from './api';
 import type { LaneEdge, LaneEntry } from './components/HistoryGraph.svelte';
 import { MAIN_BRANCH } from './namespace';
 
@@ -21,11 +23,17 @@ function commitsOf(baselines: Baseline[], branch: string): Map<string, Baseline>
   return out;
 }
 
-export type BaselineKind = 'commit' | 'fast-forward' | 'merge' | 'snapshot';
+export type BaselineKind = 'commit' | 'fast-forward' | 'merge' | 'rebase' | 'open' | 'snapshot';
+
+/** The kind of the row standing for an open branch with no commit yet (not a baseline: a transparent dot). */
+export const OPEN_KIND = 'open';
+const OPEN_PREFIX = 'open:';
+/** Whether a row id is the open head of a branch without commit, not a baseline. */
+export const isOpenHead = (id: string) => id.startsWith(OPEN_PREFIX);
 
 /** How a baseline came to be: the kind the server records, else read from its shape (a commit sits on a change's lane). */
 export function kindOf(b: Baseline): BaselineKind {
-  if (b.kind === 'commit' || b.kind === 'fast-forward' || b.kind === 'merge') return b.kind;
+  if (b.kind === 'commit' || b.kind === 'fast-forward' || b.kind === 'merge' || b.kind === 'rebase' || b.kind === OPEN_KIND) return b.kind;
   if (b.mergedFrom) return 'merge';
   if (isChangeLane(branchOf(b))) return 'commit';
   return b.changeId ? 'fast-forward' : 'snapshot';
@@ -45,8 +53,10 @@ export interface HistoryBadges {
 export function badgesOf(b: Baseline, baselines: Baseline[]): HistoryBadges {
   const byId = new Map(baselines.map((x) => [x.id ?? '', x]));
   const out: HistoryBadges = { kind: kindOf(b) };
-  if (b.rebasedFrom) out.rebased = `rebased onto ${nameOf(byId.get(b.parentId ?? ''), b.parentId)}, was ${nameOf(byId.get(b.rebasedFrom), b.rebasedFrom)}`;
-  if (b.mergedFrom) {
+  // the rebase of a committed branch (ADR 0102) names the head it moved onto as its second parent
+  const onto = out.kind === 'rebase' ? b.mergedFrom : b.parentId;
+  if (b.rebasedFrom) out.rebased = `rebased onto ${nameOf(byId.get(onto ?? ''), onto)}, was ${nameOf(byId.get(b.rebasedFrom), b.rebasedFrom)}`;
+  if (b.mergedFrom && out.kind !== 'rebase') {
     const src = byId.get(b.mergedFrom);
     const change = src?.changeId || b.changeId;
     out.merged = `merged ${change ? `change ${change.slice(0, 8)}` : 'branch'}${src ? ` from ${branchOf(src)}` : ''}`;
@@ -58,7 +68,13 @@ export function badgesOf(b: Baseline, baselines: Baseline[]): HistoryBadges {
  * Rows of the history of `branch`, newest first. `forkBaseline` anchors a branch that has no baseline of its own yet.
  * `labelOf` names the edge a baseline descends through (the change that produced it).
  */
-export function historyEntries(baselines: Baseline[], branch: string, forkBaseline = '', labelOf: (b: Baseline) => string | undefined = () => undefined): LaneEntry<Baseline>[] {
+export function historyEntries(
+  baselines: Baseline[],
+  branch: string,
+  forkBaseline = '',
+  labelOf: (b: Baseline) => string | undefined = () => undefined,
+  branches: Branch[] = [],
+): LaneEntry<Baseline>[] {
   const byId = new Map(baselines.map((b) => [b.id ?? '', b]));
   const own = baselines.filter((b) => branchOf(b) === branch);
   const landed = new Set(own.map((b) => b.changeId).filter((c): c is string => !!c));
@@ -71,11 +87,18 @@ export function historyEntries(baselines: Baseline[], branch: string, forkBaseli
     const seen = new Set<string>();
     const kind = kindOf(b);
     const tag = (what: string) => [what, labelOf(b)].filter(Boolean).join(' · ') || undefined;
+    const commitParent = kind === 'commit' && branchOf(byId.get(b.parentId ?? '') ?? {}) === branchOf(b) ? 'commit' : 'fork';
     return [
-      // a commit forks from the baseline it started on (its parent, the head it was rebased onto when it was)
-      ...(b.parentId ? [{ id: b.parentId, label: tag(kind === 'commit' ? 'fork' : kind === 'snapshot' ? '' : kind) }] : []),
-      // a merge names what it joined; a fast-forward does not, the commit of its change is what it joined
-      ...(b.mergedFrom && byId.has(b.mergedFrom) ? [{ id: b.mergedFrom, label: tag('merge') }] : joined ? [{ id: joined.id ?? '', label: tag('fast-forward') }] : []),
+      // a commit forks from the baseline it started on (its parent, the head it was rebased onto when it was), or follows
+      // the previous commit of its branch
+      ...(b.parentId ? [{ id: b.parentId, label: tag(kind === 'commit' ? commitParent : kind === 'rebase' ? 'commit' : kind === 'snapshot' ? '' : kind) }] : []),
+      // a merge names what it joined; a fast-forward does not, the commit of its change is what it joined; a rebase names
+      // the head it moved onto
+      ...(b.mergedFrom && byId.has(b.mergedFrom)
+        ? [{ id: b.mergedFrom, label: tag(kind === 'rebase' ? 'rebased onto' : 'merge') }]
+        : joined
+          ? [{ id: joined.id ?? '', label: tag('fast-forward') }]
+          : []),
       // a rebase leaves the baseline the change was forked from before: a dashed edge next to the solid fork edge
       ...(b.rebasedFrom && byId.has(b.rebasedFrom) ? [{ id: b.rebasedFrom, label: tag('rebased from'), dashed: true }] : []),
     ].filter((p) => (seen.has(p.id) ? false : (seen.add(p.id), true)));
@@ -85,6 +108,28 @@ export function historyEntries(baselines: Baseline[], branch: string, forkBaseli
     ...own.map((b) => ({ id: b.id ?? '', parents: edges(b, b.changeId && !b.mergedFrom ? commits.get(b.changeId) : undefined), lane: branch, item: b })),
     ...side.map((b) => ({ id: b.id ?? '', parents: edges(b, undefined), lane: branchOf(b), ephemeral: true, item: b })),
   ];
+  // the open branches forked from this one (ADR 0102): their own baselines, else their open head as a transparent dot
+  for (const br of branches) {
+    const name = br.name ?? '';
+    if (!name || name === branch || (br.parent || MAIN_BRANCH) !== branch || br.status !== 'open' || name.startsWith('flow-')) continue;
+    const mine = baselines.filter((b) => branchOf(b) === name && !present.has(b.id));
+    for (const b of mine) {
+      rows.push({ id: b.id ?? '', parents: edges(b, undefined), lane: name, ephemeral: isChangeLane(name), item: b });
+      present.add(b.id);
+    }
+    if (mine.length || baselines.some((b) => branchOf(b) === name)) continue;
+    const id = OPEN_PREFIX + name;
+    const changeId = br.origin?.startsWith('change:') ? br.origin.slice('change:'.length) : undefined;
+    rows.push({
+      id,
+      parents: br.forkBaseline ? [{ id: br.forkBaseline, label: 'fork · no commit yet' }] : [],
+      lane: name,
+      ephemeral: isChangeLane(name),
+      pending: true,
+      item: { id, name, branch: name, kind: OPEN_KIND, changeId, createdAt: br.createdAt },
+    });
+    present.add(id);
+  }
   // the baselines an edge reaches that no row shows: the fork point of the branch, a named branch's merge source
   const ghosts = new Set<string>();
   if (forkBaseline && !present.has(forkBaseline)) ghosts.add(forkBaseline);

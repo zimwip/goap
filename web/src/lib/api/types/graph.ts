@@ -351,6 +351,9 @@ export interface NodeEdit {
 export interface ImpactValidation {
   valid: boolean;
   message?: string;
+  /** the draft differs from the version it was checked out from (or creates a node): only a modification is accepted
+   * and committed (ADR 0102) */
+  modified?: boolean;
 }
 
 export interface ChangeImpact {

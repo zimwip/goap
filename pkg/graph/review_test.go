@@ -29,6 +29,12 @@ func reviewWorld(t *testing.T, repo Repo) (fixture, domain.Change, []domain.Chan
 	if err != nil {
 		t.Fatal(err)
 	}
+	// each impact modifies its node: only a modification is accepted (ADR 0102)
+	for i := range got {
+		if got[i], err = f.g.edit(ctx, c.ID, got[i].ID, edit{Properties: map[string]any{"title": "reviewed " + got[i].Key}}); err != nil {
+			t.Fatal(err)
+		}
+	}
 	return f, c, got, review.Service{Port: f.g}
 }
 

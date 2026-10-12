@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { badgesOf, historyEntries, kindOf } from './baselineHistory';
+import { badgesOf, historyEntries, isOpenHead, kindOf, OPEN_KIND } from './baselineHistory';
 
 // base B on main; test1 and test2 both start from B, each commits on its own branch; test1 is applied first (a
 // fast-forward onto main), then test2 (a merge of its branch into main)
@@ -85,5 +85,65 @@ describe('a rebased change', () => {
     const b = badgesOf(baselines[4], baselines);
     expect(b.kind).toBe('merge');
     expect(b.merged).toBe('merged change bbbb2222 from change-bbbb2222');
+  });
+});
+
+// ADR 0102: the open branches forked from the branch shown have a lane, committed or not
+describe('open branches forked from the branch', () => {
+  const base = [
+    { id: 'B', branch: 'main', createdAt: '2026-01-01T00:00:00Z' },
+    { id: 'M1', branch: 'main', parentId: 'B', kind: 'fast-forward', changeId: 'cccc', createdAt: '2026-01-05T00:00:00Z' },
+  ];
+  const fresh = { name: 'change-aaaa1111', parent: 'main', forkBaseline: 'B', head: 'B', status: 'open', origin: 'change:aaaa1111-x', createdAt: '2026-01-02T00:00:00Z' };
+
+  it('draws a branch with no commit as an open head forking from its baseline', () => {
+    const rows = historyEntries(base, 'main', '', undefined, [fresh]);
+    const open = rows.find((r) => isOpenHead(r.id));
+    expect(open?.lane).toBe('change-aaaa1111');
+    expect(open?.pending).toBe(true);
+    expect(open?.parents.map((p) => p.id)).toEqual(['B']);
+    expect(open?.item.kind).toBe(OPEN_KIND);
+    expect(open?.item.changeId).toBe('aaaa1111-x');
+    expect(rows.map((r) => r.id)).toEqual(['M1', 'open:change-aaaa1111', 'B']);
+  });
+
+  it('draws its commits once it has some, the second following the first', () => {
+    const committed = [
+      ...base,
+      { id: 'c1', branch: 'change-aaaa1111', parentId: 'B', kind: 'commit', changeId: 'aaaa1111-x', createdAt: '2026-01-03T00:00:00Z' },
+      { id: 'c2', branch: 'change-aaaa1111', parentId: 'c1', kind: 'commit', changeId: 'aaaa1111-x', createdAt: '2026-01-04T00:00:00Z' },
+    ];
+    const rows = historyEntries(committed, 'main', '', undefined, [{ ...fresh, head: 'c2' }]);
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    expect(rows.some((r) => isOpenHead(r.id))).toBe(false);
+    expect(byId.get('c1')?.parents).toEqual([{ id: 'B', label: 'fork' }]);
+    expect(byId.get('c2')?.parents).toEqual([{ id: 'c1', label: 'commit' }]);
+    expect(byId.get('c2')?.lane).toBe('change-aaaa1111');
+  });
+
+  it('shows the rebase of a committed branch onto the head it moved to', () => {
+    const rebased = [
+      ...base,
+      { id: 'c1', branch: 'change-aaaa1111', parentId: 'B', kind: 'commit', changeId: 'aaaa1111-x', createdAt: '2026-01-03T00:00:00Z' },
+      { id: 'r1', branch: 'change-aaaa1111', parentId: 'c1', mergedFrom: 'M1', rebasedFrom: 'B', kind: 'rebase', changeId: 'aaaa1111-x', createdAt: '2026-01-06T00:00:00Z' },
+    ];
+    const rows = historyEntries(rebased, 'main', '', undefined, [{ ...fresh, forkBaseline: 'M1', head: 'r1' }]);
+    const r1 = rows.find((r) => r.id === 'r1');
+    expect(r1?.parents.map((p) => [p.id, p.label, !!p.dashed])).toEqual([
+      ['c1', 'commit', false],
+      ['M1', 'rebased onto', false],
+      ['B', 'rebased from', true],
+    ]);
+    expect(badgesOf(rebased[3], rebased).rebased).toBe('rebased onto M1, was B');
+    expect(badgesOf(rebased[3], rebased).merged).toBeUndefined();
+  });
+
+  it('leaves out the branches forked elsewhere, closed ones and flows', () => {
+    const others = [
+      { ...fresh, name: 'change-x', parent: 'release' },
+      { ...fresh, name: 'change-y', status: 'abandoned' },
+      { ...fresh, name: 'flow-z' },
+    ];
+    expect(historyEntries(base, 'main', '', undefined, others).map((r) => r.id)).toEqual(['M1', 'B']);
   });
 });

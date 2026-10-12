@@ -75,6 +75,7 @@ type CommitResult struct {
 // a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
+	ctx = withBulk(ctx) // a producer confirms what it lists, changed or not (ADR 0102)
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
 	}

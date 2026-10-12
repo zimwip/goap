@@ -87,8 +87,12 @@ func (g *Graph) movable(ctx context.Context, tx Tx, id domain.ChangeID, project 
 	if c.ParentID != "" {
 		return nil, fmt.Errorf("change %s is a sub-change: its project is its parent's, move %s: %w", id, c.ParentID, ErrInvalid)
 	}
-	if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
-		return nil, fmt.Errorf("change %s is %s: only a draft or active change moves to another project: %w", id, c.Status, ErrConflict)
+	if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive || hasCommits(c) {
+		status := string(c.Status)
+		if hasCommits(c) {
+			status = "committed on its branch"
+		}
+		return nil, fmt.Errorf("change %s is %s: only a draft or active change that committed nothing moves to another project: %w", id, status, ErrConflict)
 	}
 	if c.ProjectID == project {
 		return nil, fmt.Errorf("change %s already acts in project %s: %w", id, project, ErrInvalid)

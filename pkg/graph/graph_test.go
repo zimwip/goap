@@ -186,10 +186,9 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		return c
 	}
 	c1, c2 := change("c1", 1, false), change("c2", 1, true)
-	// the only change impact of c1 is rejected: applying it is a no-op
-	b, err := g.Apply(ctx, c1.ID, "")
-	if err != nil || b.Nodes[f.req.ID] != 1 {
-		t.Fatalf("rejected change impact applied: %v %v", err, b.Nodes)
+	// the only change impact of c1 is rejected: it has nothing to commit (ADR 0102)
+	if _, err := g.Apply(ctx, c1.ID, ""); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("rejected change impact applied: %v", err)
 	}
 	if _, err := g.Apply(ctx, c2.ID, ""); err != nil {
 		t.Fatal(err)

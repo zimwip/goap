@@ -22,6 +22,8 @@
   import NodeGraph from '../../components/NodeGraph.svelte';
   import BaselineCompare from '../../components/BaselineCompare.svelte';
   import BaselineBranchGraph from '../../components/BaselineBranchGraph.svelte';
+  import { isOpenHead } from '../../baselineHistory';
+  import { stamp, keyOf } from '../../flux/signals.svelte';
   import Resizer from '../../shell/Resizer.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
@@ -65,6 +67,9 @@
     const ns = namespace;
     void reload;
     void baselineTool.reload;
+    // a commit, a merge, a branch opened by a change (its first edit, ADR 0102): the lanes follow
+    void stamp(keyOf.baselines);
+    void stamp(keyOf.changes);
     if (!ns) return;
     const ctrl = new AbortController();
     loading = true;
@@ -94,6 +99,11 @@
   /** a baseline of the selected branch is just shown (the graph already is the browsing view: no tab); one from
    * another branch (a fork point or merge source) switches to that branch, and shows it too */
   function selectHistory(id: string) {
+    // the open head of a branch with no commit yet (ADR 0102): shows that branch
+    if (isOpenHead(id)) {
+      selectBranch(id.slice('open:'.length));
+      return;
+    }
     const br = branchOf(baselines.find((b) => b.id === id) ?? {});
     if (br !== baselineTool.branch) selectBranch(br);
     selectBaseline(id);
@@ -413,7 +423,7 @@
   <div class="workspace">
     <nav class="card history" style:width="{historyWidth}px" aria-label="History">
       <h3>History <span class="hint">{baselineTool.branch}</span></h3>
-      <BaselineBranchGraph {baselines} branch={baselineTool.branch} {forkBaseline} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
+      <BaselineBranchGraph {baselines} {branches} branch={baselineTool.branch} {forkBaseline} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
     </nav>
 
     <Resizer orientation="vertical" value={historyWidth} min={240} max={520} label="History panel width" onresize={resizeHistory} />
