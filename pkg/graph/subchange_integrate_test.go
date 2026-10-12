@@ -367,9 +367,9 @@ func testSiblingSubChangesOnOneParentDraft(t *testing.T, repo Repo) {
 
 // The landing gate decides a sub-change on its drafts, without a version written: a draft linking to a node its parent
 // creates is no obstacle (ADR 0081 §3).
-func TestSubChangeLandingGate(t *testing.T) { forEachRepo(t, testSubChangeLandingGate) }
+func TestSubChangeMergeGuardian(t *testing.T) { forEachRepo(t, testSubChangeMergeGuardian) }
 
-func testSubChangeLandingGate(t *testing.T, repo Repo) {
+func testSubChangeMergeGuardian(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newSubWorld(t, repo)
 	g := w.g
@@ -380,10 +380,10 @@ func testSubChangeLandingGate(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.accept(ctx, sub.ID, child.ID, "reviewer", "ok"))
 	allow := false
 	var seen domain.Blackboard
-	g.MergeGuards = []MergeGuard{LandingGate(func(_ context.Context, _ domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	g.Lifecycles = mergeGate(func(_ context.Context, _ domain.Change, bb domain.Blackboard) (bool, bool, error) {
 		seen = bb
 		return true, allow, nil
-	})}
+	})
 	if _, err := g.Apply(ctx, sub.ID, ""); err == nil {
 		t.Fatal("a gate that refuses keeps the sub-change from merging")
 	}

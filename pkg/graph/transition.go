@@ -29,6 +29,10 @@ type ChangeLifecycles interface {
 	// Gate evaluates the vetos and the objectives of a transition in the same environment (condition.CheckGate, ADR
 	// 0075 §3); a transition that declares none is not asked.
 	Gate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error)
+	// Merge is the say of the methodology on the merge of a change (ADR 0066, 0102: the goal of the Activity it is
+	// scoped to), on the blackboard of what it lands: decided false, it has none and the landable states of the domain
+	// decide; decided true, ok says whether the change may merge, in place of the landable states.
+	Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
 }
 
 // ChangeTransitionAuthorizer decides whether the caller may take a transition of the lifecycle of a change. Nil allows

@@ -116,7 +116,7 @@ func (g *Graph) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in Spli
 }
 
 // gated runs a restructuring whose Gate may read the graph (the access snapshot does), which its own transaction would
-// block: the stores are not reentrant. Like askLandingGate it asks outside any transaction: a pass runs the
+// block: the stores are not reentrant. Like the guardian of a merge (checkMerge) it asks outside any transaction: a pass runs the
 // transaction with a gate that only collects the node types it is asked about; its collected() returns errCollected
 // at the end of the transaction while some were not answered yet, which rolls the pass back. The real gate answers
 // them here and the pass runs again; the pass that commits is one that was asked nothing new.

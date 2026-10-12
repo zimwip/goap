@@ -41,19 +41,19 @@ func (g *Graph) uncommitted(ctx context.Context, tx Tx, c domain.Change) ([]stri
 }
 
 // withdrawnSince lists the nodes the branch of a root change changed that no impact of it holds any more: withdrawn
-// after their commit, the next commit reverts them (ADR 0102).
-func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]domain.NodeID, error) {
+// after their commit, the next commit reverts them to the versions of the fork, returned too (ADR 0102).
+func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]domain.NodeID, map[domain.NodeID]domain.Version, error) {
 	own, ok, err := ownBranch(ctx, tx, c)
 	if err != nil || !ok || c.ParentID != "" {
-		return nil, err
+		return nil, nil, err
 	}
 	fork, err := tx.Baseline(ctx, own.ForkBaseline)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	head, err := branchHead(ctx, tx, c.Namespace, own.Name)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	held := map[domain.NodeID]bool{}
 	for _, cn := range mainImpactsOf(c) {
@@ -65,7 +65,7 @@ func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]d
 			out = append(out, id)
 		}
 	}
-	return out, nil
+	return out, fork.Nodes, nil
 }
 
 // unsettled lists what holds the merge of a change (ADR 0102), one rule for every impact of its main flow: a rejected
@@ -109,7 +109,7 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 			out = append(out, cn.Key+" is not committed")
 		}
 	}
-	if w, err := g.withdrawnSince(ctx, tx, c); err != nil {
+	if w, _, err := g.withdrawnSince(ctx, tx, c); err != nil {
 		return nil, err
 	} else if len(w) > 0 {
 		out = append(out, fmt.Sprintf("%d withdrawn node(s) still on the branch (commit to revert them)", len(w)))
@@ -389,7 +389,7 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 				accepted = true
 			}
 		}
-		w, err := g.withdrawnSince(ctx, tx, c)
+		w, _, err := g.withdrawnSince(ctx, tx, c)
 		if err != nil {
 			return err
 		}

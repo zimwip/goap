@@ -160,7 +160,13 @@ func (g *Graph) rebaseTx(ctx context.Context, tx Tx, c domain.Change) (RebaseRes
 		return RebaseResult{Parent: c.ParentID}, fmt.Errorf("change %s is %s: %w", c.ID, c.Status, ErrConflict)
 	}
 	if c.ParentID == "" {
-		return g.rebaseRootTx(ctx, tx, c)
+		// a root change is brought up to date when it merges, what it committed (ADR 0102): before its first commit there
+		// is nothing to rebase
+		own, ok, err := ownBranch(ctx, tx, c)
+		if err != nil || !ok || !hasCommits(c) {
+			return RebaseResult{}, err
+		}
+		return g.rebaseCommittedTx(ctx, tx, c, own)
 	}
 	res := RebaseResult{Parent: c.ParentID}
 	p, err := g.parentOf(ctx, tx, c)
@@ -263,143 +269,6 @@ func (g *Graph) installRebased(ctx context.Context, tx Tx, c domain.Change, cn d
 
 // HeaderBaselineID is the field of a change.updated log entry that records the move of a rebase (ADR 0101).
 const HeaderBaselineID = "baselineId"
-
-// rebaseRootTx rebases a root change onto the head of the branch it was forked from (ADR 0101 §1). The change is behind
-// when that head is not its fork baseline; each draft of its main flow whose node changed on the head since it was
-// checked out is merged three-way, then the change and its branch move to the head: possible since an uncommitted change
-// has no version on its branch (ADR 0079).
-func (g *Graph) rebaseRootTx(ctx context.Context, tx Tx, c domain.Change) (RebaseResult, error) {
-	res := RebaseResult{}
-	if c.Status == domain.ChangeCommitted {
-		return res, fmt.Errorf("change %s is committed: its versions are written, it is integrated, not rebased: %w", c.ID, ErrConflict)
-	}
-	if hasCommits(c) {
-		// its branch holds its commits: the branch moves onto the head of its target (ADR 0102)
-		own, ok, err := ownBranch(ctx, tx, c)
-		if err != nil {
-			return res, err
-		}
-		if ok {
-			return g.rebaseCommittedTx(ctx, tx, c, own)
-		}
-	}
-	target, own, hasOwn, err := rebaseTarget(ctx, tx, c)
-	if err != nil {
-		return res, err
-	}
-	head, err := branchHead(ctx, tx, c.Namespace, target)
-	if err != nil {
-		return res, err
-	}
-	res.Branch, res.From, res.Onto = target, c.BaselineID, head.ID
-	if head.ID == c.BaselineID {
-		return res, nil
-	}
-	rows, err := g.drafts(ctx, tx, c.ID)
-	if err != nil {
-		return res, err
-	}
-	for _, cn := range c.Nodes {
-		if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded {
-			continue
-		}
-		d := ownDraft(rows, cn.ID, "")
-		if d == nil {
-			// nothing written: the pre moves to the version on the head, to check again (the existing rebased event)
-			if cn.Pre != nil {
-				if v, ok := head.Nodes[cn.Pre.ID]; ok && v != cn.Pre.Version {
-					ref := domain.NodeRef{ID: cn.Pre.ID, Version: v}
-					if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactRebased, Pre: &ref}); err != nil {
-						return res, err
-					}
-				}
-			}
-			continue
-		}
-		var merged domain.Draft
-		var conflicts []string
-		var pre *domain.NodeRef
-		if d.Base == nil {
-			// a creation: the key now exists on the target, the whole node is in conflict
-			id, err := tx.NodeIDByKey(ctx, c.Namespace, d.Key)
-			if errors.Is(err, ErrNotFound) {
-				continue
-			} else if err != nil {
-				return res, err
-			}
-			if _, ok := head.Nodes[id]; !ok {
-				continue
-			}
-			merged, conflicts = d.Clone(), []string{domain.ConflictNode}
-		} else {
-			v, ok := head.Nodes[d.Node]
-			if !ok || v == d.Base.Version {
-				continue // not changed on the target since it was checked out
-			}
-			theirsRef := domain.NodeRef{ID: d.Node, Version: v}
-			base, err := g.storedDraft(ctx, tx, *d.Base)
-			if err != nil {
-				return res, err
-			}
-			theirs, err := g.storedDraft(ctx, tx, theirsRef)
-			if err != nil {
-				return res, err
-			}
-			merged, conflicts = domain.MergeDrafts(base, *d, theirs)
-			g.numberLinks(&merged)
-			merged.Base = &theirsRef
-			if cn.Pre != nil {
-				pre = &theirsRef
-			}
-		}
-		rebased := map[string]any{"branch": target, "baseline": string(head.ID)}
-		if err := g.installRebased(ctx, tx, c, cn, *d, merged, pre, rebased, conflicts, len(conflicts) > 0, "rebased onto "+target); err != nil {
-			return res, err
-		}
-		res.Impacts = append(res.Impacts, RebasedImpact{Impact: cn.ID, Key: cn.Key, Changed: len(conflicts) > 0 && cn.Review != domain.ReviewProposed,
-			Merged: !sameDraft(merged, *d), Conflicts: conflicts})
-	}
-	// the change and its branch move to the head
-	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(head.ID)}}})
-	if err != nil {
-		return res, err
-	}
-	if _, err := tx.AppendLog(ctx, e); err != nil {
-		return res, err
-	}
-	if hasOwn {
-		if own.RebasedFrom == "" {
-			own.RebasedFrom = own.ForkBaseline
-		}
-		own.ForkBaseline, own.Head = head.ID, head.ID
-		if err := tx.PutBranch(ctx, own); err != nil {
-			return res, err
-		}
-	}
-	c, err = tx.Change(ctx, c.ID)
-	if err != nil {
-		return res, err
-	}
-	c.BaselineID = head.ID
-	return res, tx.PutChange(ctx, c)
-}
-
-// rebaseTarget is the branch a root change is rebased onto: the one its own branch was forked from, or the one it works
-// on while it has no branch of its own. A branch of its own that holds a baseline (the change wrote on it) cannot move.
-func rebaseTarget(ctx context.Context, tx Tx, c domain.Change) (target string, own domain.Branch, hasOwn bool, err error) {
-	own, hasOwn, err = ownBranch(ctx, tx, c)
-	if err != nil {
-		return "", own, false, err
-	}
-	if !hasOwn {
-		return domain.BranchOf(c.Branch), own, false, nil
-	}
-	if own.Head != own.ForkBaseline {
-		return "", own, true, fmt.Errorf("change %s: its branch %s holds a baseline of its own, it is not rebased: %w", c.ID, own.Name, ErrConflict)
-	}
-	return domain.BranchOf(own.Parent), own, true, nil
-}
 
 func withoutOrigin(d domain.Draft) domain.Draft {
 	d = d.Clone()
@@ -545,7 +414,11 @@ func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseS
 			return err
 		}
 		if c.ParentID == "" {
-			return g.rootBehind(ctx, tx, c, rows, &st)
+			own, ok, err := ownBranch(ctx, tx, c)
+			if err != nil || !ok || !hasCommits(c) {
+				return err
+			}
+			return g.committedBehind(ctx, tx, c, own, &st)
 		}
 		p, err := g.parentOf(ctx, tx, c)
 		if errors.Is(err, ErrConflict) {
@@ -564,54 +437,4 @@ func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseS
 		return nil
 	})
 	return
-}
-
-// rootBehind fills the state of a root change: the head it would be rebased onto and the impacts whose node changed there.
-func (g *Graph) rootBehind(ctx context.Context, tx Tx, c domain.Change, rows []domain.Draft, st *RebaseState) error {
-	if c.Status == domain.ChangeCommitted {
-		return nil // its versions are written: it is integrated, not rebased
-	}
-	if hasCommits(c) {
-		if own, ok, err := ownBranch(ctx, tx, c); err != nil || ok {
-			if err != nil {
-				return err
-			}
-			return g.committedBehind(ctx, tx, c, own, st)
-		}
-	}
-	target, _, _, err := rebaseTarget(ctx, tx, c)
-	if errors.Is(err, ErrConflict) {
-		return nil
-	} else if err != nil {
-		return err
-	}
-	head, err := branchHead(ctx, tx, c.Namespace, target)
-	if err != nil {
-		return err
-	}
-	if head.ID == c.BaselineID {
-		return nil
-	}
-	st.Branch, st.Onto = target, head.ID
-	for _, cn := range c.Nodes {
-		if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded {
-			continue
-		}
-		d := ownDraft(rows, cn.ID, "")
-		if d == nil {
-			continue
-		}
-		if d.Base != nil {
-			if v, ok := head.Nodes[d.Node]; ok && v != d.Base.Version {
-				st.Behind = append(st.Behind, cn.ID)
-			}
-		} else if id, err := tx.NodeIDByKey(ctx, c.Namespace, d.Key); err == nil {
-			if _, ok := head.Nodes[id]; ok {
-				st.Behind = append(st.Behind, cn.ID)
-			}
-		} else if !errors.Is(err, ErrNotFound) {
-			return err
-		}
-	}
-	return nil
 }

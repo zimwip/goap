@@ -31,6 +31,25 @@ func (l *lifecycles) Guard(_ context.Context, bb domain.Blackboard, expr, transi
 	return condition.CheckGuard(expr, bb, l.world, transition, decision)
 }
 
+func (l *lifecycles) Merge(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
+	return false, false, nil
+}
+
+// mergeGate is a guardian that has only its say on the merge of a change (the goal of an activity, ADR 0066).
+type mergeGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+
+func (mergeGate) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
+func (mergeGate) DefaultGoal(context.Context, string) (string, error)          { return "", nil }
+func (mergeGate) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {
+	return true, nil
+}
+func (mergeGate) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
+	return domain.GateResult{}, nil
+}
+func (f mergeGate) Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	return f(ctx, c, bb)
+}
+
 const (
 	gateGo     = `decisionPoints.exists(d, d.id == change.decision && d.status == "decided" && d.option == "go") && world["analysed"]`
 	gateRework = `decisionPoints.exists(d, d.id == change.decision && d.status == "decided" && d.option == "rework")`

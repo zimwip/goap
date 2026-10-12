@@ -35,9 +35,6 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
-	// what holds a merge (ADR 0102): the lifecycle of the change, then the goal of the Activity it is scoped to, which,
-	// when it decides, replaces the node-type lifecycle's landable-state floor (architecture plan "Activity concept")
-	g.MergeGuards = []graph.MergeGuard{graph.FinalStateGuard{}, graph.LandingGate(reg.LandingGate), graph.LandableStatesGuard{}}
 	g.SubChangeValidator = reg.SubChangeValidator
 	// a change follows the lifecycle its methodology names, its gates read the conditions of the methodology (ADR 0058)
 	g.Lifecycles = reg

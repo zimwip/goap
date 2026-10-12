@@ -142,6 +142,11 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
 	v1 := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
 
+	// before its commit there is nothing to rebase (ADR 0102); committed, test2 is behind main
+	if st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID)); st.Onto != "" {
+		t.Fatalf("an uncommitted change is not behind: %+v", st)
+	}
+	must[domain.Baseline](t)(g.CommitChange(ctx, t2.ID, ""))
 	st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID))
 	if st.Branch != domain.MainBranch || st.Onto != b1.ID || !slices.Equal(st.Behind, []domain.ChangeImpactID{i2}) {
 		t.Fatalf("test2 is behind main: %+v", st)
@@ -168,36 +173,6 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	// the review of the merged draft was kept, the version landed
 	if cn := must[domain.ChangeImpact](t)(g.seenImpact(ctx, t2.ID, i2, "")); cn.Review != domain.ReviewAccepted || cn.Landed == nil || *cn.Landed != n.Ref() {
 		t.Fatalf("test2's impact: %+v", cn)
-	}
-}
-
-// A clean rebase keeps the acceptance of the impacts it merged (ADR 0101 §2).
-func TestRebaseRootKeepsReviews(t *testing.T) { forEachRepo(t, testRebaseRootKeepsReviews) }
-
-func testRebaseRootKeepsReviews(t *testing.T, repo Repo) {
-	ctx := context.Background()
-	f := newFixture(t, repo)
-	g := f.g
-	t1, _ := propChange(t, g, f.base.ID, "test1", f.req.Ref(), map[string]any{"a": 1})
-	t2, i2 := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"b": 2})
-	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
-
-	res := must[RebaseResult](t)(g.RebaseChange(ctx, t2.ID))
-	if res.Branch != domain.MainBranch || res.From != f.base.ID || res.Onto != b1.ID || res.Changed() || len(res.Impacts) != 1 || !res.Impacts[0].Merged {
-		t.Fatalf("rebase = %+v", res)
-	}
-	if cn := must[domain.ChangeImpact](t)(g.seenImpact(ctx, t2.ID, i2, "")); cn.Review != domain.ReviewAccepted || cn.Pre == nil || cn.Pre.Version != 2 {
-		t.Fatalf("the review is kept and the pre moved onto test1's version: %+v", cn)
-	}
-	if st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID)); len(st.Behind) != 0 || len(st.Conflicts) != 0 || st.Onto != "" {
-		t.Fatalf("not behind any more: %+v", st)
-	}
-	// a second rebase has nothing to do
-	if again := must[RebaseResult](t)(g.RebaseChange(ctx, t2.ID)); len(again.Impacts) != 0 || again.Onto != b1.ID || again.From != b1.ID {
-		t.Fatalf("again = %+v", again)
-	}
-	if n := len(rebaseMoves(t, g, t2.ID)); n != 1 {
-		t.Fatalf("one move in the log, got %d", n)
 	}
 }
 
@@ -335,14 +310,12 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	t2, _ := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"x": 2})
 	t0, _ := propChange(t, g, f.base.ID, "test0", f.need.Ref(), map[string]any{"title": "N"})
 	must[domain.Baseline](t)(g.Apply(ctx, t0.ID, ""))
+	must[domain.Baseline](t)(g.CommitChange(ctx, t2.ID, ""))
 	if _, err := g.RebaseChange(ctx, t2.ID); err != nil { // test2 brought up to date with test0...
 		t.Fatal(err)
 	}
 	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, "")) // ...then the target moves before test2 lands
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := g.commitOnBranch(ctx, tx, t2.ID, ""); err != nil {
-			return err
-		}
 		c, err := tx.Change(ctx, t2.ID)
 		if err != nil {
 			return err
@@ -363,7 +336,7 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	if res.Kind != domain.BaselineMerge || res.ParentID != b1.ID || res.MergedFrom == "" {
 		t.Fatalf("the race lands by a merge: %+v", res)
 	}
-	if got := baselineOfChange(t, g, t2.ID, domain.BaselineCommit); got.RebasedFrom != f.base.ID {
+	if got := baselineOfChange(t, g, t2.ID, domain.BaselineRebase); got.RebasedFrom != f.base.ID {
 		t.Fatalf("test2 was rebased onto test0 before: %+v", got)
 	}
 }

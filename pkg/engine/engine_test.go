@@ -58,6 +58,9 @@ func (m mainGoals) DefaultGoal(_ context.Context, name string) (string, error) {
 func (m mainGoals) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {
 	return true, nil
 }
+func (m mainGoals) Merge(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
+	return false, false, nil
+}
 func (m mainGoals) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
 	return domain.GateResult{}, nil
 }

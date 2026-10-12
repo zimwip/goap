@@ -538,34 +538,3 @@ func lastReview(cn domain.ChangeImpact) domain.Review {
 	}
 	return out
 }
-
-// subLandingBlackboard is the blackboard the landing gate decides a sub-change against (ADR 0081): the change with its
-// impacts, the pre version and the draft of each, as the change sees them (no version is written for a sub-change).
-func (g *Graph) subLandingBlackboard(ctx context.Context, tx Tx, c domain.Change) (domain.Blackboard, error) {
-	bb := domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}}
-	ix, err := g.typesAt(ctx, tx, c.BaselineID)
-	if err != nil {
-		return bb, err
-	}
-	impacts := slices.DeleteFunc(slices.Clone(c.Nodes), func(cn domain.ChangeImpact) bool { return cn.Flow != "" || cn.Superseded })
-	r, err := g.newDraftReader(ctx, tx, c, "", impacts)
-	if err != nil {
-		return bb, err
-	}
-	for _, cn := range impacts {
-		for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post} {
-			if ref == nil {
-				continue
-			}
-			v, err := viewIn(ctx, tx, r, *ref)
-			if err != nil {
-				return bb, err
-			}
-			if lc := ix.lifecycleOf(v.Type); lc != nil && v.State != "" {
-				v.NotLandable = !lc.Landable(v.State)
-			}
-			bb.Nodes[*ref] = v
-		}
-	}
-	return bb, nil
-}

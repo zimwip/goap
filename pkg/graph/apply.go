@@ -20,8 +20,8 @@ import (
 //   - IntegrateChange (the merge) takes the work into what the change was forked from, once everything in it is
 //     settled: every impact committed (a sub-change: accepted), no open flow, decision point or sub-change. It first
 //     brings the change up to date (a root change: its branch rebased onto the head of its target, rebase_committed.go;
-//     a sub-change: rebased onto its parent, ADR 0082), asks the merge guards (mergeguard.go: the methodology's say),
-//     then fast-forwards; the change is applied, closed. Only a target moving in between falls back to the three-way
+//     a sub-change: rebased onto its parent, ADR 0082), asks the guardian of the change (mergecheck.go: its lifecycle,
+//     the say of its methodology, the landable states), then fast-forwards; the change is applied, closed. Only a target moving in between falls back to the three-way
 //     merge, which leaves the change committed until it is resolved.
 //
 // Apply is both: it commits what is pending, then merges.
@@ -141,15 +141,9 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
 	}
-	own, ok, err := ownBranch(ctx, tx, c)
+	reverted, err := a.revertWithdrawn()
 	if err != nil {
 		return domain.Baseline{}, err
-	}
-	reverted := 0
-	if ok {
-		if reverted, err = a.revertWithdrawn(own); err != nil {
-			return domain.Baseline{}, err
-		}
 	}
 	if len(a.cposts) == 0 && reverted == 0 {
 		return domain.Baseline{}, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
@@ -164,9 +158,6 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 		baselineName = c.Title
 	}
 	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit, Nodes: a.target, CreatedAt: g.now()}
-	if ok {
-		result.RebasedFrom = own.RebasedFrom // the commit of a rebased change keeps where it was forked from before (ADR 0101 §4)
-	}
 	if reverted > 0 {
 		result.Kind = domain.BaselineRevert // a revert is no landed event: the state is stored whole
 	}
@@ -194,28 +185,16 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 
 // revertWithdrawn puts back, in what the commit leaves, the version the branch was forked from for every node the branch
 // changed that no change impact holds any more (withdrawn after its commit, ADR 0102); it returns how many.
-func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
-	fork, err := a.tx.Baseline(a.ctx, own.ForkBaseline)
-	if err != nil {
-		return 0, err
-	}
-	held := map[domain.NodeID]bool{}
-	for _, cn := range a.mainImpacts() {
-		held[nodeOf(cn)] = true
-	}
-	n := 0
-	for id, v := range a.target {
-		if held[id] || fork.Nodes[id] == v {
-			continue
-		}
-		if fv, ok := fork.Nodes[id]; ok {
-			a.target[id] = fv
+func (a *applier) revertWithdrawn() (int, error) {
+	ids, fork, err := a.g.withdrawnSince(a.ctx, a.tx, a.change)
+	for _, id := range ids {
+		if v, ok := fork[id]; ok {
+			a.target[id] = v
 		} else {
 			delete(a.target, id)
 		}
-		n++
 	}
-	return n, nil
+	return len(ids), err
 }
 
 // advanceBranch moves the head of a branch (main is created on first use).

@@ -19,7 +19,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.MergeGuards = []graph.MergeGuard{graph.FinalStateGuard{}, graph.LandingGate(reg.LandingGate), graph.LandableStatesGuard{}}
+	g.Lifecycles = reg
 
 	m := methodology.Methodology{
 		Name: "shipping", Version: "1", Namespace: "alm",
@@ -82,7 +82,7 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.MergeGuards = []graph.MergeGuard{graph.FinalStateGuard{}, graph.LandingGate(reg.LandingGate), graph.LandableStatesGuard{}}
+	g.Lifecycles = reg
 
 	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {

@@ -1,8 +1,9 @@
 # ADR 0102 — One commit and merge path: a change iterates on its branch, only modifications are reviewed, what holds a merge is a plugin
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Amends ADR 0056 (two-step apply), ADR 0066 (the landing gate
-becomes a merge guard), ADR 0076 / 0079 (reviews, withdrawal, a draft equal to its base no longer lands), ADR 0081
-(a sub-change does not commit), ADR 0101 (a committed branch is rebased at its merge).
+becomes the guardian's say on a merge), ADR 0076 / 0079 (reviews, withdrawal, a draft equal to its base no longer lands), ADR 0081
+(a sub-change does not commit), ADR 0101 (a committed branch is rebased at its merge; the
+rebase of the drafts of an uncommitted change is gone).
 
 ## Context
 
@@ -23,7 +24,8 @@ becomes a merge guard), ADR 0076 / 0079 (reviews, withdrawal, a draft equal to i
 
 The graph keeps the **mechanism**, identical for every change and every caller: drafts, the review of a modification,
 the commit that writes versions on the change's branch, the rebase, the fast-forward. What **moves** with the use cases is
-plugged: who may review (`ReviewPolicy`, ADR 0075) and **what may hold a merge** (`MergeGuards`, below). The web never
+asked of the plugged services: who may review (`ReviewPolicy`, ADR 0075) and **what may hold a merge**: the **guardian of
+the change** (`ChangeLifecycles`, the registry, which already guards its transitions, ADR 0058; below). The web never
 recomputes a rule of the graph: it reads `GetCommitState`.
 
 ### 1. Impacts: modification, review, rework, withdrawal
@@ -69,7 +71,7 @@ A sub-change has no branch of its own (ADR 0081): it does not commit (`CommitCha
    committed nothing moved to the target's version. A rebase with no conflict keeps the reviews and **commits** its
    merges; conflicts send their impacts back to proposed and stop the merge (`ErrConflict`): settled, accepted,
    committed, merged again. A sub-change is rebased onto its parent (ADR 0082);
-3. **guarded**: the merge guards are asked (§4);
+3. **guarded**: the guardian of the change is asked (§4);
 4. **integrated**: a fast-forward of the target (a sub-change: its drafts installed in its parent, ADR 0081); the change
    is `applied`, closed. Only a target moving in between falls back to the three-way merge, which leaves the change
    `committed` while it waits for its resolutions — the only meaning of `committed` now.
@@ -80,17 +82,21 @@ the node holds is withdrawn, and a commit with nothing left is `ErrNothingToComm
 the syncing callers (seeds, the registry's store) take that as "the graph holds it already". `MoveChange` refuses a change
 that committed.
 
-### 4. Merge guards (plugins)
+### 4. The guardian of the change holds the merge
 
-`Graph.MergeGuards` is an ordered chain of `MergeGuard` (`CheckMerge(ctx, MergeCheck) (decided bool, err error)`), asked
-outside any transaction on a `MergeCheck` (the change, its lifecycle, the blackboard of what it lands: pre versions and the
-version committed on the branch, a sub-change's drafts, and those landed nodes). The first that decides, decides: an error
-refuses, `decided` allows and ends the chain, otherwise the next is asked. Built-ins (`pkg/graph/mergeguard.go`):
-`FinalStateGuard` (the lifecycle of the change in a final state, ADR 0058), `LandableStatesGuard` (no node left in a state
-that cannot land, ADR 0078), and `LandingGate(fn)`, the adapter of a gate deciding on the blackboard (ADR 0066: the goal of
-the Activity, `registrysvc.Service.LandingGate`), which, when it decides, replaces the guards after it. Unset:
-`DefaultMergeGuards()` (final state, landable states). `goap-dev` plugs final state, the activity gate, landable states;
-`Graph.LandingGate` and `checkFinalState` are gone.
+The merge goes through the **guardian of the change**, the one that already guards its transitions (ADR 0058:
+`ChangeLifecycles`, implemented by the registry, which knows the methodology), asked outside any transaction
+(`checkMerge`, `pkg/graph/mergecheck.go`) on the blackboard of what the change lands (its impacts, their pre versions and
+what each lands: the version committed on the change's branch, a sub-change's accepted drafts):
+
+1. the lifecycle of the change (resolved by the guardian) must be in a **final state**: its transitions, guarded,
+   are how the methodology lets a change reach it;
+2. the guardian has its say: `ChangeLifecycles.Merge(ctx, change, blackboard) (decided, ok, err)` (the registry: the goal
+   of the Activity the change is scoped to, ADR 0066, formerly `LandingGate`); decided, it answers in place of 3;
+3. else no node left in a state its domain cannot land (ADR 0078).
+
+There is no other hook: `Graph.LandingGate`, the separate final-state check of the commit and the guard chain of the first
+draft of this ADR are gone. A graph with no guardian (no registry in process, `cmd/graph`) merges by 3 alone.
 
 ### 5. The web
 
@@ -117,5 +123,7 @@ the Activity, `registrysvc.Service.LandingGate`), which, when it decides, replac
 
 - Merging part of the commits, or keeping the change open after its merge.
 - Rebasing a committed branch while it holds uncommitted modifications (commit or cancel them first).
+- Rebasing a change before its first commit: there is nothing to rebase, its commit then its merge bring it up to date
+  (`RebaseChange` / `GetRebaseState` answer nothing for it).
 - A node created then withdrawn after its commit keeps its key reserved (its version exists on the change's branch).
 - The legacy `ChangeImpact.Items` bridge (ADR 0024) is still filtered out where it was; nothing sets it any more.

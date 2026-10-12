@@ -68,14 +68,9 @@ type Graph struct {
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
-	// MergeGuards are the rules a merge must pass (ADR 0102, mergeguard.go), asked in order outside any transaction, on
-	// what the change lands: the first that decides, decides. What holds a merge moves with the use cases (the lifecycle
-	// of the change, the goals of its activity, the landable states of a domain): the graph keeps the mechanism, the
-	// compositions plug the rules (LandingGate adapts the registry's goal of an Activity). Unset: DefaultMergeGuards.
-	MergeGuards []MergeGuard
 	// SubChangeValidator, when set, is asked by CreateChange about a sub-change before it is stored, with its parent
 	// as stored and the change as it is about to be (Data, Methodology, ...): an error refuses it (wrap ErrInvalid).
-	// Like a merge guard it runs outside any transaction and may read the graph.
+	// Like the guardian of a merge (ChangeLifecycles.Merge) it runs outside any transaction and may read the graph.
 	SubChangeValidator func(ctx context.Context, parent, child domain.Change) error
 
 	// Facets are the providers of the facets of a blackboard (domain.Blackboard.Facets) beyond the built-in ones (options,
