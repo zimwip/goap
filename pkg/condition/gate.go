@@ -22,6 +22,19 @@ func CheckGuard(expr string, bb domain.Blackboard, world map[string]bool, transi
 	return gd.CheckChange(change, f, world)
 }
 
+// CheckGuardian evaluates the contribution of an outer methodology of the guardian chain of a change (ADR 0106) to
+// a transition (transition set) or to its merge (transition ""): the environment of CheckGuard plus `integrator`, the
+// change of that methodology the change is attached to (nil: none, guard.NoIntegrator).
+func CheckGuardian(expr string, bb domain.Blackboard, world map[string]bool, transition string, integrator map[string]any) (bool, error) {
+	gd, err := guard.Compile(expr)
+	if err != nil {
+		return false, err
+	}
+	change, f := guardInputs(bb, transition, "")
+	f.Integrator = integrator
+	return gd.CheckChange(change, f, world)
+}
+
 func guardInputs(bb domain.Blackboard, transition, decision string) (map[string]any, guard.Facts) {
 	act := Activation(bb)
 	change, _ := act["change"].(map[string]any)

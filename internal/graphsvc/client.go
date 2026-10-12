@@ -77,6 +77,24 @@ func (c *Client) MoveChange(ctx context.Context, id domain.ChangeID, project str
 	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
+// AttachChange implements engine.GraphPort (ADR 0106).
+func (c *Client) AttachChange(ctx context.Context, id, parent domain.ChangeID) (domain.Change, error) {
+	r, err := c.rpc.AttachChange(ctx, connect.NewRequest(&graphv1.AttachChangeRequest{ChangeId: string(id), ParentId: string(parent)}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
+// DetachChange implements engine.GraphPort (ADR 0106).
+func (c *Client) DetachChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	r, err := c.rpc.DetachChange(ctx, connect.NewRequest(&graphv1.DetachChangeRequest{ChangeId: string(id)}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
 func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error) {
 	req := &graphv1.UpdateChangeRequest{Id: string(id), Title: p.Title, Intent: p.Intent, Goal: p.Goal, Data: pbconv.Struct(p.Data)}
 	if p.Status != nil {

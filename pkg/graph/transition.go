@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -33,6 +34,17 @@ type ChangeLifecycles interface {
 	// scoped to), on the blackboard of what it lands: decided false, it has none and the landable states of the domain
 	// decide; decided true, ok says whether the change may merge, in place of the landable states.
 	Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+	// Guardians is the guardian chain of a new root change of a methodology in a project (ADR 0106): the methodologies
+	// integrating it in force in the project chain, followed upwards, outermost first, then the methodology itself.
+	Guardians(ctx context.Context, methodology, project string) ([]domain.GuardianRef, error)
+	// Integrates reports whether the changes of the methodology integrator integrate the changes of methodology, the
+	// condition of an attachment (ADR 0106).
+	Integrates(ctx context.Context, integrator, methodology string) (bool, error)
+	// CheckGuardians asks the outer guardians of the chain of a change (domain.Change.OuterGuardians, innermost first)
+	// about a transition, or about its merge when transition is "": refusal names the guardian that refused and why,
+	// "" when they all agree. ancestors are the parent changes of the change, nearest first: the integrator a guardian
+	// sees is the nearest one of its methodology.
+	CheckGuardians(ctx context.Context, bb domain.Blackboard, transition string, ancestors []domain.Change) (refusal string, err error)
 }
 
 // ChangeTransitionAuthorizer decides whether the caller may take a transition of the lifecycle of a change. Nil allows
@@ -115,6 +127,9 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 	}
 	gate, err := g.checkGate(ctx, bb, t, in.Decision, consumed)
 	if err != nil {
+		return c, err
+	}
+	if err := g.checkGuardians(ctx, bb, t.Name); err != nil {
 		return c, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -309,4 +324,69 @@ func (g *Graph) reopenPhase(ctx context.Context, tx Tx, c domain.Change, to stri
 		}
 	}
 	return nil
+}
+
+// checkGuardians asks the outer guardians of the chain of a change (ADR 0106) about a transition, or about its merge
+// when transition is "". A change whose chain is its own methodology only is not asked.
+func (g *Graph) checkGuardians(ctx context.Context, bb domain.Blackboard, transition string) error {
+	c := bb.Change
+	if g.Lifecycles == nil || len(c.OuterGuardians()) == 0 {
+		return nil
+	}
+	var ancestors []domain.Change
+	for p, seen := c.ParentID, map[domain.ChangeID]bool{}; p != "" && !seen[p]; {
+		seen[p] = true
+		pc, err := g.Change(ctx, p)
+		if err != nil {
+			return err
+		}
+		ancestors = append(ancestors, pc)
+		p = pc.ParentID
+	}
+	refusal, err := g.Lifecycles.CheckGuardians(ctx, bb, transition, ancestors)
+	if err != nil {
+		return invalidf("guardians of change %s: %v", c.ID, err)
+	}
+	if refusal == "" {
+		return nil
+	}
+	what := "merge"
+	if transition != "" {
+		what = "take " + transition
+	}
+	return fmt.Errorf("change %s cannot %s: its guardian %s: %w", c.ID, what, refusal, ErrConflict)
+}
+
+// guardianChain is the guardian chain of a new change (ADR 0106): a sub-change takes its parent's chain and adds its
+// own methodology; a root change gets the chain the registry computes for its methodology in its project.
+func (g *Graph) guardianChain(ctx context.Context, in NewChange) ([]domain.GuardianRef, error) {
+	if g.Lifecycles == nil || in.Methodology == "" {
+		return nil, nil
+	}
+	if in.ParentID == "" {
+		return g.Lifecycles.Guardians(ctx, in.Methodology, in.ProjectID)
+	}
+	parent, err := g.Change(ctx, in.ParentID)
+	if err != nil {
+		return nil, err
+	}
+	return chainUnder(parent, in.Methodology, nil), nil
+}
+
+// chainUnder is the chain of a change of methodology under a parent: the parent's chain (its own methodology when it
+// has none) then the methodology, unless it is already the last one. own, when set, is the version-pinned reference
+// of the methodology.
+func chainUnder(parent domain.Change, methodology string, own *domain.GuardianRef) []domain.GuardianRef {
+	chain := slices.Clone(parent.Guardians)
+	if len(chain) == 0 && parent.Methodology != "" {
+		chain = []domain.GuardianRef{{Methodology: parent.Methodology}}
+	}
+	if n := len(chain); methodology != "" && (n == 0 || chain[n-1].Methodology != methodology) {
+		ref := domain.GuardianRef{Methodology: methodology}
+		if own != nil {
+			ref = *own
+		}
+		chain = append(chain, ref)
+	}
+	return chain
 }

@@ -31,7 +31,7 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	// methodologies and domains are nodes of the graph: the registry needs no database
 	// the scope of the MCPs (ADR 0028) is checked where methodologies declare them
 	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), DomainStore: st.domains, Authz: gp.authorizer,
-		MCPScopes: (&mcpsvc.Directory{Graph: g}).Scopes}
+		MCPScopes: (&mcpsvc.Directory{Graph: g}).Scopes, Applicable: applicable(gp.directory)}
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the registry
 	types := typecat.NewLive(reg.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
@@ -91,4 +91,16 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 		return nil, wrap("methodologies", err)
 	}
 	return &registryPart{reg: reg, types: types, bus: bus}, nil
+}
+
+// applicable lists the methodologies applicable to a project from the snapshot of the organisation (ADR 0106: where
+// the guardian chain of a change finds the methodologies integrating its own).
+func applicable(d *access.Directory) func(ctx context.Context, project string) ([]string, error) {
+	return func(ctx context.Context, project string) ([]string, error) {
+		s, err := d.Snapshot(ctx)
+		if err != nil || s == nil {
+			return nil, err
+		}
+		return s.ApplicableMethodologies(project), nil
+	}
 }

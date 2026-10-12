@@ -191,7 +191,7 @@ func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
 	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description,
-			fork_baseline = excluded.fork_baseline, rebased_from = excluded.rebased_from`,
+			fork_baseline = excluded.fork_baseline, rebased_from = excluded.rebased_from, parent = excluded.parent`,
 		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)))
 	return sqliteErr(err, "branch "+b.Name)
 }
@@ -340,14 +340,17 @@ func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Ba
 func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	var c domain.Change
 	var start, result sql.NullString
-	var data, created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state
+	var data, created, guardians string
+	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state, guardians
 		FROM change WHERE id = ?`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State)
+		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians)
 	if err != nil {
 		return c, sqliteErr(err, "change "+string(id))
 	}
 	c.BaselineID, c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(start.String), domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
+	if c.Guardians, err = guardiansOf([]byte(guardians)); err != nil {
+		return c, err
+	}
 	facts, err := t.Log(ctx, factsFilter(id))
 	if err != nil {
 		return c, err
@@ -516,13 +519,14 @@ func (t *sqliteTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID
 }
 
 func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO change (id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, parent_id, owner_org, project_id, lifecycle, state, guardians)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET title = excluded.title, intent = excluded.intent, goal = excluded.goal, status = excluded.status,
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch,
-		  lifecycle = excluded.lifecycle, state = excluded.state, project_id = excluded.project_id`,
+		  lifecycle = excluded.lifecycle, state = excluded.state, project_id = excluded.project_id,
+		  parent_id = excluded.parent_id, guardians = excluded.guardians`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
-		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State)
+		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, string(guardiansJSON(c.Guardians)))
 	return sqliteErr(err, "change")
 }
 

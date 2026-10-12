@@ -63,11 +63,16 @@ type Change struct {
 	// Lifecycle names the lifecycle the change follows (ADR 0058), set by CreateChange from its methodology, and State
 	// is the state it is in; both are empty when the methodology names no lifecycle. State is moved only by
 	// TransitionChange, which journals it as a KindTransition item.
-	Lifecycle  string       `json:"lifecycle,omitempty"`
-	State      string       `json:"state,omitempty"`
-	Goal       string       `json:"goal,omitempty"`
-	Status     ChangeStatus `json:"status"`
-	BaselineID BaselineID   `json:"baselineId"`
+	Lifecycle string `json:"lifecycle,omitempty"`
+	State     string `json:"state,omitempty"`
+	Goal      string `json:"goal,omitempty"`
+	// Guardians is the guardian chain of the change (ADR 0106): the methodologies that frame it, outermost first, its
+	// own last. Computed when the change is created (or attached to, or detached from, a parent) and saved, so the
+	// change keeps the rules it started with; each guardian has its say on its transitions and its merge. Empty: its
+	// own methodology only.
+	Guardians  []GuardianRef `json:"guardians,omitempty"`
+	Status     ChangeStatus  `json:"status"`
+	BaselineID BaselineID    `json:"baselineId"`
 	// Branch the change is applied to (default main).
 	Branch           string     `json:"branch,omitempty"`
 	ResultBaselineID BaselineID `json:"resultBaselineId,omitempty"`
@@ -81,6 +86,25 @@ type Change struct {
 
 	flx  *flowIndex // replay of the flow events, valid for flxN items
 	flxN int
+}
+
+// GuardianRef is a methodology of the guardian chain of a change (ADR 0106), at the version in force when the chain
+// was computed ("" when unknown: the latest).
+type GuardianRef struct {
+	Methodology string `json:"methodology"`
+	Version     string `json:"version,omitempty"`
+}
+
+// OuterGuardians are the guardians of the chain of a change outside its own methodology, innermost first: the order
+// they are asked in after its own.
+func (c Change) OuterGuardians() []GuardianRef {
+	var out []GuardianRef
+	for i := len(c.Guardians) - 1; i >= 0; i-- {
+		if g := c.Guardians[i]; g.Methodology != c.Methodology {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // ChangeEvent is published by the graph service on change lifecycle events

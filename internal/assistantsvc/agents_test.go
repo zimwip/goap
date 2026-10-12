@@ -229,6 +229,7 @@ func proposeArgs(extra string) string {
 
 func TestStartAgentOnlyRecordsAProposal(t *testing.T) {
 	e := newEnv(t, call(ToolStartAgent, proposeArgs(`,"newChange":{"title":"Build v2","intent":"a build of v2"}`)), `{"message":"I propose to start the builder."}`)
+	e.searched(t)
 	if _, _, err := e.send("build v2", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
@@ -278,6 +279,7 @@ func TestStartAgentRefusals(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t, call(ToolStartAgent, tc.args), `{"message":"no"}`)
+			e.searched(t)
 			if _, _, err := e.send("run it", tc.ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -361,6 +363,7 @@ func TestListAgentsGivesThePossibleSteps(t *testing.T) {
 func TestOneProposalPerAnswer(t *testing.T) {
 	two := `{"message":"","tool_calls":[{"name":"start_agent","arguments":` + proposeArgs(`,"newChange":{"title":"t","intent":"i"}`) + `},{"name":"start_agent","arguments":` + proposeArgs(`,"newChange":{"title":"t","intent":"i"}`) + `}]}`
 	e := newEnv(t, two, `{"message":"proposed"}`)
+	e.searched(t)
 	if _, _, err := e.send("build", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
@@ -374,6 +377,10 @@ func (e *env) propose(t *testing.T, extra string, c Context) convsvc.Message {
 	t.Helper()
 	e.model.answers = []string{call(ToolStartAgent, proposeArgs(extra)), `{"message":"I propose it."}`}
 	e.model.got = nil
+	if strings.Contains(extra, "newChange") && !e.didSearch {
+		e.searched(t)
+		e.didSearch = true
+	}
 	if _, _, err := e.send("build", c); err != nil {
 		t.Fatal(err)
 	}
@@ -606,21 +613,31 @@ func TestAgentToolsNeedTheEngine(t *testing.T) {
 	}
 }
 
-func TestToolsAreSeven(t *testing.T) {
-	if got := Tools(); len(got) != 7 {
+func TestToolsAreDeclared(t *testing.T) {
+	if got := Tools(); len(got) != 8 {
 		t.Fatalf("%v", got)
 	}
 	// each is declared to the model with what it does and the schema of its arguments (ADR 0098), and nothing else is
 	if len(serverTools) != len(Tools()) {
 		t.Fatalf("%d declared", len(serverTools))
 	}
+	f := Frame{Level: LevelProject, Project: "PROJ-A"}
+	prompt := systemPrompt(Context{}, "PROJ-A", nil, "", f, f.tools(true), true)
 	for _, name := range Tools() {
 		i := slices.IndexFunc(serverTools, func(s llm.ToolSpec) bool { return s.Name == name })
 		if i < 0 || serverTools[i].Description == "" || serverTools[i].InputSchema["type"] != "object" {
 			t.Errorf("%s is not declared", name)
 		}
-		if !strings.Contains(systemRules, name) {
+		if !strings.Contains(prompt, name) {
 			t.Errorf("the prompt does not name %s", name)
+		}
+	}
+	// every tool of a level is one of them
+	for l, names := range levelTools {
+		for _, n := range names {
+			if !slices.Contains(Tools(), n) {
+				t.Errorf("%s: %s", l, n)
+			}
 		}
 	}
 }

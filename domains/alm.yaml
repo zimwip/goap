@@ -1,5 +1,5 @@
 name: alm
-version: 1.2.0
+version: 1.3.0
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -122,6 +122,24 @@ nodeTypes:
       - {name: date, label: Deployed on, description: Date of the deployment, type: date, section: Outcome, order: 3}
       - {name: checks, label: Checks, description: Results of the post-deployment checks (structured), type: json, widget: textarea, section: Outcome, order: 4}
 lifecycles:
+  # The lifecycle of a release change (ADR 0106, methodologies/release-based.yaml): the parent of the changes it
+  # integrates. The integrated changes merge into it while it integrates; it lands once delivered.
+  - name: delivery
+    description: How a release is planned, screens its candidates, integrates them and is delivered
+    initial: planning
+    states:
+      - {name: planning, description: "Scope and target of the release being set"}
+      - {name: screening, description: "Open changes screened for candidates, the selected ones attached"}
+      - {name: integrating, description: "The attached changes merge into the release"}
+      - {name: delivered, final: true, description: "Delivered: the release lands"}
+      - {name: cancelled, final: true, description: "Given up: its changes are detached"}
+    transitions:
+      - {name: screen, description: Screen the open changes for candidates, from: planning, to: screening}
+      - {name: integrate, description: Integrate the selected changes, from: screening, to: integrating}
+      - {name: rescreen, description: Take more candidates in, from: integrating, to: screening}
+      - {name: deliver, description: Deliver the release once its changes are integrated, from: integrating, to: delivered}
+      - {name: cancel_planning, description: Give the release up, from: planning, to: cancelled}
+      - {name: cancel_screening, description: Give the release up, from: screening, to: cancelled}
   # A node is edited in any state while it is in a change; a state flagged notLandable (a draft) keeps the change
   # from landing until the node is moved to a landable one (ADR 0078).
   - name: requirement

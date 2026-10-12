@@ -1,0 +1,153 @@
+name: release-based
+version: 0.1.0
+description: >
+  Release-based delivery of a project (ADR 0106): a release is a change of this methodology, the parent of the sdlc
+  changes it integrates. It screens the open changes of its project for candidates, attaches the selected ones as its
+  sub-changes, lets them merge into it while it integrates (each under its own guardian first), then is delivered:
+  the release lands on main, tagged with its name. In a project where it is in force an sdlc change lands only through
+  a release (exclusive).
+
+namespace: alm
+lifecycle: delivery
+goal: release
+
+# the changes it integrates, and what it requires of them as the outer guardian of their chain
+integrates:
+  - methodologies: [sdlc]
+    exclusive: true
+    attach: decision
+guardian:
+  # an integrated change merges into its release while the release integrates
+  merge: 'integrator.state == "integrating"'
+
+# the events of the integrated changes the release follows (its `candidates` process)
+on:
+  - {event: change.committed, from: integrated}
+  - {event: change.transitioned, from: integrated}
+  - {event: change.detached, from: integrated}
+
+roles:
+  - {name: release_manager, description: "Plans the release, selects its candidates and delivers it"}
+  - {name: integrator, description: Integrates the selected changes into the release}
+
+conditions:
+  - name: in_planning
+    description: The release is being planned
+    expr: change.state == "planning"
+  - name: scoped
+    description: The scope and the target of the release are written down
+    expr: artifacts.exists(a, a.type == "release_scope")
+  - name: screened
+    description: The open changes of the project were screened for candidates
+    expr: artifacts.exists(a, a.type == "screening")
+  - name: selected
+    description: The candidates are selected (attached) or set aside, by a decision of the release manager
+    expr: artifacts.exists(a, a.type == "selection")
+  - name: integrated
+    description: The selected changes merged into the release
+    expr: artifacts.exists(a, a.type == "integration")
+  - name: delivered
+    description: The release landed
+    expr: change.status == "applied"
+  - name: candidates_followed
+    description: The last move of an integrated change was taken into account
+    expr: >
+      artifacts.exists(a, a.type == "candidate_note" && has(vars.event) && double(a.at) >= double(vars.event.at))
+
+actions:
+  - name: scope_release
+    kind: human
+    description: Write the scope and the target of the release
+    effects: {scoped: true}
+    cost: 2
+    instructions: >
+      Say what the release delivers and when (an artifact release_scope: data.scope, data.target), then move the
+      release to screening.
+
+  - name: screen_candidates
+    kind: llm
+    description: Screen the open changes of the project for the candidates of the release
+    pre: {scoped: true}
+    effects: {screened: true}
+    cost: 1
+    model: default
+    mcps: [goap-change]
+    prompt: |
+      The release "{{ .Change.Title }}": {{ .Change.Intent }}
+      1. Call goap-change/list (status draft, active; namespace "alm") to see the open changes of the project.
+      2. Keep the root sdlc changes that fit the scope of the release.
+      Finish with {"kind":"artifact","type":"screening","data":{"candidates":[{"changeId":"<id>","title":"<title>","why":"<one sentence>"}]}}.
+
+  - name: select_candidates
+    kind: human
+    description: Select the candidates and attach them to the release
+    pre: {screened: true}
+    effects: {selected: true}
+    cost: 2
+    instructions: >
+      For each candidate of the screening, attach the change to the release (Attach) or set it aside, then submit an
+      artifact selection (data.attached, data.setAside) and move the release to integrating.
+
+  - name: integrate_changes
+    kind: human
+    description: Merge the selected changes into the release, in order
+    pre: {selected: true}
+    effects: {integrated: true}
+    cost: 3
+    instructions: >
+      Merge each attached change into the release once it is ready (its own guardian lets it merge, and the release
+      integrates), in the order of the release; detach the ones that will not make it. Submit an artifact integration
+      (data.merged, data.detached), then move the release to delivered.
+
+  - name: deliver_release
+    kind: builtin
+    builtin: graph.apply
+    description: Land the release (new baseline, tagged with its name)
+    pre: {integrated: true}
+    effects: {delivered: true}
+    cost: 1
+    permission: change:apply
+
+  - name: follow_candidate
+    kind: llm
+    description: Take the last move of an integrated change into account
+    effects: {candidates_followed: true}
+    cost: 1
+    model: default
+    prompt: |
+      An integrated change of the release moved: {{ with .Vars.event }}{{ .type }} of change {{ .change.id }} ({{ .change.title }}), now {{ .change.status }}{{ with .change.state }} in state {{ . }}{{ end }}{{ end }}.
+      Say in one sentence what it means for the release (ready to merge, needs attention, left the release).
+      Finish with {"kind":"artifact","type":"candidate_note","data":{"changeId":"<its id>","note":"<the sentence>"}}.
+
+processes:
+  - name: release
+    description: Plan the release, screen and select its candidates, integrate them, deliver
+    examples: ["prepare the next release", "run the release"]
+    steps:
+      - name: planning
+        description: Scope and target of the release
+        roles: {responsible: release_manager}
+        action: scope_release
+      - name: screening
+        description: Screen the open changes of the project for candidates
+        roles: {responsible: release_manager}
+        action: screen_candidates
+      - name: selection
+        description: Attach the selected candidates, set the others aside
+        roles: {responsible: release_manager, accountable: release_manager}
+        action: select_candidates
+      - name: integration
+        description: Merge the selected changes into the release
+        roles: {responsible: integrator, accountable: release_manager}
+        action: integrate_changes
+      - name: delivery
+        description: Land the release
+        roles: {responsible: release_manager}
+        action: deliver_release
+
+  - name: candidates
+    description: Follow the integrated changes as they move (an event of one of them wakes it)
+    steps:
+      - name: follow
+        description: Note what the move of an integrated change means for the release
+        action: follow_candidate

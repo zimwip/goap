@@ -22,7 +22,9 @@ nodeTypes:
       - {name: administrative, label: Administrative, description: "The changes of the methodology name no project (it manages organisation, project, policy or adapter data)", type: boolean, section: Definition, order: 4}
       - {name: appliesTo, label: "Applies to", description: "Methodologies whose changes it runs alongside (a transverse methodology, ADR 0036)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: imports, label: Imports, description: "Condition libraries the methodology uses without declaring their conditions", type: json, widget: textarea, section: Definition, order: 4}
-      - {name: on, label: "Reacts to", description: "Events of the changes a transverse methodology reacts to", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: on, label: "Reacts to", description: "Events a methodology reacts to: of its own change (a transverse methodology), of the changes it integrates or of the change integrating it (ADR 0106)", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: integrates, label: Integrates, description: "Methodologies whose changes its changes integrate as sub-changes (ADR 0106)", type: json, widget: textarea, section: Definition, order: 4}
+      - {name: guardian, label: Guardian, description: "What it requires of the changes it integrates: merge and transition guards (ADR 0106)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: status, label: Status, description: "draft, published or archived", type: string, section: Definition, order: 5}
       - {name: createdAt, label: "Created at", description: "When the version was created", type: string, section: History, order: 6}
       - {name: updatedAt, label: "Updated at", description: "When the version was last modified", type: string, section: History, order: 7}

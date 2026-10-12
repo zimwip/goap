@@ -64,6 +64,13 @@ func (m mainGoals) Merge(context.Context, domain.Change, domain.Blackboard) (boo
 func (m mainGoals) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
 	return domain.GateResult{}, nil
 }
+func (m mainGoals) Guardians(context.Context, string, string) ([]domain.GuardianRef, error) {
+	return nil, nil
+}
+func (m mainGoals) Integrates(context.Context, string, string) (bool, error) { return false, nil }
+func (m mainGoals) CheckGuardians(context.Context, domain.Blackboard, string, []domain.Change) (string, error) {
+	return "", nil
+}
 
 func setup(t *testing.T) (*Engine, *graph.Graph, domain.BaselineID) {
 	t.Helper()

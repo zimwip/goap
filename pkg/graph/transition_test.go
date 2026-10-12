@@ -35,6 +35,14 @@ func (l *lifecycles) Merge(context.Context, domain.Change, domain.Blackboard) (b
 	return false, false, nil
 }
 
+func (l *lifecycles) Guardians(context.Context, string, string) ([]domain.GuardianRef, error) {
+	return nil, nil
+}
+func (l *lifecycles) Integrates(context.Context, string, string) (bool, error) { return false, nil }
+func (l *lifecycles) CheckGuardians(context.Context, domain.Blackboard, string, []domain.Change) (string, error) {
+	return "", nil
+}
+
 // mergeGate is a guardian that has only its say on the merge of a change (the goal of an activity, ADR 0066).
 type mergeGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
 
@@ -45,6 +53,13 @@ func (mergeGate) Guard(context.Context, domain.Blackboard, string, string, strin
 }
 func (mergeGate) Gate(context.Context, domain.Blackboard, domain.Transition, string) (domain.GateResult, error) {
 	return domain.GateResult{}, nil
+}
+func (mergeGate) Guardians(context.Context, string, string) ([]domain.GuardianRef, error) {
+	return nil, nil
+}
+func (mergeGate) Integrates(context.Context, string, string) (bool, error) { return false, nil }
+func (mergeGate) CheckGuardians(context.Context, domain.Blackboard, string, []domain.Change) (string, error) {
+	return "", nil
 }
 func (f mergeGate) Merge(ctx context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
 	return f(ctx, c, bb)

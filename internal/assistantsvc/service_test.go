@@ -75,6 +75,16 @@ func (g *fakeGraph) CreateChange(ctx context.Context, in graph.NewChange) (domai
 	return domain.Change{ID: "CHG-NEW", Title: in.Title, Methodology: in.Methodology, ProjectID: in.ProjectID}, nil
 }
 
+func (g *fakeGraph) ListChanges(_ context.Context, f graph.ChangesFilter) ([]domain.Change, error) {
+	var out []domain.Change
+	for _, c := range g.changes {
+		if f.Match(c) {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
 func (g *fakeGraph) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
 	if c, ok := g.changes[id]; ok {
 		return c, nil
@@ -129,6 +139,8 @@ type env struct {
 	conv   convsvc.Conversation
 	ctx    context.Context
 	later  []func() // turns not run yet, when deferred
+	// didSearch: searched was called (propose seeds it once)
+	didSearch bool
 }
 
 func newEnv(t *testing.T, answers ...string) *env {
@@ -198,6 +210,18 @@ func (e *env) answer(t *testing.T) convsvc.Message {
 
 func inProject(p string) Context { return Context{App: App{Project: p}} }
 
+// searched records an earlier turn that searched the open changes: creating a change is offered from then on.
+func (e *env) searched(t *testing.T) {
+	t.Helper()
+	if _, err := e.convs.Append(e.ctx, e.user, e.conv.ID, convsvc.RoleUser, convsvc.Content{Text: "is there a change for this?"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.convs.Append(authz.With(e.ctx, Principal), Principal, e.conv.ID, convsvc.RoleAssistant, convsvc.Content{Text: "None fits.", Status: convsvc.StatusDone,
+		Actions: []convsvc.Action{{"type": ActionSearchChanges, "args": map[string]any{"q": "this"}, "result": map[string]any{"count": 0}}}}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func call(name, arguments string) string {
 	return fmt.Sprintf(`{"message":"","tool_calls":[{"name":%q,"arguments":%s}]}`, name, arguments)
 }
@@ -206,7 +230,7 @@ func call(name, arguments string) string {
 
 func TestSendAnswersAndStoresTheTurn(t *testing.T) {
 	e := newEnv(t, call(ToolListMethodologies, `{}`), `{"message":"Use sdlc."}`)
-	user, pending, err := e.send("what can I do here?", Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "change"}}, Focus: Focus{Element: &Element{Type: "change", ID: "CHG-1"}}})
+	user, pending, err := e.send("what can I do here?", Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "node"}}, Focus: Focus{Element: &Element{Type: "node", ID: "NODE-1"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -221,7 +245,7 @@ func TestSendAnswersAndStoresTheTurn(t *testing.T) {
 		t.Fatalf("%d model calls", len(e.model.got))
 	}
 	first, second := e.model.got[0], e.model.got[1]
-	if first.Model != "assistant" || first.JSON || len(first.Tools) != len(Tools()) || !strings.Contains(first.System, `"element":{"type":"change","id":"CHG-1"}`) || !strings.Contains(first.System, `"activeProject":"PROJ-A"`) {
+	if first.Model != "assistant" || first.JSON || len(first.Tools) != len(levelTools[LevelProject])-1 || !strings.Contains(first.System, `"element":{"type":"node","id":"NODE-1"}`) || !strings.Contains(first.System, `"activeProject":"PROJ-A"`) {
 		t.Fatalf("request %+v", first)
 	}
 	for _, m := range e.model.metas { // the ledger of the gateway names the assistant and its conversation (ADR 0089)
@@ -318,6 +342,7 @@ func TestCreateChangeActsAsTheCaller(t *testing.T) {
 		call(ToolCreateChange, `{"title":"Ship v2","intent":"Customers need it","methodology":"risk"}`), // not applicable to PROJ-A
 		call(ToolCreateChange, `{"title":"Ship v2","intent":"Customers need it","methodology":"sdlc"}`),
 		`{"message":"Created."}`)
+	e.searched(t)
 	if _, _, err := e.send("start a change", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}
@@ -344,6 +369,7 @@ func TestCreateChangeInAProjectTheCallerCannotUse(t *testing.T) {
 	e := newEnv(t, call(ToolCreateChange, `{"title":"x","intent":"y"}`), `{"message":"no"}`)
 	e.user.Project = "PROJ-SECRET" // a stale claim; the project of the context is not usable either
 	e.ctx = authz.With(context.Background(), e.user)
+	e.searched(t)
 	// the context names the principal's own project (not re-checked at Send): the tool refuses it
 	if _, _, err := e.send("hi", inProject("PROJ-SECRET")); err != nil {
 		t.Fatalf("the principal's own project is not re-checked: %v", err)
@@ -359,6 +385,7 @@ func TestCreateChangeInAProjectTheCallerCannotUse(t *testing.T) {
 func TestCreateChangeRefusedByTheGraph(t *testing.T) {
 	e := newEnv(t, call(ToolCreateChange, `{"title":"x","intent":"y"}`), `{"message":"It failed."}`)
 	e.graph.err = errors.New("boom")
+	e.searched(t)
 	if _, _, err := e.send("go", Context{}); err != nil {
 		t.Fatal(err)
 	}
@@ -605,6 +632,7 @@ func TestCreateChangeWithNoActiveProjectActsInTheRoot(t *testing.T) {
 	e := newEnv(t, call(ToolCreateChange, `{"title":"x","intent":"y"}`), `{"message":"Created."}`)
 	e.user.Project = ""
 	e.ctx = authz.With(context.Background(), e.user)
+	e.searched(t)
 	if _, _, err := e.send("go", Context{}); err != nil {
 		t.Fatal(err)
 	}

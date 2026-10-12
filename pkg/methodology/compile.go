@@ -111,6 +111,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.compileGoals()
 	s.compileAgents()
 	s.checkTransverse()
+	s.checkIntegration()
 	s.mergeRolesMethodsProcesses()
 	s.checkMainGoal()
 	return s.finish(lenient)
@@ -517,8 +518,8 @@ func (s *compileState) checkTransverse() {
 	}
 	for i, sub := range m.On {
 		path := fmt.Sprintf("on[%d]", i)
-		if len(m.AppliesTo) == 0 {
-			s.add(path, "on applies to transverse methodologies (appliesTo)")
+		if len(m.AppliesTo) == 0 && sub.Origin() == FromSelf {
+			s.add(path, "on applies to transverse methodologies (appliesTo), or to the events of integrated or integrating changes (from)")
 		}
 		if !slices.Contains(TriggerEvents, sub.Event) {
 			s.add(path+".event", "event must be one of %s", strings.Join(TriggerEvents, ", "))

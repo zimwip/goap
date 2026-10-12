@@ -28,6 +28,11 @@ export function actionLabel(a: ConversationAction): string {
       return `Opened change ${str(a.result, 'title') || actionChangeId(a)}`;
     case 'create_change':
       return `Created change ${str(a.result, 'title') || str(a.args, 'title') || actionChangeId(a)}`;
+    case 'search_changes': {
+      // a record that the open changes were searched (it offers the creation of a change); never run
+      const n = (a.result as Record<string, unknown> | undefined)?.count;
+      return `Searched the changes for "${str(a.args, 'q')}"${typeof n === 'number' ? ` (${n} found)` : ''}`;
+    }
     case 'ui_tool':
       return (a as UiToolAction).label || `Screen action ${(a as UiToolAction).tool ?? ''}`.trim();
     default:

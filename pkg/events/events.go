@@ -6,10 +6,17 @@ import "strings"
 
 // The events of changes, processes and methodologies, as triggers (`event:`) and subscriptions (`on:`) name them.
 const (
-	ChangeCreated        = "change.created"
-	ChangeApplied        = "change.applied"
-	ChangeItemAdded      = "change.item_added"
-	ChangeSignal         = "change.signal"
+	ChangeCreated   = "change.created"
+	ChangeApplied   = "change.applied"
+	ChangeItemAdded = "change.item_added"
+	ChangeSignal    = "change.signal"
+	// ChangeTransitioned, ChangeCommitted, ChangeAttached and ChangeDetached couple the changes of methodologies
+	// integrating one another (ADR 0106): a lifecycle move, a commit on its branch, an attachment to a change
+	// integrating it, a detachment from it.
+	ChangeTransitioned   = "change.transitioned"
+	ChangeCommitted      = "change.committed"
+	ChangeAttached       = "change.attached"
+	ChangeDetached       = "change.detached"
 	ProcessCompleted     = "process.completed"
 	ProcessFailed        = "process.failed"
 	ProcessStuck         = "process.stuck"
@@ -22,6 +29,7 @@ const (
 // (TRIGGER_EVENTS in web/src/lib/api/types/registry.ts), checked against this list by a test.
 var All = []string{
 	ChangeCreated, ChangeApplied, ChangeItemAdded, ChangeSignal,
+	ChangeTransitioned, ChangeCommitted, ChangeAttached, ChangeDetached,
 	ProcessCompleted, ProcessFailed, ProcessStuck, ProcessAttached,
 	StepCompleted, MethodologyPublished,
 }

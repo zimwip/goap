@@ -349,6 +349,11 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			lifecycle, initial = lc.Name, lc.Initial
 		}
 	}
+	// the guardian chain (ADR 0106) is computed once, here, and saved on the change
+	guardians, err := g.guardianChain(ctx, in)
+	if err != nil {
+		return domain.Change{}, err
+	}
 	// the validator of sub-changes is asked before the transaction too, it reads the graph
 	if g.SubChangeValidator != nil && in.ParentID != "" {
 		parent, err := g.Change(ctx, in.ParentID)
@@ -362,13 +367,13 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		}
 	}
 	var c domain.Change
-	err := g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c = domain.Change{
 			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID,
 		}
-		c.Lifecycle, c.State, c.Goal = lifecycle, initial, goal
+		c.Lifecycle, c.State, c.Goal, c.Guardians = lifecycle, initial, goal, guardians
 		if err := g.prepareSubChange(ctx, tx, &c, &in); err != nil {
 			return err
 		}

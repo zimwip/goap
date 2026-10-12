@@ -40,7 +40,7 @@ func TestNativeToolCallsAndResults(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, second := e.model.got[0], e.model.got[1]
-	if first.JSON || len(first.Tools) != len(Tools())+1 || first.Tools[len(first.Tools)-1].Name != "ui.set_field" ||
+	if first.JSON || len(first.Tools) != len(levelTools[LevelProject])-1+1 || first.Tools[len(first.Tools)-1].Name != "ui.set_field" ||
 		strings.Contains(first.System, `"args"`) {
 		t.Fatalf("first request: json %v, %d tools", first.JSON, len(first.Tools))
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -72,8 +73,9 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 		return
 	}
 	act := ev.activation()
+	e.relay(ctx, ev, act, changeID)
 	for _, m := range ms {
-		if !slices.Contains(m.AppliesTo, of) || !subscribed(m, ev, act) {
+		if !slices.Contains(m.AppliesTo, of) || !subscribed(m, ev, act, methodology.FromSelf) {
 			continue
 		}
 		if ev.Type == events.ChangeItemAdded && !slices.ContainsFunc(ev.Items, func(it domain.ChangeItem) bool { return !ownItem(m, it) }) {
@@ -89,10 +91,57 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	}
 }
 
-// subscribed reports whether a transverse methodology reacts to the event.
-func subscribed(m *methodology.Compiled, ev TriggerEvent, act map[string]any) bool {
+// relay carries the event of a change across the integration relation (ADR 0106): to the change integrating it (its
+// parent), whose methodology subscribes to the events of the changes it integrates (on.from integrated), and to the
+// changes it integrates (its open sub-changes), whose methodologies subscribe to the events of their integrator
+// (on.from integrator). Each runs the processes of that methodology on its own change, as a companion run, with the
+// event in vars.event (its "relation" says which side it came from); the runs of those changes waiting for conditions
+// are tried again.
+func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any, changeID domain.ChangeID) {
+	var parent domain.ChangeID
+	if ev.Change != nil && ev.Change.ID == changeID {
+		parent = ev.Change.ParentID
+	} else if bb, err := e.Graph.Blackboard(ctx, changeID); err == nil {
+		parent = bb.Change.ParentID
+	}
+	var targets []domain.Change
+	var from []string
+	if parent != "" {
+		if p, err := e.Graph.Change(ctx, parent); err == nil {
+			targets, from = append(targets, p), append(from, methodology.FromIntegrated)
+		}
+	}
+	if subs, err := e.Graph.ListChanges(ctx, graph.ChangesFilter{Status: []domain.ChangeStatus{domain.ChangeDraft, domain.ChangeActive}}); err == nil {
+		for _, s := range subs {
+			if s.ParentID == changeID {
+				targets, from = append(targets, s), append(from, methodology.FromIntegrator)
+			}
+		}
+	}
+	for i, t := range targets {
+		e.retryBlocked(ctx, t.ID, "")
+		if t.Methodology == "" {
+			continue
+		}
+		m, err := e.Methodologies.Methodology(ctx, t.Methodology)
+		if err != nil || !subscribed(m, ev, act, from[i]) {
+			continue
+		}
+		event := maps.Clone(act)
+		event["id"], event["at"], event["relation"] = uuid.NewString(), e.clock().UnixMilli(), from[i]
+		for _, proc := range m.Processes {
+			if err := e.accompany(ctx, m, proc.Name, t.ID, event); err != nil {
+				e.log().Warn("relay", "methodology", m.Name, "process", proc.Name, "change", t.ID, "err", err)
+			}
+		}
+	}
+}
+
+// subscribed reports whether a methodology reacts to the event coming from the given side of the change it runs on
+// (methodology.FromSelf: its own change, a transverse methodology).
+func subscribed(m *methodology.Compiled, ev TriggerEvent, act map[string]any, from string) bool {
 	for _, sub := range m.Subscriptions() {
-		if sub.Event != ev.Type {
+		if sub.Event != ev.Type || sub.Origin() != from {
 			continue
 		}
 		f, err := condition.CompileEventFilter(sub.Filter)

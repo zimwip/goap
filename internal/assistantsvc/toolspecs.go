@@ -1,11 +1,14 @@
 package assistantsvc
 
 import (
+	"maps"
+	"slices"
+
 	"github.com/zimwip/goap/pkg/llm"
 )
 
-// The tools of a turn as the model gets them (ADR 0098): the seven server tools with the JSON schema of their
-// arguments, then the screen tools of the turn (ui.<name>) with theirs. The gateway passes them through the provider's
+// The tools of a turn as the model gets them (ADR 0098): the server tools of its frame (frame.go) with the JSON schema
+// of their arguments, then the screen tools of the turn (ui.<name>) with theirs. The gateway passes them through the provider's
 // tool API, or through its text protocol for a provider without one.
 
 func str(desc string) map[string]any { return map[string]any{"type": "string", "description": desc} }
@@ -21,7 +24,7 @@ func obj(props map[string]any, required ...string) map[string]any {
 // rationaleProp is the one-sentence reason a proposal carries (start_agent, the screen tools).
 var rationaleProp = str("why you propose it, one sentence (shown to the person)")
 
-// serverTools are the seven tools the server runs, as the caller.
+// serverTools are every tool the server runs, as the caller; a turn declares those of its frame.
 var serverTools = []llm.ToolSpec{
 	{Name: ToolListMethodologies, InputSchema: obj(map[string]any{}),
 		Description: "Lists the methodologies applicable to the active project (name, description, goal examples). Use it before proposing a methodology."},
@@ -40,7 +43,13 @@ var serverTools = []llm.ToolSpec{
 		Description: "Asks the interface to make that project the active one. It is refused when the person may not work on it."},
 	{Name: ToolCreateChange, InputSchema: obj(map[string]any{"title": str("short title"), "intent": str("why the change is needed"),
 		"methodology": str("optional: one that list_methodologies returned")}, "title", "intent"),
-		Description: "Creates a change, in the active project, for the person. Only do it when they asked to start a change or agreed to it."},
+		Description: "Creates a change, in the active project, for the person. Offered once search_changes has run in the conversation: only do it when no change found fits, or the person asked for a new change or agreed to it."},
+	{Name: ToolSearchChanges, InputSchema: obj(map[string]any{
+		"q": str("words of the intent (title and intent of the changes are searched, words of 3 characters or more)"),
+		"status": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"draft", "active", "committed", "applied", "abandoned"}},
+			"description": "default: the open ones (draft, active, committed)"},
+	}, "q"),
+		Description: "Searches the changes of the active project (and the projects below it) whose title or intent holds the words of q, as the person: at most 10, best first, with \"total\". Call it on the intent before creating a change, and show the person what was found."},
 	{Name: ToolOpenChange, InputSchema: obj(map[string]any{"changeId": str("the change id")}, "changeId"),
 		Description: "Asks the interface to open that change. It is refused when it does not exist or is not visible to the person."},
 	{Name: ToolListAgents, InputSchema: obj(map[string]any{}),
@@ -92,9 +101,32 @@ func paramSchema(p UIParam) map[string]any {
 	return s
 }
 
-// toolSpecs are the tools of this turn.
-func (t *turn) toolSpecs() []llm.ToolSpec {
-	specs := append([]llm.ToolSpec(nil), serverTools...)
+// startAgentNoNew is start_agent where no new change may be proposed: without the newChange argument.
+var startAgentNoNew = func() llm.ToolSpec {
+	i := slices.IndexFunc(serverTools, func(s llm.ToolSpec) bool { return s.Name == ToolStartAgent })
+	s := serverTools[i]
+	props := maps.Clone(s.InputSchema["properties"].(map[string]any))
+	delete(props, "newChange")
+	s.InputSchema = obj(props)
+	s.Description = "Starts NOTHING: records a proposal to start an agent that the person confirms or rejects in the interface. On a change give \"step\" only (from possibleSteps); with no change open a new change is needed, offered once the open changes were searched (search_changes)."
+	return s
+}()
+
+// toolSpecs are the tools of this turn in its frame: the server tools of the frame, in its order, then the screen
+// tools.
+func (t *turn) toolSpecs(f Frame) []llm.ToolSpec {
+	var specs []llm.ToolSpec
+	for _, name := range f.tools(t.searched) {
+		i := slices.IndexFunc(serverTools, func(s llm.ToolSpec) bool { return s.Name == name })
+		if i < 0 {
+			continue
+		}
+		s := serverTools[i]
+		if name == ToolStartAgent && !f.mayCreate(t.searched) {
+			s = startAgentNoNew
+		}
+		specs = append(specs, s)
+	}
 	for _, u := range t.in.UITools {
 		specs = append(specs, uiToolSpec(u))
 	}

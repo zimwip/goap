@@ -65,6 +65,9 @@ describe('assistant actions', () => {
     expect(actionLabel({ type: 'select_project', args: { project: 'P' } })).toBe('Switched to project P');
     expect(actionLabel({ type: 'open_change', args: { changeId: 'CHG-1' } })).toBe('Opened change CHG-1');
     expect(actionLabel({ type: 'create_change', args: { title: 'T' }, result: { changeId: 'CHG-2', title: 'Fix' } })).toBe('Created change Fix');
+    const search = { type: 'search_changes', args: { q: 'payment' }, result: { count: 2 } };
+    expect(actionLabel(search)).toBe('Searched the changes for "payment" (2 found)');
+    expect(repeatable(search)).toBe(false);
   });
 
   it('notifies a failure instead of throwing', async () => {

@@ -347,6 +347,10 @@ func (t *turn) startAgent(ctx context.Context, a args) (any, error) {
 	case ctxChange == "" && nc == nil:
 		return nil, errors.New(`no change is open: "newChange" {title, intent} is required`)
 	}
+	if nc != nil && !t.searched {
+		// a new change is proposed only once the open changes were searched (frame.go)
+		return nil, errors.New("a new change is proposed only once the open changes were searched: call search_changes on the intent first and show the person what was found")
+	}
 	newChange := map[string]any(nil)
 	if nc != nil {
 		title, why := args(nc).str("title"), args(nc).str("intent")
@@ -603,14 +607,18 @@ func mapOf(v any) map[string]any {
 }
 
 // describeActions is what the history says of the actions of an assistant message: the proposals with the decision of
-// the person (so the assistant can follow up), the screen tools with what became of them, then the types of the other
-// actions.
+// the person (so the assistant can follow up), the screen tools with what became of them, the searches of the changes,
+// then the types of the other actions.
 func describeActions(actions []convsvc.Action) string {
 	var other, notes []string
 	for _, a := range actions {
 		t, _ := a["type"].(string)
 		if t == ActionUITool {
 			notes = append(notes, describeUITool(a))
+			continue
+		}
+		if t == ActionSearchChanges {
+			notes = append(notes, fmt.Sprintf("searched the open changes for %q: %v found", args(mapOf(a["args"])).str("q"), mapOf(a["result"])["count"]))
 			continue
 		}
 		if t != ActionStartAgent {

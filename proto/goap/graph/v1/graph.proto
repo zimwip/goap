@@ -48,6 +48,9 @@ service GraphService {
   rpc ListNodeChanges(ListNodeChangesRequest) returns (ListNodeChangesResponse);
   rpc UpdateChange(UpdateChangeRequest) returns (UpdateChangeResponse);
   rpc MoveChange(MoveChangeRequest) returns (MoveChangeResponse);
+  // Make a root change a sub-change of a change whose methodology integrates its own, or give it back (ADR 0106).
+  rpc AttachChange(AttachChangeRequest) returns (AttachChangeResponse);
+  rpc DetachChange(DetachChangeRequest) returns (DetachChangeResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
@@ -314,6 +317,14 @@ message Change {
   // the lifecycle the change follows (named by its methodology) and its state (ADR 0058); empty: none
   string lifecycle = 20;
   string state = 21;
+  // the guardian chain of the change, outermost first, its own methodology last (ADR 0106)
+  repeated GuardianRef guardians = 22;
+}
+
+// A methodology of the guardian chain of a change, at the version in force when the chain was computed (ADR 0106).
+message GuardianRef {
+  string methodology = 1;
+  string version = 2;
 }
 
 message Review {
@@ -743,6 +754,25 @@ message MoveChangeRequest {
 }
 
 message MoveChangeResponse {
+  Change change = 1;
+}
+
+// AttachChange makes a root change, draft or active, a sub-change of parent_id (ADR 0106).
+message AttachChangeRequest {
+  string change_id = 1;
+  string parent_id = 2;
+}
+
+message AttachChangeResponse {
+  Change change = 1;
+}
+
+// DetachChange gives a sub-change back as a root change (ADR 0106).
+message DetachChangeRequest {
+  string change_id = 1;
+}
+
+message DetachChangeResponse {
   Change change = 1;
 }
 

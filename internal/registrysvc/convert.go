@@ -13,7 +13,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
@@ -84,7 +84,7 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 func subsToPB(subs []methodology.Subscription) []*registryv1.Subscription {
 	var out []*registryv1.Subscription
 	for _, s := range subs {
-		out = append(out, &registryv1.Subscription{Event: s.Event, Filter: s.Filter})
+		out = append(out, &registryv1.Subscription{Event: s.Event, Filter: s.Filter, From: s.From})
 	}
 	return out
 }
@@ -92,9 +92,39 @@ func subsToPB(subs []methodology.Subscription) []*registryv1.Subscription {
 func subsFromPB(subs []*registryv1.Subscription) []methodology.Subscription {
 	var out []methodology.Subscription
 	for _, s := range subs {
-		out = append(out, methodology.Subscription{Event: s.Event, Filter: s.Filter})
+		out = append(out, methodology.Subscription{Event: s.Event, Filter: s.Filter, From: s.From})
 	}
 	return out
+}
+
+func integrationsToPB(ins []methodology.Integration) []*registryv1.Integration {
+	var out []*registryv1.Integration
+	for _, in := range ins {
+		out = append(out, &registryv1.Integration{Methodologies: in.Methodologies, Exclusive: in.Exclusive, Attach: in.Attach})
+	}
+	return out
+}
+
+func integrationsFromPB(ins []*registryv1.Integration) []methodology.Integration {
+	var out []methodology.Integration
+	for _, in := range ins {
+		out = append(out, methodology.Integration{Methodologies: nilIfNone(in.Methodologies), Exclusive: in.Exclusive, Attach: in.Attach})
+	}
+	return out
+}
+
+func guardianToPB(g *methodology.Guardian) *registryv1.Guardian {
+	if g == nil {
+		return nil
+	}
+	return &registryv1.Guardian{Merge: g.Merge, Transitions: g.Transitions}
+}
+
+func guardianFromPB(g *registryv1.Guardian) *methodology.Guardian {
+	if g == nil || (g.Merge == "" && len(g.Transitions) == 0) {
+		return nil
+	}
+	return &methodology.Guardian{Merge: g.Merge, Transitions: g.Transitions}
 }
 
 func respToPB(r *methodology.Responsibilities) *registryv1.Responsibilities {
@@ -150,7 +180,8 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	if p == nil {
 		return methodology.Methodology{}
 	}
-	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal}
+	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal,
+		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian)}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}

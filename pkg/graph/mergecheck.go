@@ -9,8 +9,8 @@ import (
 
 // The merge of a change is held by its guardian (ADR 0102), the same as its transitions (ADR 0058): the lifecycle of
 // the change must be in a final state, then the methodology has its say (ChangeLifecycles.Merge: the goal of the
-// Activity the change is scoped to), else the landable states of the domain decide (ADR 0078). Asked outside any
-// transaction: the guardian may read the graph.
+// Activity the change is scoped to), else the landable states of the domain decide (ADR 0078); then the outer
+// guardians of its chain, innermost first (ADR 0106). Asked outside any transaction: the guardian may read the graph.
 
 // checkMerge asks the guardian of a change whether it may merge.
 func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
@@ -36,6 +36,15 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 			return fmt.Errorf("change %s is in state %s of lifecycle %s: it is merged once it is in a final state: %w", c.ID, c.State, c.Lifecycle, ErrConflict)
 		}
 	}
+	if err := g.ownGuardianMerge(ctx, c, bb, landed); err != nil {
+		return err
+	}
+	// then the outer guardians of its chain (ADR 0106), innermost first
+	return g.checkGuardians(ctx, bb, "")
+}
+
+// ownGuardianMerge is the say of the change's own methodology on its merge: its Activity goal, else the landable states.
+func (g *Graph) ownGuardianMerge(ctx context.Context, c domain.Change, bb domain.Blackboard, landed []domain.NodeView) error {
 	if g.Lifecycles != nil {
 		decided, ok, err := g.Lifecycles.Merge(ctx, c, bb)
 		switch {

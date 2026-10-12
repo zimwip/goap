@@ -38,6 +38,30 @@ func (g EventingGraph) CreateChange(ctx context.Context, in graph.NewChange) (do
 	return c, err
 }
 
+// AttachChange implements GraphPort: change.attached (ADR 0106).
+func (g EventingGraph) AttachChange(ctx context.Context, id, parent domain.ChangeID) (domain.Change, error) {
+	c, err := g.GraphPort.AttachChange(ctx, id, parent)
+	if err == nil {
+		g.emit(ctx, events.ChangeAttached, id, nil, nil)
+	}
+	return c, err
+}
+
+// DetachChange implements GraphPort: change.detached, naming the change it left (ADR 0106).
+func (g EventingGraph) DetachChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	before, err := g.GraphPort.Change(ctx, id)
+	if err != nil {
+		return before, err
+	}
+	c, err := g.GraphPort.DetachChange(ctx, id)
+	if err == nil && g.OnEvent != nil {
+		ev := c
+		ev.Items, ev.Nodes, ev.ParentID = nil, nil, before.ParentID
+		g.OnEvent(ctx, domain.ChangeEvent{Type: events.ChangeDetached, Change: ev})
+	}
+	return c, err
+}
+
 // AddItems implements GraphPort.
 func (g EventingGraph) AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
 	out, err := g.GraphPort.AddItems(ctx, id, items)

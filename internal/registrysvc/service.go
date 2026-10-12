@@ -31,7 +31,11 @@ type Service struct {
 	// MCPScopes gives the scope of each MCP of the platform (ADR 0028), checked against where a methodology
 	// declares them; nil: not checked.
 	MCPScopes func(ctx context.Context) (map[string]string, error)
-	now       func() time.Time
+	// Applicable lists the methodologies applicable to a project, nearest project of its chain first (ADR 0039): where
+	// the guardian chain of a change looks for the methodologies integrating its own (ADR 0106). Nil: a change's chain is
+	// its own methodology.
+	Applicable func(ctx context.Context, project string) ([]string, error)
+	now        func() time.Time
 	// compiled caches the compiled methodologies (ADR 0072).
 	compiled compileCache
 	// aliasMu serializes ensureAliasStubs (check, then create).

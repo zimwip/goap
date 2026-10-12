@@ -18,18 +18,19 @@ import (
 	"github.com/zimwip/goap/pkg/llm"
 )
 
-// The seven tools, the whole of what the assistant may do.
+// The server tools, the whole of what the assistant may do; a turn offers those of its frame (frame.go).
 const (
 	ToolListMethodologies = "list_methodologies"
 	ToolSelectProject     = "select_project"
 	ToolCreateChange      = "create_change"
 	ToolOpenChange        = "open_change"
-	// ToolListAgents and ToolStartAgent are in agents.go, ToolMethodologyQuery in methodtool.go
+	// ToolListAgents and ToolStartAgent are in agents.go, ToolMethodologyQuery in methodtool.go, ToolSearchChanges in
+	// searchtool.go
 )
 
-// Tools lists the names of the tools; nothing else is ever run.
+// Tools lists the names of every server tool; nothing else is ever run, and a turn offers only those of its frame.
 func Tools() []string {
-	return []string{ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange, ToolListAgents, ToolStartAgent, ToolMethodologyQuery}
+	return []string{ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange, ToolListAgents, ToolStartAgent, ToolMethodologyQuery, ToolSearchChanges}
 }
 
 // turn is the answer to one user message.
@@ -54,6 +55,12 @@ type turn struct {
 	// the turn is answered
 	summary convsvc.Summary
 	older   []convsvc.Message
+	// searched: the open changes were searched in this conversation (an earlier turn, or this one): creating a change
+	// is offered from then on (frame.go)
+	searched bool
+	// the change of the context as the frame reads it, once per turn
+	changeRead, changeOK          bool
+	changeMethodology, changeNote string
 }
 
 type toolCall struct {
@@ -121,10 +128,12 @@ func (t *turn) loop(ctx context.Context) (string, error) {
 		d.add(m.Role, m.Content)
 	}
 	d.add("user", t.in.Text)
-	specs := t.toolSpecs()
 	for round := 1; ; round++ {
 		t0 := time.Now()
-		sys := systemPrompt(t.in.Context, t.project, t.in.UITools, t.summary.Text)
+		// the frame of each round: select_project and search_changes change what the next round offers
+		f := t.frame(ctx)
+		specs := t.toolSpecs(f)
+		sys := systemPrompt(t.in.Context, t.project, t.in.UITools, t.summary.Text, f, f.tools(t.searched), t.searched)
 		// the rounds of a turn send the same system text, tools and history again: cache them
 		t.rounds = round
 		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: sys, Messages: slices.Clone(d), Tools: specs, MaxTokens: 2048, Cache: true})
@@ -286,6 +295,12 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 	if strings.HasPrefix(c.Name, PrefixUI) {
 		return t.uiTool(c, a)
 	}
+	if !slices.Contains(Tools(), c.Name) {
+		return nil, fmt.Errorf("unknown tool %q: the tools of this turn are %s (and the screen tools prefixed %q)", c.Name, strings.Join(t.frame(ctx).tools(t.searched), ", "), PrefixUI)
+	}
+	if err := t.available(ctx, c.Name); err != nil {
+		return nil, err
+	}
 	switch c.Name {
 	case ToolListMethodologies:
 		return t.listMethodologies(ctx)
@@ -301,8 +316,10 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 		return t.startAgent(ctx, a)
 	case ToolMethodologyQuery:
 		return t.methodologyQuery(ctx, a)
+	case ToolSearchChanges:
+		return t.searchChanges(ctx, a)
 	}
-	return nil, fmt.Errorf("unknown tool %q: the tools are %s (and the screen tools prefixed %q)", c.Name, strings.Join(Tools(), ", "), PrefixUI)
+	return nil, fmt.Errorf("unknown tool %q", c.Name)
 }
 
 // applicable returns the methodologies of the active project.

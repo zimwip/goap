@@ -272,7 +272,7 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 func ChangeToPB(c domain.Change) *graphv1.Change {
 	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
-		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID, Lifecycle: c.Lifecycle, State: c.State}
+		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansToPB(c.Guardians)}
 }
 
 func ChangeFromPB(c *graphv1.Change) domain.Change {
@@ -281,7 +281,7 @@ func ChangeFromPB(c *graphv1.Change) domain.Change {
 	}
 	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
-		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: c.ProjectId, Lifecycle: c.Lifecycle, State: c.State}
+		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: c.ProjectId, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansFromPB(c.Guardians)}
 }
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {
@@ -436,6 +436,22 @@ func RestructuredFromPB(r *graphv1.ImpactNodeRestructureResponse) graph.Restruct
 	out := graph.Restructured{Successors: ChangeImpactsFromPB(r.GetSuccessors()), Sources: ChangeImpactsFromPB(r.GetSources()), Parents: ChangeImpactsFromPB(r.GetParents())}
 	for _, s := range r.GetSuspect() {
 		out.Suspect = append(out.Suspect, graph.SuspectLink{From: RefFromPB(s.From), FromKey: s.FromKey, Type: s.Type, To: RefFromPB(s.To), ToKey: s.ToKey})
+	}
+	return out
+}
+
+func guardiansToPB(gs []domain.GuardianRef) []*graphv1.GuardianRef {
+	var out []*graphv1.GuardianRef
+	for _, g := range gs {
+		out = append(out, &graphv1.GuardianRef{Methodology: g.Methodology, Version: g.Version})
+	}
+	return out
+}
+
+func guardiansFromPB(gs []*graphv1.GuardianRef) []domain.GuardianRef {
+	var out []domain.GuardianRef
+	for _, g := range gs {
+		out = append(out, domain.GuardianRef{Methodology: g.Methodology, Version: g.Version})
 	}
 	return out
 }

@@ -415,12 +415,34 @@ message Methodology {
   string criticality = 25;
   // the main goal of the methodology: a declared goal or a process; its changes start with it (ADR 0096)
   string goal = 26;
+  // the methodologies whose changes its changes integrate as sub-changes (ADR 0106)
+  repeated Integration integrates = 27;
+  // what it requires of the changes it integrates, as an outer guardian of their chain (ADR 0106)
+  Guardian guardian = 28;
 }
 
-// An event a transverse methodology reacts to, with a CEL filter over event ({type, change, process, step, items}).
+// Methodologies whose changes the changes of a methodology integrate (ADR 0106).
+message Integration {
+  repeated string methodologies = 1;
+  // those changes land only through a change of the integrator
+  bool exclusive = 2;
+  // decision (default) | auto
+  string attach = 3;
+}
+
+// The guards a methodology adds to the changes it integrates (ADR 0106): CEL, with `integrator`.
+message Guardian {
+  string merge = 1;
+  // transition name -> guard
+  map<string, string> transitions = 2;
+}
+
+// An event a methodology reacts to, with a CEL filter over event ({type, change, process, step, items}); from: self
+// (default, the change it runs on), integrated (the changes it integrates), integrator (the change integrating it).
 message Subscription {
   string event = 1;
   string filter = 2;
+  string from = 3;
 }
 
 // A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY").

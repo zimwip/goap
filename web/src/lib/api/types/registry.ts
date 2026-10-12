@@ -304,6 +304,10 @@ export const TRIGGER_EVENTS = [
   'process.attached',
   'step.completed',
   'change.signal',
+  'change.transitioned',
+  'change.committed',
+  'change.attached',
+  'change.detached',
   'methodology.published',
 ] as const;
 

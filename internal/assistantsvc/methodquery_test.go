@@ -383,6 +383,7 @@ func TestMethodologyQueryRefusesWhatTheProjectDoesNotApply(t *testing.T) {
 	}
 	// the message is the one create_change gives
 	e := newEnv(t, call(ToolCreateChange, `{"title":"t","intent":"i","methodology":"other"}`), `{"message":"ok"}`)
+	e.searched(t)
 	if _, _, err := e.send("x", inProject("PROJ-A")); err != nil {
 		t.Fatal(err)
 	}

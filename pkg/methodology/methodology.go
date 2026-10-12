@@ -68,6 +68,12 @@ type Methodology struct {
 	// On are the events of those changes a transverse methodology reacts to (ADR 0036 §3): each matching event runs its
 	// processes again, with the event in vars.event. Default: a process attached to the change, a step completed.
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
+	// Integrates names the methodologies whose changes the changes of this one integrate as sub-changes (ADR 0106):
+	// a methodology integrating others is one level above them (a release above the changes it delivers).
+	Integrates []Integration `yaml:"integrates,omitempty" json:"integrates,omitempty"`
+	// Guardian is what the methodology requires of the changes it integrates, as an outer guardian of their chain
+	// (ADR 0106).
+	Guardian *Guardian `yaml:"guardian,omitempty" json:"guardian,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types def.TypeSet `yaml:"-" json:"-"`

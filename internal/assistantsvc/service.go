@@ -1,8 +1,11 @@
 // Package assistantsvc is the conversational assistant (ADR 0087): it answers the messages a person writes in a
-// conversation (ADR 0085) with the model of the `assistant` alias, and may do seven things for them through tools, no
-// more (ADR 0090 added the agents), and asks the interface to act on the screen they are on (ADR 0092: its tools are
-// handed back, never run here). It is a use case over the graph, the model gateway and the conversation service: `pkg/graph` and `pkg/engine`
-// do not import it (`pkg/layering`).
+// conversation (ADR 0085) with the model of the `assistant` alias, and may do a few things for them through its server
+// tools, no more (ADR 0090 added the agents), and asks the interface to act on the screen they are on (ADR 0092: its
+// tools are handed back, never run here). Each turn follows its frame (frame.go): the active project, the change the
+// person is looking at and its methodology, computed from the context and the history; the tools offered and the
+// prompt are those of the frame, and a change is created only once the open changes were searched (search_changes).
+// It is a use case over the graph, the model gateway and the conversation service: `pkg/graph` and `pkg/engine` do
+// not import it (`pkg/layering`).
 package assistantsvc
 
 import (
@@ -73,11 +76,12 @@ const (
 // caller may use (*modelgw.Service, *modelgw.Client).
 type Model = modelgw.SuggestModel
 
-// Graph is what the assistant needs of the graph: to create a change and to read one, as the caller
-// (*graph.Graph, *graphsvc.Client).
+// Graph is what the assistant needs of the graph: to create a change, to read one and to list them, as the caller
+// (*graph.Graph, *graphsvc.Client, engine.EventingGraph).
 type Graph interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
+	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
 }
 
 // Methodologies serves a methodology by name (*registrysvc.Service, *registrysvc.Client).
@@ -276,7 +280,7 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 		p.Project = in.Context.App.Project
 	}
 	t := &turn{s: s, p: p, conversation: in.ConversationID, message: pending.ID, in: in, history: history, project: p.Project,
-		uiTools: toolIndex(in.UITools), summary: summary, older: compactable(msgs[:from], summary.UpTo)}
+		uiTools: toolIndex(in.UITools), summary: summary, older: compactable(msgs[:from], summary.UpTo), searched: searchedIn(msgs)}
 	run := func() {
 		tctx := authz.With(context.WithoutCancel(ctx), p)
 		t.run(tctx)

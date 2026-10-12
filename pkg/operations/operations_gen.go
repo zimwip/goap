@@ -4,7 +4,9 @@ package operations
 
 // The operations of the catalogue.
 const (
+	ChangeAttach     = "change.attach"      // Graph.AttachChange, doer
 	ChangeCommit     = "change.commit"      // Graph.CommitChange, doer
+	ChangeDetach     = "change.detach"      // Graph.DetachChange, doer
 	ChangeMerge      = "change.merge"       // Graph.IntegrateChange, doer
 	ChangeRebase     = "change.rebase"      // Graph.RebaseChange, doer
 	ImpactCancel     = "impact.cancel"      // Graph.ImpactNodeCancel, doer
@@ -24,7 +26,9 @@ const (
 )
 
 var catalog = []Operation{
+	{Code: ChangeAttach, Kind: Doer, Method: "Graph.AttachChange", Doc: "AttachChange makes a root change a sub-change of another change, whose methodology integrates its own (ADR 0106): both open, in one namespace, the change acting in the parent's project or one below it, held by the parent's unit or one below it."},
 	{Code: ChangeCommit, Kind: Doer, Method: "Graph.CommitChange", Doc: "CommitChange writes the accepted modifications of a change on its own branch and reverts there the nodes it no longer changes; it returns the commit baseline."},
+	{Code: ChangeDetach, Kind: Doer, Method: "Graph.DetachChange", Doc: "DetachChange gives a sub-change back as a root change (ADR 0106: deferred, rejected by the change integrating it), still open and not merged: its branch is forked again from the head of the branch its root ancestor merges into (what it committed rebased there; ErrConflict when that leaves conflicts), its guardian chain recomputed for its methodology and project."},
 	{Code: ChangeMerge, Kind: Doer, Method: "Graph.IntegrateChange", Doc: "IntegrateChange merges a change into what it was forked from (ADR 0102, merge): a root change that committed on its own branch into the branch it was forked from, a sub-change into its parent."},
 	{Code: ChangeRebase, Kind: Doer, Method: "Graph.RebaseChange", Doc: "RebaseChange brings what a change committed up to date with the head of the branch it was forked from (the branch of its parent change for a sub-change, ADR 0103)."},
 	{Code: ImpactCancel, Kind: Doer, Method: "Graph.ImpactNodeCancel", Doc: "ImpactNodeCancel drops the draft of a change impact on the flow: the impact goes back to what the flow saw before (the draft of a parent flow), or to none."},

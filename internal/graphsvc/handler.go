@@ -452,6 +452,37 @@ func (h *Handler) MoveChange(ctx context.Context, r *connect.Request[graphv1.Mov
 	return connect.NewResponse(&graphv1.MoveChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
+// AttachChange makes a root change a sub-change of a change integrating it (ADR 0106) and publishes change.attached.
+func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[graphv1.AttachChangeRequest]) (*connect.Response[graphv1.AttachChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, err := h.Graph.AttachChange(ctx, domain.ChangeID(r.Msg.ChangeId), domain.ChangeID(r.Msg.ParentId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items, c.Nodes = nil, nil
+	h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeAttached), domain.ChangeEvent{Type: events.ChangeAttached, Change: c})
+	return connect.NewResponse(&graphv1.AttachChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
+}
+
+// DetachChange gives a sub-change back as a root change (ADR 0106) and publishes change.detached.
+func (h *Handler) DetachChange(ctx context.Context, r *connect.Request[graphv1.DetachChangeRequest]) (*connect.Response[graphv1.DetachChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	before, err := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c, err := h.Graph.DetachChange(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items, c.Nodes = nil, nil
+	// the event names the change it left, for the integrator listening to its integrated changes
+	ev := c
+	ev.ParentID = before.ParentID
+	h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeDetached), domain.ChangeEvent{Type: events.ChangeDetached, Change: ev})
+	return connect.NewResponse(&graphv1.DetachChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
+}
+
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	proposed := pbconv.ItemsFromPB(r.Msg.Items)
@@ -945,6 +976,12 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 func (h *Handler) CommitChange(ctx context.Context, r *connect.Request[graphv1.CommitChangeRequest]) (*connect.Response[graphv1.CommitChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
 	b, err := h.Graph.CommitChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
+	if err == nil {
+		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
+			c.Items, c.Nodes = nil, nil
+			h.publish(ctx, events.ChangeSubject(r.Msg.ChangeId, events.ChangeCommitted), domain.ChangeEvent{Type: events.ChangeCommitted, Change: c, Baseline: &b})
+		}
+	}
 	return res(&graphv1.CommitChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 
@@ -955,6 +992,9 @@ func (h *Handler) TransitionChange(ctx context.Context, r *connect.Request[graph
 		return nil, rpcerr.ToConnect(err)
 	}
 	c.Items = nil
+	ev := c
+	ev.Nodes = nil
+	h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeTransitioned), domain.ChangeEvent{Type: events.ChangeTransitioned, Change: ev})
 	return connect.NewResponse(&graphv1.TransitionChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 

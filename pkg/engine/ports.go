@@ -16,6 +16,10 @@ type GraphPort interface {
 	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error)
 	// MoveChange moves a root change to another project, with its open sub-changes (ADR 0091).
 	MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error)
+	// AttachChange makes a root change a sub-change of a change whose methodology integrates its own, DetachChange
+	// gives it back (ADR 0106).
+	AttachChange(ctx context.Context, id, parent domain.ChangeID) (domain.Change, error)
+	DetachChange(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	// Change is the change as stored, its items of every flow included (the blackboard is a view of one flow).
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)

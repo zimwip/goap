@@ -33,6 +33,10 @@
     'process.attached': 'process.attached — run attached to a change',
     'step.completed': 'step.completed — step of a process completed',
     'change.signal': 'change.signal — signal emitted on a change',
+    'change.transitioned': 'change.transitioned — change moved in its lifecycle',
+    'change.committed': 'change.committed — change committed on its branch',
+    'change.attached': 'change.attached — change attached to a change integrating it',
+    'change.detached': 'change.detached — change detached from the change integrating it',
     'methodology.published': 'methodology.published — methodology published',
   };
   const TARGET_LABELS: Record<string, string> = {
