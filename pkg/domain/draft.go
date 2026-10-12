@@ -51,17 +51,6 @@ type Draft struct {
 	// Execution is the action run that checked the node out (what a relaunch of a step marks stale, ADR 0025).
 	Execution string      `json:"execution,omitempty"`
 	Links     []DraftLink `json:"links,omitempty"`
-	// Inherited is, for the draft of a sub-change copied from a draft of a parent change (ADR 0081), where it was copied
-	// from: what its integration into the parent checks for a conflict.
-	Inherited *DraftOrigin `json:"inherited,omitempty"`
-}
-
-// DraftOrigin is the draft of a parent change a draft of a sub-change was copied from: the change, its change impact and
-// the seq of the last event of that impact in the change's log when it was copied (ADR 0081).
-type DraftOrigin struct {
-	Change ChangeID       `json:"changeId"`
-	Impact ChangeImpactID `json:"impactId"`
-	Seq    int            `json:"seq"`
 }
 
 // Ref is the draft reference of the node.
@@ -78,10 +67,6 @@ func (d Draft) Clone() Draft {
 	if d.MergedWith != nil {
 		m := *d.MergedWith
 		d.MergedWith = &m
-	}
-	if d.Inherited != nil {
-		o := *d.Inherited
-		d.Inherited = &o
 	}
 	d.Links = slices.Clone(d.Links)
 	for i := range d.Links {

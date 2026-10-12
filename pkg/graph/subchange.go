@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -169,7 +168,10 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("parent change %s has no branch of its own to merge sub-changes into: %w", parent.ID, ErrInvalid)
+		// the branch of the parent is where its sub-changes are forked from and merged into
+		if parent, own, err = g.ensureOwnBranch(ctx, tx, parent); err != nil {
+			return err
+		}
 	}
 	if in.Namespace != "" && domain.NamespaceOf(in.Namespace) != domain.NamespaceOf(parent.Namespace) {
 		return fmt.Errorf("a sub-change acts on the namespace of its parent (%s): %w", domain.NamespaceOf(parent.Namespace), ErrInvalid)
@@ -275,8 +277,8 @@ func (g *Graph) abandonSubChanges(ctx context.Context, tx Tx, id domain.ChangeID
 }
 
 // SplitByOwner splits a change along organisational boundaries: one sub-change per unit owning nodes the change has
-// an impact on (the owner of the pre version of a modified change impact, ADR 0024, 0054). The sub-change gets a copy
-// of the change impacts of its nodes, derived from the parent's. Units that already have an open sub-change are left
+// a candidate impact on (the owner of the pre version of a modified change impact, ADR 0024, 0054). The candidate moves to
+// the sub-change (a copy derived from the parent's, withdrawn from the parent: ADR 0103). Units that already have an open sub-change are left
 // as they are. Impacts on nodes the unit holding the change owns, or a unit outside it, stay with the parent.
 func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created []domain.Change, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -306,8 +308,8 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if !slices.ContainsFunc(seen, func(x domain.ChangeImpact) bool { return x.ID == cn.ID }) && len(cn.Items) == 0 {
 				continue // a candidate of a flow, or replaced by one
 			}
-			if cn.Pre == nil || cn.Intent != domain.IntentModified || cn.Review == domain.ReviewRejected || cn.Superseded {
-				continue
+			if cn.Pre == nil || cn.Intent != domain.IntentModified || cn.Post != nil || cn.Superseded {
+				continue // only a candidate moves: a node the change works on already stays with it
 			}
 			pre, err := tx.Node(ctx, *cn.Pre)
 			if err != nil {
@@ -361,13 +363,10 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 				return err
 			}
 			for _, cn := range gr.nodes {
-				// the impact is confirmed for the parent, the work moves to the sub-change
-				if stored := slices.IndexFunc(parent.Nodes, func(x domain.ChangeImpact) bool { return x.ID == cn.ID && len(x.Items) == 0 }); stored >= 0 && cn.Review == domain.ReviewProposed && cn.Post == nil {
-					r := domain.Review{Status: domain.ReviewAccepted, By: "graph.split_by_owner", At: g.now(),
-						Comment: fmt.Sprintf("delegated to %s (sub-change %s)", gr.org, sub.ID)}
-					if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, By: r.By, Review: &r}); err != nil {
-						return err
-					}
+				// the candidate moves to the sub-change (ADR 0103): withdrawn from the parent, it comes back to it with the
+				// version the sub-change commits, when the sub-change merges
+				if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactWithdrawn, By: "graph.split_by_owner"}); err != nil {
+					return err
 				}
 				// DerivedFrom holds the id of the parent's change impact it is copied from
 				cp := domain.ChangeImpact{ID: domain.ChangeImpactID(g.newID()), Key: cn.Key, Type: cn.Type, Intent: domain.IntentModified, Rationale: cn.Rationale,
@@ -385,156 +384,4 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 		return nil
 	})
 	return
-}
-
-// checkSubDrafts checks the accepted modifications of a sub-change as the versions written from them would be (ADR 0081,
-// 0102): a sub-change writes nothing to a branch, its merge hands its drafts to its parent.
-func (g *Graph) checkSubDrafts(ctx context.Context, tx Tx, c domain.Change) error {
-	ix, err := g.typesAt(ctx, tx, c.BaselineID)
-	if err != nil {
-		return err
-	}
-	rows, err := g.drafts(ctx, tx, c.ID)
-	if err != nil {
-		return err
-	}
-	impacts := mainImpactsOf(c)
-	reader, err := g.newDraftReader(ctx, tx, c, "", impacts)
-	if err != nil {
-		return err
-	}
-	resolve := draftResolver(ctx, tx, reader)
-	for _, cn := range impacts {
-		d := ownDraft(rows, cn.ID, "")
-		if cn.Review != domain.ReviewAccepted || d == nil {
-			continue
-		}
-		if err := g.checkOrigins(impacts, cn, d); err != nil {
-			return err
-		}
-		if err := g.checkDraft(ctx, ix, c, *d, resolve); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// subInstall is a draft of a sub-change its integration installs in the parent change.
-type subInstall struct {
-	cn     domain.ChangeImpact  // the change impact of the sub-change
-	d      domain.Draft         // its draft
-	parent *domain.ChangeImpact // the change impact the parent holds of the node, if any
-}
-
-// integrateSub integrates a committed sub-change into its parent change (ADR 0081 §4, ADR 0082 §3): every accepted draft
-// of its main flow is installed in the parent's main flow by events of the parent's log, accepted there with the review
-// the sub-change made, and recorded integrated in the sub-change's log. It is a fast-forward: a draft the parent changed
-// since the sub-change took it is refused (rebase the sub-change first), and nothing is written.
-func (g *Graph) integrateSub(ctx context.Context, tx Tx, c domain.Change) (domain.Change, error) {
-	p, err := g.parentOf(ctx, tx, c)
-	if err != nil {
-		return c, err
-	}
-	rows, err := g.drafts(ctx, tx, c.ID)
-	if err != nil {
-		return c, err
-	}
-	var plan []subInstall
-	var behind, rejected []string
-	for _, cn := range c.Nodes {
-		if cn.Flow != "" || cn.Superseded || cn.Review != domain.ReviewAccepted {
-			continue
-		}
-		d := ownDraft(rows, cn.ID, "")
-		if d == nil {
-			continue // a source of a merge or a split its parent impact realizes
-		}
-		in := subInstall{cn: cn, d: *d, parent: p.impactOf(d.Node)}
-		switch {
-		case in.parent != nil && in.parent.Review == domain.ReviewRejected:
-			rejected = append(rejected, d.Key)
-		case p.behind(*d, in.parent):
-			behind = append(behind, d.Key)
-		}
-		plan = append(plan, in)
-	}
-	if len(rejected) > 0 {
-		slices.Sort(rejected)
-		return c, fmt.Errorf("parent change %s rejected %v: withdraw them from sub-change %s, or have the parent reopen them: %w", p.c.ID, rejected, c.ID, ErrConflict)
-	}
-	if len(behind) > 0 {
-		slices.Sort(behind)
-		return c, fmt.Errorf("parent change %s changed %v since sub-change %s took them: rebase it onto the parent first: %w", p.c.ID, behind, c.ID, ErrConflict)
-	}
-	for _, in := range plan {
-		into := domain.ImpactRef{Change: p.c.ID}
-		if into.Impact, err = g.installSub(ctx, tx, c, p.c.ID, in); err != nil {
-			return c, err
-		}
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: in.cn.ID, Op: domain.ImpactIntegrated, Into: &into}); err != nil {
-			return c, err
-		}
-	}
-	// its branch received nothing: it is closed with the change
-	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
-		return c, err
-	} else if ok {
-		own.Status = domain.BranchMerged
-		if err := tx.PutBranch(ctx, own); err != nil {
-			return c, err
-		}
-	}
-	c.Status = domain.ChangeApplied
-	return c, tx.PutChange(ctx, c)
-}
-
-// installSub installs a draft of a sub-change in its parent's main flow (ADR 0081 §4) and accepts it there with the
-// review of the sub-change; it returns the parent's change impact.
-func (g *Graph) installSub(ctx context.Context, tx Tx, c domain.Change, parent domain.ChangeID, in subInstall) (domain.ChangeImpactID, error) {
-	d := in.d.Clone()
-	if d.Inherited != nil && d.Inherited.Change == parent {
-		d.Inherited = nil // the parent's own draft now; one copied from a grandparent keeps its origin
-	}
-	ref := d.Ref()
-	patch := map[string]any{"integrated": map[string]any{"change": string(c.ID), "impact": string(in.cn.ID)}}
-	var id domain.ChangeImpactID
-	if in.parent != nil {
-		id = in.parent.ID
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactTransitioned, Execution: d.Execution, Post: &ref, Draft: &d, Patch: patch}); err != nil {
-			return "", err
-		}
-	} else {
-		id = domain.ChangeImpactID(g.newID())
-		st := domain.ChangeImpact{ID: id, Key: in.cn.Key, Type: in.cn.Type, Intent: in.cn.Intent, Rationale: in.cn.Rationale, Review: domain.ReviewProposed,
-			ProducedBy: "graph.integrate", DerivedFrom: []domain.ItemID{domain.ItemID(in.cn.ID)}, Execution: in.cn.Execution, CreatedAt: g.now()}
-		if in.cn.Pre != nil {
-			p := *in.cn.Pre
-			st.Pre = &p
-		}
-		var events []domain.ImpactEvent
-		if st.Intent == domain.IntentCreated {
-			events = append(events, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactCreated, Execution: d.Execution, State: &st, Post: &ref, Draft: &d, Patch: patch})
-		} else {
-			events = append(events, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactProposed, Execution: st.Execution, State: &st},
-				domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactCheckedOut, Execution: d.Execution, Post: &ref, Draft: &d, Patch: patch})
-		}
-		if err := g.emit(ctx, tx, events...); err != nil {
-			return "", err
-		}
-	}
-	last := lastReview(in.cn)
-	r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(), ReviewID: last.ReviewID,
-		Comment: strings.TrimSpace(fmt.Sprintf("integrated from sub-change %s (%s): %s", c.Title, c.ID, last.Comment))}
-	return id, g.emit(ctx, tx, domain.ImpactEvent{Change: parent, Impact: id, Op: domain.ImpactReviewed, By: r.By, Review: &r})
-}
-
-// lastReview is the review that decides a change impact on the main flow.
-func lastReview(cn domain.ChangeImpact) domain.Review {
-	var out domain.Review
-	for _, r := range cn.Reviews {
-		if r.Flow == "" && !r.Superseded {
-			out = r
-		}
-	}
-	return out
 }

@@ -20,7 +20,7 @@ import (
 
 // hasCommits reports whether a root change committed versions on its own branch it has not merged yet.
 func hasCommits(c domain.Change) bool {
-	return c.ParentID == "" && c.ResultBaselineID != "" && (c.Status == domain.ChangeDraft || c.Status == domain.ChangeActive)
+	return c.ResultBaselineID != "" && (c.Status == domain.ChangeDraft || c.Status == domain.ChangeActive)
 }
 
 // uncommitted lists the change impacts whose draft holds a modification not committed yet (ADR 0102).
@@ -44,7 +44,7 @@ func (g *Graph) uncommitted(ctx context.Context, tx Tx, c domain.Change) ([]stri
 // after their commit, the next commit reverts them to the versions of the fork, returned too (ADR 0102).
 func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]domain.NodeID, map[domain.NodeID]domain.Version, error) {
 	own, ok, err := ownBranch(ctx, tx, c)
-	if err != nil || !ok || c.ParentID != "" {
+	if err != nil || !ok {
 		return nil, nil, err
 	}
 	fork, err := tx.Baseline(ctx, own.ForkBaseline)
@@ -101,11 +101,11 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 		switch {
 		case cn.Review == domain.ReviewRejected:
 			out = append(out, cn.Key+" is rejected (rework or withdraw it)")
-		case !modifies && (c.ParentID != "" || cn.Landed == nil):
+		case !modifies && cn.Landed == nil:
 			out = append(out, cn.Key+" modifies nothing (modify or withdraw it)")
 		case modifies && cn.Review != domain.ReviewAccepted:
 			out = append(out, cn.Key+" awaits its review")
-		case modifies && c.ParentID == "":
+		case modifies:
 			out = append(out, cn.Key+" is not committed")
 		}
 	}
@@ -130,13 +130,10 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		} else if len(left) > 0 {
 			return fmt.Errorf("change %s cannot be merged yet: %s: %w", id, strings.Join(left, "; "), ErrConflict)
 		}
-		if c.ParentID == "" && !hasCommits(c) {
+		if !hasCommits(c) {
 			return fmt.Errorf("change %s committed nothing on its branch: %w", id, ErrNothingToCommit)
 		}
-		if c.ParentID != "" && !slices.ContainsFunc(mainImpactsOf(c), func(cn domain.ChangeImpact) bool { return cn.Review == domain.ReviewAccepted }) {
-			return fmt.Errorf("sub-change %s holds no accepted modification: %w", id, ErrNothingToCommit)
-		}
-		return nil
+		return g.checkParentDrafts(ctx, tx, c)
 	})
 	if err != nil {
 		return c, err
@@ -159,13 +156,6 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
-		if c.ParentID != "" {
-			if err := g.checkSubDrafts(ctx, tx, c); err != nil {
-				return err
-			}
-			c, err = g.integrateSub(ctx, tx, c)
-			return err
-		}
 		own, ok, err := ownBranch(ctx, tx, c)
 		if err != nil {
 			return err
@@ -173,10 +163,116 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		if !ok {
 			return fmt.Errorf("change %s has no branch of its own: %w", id, ErrInvalid)
 		}
-		c, err = g.integrate(ctx, tx, c, own, resolutions)
-		return err
+		if c.ParentID == "" {
+			c, err = g.integrate(ctx, tx, c, own, resolutions)
+			return err
+		}
+		// a sub-change fast-forwards the branch of its parent, which takes its work as its own (ADR 0103)
+		if ff, err := g.fastForward(ctx, tx, c, own); err != nil {
+			return err
+		} else if !ff {
+			return fmt.Errorf("the branch of parent change %s moved meanwhile: merge %s again: %w", c.ParentID, id, ErrConflict)
+		}
+		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		return g.recordInParent(ctx, tx, c)
 	})
 	return c, err
+}
+
+// checkParentDrafts refuses the merge of a sub-change while its parent holds an uncommitted modification of a node the
+// sub-change changed: the parent commits or cancels it first (its draft would no longer start from its branch).
+func (g *Graph) checkParentDrafts(ctx context.Context, tx Tx, c domain.Change) error {
+	if c.ParentID == "" {
+		return nil
+	}
+	parent, err := tx.Change(ctx, c.ParentID)
+	if err != nil {
+		return err
+	}
+	rows, err := g.drafts(ctx, tx, parent.ID)
+	if err != nil {
+		return err
+	}
+	mine := map[domain.NodeID]bool{}
+	for _, cn := range mainImpactsOf(c) {
+		mine[nodeOf(cn)] = true
+	}
+	var held []string
+	for _, cn := range mainImpactsOf(parent) {
+		if !mine[nodeOf(cn)] {
+			continue
+		}
+		if ok, err := g.draftModifies(ctx, tx, ownDraft(rows, cn.ID, "")); err != nil {
+			return err
+		} else if ok {
+			held = append(held, cn.Key)
+		}
+	}
+	if len(held) > 0 {
+		return fmt.Errorf("parent change %s holds uncommitted modifications of %s: it commits or cancels them first: %w", parent.ID, strings.Join(held, ", "), ErrConflict)
+	}
+	return nil
+}
+
+// recordInParent gives the parent of a merged sub-change an impact for each node the sub-change landed on the parent's
+// branch (ADR 0103): its own impact of the node, else a new one, accepted with the sub-change's review and landed as the
+// version the sub-change committed. The parent then holds the work as its own, committed.
+func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) error {
+	parent, err := tx.Change(ctx, c.ParentID)
+	if err != nil {
+		return err
+	}
+	head, err := branchHead(ctx, tx, parent.Namespace, parent.Branch)
+	if err != nil {
+		return err
+	}
+	for _, cn := range mainImpactsOf(c) {
+		if cn.Landed == nil {
+			continue
+		}
+		ref := *cn.Landed
+		var events []domain.ImpactEvent
+		id := domain.ChangeImpactID("")
+		for _, p := range mainImpactsOf(parent) {
+			if nodeOf(p) == ref.ID {
+				id = p.ID
+			}
+		}
+		if id == "" {
+			id = domain.ChangeImpactID(g.newID())
+			st := domain.ChangeImpact{ID: id, Key: cn.Key, Type: cn.Type, Intent: cn.Intent, Rationale: cn.Rationale, Review: domain.ReviewProposed,
+				ProducedBy: "graph.merge", DerivedFrom: []domain.ItemID{domain.ItemID(cn.ID)}, Execution: cn.Execution, CreatedAt: g.now()}
+			if cn.Pre != nil {
+				p := *cn.Pre
+				st.Pre = &p
+				events = append(events, domain.ImpactEvent{Change: parent.ID, Impact: id, Op: domain.ImpactProposed, State: &st})
+			} else {
+				events = append(events, domain.ImpactEvent{Change: parent.ID, Impact: id, Op: domain.ImpactCreated, State: &st, Post: &ref})
+			}
+		}
+		last := domain.Review{}
+		for _, r := range cn.Reviews {
+			if r.Flow == "" && !r.Superseded {
+				last = r
+			}
+		}
+		r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(), ReviewID: last.ReviewID,
+			Comment: strings.TrimSpace(fmt.Sprintf("merged from sub-change %s (%s): %s", c.Title, c.ID, last.Comment))}
+		events = append(events,
+			domain.ImpactEvent{Change: parent.ID, Impact: id, Op: domain.ImpactReviewed, By: r.By, Review: &r},
+			domain.ImpactEvent{Change: parent.ID, Impact: id, Op: domain.ImpactLanded, Landed: &ref, Baseline: head.ID, Branch: domain.BranchOf(parent.Branch)})
+		if err := g.emit(ctx, tx, events...); err != nil {
+			return err
+		}
+	}
+	// the parent's branch now holds the sub-change's commits: the parent has committed work to merge
+	if parent, err = tx.Change(ctx, parent.ID); err != nil {
+		return err
+	}
+	parent.ResultBaselineID = head.ID
+	return tx.PutChange(ctx, parent)
 }
 
 // rebaseCommittedTx rebases a root change that committed on its own branch onto the head of its target branch: a
@@ -377,7 +473,6 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 		if err != nil {
 			return err
 		}
-		accepted := false
 		for _, cn := range mainImpactsOf(c) {
 			if cn.Review != domain.ReviewAccepted {
 				continue
@@ -386,7 +481,6 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 				return err
 			} else if ok {
 				st.ToCommit = append(st.ToCommit, cn.Key)
-				accepted = true
 			}
 		}
 		w, _, err := g.withdrawnSince(ctx, tx, c)
@@ -397,8 +491,8 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 			return err
 		}
 		st.Reverts, st.Commits = len(w), hasCommits(c)
-		st.CanCommit = c.ParentID == "" && (len(st.ToCommit) > 0 || st.Reverts > 0)
-		st.CanMerge = len(st.Unsettled) == 0 && (st.Commits || c.ParentID != "" && accepted)
+		st.CanCommit = len(st.ToCommit) > 0 || st.Reverts > 0
+		st.CanMerge = len(st.Unsettled) == 0 && st.Commits
 		return nil
 	})
 	return

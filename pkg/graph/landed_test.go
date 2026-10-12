@@ -49,7 +49,7 @@ func testLanded(t *testing.T, repo Repo) {
 		t.Fatalf("the change impact holds the last landing: %+v", c.Nodes)
 	}
 
-	// a sub-change lands nothing on a branch: it is integrated into its parent's log, and the parent lands its work (ADR 0081)
+	// a sub-change commits on its own branch, forked from its parent's, and lands on it at its merge (ADR 0103)
 	head := must[domain.Baseline](t)(g.BranchHead(ctx, "", domain.MainBranch))
 	parent := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "parent", BaselineID: head.ID, OwnBranch: true}))
 	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "sub", ParentID: parent.ID}))
@@ -64,24 +64,18 @@ func testLanded(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ev = landings(sub.ID); len(ev) != 0 || b.ID != "" {
-		t.Fatalf("a sub-change lands nothing (baseline %q): %+v", b.ID, ev)
+	if ev = landings(sub.ID); len(ev) != 2 || ev[1].Branch != domain.BranchOf(parent.Branch) || b.Branch != domain.BranchOf(parent.Branch) {
+		t.Fatalf("a sub-change lands on its branch, then on its parent's (baseline %+v): %+v", b, ev)
 	}
-	var into *domain.ImpactRef
-	for _, e := range must[[]domain.ImpactEvent](t)(impactEventsOf(ctx, g, sub.ID)) {
-		if e.Op == domain.ImpactIntegrated {
-			into = e.Into
-		}
-	}
-	if into == nil || into.Change != parent.ID || into.Impact == "" {
-		t.Fatalf("the sub-change records where its impact went: %+v", into)
+	if pl := landings(parent.ID); len(pl) != 1 || *pl[0].Landed != *ev[1].Landed {
+		t.Fatalf("the parent holds what its sub-change landed: %+v", pl)
 	}
 	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	ev = landings(parent.ID)
-	if len(ev) != 2 || ev[0].Impact != into.Impact {
-		t.Fatalf("the parent lands the integrated impact on its branch, then on main: %+v", ev)
+	if len(ev) != 2 || ev[0].Impact != ev[1].Impact || ev[1].Branch != domain.MainBranch {
+		t.Fatalf("the parent holds the sub-change's landing on its branch, then lands it on main: %+v", ev)
 	}
 	if n, err := g.NodeByKey(ctx, "", "L-2"); err != nil || n.Properties["title"] != "t" || n.ChangeID != parent.ID {
 		t.Fatalf("L-2 on main = %+v, %v", n, err)

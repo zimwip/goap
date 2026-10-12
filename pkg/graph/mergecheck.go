@@ -60,8 +60,7 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 }
 
 // mergeBlackboard is what the guardian judges: the change with, for each impact, its pre version and what it lands (the
-// version on the change's branch for a root change, its accepted draft for a sub-change, which hands it to its parent),
-// those landed nodes returned apart.
+// version on the change's branch), those landed nodes returned apart.
 func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (domain.Blackboard, []domain.NodeView, error) {
 	bb := domain.Blackboard{Change: c, Nodes: map[domain.NodeRef]domain.NodeView{}}
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
@@ -76,7 +75,7 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 	var head map[domain.NodeID]domain.Version
 	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
 		return bb, nil, err
-	} else if ok && c.ParentID == "" {
+	} else if ok {
 		h, err := branchHead(ctx, tx, c.Namespace, own.Name)
 		if err != nil {
 			return bb, nil, err
@@ -99,15 +98,11 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 			}
 			bb.Nodes[*cn.Pre] = v
 		}
-		var to *domain.NodeRef
-		if c.ParentID != "" && cn.Drafted() && cn.Review == domain.ReviewAccepted {
-			to = cn.Post
-		} else if v, ok := head[nodeOf(cn)]; ok && cn.Landed != nil {
-			to = &domain.NodeRef{ID: nodeOf(cn), Version: v}
-		}
-		if to == nil {
+		at, ok := head[nodeOf(cn)]
+		if !ok || cn.Landed == nil {
 			continue
 		}
+		to := &domain.NodeRef{ID: nodeOf(cn), Version: at}
 		v, err := view(*to)
 		if err != nil {
 			return bb, nil, err

@@ -15,14 +15,15 @@ import (
 //     there the nodes it no longer changes (an impact withdrawn after its commit). It checks the drafts as versions (their
 //     attributes, validators, required links, the moves of their lifecycle) and nothing else: neither the methodology
 //     nor the target branch. The change stays open; it is edited and committed again as often as needed. A commit that
-//     writes and reverts nothing is refused (ErrNothingToCommit). A sub-change has no branch of its own: it does not
-//     commit, its merge takes its accepted modifications into its parent (ADR 0081).
+//     writes and reverts nothing is refused (ErrNothingToCommit). A sub-change is a change like any other, whose branch
+//     is forked from the branch of its parent change (ADR 0103).
 //   - IntegrateChange (the merge) takes the work into what the change was forked from, once everything in it is
-//     settled: every impact committed (a sub-change: accepted), no open flow, decision point or sub-change. It first
-//     brings the change up to date (a root change: its branch rebased onto the head of its target, rebase_committed.go;
-//     a sub-change: rebased onto its parent, ADR 0082), asks the guardian of the change (mergecheck.go: its lifecycle,
-//     the say of its methodology, the landable states), then fast-forwards; the change is applied, closed. Only a target moving in between falls back to the three-way
-//     merge, which leaves the change committed until it is resolved.
+//     settled: every impact committed, no open flow, decision point or sub-change. It first rebases its branch onto the
+//     head of its target (the branch it was forked from: main, a release branch, the branch of its parent change;
+//     rebase_committed.go), asks the guardian of the change (mergecheck.go: its lifecycle, the say of its methodology,
+//     the landable states), then fast-forwards; the change is applied, closed, and a sub-change's parent holds its work
+//     as its own (recordInParent). Only a root change's target moving in between falls back to the three-way merge,
+//     which leaves the change committed until it is resolved.
 //
 // Apply is both: it commits what is pending, then merges.
 
@@ -30,20 +31,14 @@ import (
 var ErrNothingToCommit = fmt.Errorf("nothing to commit: %w", ErrInvalid)
 
 // Apply commits what the change has pending, then merges it (IntegrateChange). It returns the baseline the change left
-// on the branch it was forked from, or its last commit when the merge waits for a resolution; nothing for a sub-change,
-// which lands in its parent (ADR 0081).
+// on the branch it was forked from, or its last commit when the merge waits for a resolution.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
-	c, err := g.Change(ctx, id)
-	if err != nil {
+	if _, err := g.CommitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
 		return result, err
 	}
-	if c.ParentID == "" {
-		if _, err := g.CommitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
-			return result, err
-		}
-	}
-	if c, err = g.IntegrateChange(ctx, id, nil); err != nil || c.ResultBaselineID == "" {
+	c, err := g.IntegrateChange(ctx, id, nil)
+	if err != nil || c.ResultBaselineID == "" {
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
@@ -59,16 +54,13 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 	return result, err
 }
 
-// CommitChange writes the accepted modifications of a root change on its own branch and reverts there the nodes it no
+// CommitChange writes the accepted modifications of a change on its own branch and reverts there the nodes it no
 // longer changes; it returns the commit baseline. The change stays open (ADR 0102).
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
-		}
-		if c.ParentID != "" {
-			return fmt.Errorf("change %s is a sub-change: it has no branch of its own, merge it into its parent: %w", id, ErrInvalid)
 		}
 		// the change is its branch: one that wrote nothing has none yet
 		if _, own, err := ownBranch(ctx, tx, c); err != nil {

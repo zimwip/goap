@@ -146,22 +146,26 @@ func testSplitByOwnerAndMerge(t *testing.T, repo Repo) {
 			t.Fatalf("%s = %s", s.OwnerOrg, got.Status)
 		}
 	}
-	// integrated into the parent's log (ADR 0081): no version written, main and the parent branch are untouched
+	// merged into the parent's branch (ADR 0103): main is untouched, the parent's branch holds the versions
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: w.cmp1.ID}); n.Properties["title"] != "one" || n.Version != w.cmp1.Version {
 		t.Fatalf("sub-change leaked on main: %+v", n)
 	}
-	if n, err := g.NodeByKeyOn(ctx, "", parent.Branch, "CMP-1"); err != nil || n.Properties["title"] != "one" {
+	if n, err := g.NodeByKeyOn(ctx, "", parent.Branch, "CMP-1"); err != nil || n.Properties["title"] != "one v2" {
 		t.Fatalf("parent branch = %v, %v", n.Properties, err)
 	}
-	if v, err := g.ChangeNodeViewByKey(ctx, parent.ID, "", "", "CMP-1"); err != nil || v.Properties["title"] != "one v2" || v.Version != 0 {
-		t.Fatalf("the parent holds the draft of its sub-change: %+v, %v", v.Node, err)
-	}
-	// the parent's delegated impact holds the work and is accepted with the sub-change's review
+	// the parent holds the work as its own: an impact accepted with the sub-change's review, committed
 	pc, _ := g.Change(ctx, parent.ID)
+	found := 0
 	for _, cn := range pc.Nodes {
-		if cn.Key == "CMP-1" && (cn.Review != domain.ReviewAccepted || !cn.Drafted() || !strings.Contains(cn.Reviews[len(cn.Reviews)-1].Comment, "integrated from sub-change")) {
-			t.Fatalf("parent impact of CMP-1 = %+v", cn)
+		if cn.Key == "CMP-1" || cn.Key == "CMP-2" {
+			found++
+			if cn.Review != domain.ReviewAccepted || cn.Landed == nil || cn.Drafted() || !strings.Contains(cn.Reviews[len(cn.Reviews)-1].Comment, "merged from sub-change") {
+				t.Fatalf("parent impact of %s = %+v", cn.Key, cn)
+			}
 		}
+	}
+	if found != 2 {
+		t.Fatalf("the parent holds the work of its sub-changes: %+v", pc.Nodes)
 	}
 	// the parent applies with what its sub-changes brought in, then merges into main
 	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
@@ -186,10 +190,15 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	w := newOrgWorld(t, repo)
 	g := w.g
-	// a parent without a branch of its own cannot have sub-changes
+	// a parent without a branch of its own gets one: its sub-changes fork from it (ADR 0103)
 	flat, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "flat", BaselineID: w.base.ID})
-	if _, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: flat.ID}); !errors.Is(err, ErrInvalid) {
+	sub, err := g.CreateChange(ctx, NewChange{Title: "x", ParentID: flat.ID})
+	if err != nil {
 		t.Fatalf("sub-change of a flat change: %v", err)
+	}
+	flat = must[domain.Change](t)(g.Change(ctx, flat.ID))
+	if fb, err := g.Branch(ctx, sub.Namespace, sub.Branch); err != nil || fb.Parent != flat.Branch || flat.Branch == domain.MainBranch {
+		t.Fatalf("the sub-change forks from the branch its parent was given: %+v, parent on %s, %v", fb, flat.Branch, err)
 	}
 	// unknown owner org
 	if _, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "x", BaselineID: w.base.ID, OwnerOrg: "ORG-NOPE"}); !errors.Is(err, ErrInvalid) {
@@ -208,7 +217,7 @@ func testSubChangeRules(t *testing.T, repo Repo) {
 		t.Fatalf("other namespace: %v", err)
 	}
 	p2, _ := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "p2", BaselineID: w.base.ID, OwnBranch: true, OwnerOrg: "ORG-DIGITAL"})
-	sub, err := g.CreateChange(ctx, NewChange{Title: "s", ParentID: p2.ID, OwnerOrg: "ORG-T2"})
+	sub, err = g.CreateChange(ctx, NewChange{Title: "s", ParentID: p2.ID, OwnerOrg: "ORG-T2"})
 	if err != nil || sub.Branch == p2.Branch || sub.ParentID != p2.ID {
 		t.Fatalf("sub = %+v, %v", sub, err)
 	}
@@ -388,8 +397,8 @@ func testSubChangeValidatorHook(t *testing.T, repo Repo) {
 }
 
 // Two sibling sub-changes, each on its own branch forked from the same parent branch, touching the same node:
-// whichever applies (merges into the parent branch) first wins; the other waits committed and needs a
-// resolution, exactly the precedence the parent/parallel-sub-activity design relies on.
+// whichever merges into the parent branch first wins; the other is rebased onto it at its merge, settles the conflict and
+// merges again, exactly the precedence the parent/parallel-sub-activity design relies on (ADR 0103).
 func TestSubChangeMergePrecedence(t *testing.T) { forEachRepo(t, testSubChangeMergePrecedence) }
 
 func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
@@ -438,7 +447,7 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 		title, _ := v.Properties["title"].(string)
 		return title
 	}
-	// A applies first: integrated cleanly into the parent's log (ADR 0081)
+	// A merges first: a fast-forward of the parent's branch
 	if _, err := g.Apply(ctx, a.ID, ""); err != nil {
 		t.Fatalf("sub A applies first: %v", err)
 	}
@@ -471,7 +480,94 @@ func testSubChangeMergePrecedence(t *testing.T, repo Repo) {
 	if _, err := g.Apply(ctx, parent.ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"); err != nil || n.Properties["title"] != "from A and B" || n.Version != w.cmp3.Version+1 {
+	if n, err := g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3"); err != nil || n.Properties["title"] != "from A and B" || n.Version != w.cmp3.Version+3 ||
+		len(n.Parents) != 2 || n.Parents[1] != w.cmp3.Version+1 {
+		// A's commit, B's commit, then B's rebased merge of both (its second parent A's version)
 		t.Fatalf("CMP-3 on main = %+v, %v", n, err)
+	}
+}
+
+// A sub-change of a sub-change forks from the branch of its parent, recursively, and each level merges into the one
+// above (ADR 0103): the guardian of the change being merged is asked, and a parent holding an uncommitted modification
+// of a node its sub-change changed commits or cancels it first.
+func TestNestedSubChanges(t *testing.T) { forEachRepo(t, testNestedSubChanges) }
+
+func testNestedSubChanges(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newOrgWorld(t, repo)
+	g := w.g
+	root := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", BaselineID: w.base.ID, OwnBranch: true}))
+	mid := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "mid", ParentID: root.ID}))
+	leaf := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "leaf", ParentID: mid.ID}))
+	if b := must[domain.Branch](t)(g.Branch(ctx, leaf.Namespace, leaf.Branch)); b.Parent != mid.Branch {
+		t.Fatalf("the leaf forks from the branch of its parent %s: %+v", mid.Branch, b)
+	}
+	if b := must[domain.Branch](t)(g.Branch(ctx, mid.Namespace, mid.Branch)); b.Parent != root.Branch {
+		t.Fatalf("the middle change forks from the branch of the root %s: %+v", root.Branch, b)
+	}
+	pre := w.cmp3.Ref()
+	write := func(c domain.Change, title string) domain.ChangeImpactID {
+		t.Helper()
+		added := must[[]domain.ChangeImpact](t)(g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &pre, Rationale: title}}))
+		if _, err := g.edit(ctx, c.ID, added[0].ID, edit{Properties: map[string]any{"title": title}}); err != nil {
+			t.Fatal(err)
+		}
+		return added[0].ID
+	}
+	leafImpact := write(leaf, "from the leaf")
+	if _, err := g.accept(ctx, leaf.ID, leafImpact, "u", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.CommitChange(ctx, leaf.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// the parent drafts the same node and has not committed it: the leaf waits
+	midImpact := write(mid, "from the middle")
+	if _, err := g.IntegrateChange(ctx, leaf.ID, nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("merge under an uncommitted draft of the parent: %v", err)
+	}
+	if _, err := g.ImpactNodeCancel(ctx, mid.ID, midImpact, "", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	// the guardian of the leaf holds its merge, then lets it go
+	allow := false
+	var asked domain.ChangeID
+	g.Lifecycles = mergeGate(func(_ context.Context, c domain.Change, _ domain.Blackboard) (bool, bool, error) {
+		asked = c.ID
+		return true, allow, nil
+	})
+	if _, err := g.IntegrateChange(ctx, leaf.ID, nil); !errors.Is(err, ErrInvalid) || asked != leaf.ID {
+		t.Fatalf("the guardian refuses the merge of %s: %v (asked for %s)", leaf.ID, err, asked)
+	}
+	allow = true
+	if _, err := g.IntegrateChange(ctx, leaf.ID, nil); err != nil {
+		t.Fatal(err)
+	}
+	if v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, mid.ID, "", domain.DefaultNamespace, "CMP-3")); v.Properties["title"] != "from the leaf" {
+		t.Fatalf("the middle change holds the leaf's work: %v", v.Properties)
+	}
+
+	// each level merges into the one above, then the root lands on main
+	if _, err := g.Apply(ctx, mid.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if v := must[domain.NodeView](t)(g.ChangeNodeViewByKey(ctx, root.ID, "", domain.DefaultNamespace, "CMP-3")); v.Properties["title"] != "from the leaf" {
+		t.Fatalf("the root holds the leaf's work: %v", v.Properties)
+	}
+	if n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3")); n.Properties["title"] == "from the leaf" {
+		t.Fatalf("main moved before the root merged: %+v", n)
+	}
+	if _, err := g.Apply(ctx, root.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if n := must[domain.Node](t)(g.NodeByKey(ctx, domain.DefaultNamespace, "CMP-3")); n.Properties["title"] != "from the leaf" || n.Version != w.cmp3.Version+1 {
+		t.Fatalf("CMP-3 on main = %+v", n)
+	}
+	for _, id := range []domain.ChangeID{leaf.ID, mid.ID, root.ID} {
+		if c := must[domain.Change](t)(g.Change(ctx, id)); c.Status != domain.ChangeApplied {
+			t.Fatalf("change %s (%s) is %s", c.Title, id, c.Status)
+		}
 	}
 }

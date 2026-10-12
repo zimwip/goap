@@ -2,22 +2,18 @@ package graph
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// Rebasing a sub-change onto its parent (ADR 0082): the drafts of the sub-change the parent changed since they were taken
-// are merged three-way with the parent's (domain.MergeDrafts), the base folded from the log at the position the draft was
-// copied; the fields changed on both sides are conflicts the sub-change settles by editing its draft, and its integration
-// into the parent is then a fast-forward.
-//
-// Rebasing a root change onto its target branch (ADR 0101): the same merge against the versions on the head of the branch
-// the change was forked from, then the change and its branch move to that head, so that its landing is a fast-forward.
+// Rebasing a change (ADR 0101, 0102, 0103): what it committed on its branch is brought onto the head of the branch it was
+// forked from (main, a release branch, the branch of its parent change), the nodes changed on both sides merged
+// three-way (domain.MergeDrafts, rebaseCommittedTx); the fields changed on both sides are conflicts the change settles by
+// editing its draft, and its merge is then a fast-forward. A change that committed nothing has nothing to rebase.
 
-// RebasedImpact is what a rebase did to a change impact of the sub-change.
+// RebasedImpact is what a rebase did to a change impact.
 type RebasedImpact struct {
 	Impact domain.ChangeImpactID `json:"impactId"`
 	Key    string                `json:"key"`
@@ -42,7 +38,7 @@ type RebaseResult struct {
 	Impacts []RebasedImpact   `json:"impacts,omitempty"`
 }
 
-// Changed reports a rebase that changed a draft: the sub-change has impacts to review again.
+// Changed reports a rebase that left conflicts: the change has impacts to settle and review again.
 func (r RebaseResult) Changed() bool {
 	for _, i := range r.Impacts {
 		if i.Changed || len(i.Conflicts) > 0 {
@@ -62,19 +58,15 @@ func (r RebaseResult) summary() string {
 			conflicts = append(conflicts, i.Key+" "+c)
 		}
 	}
-	out := fmt.Sprintf("rebased onto parent change %s: review again %s", r.Parent, strings.Join(review, ", "))
-	if r.Parent == "" {
-		out = fmt.Sprintf("rebased onto branch %s: review again %s", r.Branch, strings.Join(review, ", "))
-	}
+	out := fmt.Sprintf("rebased onto branch %s: review again %s", r.Branch, strings.Join(review, ", "))
 	if len(conflicts) > 0 {
 		out += "; settle the conflicts " + strings.Join(conflicts, ", ")
 	}
 	return out
 }
 
-// RebaseChange brings a sub-change up to date with its parent (ADR 0082 §1), a root change with the head of its target
-// branch (ADR 0101 §1). A committed sub-change whose rebase changes a draft goes back to active: its impacts are to be
-// reviewed again; a committed root change is not rebased.
+// RebaseChange brings what a change committed up to date with the head of the branch it was forked from (the branch of
+// its parent change for a sub-change, ADR 0103).
 func (g *Graph) RebaseChange(ctx context.Context, id domain.ChangeID) (res RebaseResult, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
@@ -87,159 +79,19 @@ func (g *Graph) RebaseChange(ctx context.Context, id domain.ChangeID) (res Rebas
 	return
 }
 
-// parentState is what a sub-change is checked against: its parent, the parent's drafts and log.
-type parentState struct {
-	c      domain.Change
-	rows   []domain.Draft
-	events []domain.ImpactEvent
-}
-
-func (g *Graph) parentOf(ctx context.Context, tx Tx, c domain.Change) (parentState, error) {
-	var p parentState
-	if c.ParentID == "" {
-		return p, invalidf("change %s is not a sub-change", c.ID)
-	}
-	var err error
-	if p.c, err = changeOpen(ctx, tx, c.ParentID); err != nil {
-		return p, err
-	}
-	if p.rows, err = g.drafts(ctx, tx, p.c.ID); err != nil {
-		return p, err
-	}
-	p.events, err = impactEvents(ctx, tx, p.c.ID)
-	return p, err
-}
-
-// impactOf is the change impact the parent holds of a node on its main flow, if any.
-func (p parentState) impactOf(node domain.NodeID) *domain.ChangeImpact {
-	var out *domain.ChangeImpact
-	for i, x := range p.c.Nodes {
-		if x.Flow == "" && !x.Superseded && nodeOf(x) == node {
-			out = &p.c.Nodes[i]
-		}
-	}
-	return out
-}
-
-// lastSeq is the position of the last event of a change impact on the main flow of a log.
-func lastSeq(events []domain.ImpactEvent, impact domain.ChangeImpactID) int {
-	seq := 0
-	for _, e := range events {
-		if e.Impact == impact && e.Flow == "" && e.Seq > seq {
-			seq = e.Seq
-		}
-	}
-	return seq
-}
-
-// behind reports whether the parent changed a node since the sub-change took it (ADR 0081 §5): the draft was copied from
-// the parent's and an event changed that draft after, or it was taken from the stored version (or from a grandparent) and
-// the parent holds a draft of the node now; or the parent rejected or withdrew the impact the draft was copied from.
-func (p parentState) behind(d domain.Draft, pi *domain.ChangeImpact) bool {
-	if pi != nil && pi.Review == domain.ReviewRejected {
-		return true
-	}
-	if o := d.Inherited; o != nil && o.Change == p.c.ID {
-		if pi == nil || pi.ID != o.Impact {
-			return true
-		}
-		for _, e := range p.events {
-			if e.Impact == o.Impact && e.Flow == "" && e.Seq > o.Seq && changesDraft(e) {
-				return true
-			}
-		}
-		return false
-	}
-	return pi != nil && ownDraft(p.rows, pi.ID, "") != nil
-}
-
 // rebaseTx is RebaseChange inside a transaction.
 func (g *Graph) rebaseTx(ctx context.Context, tx Tx, c domain.Change) (RebaseResult, error) {
 	switch c.Status {
 	case domain.ChangeApplied, domain.ChangeAbandoned:
 		return RebaseResult{Parent: c.ParentID}, fmt.Errorf("change %s is %s: %w", c.ID, c.Status, ErrConflict)
 	}
-	if c.ParentID == "" {
-		// a root change is brought up to date when it merges, what it committed (ADR 0102): before its first commit there
-		// is nothing to rebase
-		own, ok, err := ownBranch(ctx, tx, c)
-		if err != nil || !ok || !hasCommits(c) {
-			return RebaseResult{}, err
-		}
-		return g.rebaseCommittedTx(ctx, tx, c, own)
+	own, ok, err := ownBranch(ctx, tx, c)
+	if err != nil || !ok || !hasCommits(c) {
+		return RebaseResult{Parent: c.ParentID}, err
 	}
-	res := RebaseResult{Parent: c.ParentID}
-	p, err := g.parentOf(ctx, tx, c)
-	if err != nil {
-		return res, err
-	}
-	rows, err := g.drafts(ctx, tx, c.ID)
-	if err != nil {
-		return res, err
-	}
-	for _, cn := range c.Nodes {
-		if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded {
-			continue
-		}
-		d := ownDraft(rows, cn.ID, "")
-		if d == nil {
-			continue // nothing written: the sub-change sees the parent's draft as it is
-		}
-		pi := p.impactOf(d.Node)
-		if !p.behind(*d, pi) {
-			continue
-		}
-		base, err := g.rebaseBase(ctx, tx, *d)
-		if err != nil {
-			return res, err
-		}
-		var merged domain.Draft
-		var conflicts []string
-		var onto *domain.DraftOrigin
-		switch {
-		case pi == nil || pi.Review == domain.ReviewRejected:
-			// the parent withdrew or rejected what the sub-change works on: the whole node is in conflict
-			merged, conflicts = d.Clone(), []string{domain.ConflictNode}
-			if pi != nil {
-				onto = &domain.DraftOrigin{Change: p.c.ID, Impact: pi.ID, Seq: lastSeq(p.events, pi.ID)}
-			}
-		default:
-			// the parent's draft; a parent holding none (it cancelled its checkout) sees the stored version again
-			theirs := base
-			if pd := ownDraft(p.rows, pi.ID, ""); pd != nil {
-				theirs = *pd
-			} else if pi.Pre != nil {
-				if theirs, err = g.storedDraft(ctx, tx, *pi.Pre); err != nil {
-					return res, err
-				}
-			}
-			merged, conflicts = domain.MergeDrafts(base, *d, theirs)
-			g.numberLinks(&merged)
-			onto = &domain.DraftOrigin{Change: p.c.ID, Impact: pi.ID, Seq: lastSeq(p.events, pi.ID)}
-		}
-		merged.Inherited = onto
-		changed := !sameDraft(withoutOrigin(merged), withoutOrigin(*d))
-		rebased := map[string]any{"change": string(p.c.ID)}
-		if onto != nil {
-			rebased["seq"] = onto.Seq
-		}
-		back := changed || len(conflicts) > 0
-		if err := g.installRebased(ctx, tx, c, cn, *d, merged, nil, rebased, conflicts, back, "rebased onto parent change "+string(p.c.ID)); err != nil {
-			return res, err
-		}
-		res.Impacts = append(res.Impacts, RebasedImpact{Impact: cn.ID, Key: cn.Key, Changed: changed, Conflicts: conflicts})
-	}
-	if res.Changed() && c.Status == domain.ChangeCommitted {
-		c, err := tx.Change(ctx, c.ID)
-		if err != nil {
-			return res, err
-		}
-		c.Status = domain.ChangeActive
-		if err := tx.PutChange(ctx, c); err != nil {
-			return res, err
-		}
-	}
-	return res, nil
+	res, err := g.rebaseCommittedTx(ctx, tx, c, own)
+	res.Parent = c.ParentID
+	return res, err
 }
 
 // numberLinks gives the links a merge brought (they have no id) one.
@@ -270,37 +122,6 @@ func (g *Graph) installRebased(ctx context.Context, tx Tx, c domain.Change, cn d
 // HeaderBaselineID is the field of a change.updated log entry that records the move of a rebase (ADR 0101).
 const HeaderBaselineID = "baselineId"
 
-func withoutOrigin(d domain.Draft) domain.Draft {
-	d = d.Clone()
-	d.Inherited = nil
-	return d
-}
-
-// rebaseBase is the state a draft of a sub-change started from: the draft it was copied from, folded from that change's
-// log up to the position it was copied at; else the stored version it was checked out from (with its outgoing links);
-// else (a creation of its own) an empty draft.
-func (g *Graph) rebaseBase(ctx context.Context, tx Tx, d domain.Draft) (domain.Draft, error) {
-	if o := d.Inherited; o != nil {
-		events, err := impactEvents(ctx, tx, o.Change)
-		if err != nil {
-			return domain.Draft{}, err
-		}
-		upTo := events[:0:0]
-		for _, e := range events {
-			if e.Seq <= o.Seq {
-				upTo = append(upTo, e)
-			}
-		}
-		if b := domain.DraftSeenBy(upTo, o.Impact, nil, func(string) bool { return false }); b != nil {
-			return *b, nil
-		}
-	}
-	if d.Base == nil {
-		return domain.Draft{Node: d.Node, Key: d.Key, Type: d.Type}, nil
-	}
-	return g.storedDraft(ctx, tx, *d.Base)
-}
-
 // storedDraft is a stored version seen as a draft, with its outgoing links: what a three-way merge compares.
 func (g *Graph) storedDraft(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.Draft, error) {
 	n, err := tx.Node(ctx, ref)
@@ -319,8 +140,8 @@ func (g *Graph) storedDraft(ctx context.Context, tx Tx, ref domain.NodeRef) (dom
 	return out, nil
 }
 
-// ImpactNodeResolve settles the conflicts a rebase left on a change impact of a sub-change by keeping the sub-change's
-// values (ADR 0082 §2): an updated event with {"resolved": true}. The impact is then reviewed as any.
+// ImpactNodeResolve settles the conflicts a rebase left on a change impact by keeping the change's values (ADR 0082 §2):
+// an updated event with {"resolved": true}. The impact is then reviewed as any.
 func (g *Graph) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, execution string) (cn domain.ChangeImpact, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, domain.MainFlow)
@@ -358,12 +179,8 @@ func (g *Graph) checkSettled(ctx context.Context, tx Tx, c domain.Change, impact
 		return err
 	}
 	if pending := domain.PendingConflicts(events, impact); len(pending) > 0 {
-		with := "its parent change"
-		if c.ParentID == "" {
-			with = "its target branch"
-		}
-		return fmt.Errorf("change impact %s has conflicts with %s to settle first (edit the fields, or keep them with ImpactNodeResolve): %s: %w",
-			impact, with, strings.Join(pending, ", "), ErrConflict)
+		return fmt.Errorf("change impact %s has conflicts with the branch it was forked from to settle first (edit the fields, or keep them with ImpactNodeResolve): %s: %w",
+			impact, strings.Join(pending, ", "), ErrConflict)
 	}
 	return nil
 }
@@ -375,21 +192,20 @@ type ImpactConflicts struct {
 	Conflicts []string              `json:"conflicts"`
 }
 
-// RebaseState is where a change stands against what it builds on (ADR 0082, 0101): the change impacts whose draft the
-// parent change (a sub-change) or the head of the target branch (a root change) changed since the change took it, a
-// rebase bringing them up to date, and the conflicts left to settle.
+// RebaseState is where a change stands against the branch it was forked from (ADR 0101, 0103): the change impacts whose
+// node that branch changed since the fork, a rebase bringing them up to date, and the conflicts left to settle.
 type RebaseState struct {
 	Parent    domain.ChangeID         `json:"parentId"`
 	Behind    []domain.ChangeImpactID `json:"behind,omitempty"`
 	Conflicts []ImpactConflicts       `json:"conflicts,omitempty"`
-	// Branch and Onto, for a root change behind the head of its target branch: the branch and the head baseline a
+	// Branch and Onto, for a change behind the head of the branch it was forked from: that branch and the head baseline a
 	// rebase moves it to (empty: not behind).
 	Branch string            `json:"branch,omitempty"`
 	Onto   domain.BaselineID `json:"onto,omitempty"`
 }
 
-// RebaseState reads where a change stands against what it builds on. A sub-change whose parent is no longer open, a
-// committed or closed root change, has nothing behind.
+// RebaseState reads where a change stands against the branch it was forked from. A change that committed nothing, or a
+// closed one, has nothing behind.
 func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseState, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
@@ -409,32 +225,11 @@ func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseS
 		if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned {
 			return nil
 		}
-		rows, err := g.drafts(ctx, tx, c.ID)
-		if err != nil {
+		own, ok, err := ownBranch(ctx, tx, c)
+		if err != nil || !ok || !hasCommits(c) {
 			return err
 		}
-		if c.ParentID == "" {
-			own, ok, err := ownBranch(ctx, tx, c)
-			if err != nil || !ok || !hasCommits(c) {
-				return err
-			}
-			return g.committedBehind(ctx, tx, c, own, &st)
-		}
-		p, err := g.parentOf(ctx, tx, c)
-		if errors.Is(err, ErrConflict) {
-			return nil // the parent is no longer open
-		} else if err != nil {
-			return err
-		}
-		for _, cn := range c.Nodes {
-			if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded {
-				continue
-			}
-			if d := ownDraft(rows, cn.ID, ""); d != nil && p.behind(*d, p.impactOf(d.Node)) {
-				st.Behind = append(st.Behind, cn.ID)
-			}
-		}
-		return nil
+		return g.committedBehind(ctx, tx, c, own, &st)
 	})
 	return
 }

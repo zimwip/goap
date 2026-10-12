@@ -29,12 +29,9 @@ func ownBranch(ctx context.Context, tx Tx, c domain.Change) (domain.Branch, bool
 	return b, b.Origin == domain.ChangeBranchOrigin(c.ID), nil
 }
 
-// integrateTx integrates a committed change into the branch it was forked from (its own branch is the one to merge),
-// a sub-change into its parent change (ADR 0081; a fast-forward, ADR 0082). Unresolved conflicts leave a change committed.
+// integrateTx integrates a committed change into the branch it was forked from (its own branch is the one to merge).
+// Unresolved conflicts leave a change committed.
 func (g *Graph) integrateTx(ctx context.Context, tx Tx, c domain.Change, resolutions map[domain.NodeID]Resolution) (domain.Change, error) {
-	if c.ParentID != "" {
-		return g.integrateSub(ctx, tx, c)
-	}
 	own, ok, err := ownBranch(ctx, tx, c)
 	if err != nil {
 		return c, err
