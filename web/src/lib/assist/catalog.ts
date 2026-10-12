@@ -94,6 +94,12 @@ export const TOOLS = {
     level: 'write',
     args: { properties: { step: str('the step id') }, required: ['step'] },
   },
+  run_import: {
+    description: 'Import the content loaded in the Import tab: a methodology or domain definition, or a graph snapshot (opens a change on main).',
+    guidance: 'Only once the summary says content is loaded and valid. title: the change of a graph import (optional). publish: a definition published directly.',
+    level: 'write',
+    args: { properties: { title: str('the title of the change a graph import opens, optional'), publish: { type: 'boolean', description: 'publish the definition directly (it must be valid)' } } },
+  },
   set_field: {
     description: 'Put a value in a field of the form on screen (the person still saves the form).',
     guidance: 'field: an id of the screen entities of type field; value: its value as text, in the type of the field.',

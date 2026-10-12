@@ -13,6 +13,8 @@
   import { methodologySpec } from './methodologyTabs';
   import { domainSpec } from './domainTabs';
   import { importKind, IMPORT_KINDS } from './importKinds';
+  import { registerAssist } from '../../assist/registry.svelte';
+  import { contentFacts, importSummary } from '../../assist/importScreen';
 
   let { tab }: { tab: Tab } = $props();
 
@@ -38,8 +40,8 @@
     }
   }
 
-  async function doImport() {
-    if (!text.trim()) return;
+  async function doImport(): Promise<string | undefined> {
+    if (!text.trim()) return 'No content is loaded: pick a file or paste it.';
     importing = true;
     error = '';
     definition = null;
@@ -66,6 +68,7 @@
       }
     } catch (err) {
       error = errorMessage(err);
+      return error;
     } finally {
       importing = false;
     }
@@ -85,9 +88,45 @@
         primary: true,
         shortcut: 'Ctrl+S',
         disabled: importing || !text.trim(),
-        run: doImport,
+        run: () => void doImport(),
       },
     ],
+  );
+
+  // what the assistant sees and may do here (ADR 0092): a description of the content, never the content itself
+  $effect(() =>
+    registerAssist({
+      tab: tab.id,
+      screen: () => ({
+        kind: 'import',
+        title: kind.heading,
+        summary: importSummary(what, text, { publish, title: title.trim() }, {
+          definition: definition ? { name: definition.name, version: definition.version, status: definition.status, issues: definition.issues.length } : undefined,
+          graph: graphResult
+            ? { changeTitle: graphResult.change ? graphResult.change.title || graphResult.change.id : undefined, created: graphResult.created, updated: graphResult.updated, unchanged: graphResult.unchanged, warnings: graphResult.warnings?.length ?? 0 }
+            : undefined,
+        }),
+        entities: graphResult?.change?.id ? [{ type: 'change', id: graphResult.change.id, label: graphResult.change.title || graphResult.change.id }] : [],
+      }),
+      focus: () => ({ pendingAction: importing ? `importing ${contentFacts(what, text)}` : undefined, errors: error ? [error] : [] }),
+      tools: [
+        {
+          name: 'run_import',
+          enabled: () => !importing && !!text.trim(),
+          describe: (base) => {
+            const props = { ...base.args?.properties };
+            if (what === 'graph') delete props.publish;
+            else delete props.title;
+            return { ...base, args: { properties: props } };
+          },
+          run: (a) => {
+            if (what === 'graph' && typeof a.title === 'string' && a.title.trim()) title = a.title.trim();
+            if (what !== 'graph' && typeof a.publish === 'boolean') publish = a.publish;
+            return doImport();
+          },
+        },
+      ],
+    }),
   );
 </script>
 
@@ -160,7 +199,7 @@
         </ul>
       {/if}
     {/if}
-    <button class="primary" type="button" onclick={doImport} disabled={importing || !text.trim()}>
+    <button class="primary" type="button" onclick={() => void doImport()} disabled={importing || !text.trim()}>
       {importing ? 'Import…' : 'Import'}
     </button>
   </section>
