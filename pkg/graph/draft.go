@@ -302,6 +302,19 @@ func (g *Graph) ChangeNodeViewByKey(ctx context.Context, id domain.ChangeID, flo
 				return err
 			}
 			ref = n.Ref()
+			// a change with a branch of its own reads the version its branch holds: what its parent committed, for a
+			// sub-change (ADR 0103), not the latest version anywhere
+			if own, ok, err := ownBranch(ctx, tx, c); err != nil {
+				return err
+			} else if ok {
+				head, err := branchHead(ctx, tx, c.Namespace, own.Name)
+				if err != nil {
+					return err
+				}
+				if at, ok := head.Nodes[n.ID]; ok {
+					ref.Version = at
+				}
+			}
 		}
 		v, err = viewIn(ctx, tx, r, ref)
 		return err

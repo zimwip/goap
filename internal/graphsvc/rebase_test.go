@@ -13,8 +13,9 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 )
 
-// A sub-change behind its parent through the service (ADR 0082): the state tells what is behind, the rebase names the
-// conflict, the resolution keeps the sub-change's value, and the sub-change then applies into its parent.
+// A sub-change behind its parent through the service (ADR 0103): the parent committed the node the sub-change committed
+// on its own branch; the state tells what is behind, the rebase names the conflict, the resolution keeps the
+// sub-change's value, and the sub-change then applies into its parent.
 func TestRebaseThroughTheService(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
@@ -46,7 +47,10 @@ func TestRebaseThroughTheService(t *testing.T) {
 	ok(nil, err)
 	ok(g.ImpactNodeUpdate(ctx, sub.ID, scn.ID, graph.NodeUpdate{Properties: map[string]any{"title": "sub"}}))
 	ok(g.ImpactNodeReview(ctx, sub.ID, scn.ID, domain.ReviewAccepted, "r", "ok"))
+	ok(g.CommitChange(ctx, sub.ID, ""))
 	ok(g.ImpactNodeUpdate(ctx, parent.ID, pcn.ID, graph.NodeUpdate{Properties: map[string]any{"title": "parent"}}))
+	ok(g.ImpactNodeReview(ctx, parent.ID, pcn.ID, domain.ReviewAccepted, "r", "ok"))
+	ok(g.CommitChange(ctx, parent.ID, ""))
 
 	st, err := cl.RebaseState(ctx, sub.ID)
 	if err != nil || st.Parent != parent.ID || len(st.Behind) != 1 || st.Behind[0] != scn.ID || len(st.Conflicts) != 0 {
