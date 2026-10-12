@@ -82,6 +82,9 @@ type Graph interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
+	// AttachChange and DetachChange carry out the attach / detach proposals the person accepted (ADR 0106).
+	AttachChange(ctx context.Context, id, parent domain.ChangeID) (domain.Change, error)
+	DetachChange(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 }
 
 // Methodologies serves a methodology by name (*registrysvc.Service, *registrysvc.Client).

@@ -1,7 +1,9 @@
 # ADR 0042 — Local sign-in by default, users declared at sign-in, the waiting unit
 
 **Status**: accepted, implemented · **Date**: 2026-09 ·
-Completes ADR 0040 (user bootstrap, local auth), builds on ADR 0039 (`EnsureUser`, `User extends OrgUnit`).
+Completes ADR 0040 (user bootstrap, local auth), builds on ADR 0039 (`EnsureUser`, `User extends OrgUnit`). Completed
+by ADR 0044 / 0045 (token refresh, server-side sessions); the first administrator is granted by a platform Assignment
+since ADR 0047.
 
 ## Context
 
@@ -38,7 +40,8 @@ every caller is a fixed dev principal. Three gaps remained to make users a real 
   one-second TTL) so the very first calls carry the user's unit and roles. `EnsureCaller` still covers
   callers that never went through sign-in (hs256 tokens).
 - **`EnsureUser` commits a change.** The `User` node and its `member_of` link are one commit on `main`
-  (`createUser`, the same `applyOn` the seeds use): atomic, journaled, and it moves the head, so the access
+  (`createUser`, through `SeedChange` as the seeds do, run as the system principal; it also activates the user,
+  ADR 0048, and grants the first one admin, ADR 0047): atomic, journaled, and it moves the head, so the access
   snapshot sees the user at once. Creations are serialized within a process (the web fires several calls at
   once right after signing in) and retried when another change moved `main` meanwhile (`ErrConflict`).
 - **The waiting unit is a flag of its own, at the administrator's discretion.** `OrgUnit` gains a `waiting`
@@ -63,4 +66,5 @@ every caller is a fixed dev principal. Three gaps remained to make users a real 
 - A fresh deployment opens on the sign-in page; the first account created is its administrator (ADR 0040).
   Development setups that relied on the implicit dev principal set `GOAP_AUTH_MODE=none`.
 - Every new user is a change of the `organisation` namespace ("User <subject>"), visible in its history.
-- Not implemented (unchanged from ADR 0040): an OIDC/OAuth mode, server-side token revocation.
+- Not implemented (unchanged from ADR 0040): an OIDC/OAuth mode. Server-side sessions, which logout ends, came with
+  ADR 0045.

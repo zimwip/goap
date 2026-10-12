@@ -220,7 +220,7 @@ func SeedProtectedAliases(ctx context.Context, g *graph.Graph) (bool, error) {
 }
 
 // SeedBehaviors gives every install the built-in example behaviour of the gateway (ADR 0093: llmcfg.TerseBehavior,
-// disabled): created when no node of its key exists, never touched afterwards, so an administrator who edited, enabled
+// enabled): created when no node of its key exists, never touched afterwards, so an administrator who edited, disabled
 // or retired it keeps it so. It reports whether it wrote anything.
 func SeedBehaviors(ctx context.Context, g *graph.Graph) (bool, error) {
 	b := llmcfg.TerseBehavior()

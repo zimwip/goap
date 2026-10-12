@@ -9,8 +9,10 @@ edited methodologies, policies, processes waiting on a human action.
 
 ## Decision
 - `goap-dev` selects its storage via `GOAP_STORE`: `memory` (default) or `sqlite`, a **single file**
-  (`GOAP_SQLITE_PATH`, default `.goap/goap.db`) shared by the graph, the index, the model gateway usage, the engine,
-  the MCP hub (connector registry) and the registry's domains (the methodologies and access control keep their data in the graph, ADR 0020 and 0023).
+  (`GOAP_SQLITE_PATH`, default `.goap/goap.db`) shared by the graph, the index, the model gateway (usage and call
+  ledger), the engine, the MCP hub (connector registry), the registry's domains, the preferences, the conversations
+  and the credentials (ADR 0038, 0085, 0045); the methodologies and access control keep their data in the graph
+  (ADR 0020 and 0023).
 - **`modernc.org/sqlite`** driver (pure Go, no cgo): nothing to install besides Go (and Node for the IDE).
 - Each component has its own SQLite migrations (`migrations_sqlite/`), tracked per component in
   `schema_migrations`; same storage interfaces as PostgreSQL (`graph.Repo`, `engine.Store`, the index store) and the
@@ -28,4 +30,5 @@ edited methodologies, policies, processes waiting on a human action.
 ## Consequences
 - SQLite remains a **development** mode: no clustering, a single process; production stays
   on PostgreSQL (one database per service).
-- Any schema change must be made in both dialects (`migrations/` and `migrations_sqlite/`).
+- Any schema change must be made in both dialects (`migrations/` and `migrations_sqlite/`); `TestSchemasAligned`
+  checks they agree (ADR 0074).

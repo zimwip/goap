@@ -10,8 +10,8 @@ node must signal the elements that depend on it.
 - A link belongs to a baseline if both its endpoints are in it (at the link's versions).
 - **Outgoing links are part of the source node's version**: adding or removing an outgoing link
   of an existing node creates a new version of that node.
-- When a node gets a new version (written on the change's branch, then merged by the application of the change,
-  ADR 0015 §5), it **carries its outgoing links forward**;
+- When a node gets a new version (written from its draft on the change's branch when the change is committed, then
+  merged into the target branch, ADR 0079, ADR 0102), it **carries its outgoing links forward**;
   **incoming** links from unmodified nodes stay on the old version and become
   **suspect** (`SuspectLinks`): this is the model's native impact signal.
 

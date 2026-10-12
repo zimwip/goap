@@ -116,7 +116,7 @@ func TestToolsFollowTheFrameOnAChange(t *testing.T) {
 	if _, _, err := e.send("what now?", changeCtx("CHG-D")); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{ToolSelectProject, ToolOpenChange, ToolMethodologyQuery, ToolListAgents, ToolStartAgent, ToolSearchChanges}
+	want := []string{ToolSelectProject, ToolOpenChange, ToolMethodologyQuery, ToolListAgents, ToolStartAgent, ToolSearchChanges, ToolAttachChange, ToolDetachChange}
 	if got := toolNames(e.model.got[0].Tools); !slices.Equal(got, want) || hasNewChange(e.model.got[0].Tools) {
 		t.Fatalf("tools %v", got)
 	}

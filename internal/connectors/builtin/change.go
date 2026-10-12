@@ -35,6 +35,8 @@ var _ connectorkit.Connector = Change{}
 var changeOps = []op{
 	{"create", "Open a change on the head of main of a namespace: {change}", schema(map[string]string{"title": "string", "intent": "string", "namespace": "string", "methodology": "string", "unit": "string", "project": "string"}, "title", "intent", "namespace")},
 	{"move", "Move a root change, draft or active, with its sub-changes, to another project: {change}", schema(map[string]string{"change": "string", "project": "string"}, "project")},
+	{"attach", "Attach a root change to a change whose methodology integrates its own, as its sub-change: {change}", schema(map[string]string{"change": "string", "parent": "string"}, "parent")},
+	{"detach", "Detach a sub-change from the change integrating it, a root change again: {change}", schema(map[string]string{"change": "string"})},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
 	{"reformulate", "Revise the title/intent of a change, superseding the previous definition (history kept): {change, item}",
@@ -119,6 +121,18 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			return nil, err
 		}
 		return result(map[string]any{"change": changeSummary(moved)})
+	case "attach":
+		attached, err := c.p.Graph.AttachChange(ctx, id, domain.ChangeID(a.str("parent")))
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"change": changeSummary(attached)})
+	case "detach":
+		detached, err := c.p.Graph.DetachChange(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"change": changeSummary(detached)})
 	case "options", "option", "activate", "evaluate", "compare":
 		return c.options(ctx, who, id, op, a)
 	case "decisions", "decision", "rule", "answer":
@@ -599,7 +613,8 @@ func producer(ctx context.Context) string {
 
 func changeSummary(c domain.Change) map[string]any {
 	return map[string]any{"id": c.ID, "title": c.Title, "intent": c.Intent, "methodology": c.Methodology, "namespace": c.Namespace,
-		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID, "project": c.ProjectID}
+		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID, "project": c.ProjectID,
+		"guardians": c.Guardians}
 }
 
 // working is one call on the blackboard of a change.

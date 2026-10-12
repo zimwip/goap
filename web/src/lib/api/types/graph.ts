@@ -277,12 +277,20 @@ export interface ChangeItem {
   execution?: string;
 }
 
+/** A methodology of the guardian chain of a change, at the version it was saved with (ADR 0106). */
+export interface GuardianRef {
+  methodology?: string;
+  version?: string;
+}
+
 export interface Change {
   id?: string;
   namespace?: string;
   /** branch the change works on (change-<id> when it has its own) */
   branch?: string;
   /** sub-change: parent change and responsible OrgUnit key */
+  /** the methodologies framing the change, outermost first, its own last (ADR 0106) */
+  guardians?: GuardianRef[];
   parentId?: string;
   ownerOrg?: string;
   /** key of the project the change acts in (ADR 0054) */

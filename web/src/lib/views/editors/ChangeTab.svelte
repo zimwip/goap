@@ -32,6 +32,8 @@
   import { availableTransitions, decisionLabel, findLifecycle, movable as lifecycleMovable, pickableDecisions, resolveCall, runTransition, type Refusal, type TransitionOffer } from '../../changeTransition';
   import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
+  import AttachChange from '../../components/AttachChange.svelte';
+  import { attachable, detach, detachable, guardianChain } from '../../changeAttach';
   import { movable } from '../../changeProject';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -165,6 +167,23 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let baselineName = $state('');
   let applying = $state(false);
   let moveOpen = $state(false);
+  let attachOpen = $state(false);
+  let detaching = $state(false);
+  // detaches the change from the change integrating it (ADR 0106)
+  const detachFromParent = async () => {
+    if (!change?.id || !(await confirmDialog({ message: `Detach “${change.title}” from the change integrating it? It becomes a root change again, rebased onto the branch its former root merges into.`, confirmLabel: 'Detach' })))
+      return;
+    detaching = true;
+    try {
+      await detach(change.id);
+      notify('Change detached.', 'ok');
+      load(selected);
+    } catch (e) {
+      notify(errorMessage(e), 'error');
+    } finally {
+      detaching = false;
+    }
+  };
   // the lifecycle definition the change follows, its decision points and the transition being taken (ADR 0058)
   let lcDef = $state<Lifecycle>();
   let lcDomain = $state('');
@@ -1068,9 +1087,14 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           {#if !closed && !defining}
             <button type="button" class="small" onclick={startDefine}>Edit</button>
             {#if movable(ch)}<button type="button" class="small" onclick={() => (moveOpen = !moveOpen)}>Move to project…</button>{/if}
+            {#if attachable(ch)}<button type="button" class="small" onclick={() => (attachOpen = !attachOpen)}>Attach to change…</button>{/if}
+            {#if detachable(ch)}<button type="button" class="small" disabled={detaching} onclick={detachFromParent}>Detach</button>{/if}
             <button type="button" class="small danger" disabled={defBusy} onclick={abandon}>Abandon</button>
           {/if}
         </div>
+        {#if attachOpen && attachable(ch)}
+          <AttachChange change={ch} oncancel={() => (attachOpen = false)} onattached={() => ((attachOpen = false), notify('Change attached.', 'ok'), load(selected))} />
+        {/if}
         {#if moveOpen && movable(ch)}
           <MoveChange change={ch} oncancel={() => (moveOpen = false)} onmoved={() => ((moveOpen = false), load(selected))} />
         {/if}
@@ -1096,6 +1120,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: ch.parentId ?? '' } })}>{shortId(ch.parentId)}</button></dd>
           {/if}
           {#if ch.methodology}<dt>Methodology</dt><dd>{ch.methodology}</dd>{/if}
+          {#if guardianChain(ch)}<dt>Guardians</dt><dd title="The methodologies whose guardians hold its merge and its moves, outermost first (ADR 0106)">{guardianChain(ch)}</dd>{/if}
           {#if ch.goal}
             <dt>Goal</dt>
             <dd>

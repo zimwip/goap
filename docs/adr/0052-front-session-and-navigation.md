@@ -18,7 +18,8 @@ was down at boot left the app with a dead token until a manual reload.
   Panel selection, explorer expansion and baseline selection are no longer stored.
 - **The token claim is the project.** `goap.project` is gone; `project.current` follows the identity.
 - **A session change restarts the page.** Signing in or out (the token appearing or disappearing, in this tab or
-  another) drops what the browser kept for the user (`forgetSessionState`: notifications, assistant), then reloads
+  another) drops what the browser kept for the user (`forgetSessionState`: notifications; the assistant's conversations are kept server side since ADR 0085 /
+  0088), then reloads
   on home: no store keeps the previous user's data. A refreshed or reissued token is not a session change. The
   reason of an ended session survives the reload as `goap.notice`, read once by the sign-in page.
 - **One session keeper for every mode.** A 401 on the current token (including an end-of-stream refusal and the

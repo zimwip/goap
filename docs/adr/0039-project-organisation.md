@@ -1,6 +1,8 @@
 # ADR 0039 — Project mirrors Organisation; Assignment is where they meet
 
-**Status**: accepted, implemented · **Date**: 2026-09 ·
+**Status**: accepted, implemented; the seeding of the roots and the project gate of `Engine.Start` superseded by ADR
+0054 (`Graph.Bootstrap`), the default project by ADR 0091 (a change names its project); roles held through
+Assignments completed by ADR 0043 / 0047; the active project is the token claim only (ADR 0052) · **Date**: 2026-09 ·
 Builds on ADR 0016 (organisation and sub-changes), ADR 0019 (organisations, MCP, connectors), ADR 0020
 (access control), ADR 0023 (methodologies as graph nodes), ADR 0028 (built-in MCPs and connectors),
 ADR 0035 (methods, roles, operations, documents).
@@ -28,11 +30,10 @@ different applicable roles depending on which project the work belongs to.
   it is `project_part_of` instead.
 - **The root project is seeded self-linked, not rootless.** `ORG-DEFAULT` is the root of the organisation
   chain by *omitting* its `part_of` link; `PROJ-ROOT` (the `root` of its structure tag, ADR 0069) is instead seeded with a
-  `project_part_of` link to itself. A self-link cannot be made in the same commit as the node it targets
-  (the commit orderer refuses a cycle among created nodes, `pkg/graph/commit.go`), so seeding is two
-  commits: create, then link the new version to itself (`graphsvc.seedRootProject`). Every walk that
-  follows the chain already guards against revisiting a node (`Snapshot.Chain`/`Snapshot.ProjectChain`, and
-  `projectWithin` mirroring `orgWithin`), so the self-link terminates safely with no special-casing needed.
+  `project_part_of` link to itself. It was first seeded in two commits (create, then link the new version to
+  itself); since ADR 0054 `Graph.Bootstrap` creates both roots in one transaction, as the structure tags declare
+  (`selfParent`). Every walk that follows the chain guards against revisiting a node (`domain.Hierarchy`,
+  `Snapshot.Chain` / `Snapshot.ProjectChain`, ADR 0068), so the self-link terminates safely with no special-casing.
 - **Assignment is the meeting point of organisation and project** — the same shape as `Adapter` (the
   meeting point of organisation, MCP and connector, ADR 0019/0028): `organisation@Assignment` links an
   `OrgUnit` (`assigns_org`) to a `ProjectUnit` (`assigns_project`) and carries the `roles` that unit locally
@@ -70,17 +71,18 @@ different applicable roles depending on which project the work belongs to.
 - **Token / API propagation.** The gateway JWT (`internal/gateway.Claims`) gained a `project` claim,
   propagated as `X-Goap-Project` alongside the existing `X-Goap-Subject/Org/Roles`
   (`internal/identity`). `POST /auth/dev-token/project` reissues the caller's token with the same
-  subject/org/roles and a new project — "a token regenerated each time the user changes project" — gated
-  behind the same `DevTokens && AuthMode == "hs256"` flag as `/auth/dev-token` (there is no other token
-  issuance in the repository yet). `graphsvc.CreateChange` and `enginesvc.StartProcess`/`AttachChange`
-  default their `project_id` from `authz.From(ctx).Project` when the request names none, so a caller only
-  has to pass one explicitly when acting on a project other than their active one.
-- **The project selector** sits in the web header, between the brand and the search box (not in the
-  `.right` status cluster: "near goap", the product mark, is more discoverable than buried among status
-  icons). It calls the switch-project endpoint (`api.switchProject`) and persists the choice locally
-  (`stores/project.svelte.ts`); with no token to reissue (`goap-dev`, `AuthMode: "none"`) the selection
-  stays local-display only — `goap-dev` has its own fixed `GOAP_DEV_PROJECT` env var instead, the same way
-  `GOAP_DEV_ORG` already works.
+  subject/org/roles and a new project — "a token regenerated each time the user changes project" — first
+  gated behind `DevTokens` in `hs256` mode, served in `local` mode too since ADR 0040 / 0042 (it checks the
+  session and `access.Directory.MayAccessProject`). `graphsvc.CreateChange` and `enginesvc.StartProcess`/
+  `AttachChange` default their `project_id` from `authz.From(ctx).Project` when the request names none, so a
+  caller only has to pass one explicitly when acting on a project other than their active one (an empty claim
+  meaning the root project, ADR 0091).
+- **The project selector** sits in the web header, between the brand and the search box (not in the `.right` status
+  cluster: "near goap", the product mark, is more discoverable than buried among status icons). It calls the
+  switch-project endpoint (`api.switchProject`, `stores/project.svelte.ts`); the active project is the token claim, not
+  kept in browser storage (ADR 0052); with no token to reissue (`goap-dev`, `AuthMode: "none"`) the selection stays
+  local-display only — `goap-dev` has its own fixed `GOAP_DEV_PROJECT` env var instead, the same way `GOAP_DEV_ORG`
+  already works.
 - **Navigation**: one left-nav entry, "People & Organisation" (not three), sub-navigated into Organisation
   / Projects / Users panels (`PeopleOrgExplorer.svelte` wrapping the three existing explorer components).
   Users are listed (and pre-provisionable) alongside units and projects. Assignment has no nav entry of its
@@ -88,14 +90,13 @@ different applicable roles depending on which project the work belongs to.
   implementation parametrized by which side — org or project — is fixed) via its own "+ Assignment" action,
   or via each explorer's tree/list context menu ("New assignment"), which opens the entity's tab with that
   pane pre-opened.
-- **Enforcement**: "a user must select a project before any action but the administrative ones" is checked
-  where a *person starts a process* (`Engine.resolveChange`, only when opening a fresh change — an attach
-  to an existing change carries its project already) — not at the raw graph API (`CreateChange` still
-  defaults an empty `ProjectID` to the root project, the way an empty `OwnerOrg` already defaults to
-  `DefaultOrg`): most direct graph callers are administrative by nature (seeding, org/project/policy/
-  adapter management, tests, tools) and would otherwise all need updating for a rule that exists to gate
-  *user-initiated work*, not graph plumbing. `Methodology.Administrative` methodologies and
-  trigger-initiated processes (`Process.Trigger != ""`, no one at the keyboard to ask) are exempt.
+- **Enforcement** (as first decided): "a user must select a project before any action but the
+  administrative ones" was checked where a *person starts a process* (`Engine.resolveChange`, when opening a
+  fresh change), not at the raw graph API, where `CreateChange` defaulted an empty `ProjectID` to the root
+  project; `Methodology.Administrative` methodologies and trigger-initiated processes were exempt. Since ADR
+  0054 / 0091 there is no such gate and no default in the graph: `CreateChange` refuses a root change naming
+  no project, and the edges (RPC handlers, `Engine.resolveChange`, `goap-change/create`, the assistant)
+  resolve the caller's active project, an empty claim meaning the root project.
 
 ## Known limitation
 
@@ -107,9 +108,7 @@ different applicable roles depending on which project the work belongs to.
 
 - `organisation` is now the namespace of two mirrored hierarchies plus their meeting point
   (`docs/architecture.md` §3.9b); `methodology` gained one more materialized element kind (Role).
-- Every existing caller of `CreateChange` (tests, tools, methodologies) keeps working unchanged:
-  `ProjectID` is additive, defaulting exactly like `OwnerOrg`/`Namespace` do (the administrative mark became a key of `Change.Data`, ADR 0065) — the
-  stricter rule lives one layer up, at `Engine.Start`, where `methodologies/*.yaml` and their tests needed
-  (and got) a project to seed and pass.
+- `ProjectID` was additive at first, defaulting like `OwnerOrg` / `Namespace`; since ADR 0091 every root change
+  names its project, resolved at the edges (the administrative mark became a key of `Change.Data`, ADR 0065).
 - `USR:<subject>` keys are no longer ambiguous between "personal unit" and "User node": they are the same
   node, so deleting or restricting one no longer risks leaving the other behind.

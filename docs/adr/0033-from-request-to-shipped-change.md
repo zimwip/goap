@@ -1,6 +1,7 @@
 # ADR 0033 — From a request to a shipped change: intake, proposals, participation
 
-**Status**: proposed · **Date**: 2026-09 ·
+**Status**: proposed, not adopted as written: the request path took another shape (see "Since then"); §5 (participants,
+addressees, work list), §6 (stage) and §7 (workspace / studio) are not implemented · **Date**: 2026-09 ·
 Builds on ADR 0001 (the change as blackboard), ADR 0004 (change application), ADR 0016 (sub-changes),
 ADR 0020 (access control), ADR 0026 (node index), ADR 0031 (deferred change binding).
 
@@ -16,9 +17,9 @@ The platform is hard to use. The principle it should follow is simple:
 3. Starting from the change, several **people and agents take part** in carrying it out.
 4. By default, the goal of a change is to be **shipped** (applied).
 
-A walkthrough of the code shows that almost none of this path exists as such:
+A walkthrough of the code (2026-09) showed that almost none of this path existed as such:
 
-| Step | Today | Where |
+| Step | At the time | Where |
 |---|---|---|
 | Request | Every assistant message starts a new process; the conversation lives only in the browser's localStorage; no follow-up in context. | `web/src/lib/stores/assistant.svelte.ts` (`sendRequest`) |
 | Identification | The intent loop picks (methodology, agent, goal) with the **lexical** ranker by default; the LLM ranker only with `GOAP_INTENT_RANKER=llm`. | `pkg/intent`, `cmd/engine/main.go`, `cmd/goap-dev/main.go` |
@@ -180,6 +181,26 @@ without saying why.
   of `change_log` (no new table for them); the index gains change intents (both SQL dialects).
 - The workspace hides the machinery (flows, options, baselines) without removing it: authors keep the studio,
   and every advanced pane stays one click away.
+
+## Since then
+
+The principle stands; the mechanisms proposed here were mostly replaced by later decisions:
+
+- **Request and conversation (§1)**: the assistant is a dedicated builtin, not an intake process; its conversations
+  are kept server-side by the `conversations` service, not in the process log nor in localStorage (ADR 0085, 0087,
+  0088). It does not use deferred binding.
+- **Proposals (§3)**: the assistant proposes and the person confirms before anything starts (`start_agent` and write
+  screen tools as proposal cards, `ConfirmAction`, ADR 0090, 0092); there is no `proposal` pending kind of the engine,
+  no `request` fact and no amendment ruled as a decision point.
+- **Matching (§2)**: changes are documents of the index, searchable by text and similarity (ADR 0095); no intake
+  agent ranks candidate changes.
+- **Default goal (§4)**: a methodology states its main goal (`goal:`, ADR 0096), the initial goal of a change; there
+  is no `ship:` declaration, and a change proposes the steps possible now towards its goal (ADR 0097).
+- **Sign-in (§7)**: local sign-in by default (ADR 0040, 0042), not OIDC; dates are still formatted `fr-FR`
+  (`web/src/lib/api/helpers.ts`).
+- **Shipping (§6, §8)**: apply is two steps, commit and merge (ADR 0056, 0102), the web's Commit / Merge buttons
+  are driven by `GetCommitState`, and the operations a person performs on a change are checked against the roles of
+  the methodology (ADR 0103).
 
 ## Open questions
 

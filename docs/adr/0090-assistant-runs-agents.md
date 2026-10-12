@@ -1,8 +1,14 @@
 # ADR 0090 — The assistant runs agents, after a confirmation
 
-**Status**: accepted, implemented (server side; the proposal card of the web is a later task) · **Date**: 2026-10 ·
-Builds on ADR 0043 (project roles, agent roles), 0063 (engine scope), 0085 (conversations), 0087 (the assistant),
-0089 (ledger).
+**Status**: accepted, implemented (server side; the proposal card of the web: ADR 0088); on a change, `start_agent`
+amended by ADR 0097 (a possible step only), the tool set by ADR 0094 and ADR 0106 §6 · **Date**: 2026-10 · Builds on
+ADR 0043 (project roles, agent roles), 0063 (engine scope), 0085 (conversations), 0087 (the assistant), 0089 (ledger).
+
+> Since then: ADR 0094 adds `methodology_query` and ADR 0106 §6 `search_changes` and the frame of a turn (eight server
+> tools; a new change, `newChange`, is proposed only at level project and once the open changes were searched). ADR 0097:
+> `list_agents` on a change also returns `possibleSteps` / `waitingSteps` and flags `ready` agents, and `start_agent` on a
+> change takes `step` (a possible step) and nothing else; the proposal records it and `ConfirmAction` re-validates it. The
+> change of the context is the one of ADR 0092 (the `change` tab's `id`, else a focused `change` element).
 
 ## Context
 
@@ -16,7 +22,7 @@ before anything starts.
 
 - **Who, why, how, what**: the assistant still answers none of the four questions; it helps *start a process of a
   methodology on a change* for the person, as the person. Nothing it does bypasses the engine's or the graph's checks.
-- **Two new tools (six in all, nothing else)**:
+- **Two new tools (six in all at the time, nothing else)**:
   - `list_agents` (read). The agents the caller may run HERE, after three filters. (a) *Context*: when the tab is a change
     (`tab.kind` `change`, `params.id`; else `subject`), the change is read as the caller (`Graph.Change`; a personal change
     of someone else is "not visible") and only the agents of **its methodology** are listed, with the change header
@@ -64,9 +70,9 @@ before anything starts.
   {methodology, projectId, agents[]}` -> `{mayStart, agents: [{agent, mayRun, roles}]}` (`mayStart` is the "start"
   permission `StartProcess` checks). `StartProcess` itself is unchanged and re-checks everything when the process starts, so
   the assistant's checks are a filter for the model and the person, never the authority. The assistant reaches the engine
-  through a port (`assistantsvc.Engine`: `CheckAgents`, `StartProcess`, `Active`), `EngineClient` over the engine service
-  (the handler in `goap-dev`, a Connect client in `cmd/conversations`, `GOAP_ENGINE_URL`), the caller's identity headers on
-  every request. `pkg/graph` and `pkg/engine` still do not import `internal/assistantsvc`.
+  through a port (`assistantsvc.Engine`: `CheckAgents`, `StartProcess`, `Active`; ADR 0097 adds `StartingPoints`),
+  `EngineClient` over the engine service (the handler in `goap-dev`, a Connect client in `cmd/conversations`,
+  `GOAP_ENGINE_URL`), the caller's identity headers on every request. `pkg/graph` and `pkg/engine` still do not import `internal/assistantsvc`.
 - **Attached to the conversation.** The process variables carry `conversationId` and `messageId`; the engine puts the
   conversation id (`engine.VarConversation`) in the ledger `CallMeta` of the model calls of that process (ADR 0089), so the
   gateway's ledger can group a conversation's turns and the runs it started. The run's status is read from the process by
@@ -88,5 +94,5 @@ before anything starts.
 
 ## Not done
 
-The proposal card, run status and Accept / Reject buttons of the web (a later task; the contract is the action shape and
-`ConfirmAction` above); expiry of an unanswered proposal; rewriting a stuck `starting`; several proposals in one answer.
+Expiry of an unanswered proposal; rewriting a stuck `starting`; several proposals in one answer. (The proposal card, run
+status and Accept / Reject buttons of the web are ADR 0088.)

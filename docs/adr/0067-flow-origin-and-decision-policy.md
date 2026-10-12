@@ -1,6 +1,7 @@
 # ADR 0067 — Flow origin and decision policy out of the graph core
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0009, 0017, 0025, 0032, 0066.
+**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0009, 0017, 0025, 0032, 0066. The adoption
+rule of §1 follows ADR 0079 (flows hold drafts, no branch).
 
 ## Context
 
@@ -19,11 +20,12 @@ log).
 
 1. **Flow.** `FlowEvent` / `Flow` keep `Parent`, `ForkAfter`, `Stale` (items), `By`, `Option`, and gain
    `StaleRuns []string` and `Origin map[string]any`.
-   - `StaleRuns` (formerly `StaleExecutions`) are opaque producer ids, the `Execution` of the change impacts and node
-     versions: the graph only compares them, and keeps the rule built on them (a flow that invalidated nothing joins
-     the change branch, else its versions are copied; which versions and impacts an adoption supersedes; which flows
-     compete). The word "execution" is gone from the flow; the name is `StaleRuns` rather than `Stale`, which already
-     lists the stale items.
+   - `StaleRuns` (formerly `StaleExecutions`) are opaque producer ids, the `Execution` of the change impacts and of
+     their writes: the graph only compares them, and keeps the rule built on them (what a flow sees; which impacts an
+     adoption supersedes; which flows compete). At the time a flow that invalidated nothing joined the change branch
+     and the versions of the others were copied; since ADR 0079 flows keep no branch: an adoption installs the flow's
+     drafts on the main flow and resets the main drafts the stale runs wrote (`adoptNodes`). The word "execution" is
+     gone from the flow; the name is `StaleRuns` rather than `Stale`, which already lists the stale items.
    - `Origin` is an opaque record of the opener: stored and returned, never read by the graph. The engine writes
      `{step, execution, process, reason}` for a relaunch; the option mechanism writes none (its hypothesis is
      `Option.Hypothesis`).

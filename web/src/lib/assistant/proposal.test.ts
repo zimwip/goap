@@ -93,4 +93,13 @@ describe('run status', () => {
     expect(runStatus({ status: 'failed' }).tone).toBe('err');
     expect(runStatus({ status: 'stuck' }).tone).toBe('err');
   });
+
+  it('shows an attach / detach proposal of the change (ADR 0106)', () => {
+    const attach = { type: 'attach_change', status: 'proposed', label: 'Attach "Fix" to "R1"', args: { changeId: 'CHG-1', parentId: 'CHG-R', project: 'PROJ-A' } } as unknown as ConversationAction;
+    expect(isCard(attach)).toBe(true);
+    expect(cardView(attach)).toMatchObject({ kind: 'attach_change', status: 'proposed', acceptLabel: 'Attach', canDecide: true, changeId: 'CHG-1' });
+    expect(cardView(attach)!.details).toContainEqual({ label: 'Into', value: 'CHG-R' });
+    const done = { ...(attach as object), type: 'detach_change', status: 'done' } as unknown as ConversationAction;
+    expect(cardView(done)).toMatchObject({ kind: 'detach_change', status: 'done', acceptLabel: 'Detach', canDecide: false });
+  });
 });

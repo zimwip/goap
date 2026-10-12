@@ -1,7 +1,11 @@
 # ADR 0032 — Versions on several branches, baselines stored as deltas
 
-**Status**: accepted, implemented (see §6) · **Date**: 2026-09 · Extends ADR 0003 (version-to-version
+**Status**: accepted, implemented · **Date**: 2026-09 · Extends ADR 0003 (version-to-version
 links), ADR 0009 (branches, options, merge), ADR 0024 (change impacts), ADR 0029 (event-sourced change impacts).
+§4 and the naming of baselines amended by ADR 0056 (a baseline is the state a change leaves, derived from what the
+change did, materialised every `MaterializeEvery` baselines); the versions of flows and options in §5–6 amended by
+ADR 0079 (a flow holds drafts, no versions); `Apply` is commit + merge since ADR 0056 / 0102; §6 amended by ADR 0067
+and ADR 0083.
 
 ## Context
 A node version carried exactly one branch label (`node_version.branch`), and "the latest version on a branch" was read
@@ -60,35 +64,39 @@ Reading a baseline costs its checkpoint plus at most 49 deltas, about the cost o
 
 ### 4. The landed events and the deltas
 The `landed` events of the change impacts are the meaning of a delta: approved, and this exact version is now on the
-target branch. They are not its only source, so the delta is stored with the baseline, as a projection:
-- some baselines are not landings of change impacts: seeds and imports (`CreateBaseline`), the result of a change on
-  its own branch at `Apply` (the accepted level, §5), a fast-forward carrying what sub-changes merged into the change
-  branch (their events name the change branch baselines);
-- a merge resolves conflicts: replaying events would mean replaying merges.
+target branch. As first decided they were not its only source (seeds and imports wrote baselines outside a change,
+merges resolve conflicts), so the delta was stored with every baseline, as a projection.
 
 The two must agree, and the tests check it after every test (`checkLandings`): every `landed` event names a baseline
 that holds the landed version (a tombstone: the node is not in it) and changed it from its parent.
+
+**Since ADR 0056** every baseline is the state a change leaves (there is no `CreateBaseline`), each with a `Kind`; its
+state is derived from the `landed` events of its change (or the versions a fast-forward joined), and only every
+`MaterializeEvery`-th baseline of a chain stores its entries, as the deltas and checkpoints above; `checkStates`
+replays every baseline against what is stored.
 
 ### 5. Three levels of the same change impacts
 What a branch sees is its fork plus the change impacts on it, filtered by how far they went:
 
 | level | the change impacts that count | what for |
 |---|---|---|
-| `written` | every written version not rejected (proposed or accepted) | what the change, a flow or an option would look like: analysis, propagation, the agent's reads |
-| `accepted` | the accepted versions only | what would land: comparison, the decision |
+| `written` | every draft not rejected (proposed or accepted) | what the change, a flow or an option would look like: analysis, propagation, the agent's reads |
+| `accepted` | the accepted drafts only | what would land: comparison, the decision |
 | `landed` | what landed | the baselines: deltas, checkpoints, history |
 
 `ChangeView(change, flow, level)` computes the first two from the change impact projection (what a flow sees is its
-fold, ADR 0029 §3) over the head of the change branch, without storing anything; `landed` is the result baseline of
-the change, or its starting point before it is applied. A rejected or superseded version drops out by itself.
+fold, ADR 0029 §3) over the head of the change branch, without storing anything (a node the change holds a draft of
+is laid over as its draft reference, read through the change, ADR 0079); `landed` is the result baseline of the
+change, or its starting point before it is applied. A rejected or superseded draft drops out by itself.
 
 ### 6. Options (ADR 0009 §3–5)
-Two versions of a node coexist, each on the branch of its option: `REQ-1@v2` on option A, `REQ-1@v3` on option B, both
-children of v1.
+Two states of a node coexist, one per option: as first written, `REQ-1@v2` on the flow branch of option A and
+`REQ-1@v3` on option B's, both children of v1; since ADR 0079 each option holds a draft of `REQ-1` checked out from v1,
+and only the selected one becomes a version when the change lands.
 
 - An **option is a flow** (ADR 0025) opened as a hypothesis (`OpenOption`: a flow event `open` carrying
   `option: {name, hypothesis}`), forked from the main flow and invalidating nothing. What it declares, writes and
-  reviews is a candidate of its flow until it is decided; its versions live on its flow branch.
+  reviews is a candidate of its flow until it is decided; its drafts are its own (ADR 0079: a flow keeps no branch).
 - **The active pointer**: `activate` / `deactivate` flow events name the option the change works on
   (`Change.ActiveOption`, `ActivateOption`; "" or `main` goes back to the main flow). Every graph call that names no
   flow resolves to it (`Change.ResolveFlow`): declaring, writing and reviewing change impacts, adding items, the
@@ -103,10 +111,9 @@ children of v1.
   flow, with the version and the properties on each side (both sides fork from the same graph). The IDE compares two
   scopes impact by impact with `DiffFlows` instead ([ADR 0083](0083-option-diff.md)).
 - **Selection** (`SelectOption`) is a decision: the other open options are rejected, then the flow of the selected
-  one is adopted. A flow that invalidated nothing (an option) and wrote every node it changes on top of the head of
-  the change branch is adopted **without copies**: its versions join the change branch (§1). A flow that relaunched
-  steps still writes `adopt` versions (resetting a node to an older version needs a new one). The change is then
-  applied as usual; `Apply` refuses a change with an open option.
+  one is adopted: its drafts become the main flow's (ADR 0079; as first decided its versions joined the change branch,
+  and a flow that relaunched steps wrote `adopt` versions). The change is then committed and merged as usual; the
+  merge refuses a change with an open flow (`unsettled`, ADR 0102).
 - **Surfaces**: the graph service (`OpenOption`, `ActivateOption`, `EvaluateOption`, `SelectOption`,
   `RejectOption`, `ListOptions`, `CompareOptions`, `GetChangeView`, `GetChangeGraph`; `ListNodeVersions` reports
   `joined`), the engine port (`ChangeGraph`, `ChangeView`, the options except selecting and rejecting), the
@@ -116,7 +123,7 @@ children of v1.
 - The baselines written whole before this ADR are compacted to deltas at start (`CompactBaselines`, in the
   background: a baseline's content never changes, so it can run while the graph is in use).
 
-**Implemented**: all of the above. The decision points that choose among the options, their loops and the CEL
+The decision points that choose among the options, their loops and the CEL
 conditions on options are ADR 0009 §4 (implemented: a decided point selects its option, and selecting an option by
 hand settles the pending points that chose among the options).
 

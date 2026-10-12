@@ -1,7 +1,8 @@
 # ADR 0026 — Node index and search (RAG + full text)
 
-**Status**: accepted, implemented · **Date**: 2026-09 · Extends ADR 0010 (local mode), ADR 0012 (node types),
-ADR 0021 (model configuration in the graph).
+**Status**: accepted, implemented; amended by ADR 0095 (changes in the index, search modes, authorization before
+counting) · **Date**: 2026-09 · Extends ADR 0010 (local mode), ADR 0012 (node types), ADR 0021 (model configuration in
+the graph).
 
 ## Context
 Finding a node means listing and filtering client-side. We want semantic search (RAG over an embedding index) and
@@ -17,7 +18,7 @@ A node type declares its searchable properties, like its validators (ADR 0018):
 
 ```yaml
 - name: Requirement
-  properties: [title, description, priority, status]
+  attributes: [title, description, priority, status]
   search:
     - {property: title, text: true, facet: true}
     - {property: description, text: true}
@@ -38,7 +39,7 @@ with no call-site change.
 
 | Subject | Payload |
 |---|---|
-| `goap.node.<ns>.<type>.<id>.written` (`<type>`: the qualified type, `alm@Requirement`; `.`, `*`, `>` and spaces escaped) | `NodeEvent`: id, version, branch, namespace, key, type, state, deleted, `text` (resolved searchable text), `facets` (resolved facet values), `changeId`, time |
+| `goap.node.<ns>.<type>.<id>.written` (`<type>`: the qualified type, `alm@Requirement`; `.`, `*`, `>` and spaces escaped) | `NodeEvent`: id, version, branch, namespace, key, type, state, deleted, project and owner (keys, ADR 0054), `text` (resolved searchable text), `facets` (resolved facet values), `changeId`, time |
 | `goap.baseline.<branch>.advanced` | `BaselineEvent`: id, branch, parent, and the **diff** with the parent baseline: `set: {nodeId: version}`, `removed: [nodeId]` |
 
 ### 3. Index everything, filter main by a facet
@@ -63,13 +64,15 @@ the IDE search defaults to the heads of main.
 `goap.node.>` and `goap.baseline.>` (at-least-once; upserts idempotent on `(node_id, version)`).
 
 - Table `node_index`: identity, `namespace`, `type`, `key`, `state`, `branch`, `main`, `facets jsonb`, `doc text`,
-  `tsv`, `embedding`.
+  `tsv`, `embedding` (since ADR 0095 also the documents of the changes: `kind` `node` | `change`, key
+  `(kind, node_id, version)`).
 - RPC `Search(text, namespaces, types, states, branches, main, facet filters, facets, limit, offset)` → hits + facet
-  counts; `Reindex()` rebuilds from the graph
-  (bootstrap, model change, lost events); `Status()`.
+  counts (ADR 0095 adds the kind, project and change filters, the mode, `MinSimilarity`, snippets, `SimilarTo`);
+  `Reindex()` rebuilds from the graph (bootstrap, model change, lost events); `Status()`.
 - **Hybrid** retrieval: vector top-k and full-text top-k merged by reciprocal rank fusion.
-- **Authorization (ABAC)**: hits are post-filtered by `pkg/access` on the caller (the index stores no policy). The
-  page is over-fetched so filtering keeps the page full; facet counts are computed on the authorized set.
+- **Authorization (ABAC)**: the index stores no policy; the candidates are filtered on the caller before anything is
+  counted or quoted (`indexersvc.readFilter`, ADR 0095: `read` on the type and access to the node's project), so the
+  page stays full and the facet counts cover the authorized set only.
 
 ### 6. Two stores behind one interface (`pkg/index`)
 | | PostgreSQL | SQLite (devlocal) |
@@ -79,7 +82,7 @@ the IDE search defaults to the heads of main.
 | Facets | `jsonb` (GIN `jsonb_path_ops`), `GROUP BY` | `json_extract`, `GROUP BY` |
 
 The exact scan is fine at development scale (tens of thousands of nodes). Schema changes go to both
-(`migrations/`, `migrations_sqlite/`). Deployment images move to `pgvector/pgvector` (`CREATE EXTENSION vector` in
+(`pkg/index/migrations/`, `migrations_sqlite/`, kept aligned by hand). Deployment images move to `pgvector/pgvector` (`CREATE EXTENSION vector` in
 `deploy/postgres/init.sql`).
 
 `goap-dev` runs the indexer in process, fed by an in-process sink (`indexersvc.NewSink`, through `Graph.Observe`),
@@ -89,7 +92,7 @@ and publishes the graph again at start (`Republish`), so no event is missed acro
 - Events are published after the commit, best effort: a crash between commit and publish loses them; `Reindex`
   repairs. (An outbox in the graph transaction would remove the gap.)
 - A change of the `search` declaration of a type does not reindex the nodes already stored: run `Reindex`.
-- Search returns at most `PoolSize` (500) candidates; totals and facets cover them (`truncated`).
+- Search ranks at most `PoolSize` (500) candidates; totals and facets cover them (`truncated`).
 
 ## Consequences
 - The graph stays free of search code; the index can lag (eventually consistent) and is rebuildable.

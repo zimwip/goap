@@ -33,11 +33,11 @@ integrates:
     attach: decision               # how a candidate becomes a sub-change: decision (default) | auto
 guardian:
   merge: 'integrator.state == "integrating"'
-  transitions:
-    ready: '!integrator.attached || integrator.state != "frozen"'
+  # transitions: {<transition of the integrated change's lifecycle>: <CEL guard>} (release-based declares none)
 on:
   - {event: change.committed, from: integrated}
   - {event: change.transitioned, from: integrated}
+  - {event: change.detached, from: integrated}
 ```
 
 - **Levels are derived, never declared.** A methodology that integrates others is one level above them; the relation
@@ -93,6 +93,16 @@ release defers or rejects a candidate) makes it a root change again, forked from
 ancestor merges into. RPCs `AttachChange` / `DetachChange`, `graphsvc.Client`, `engine.GraphPort`. The integration
 itself is the existing merge of a sub-change into its parent (ADR 0103).
 
+**Where a person attaches.** `goap-change` tools `attach` (`{change, parent}`) and `detach`; the change tab's *Attach
+to change…* (the open changes of another methodology in its namespace, `web/src/lib/changeAttach.ts`,
+`AttachChange.svelte`) and *Detach*, and its *Guardians* row showing the chain; the assistant's proposals (§6).
+
+**Validation and moves.** The registry refuses a cycle of integrations at validation (`integrationIssues`: a
+methodology integrating, directly or through others, one that integrates it; the wildcard is not followed).
+`MoveChange` computes the chain of the root change again for its new project, and of its sub-changes from it, journaled
+in the same `change.updated` entry (`guardians` field). `cmd/registry` gets `Applicable` from the organisation snapshot
+like `goap-dev`.
+
 ### 4. `on:` crosses the relation — coupling by events
 
 `on:` (ADR 0036 §3) gets a `from`: `self` (default: the events of the change the methodology runs on), `integrated`
@@ -123,6 +133,9 @@ Each turn computes its frame from the context of the turn and the history (`inte
 prompt follow the frame. At level project, `create_change` (and `start_agent` with a new change) is offered only once
 `search_changes` (the open changes of the active project matching the intent, `searchtool.go`) ran in this
 conversation, so the assistant proposes an existing change before opening a new one.
+At level change it may propose to attach the change to a change integrating it (`attach_change {parent}`) or to
+detach it (`detach_change`): proposals the person confirms like `start_agent` (`ConfirmAction` re-validates, then calls `AttachChange` / `DetachChange` as them;
+`internal/assistantsvc/relate.go`), shown as cards with *Attach* / *Detach* (`web/src/lib/assistant/proposal.ts`).
 
 ## Consequences
 
@@ -134,10 +147,13 @@ conversation, so the assistant proposes an existing change before opening a new 
 
 ## Not done
 
-- `attach: auto` is declared and compiled but the engine attaches nothing on its own; `release-based` attaches
-  through its human step.
-- `MoveChange` does not recompute the chain.
-- `goap-change` tools and assistant proposals for attach / detach; the web shows no chain.
-- `cmd/registry` (distributed) has no `Applicable`: a root change gets its own methodology as its chain there.
-- A cycle of `integrates` across methodologies is not refused by the compiler (the chain walk stops on it).
+- `attach: auto` is declared and compiled but the engine attaches nothing on its own: which open change of the
+  integrator receives a new change is a policy not decided yet. `release-based` attaches through its human step (the
+  change tab's *Attach to change…*, `goap-change/attach`, or the assistant's proposal).
+- `cmd/graph` (distributed) wires no `ChangeLifecycles` (no registry in process), so a change gets no chain and no
+  outer guardian there, as for its lifecycle (ADR 0058).
+- Dependencies between changes are not declared: only the order of the merges into an integrator expresses them (a
+  `depends_on` relation checked by the integrator's guardian is the likely form).
+- Moving a change from one integrator to another is a detach then an attach while it has not merged; once merged, its
+  work belongs to that integrator's change and leaves it only by withdrawing those impacts there.
 - Deliverables (a `project` built-in domain) are left to the follow-up.

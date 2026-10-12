@@ -478,7 +478,7 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 		return convsvc.Message{}, convsvc.ErrNotFound
 	}
 	msg := msgs[i]
-	if msg.Role != convsvc.RoleAssistant || in.ActionIndex < 0 || in.ActionIndex >= len(msg.Actions) || (msg.Actions[in.ActionIndex]["type"] != ActionStartAgent && msg.Actions[in.ActionIndex]["type"] != ActionUITool) {
+	if msg.Role != convsvc.RoleAssistant || in.ActionIndex < 0 || in.ActionIndex >= len(msg.Actions) || !isProposal(msg.Actions[in.ActionIndex]["type"]) {
 		return convsvc.Message{}, fmt.Errorf("%w: that is not a proposal", ErrInvalid)
 	}
 	act := msg.Actions[in.ActionIndex]
@@ -510,6 +510,9 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 			return convsvc.Message{}, fmt.Errorf("%w: it was made for project %q and the active project is %q", ErrStale, proj, p.Project)
 		}
 		return decide(StatusProposed, StatusAccepted, nil)
+	}
+	if act["type"] == ActionAttachChange || act["type"] == ActionDetachChange {
+		return s.confirmRelate(ctx, p, act, decide)
 	}
 
 	ar := args(mapOf(act["args"]))
@@ -615,6 +618,10 @@ func describeActions(actions []convsvc.Action) string {
 		t, _ := a["type"].(string)
 		if t == ActionUITool {
 			notes = append(notes, describeUITool(a))
+			continue
+		}
+		if t == ActionAttachChange || t == ActionDetachChange {
+			notes = append(notes, describeRelate(a))
 			continue
 		}
 		if t == ActionSearchChanges {

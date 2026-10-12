@@ -13,8 +13,8 @@ builtins (`observe.analyze`, `observe.propose`, `methodology.draft`) and so impo
 ## Decision
 
 1. `pkg/builtins` is a leaf package (no project import) holding the builtin names (`GraphPropagate`, `GraphApply`,
-   `DecisionInvestigate`, `ProcessStep`, `ObserveAnalyze`, `ObservePropose`, `MethodologyDraft`), `All()` and `Known`,
-   the static set of those names.
+   `DecisionInvestigate`, `ProcessStep`, `ObserveAnalyze`, `ObservePropose`, `MethodologyDraft`; `DerogationExpire`
+   since ADR 0075), `All()` and `Known`, the static set of those names.
 2. `methodology.BuiltinSet` (`HasBuiltin(name)`) and `Methodology.Builtins`, set by `WithBuiltins` like `Types` by
    `Resolve`: the compiler reports `unknown builtin` for an action of kind builtin when a set is given, and always
    accepts `process.step`. Nil: not checked (tests, loaders). `lintTypeRefs` still reads the `linkTypes` param of
@@ -22,7 +22,8 @@ builtins (`observe.analyze`, `observe.propose`, `methodology.draft`) and so impo
 3. The registry resolves every methodology with `builtins.Known{}` (`registrysvc.resolve`), so a wrong name is
    refused when it is validated, saved as an issue and refused at publish, without an engine.
 4. `engine.BuiltinExecutor` is the engine's table: `Register(name, f)` panics on a duplicate, `HasBuiltin`
-   implements `BuiltinSet`. `DefaultBuiltins()` registers the four generic builtins.
+   implements `BuiltinSet`. `DefaultBuiltins()` registers the generic builtins (`graph.propagate`, `graph.apply`,
+   `decision.investigate`, `process.step`, and `derogation.expire` since ADR 0075).
 5. The self-observation builtins moved to `pkg/selfimprove` (`Register(b, e, Config)`, with `TraceSource`,
    `MethodologyDrafts`, `Config`), called by `cmd/engine` and `cmd/goap-dev` after the engine is built. `pkg/engine`
    no longer imports `pkg/observe` (`pkg/layering` tests it).

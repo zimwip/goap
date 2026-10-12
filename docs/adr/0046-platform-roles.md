@@ -1,6 +1,7 @@
 # ADR 0046 — Platform roles: an Assignment naming no project
 
-**Status**: accepted, implemented · **Date**: 2026-10 ·
+**Status**: accepted, implemented; amended by ADR 0047 (administration joins the catalog, the merge moves into
+`Snapshot.Enrich`) · **Date**: 2026-10 ·
 Builds on ADR 0043 (project-scoped roles, admin flag), ADR 0039 (project, Assignment).
 
 ## Context
@@ -19,7 +20,7 @@ administration itself into a general mechanism.
 ## Decision
 
 - **A platform role is a fixed, built-in catalog entry of the platform namespace** (`platform@Role`,
-  `access.BuiltinRoles`, today just "reader"; `access.RoleReader` names it for the ABAC rules, `access.
+  `access.BuiltinRoles`, first just "reader", "admin" since ADR 0047; `access.RoleReader` names it for the ABAC rules, `access.
   PlatformRoles` lists the grantable names). `SeedBuiltins` keeps its node in sync with the code at every start,
   the same way it does for the built-in MCPs (ADR 0028) — unlike `methodology@Role`, there is no registry version
   for it, it ships with the platform. The node documents the role for the IDE; it is not consulted to decide what
@@ -33,8 +34,9 @@ administration itself into a general mechanism.
   `access.PlatformAssignmentKey(org)` ("ASG:\<org\>/PLATFORM"), distinct from any per-project
   `access.AssignmentKey(org, project)`.
 - **Resolution is a separate, unconditional merge.** `Snapshot.PlatformRoles(orgChain)` unions the roles of every
-  platform-wide Assignment whose org is in the chain; `Authorizer.Authorize` merges it into the principal's roles
-  on every request, alongside (not instead of) `ProjectRoles` for the resource's project chain. A platform role
+  platform-wide Assignment whose org is in the chain and is merged into the principal's roles on every request,
+  alongside (not instead of) `ProjectRoles` for the resource's project chain (`Authorizer.Authorize` did it at first;
+  ADR 0047 moved it into `Snapshot.Enrich`, so the floor sees it too). A platform role
   is not scoped to a project by the grant itself — a policy that wants it scoped reads the project's own
   Assignments itself (the existing `onProject`/`ProjectRoles` machinery), the same way any other rule can narrow
   what a role is allowed to do.

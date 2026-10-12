@@ -1,6 +1,7 @@
 # ADR 0072 — One compile pipeline, a split apply check, a compile cache
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0023, 0034, 0051, 0056, 0058, 0062.
+**Status**: accepted, implemented; the apply check reshaped by ADR 0079 and 0102 · **Date**: 2026-10 · Builds on ADR
+0023, 0034, 0051, 0056, 0058, 0062.
 
 ## Context
 
@@ -13,8 +14,9 @@ compiled a methodology on every `Methodology` / `List` call, which the engine ma
 ## Decision
 
 - **Compile pipeline** (`pkg/methodology/compile.go`): `compileWith` orchestrates one `compileState` method per phase
-  (`checkHeader`, `compileConditions`, `injectLibraries`, `compileActions`, `checkSpecializations`, `checkReferences`,
-  `compileGoals`, `compileAgents`, `checkTransverse`, `mergeRolesMethodsProcesses`, `finish`); the order is a constraint
+  (`checkHeader`, `checkMainGoal` (added by ADR 0096), `compileConditions`, `injectLibraries`, `compileActions`,
+  `checkSpecializations`, `checkReferences`, `compileGoals`, `compileAgents`, `checkTransverse`,
+  `mergeRolesMethodsProcesses`, `finish`); the order is a constraint
   (the `expect:*` conditions are known after the actions, the agents are complete before methods and processes merge) and
   the issues are sorted at the end. The methodology is never modified: generated effects live on copies of the actions.
 - **One policy type**: `CompileWith(CompileOptions{Lenient, Stored})`. `Compile`, `CompileLenient`, `Validate`,
@@ -27,7 +29,10 @@ compiled a methodology on every `Methodology` / `List` call, which the engine ma
   with the issues rather than as not-found.
 - **Apply check**: `checkChangeImpacts` is `walkChangeImpacts` (property validation, editable-state collection, per node
   `walkTransitions` with the collect / authorize switch) then `settleChangeImpacts` (collect pass stops, landing gate,
-  editable refusal, `checkTransition`, `runActions`). The two-pass design of `authorizeMoves` is unchanged.
+  editable refusal, `checkTransition`, `runActions`). The two-pass design of `authorizeMoves` is unchanged. Since then
+  a move is authorized, guarded and acted when it is taken (`ImpactNodeTransition`, ADR 0079), so the commit's check is
+  `walkChangeImpacts` alone (properties, `walkTransitions` replaying the recorded moves); `settleChangeImpacts` and
+  `authorizeMoves` are gone, and the landing gate became the guardian of the merge (`checkMerge`, ADR 0102).
 - **Compile cache** (`internal/registrysvc/compilecache.go`): the key is (name, version, hash of the definition's JSON,
   the published domains in force as `name@version`), so a stale hit cannot happen (a draft replaced in place, a domain
   republished, are other keys); the value is the compiled methodology or its error. It is bounded (256 entries, then it

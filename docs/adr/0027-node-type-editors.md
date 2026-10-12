@@ -17,7 +17,7 @@ declaration of the domain, next to its lifecycle, validators and search properti
 ### 1. The NodeType names its editor
 ```yaml
 nodeTypes:
-  - {name: OrgUnit, editor: unit, properties: [...]}
+  - {name: OrgUnit, editor: unit, attributes: [...]}
 ```
 - `editor` is a name (`^[a-z][a-z0-9_-]*$`, checked by `Schema.check`); empty: the default node editor.
 - Inherited through `extends`: a subtype opens in the editor of its nearest ancestor that names one.
@@ -39,9 +39,11 @@ nodeTypes:
 | editor | node types | opens |
 |---|---|---|
 | `methodology` | `methodology@MethodologyVersion` | the methodology version |
-| `agent`, `action`, `condition`, `goal` | `methodology@Agent`, `@Action`, `@Condition`, `@Goal` | the element's tab, on the methodology draft |
+| `agent`, `action`, `condition`, `goal`, `process`, `method` | `methodology@Agent`, `@Action`, `@Condition`, `@Goal`, `@Process`, `@Method` | the element's tab, on the methodology draft |
+| `role` | `methodology@Role` | the Roles pane of the methodology version |
+| `step` | `methodology@Step`, `@MethodStep` | the tab of the process or method holding the step |
 | `unit` | `organisation@OrgUnit`, `@Adapter` | the unit's page (its adapters) |
-| `access` | `organisation@Policy`, `@User` | the access screen |
+| `access` | `organisation@Policy`, `@User` | a user's editor; for a policy, the access screen |
 | `mcp`, `adapter` | `platform@MCP`, `@AdapterDef` | the MCP / adapter definition |
 
 The editors of the built-in types are declared in their built-in definitions (ADR 0012 §4). Domains are not graph

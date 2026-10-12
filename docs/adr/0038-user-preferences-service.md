@@ -25,7 +25,7 @@ The graph describes the enterprise; the enterprise does not care that a user pre
 - **No change, no Save.** The interface applies a preference at once and writes it to the service in the order it was
   made; the last values are also kept in the browser, so the interface starts the way the user left it, and the
   service is the reference read at start. The theme selector is back in the header user menu as a shortcut.
-- **Platform settings stay graph data** (ADR 0037 §4): providers, models, quotas, aliases are still staged in personal
+- **Platform settings stay graph data** (ADR 0037 §3): providers, models, quotas, aliases are still staged in personal
   changes and saved from the dialog's Save / Discard bar. The dialog's Preferences section is not part of that bar.
 
 ## Consequences

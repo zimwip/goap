@@ -84,8 +84,8 @@ type Graph struct {
 	// keeps the mechanism (open, rule, answer, ratify); pkg/decision is the policy the services plug.
 	DecisionPolicy domain.DecisionPolicy
 
-	// ReviewPolicy is the rule of who may review a change impact (ADR 0075): ImpactNodeReviewOn asks it before it writes and an
-	// error refuses the review. Unset: anyone allowed to review may. pkg/verify is the policy the services plug.
+	// ReviewPolicy is the rule of who may review a change impact (ADR 0075): reviewTx asks it before it writes any verdict and
+	// an error refuses the review. Unset: anyone allowed to review may. pkg/verify is the policy the services plug.
 	ReviewPolicy domain.ReviewPolicy
 
 	// ItemAuthorizer, when set, is asked before AddItems stores an item whose kind asks a permission of its writer

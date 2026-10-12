@@ -14,11 +14,12 @@ drown the context and the budget of the turn. The result of a tool has to be as 
 
 - **Who, why, how, what**: a read of the *how*, as the caller, for the person's questions. It changes nothing, runs
   nothing, asks no confirmation and calls neither the graph nor the engine; it is a server tool counted in the per-round
-  tool-call cap (`MaxToolCalls`) like the others. It is the seventh server tool; `list_methodologies` stays the overview.
+  tool-call cap (`MaxToolCalls`) like the others. It was the seventh server tool (eight since `search_changes`, ADR 0106
+  §6; offered at both levels of the frame of a turn); `list_methodologies` stays the overview.
 - **Scope**: the methodologies applicable to the active project (`Projects.ApplicableMethodologies`, the rule of
   `list_methodologies`, `list_agents` and `create_change`), at most 30; `methodology` names one of them, any other name is
   refused with the message `create_change` gives. The definitions are read through the `Methodologies` port, as the
-  caller (`Registry.Methodology`, the compile cache). The declared definition only: what the compiler generates for
+  caller (the registry's `Methodology`, the compile cache). The declared definition only: what the compiler generates for
   processes and methods (agents, actions, goals) is not listed, the processes and methods are.
 - **Arguments** (all optional, unknown ones refused): `methodology`; `kind` (`agent | action | goal | process | step |
   role | method | trigger | condition | library`; a step is named by its path `<process or method>/<step>/<sub-step>`,

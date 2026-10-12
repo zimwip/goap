@@ -18,12 +18,12 @@ import (
 type RebasedImpact struct {
 	Impact domain.ChangeImpactID `json:"impactId"`
 	Key    string                `json:"key"`
-	// Changed is set when its review went back to proposed: the merged draft of a sub-change differs from its own, a
-	// root change has conflicts (a clean rebase keeps the reviews, ADR 0101 §2).
+	// Changed is set when its review went back to proposed: the rebase left conflicts on a decided impact (a clean
+	// rebase keeps the reviews, ADR 0101 §2).
 	Changed bool `json:"changed"`
-	// Merged is set when the draft took values from the target (a root change).
+	// Merged is set when the node was merged three-way with the target's version.
 	Merged bool `json:"merged,omitempty"`
-	// Conflicts are the fields changed on both sides (domain.ConflictProp, ...), kept as the sub-change had them.
+	// Conflicts are the fields changed on both sides (domain.ConflictProp, ...), kept as the change had them.
 	Conflicts []string `json:"conflicts,omitempty"`
 }
 

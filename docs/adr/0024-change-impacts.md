@@ -1,7 +1,12 @@
 # ADR 0024 — Change impacts: the change is attached to node versions (pre / post)
 
-**Status**: accepted, implemented (see Final state) · **Date**: 2026-09 · Refines ADR 0011 (journal), 0014 (attachment), 0015 (pre/post
-impacts, shared versions) and 0009 (merge). Supersedes the `impact` and `proposal` item kinds.
+**Status**: accepted, implemented (see Final state); the impact rows are event-sourced since ADR 0029; the post
+versions written on the change branch (§2, §3, §6) are superseded by ADR 0076 / 0079 (a draft per impact, the version
+written when the change commits); the editable / released rule of §2 by ADR 0078 (landable states); the garbage
+collection of §4 by ADR 0076 (a node no parent holds is retired by its lifecycle); the `merge_pending` merge of §5 by
+ADR 0101 / 0102 (a change is rebased onto its target before it lands); every verdict of §3 is a submitted review since
+ADR 0105 · **Date**: 2026-09 · Refines ADR 0011 (journal), 0014 (attachment), 0015 (pre/post impacts, shared versions)
+and 0009 (merge). Supersedes the `impact` and `proposal` item kinds.
 
 ## Context
 `Change.Items` mixes two different things:
@@ -48,30 +53,33 @@ ChangeImpact {
 - **An impact is a change impact with `pre`, `intent`, `rationale` and no `post`.** No final node has to be
   defined first. Later an action or a human realizes it: the new version is created on the change branch
   (`reason = revise` / `create`, `parents = [pre]`) and `post` is filled in. Until then the change impact is
-  *planned*; with `post` it is *realized*.
+  *planned*; with `post` it is *realized*. Since ADR 0079 realizing it gives the node a **draft** (checked out or
+  created, ADR 0076), `post` is the draft reference (`NodeRef{ID, Version: 0}`), and the version is written from the
+  draft when the change commits (`CommitChange`, ADR 0102).
 - `intent` is what the analysis declares; the realization must match it: `created` has no `pre`,
   `modified` has one, `post.parents` contains `pre`.
-- The pre side keeps the ADR 0014 §3 rule: when the type has a lifecycle, `pre` is a non-editable
-  (released) version; the post version is editable and must reach a non-editable state before `Apply`
-  (ADR 0014 §3).
+- The pre side kept the ADR 0014 §3 rule: when the type has a lifecycle, `pre` is a non-editable
+  (released) version; the post version is editable and must reach a non-editable state before `Apply`. Since
+  ADR 0078 edits are allowed in any state, and a change lands only when each node ends in a landable state.
 - Applies to one namespace, the change's (ADR 0015 §2); `pre` may point to another namespace only as a read
   (cross-namespace impact analysis), with no post.
-- A node appears **once** per change (`pre` is unique in `Nodes`); several proposals on the same node
-  become successive versions on the branch, the change impact's `post` being the last one.
+- A node appears **once** per change (`pre` is unique in `Nodes`); several edits of the same node edit its one
+  draft (ADR 0079), and each commit of the change writes one version of it on the change branch (ADR 0102).
 
 ### 3. Accepting requires a comment, and the node version remembers its origin
 - `review` moves `proposed → accepted | rejected` only with a **non-empty comment**; the transition is
   appended to `reviews` (who, when, comment). Accepting or rejecting without a comment is refused. The
   former `decision` item about a node is replaced by this; `decision` facts remain for choices that are
-  not about a node.
+  not about a node. Since ADR 0105 every verdict is made by a submitted review (a batch of one for a single verdict).
 - The node version itself records where it comes from: `Node.ChangeID` (already there), plus
   `Node.ChangeImpact` (id of the change impact) and `Node.Comment` (the acceptance comment, else the
   rationale). Together with `Parents` and `Reason` (ADR 0009) the state of a node is understandable from
   the node alone: *which change, why, accepted by whom and with what remark, from which version*.
-  `Apply` copies the comment onto the version when it lands (§6); a merge version (§5) also lists both
+  The version is written with the comment (the last review comment, ADR 0079); a merge version (§5) also lists both
   change impacts it merges.
-- `Apply` applies only `accepted` change impacts; a `proposed` one blocks it, a `rejected` one is dropped
-  (its post version on the branch is abandoned with the change, or reverted before the merge).
+- `Apply` applied only `accepted` change impacts; a `proposed` one blocked it, a `rejected` one was dropped.
+  Since ADR 0102 the commit writes the accepted modifications only, and the merge needs every impact settled: a
+  rejected one is reworked or withdrawn (`WithdrawImpact`) first.
 
 ### 4. No node deletion: a removal is a modification of the parent
 - A node is not deleted by a change. Removing a child is a `modified` change impact on its **parent**: the
@@ -80,17 +88,17 @@ ChangeImpact {
   `modified` change impact on the source node.
 - An impact analysis still has to say "X goes away". It records a `modified` change impact on X with the
   rationale and `via` = the parent's change impact, the one that is really realized. X keeps its versions.
-- A real deletion is a garbage-collection step, outside changes: a node that no version of any node links
-  to any more (orphan) can be removed (`Node.Deleted` tombstone) by the platform. It is not user
-  intent and never appears as a change impact.
+- A real deletion was left to a garbage-collection step outside changes (an orphan removed by the platform), never
+  built. Since ADR 0076 a node no parent holds is retired by its lifecycle (`config`: `active` / `retired`) through a
+  change; a node is never deleted.
 
 ### 5. Several changes on the same node version: detection, then a mandatory merge
 Every change works on its own branch (ADR 0015 §5, made the rule): its post versions have `pre` as
 parent, so **`pre` is the common ancestor** of the 3-way merge with whatever landed meanwhile.
 
 **Detection, as early as possible**
-- On `AddNodes`, any other open change holding a change impact with the same node (any version) makes both
-  sides `shared`. `GetSharedNodes` (ADR 0015 §6) / `ListNodeChanges` (ADR 0014 §4) report it, and the journal
+- On declaring a change impact (`AddNodes` then; `ProposeImpact` and the node operations of ADR 0076 now), any other
+  open change holding a change impact with the same node (any version) makes both sides `shared`. `GetSharedNodes` (ADR 0015 §6) / `ListNodeChanges` (ADR 0014 §4) report it, and the journal
   records it.
 - When a change lands on a branch, the planned change impacts of the other open changes on the same node are
   moved to the new head and flagged to re-check (below); the realized ones are merged when their change is
@@ -101,32 +109,34 @@ parent, so **`pre` is the common ancestor** of the 3-way merge with whatever lan
 |---|---|
 | *planned* (no `post`), i.e. an impact | No content to merge. `pre` is moved to the new head, the `rationale` is kept and flagged **to re-check** (`recheck = true`, with the version it was written against). The planner replans if needed. |
 | *realized*, properties and links disjoint | Auto-merge at `Apply` (3-way per property, links per source version): a `merge` version is created, `parents = [post, head]`, `reason = merge`. |
-| *realized*, same property or same link changed | **`merge_pending`**: the change is applied but its branch is not merged; the conflicts (`base = pre`, `theirs` = head, `ours` = post, conflicting keys) are resolved per node by a human, and `MergeChange` completes the merge with the resolutions. |
+| *realized*, same property or same link changed | **`merge_pending`** (now `committed`): the change is applied but its branch is not merged; the conflicts (`base = pre`, `theirs` = head, `ours` = post, conflicting keys) are resolved per node by a human, and `MergeChange` completes the merge with the resolutions. Since ADR 0101 / 0102 the change is rebased onto the head first: the conflicts stop the rebase and are settled on the change's drafts, so landing is a fast-forward and this three-way merge only a race. |
 | parent lists (children / links) | Merged as a 3-way set: additions and removals from both sides are kept, an item removed by one and modified by the other is a conflict. This is what makes "a removal is a parent modification" mergeable. |
 
 Rules:
 - **A merge is required, never skipped.** A change whose realized change impacts conflict stays `merge_pending`
-  until each conflict is resolved. The order of application decides who merges: the first to apply lands as is,
+  (`committed`) until each conflict is resolved. The order of application decides who merges: the first to apply lands as is,
   the following ones merge onto it.
 - A merge does not delete the earlier work: the `post` of each change stays; the `landed` version (§6) is
   the merge version and its `parents` give the traceability to both.
-- The planner replans what became obsolete. Rebuilding `post` on the new head instead of merging is a new
-  realization of the change impact by the human or the agent (there is no rebase operation).
+- The planner replans what became obsolete. Rebuilding `post` on the new head instead of merging was a new
+  realization of the change impact by the human or the agent; since ADR 0101 / 0102 the graph rebases the change
+  (`RebaseChange`) before it lands.
 - *Not done*: a `merge` fact attached to the change impact and proposed by an agent, a merge task pausing the
   process, a dedicated ABAC action and mandatory comment for the resolution.
 - Building a change on the unmerged versions of another one is still not supported (ADR 0015 §6).
 
 ### 6. Landing
 `Apply`: accepted change impacts → their `post` is merged onto the target branch; `landed` is set (equal to
-`post` if it fast-forwards, the merge version otherwise); the result baseline is the merge baseline.
+`post` if it fast-forwards, the merge version otherwise); the result baseline is the merge baseline. Since ADR 0102
+`Apply` is `CommitChange` (the versions written on the change branch) then `IntegrateChange` (the merge).
 `landed` is what impact analysis of later changes reads as `pre`.
 
 ## Consequences
 - Graph model: `change_impact` is the change impact table (`intent`, `rationale`, `pre_version`, `post_version`,
   `landed_version` on one `node_id`, `review`, the `reviews` history as JSON, `via`, `recheck`, `key`,
   `type`). The ADR 0014 attachment table is renamed `change_attachment` and kept until the items that fill
-  it are retired (step 2). `node_version` gets `change_impact` and `comment`. Both SQL dialects (PostgreSQL `migrations/`, SQLite
-  `migrations_sqlite/`), proto `graph.v1` (`ChangeImpact`, `Review`; `Item` loses `target`, `post`,
+  it are retired (step 2). `node_version` gets `change_impact` and `comment`. Both SQL dialects (now
+  `pkg/graph/migrations/` and `migrations_sqlite/`), proto `graph.v1` (`ChangeImpact`, `Review`; `Item` loses `target`, `post`,
   `proposal`), and `gen/` regenerated.
 - Migration of existing data: an `impact` item becomes a change impact (intent from its proposal, else
   `modified`); the `post` link or proposal becomes `post`; a `decision` on a proposal becomes a `review`
@@ -139,8 +149,8 @@ Rules:
   `methodologies/`, `pkg/observe`, and the web views of a change.
 - Docs: `docs/architecture.md` (§2.1 change axis, §2.3 CEL bindings), ADR 0011 (journal items), ADR 0015
   §8 (pre/post: superseded by this ADR), `docs/dsl.md` and its copy in `web/src/lib/help/dsl.md`.
-- Sub-changes (ADR 0016) are unchanged: each holds its own change impacts; a parent change reads those of its
-  sub-changes through `via`-free references.
+- Sub-changes (ADR 0016) are unchanged: each holds its own change impacts (since ADR 0103 the work a sub-change merges
+  is recorded on impacts of its parent).
 - Risk: broad refactor across domain, graph, engine, proto and UI; to be done in steps (types + storage
   with migration, then apply / merge, then engine bindings and methodologies, then UI), each keeping
   `make test` and `make lint` green.
@@ -149,10 +159,12 @@ Rules:
 - Whether `landed` needs its own column or can be derived (`post` when fast-forward, the merge version
   otherwise); kept explicit here for traceability.
 - Retention of a rejected change impact's post version: abandoned with the branch (chosen) versus a
-  reverting version; only matters when the change is not on its own branch.
+  reverting version. Moot since ADR 0079: a rejected impact keeps its draft and no version was written.
 
 ## Implementation history
-The steps as they were done; the result is the **Final state** below.
+The steps as they were done; the result is the **Final state** below. The names of this history (`AddNodes`,
+`WriteNode`, `ReviewNode`, `RealizeNode`, the RPCs `AddChangeImpacts` / `WriteChangeImpact` / `ReviewChangeImpact`,
+`merge_pending`, `NodeWrite.Retire`) are gone since ADR 0076, 0079 and 0102.
 
 - **Step 1 (done)**: types, storage (both dialects), `AddNodes`, `RealizeNode`, `ReviewNode`, `ListChangeImpacts`.
 - **Step 2a (done)**: `WriteNode` creates the post versions on the change branch (own branch required);
@@ -238,6 +250,7 @@ item calls (`addImpact`, `propose*`, `decide`, `impacts()`, `proposals()`), the 
 namespace and impact checks (the change impacts enforce the namespace, ADR 0015 §2), and the `instanceOf` link:
 `Node.Type` is the direct attribute of a node. A change holds
 change impacts and facts (`decision`, `artifact`, `merge`, `flow`); every producer (registry, seeds,
-merge, engine, DSL) writes change impacts, through `Graph.Commit` or `AddNodes` / `WriteNode` / `ReviewNode`. Drafts that
-still held proposal items lose them (no data migration). The Go field is still named `Items`; the unused
-`change_item.target_id` / `target_version` columns stay.
+merge, engine, DSL) writes change impacts, through `Graph.Commit` or the node operations of ADR 0076
+(`ImpactNodeCreate` / `ImpactNodeCheckout` / `ImpactNodeUpdate` / `ImpactNodeReviewOn`, ...). Drafts that
+still held proposal items lose them (no data migration). The Go field is still named `Items`; the facts are entries of
+the change log (ADR 0030), with no target column.

@@ -17,9 +17,11 @@ grouped them in the log, and a reviewer could not leave a decision half made.
 ### 1. The review is an item of the change
 
 A **review** is a change item of the kind `review`, in the manner of `risk`, `action`, `waiver` (ADR 0036, 0065): each item is a
-version of the record of its `data.key`, event-logged as `fact.review`. `pkg/review` registers the kind (`review.Register()`,
-called by `cmd/graph`, `cmd/engine`, `cmd/goap-dev` and the `TestMain` of the tests that write it) and folds the items
-(`review.Reviews(items)`, pure). `pkg/graph` and `pkg/domain` import nothing of it (`pkg/layering`).
+version of the record of its `data.key`, event-logged as `fact.review`. The kind and its record are built in
+(`domain.KindReview`, `domain.ReviewRecord`, `ReviewEntry`, known to `ChangeItem.Validate` without a registration, ADR 0105;
+this ADR first had `pkg/review` register it with `review.Register()`). `pkg/review` is the use case and folds the items
+(`review.Reviews(items)`, pure, its names aliases of the domain's). `pkg/graph` and `pkg/domain` import nothing of it
+(`pkg/layering`).
 
 Data of an item (the whole record, a version never restates by omission): `key` (`REV-…`), `flow` (the flow the entries are
 reviewed on, empty: main), `comment` (the **global comment**), `status`, `entries` `[{impact, comment, outcome}]`, `by` (the
@@ -50,15 +52,16 @@ build a `Service` over their graph; none of them has review logic of its own. Th
 
 **Authorization**: only the author or an administrator updates, submits or discards (`review.Actor{Subject, Admin}`; the handler
 asks the floor of the authorizer, as `gateAccess` does, a platform service and a principal holding `admin` also count). There is no
-`change:review` action in the ABAC rules today (`ImpactNodeReview` itself has none, ADR 0075 only adds the `ReviewPolicy`), so none
-is invented: the author-or-admin rule is the use case's. **The verifier-is-not-producer policy of ADR 0075 applies per impact, exactly
+`change:review` action in the ABAC rules (`ImpactNodeReview` itself has none, ADR 0075 only adds the `ReviewPolicy`), so none
+is invented: the author-or-admin rule is the use case's. (Since ADR 0103 a verdict is the operation `impact.review`, kind
+`reviewer`, which the roles of the change's methodology may restrict, `Graph.OperationAuthorizer`.) **The verifier-is-not-producer policy of ADR 0075 applies per impact, exactly
 as for a review on its own**, at submit: the submitter is the reviewer of every entry.
 
 ### 3. Submit is the ordinary review, in one transaction
 
 `Graph.ImpactNodeReviewBatch(change, domain.ReviewBatch{ID, Flow, Execution, By, Verdicts, Item})` is the mechanism the submit
-stands on. `ImpactNodeReviewOn` became a thin transaction around `reviewTx`; the batch runs `reviewTx` for every verdict in **one
-transaction**, so each entry gets everything a review on its own gets: the change and flow open, the impact proposed as the flow
+stands on. Both run `reviewTx` per verdict (since ADR 0105 `ImpactNodeReviewOn` is a batch of one verdict); the batch runs it
+for every verdict in **one transaction**, so each entry gets everything a review on its own gets: the change and flow open, the impact proposed as the flow
 sees it, the `ReviewPolicy`, the gate of an accepted draft (validators, required links, origins), the `reviewed` event.
 
 - **All or none**: any refusal returns an error that names the verdict (`verdict 2 (REQ-1): ...`) and rolls everything back; the
@@ -72,9 +75,11 @@ sees it, the `ReviewPolicy`, the gate of an accepted draft (validators, required
   needs a comment).
 - **The review id**: the batch's `ID` (the review key) is stamped on every review it writes: `domain.Review.ReviewID`, in the
   `reviewed` event, the proto `Review.review_id`, the audit trail and the PROV-O export. The graph treats it as opaque.
-- **The item**: `Item` (the submitted version of the record, `submittedAt` set) is written in the same transaction after the
-  verdicts, on the resolved flow. The batch refuses the reserved kinds (`flow`, `transition`, `decisionPoint`) and runs the item
-  authorizers, as `AddItems` does. The RPC `ImpactNodeReviewBatch` exposes the mechanism (the reviewer is the principal of the
+- **The item**: `Item` (the submitted version of the record, `submittedAt` set) is written in the same transaction, on the
+  resolved flow. The batch refuses the reserved kinds (`flow`, `transition`, `decisionPoint`) and runs the item authorizers, as
+  `AddItems` does. ADR 0105 changed the order and made the record mandatory: it is written **before** the verdicts (checked
+  against them; without `Item` the graph makes one), each decided `reviewed` entry naming it as its cause
+  (`LogEntry.Causation`), and `AddItems` refuses a submitted review. The RPC `ImpactNodeReviewBatch` exposes the mechanism (the reviewer is the principal of the
   request), for remote callers of the port.
 - An impact edited after the submit follows the existing rule (ADR 0079): its review goes back to `proposed`; the submitted review
   stays as it was, a record of what was decided then.
@@ -119,6 +124,7 @@ until the `change.updated` event brings the new one; the pure rules (`foldReview
   need a graph hook the item write does not have.
 - Awaiting-review is evaluated by the use case from the change impacts as stored (the reviews of the flow, else the impact's); the
   authoritative view of a flow (`ImpactsSeenBy`) is the graph's, applied at submit.
-- No DSL / engine builtin to open or submit a review (an action reviews with `impactNodeReview`); the `goap-change` tools exist.
+- No DSL / engine builtin to open or submit a review (an action reviews with `impactNodeReview`, which since ADR 0105 is the
+  submission of a review of one entry); the `goap-change` tools exist.
 - No ABAC action for reviews (`change:review`): author-or-administrator only.
 - A review of several flows at once: a review is of one flow.

@@ -34,7 +34,8 @@ and in which run (ADR 0030).
 
 - CEL sees `risks` and `actions` (the register); the conditions of the `risks` library (ADR 0064) `open_risks`, `unmitigated_risks` (an open risk of
   score ≥ 9 with no open or done action), `risks_under_control`, `open_actions`, `no_open_actions`.
-- `goap-change` serves `risks`, `risk` (raise or update), `actions`, `action`; actions and people write them as items
+- `goap-change` serves `risks` (the register and the actions), `risk` (raise or update), `action`; actions and people
+  write them as items
   (`{"kind":"risk","data":{...}}`).
 - The change page has a Risks & actions pane (register, heat, actions by owner).
 
@@ -83,7 +84,7 @@ events of the change they share, and by its state.
   keeps waiting), it carries a task `unblock` with the conditions that would unblock it, and a waiting one may be
   decided on as well (`Engine.Unblock`, `UnblockProcess`). Whoever answers for the run decides: its initiator or the
   initiator of a run above it (the owner of the work), the accountable role of the step it carries out, or a holder of
-  `process:unblock` (by default the members of its organisation who may run processes, and the administrators):
+  `process:unblock` (by default the members of its project, ADR 0043, and the administrators):
   - **waive**: declare conditions established for this run, with a reason. It is a `waiver` item on the change
     (`{process, conditions, reason, by}`), applied over the evaluated conditions of that run only, and journaled
     (`unblock` record): the change keeps who took the decision and why (the owner accepts the risks, say);
@@ -101,7 +102,8 @@ and has an action defined for every high one, under the roles `risk_manager` (re
 
 - **Process graph** (methodology editor): the steps of a process as a graph whose edges are the **conditions** that
   chain them (a step whose exit criteria meet another step's entry), phases as groups, nested processes and methods as
-  their own nodes; selecting a method focuses on it (its context, guidance, references, agent and the agent's actions).
+  their own nodes; selecting a method focuses on it (its context, guidance, references and actions: since ADR 0050 a
+  method owns its actions and names no agent).
   The registry serves the compiled graph (`GetProcessGraph`).
 - **Graph explorer**: the whole graph of the heads of every namespace (organisation, platform, methodology, domains'
   data), laid out by a force simulation (d3-force), zoomable, filterable by namespace and type; selecting a node

@@ -13,20 +13,23 @@ OpenTelemetry remains the source of truth for durations and technical pain point
 ## Decision
 
 ### 1. Execution journal (change axis)
-- Each change carries an `ExecutionRecord` **journal** (`pkg/domain/execution.go`), written by the engine:
+- Each change carries a **journal** of records (`journal.Record`, `pkg/journal`; first `domain.ExecutionRecord`,
+  moved out of the core by ADR 0066), written by the engine:
   `process.started`, `schedule` (a run picks up a process made runnable: why — started, sub-agent, trigger,
   answered, input, approved / rejected, relaunched, sub-agent-ended, board-ignored, flow-adopted / flow-discarded —,
   by whom, what caused it, from queuing to pick-up), `tick` (world state, plan, chosen action, `replanned`, unknown
   conditions),
   `action` (action, specialization executed, type, effects held, items produced, tokens, model and
   tool calls, output, error, waiting on human / sub-agent), `approval` (decider, decision), `process.ended`
-  (status, totals, disabled actions).
+  (status, totals, disabled actions); later `attach` (ADR 0031) and `unblock` (ADR 0036 §3).
 - Each record carries the flow branch its process runs on (`flow`, empty for the main flow), `methodology@version`,
   agent, planner, goal, `traceId` / `spanId`
   (link to the OpenTelemetry span). Blackboard items carry `execution`: the record that
   produced them (provenance down to the LLM calls).
-- Stored by the graph service (memory, PostgreSQL, SQLite), write order; RPC `RecordExecutions` /
-  `ListExecutions`. Writing is "best effort": a journal failure is logged, never blocking.
+- Stored by the graph service (memory, PostgreSQL, SQLite), write order: the records are `journal.*` entries of the
+  log of the change (ADR 0030), appended with RPC `AppendLog` and read with `ListExecutions`; the request and answer of
+  each LLM call are `model.call` entries of the same log (ADR 0059). Writing is "best effort": a journal failure is
+  logged, never blocking.
 
 ### 2. Self-observation agent (`methodology-improvement`)
 - Triggered at the end of a root process (`process.completed`, `process.failed`, `process.stuck`);

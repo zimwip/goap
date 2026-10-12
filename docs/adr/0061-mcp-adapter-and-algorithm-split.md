@@ -21,8 +21,9 @@ and no adapter, and that the adapter is the one place organisation, MCP and conn
    organisation (`Defs`, `AdapterDefs`, `Adapter`, `Names`, `Is`).
 4. The platform roles (`Role`, `BuiltinRoles`, `RoleKey`, `NodeTypeRole`, `PlatformRoles`) belong to `pkg/access`.
 5. The duplicated constants of `pkg/mcp` are gone: `domain.NamespacePlatform`, `domain.NamespaceOrganisation`,
-   `domain.TypeOrgUnit`, `domain.LinkPartOf`; the node types of the adapter are `domain.TypeAdapterDef` and
-   `domain.TypeAdapter` (so `pkg/access` can gate them without importing the adapter).
+   `domain.TypeOrgUnit`, `domain.LinkPartOf` replaced them (the last three moved to `pkg/access` since ADR 0069:
+   `access.NamespaceOrganisation`, `NodeTypeOrgUnit`, `LinkPartOf`); the node types of the adapter are
+   `domain.TypeAdapterDef` and `domain.TypeAdapter` (so `pkg/access` can gate them without importing the adapter).
 6. `pkg/algo` is the generic model of the domains: no `UsageAdapter`, no `MCP` / `Connector` on `Algorithm`, no secret
    parameter type, no `Split`. `Algorithm.Declaration(extraParamTypes...)` is the part of `Issues` that does not
    concern the usage; `adapter.Def.Validate` uses it, declaring `secret` as its own parameter type, and

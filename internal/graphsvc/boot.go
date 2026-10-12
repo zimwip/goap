@@ -43,7 +43,7 @@ type Report struct {
 //     catalogue holding the domains Boot and Options.Dev write to (the registry seeds the domains: SeedDomains, then
 //     Types reload). Boot writes through those hooks: it never runs ahead of them.
 //  2. Boot: Graph.Bootstrap (the roots ORG-DEFAULT and PROJ-ROOT, ADR 0054), SeedAccess (the default policies),
-//     SeedBuiltins (the built-in MCPs, adapter definitions, roles), SeedModels (the model gateway configuration), SeedProtectedAliases (the assistant and helper aliases, ADR 0084), SeedBehaviors (the built-in LLM behaviour, disabled, ADR 0093), then
+//     SeedBuiltins (the built-in MCPs, adapter definitions, roles), SeedModels (the model gateway configuration), SeedProtectedAliases (the assistant and helper aliases, ADR 0084), SeedBehaviors (the built-in LLM behaviour, enabled, ADR 0093), then
 //     Options.Dev if any. Every step is idempotent, so a second call writes nothing.
 //  3. After Boot, the registry seeds the methodologies (Service.Seed): they need the model aliases of SeedModels.
 //

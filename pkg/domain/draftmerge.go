@@ -6,15 +6,16 @@ import (
 	"sort"
 )
 
-// Rebasing a sub-change onto its parent (ADR 0082): a draft of the sub-change is merged three-way with the parent's draft
-// of the node, against the state the sub-change started from. A field changed on both sides to different values is a
-// conflict, named; the sub-change settles it by editing its draft.
+// Rebasing a committed branch (ADR 0101, 0103: rebaseCommittedTx): a node changed both on the change's branch and on the
+// branch it is rebased onto is merged three-way, the change's version against the target's, from the version at the fork.
+// A field changed on both sides to different values is a conflict, named; the change settles it by editing its draft.
 
-// Conflict names (ADR 0082 §1).
+// Conflict names (first named by ADR 0082 §1).
 const (
 	ConflictOwner = "owner"
 	ConflictState = "state"
-	// ConflictNode is a conflict on the whole node: the parent rejected or withdrew its impact of it.
+	// ConflictNode is a conflict on the whole node: it is missing from the fork or from the target, so it cannot be merged
+	// field by field.
 	ConflictNode = "node"
 )
 
@@ -24,7 +25,7 @@ func ConflictProp(key string) string { return "props." + key }
 // ConflictLink names a conflict on the outgoing link of a type to a node.
 func ConflictLink(typ string, to NodeID) string { return "link:" + typ + ":" + string(to) }
 
-// MergeDrafts merges ours (the sub-change's draft) with theirs (the parent's) against base (what ours started from), field by
+// MergeDrafts merges ours (the change's) with theirs (the target's) against base (the version at the fork), field by
 // field: each property (set or unset), the owner, the state and each outgoing link (identified by its type and target
 // node; its target version and properties are its value). A field changed on one side takes that side's value, on both
 // sides to one value that value; changed on both sides differently, it keeps ours and is named in the conflicts (sorted).

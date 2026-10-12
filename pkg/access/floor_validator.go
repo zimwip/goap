@@ -13,7 +13,7 @@ import (
 
 // AdminFloorValidator refuses a change that would leave the graph with no active administrator (ADR 0020's
 // floor policy, enforced by ADR 0048's NodeValidator mechanism): "administrator" is a User holding the
-// platform RoleAdmin as Snapshot.Enrich grants it (ADR 0047: an Assignment of the user or of a unit above it, ); "active" is the user lifecycle's active state (ADR 0048). Wired onto Graph.Validators (see cmd/goap-dev, cmd/graph).
+// platform RoleAdmin as Snapshot.Enrich grants it (ADR 0047: an Assignment of the user or of a unit above it); "active" is the user lifecycle's active state (ADR 0048). Wired onto Graph.Validators (see cmd/goap-dev, cmd/graph).
 type AdminFloorValidator struct{}
 
 // Types runs this validator whenever a change touches a User or an Assignment (not derived from `adminOnly`: that

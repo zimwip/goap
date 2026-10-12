@@ -21,5 +21,8 @@ the engine, or the engine itself.
 - Each methodology decides whether the application is automatic, subject to approval, or absent
   (a goal that stops at review).
 - Validation remains traceable in the process (step, approver, refusal comment).
-- Application can fail with a conflict if the reference repository has evolved since the reference baseline:
-  the step errors out and the action is retried and then disabled like any other action.
+- `graph.apply` is `Apply`: it commits what is pending, then merges (ADR 0102). If the reference repository has
+  evolved since the change forked, the change is rebased first (ADR 0101): rebase conflicts make the process wait on a
+  `rebase` task, and conflicts of the residual three-way merge (the target moved in between) on a `merge` task; a
+  person settles them (the planner then applies again; settling a `merge` task completes the merge). Any other
+  refusal errors the step, and the action is retried and then disabled like any other action.

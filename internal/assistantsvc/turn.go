@@ -25,12 +25,12 @@ const (
 	ToolCreateChange      = "create_change"
 	ToolOpenChange        = "open_change"
 	// ToolListAgents and ToolStartAgent are in agents.go, ToolMethodologyQuery in methodtool.go, ToolSearchChanges in
-	// searchtool.go
+	// searchtool.go, ToolAttachChange and ToolDetachChange in relate.go
 )
 
 // Tools lists the names of every server tool; nothing else is ever run, and a turn offers only those of its frame.
 func Tools() []string {
-	return []string{ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange, ToolListAgents, ToolStartAgent, ToolMethodologyQuery, ToolSearchChanges}
+	return []string{ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange, ToolListAgents, ToolStartAgent, ToolMethodologyQuery, ToolSearchChanges, ToolAttachChange, ToolDetachChange}
 }
 
 // turn is the answer to one user message.
@@ -318,6 +318,10 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 		return t.methodologyQuery(ctx, a)
 	case ToolSearchChanges:
 		return t.searchChanges(ctx, a)
+	case ToolAttachChange:
+		return t.relateChange(ctx, true, a)
+	case ToolDetachChange:
+		return t.relateChange(ctx, false, a)
 	}
 	return nil, fmt.Errorf("unknown tool %q", c.Name)
 }

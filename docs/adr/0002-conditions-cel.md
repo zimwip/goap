@@ -17,9 +17,11 @@ safe (executed server-side), fast, and verifiable at load time.
 ## Decision
 CEL (`cel.dev/cel-go`). Variables: `change`, `items`, `changeImpacts` (ADR 0024), `decisions`,
 `artifacts`, `merges`, `vars`. Node references (the `pre` / `post` of a change impact) are hydrated
-(`type`, `types`: the type and its supertypes, `key`, `props`, `state`, `editable`, `deleted`,
-`out`, `in`, `latest`); type literals are qualified (`"alm@Requirement" in n.types`, ADR 0012). An expression that errors makes the condition **unknown**: it satisfies no
-precondition. Actions' `expects` are compiled into CEL.
+(`type`, `types`: the type and its supertypes, `key`, `props`, `state`, `landable` (was `editable`, ADR 0078),
+`deleted`, `out`, `in`, `latest`); type literals are qualified (`"alm@Requirement" in n.types`, ADR 0012). An
+expression that errors makes the condition **unknown**: it satisfies no precondition. Actions' `expects` are compiled
+into CEL. Later ADRs add variables (`options`, `activeOption`, `decisionPoints`, `questions`: ADR 0009; `risks`,
+`actions`: ADR 0036; `verifications`, `derogations`, `criticalityPolicy`: ADR 0075).
 
 ## Consequences
 - Methodologies are validated at publish time (compilation + bool type check).

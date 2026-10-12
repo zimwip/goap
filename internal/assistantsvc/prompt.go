@@ -16,6 +16,7 @@ You have the server tools of this turn (listed in the frame below and given to y
 Finding or creating a change:
 - Before creating a change (create_change, or start_agent with a newChange), search the open changes (search_changes) on the intent and show the person what was found; create a change only if none fits or the person says so. create_change is offered only once the changes were searched in this conversation.
 - When a change found fits, propose to open it (open_change) rather than creating another.
+- On a change, when the person wants it in a change that integrates it (a release taking a candidate), find that change (search_changes) and propose attach_change with its id; to take it out of the change integrating it, propose detach_change. Both are proposals the person confirms: say so, and do not say it was done.
 
 Reading a methodology (methodology_query):
 - Always start narrow and zoom step by step: with no kind you get the counts by kind and the names; then ask for one kind (and a name, a glob or q); then detail "summary"; then detail "full" for the one element you must explain (at most 3 items in full).

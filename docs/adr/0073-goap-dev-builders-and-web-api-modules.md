@@ -28,11 +28,12 @@ the session calls, display helpers) imported by 85 files.
 - **Web API**: `web/src/lib/api.ts` re-exports `web/src/lib/api/`: `transport.ts` (base URL, token store, `RpcError`,
   `rpc`, `reportUnauthorized`), `types/{common,registry,access,graph,engine,models,mcp,nodeIndex}.ts` (shapes only, but
   `TRIGGER_EVENTS` and `ITEM_SUPERSEDED`), one client per service (`registry`, `graph`, `engine`, `models` with
-  `preferencesApi`, `mcp`, `nodeIndex`), `status.ts`, `authApi.ts` (the session calls; named so it does not suggest
-  `stores/session.svelte.ts`) and `helpers.ts`. No module imports a module above it; the types do not import clients. The
-  importers are unchanged; `api.test.ts` covers the transport. `Int64`, `FlowOrigin`, `FlowEvent`, `OptionSpec` and
-  `DecisionPolicy` moved down (common, graph) to keep the engine and graph shapes acyclic. The Go tests that read the web
-  (`pkg/events` for `TRIGGER_EVENTS`) point at the new file.
+  `preferencesApi`, `mcp`, `nodeIndex`; `conversations` and `assistant` came later, ADR 0085, 0087), `status.ts`,
+  `authApi.ts` (the session calls; named so it does not suggest `stores/session.svelte.ts`) and `helpers.ts`. No module
+  imports a module above it; the types do not import clients. The importers are unchanged; `api.test.ts` covers the
+  transport. `Int64`, `FlowOrigin`, `FlowEvent`, `OptionSpec` and `DecisionPolicy` moved down (common, graph) to keep
+  the engine and graph shapes acyclic. The Go tests that read the web (`pkg/events` for `TRIGGER_EVENTS`) point at the
+  new file.
 
 ## Consequences
 

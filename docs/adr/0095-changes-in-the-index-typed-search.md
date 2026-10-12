@@ -108,7 +108,8 @@ existing nodes.
 
 ## Not done
 
-Tools for the assistant and `goap-change` (`search_changes`, `similar_changes`), the web UI (kind selector, similar
-changes panel), methodology integration (a methodology asking for similar past changes), pushing the authorization
+Index-backed tools for the assistant and `goap-change` (`similar_changes`; the assistant's `search_changes` of ADR
+0106 is a word match over the changes it lists from the graph, not a search of the index), the web UI (the search
+overlay asks for nodes only: no kind selector, no similar changes panel), methodology integration (a methodology asking for similar past changes), pushing the authorization
 conditions into the queries, a `TestSchemasAligned` for `pkg/index` (`sqlschematest` does not understand pgvector or
 FTS5; the two migrations are aligned by hand), highlighting.

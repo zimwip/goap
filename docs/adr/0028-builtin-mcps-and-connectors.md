@@ -1,6 +1,7 @@
 # ADR 0028 — Built-in MCPs and connectors, and restricting an MCP in a unit
 
-**Status**: accepted, implemented · **Date**: 2026-09 ·
+**Status**: accepted, implemented; the tool lists of §1 grew with later ADRs (`goap-change`: ADR 0031, 0076, 0077, 0080,
+0091...; `goap-scheduler`: ADR 0031, 0097); the access gate of §3 is ADR 0068's `adminOnly` · **Date**: 2026-09 ·
 Builds on ADR 0019 (MCP, connectors, adapters), ADR 0016 (organisation), ADR 0020 (access control), ADR 0024 (change impacts).
 
 ## Context
@@ -21,15 +22,16 @@ of the same name:
 | MCP | Tools | What it is for |
 |---|---|---|
 | `goap-graph` | `read`, `glob`, `grep`, `links`, `baselines` (all read-only) | read the versioned graph, as of the head of `main` of a namespace or of a baseline |
-| `goap-change` | `create`, `read`, `write`, `edit`, `link`, `retire`, `note`, `validate` | work on a change, the blackboard of every modification: open one, declare and write nodes (change impacts), add notes, check it |
-| `goap-scheduler` (scope `agent`) | `start`, `list`, `get`, `triggers`, `fire` | start a process for an intent (another agent), follow processes, fire triggers |
+| `goap-change` | `create`, `read`, `write`, `edit`, `link`, `note`, `validate` (first also `retire`; since joined by `move`, `unlink`, `merge` / `split`, `cancel`, `remove`, the options, decisions, risks and reviews tools) | work on a change, the blackboard of every modification: open one, declare and write nodes (change impacts), add notes, check it |
+| `goap-scheduler` (scope `agent`) | `start`, `attach`, `list`, `get`, `starting_points`, `triggers`, `fire` | start a process for an intent (another agent), follow processes, fire triggers |
 | `goap-admin` | `units`, `users`, `mcps`, `connectors`, `domains`, `methodologies` (all read-only) | describe the platform: who, with what, what, how |
 
 - The split follows the platform's own services: graph reads, changes (graph writes, always through a change —
   rule 2), the engine (scheduler), and the administration (organisation, hub, registry). It is the unit of
   restriction too: a unit can keep `goap-graph` and drop `goap-change`.
 - Tools carry `readOnly` (the MCP `readOnlyHint`): a unit can keep only those.
-- `goap-change` writes on the change branch only (`AddNodes` then `WriteNode`); **applying stays a decision** of
+- `goap-change` writes in the change only (first `AddNodes` then `WriteNode` on the change branch; since ADR 0079 the
+  drafts of the node operations); **applying stays a decision** of
   the methodology or of a reviewer, so there is no `apply` tool. `edit` takes `expect` (current values) to refuse
   an edit made on stale content. Without a `change` argument the tools work on the change of the calling process.
 - `goap-admin` changes nothing: the organisation, the adapters and the methodologies are graph data, changed
@@ -63,8 +65,8 @@ agent level, not of a step. The rule holds everywhere:
   operations, a test checks they match the tools of the MCP of the same name.
 - **They act for the caller, never for themselves.** The hub has already checked `tool:call` for the principal (the
   initiator of the process). The connectors then go through the platform's own rules: reads are filtered by the
-  `read` authorization of each node type, `User` and `Policy` nodes stay behind the access gate (`policy:write`
-  against the floor, ADR 0020), processes are started and read through the engine service, which authorizes them.
+  `read` authorization of each node type, the `adminOnly` node types (ADR 0068; first `User` and `Policy`) stay behind
+  the access gate (`policy:write` against the floor, ADR 0020), processes are started and read through the engine service, which authorizes them.
   An anonymous call is refused. Service clients forward the caller's identity (`builtin.ForwardIdentity`).
 - **The call context.** A tool call carries what it runs for (`mcp.CallContext`: unit, change, process). The engine
   sets the change and the process of the action; `CallToolRequest` carries them to a remote hub (`change_id`,

@@ -83,4 +83,16 @@ func TestGuardianChain(t *testing.T) {
 	if refusal, _ = reg.CheckGuardians(ctx, bb, "ready", nil); refusal != "" {
 		t.Fatalf("unattached, ready is free: %q", refusal)
 	}
+
+	// an integration cycle is reported on the methodology that closes it
+	cyc := methodology.Methodology{Name: "work", Version: "2", Namespace: "alm", Processes: steps("work"),
+		Integrates: []methodology.Integration{{Methodologies: []string{"portfolio"}}}}
+	issues := reg.integrationIssues(ctx, &cyc)
+	if len(issues) != 1 || !strings.Contains(issues[0].Message, "work integrates portfolio integrates release integrates work") {
+		t.Fatalf("cycle: %+v", issues)
+	}
+	if issues := reg.integrationIssues(ctx, &methodology.Methodology{Name: "release", Version: "3",
+		Integrates: []methodology.Integration{{Methodologies: []string{"work"}}}}); len(issues) != 0 {
+		t.Fatalf("no cycle: %+v", issues)
+	}
 }

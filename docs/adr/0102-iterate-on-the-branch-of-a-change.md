@@ -1,6 +1,8 @@
 # ADR 0102 — One commit and merge path: a change iterates on its branch, only modifications are reviewed, what holds a merge is a plugin
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Amends ADR 0056 (two-step apply), ADR 0066 (the landing gate
+**Status**: accepted, implemented; the sub-change rules of §2-§5 superseded by ADR 0103 (a sub-change commits on its
+own branch and merges into its parent's), §4 extended by ADR 0106 (the guardian chain), the verdicts of the merges made
+by a submitted review since ADR 0105 · **Date**: 2026-10 · Amends ADR 0056 (two-step apply), ADR 0066 (the landing gate
 becomes the guardian's say on a merge), ADR 0076 / 0079 (reviews, withdrawal, a draft equal to its base no longer lands), ADR 0081
 (a sub-change does not commit), ADR 0101 (a committed branch is rebased at its merge; the
 rebase of the drafts of an uncommitted change is gone).
@@ -54,15 +56,16 @@ commit that writes and reverts nothing is refused (`ErrNothingToCommit`, an `Err
 header, `rpcerr`). The change stays `active` (`ResultBaselineID` = its last commit); it is checked out (from the version
 it committed), edited and committed again. A key taken meanwhile by another change is a conflict at the commit.
 
-A sub-change has no branch of its own (ADR 0081): it does not commit (`CommitChange` refuses it).
+As first decided, a sub-change had no branch of its own (ADR 0081) and did not commit; since ADR 0103 it commits on
+its own branch like a root change.
 
 ### 3. Merge: settled, up to date, guarded, fast-forward
 
 `IntegrateChange` (RPC `MergeChange`) of an open change, root or sub (`merge`):
 
-1. **settled** (`unsettled`): no open flow, decision point or sub-change; every impact committed (a sub-change: accepted),
-   none rejected (rework or withdraw), no candidate (modify or withdraw), no withdrawal waiting for its commit; something
-   to merge (`ErrNothingToCommit` otherwise);
+1. **settled** (`unsettled`): no open flow, decision point or sub-change; every impact committed (a sub-change's too
+   since ADR 0103), none rejected (rework or withdraw), no candidate (modify or withdraw), no withdrawal waiting for its
+   commit; something to merge (`ErrNothingToCommit` otherwise);
 2. **up to date**: a root change whose target moved since its fork is **rebased** (`rebaseCommittedTx`): a baseline of
    kind `rebase` on its branch (the target's head with what the change committed; parent the previous head, `MergedFrom`
    the head it moved onto, `RebasedFrom` the fork it left), the fork and the reference baseline moved there (a
@@ -70,9 +73,11 @@ A sub-change has no branch of its own (ADR 0081): it does not commit (`CommitCha
    the committed version, `MergedWith` the target's, the second parent of the version it lands as), the impacts that
    committed nothing moved to the target's version. A rebase with no conflict keeps the reviews and **commits** its
    merges; conflicts send their impacts back to proposed and stop the merge (`ErrConflict`): settled, accepted,
-   committed, merged again. A sub-change is rebased onto its parent (ADR 0082);
+   committed, merged again. A sub-change is rebased onto its parent's branch the same way (ADR 0103; first onto its
+   parent's drafts, ADR 0082);
 3. **guarded**: the guardian of the change is asked (§4);
-4. **integrated**: a fast-forward of the target (a sub-change: its drafts installed in its parent, ADR 0081); the change
+4. **integrated**: a fast-forward of the target (a sub-change: of its parent's branch, the parent recording the merged
+   work as its own, ADR 0103; first its drafts installed in its parent, ADR 0081); the change
    is `applied`, closed. Only a target moving in between falls back to the three-way merge, which leaves the change
    `committed` while it waits for its resolutions — the only meaning of `committed` now.
 
@@ -87,7 +92,7 @@ that committed.
 The merge goes through the **guardian of the change**, the one that already guards its transitions (ADR 0058:
 `ChangeLifecycles`, implemented by the registry, which knows the methodology), asked outside any transaction
 (`checkMerge`, `pkg/graph/mergecheck.go`) on the blackboard of what the change lands (its impacts, their pre versions and
-what each lands: the version committed on the change's branch, a sub-change's accepted drafts):
+what each lands: the version committed on the change's branch, for a sub-change too since ADR 0103):
 
 1. the lifecycle of the change (resolved by the guardian) must be in a **final state**: its transitions, guarded,
    are how the methodology lets a change reach it;
@@ -96,13 +101,15 @@ what each lands: the version committed on the change's branch, a sub-change's ac
 3. else no node left in a state its domain cannot land (ADR 0078).
 
 There is no other hook: `Graph.LandingGate`, the separate final-state check of the commit and the guard chain of the first
-draft of this ADR are gone. A graph with no guardian (no registry in process, `cmd/graph`) merges by 3 alone.
+draft of this ADR are gone. A graph with no guardian (no registry in process, `cmd/graph`) merges by 3 alone. Since ADR
+0106 the outer guardians of the chain saved on the change (the methodologies integrating its own) are asked after these
+three (`checkGuardians`).
 
 ### 5. The web
 
 - `GetCommitState` (`Graph.CommitState`: what the next commit writes and reverts, what holds the merge, `canCommit`,
   `canMerge`) drives the **Commit** and **Merge** buttons of the change tab (`changeCommit.ts` only words it); a sub-change
-  has "Integrate into parent", from the same state. Accept is disabled for an impact that modifies nothing
+  has "Merge into parent" (ADR 0103), from the same state. Accept is disabled for an impact that modifies nothing
   (`ImpactValidation.modified`, `reviews.invalidReason`). "Remove from change" works at any time.
 - The settings dialog (`pending.svelte.ts`) withdraws the staged edits put back as they were before it saves, and drops
   its change when nothing is left.

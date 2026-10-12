@@ -1,8 +1,11 @@
 # ADR 0082 — A sub-change is rebased onto its parent; its integration is a fast-forward
 
-**Status**: superseded by ADR 0103 (a sub-change is rebased onto its parent's branch, like a root change); was accepted, implemented (graph) · **Date**: 2026-10 · Amends ADR 0081 §5 (a conflict leaves the sub-change
-committed until `IntegrateChange` gets a `Resolution`); builds on ADR 0079 (drafts folded from the log, reviews explicit,
-an edit after an acceptance sends the review back to `proposed`) and ADR 0081 (a sub-change lands in its parent's log).
+**Status**: superseded by ADR 0103 (a sub-change works on its own branch, forked from its parent's, and is rebased
+onto it like a root change, ADR 0101 / 0102); was accepted, implemented (graph). The three-way merge of §1
+(`domain.MergeDrafts`), the conflict names and the settling of §2 (`ImpactNodeResolve`) survive, reused by ADR 0101 for
+the rebase of a committed branch · **Date**: 2026-10 · Amended ADR 0081 §5 (a conflict left the sub-change committed until
+`IntegrateChange` got a `Resolution`); built on ADR 0079 (drafts folded from the log, reviews explicit, an edit after an
+acceptance sends the review back to `proposed`) and ADR 0081 (a sub-change landed in its parent's log).
 
 ## Context
 
@@ -20,6 +23,8 @@ and a contradiction its to resolve, under its own review. The log makes this exa
 the parent's draft at a known position of the parent's log (`Draft.Inherited.Seq`, ADR 0081 §2), which a fold rebuilds.
 
 ## Decision
+
+As decided then (§1 and §3 describe a mechanism ADR 0103 removed; see "Since then").
 
 ### 1. Rebase
 
@@ -78,3 +83,14 @@ integration refuse; `Apply` again rebases again.
   conflicts with "Keep mine"; `ApplyChange` rebases by itself).
 - Not done: a `goap-change` tool for the rebase and the resolution (an agent reaches them through `apply` and its edits).
   Merging the values of a property (text, lists) is not attempted: a property is one value.
+
+## Since then
+
+ADR 0103 gave a sub-change a branch of its own, forked from the head of its parent's: it sees what its parent committed,
+never its drafts, commits on its branch and merges into its parent's like a root change into its target. `Draft.Inherited`,
+the rebase of a sub-change's drafts against its parent's (§1), the installation of its drafts in the parent's log and the
+fast-forward rule of §3 are gone. What stands: `Graph.RebaseChange` rebases what a change committed onto the head of the
+branch it was forked from (its parent's branch for a sub-change, `rebaseCommittedTx`, ADR 0101 / 0102), merging the nodes
+changed on both sides field by field with `domain.MergeDrafts` and naming the conflicts as in §1; the conflicts are settled
+in the change as in §2 (an edit, `ImpactNodeResolve`, cancelling the draft or withdrawing the impact) and hold the
+acceptance (`checkSettled`); `GetRebaseState` and `SubChangeSync.svelte` serve root and sub-changes alike.

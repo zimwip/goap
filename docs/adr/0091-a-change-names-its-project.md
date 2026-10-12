@@ -1,7 +1,8 @@
 # ADR 0091 — A change names its project, and may move to another
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0039 (project), 0043 (project roles), 0054
-(structures, guard), 0066 and 0069 (the core names no structure), 0081 (sub-changes), 0058 (change lifecycle).
+(structures, guard), 0066 and 0069 (the core names no structure), 0081 (sub-changes, since ADR 0103), 0058 (change
+lifecycle).
 Supersedes the default project of ADR 0054 §2 and the `default` flag of ADR 0069.
 
 ## Context
@@ -34,7 +35,8 @@ never changes.
    `PersonalScope` applies), `engine.GraphPort.MoveChange`, `graphsvc.Client.MoveChange`, `goap-change/move`, web
    "Move to project…" on the change overview (`MoveChange.svelte`, `web/src/lib/changeProject.ts`). Rules of the graph:
    only a **root** change (a sub-change's project is its parent's: the family moves with its root), only while `draft`
-   or `active` (a `committed`, `applied` or `abandoned` change is `ErrConflict`), the target an existing project other
+   or `active` and while it committed nothing (since ADR 0102 a commit leaves a change `active`; a change with commits,
+   `committed`, `applied` or `abandoned` is `ErrConflict`), the target an existing project other
    than the current one (`ErrInvalid`). The change and its open sub-changes get the new project in **one
    transaction** (the parent/sub project invariant of `prepareSubChange` holds trivially: they are equal). The row is
    updated by `PutChange` (the `ON CONFLICT` clauses of both repositories now include `project_id`).

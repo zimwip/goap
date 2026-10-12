@@ -19,7 +19,8 @@ are those of five other services. Nothing said when a twin drifted, and the Post
   DISTINCT FROM` or the explicit null test), `where1`, `orderBy`. Built: node by version / latest on a branch /
   versions and joined branches / by key / in a baseline, the baseline entries, out and in links, branches, branch
   joins, baseline and change id lists, change impacts, the log and its counts (`logWhere` already took the
-  placeholder), tags, the plain inserts, the node origin / properties updates and the whole of `DeleteChange`. The
+  placeholder), tags, the plain inserts, the node origin update and the whole of `DeleteChange` (the update of a
+  node's properties went with ADR 0079: a written version is immutable). The
   executors, the scanning, the encodings (`jsonb`, `tsText`, arrays, `COPY`), the upserts (`ON CONFLICT ... SET`),
   `LatestNodes` (`DISTINCT ON` against a `max(version)` subquery) and the SQLite `change_impact.seq` assignment stay in
   their repository: they do not share text. The driver does not change and there is no code generation.
@@ -32,8 +33,9 @@ are those of five other services. Nothing said when a twin drifted, and the Post
   primary key is not compared as generated, `WHERE NOT flag` is `flag = 0`, an inline and an `ALTER` foreign key are
   one) and lists every difference of tables, columns, nullability, defaults, primary keys, unique and check
   constraints, foreign keys and indexes. `TestSchemasAligned` runs it for the graph, `credsvc`, `mcpsvc`, `modelgw`,
-  `prefssvc` and `registrysvc`; `pkg/index` is not covered (pgvector, `tsvector` and generated columns on one side,
-  FTS5 virtual tables on the other). The other schema is not generated from the first: the guard is the deliverable.
+  `prefssvc` and `registrysvc` (and `convsvc` since ADR 0085); `pkg/index` is not covered (pgvector, `tsvector` and
+  generated columns on one side, FTS5 virtual tables on the other). The other schema is not generated from the first:
+  the guard is the deliverable.
 - **`make test-pg`** runs every test against PostgreSQL: `GOAP_TEST_PG_DSN` when set, else a throw-away
   `pgvector/pgvector:pg17` container (the image of the compose file). There is no CI configuration in the repository;
   the target is what to run before touching `postgres.go` or a `migrations/` file.

@@ -114,8 +114,8 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 		return nil, "", err
 	}
 	target, parentBaseline := maps.Clone(base.Nodes), base.ID
-	// A change on its own branch starts from the head of that branch (its sub-changes land in its log, ADR 0081: the
-	// head moves only by other means).
+	// A change on its own branch starts from the head of that branch (moved by its own commits and by the merges of its
+	// sub-changes, ADR 0102, 0103).
 	if _, isOwn, err := ownBranch(ctx, tx, c); err != nil {
 		return nil, "", err
 	} else if isOwn {

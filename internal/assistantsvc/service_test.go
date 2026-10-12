@@ -85,6 +85,26 @@ func (g *fakeGraph) ListChanges(_ context.Context, f graph.ChangesFilter) ([]dom
 	return out, nil
 }
 
+func (g *fakeGraph) AttachChange(_ context.Context, id, parent domain.ChangeID) (domain.Change, error) {
+	if g.err != nil {
+		return domain.Change{}, g.err
+	}
+	c := g.changes[id]
+	c.ParentID = parent
+	g.changes[id] = c
+	return c, nil
+}
+
+func (g *fakeGraph) DetachChange(_ context.Context, id domain.ChangeID) (domain.Change, error) {
+	if g.err != nil {
+		return domain.Change{}, g.err
+	}
+	c := g.changes[id]
+	c.ParentID = ""
+	g.changes[id] = c
+	return c, nil
+}
+
 func (g *fakeGraph) Change(_ context.Context, id domain.ChangeID) (domain.Change, error) {
 	if c, ok := g.changes[id]; ok {
 		return c, nil

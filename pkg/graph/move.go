@@ -21,10 +21,11 @@ const HeaderProjectID = "projectId"
 
 // MoveChange moves a change to another project (ADR 0091): the root change of a family, still draft or active, and
 // with it its open sub-changes, in one transaction. A sub-change cannot move alone: its project is its parent's. The
-// target must be a project and not the one the change is in, and ProjectMoveGate (when set) must accept the move. Only
-// the project of the change changes: the nodes keep theirs (the project of a node never changes), the nodes the change
-// creates take the new project when it lands. Each moved change logs a change.updated entry with a projectId field
-// {from, to}, by the caller. It returns the change as moved.
+// target must be a project and not the one the change is in, and ProjectMoveGate (when set) must accept the move. The
+// nodes keep their projects (the project of a node never changes), the nodes the change creates take the new project
+// when it lands. The guardian chain of each moved change is computed again for the new project (ADR 0106). Each moved
+// change logs a change.updated entry with a projectId field {from, to} (and a guardians field when its chain changed),
+// by the caller. It returns the change as moved.
 func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error) {
 	if project == "" {
 		return domain.Change{}, fmt.Errorf("move change %s: a project is required: %w", id, ErrInvalid)
@@ -38,6 +39,14 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 	}
 	if g.ProjectMoveGate != nil {
 		if err := g.ProjectMoveGate(ctx, family, project); err != nil {
+			return domain.Change{}, err
+		}
+	}
+	// the guardian chain of the root is computed again for the new project (ADR 0106), its sub-changes' from it
+	var rootChain []domain.GuardianRef
+	if root := family[0]; g.Lifecycles != nil && root.Methodology != "" {
+		var err error
+		if rootChain, err = g.Lifecycles.Guardians(ctx, root.Methodology, project); err != nil {
 			return domain.Change{}, err
 		}
 	}
@@ -55,16 +64,29 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 				return fmt.Errorf("change %s changed while it was checked for a move: %w", id, ErrConflict)
 			}
 		}
+		movedTo := map[domain.ChangeID]domain.Change{}
 		for _, c := range again {
-			e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-				domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderProjectID: {From: c.ProjectID, To: project}}})
+			fields := map[string]domain.HeaderValue{HeaderProjectID: {From: c.ProjectID, To: project}}
+			chain := c.Guardians
+			if g.Lifecycles != nil && c.Methodology != "" {
+				if c.ID == id {
+					chain = rootChain
+				} else if p, ok := movedTo[c.ParentID]; ok {
+					chain = chainUnder(p, c.Methodology, ownRef(c))
+				}
+			}
+			if !slices.Equal(chain, c.Guardians) {
+				fields[HeaderGuardians] = domain.HeaderValue{From: c.Guardians, To: chain}
+			}
+			e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(), domain.HeaderEdit{Fields: fields})
 			if err != nil {
 				return err
 			}
 			if _, err := tx.AppendLog(ctx, e); err != nil {
 				return err
 			}
-			c.ProjectID = project
+			c.ProjectID, c.Guardians = project, chain
+			movedTo[c.ID] = c
 			if err := tx.PutChange(ctx, c); err != nil {
 				return err
 			}

@@ -43,7 +43,8 @@ ABAC roles of the action (`roles`, ADR 0043) and, for `model`, an alias distinct
 
 **Enforcement (graph mechanism, engine policy).** The graph keeps the mechanism, as for decisions (ADR 0067): an
 optional hook `Graph.ReviewPolicy` (a `domain.ReviewPolicy`, nil: anyone with `node:review` may review) is called
-by `ImpactNodeReviewOn` with a `domain.ReviewRequest` (the impact with its producer, execution and flow, the reviewer, the
+before every verdict (`reviewTx`, so `ImpactNodeReviewOn` and the batches of a submitted review, ADR 0080, 0105) with
+a `domain.ReviewRequest` (the impact with its producer, execution and flow, the reviewer, the
 verdict, the facts of the change) and may refuse. The platform plugs
 the rule `verifier ≠ producer` (principal, and model alias when both are models) from `pkg/verify`, wired explicitly
 by `cmd/graph` and `cmd/goap-dev`; `pkg/graph` and `pkg/domain` do not import it (`pkg/layering`).
@@ -100,8 +101,8 @@ comment)` (`NodeOp.Reserve`).
   (`domain.DataCriticality`, ADR 0065, `pkg/criticality`): the graph never reads it. The methodology gives a default
   (`Methodology.Criticality`, else `C2`), the requester may raise it freely, lowering it needs the permission
   `change:lower-criticality` (administrators by default).
-- **WHO.** What each level *requires* is organisation policy: `organisation@CriticalityPolicy` nodes (organisation
-  domain 1.12.0, `adminOnly`), one per level, resolved along the unit chain, the nearest unit winning, the whole
+- **WHO.** What each level *requires* is organisation policy: `organisation@CriticalityPolicy` nodes (added to the
+  organisation domain in 1.12.0, `adminOnly`), one per level, resolved along the unit chain, the nearest unit winning, the whole
   policy and not field by field (rule 3); the compiled-in `criticality.Defaults()` apply where none exists. A policy
   holds the accepted oracle kinds, whether sampling is allowed, the role of a derogation signatory and the maximum
   derogation lifetime. The methodology does not know the table.

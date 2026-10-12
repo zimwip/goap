@@ -18,9 +18,10 @@ thing:
 
 1. **A methodology is nodes of the meta-domain `methodology`.** A version is a node `methodology@MethodologyVersion`
    (key `MV:<name>@<version>`, namespace `methodology`) holding the scalar fields, the `status` and the timestamps,
-   and one node per element: `Agent` (with its triggers), `Action`, `Condition`, `Goal`. Elements are keyed
-   `<version key>/<kind>/<name>`, ordered by a `position` property and tied to their version by `methodology@defines`
-   links. The meta-domain is built in (ADR 0012 §4); there is no second representation of a published version.
+   and one node per element: `Agent` (with its triggers), `Action`, `Condition`, `Goal`, and since ADR 0034, 0035, 0039
+   and 0050 `Process`, `Method`, `Role`, `Step`, `MethodStep` (`defKinds` of `internal/registrysvc/defs.go`). Elements are
+   keyed `<version key>/<kind>/<name>`, ordered by a `position` property and tied to their version by
+   `methodology@defines` links (an activity to its steps by `methodology@sub_activity`). The meta-domain is built in (ADR 0012 §4); there is no second representation of a published version.
 2. **A domain is kept in the registry's database.** A version is a row of `domain_version` (name, version, status,
    the definition as JSON, timestamps), in PostgreSQL (`internal/registrysvc/migrations`, `GOAP_DB_DSN`) or SQLite in
    the local mode (`migrations_sqlite`, ADR 0010); without a database the registry keeps them in memory
@@ -38,8 +39,8 @@ thing:
 5. **Nothing of a methodology is deleted**: a node key is never freed on a versioned graph. A deleted draft keeps its
    version node marked `deleted`; an element that leaves a draft is marked `removed`; saving it again revives the
    node. A deleted domain draft is a deleted row.
-6. **YAML is the exchange format** (`Import*` / `Export*`); the registry imports `domains/*.yaml` then
-   `methodologies/*.yaml` at startup (missing versions only), once the graph answers.
+6. **YAML is the exchange format** (`Import*` / `Export*`; a domain also exports and imports as JSON, ADR 0104); the
+   registry imports `domains/*.yaml` then `methodologies/*.yaml` at startup (missing versions only), once the graph answers.
 7. **Access**: ABAC resources `methodology` and `domain` (actions `write`, `publish`, `delete`).
 
 ## Consequences

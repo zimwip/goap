@@ -39,7 +39,7 @@ type Frame struct {
 // levelTools are the server tools of each level, in the order they are declared to the model.
 var levelTools = map[Level][]string{
 	LevelProject: {ToolSelectProject, ToolOpenChange, ToolListMethodologies, ToolMethodologyQuery, ToolSearchChanges, ToolListAgents, ToolStartAgent, ToolCreateChange},
-	LevelChange:  {ToolSelectProject, ToolOpenChange, ToolMethodologyQuery, ToolListAgents, ToolStartAgent, ToolSearchChanges},
+	LevelChange:  {ToolSelectProject, ToolOpenChange, ToolMethodologyQuery, ToolListAgents, ToolStartAgent, ToolSearchChanges, ToolAttachChange, ToolDetachChange},
 }
 
 // tools are the server tools of the frame; create_change only once the open changes were searched.

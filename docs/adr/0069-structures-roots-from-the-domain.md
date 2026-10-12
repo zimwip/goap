@@ -1,6 +1,7 @@
 # ADR 0069 — Structures and their roots are domain data: the graph core names none of them
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0012, 0039, 0054, 0065, 0068.
+**Status**: accepted, implemented; the `default` property (§1, §4, §5) superseded by ADR 0091 · **Date**: 2026-10 ·
+Builds on ADR 0012, 0039, 0054, 0065, 0068.
 
 ## Context
 
@@ -17,11 +18,12 @@ We keep exactly two scope axes, the organisation (who owns a version) and the pr
 by the kinds `domain.StructureOrganisation` / `StructureProject`: they are axis names, not node types. Everything else
 comes from the domain.
 
-1. **The tag carries it all.** `structure:` on a node type is `{kind, parent, root, selfParent, default, bootstrap}`:
-   `default` names the boolean property flagging the default member (`Graph.DefaultProject` reads it from the
-   structure, the smallest flagged key wins, else the root), `bootstrap` gives the initial properties of the root node.
-   `domain.Structure` mirrors it; `Graph.Bootstrap` walks the declared structures (organisation, project, then any
-   other) and still writes every root in one transaction and one applied change per namespace, with a generic intent.
+1. **The tag carries it all.** `structure:` on a node type is `{kind, parent, root, selfParent, bootstrap}`:
+   `bootstrap` gives the initial properties of the root node. (It first also carried `default`, the boolean property
+   flagging the default member, read by `Graph.DefaultProject`; ADR 0091 removed both: no change is created without a
+   project, so nothing resolves to a default member.) `domain.Structure` mirrors it; `Graph.Bootstrap` walks the
+   declared structures (organisation, project, then any other) and still writes every root in one transaction and one
+   applied change per namespace, with a generic intent.
 2. **No built-in copy.** An untyped graph (tests, tools) and a catalogue that lacks a question fall back to
    `typecat.Builtin()`, the catalogue of the built-in domains (`Structure`, `Structures`, `Requires`, `AdminOnly`,
    `IsA`), so the yaml of the organisation domain is the one definition. `domain.BuiltinStructures`,
@@ -34,9 +36,9 @@ comes from the domain.
    the services behind the scope (`mcpsvc.Snapshot.Unit`, the access snapshot) resolve an empty one to the root.
 4. **`domain.Structures` is a list** of `StructureSet{Structure, Types}`, one per kind declared, with the typed helpers
    `Organisation()`, `Project()`, `Of(kind)`, `TypesOf(kind)`, `In(kind, type)`. The `GetStructures` RPC answers
-   `repeated Structure` (each with its kind, the `default_property` and the `bootstrap` properties).
+   `repeated Structure` (each with its kind, type, parent link, root, types and the `bootstrap` properties).
 5. **Validation where it is needed.** The domain schema no longer holds a fixed list of kinds (a kind is required,
-   tagged once, the `default` property must be an attribute of the type). The type catalogue checks the parent link of
+   tagged once). The type catalogue checks the parent link of
    every structure and one platform constraint, stated there: the organisation and the projects share a namespace,
    because the services reading them read one head (an Assignment links a unit and a project). The built-in domain
    tags both, so a catalogue always has them.
@@ -46,8 +48,6 @@ comes from the domain.
 ## Consequences
 
 - A domain other than the built-in one cannot tag a structure again (one per kind, ADR 0054) but a deployment that
-  replaces the organisation domain would change roots, default flag and bootstrap properties without a line of Go.
+  replaces the organisation domain would change roots and bootstrap properties without a line of Go.
 - Not done here (phase P5b): the shape of `Change.OwnerOrg` / `ProjectID` and `Node.Owner` / `Project`, and the SQL
   columns, still name the two axes.
-
-> The `default` property of a structure is gone (ADR 0091): no change is created without a project, so nothing resolves to a default member.

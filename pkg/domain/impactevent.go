@@ -50,9 +50,10 @@ const (
 	ImpactLanded ImpactOp = "landed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
-	// ImpactIntegrated records, in the log of a sub-change, that its change impact was integrated into its parent change
-	// (Into: the parent and its change impact, ADR 0081): the draft went to the parent, it is dropped here. A conflict
-	// skipped by its resolution is integrated with no install in the parent (Into names no impact).
+	// ImpactIntegrated is a legacy event, still read from old logs and never written since ADR 0103 (a sub-change merges
+	// its branch into its parent's): it recorded, in the log of a sub-change, that its change impact was integrated into
+	// its parent change (Into: the parent and its change impact, ADR 0081), the draft going to the parent and dropped
+	// here; a conflict skipped by its resolution was integrated with no install in the parent (Into named no impact).
 	ImpactIntegrated ImpactOp = "integrated"
 )
 
@@ -106,7 +107,8 @@ type ImpactEvent struct {
 	// integrated into after (the main flow's: BranchOf).
 	Branch string  `json:"branch,omitempty"`
 	Review *Review `json:"review,omitempty"` // reviewed, discarded
-	// Into is, on integrated, the parent change and the change impact the draft was installed in (ADR 0081).
+	// Into is, on integrated (a legacy event), the parent change and the change impact the draft was installed in
+	// (ADR 0081).
 	Into  *ImpactRef `json:"into,omitempty"`
 	Stale []string   `json:"stale,omitempty"` // adopted: the stale executions
 	// Patch is what an updated event changed on the draft: {"props": {...}, "unset": [...], "owner": unit key, "ownerId":

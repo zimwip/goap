@@ -1,6 +1,7 @@
 # ADR 0015 — Namespaces and namespace-scoped changes
 
-**Status**: accepted, implemented · **Date**: 2026-09
+**Status**: accepted, implemented · **Date**: 2026-09 · §5 / §6 amended by ADR 0079, 0101 and 0102 (versions written
+at commit, rebase before landing, commit then merge)
 
 ## Context
 Node keys were globally unique free strings and a change could touch any node. We want to organise the graph by
@@ -23,23 +24,25 @@ delivery node owned by an organisation unit).
    at nodes of another namespace.
 4. `authz.Resource` carries the namespace so policies can restrict who may act on which namespace.
 
-5. **Change branch** (every change has one, ADR 0024): the change
+5. **Change branch** (every change has one, ADR 0024; given at its first commit when it has none): the change
    forks a branch named `change-<id8>` (origin `change:<id>`) from its reference baseline; its versions
-   live there. `Apply` accepts the change impacts on that branch, then merges the branch into the branch it
-   was forked from (`Branch`, `main` by default) with the ADR 0009 3-way merge. Without conflicts the
-   change becomes `applied` and its result baseline is the merge baseline. With conflicts it becomes
-   `merge_pending`: a human resolves them with `MergeChange` (per-node resolutions), which completes the
-   merge. Abandoning the change abandons its branch.
+   live there, written from its drafts when it is committed (`CommitChange`, ADR 0079, 0102). The merge
+   (`MergeChange`; `Apply` commits then merges) rebases the branch onto the head of the branch it was forked from
+   (`Branch`, `main` by default; ADR 0101) and fast-forwards it; only a target moving in between falls back to the
+   ADR 0009 3-way merge. The change then becomes `applied` and its result baseline is the one it left on the target.
+   With conflicts it stays `committed` (first `merge_pending`): a human resolves them with `MergeChange` (per-node
+   resolutions), which completes the merge. Abandoning the change abandons its branch.
 6. **Shared versions**: changes acting on the same node are detected through the attachments
    (`SharedNodes` / `GetSharedNodes`). Each change keeps its own version on its own branch; the second
-   one to be applied meets the first one's version on the target branch and goes through the 3-way
-   merge (auto-merged when properties are disjoint, `merge_pending` otherwise). Building one change
-   on the unmerged versions of another is not supported yet.
+   one to be applied meets the first one's version on the target branch: its rebase (ADR 0101) merges the
+   properties when they are disjoint and stops on a conflict otherwise. Building one change on the unmerged
+   versions of another is not supported, except for a sub-change, forked from its parent's branch (ADR 0103).
 7. `NodeByKeyOn(namespace, branch, key)` resolves a key as seen from a branch (own version, else the
    parent's, up to main).
 
-8. **Pre/post impacts**: a change impact carries the version a change starts from (pre), the version it writes
-   (post) and the version that lands on the target branch (ADR 0024).
+8. **Pre/post impacts**: a change impact carries the version a change starts from (pre), what it writes
+   (post: a draft reference until the change lands, ADR 0079) and the version that lands on the target branch
+   (ADR 0024).
 9. **Maturity**: the `maturity` lifecycle of `domains/alm.yaml` (proposed, draft, accepted, released,
    withdrawn) is a reusable template for a type (`lifecycle: maturity`), on top of ADR 0014.
 

@@ -1,6 +1,8 @@
 # ADR 0055 — Attributes, enums and node validators in the domain
 
-Status: accepted
+**Status**: accepted, implemented; amended since: attributes are strict (a property that is not an attribute of the
+node's type is refused unless the type is flagged `additionalProperties: true`), the validators of link attributes run
+(ADR 0100), `restInEditable` is gone (ADR 0078) · **Date**: 2026-10 · Builds on ADR 0018 (algorithms).
 
 ## Context
 
@@ -30,9 +32,12 @@ order, tooltip, name flag) with its own validators, and enumerations next to the
 5. **Checks**: the domain refuses unknown or duplicate attributes, unknown types or widgets, an enum attribute
    without (or with an unknown) enum, a non-enum attribute naming one, more than one `asName`, and instances
    plugged with the wrong usage. On commit the graph checks the type of each declared value and enum
-   membership (`graph.checkAttributeValue`, through `TypeCatalog.AttributeChecks`); an untyped attribute and
-   an empty value are accepted (requiring a value is a validator's job); extra properties stay allowed. The
-   validators of link type attributes are checked by the domain but not yet run when a link is written.
+   membership (`checkAttributeValue`, through `TypeCatalog.AttributeChecks`); an untyped attribute and
+   an empty value are accepted (requiring a value is a validator's job). Extra properties were first allowed;
+   since then attributes are strict (`typeIndex.checkAttributes`, `TypeCatalog.AttributeNames`): a property the
+   type does not declare is refused with `ErrInvalid`, unless the type is flagged `additionalProperties: true`.
+   The validators of link type attributes were first checked by the domain only; ADR 0100 runs them when a link
+   is written.
 6. **Registry and web**: the contract carries `Attribute`, `Enum`, `AttributeInfo` (resolved: where it is
    inherited from, enum values); `ListTypes` returns them. In the IDE each node type, link type, lifecycle
    and enum has its own tab; the Domains explorer lists, under each version, node types (attributes with
@@ -40,7 +45,7 @@ order, tooltip, name flag) with its own validators, and enumerations next to the
    their guards and actions) and algorithms. The node editor lays a node out by section and order and edits
    each value with its widget; the attribute with `asName` is the display name.
 
-Lifecycles, transitions and link types also carry a `description` (states, node types, enums and algorithms already did), so that the whole model of a domain is documented in the registry. A lifecycle's `restInEditable` (ADR 0048) now travels through the registry contract too.
+Lifecycles, transitions and link types also carry a `description` (states, node types, enums and algorithms already did), so that the whole model of a domain is documented in the registry.
 
 No migration: the model starts from this shape.
 

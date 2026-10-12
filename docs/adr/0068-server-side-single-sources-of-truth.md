@@ -16,11 +16,13 @@ Greenfield: no shim, the old list, switches and schema are removed.
 
 1. **`adminOnly` on a node type.** A node type of a domain may carry `adminOnly: true` (`def.NodeType.AdminOnly`,
    registry proto `NodeType.admin_only`): its nodes are written by platform administrators only (checked against the
-   floor, ADR 0020), never by the ordinary change / object / node rules, and never by a direct write. A subtype
-   inherits it (`User extends OrgUnit`). The built-in `organisation` domain flags `OrgUnit`, `Adapter`, `Policy`,
-   `ProjectUnit`, `Assignment` (so `User`), the `platform` domain `AdapterDef`. The type catalogue resolves it
+   floor, ADR 0020), never by the ordinary change / object / node rules, and never by a direct write (there is none
+   since ADR 0079). A subtype inherits it (`User extends OrgUnit`). The built-in `organisation` domain flags `OrgUnit`,
+   `Adapter`, `Policy`, `ProjectUnit`, `Assignment` (so `User`), the `platform` domain `AdapterDef` (later flags:
+   `CriticalityPolicy`, ADR 0075; `LlmBehavior`, ADR 0093). The type catalogue resolves it
    (`typecat.Catalog.AdminOnly`, `graph.TypeCatalog.AdminOnly`) and the graph answers one question,
-   `Graph.AdminOnlyType(ctx, typ)`: the catalogue's flag, plus the built-in domains for an untyped graph (`typecat.Builtin()`, ADR 0069). The graph handler (`refuseDirectWrite`, `gateAccess`) and
+   `Graph.AdminOnlyType(ctx, typ)`: the catalogue's flag, plus the built-in domains for an untyped graph
+   (`typecat.Builtin()`, ADR 0069). The graph handler (`gateAccess`) and
    `goap-change` (`Change.gate`) both ask it, the connector through `engine.GraphPort.AdminOnlyType`, which the
    in-process graph implements and `graphsvc.Client` implements with the new RPC `IsAdminOnlyType`. A domain
    flagged type is gated with no code naming it. `access.IsAccessType` is gone. `AdminFloorValidator.Types()` stays a

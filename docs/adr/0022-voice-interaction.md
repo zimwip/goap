@@ -1,6 +1,6 @@
 # ADR 0022 — Voice interaction with the assistant
 
-**Status**: accepted (phase 1) · **Date**: 2026-09
+**Status**: accepted; phase 1 implemented, phases 2 and 3 not built · **Date**: 2026-09
 
 ## Context
 
@@ -12,7 +12,8 @@ Users want to talk to the assistant instead of typing. Two families of solutions
   reasons and answers by voice with low latency.
 
 Constraints at the time of the decision (early 2026-09; the browser has since called `modelgw` for the model
-configuration, and `modelgw` gained embeddings, discovery and an authorization check):
+configuration, `modelgw` gained embeddings, discovery, an authorization check and native tool calling (ADR 0098), and
+the assistant became a conversation answered on the server, ADR 0087 / 0088):
 
 - The assistant sends a text intent to `EngineService.StartProcess` and follows the run
   through `WatchEvents`. The browser never calls `modelgw`.
@@ -65,7 +66,7 @@ provider's concern. Alternative: WebSocket through the gateway, which requires:
   session store, connection draining on deploy, and idle-timeout alignment on every
   load balancer;
 - per-tenant quotas and backpressure;
-- streaming and tool-use RPCs on `modelgw`.
+- streaming RPCs on `modelgw` (tool use exists since ADR 0098).
 
 ## Consequences
 

@@ -1,6 +1,7 @@
 # ADR 0066 — Activity, execution journal and blackboard facets out of the graph core
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0011, 0030, 0059, 0065.
+**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0011, 0030, 0059, 0065. §1's landing gate
+superseded by ADR 0102 (the guardian's say on a merge, `ChangeLifecycles.Merge`).
 
 ## Context
 
@@ -14,10 +15,10 @@ points as fixed fields of the blackboard.
 1. **Activity.** `ActivityRef` is no longer a column, a field of `Change` or of `NewChange`: it is
    `Change.Data[registrysvc.DataActivity]` (`registrysvc.ActivityOf(c)`). The graph asks two hooks, both wired in
    `goap-dev` from the registry service (`cmd/graph` holds no registry: it wires neither, as for `Lifecycles`):
-   - `Graph.LandingGate func(ctx, c, bb) (decided, ok bool, err error)`, asked for every change at Apply / Commit by
-     `authorizeMoves`'s rolled-back pass, outside the transaction (it may read the graph). `decided` false: the
-     node-type lifecycle's Editable floor applies; true: `ok` replaces it. The collect pass now stops before the
-     transition checks (they are made by the real pass).
+   - A landing gate, `(decided, ok bool, err error)`, asked outside the transaction (it may read the graph): `decided`
+     false, the floor of the node-type lifecycles applies; true, `ok` replaces it. First `Graph.LandingGate`, asked at
+     Apply / Commit; since ADR 0102 it is the guardian's say on a merge, `ChangeLifecycles.Merge`
+     (`registrysvc.Service.Merge`, the Activity's goals), asked by `checkMerge`, and `LandingGate` is gone.
    - `Graph.SubChangeValidator func(ctx, parent, child) error`, asked by `CreateChange` before its transaction when it
      has a parent. The registry implements the cascade (the child's activity within the parent's through the
      `sub_activity` links, read from the methodology namespace) and wraps `graph.ErrInvalid`.
@@ -32,7 +33,8 @@ points as fixed fields of the blackboard.
    work over a `journal.Log` (`*graph.Graph`, `graphsvc.Client`), `journal.Decode` / `DecodeExchange` read entries
    back. `engine.GraphPort` has `AppendLog` / `ChangeLog` instead of `Record` / `Journal`. The wire carries log entries for
    the write: `RecordExecutions` and the `ModelExchange` messages are replaced by `AppendLog` (and the existing
-   `ListChangeLog`); `ListExecutions` stays as the read of records (the web uses it), the handler decoding the entries. `ExecutionRecord.ActivityRef` stays on the journal record (it is a journal field, not the core's).
+   `ListChangeLog`); `ListExecutions` stays as the read of records (the web uses it), the handler decoding the
+   entries. `journal.Record.ActivityRef` stays on the journal record (it is a journal field, not the core's).
    `pkg/prov`, `pkg/observe`, `pkg/engine`, `pkg/selfimprove`, `internal/graphsvc` import `pkg/journal`; `pkg/graph`
    and `pkg/domain` must not, and `pkg/journal` must not import `pkg/graph` or the engine (`pkg/layering`).
 3. **Blackboard facets.** `Blackboard` keeps the change, its nodes, neighbours, vars, supertypes and `At`; the options,
@@ -45,7 +47,7 @@ points as fixed fields of the blackboard.
 
 ## Consequences
 
-- A use case adds what a change carries (Data), what lands it (LandingGate), what a sub-change may be
+- A use case adds what a change carries (Data), what lands it (the guardian's `Merge`), what a sub-change may be
   (SubChangeValidator), what the blackboard shows (Facets) or what the log holds (a stream) without touching the core.
 - Typed access to the three built-in facets goes through accessors (a type assertion each); the `Facets` map is not
   serialised (`json:"-"`).

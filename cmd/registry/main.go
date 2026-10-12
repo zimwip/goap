@@ -37,12 +37,14 @@ func main() {
 		domains = registrysvc.SQLDomainStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		srv.Readiness(pool.Ping)
 	}
-	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphClient})
+	directory := &access.Directory{Graph: graphClient}
+	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
 	svc := &registrysvc.Service{Store: store, DomainStore: domains, Authz: authorizer, Events: events,
-		MCPScopes: (&mcpsvc.Directory{Graph: graphClient}).Scopes} // the scope of the MCPs (ADR 0028)
+		MCPScopes:  (&mcpsvc.Directory{Graph: graphClient}).Scopes, // the scope of the MCPs (ADR 0028)
+		Applicable: applicable(directory)}                          // the integrators in force in a project (ADR 0106)
 	if dir := platform.Env("GOAP_METHODOLOGIES_DIR", ""); dir != "" {
 		// bootstrap: import the YAML files of versions not stored yet, once the graph answers
 		go func() {
@@ -75,5 +77,17 @@ func main() {
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
+	}
+}
+
+// applicable lists the methodologies applicable to a project from the snapshot of the organisation (ADR 0106: where
+// the guardian chain of a change finds the methodologies integrating its own).
+func applicable(d *access.Directory) func(ctx context.Context, project string) ([]string, error) {
+	return func(ctx context.Context, project string) ([]string, error) {
+		s, err := d.Snapshot(ctx)
+		if err != nil || s == nil {
+			return nil, err
+		}
+		return s.ApplicableMethodologies(project), nil
 	}
 }

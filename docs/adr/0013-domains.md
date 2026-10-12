@@ -13,8 +13,8 @@ own lifecycle rather than with the methodologies.
 
 1. **A domain is a registry entity** with the lifecycle of a methodology (draft → published → archived, immutable once
    published), kept in the registry's database (ADR 0023), served by the `registry.v1` `*Domain*` RPCs, guarded by
-   the ABAC resource `domain` (role `methodologist`). A domain is the definition of a graph, not graph data: saving a
-   draft is no change of the graph.
+   the ABAC resource `domain` (administrators by default, ADR 0043; first the role `methodologist`). A domain is the
+   definition of a graph, not graph data: saving a draft is no change of the graph.
 2. **One domain per namespace.** A domain's name is the namespace its nodes live in (`alm`, `platform`,
    `organisation`; ADR 0015), and the prefix of the references to its types (ADR 0012). **Adding a namespace is
    creating and publishing a domain** in the domain editor: its name (lowercase letters, digits, `-`, `_`) becomes the

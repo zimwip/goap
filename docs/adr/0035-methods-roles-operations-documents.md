@@ -1,6 +1,8 @@
 # ADR 0035 — Methods, roles, operations and documents
 
-**Status**: accepted (decisions below; implemented in phases, see the Phasing table) · **Date**: 2026-09 ·
+**Status**: accepted (decisions below); phases 1–3 implemented, 4–5 not (see the Phasing table); §1 reshaped by
+ADR 0050 (a method owns its actions and names no agent); the holding of roles in §2 superseded by ADR 0039 / 0043
+(roles held on projects through Assignments) · **Date**: 2026-09 ·
 Builds on ADR 0009 §5 (specializations), ADR 0012–0015 (types, domains, namespaces), ADR 0014 (lifecycles and
 documents), ADR 0016 (sub-changes), ADR 0018 (library and instance), ADR 0020 (access control), ADR 0034 (processes and
 steps). Relates to ADR 0033 (request to shipped change).
@@ -70,6 +72,11 @@ methods:
   then the **actions** within the method's agent by planning.
 - `agent:` on a step stays the case of a step with a single way of working and no reference of its own.
 
+**Since ADR 0050** a method no longer names an agent (`agent:` and `goal:` are gone): it owns its `actions` and/or
+`steps`, with `done`, `planner`, `model` and `mcps`; compiling it generates an agent of its name, acting as the
+method's responsible role, run as a fresh sub-agent per step. The scheduler picks the applicable method by priority,
+then the most specific `when` (`Method.Specificity`), and a step may run once per element of a `foreach` list.
+
 ### 2. Guidance, roles and responsibilities
 
 **Guidance.** Steps and methods gain `guidance` (markdown), `inputs` (what must be available: conditions or node types),
@@ -94,16 +101,17 @@ steps:
 ```
 
 Design rule 1 holds: the methodology names **roles**, never users or units. The organisation **assigns** roles to users
-per unit (`organisation@User` has roles today; the proposal is a role held *in a unit*: `holds_role` from a user to a
-unit with the role name, inherited down `part_of`). Access control uses them through **one generic policy family**,
-not one rule per methodology:
+(the proposal was a role held *in a unit*, `holds_role`, inherited down `part_of`; since ADR 0039 / 0043 a role is
+held on a project through an `organisation@Assignment`, inherited by sub-projects). Access control uses them through
+**one generic policy family**, not one rule per methodology:
 
 | Rule | Resource | Action |
 |---|---|---|
-| `hasRoleIn(r.sub, r.obj.Role, r.obj.Org)` | `step` | `perform` (submit a human task, approve its outputs) |
-| `hasRoleIn(r.sub, r.obj.Accountable, r.obj.Org) && r.sub.Subject != r.obj.Owner` | `step` | `approve` |
+| `hasRoleIn(r.sub, r.obj.Role, r.obj)` | `step` | `perform` (submit a human task, approve its outputs) |
+| `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner` | `step` | `approve` |
 
-The resource of a step carries its role names (from the definition) and the unit holding the change. Consequences:
+The resource of a step carries its role names (from the definition), the unit holding the change and its project.
+Consequences:
 
 - a human task is **addressed** to the role in the unit (ADR 0033 §5: the work list of a user is the tasks of the roles
   they hold);
@@ -214,8 +222,8 @@ inside one namespace.
 | Phase | Content |
 |---|---|
 | 1 ✅ | Process progress (§3): `Engine.Progress`, `GetProcessProgress`, shown on the run and the change (nested processes unfold); guidance / checklist / deliverables on steps (§2), the step's context on its human tasks (`HumanTask.context`), in the system prompt of its LLM actions and `{{ .Step }}`, and passed to the sub-agent of an agent or process step |
-| 2 ✅ | Methods (§1): `methods` (capability `for`, context `when`, `priority`, guidance, checklist, deliverables, references, `agent` + `goal`), steps naming a capability (`method:`), the choice in `process.step` (applicable, highest priority, agent runnable by the unit; kept when the step resumes), recorded as the step's specialization and shown in the progress, the method's guidance added to the step context of its agent; node type `methodology@Method` (meta-domain 1.2.0), Method tab in the IDE; sdlc 0.5.3 designs by `solution_design` (architect) or `functional_design` (designer). Methods of other methodologies providing a capability: not yet |
-| 3 ✅ | Roles (§2): `roles` declared by the methodology, RACI `roles` on steps (inherited by sub-steps) and methods (replacing the step's); a role held in a unit is a scoped user role `role@UNIT` holding in the units below it (`authz.Principal.HasRoleIn`, `Resource.OrgChain` filled by `access.Authorizer` from `part_of`); Casbin `hasRoleIn`, default rules `step:perform` (responsible) and `step:approve` (accountable, four-eyes); the engine checks `perform` when a step's task is submitted and lets the accountable role approve a step's gate; the roles reach the task (`StepContext.roles`), the progress and the IDE (declared roles on the methodology's overview, RACI on steps and methods). Remaining: the work list of a user (ADR 0033 §5), agents acting under the responsible role's identity, the Access screen listing the declared roles |
+| 2 ✅ | Methods (§1): `methods` (capability `for`, context `when`, `priority`, guidance, checklist, deliverables, references, `agent` + `goal`, replaced by the method's own actions in ADR 0050), steps naming a capability (`method:`), the choice in `process.step` (applicable, highest priority, agent runnable by the unit; kept when the step resumes), recorded as the step's specialization and shown in the progress, the method's guidance added to the step context of its agent; node type `methodology@Method` (meta-domain 1.2.0), Method tab in the IDE; sdlc 0.5.3 designs by `solution_design` (architect) or `functional_design` (designer). Methods of other methodologies providing a capability: not yet |
+| 3 ✅ | Roles (§2): `roles` declared by the methodology, RACI `roles` on steps (inherited by sub-steps) and methods (replacing the step's); a role held in a unit is a scoped user role `role@UNIT` holding in the units below it (`authz.Principal.HasRoleIn`, `Resource.OrgChain` filled by `access.Authorizer` from `part_of`); Casbin `hasRoleIn`, default rules `step:perform` (responsible) and `step:approve` (accountable, four-eyes); the engine checks `perform` when a step's task is submitted and lets the accountable role approve a step's gate; the roles reach the task (`StepContext.roles`), the progress and the IDE (declared roles on the methodology's overview, RACI on steps and methods). Since ADR 0043 the roles are held on projects through Assignments (merged into the subject's roles by `access.Authorizer`), an agent runs for the process's initiator, who must hold its roles, and the Project tab lists the roles a project needs and who holds them. Remaining: the work list of a user (ADR 0033 §5) |
 | 4 | Documents (§5) and companion changes (§6) |
 | 5 | Operations (§4): `shipped` stage, standard changes, deployment waves recorded per environment, `EffectiveIn`, operating processes per scope, version pinning |
 

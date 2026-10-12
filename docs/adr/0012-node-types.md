@@ -27,9 +27,9 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
   its type is its own.
 - Every reference to a node type is qualified: `extends`, link type ends (`from`, `to`), `document.contains`,
   `expects.produce.nodeType`, the literals of CEL (`n.type == "alm@Requirement"`, `"alm@Requirement" in n.types`),
-  `x.types`. A reference may cross domains (`alm@Component` has an `owner` link to `organisation@OrgUnit`).
-- Link types are referenced the same way, with the prefix of the domain that declares them (`alm@verifies`,
-  `organisation@owner` from a node of any domain to an `organisation@OrgUnit`).
+  `x.types`. A reference may cross domains (a link type of one domain may end on a type of another).
+- Link types are referenced the same way, with the prefix of the domain that declares them (`alm@satisfies`,
+  `organisation@part_of`).
 - Inside a domain definition, a bare name is a type of that domain (`extends: Requirement` in `alm`), a qualified one
   a type of another (`extends: base@Item`). `domain.TypeRef` parses and qualifies references; `pkg/typecat` is the
   catalogue.
@@ -46,8 +46,8 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
   are not in the graph. The code is a library (`pkg/`) shared by the registry and the services.
   The IDE loads the resolved catalogue from the registry (`ListTypes`: types with their properties, ancestors,
   lifecycle and editor; link types with their ends; the version in force of each domain).
-- A change is judged by the catalogue **in force when it is checked**: when a version is written, and again when the
-  change is applied. Publishing a domain version applies to the changes checked afterwards.
+- A change is judged by the catalogue **in force when it is checked**: when a draft is written or reviewed, and again
+  when the change lands (ADR 0079). Publishing a domain version applies to the changes checked afterwards.
 - Nothing is projected: no metadata nodes the graph enforces, no `M:` / `D:` keys, no `pkg/metamodel`
   synchronisation, no `goap.graph.nodetype.changed` event. The domains are not graph data: the registry keeps them in its
   database (ADR 0023).
@@ -62,12 +62,13 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 ### 4. Built-in domains: shipped with the code, frozen
 - The domains the platform writes or reads before anything is loaded ship with the code (embedded YAML,
   `domains/builtin/`, `def.BuiltinDomains`):
-  - the **meta-domain** `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`),
-    which types the definition nodes of the methodologies (ADR 0023);
-  - `organisation` (`OrgUnit`, `Adapter`, `User`, `Policy`), read by the sub-changes (ADR 0016), the adapters
-    (CLAUDE.md, rule 3) and access control (ADR 0020);
-  - `platform` (`MCP`, `AdapterDef`, `LlmProvider`, `LlmModel`, `LlmAlias`), read by the MCP hub (ADR 0019) and the
-    model gateway.
+  - the **meta-domain** `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`;
+    later `Role`, `Activity`, `Method`, `Process`, `Step`, `MethodStep`), which types the definition nodes of the
+    methodologies (ADR 0023);
+  - `organisation` (`OrgUnit`, `Adapter`, `User`, `Policy`; later `ProjectUnit`, `Assignment`, `CriticalityPolicy`),
+    read by the sub-changes (ADR 0016), the adapters (CLAUDE.md, rule 3) and access control (ADR 0020);
+  - `platform` (`MCP`, `AdapterDef`, `LlmProvider`, `LlmModel`, `LlmAlias`; later `LlmBehavior`, `Role`), read by the
+    MCP hub (ADR 0019) and the model gateway.
 - They are **frozen**: the platform reads them in its own way, so they are initialised at startup from their YAML and
   change with the code only; the registry never versions them.
 - A built-in domain is always in the catalogue, before anything is loaded from the registry: the registry writes its

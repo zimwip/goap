@@ -48,7 +48,7 @@ by removing a node the way every other grant is, and didn't show up next to "rea
 
 ## Consequences
 
-- Administration can now be granted to a unit, revoked by deleting a node (the Assignment) instead of flipping
-  a property, and shown in the same place every other role is — at the cost of one more kind of node an
+- Administration can now be granted to a unit, revoked by retiring a node (the Assignment, lifecycle `config`; a
+  node is never deleted, ADR 0079) instead of flipping a property, and shown in the same place every other role is — at the cost of one more kind of node an
   administrator-granting change touches.
 - `Snapshot.Enrich` now does a `PlatformRoles` scan per call — bounded by the number of platform Assignments in a snapshot, not expected to matter.

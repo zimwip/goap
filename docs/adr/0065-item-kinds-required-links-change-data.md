@@ -31,8 +31,9 @@ membership rule coded in `checkRequiredParent`, and a `Graph.PurgePolicy` hook n
    `domain.RequiredLink`, "exactly `count` outgoing links of the type", default 1, inherited through `extends` and
    redefined by link; registry proto `NodeType.requires`). `organisation@User` declares one `member_of`. The
    structure part (parent of an `OrgUnit` / `ProjectUnit`) is unchanged. The checks keep their timing
-   (`checkRequiredParent` at `Commit`, `checkParentInvariant` after the write): not a `NodeValidator`. An untyped graph
-   uses the catalogue of the built-in domains (ADR 0069).
+   (`checkRequiredParent` on the edits of a `Commit`; the read-back check, `checkRequiredLinks` since ADR 0079, when a
+   draft is accepted and when its version lands): not a `NodeValidator`. An untyped graph uses the catalogue of the
+   built-in domains (ADR 0069).
 6. **`Graph.PurgePolicy` is removed**: no production code set it. A rule keeping discarded changes would be added as
    a hook when a use case asks for it.
 

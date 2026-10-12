@@ -1,6 +1,8 @@
 # ADR 0017 — Flow branches: relaunching a step of the action flow
 
-**Status**: accepted, implemented (the graph branch of a flow is ADR 0025) · **Date**: 2026-09 · Extends ADR 0001 (blackboard), ADR 0011 (journal), ADR 0015 (step marks).
+**Status**: accepted, implemented; the flows of change impacts are ADR 0025 (graph branch of a flow, since replaced by
+drafts per flow, ADR 0079); amended by ADR 0067 (the origin of a flow is opaque) · **Date**: 2026-09 · Extends ADR 0001
+(blackboard), ADR 0011 (journal), ADR 0015 (step marks).
 
 ## Context
 Relaunching a step of an agent run may invalidate its previous output and every conclusion
@@ -36,7 +38,7 @@ rewritten. Relaunching is a **flow branch**, and every transition is an event of
    `superseded`. Discarding (possible while the branch is open): the candidates are `rejected`, the
    stale items count again, the relaunched process is `superseded`, the previous run is untouched.
    Both are journaled (`approval` record, action `flow`).
-8. **Guards**: a change with an open branch cannot be applied; a batch of items belongs to one flow;
+8. **Guards**: a change with an open branch cannot be merged; a batch of items belongs to one flow;
    only processes without a parent can be relaunched (relaunch the parent step, its sub-agent outputs
    are seeds).
 
@@ -51,9 +53,9 @@ rewritten. Relaunching is a **flow branch**, and every transition is an event of
   `guidance` on the branch, so only the relaunched steps read it: LLM actions get it appended to their
   prompt ("Guidance from a human reviewer..."). A board-inconsistency relaunch passes the human's
   comment the same way.
-- **Graph branch of a flow**: superseded by ADR 0025. A flow writes its versions eagerly on a graph branch of its
-  own, forked from the change branch; the reviewer reads the resulting graph there, and adopting the flow makes the
-  change branch equal to it (`adopt` versions). Discarding abandons the flow branch.
+- **Graph branch of a flow**: the change impacts of a flow are ADR 0025's. It first gave a flow a graph branch of its
+  own, forked from the change branch, adopted by making the change branch equal to it; since ADR 0079 a flow keeps no
+  branch: its drafts are its own, and adopting it installs them on the main flow.
 
 ## Blackboard validation before each action
 The engine validates the blackboard the process reads at the start of every cycle, before planning
@@ -62,8 +64,8 @@ The engine validates the blackboard the process reads at the start of every cycl
 - **Checks**: fact and change impact structure (`structure`); provenance and references to facts that do not
   exist (`dangling`); facts built on a fact that is rejected or superseded (`derived_from_invalid`, the culprit is
   the parent); change impacts whose `pre` is outside the reference baseline (`reference`); change impacts written
-  against a version that is no longer the head (`outdated`). Lifecycle, namespace and link rules are checked when a
-  version is written (ADR 0024). Each issue names the item where it shows and the **culprit** to blame.
+  against a version that is no longer the head (`outdated`). Lifecycle, namespace and link rules are checked on the
+  drafts, when an impact is accepted and when the change lands (ADR 0079). Each issue names the item where it shows and the **culprit** to blame.
 - **Where to restart**: the culprit items are mapped to the steps that produced them (`execution`),
   a sub-agent step to the step of its parent that started it. The earliest step over every run of the
   change is the proposal. None is proposed when the content did not come from a step (human,
@@ -76,11 +78,11 @@ The engine validates the blackboard the process reads at the start of every cycl
 - A validation failure (graph unreachable) never blocks a process.
 
 ## Consequences
-- No schema change: events are ordinary change items. Readers of item statuses use
+- No schema change: events are ordinary change items (entries of the change log since ADR 0030). Readers of item statuses use
   `Change.InEffect`; the CEL `items` of the main flow no longer contain candidates.
 - Permissions: the actions `relaunch` and `decide_flow` on the `process` resource (same roles as the
   other process actions).
-- Node versions proposed by an abandoned branch are only proposals until apply: no rollback needed.
+- What an abandoned branch proposed is only drafts until landing: no rollback needed.
 
 **Amended by ADR 0067**: the flow keeps no `fromStep` / `execution` / `process` / `reason` of its own: the engine
 records them in the opaque `Flow.Origin`, and the guidance of a relaunch is an item the engine gives to

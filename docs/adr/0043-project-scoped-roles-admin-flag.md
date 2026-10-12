@@ -1,6 +1,6 @@
 # ADR 0043 — Roles are held on projects; administration is a flag of the user
 
-**Status**: accepted, implemented (administration is no longer a flag — it became a platform role, ADR 0047) ·
+**Status**: accepted, implemented; the administrator flag superseded by ADR 0047 (administration is a platform role) ·
 **Date**: 2026-10 ·
 Builds on ADR 0020 (access control), ADR 0035 §2 (roles of a methodology), ADR 0039 (project, Assignment,
 `methodology@Role`), ADR 0040 / 0042 (user bootstrap, sign-in).
@@ -22,10 +22,10 @@ were merged only into the step checks (`step:perform` / `step:approve`). As a re
 
 ## Decision
 
-- **Administration is a flag of the user** (superseded by ADR 0047: a platform role; the flag is gone). `organisation@User` gets `admin: true` (`access.User.Admin`) instead of
-  `roles`; the principal of an administrator carries `admin` (`access.RoleAdmin`), which the floor policy lets do
-  everything. The first user is created an administrator (ADR 0040). A node written before lists `admin` among its
-  roles: still read as an administrator; its other roles are ignored.
+- **Administration is a flag of the user.** `organisation@User` got `admin: true` instead of `roles`; the principal
+  of an administrator carries `admin` (`access.RoleAdmin`), which the floor policy lets do everything; the first user
+  is created an administrator (ADR 0040). *Since then* (ADR 0046, 0047) the flag is gone: `admin` is a platform role
+  granted by an Assignment naming no project, the first user receiving one.
 - **Every other role is a methodology's, held on a project.** A methodology declares its roles (`methodology@Role`).
   A project names the methodologies that apply to it, inherited by its sub-projects: their roles are the ones the
   project needs. An Assignment grants some of them to a unit or a user on the project. The authorizer resolves, for
@@ -40,8 +40,8 @@ were merged only into the step checks (`step:perform` / `step:approve`). As a re
     approval by someone who does (`HumanTask` of kind approval, permission `action:run`, the allowed roles in `Roles`;
     the approver needs the action's `permission` too); a human action is submitted by someone holding one;
   - with no roles at all, any member of the project (process start already required it).
-  The engine acts as the initiator *on the process's project* (`Engine.actor`), so tool calls and model use resolve the
-  same roles.
+  The engine acts as the initiator *on the process's project* (`ProcessRef.Actor`, `engine.Scope`, ADR 0063), so tool
+  calls and model use resolve the same roles.
 - **Default policies follow the project** (`authz.DefaultPolicies`): an administrator may do everything; holding any
   role on the project (`onProject`) lets one start and act on processes, create objects, transition nodes, call tools,
   and apply changes (never one's own); a release is deployed by a `release_manager` of the project; steps keep
@@ -55,7 +55,7 @@ were merged only into the step checks (`step:perform` / `step:approve`). As a re
   methodology is administration).
 - **The model gateway** resolves the roles a catalog model requires on the caller's project through the authorizer
   (resource `model`, act `use`).
-- **The web**: the User tab and the Access screen edit the administrator flag; a project chooses its applicable
+- **The web**: a project chooses its applicable
   methodologies from the registry and shows the roles it needs, who holds them and which are unassigned; an Assignment
   picks its roles among the project's (`web/src/lib/projectRoles.ts`); the agent and action editors edit `roles`; the
   roles a model can be restricted to are the declared ones.
@@ -64,7 +64,8 @@ were merged only into the step checks (`step:perform` / `step:approve`). As a re
 
 - A user without any Assignment can sign in and read within their organisation, but starts nothing until an
   administrator assigns them a role on a project (or makes them an administrator).
-- Nodes carry no project (one node is shared by the changes of several projects): access to objects is governed by the
-  processes, changes and tools of a project, not by a node's own project.
+- Access to objects is governed by the processes, changes and tools of a project. (Nodes carried no project when this
+  was decided; since ADR 0054 every node records the project of the change that created it, `Node.Project`, which the
+  search filters on, ADR 0095.)
 - Not done: an Assignment's roles are not validated server-side against the project's methodologies (the web offers
   only those); an OrgUnit-side restriction of actions on a project (ADR 0039) is still open.

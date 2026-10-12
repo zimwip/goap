@@ -1,6 +1,8 @@
 # ADR 0058 — A change may have a lifecycle; its transitions are gated by decisions and expected world state
 
 **Status**: accepted, mechanism implemented · **Date**: 2026-10 · Builds on ADR 0009, 0014, 0034, 0035, 0051, 0056.
+Amended by ADR 0079 (phases follow the drafts), ADR 0075 (gates split into vetos and objectives) and ADR 0102 (the final
+state is asked at the merge, not at the commit); extended by ADR 0106 (the guardian chain).
 
 ## Context
 
@@ -22,7 +24,7 @@ methodologies.
    not specialised for changes. The **Methodology** says which one its changes follow (`lifecycle: <name>`; none: the
    change has no state and behaves as before). The **Change** holds the current state (`Change.State`) and the lifecycle
    it follows. The lifecycle is orthogonal to `ChangeStatus`, which stays the technical machine of branch, commit and
-   integrate (ADR 0056). Who / why / how / what stay separate: the domain says what states exist, the methodology how
+   merge (ADR 0056, 0102). Who / why / how / what stay separate: the domain says what states exist, the methodology how
    a change goes through them, the change where it is.
 
 2. **A transition is guarded by a CEL guard, a gate is a convention of that guard.** The guard model does not change.
@@ -42,12 +44,12 @@ methodologies.
    its own. The lifecycle tracks the maturity, the process does the work; a gate reads what the process established.
    Conditions follow ADR 0051 (a condition is never both an input and an output of a step).
 
-4. **A gate freezes, it does not land.** Leaving a non-editable state freezes the impacts written in it, as a node in
-   a non-editable state is frozen (blackboard `Frozen`). Landing is unchanged: the change lands once, at its end
-   (`CommitChange` / `IntegrateChange`); when the change has a lifecycle, committing is refused while its state is not
-   a final state. Going back (implementing → analysing) is a transition like any other, whose guard asks for a new
-   decision; it unfreezes the phase it returns to and marks the impacts of the later phases `stale`, so that they are
-   reviewed again before the change can leave analysis a second time.
+4. **A gate freezes, it does not land.** Leaving a state freezes the impacts written in it. Landing is unchanged: the
+   change lands once, at its end (`IntegrateChange`); when the change has a lifecycle, the merge is refused while its
+   state is not a final state (first asked at the commit; at the merge since ADR 0102). Going back (implementing →
+   analysing) is a transition like any other, whose guard asks for a new decision; it unfreezes the phase it returns to
+   and sends the accepted impacts of the later phases back to `proposed`, so that they are reviewed again before the
+   change can leave analysis a second time.
 
 5. **A transition is journaled and authorised.** `Graph.TransitionChange` (RPC `TransitionChange`) checks the
    transition out of the current state, the permission (the transition's own, by default `change:transition`, ABAC,
@@ -58,19 +60,20 @@ methodologies.
 ## Mechanism
 
 - The registry resolves what the graph does not know (`graph.ChangeLifecycles`, implemented by `registrysvc.Service`,
-  wired in `goap-dev`; the separate `graph` service wires it when it gets a registry client): the lifecycle of a
-  methodology (`Methodology.Lifecycle`, a lifecycle of the domain of its namespace) and the guard evaluation, with the
-  world state of the compiled methodology. `CreateChange` sets `Change.Lifecycle` / `State` (initial state); a
-  methodology the registry does not know, or naming none, leaves the change without state.
+  wired in `goap-dev`; `cmd/graph`, with no registry in process, wires none and its changes have no state): the
+  lifecycle of a methodology (`Methodology.Lifecycle`, a lifecycle of the domain of its namespace) and the guard
+  evaluation, with the world state of the compiled methodology. `CreateChange` sets `Change.Lifecycle` / `State`
+  (initial state); a methodology the registry does not know, or naming none, leaves the change without state.
 - The guard is the node one (`pkg/guard`), its environment widened with `decisionPoints` and `world` (condition name
   to bool); `condition.CheckGuard` builds it from the blackboard. It sees `change.transition` and `change.decision`,
   the decision point the caller names. A decision point gates one transition only: the ones already named by a
   transition are left out of what a guard sees. Example:
   `world["analysed"] && decisionPoints.exists(d, d.id == change.decision && d.status == "decided" && d.option == "go")`.
-- Freeze: the state an impact was last written in is derived from the log (the order of its `written` events against
-  the `transition` facts); `WriteNode` refuses an impact written in another state than the current one. Going back to
-  a state already occupied puts the impacts written since in `proposed` again (an impact review event).
-- `CommitChange` / `Apply` refuse a change whose state is not final, checked before their transaction.
+- Freeze: the state an impact was written in is derived from the log (the event that started its draft,
+  `ImpactEvent.StartsDraft`, ADR 0079, against the `transition` facts); the checkout and the edits refuse an impact
+  written in another state than the current one (`Graph.frozen`). Going back to a state already occupied puts the
+  accepted impacts written since in `proposed` again (an impact review event, `reopenPhase`).
+- The merge refuses a change whose state is not final (`checkMerge`, ADR 0102), asked before its transaction.
 - Default policy `onProject` for `change:transition` (new graphs; an existing graph adds it).
 
 ## Out of the principle

@@ -1,9 +1,10 @@
-// The proposal card of the assistant (ADR 0090, 0092): what a `start_agent` or a write `ui_tool` action shows while it
+// The proposal card of the assistant (ADR 0090, 0092, 0106): what a `start_agent`, an `attach_change` / `detach_change`
+// or a write `ui_tool` action shows while it
 // waits for the person and afterwards, and the status of the run an agent started. Pure: the card component and the
 // tests read the same view.
 import type { ConversationAction, Process, StartAgentAction, UiToolAction } from '../api';
 
-export type CardKind = 'start_agent' | 'ui_tool';
+export type CardKind = 'start_agent' | 'ui_tool' | 'attach_change' | 'detach_change';
 
 /**
  * proposed: waits for the person · starting: the server claimed it · started: the agent runs · applying: accepted, the
@@ -47,7 +48,34 @@ const clip = (s: string, n = 160): string => (s.length <= n ? s : s.slice(0, n -
 
 /** Does this action get a card (a proposal)? Effects are chips. */
 export function isCard(a: ConversationAction): boolean {
-  return a.type === 'start_agent' || (a.type === 'ui_tool' && (a as UiToolAction).level === 'write');
+  return a.type === 'start_agent' || isRelate(a) || (a.type === 'ui_tool' && (a as UiToolAction).level === 'write');
+}
+
+/** An attach / detach proposal of the change the person looks at (ADR 0106). */
+function isRelate(a: ConversationAction): boolean {
+  return (a.type as string) === 'attach_change' || (a.type as string) === 'detach_change';
+}
+
+interface RelateAction {
+  type: 'attach_change' | 'detach_change';
+  status?: string;
+  label?: string;
+  rationale?: string;
+  error?: string;
+  args?: { changeId?: string; parentId?: string; project?: string };
+}
+
+function relateStatus(a: RelateAction): CardStatus {
+  switch (a.status) {
+    case 'starting':
+      return 'applying';
+    case 'done':
+    case 'rejected':
+    case 'failed':
+      return a.status;
+    default:
+      return 'proposed';
+  }
 }
 
 /** The arguments of a screen tool as label / value rows, texts clipped. */
@@ -117,6 +145,32 @@ export function cardView(a: ConversationAction, opts: { busy?: boolean; register
       target: '',
       processId: s.result?.processId ?? '',
       changeId: s.result?.changeId ?? args.changeId ?? '',
+    };
+  }
+  if (isRelate(a)) {
+    const r = a as unknown as RelateAction;
+    const status = relateStatus(r);
+    const attach = r.type === 'attach_change';
+    const details: CardView['details'] = [
+      { label: 'Change', value: r.args?.changeId ?? '' },
+      { label: attach ? 'Into' : 'Out of', value: r.args?.parentId ?? '' },
+      { label: 'Project', value: r.args?.project ?? '' },
+    ].filter((d) => d.value);
+    return {
+      kind: r.type,
+      status,
+      statusLabel: STATUS_LABEL[status],
+      title: r.label || (attach ? 'Attach the change' : 'Detach the change'),
+      details,
+      rationale: r.rationale ?? '',
+      error: r.error ?? '',
+      acceptLabel: attach ? 'Attach' : 'Detach',
+      canDecide: status === 'proposed' && !busy,
+      canRetry: false,
+      retryBlocked: '',
+      target: '',
+      processId: '',
+      changeId: r.args?.changeId ?? '',
     };
   }
   if (a.type === 'ui_tool' && (a as UiToolAction).level === 'write') {

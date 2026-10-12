@@ -19,7 +19,7 @@ describing the whole page evenly.
 - **Layered context** (greenfield, replaces the flat one), rendered in the prompt most specific first:
   `focus` (the element the person acts on, the selection, the open dialog, `pendingAction`, the `errors` on screen,
   `lastAction`), then `screen` (`kind`, `title`, a `summary`, up to 40 `entities` `{type, id, label, state?, props?}`),
-  then `app` (`activeProject`, `tab`). Absent fields are omitted. Caps and sanitising are the server's
+  then `app` (`project`, `tab`). Absent fields are omitted. Caps and sanitising are the server's
   (`Context.normalise`): 8 KiB rendered, 40 entities (the entity of the focus is moved first so it is the last one
   dropped; entities are dropped from the end until the context fits), 10 errors, 6 props, every text cut (labels 200
   bytes, summary 600, actions 300, errors 200), control characters blanked; only a selection over 2000 bytes, or a
@@ -34,8 +34,9 @@ describing the whole page evenly.
   `items`, a scalar or enum, never nested), `required`. Caps: 30 tools, names `[a-z][a-z0-9_.-]{0,48}` unique, a
   description of 300 bytes, a guidance of 200, 12 properties named `[A-Za-z][A-Za-z0-9_]{0,39}`, 2 KiB of schema per
   tool. An invalid descriptor refuses the request (`InvalidArgument`): it is a bug of the screen, not of the model. The
-  model sees them in the prompt and calls them `ui.<name>` in the same tool-call protocol, so a screen tool can never
-  shadow one of the server tools (ADR 0090 and 0094 are untouched). A call to a name not in this turn's
+  model sees them in the prompt and calls them `ui.<name>` in the same tool-call protocol (since ADR 0098, declared
+  through the provider's tool API, `uiToolSpec`), so a screen tool can never shadow one of the server tools (ADR 0090
+  and 0094 are untouched). A call to a name not in this turn's
   descriptors, or whose arguments fail the schema (unknown property, missing required, type, enum, array element,
   4 KiB of arguments, 2000 bytes per string) is an error fed back to the model and never emitted. **The server never
   executes a screen tool.**
@@ -44,7 +45,8 @@ describing the whole page evenly.
   once; the model is told "requested on the client, no result available" and must not rely on the outcome. `write`
   tools modify something: they are recorded as a proposal `status: proposed` (plus `project`), nothing runs, like
   `start_agent`. Per answer: at most 3 proposals and 5 effects (the rest is an error to the model). The label is the
-  descriptor's description with the arguments; the optional `rationale` is a sibling of `arguments` in the call.
+  descriptor's description with the arguments; the optional `rationale` was a sibling of `arguments` in the JSON call;
+  with native tool calls (ADR 0098) it is an argument of the declared tool, taken out of the arguments (`readAnswer`).
 - **Confirmation**. `ConfirmAction` handles `ui_tool` next to `start_agent` (that branch is unchanged): reject moves
   `proposed` -> `rejected`, always possible; accept moves it to `accepted` and the server does nothing else (no engine,
   no graph); the web then runs the tool through the screen's normal edit path, as the person. Compare-and-set as

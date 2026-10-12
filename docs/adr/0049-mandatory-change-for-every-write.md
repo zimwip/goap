@@ -1,6 +1,9 @@
 # ADR 0049 — Mandatory Change for every node, version and link write
 
-**Status**: accepted, implemented · **Date**: 2026-10 ·
+**Status**: accepted, implemented; the rule stands, its mechanisms are superseded: the guard enforces it below the Go
+write paths (ADR 0054, which also removed `LinkOrphanUnits`), the empty initial baseline by ADR 0056, the implicit
+changes of `CreateNode` / `UpdateNode` and the standalone `Link` by ADR 0076 / 0077 / 0079 (every node and link write
+is an operation of a change the caller names) · **Date**: 2026-10 ·
 Builds on ADR 0024 (change impacts), ADR 0029/0030 (impact log), ADR 0040 (user bootstrap, required parent).
 
 ## Context
@@ -14,89 +17,45 @@ outside the frame of a change, hardwired, with no caller-level exemption.
 
 ## Decision
 
-### `CreateNode` / `UpdateNode` become `Commit` sugar, signatures unchanged
+No node, node version or link is written by `pkg/graph` outside the frame of a change, hardwired, with no
+caller-level exemption. As first implemented:
 
-Rejected a required `ChangeID` parameter (would force every caller — ~60 of them — to hand-roll `Commit`'s own
-bookkeeping). Instead both now open, populate and apply a single-edit change internally
-(`Graph.commitEdits`, the unexported core `Commit` itself calls). `Commit` gained an implicit-baseline
-bootstrap: a namespace touched for the first time gets an empty baseline exactly the way
-`graphsvc.applyOn` used to do it by hand (now dead code, removed).
+- **`CreateNode` / `UpdateNode` became `Commit` sugar**, signatures unchanged: each opened, populated and applied a
+  single-edit change internally (`Graph.commitEdits`, the core `Commit` itself called), a namespace touched for the
+  first time getting an empty baseline. A node so created got a real `ChangeID`, went through the impact log (ADR
+  0029/0030) and any `NodeValidator` (ADR 0048), and a lifecycle-typed node a real initial state instead of the empty
+  string the old raw write left it at (a fix: `SeedDemo`'s `alm@Requirement` nodes had bypassed the editable-state
+  gate).
+- **`Commit`'s parenting checks stayed `Commit`-specific**: `CreateNode` / `UpdateNode` called
+  `commitEdits(ctx, in, parenting=false)`, so ADR 0040's required parent link (`checkRequiredParent`,
+  `checkParentInvariant`) kept its pre-existing scope; `SeedDemo` created `ORG-ACME` with no parent and
+  `LinkOrphanUnits` parented it afterwards.
+- **`Link` gained a required `domain.ChangeID`**, the one signature break, since a link versions neither endpoint and
+  an implicit change would defeat asking which change it belongs to (the `CreateLink` RPC gained a `change_id`). Nodes
+  a `Commit` creates link each other freely, cycles included (`NodeEdit.Links` with `ToKey`), so a whole import is one
+  change per namespace.
+- **Test fixtures** got two helpers in `pkg/graph/repos_test.go`: `seedNode`, writing a node in an arbitrary lifecycle
+  state for a fixture, and `testChange`, opening a change on a namespace's current head for a test that needs a
+  `ChangeID`.
 
-**Consequence, verified against the full test suite**: a node created this way now gets a real `ChangeID`, goes
-through the impact log (ADR 0029/0030) and any `NodeValidator` (ADR 0048), and — for a lifecycle-typed node —
-a real initial state instead of the empty string the old raw write silently left it at. That last point is a
-genuine correctness fix with a real consequence: `SeedDemo`'s `alm@Requirement` nodes now start `proposed`
-(not editable) instead of `""` (which accidentally bypassed the editable-state gate entirely). Any later edit
-of such a node — including the `specify_requirements` LLM step of `methodologies/sdlc.yaml`, and
-`internal/connectors/builtin`'s `goap-change/edit` integration tests — must now follow the reopen → edit →
-resubmit sequence the system prompt (`pkg/engine/executors.go`'s `llmSystem`) already documents for any
-compliant agent. This was already the documented contract for a real LLM; only the tests' hand-scripted mocks
-and fixtures needed updating to actually follow it, since they'd been quietly riding the old empty-state bug.
+## Since then
 
-### `checkRequiredParent` / `checkParentInvariant` stay `Commit`-specific, not universal
-
-A real implementation conflict surfaced here, not anticipated at design time: ADR 0040's rule ("a created
-OrgUnit/ProjectUnit/User must declare its one required parent/membership link") was, and remains, enforced
-only by `Commit`'s own two checks — never by a lower-level write. `SeedDemo` deliberately creates `ORG-ACME`
-with no parent (`LinkOrphanUnits` parents it afterward, once `ORG-DEFAULT` exists — exercised by
-`internal/graphsvc/seed_test.go`'s `TestLinkOrphanUnits`, which runs `SeedDemo` *before* `SeedDefaults` on
-purpose). Routing `CreateNode` through the same `Commit` path as `Commit` itself would have dragged this
-unrelated rule along for the ride, breaking that deliberate, tested behavior and forcing dozens of unrelated
-test fixtures (`pkg/engine`'s shared `setup()` and friends) to grow parent links they never needed.
-
-Resolution: `Commit` is now `commitEdits(ctx, in, parenting=true)`; `CreateNode`/`UpdateNode` call
-`commitEdits(ctx, in, parenting=false)`. Both go through the identical change/impact/Apply/NodeValidator
-pipeline; only `Commit`'s own two producer-level guarantees are opt-in, exactly matching their pre-ADR-0049
-scope (a raw write never made them either). This is not a loophole against "every write is a change" — it
-leaves that invariant intact — it simply keeps a separate, pre-existing business rule exactly as narrow as it
-already was.
-
-### `Link` gains a required `domain.ChangeID` — the one real signature break
-
-`Link` is the one kind of mutation that deliberately stays outside `Commit`/`Apply`: it never versions either
-endpoint (versioning the source would turn its own outgoing links into suspect links,
-`pkg/graph.SuspectLinks` — independently wrong, not just inconvenient, the reason `LinkOrphanUnits` exists at
-all). Silently picking an implicit change for it would defeat the point of asking "which change is this link
-part of" at all, so the break is deliberate and visible: every caller must now say which open change a link
-belongs to.
-
-The standalone `Link` call is the only one that stays outside `Commit`/`Apply`. Nodes a `Commit` *creates* are
-inside the change, so they link each other freely (`NodeEdit.Links` with `ToKey`, a link belonging to the version
-of its source), **cycles included**: a link to a node of the commit not written yet is added, in the same change,
-once it is (`commitEdits`, through `Link`, which versions neither endpoint). Only a link to a key the commit does
-not create is refused. A whole import (the demo seed: units, then the alm nodes with their cyclic links) is
-therefore one change per namespace, not one change per node. `internal/graphsvc/handler.go`'s `CreateLink` RPC gained a `change_id` field
-(`proto/goap/graph/v1/graph.proto`, regenerated via `make generate`) — the one user-facing API change in this
-ADR.
-
-### Fallout fixed
-
-- `SeedDemo` (`internal/graphsvc/seed.go`): all its `g.Link` calls now attribute to one change opened on the
-  namespace's current head, closed `abandoned` once done (no change impact ever existed for it to land).
-- `LinkOrphanUnits` (`internal/graphsvc/seed_defaults.go`): same pattern — one change per repair pass.
-- `pkg/graph`'s own test suite needed two new unexported test helpers (`repos_test.go`):
-  - `seedNode` — the literal old raw `CreateNode` body, for fixtures that need to arrange a world already
-    sitting in an arbitrary (including editable, including non-adjacent) lifecycle state without walking every
-    transition to get there. No production code may do this; test fixtures that construct exotic starting
-    conditions legitimately need to.
-  - `testChange` — opens a change on a namespace's *current* head (creating an empty one only if none
-    exists). Needed because `CreateBaseline` unconditionally advances the branch head, even to an empty
-    baseline — a naive "just create a throwaway baseline to get a ChangeID for `Link`" pattern silently wiped
-    out real content already on main in several fixtures (`pkg/graph/browse_test.go`'s `TestBrowseBaseline`
-    actually failed on this; several others were only saved because a correctly-populated baseline happened to
-    be created again immediately after, masking the corruption window). `testChange` is now the only pattern
-    used for this across `pkg/graph`'s test suite.
+- ADR 0054 made the rule a property of the storage: the guard (`pkg/graph/guard.go`) checks at the end of every
+  transaction that every node version, link, branch membership and node origin names an existing change, and the
+  schema repeats it with `NOT NULL` foreign keys; even `seedNode` writes inside a change. Units are created with their
+  parent, `LinkOrphanUnits` is gone, and the demo data lives in `internal/devseed`.
+- ADR 0056 removed the empty initial baseline (the state before a namespace's first change is the empty baseline id,
+  stored nowhere) and `CreateBaseline` (a baseline is the state a change leaves).
+- ADR 0076, 0077 and 0079 removed the implicit changes: `CreateNode`, `UpdateNode`, the standalone `Link` and
+  `CreateLink` are gone; every node write is an operation of a change the caller names (`ImpactNodeCreate`,
+  `ImpactNodeCheckout`, `ImpactNodeUpdate`, `ImpactLinkCreate` / `Update` / `Delete`, ...) editing a draft, the
+  versions being written when the change commits. `Graph.Commit` remains the producer path (seeds, `CommitEdits`),
+  running its edits as one change through those same operations, and keeps `checkRequiredParent`.
+- ADR 0078 removed the `editable` flag, so no reopen-before-edit sequence is needed any more.
 
 ## Consequences
 
-- No test file anywhere constructs a node or link outside a change any more; the distinction between
-  "change-shaped" (always, now) and "carries `Commit`'s producer-level parenting guarantees" (opt-in, as
-  before) is explicit in the code (`commitEdits`'s `parenting` parameter), not implicit in which entry point
-  happened to be called.
-- `CreateBaseline`'s "always advances the branch, even to empty" behavior is pre-existing and unchanged by
-  this ADR, but is now a sharper footgun given how often a throwaway baseline might be reached for
-  change-attribution purposes; `testChange` is the safe pattern for `pkg/graph`'s own tests, and any future
-  caller should prefer reading the current head over blindly creating a new baseline.
-- `methodologies/sdlc.yaml` itself needed no change: its prompts already rely on the shared system prompt's
-  lifecycle instructions. Only the test mocks simulating what a real LLM would do needed to actually follow
-  them.
+- The distinction between "change-shaped" (always) and "carries `Commit`'s producer-level parenting guarantees" is
+  explicit in the code, not implicit in which entry point happened to be called.
+- Test fixtures write through a change too (`seedNode`, `testChange`, `graphtest`), so the graph tests can replay and
+  check every change.

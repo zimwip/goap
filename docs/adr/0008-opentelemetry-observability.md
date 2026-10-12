@@ -17,7 +17,8 @@ tokens consumed, and attributed to the process, the agent, and the action.
 - LLM calls attributed via **baggage** (`goap.process.id`, `goap.agent`, `goap.action`,
   `goap.methodology`) set by the engine and read by the model gateway; the process ID is not
   put into metrics (cardinality).
-- Counters (tokens, calls) are also persisted in the process for the IDE.
+- Counters (tokens, calls) are also persisted in the process: the run's own totals. Since ADR 0089 the per-call
+  token views of the IDE read the model gateway's ledger (`llm_call`), not the process.
 
 ## Consequences
 - A trace can last a long time (process waiting on a human): acceptable for Jaeger, to watch

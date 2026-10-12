@@ -134,6 +134,7 @@ func (s *Service) validate(ctx context.Context, m *methodology.Methodology) def.
 			issues = append(issues, def.Issue{Path: "namespace", Message: fmt.Sprintf("no published domain %s", m.Namespace)})
 		}
 	}
+	issues = append(issues, s.integrationIssues(ctx, m)...)
 	return append(issues, s.scopeIssues(ctx, m)...)
 }
 

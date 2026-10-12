@@ -13,10 +13,12 @@ adapter definition in every deployment, `SeedDemo` lived next to the platform se
 ## Decision
 
 - **One function**, `graphsvc.Boot(ctx, g, Options)`, runs for every composition: `Graph.Bootstrap`, `SeedAccess`,
-  `SeedBuiltins`, `SeedModels`, then `Options.Dev`. Idempotent. The caller assigns the hooks of the graph and loads the
+  `SeedBuiltins`, `SeedModels`, then `Options.Dev` (later ADRs inserted `SeedProtectedAliases`, ADR 0084, and
+  `SeedBehaviors`, ADR 0093, after `SeedModels`). Idempotent. The caller assigns the hooks of the graph and loads the
   type catalogue before, and seeds the methodologies after (the registry needs the model aliases). `Options.RequireHooks`
-  panics when the access hooks are missing; a graph without `LandingGate` / `SubChangeValidator` / `Lifecycles` (no registry
-  in process: `cmd/graph`) gets one warning, no behaviour change (the gap of ADR 0066 stays, now visible).
+  panics when the access hooks are missing; a graph without `SubChangeValidator` / `Lifecycles` (no registry in
+  process: `cmd/graph`) gets one warning, no behaviour change (the gap of ADR 0066 stays, now visible). The warning
+  first named `LandingGate` too; that hook is gone (the guardian of a merge is `ChangeLifecycles.Merge`, ADR 0102).
 - **Platform defaults carry no development concept.** `SeedDefaults` is gone (nothing generic remained once the bootstrap
   is `Graph.Bootstrap`). `internal/devseed` holds the ALM demo (`Demo`), the document-repository MCP and its localfs
   adapter definition (`DocumentRepository`) and the directory-backed repository of the default organisation (`LocalFS`).

@@ -130,7 +130,9 @@ service GraphService {
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
   // What going from a baseline to another changes, node by node (same namespace).
   rpc DiffBaselines(DiffBaselinesRequest) returns (DiffBaselinesResponse);
-  // Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
+  // Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
+  // into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
+  // fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
   rpc MergeChange(MergeChangeRequest) returns (MergeChangeResponse);
   // Nodes the change shares with other open changes (a merge will be needed).
   rpc GetSharedNodes(GetSharedNodesRequest) returns (GetSharedNodesResponse);

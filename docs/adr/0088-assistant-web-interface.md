@@ -21,7 +21,7 @@ process from the intent; it is replaced by the conversation service.
   comes back for an earlier conversation, and stops on `done` / `error`.
 - **Actions run once.** The web executes the actions of a message only when it saw that message pending in this page and
   then done; a reloaded conversation never replays old actions. An action that only navigates is a chip that repeats it on
-  demand; a proposal is a card (below).
+  demand; a proposal is a card (below); a `search_changes` record (ADR 0106 §6) is a chip that runs nothing.
 - **Context**: see "Screen tools and layered context (ADR 0092)" below (it replaced the flat context of this first phase).
 - **One switch.** `aliasFlags.assistantEnabled` hides the launcher and the commands; the tab explains and links to the
   model catalog. The helper keeps its own flag. The launcher and the helper are never open together.
@@ -71,6 +71,8 @@ process from the intent; it is replaced by the conversation service.
   fill the form and are effects, `create` is a write); the review comment fields (impact review in the change table and the node
   tab, the review object's comment and entry comments) as fields with guidance, and the impact with the names of the properties
   it edits as the node tab's screen context. The change tab's lifecycle transitions have a `transition_change` write tool (ADR 0058, ADR 0092).
+  Later tools joined the same catalog (`assist/catalog.ts` is the list in force): `start_step` (ADR 0097), `set_methodology`
+  (ADR 0096), `withdraw_impacts`, `commit_change`, `merge_change` on the change tab, `run_import` on the import screen.
 - **One helper at a time** is unchanged: the panel closes when the helper opens and the shortcut closes the helper first.
 
 ## Not done

@@ -64,6 +64,12 @@ var serverTools = []llm.ToolSpec{
 		"newChange":   obj(map[string]any{"title": str("short title"), "intent": str("why")}, "title", "intent"),
 		"rationale":   str("why this step or agent, one sentence"),
 	}), Description: "Starts NOTHING: records a proposal to start an agent that the person confirms or rejects in the interface. On a change give \"step\" only; otherwise \"methodology\" and \"agent\" from list_agents (and \"newChange\" only when no change is open)."},
+	{Name: ToolAttachChange, InputSchema: obj(map[string]any{
+		"parent":    str("id of the change whose methodology integrates this one (a release), from search_changes"),
+		"rationale": rationaleProp,
+	}, "parent"), Description: "Changes NOTHING: records a proposal, which the person confirms, to attach the change they are looking at to a change integrating it (a release taking a candidate): it becomes its sub-change and merges into it."},
+	{Name: ToolDetachChange, InputSchema: obj(map[string]any{"rationale": rationaleProp}),
+		Description: "Changes NOTHING: records a proposal, which the person confirms, to detach the change they are looking at from the change integrating it (a candidate deferred or rejected): a root change again."},
 }
 
 // uiToolSpec is a screen tool as the model gets it: its arguments' schema, plus the rationale of its proposal.

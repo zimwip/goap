@@ -2,7 +2,8 @@
 
 **Status**: accepted, implemented · **Date**: 2026-09 ·
 Builds on ADR 0004 (change application), ADR 0009 §5 (specializations), ADR 0011 (execution journal), ADR 0023
-(definitions in the graph). Relates to ADR 0033 (from a request to a shipped change).
+(definitions in the graph). Relates to ADR 0033 (from a request to a shipped change). Extended by ADR 0035 / 0050
+(methods: a step naming a capability, `method:`, `foreach`) and ADR 0097 (starting points of a process).
 
 ## Context
 
@@ -68,7 +69,8 @@ which runs a deployment procedure).
    there is no default agent; the processes' agents are the methodology's agents.
 
 5. **Storage and contract.** A process is an element of a methodology version like the others: a node
-   `methodology@Process` (meta-domain 1.1.0) keyed `<version key>/process/<name>`, its steps a property. The registry
+   `methodology@Process` (meta-domain 1.1.0) keyed `<version key>/process/<name>`, its steps a property (each step is
+   also materialised as a `methodology@Step` node linked by `methodology@sub_activity`, ADR 0023). The registry
    contract carries `Methodology.processes` (`Process`, `Step`); the summary lists each process as an agent (planner
    `process`) and a goal, so identification and the assistant offer them. The IDE edits them in a Process tab (a tree
    of steps; the issue paths are `processes[i].steps[j].steps[k].<field>`).
@@ -88,5 +90,6 @@ which runs a deployment procedure).
   possible): the conditions are the design, and the validation only checks that they exist and do not contradict.
 - A step retried after its sub-agent ended appears twice in the run's steps (suspended, then completed), as for any
   action waiting for a sub-agent.
-- Not done yet: a step's own permission or addressee (who is expected to do a manual step: ADR 0033 §5), and
-  showing a run as the progress of its process (steps done / current / remaining) in the change and the assistant.
+- Done since: a step's roles (RACI, `step:perform` / `step:approve`, ADR 0035 §2) and the progress of a run's process
+  (steps done / current / remaining, `Engine.Progress`, shown on the change). Not done: an addressee of a manual step
+  and a user's work list (ADR 0033 §5).

@@ -2,7 +2,9 @@
 
 **Status**: accepted, implemented · **Date**: 2026-10 ·
 Builds on ADR 0032 (branches as pointers, baselines as deltas), ADR 0049 (mandatory change), ADR 0054 (the guard).
-Supersedes the empty initial baseline of ADR 0049 and the naming of baselines of ADR 0032.
+Supersedes the empty initial baseline of ADR 0049 and the naming of baselines of ADR 0032. The two-step apply is
+amended by ADR 0101 (a change is rebased onto its target before it lands) and ADR 0102 (the commit keeps the change
+open and asks nothing of the methodology; the merge is guarded).
 
 ## Context
 
@@ -23,23 +25,25 @@ write one that no change produced.
   `branchHead`). `guardTx.Baseline("")` reads it, nothing stores it. `CreateChange` naming no starting state starts
   from the head of its branch: the state the last change left, or the empty one.
 - **Committing and integrating are two steps** (the first collapsed them in `Apply`):
-  - `CommitChange` validates the change (reviews, properties, lifecycle and transitions, validators, activity goals:
-    every rule of a change) and records the state it leaves on its own branch: a baseline of kind `commit` and one
-    `impact.landed` event per applied impact naming it. That depends on the change alone. The change is `committed`
-    (the former `merge_pending` is this status: a committed change whose integration waits for a resolution).
-  - `IntegrateChange` (`MergeChange` over RPC) integrates a committed change into the branch it was forked from: a
+  - `CommitChange` records the state the change leaves on its own branch: a baseline of kind `commit` and one
+    `impact.landed` event per accepted modification naming it. That depends on the change alone. As first decided, the
+    commit checked every rule of the change (methodology and activity goals included) and left it `committed`; since
+    ADR 0102 it checks the drafts as versions only and the change stays `active`, committed again as it is worked on.
+  - `IntegrateChange` (`MergeChange` over RPC) integrates the change into the branch it was forked from: a
     fast-forward (baseline of kind `fast-forward`, the versions of the branch joined to the target, ADR 0032) or a
     3-way merge (kind `merge`, written by a merge change that records its own `landed` events); `landed` is emitted
     again for the change's impacts on the target; the change is `applied`. Conflicts without a resolution leave it
-    `committed`.
-  - `Apply` is both, in one transaction. A change is its branch: one that wrote nothing gets its branch when it is
-    committed (`ensureOwnBranch`), so a change is never applied straight onto the branch it acts on.
+    `committed` (the former `merge_pending`). Since ADR 0101 / 0102 the merge first rebases the change onto the head of
+    its target and asks the guardian of the change, so landing is a fast-forward and the 3-way merge only a race.
+  - `Apply` is both: it commits what is pending, then merges. A change is its branch: one that wrote nothing gets its
+    branch when it is committed (`ensureOwnBranch`), so a change is never applied straight onto the branch it acts on.
 - **The state after a change is derived from what the change did; a stored baseline is a snapshot of it.** Each
   baseline has a `Kind` saying how: `commit` and `merge` from the `landed` events naming the baseline in the log of the
   change that produced it, `fast-forward` from the versions that change joined to the branch (`Tx.BranchJoins`),
-  `snapshot` (the bootstrap, test fixtures) not derived and always stored. No extra record is written for it: the
-  `landed` events are the impact log of ADR 0029, the joins are what a fast-forward already writes (ADR 0032). The
-  replay of every baseline in the test corpus is checked against its stored entries (`checkStates`).
+  `snapshot` (the bootstrap, test fixtures) not derived and always stored (as are the `rebase` and `revert` kinds that
+  ADR 0102 added). No extra record is written for it: the `landed` events are the impact log of ADR 0029, the joins
+  are what a fast-forward already writes (ADR 0032). The replay of every baseline in the test corpus is checked
+  against its stored entries (`checkStates`).
   - Only every `MaterializeEvery` baselines along a chain of derived baselines is **materialised** (its entries stored,
     `Baseline.Gap` 0; default 16, `Graph.MaterializeEvery`, `GOAP_MATERIALIZE_EVERY`, 1 materialises every one); the
     others keep their header (`baseline` row, `Gap` = steps since a snapshot) and their state is the nearest snapshot

@@ -29,7 +29,7 @@ type ValidatedNode struct {
 
 // ValidatorQuery is the read access into the resulting state of the change being applied that a NodeValidator
 // gets: bound to the transaction Apply already runs in (there is no nested transaction, the stores are not
-// reentrant, see authorizeMoves) and to the exact node versions the resulting baseline will hold.
+// reentrant) and to the exact node versions the resulting baseline will hold.
 type ValidatorQuery interface {
 	// NodesOfType returns the live, non-deleted nodes of a type in a namespace, as the change leaves them.
 	NodesOfType(ctx context.Context, namespace, typ string) ([]domain.Node, error)

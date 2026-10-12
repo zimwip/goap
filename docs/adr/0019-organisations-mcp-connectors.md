@@ -1,6 +1,8 @@
 # ADR 0019 — MCP, connectors and adapters in the organisation
 
-**Status**: accepted, implemented · **Date**: 2026-09 · Builds on ADR 0015 (namespaces), 0016 (organisation namespace and sub-changes), 0018 (algorithms).
+**Status**: accepted, implemented; §2 amended by ADR 0054 (the roots come from `Graph.Bootstrap`) and ADR 0071 (the
+demo data is apart), §7 superseded by ADR 0098 (native tool calling); ADR 0061 moves the adapter to `pkg/adapter` ·
+**Date**: 2026-09 · Builds on ADR 0015 (namespaces), 0016 (organisation namespace and sub-changes), 0018 (algorithms).
 
 ## Context
 Actions must reach real services (documents, tickets, ...). A methodology stays generic while each
@@ -30,13 +32,14 @@ rooted in a different directory). Several organisations can work on one change, 
      Parameters are handed to the connector as its configuration under the same name; secret parameters are
      resolved by the hub and passed under their name.
      **Each organisational unit holds an instance**: an `organisation@Adapter` node of the **`organisation`** namespace
-     (key `ADP:<unit>/<mcp>`, linked by `owner` to the OrgUnit) with the name of the definition (`adapter`) and the
+     (key `ADP:<unit>/<mcp>`, owned by the OrgUnit: the owner of its version, ADR 0054) with the name of the definition (`adapter`) and the
      parameter values. It is the only place where unit,
      MCP and connector meet, and it is what lets units share the same adapter with different scopes.
 2. **Organisations are OrgUnits.** No second notion of organisation: the hierarchy is `part_of` (ADR 0016).
-   The default organisation `ORG-DEFAULT` is created at the first start (`graphsvc.SeedDefaults`, with
-   `document-repository`) and is the implicit root of every unit's ancestors. A new organisation is a new unit.
-3. **The organisation holding a change** is its owner unit (`ownerOrg`; empty: `ORG-DEFAULT`), settable when
+   The default organisation `ORG-DEFAULT` is created at the first start (first `graphsvc.SeedDefaults`, now
+   `Graph.Bootstrap`, ADR 0054; the `document-repository` MCP and its adapter are demo data, `internal/devseed`) and is
+   the root of every unit's ancestors. A new organisation is a new unit.
+3. **The organisation holding a change** is its owner unit (`ownerOrg`; empty: the parent change's, else `ORG-DEFAULT`), settable when
    the change or the process is created. Sub-changes split by owner have their own unit.
 4. **Resolution: nearest wins.** For a tool call, the adapter of an MCP is looked up in the holding unit, then
    its ancestors, then `ORG-DEFAULT`. The same MCP and connector can thus be configured differently by each
@@ -49,9 +52,9 @@ rooted in a different directory). Several organisations can work on one change, 
    the planner only when the unit holding the change resolves an adapter for each. An action can only call
    the tools of the MCPs it declared, plus, for `llm` / `script` actions, those of its agent (`agents[].mcps`).
    Tool calls carry the initiator's principal and need `tool:call`.
-7. **LLM tools** are exchanged as JSON on top of the existing model gateway (bounded rounds) instead of a
-   provider-specific tool API; it works with every provider, and a native protocol can replace it later
-   without changing methodologies.
+7. **LLM tools** were exchanged as JSON on top of the existing model gateway (bounded rounds) instead of a
+   provider-specific tool API, so that it worked with every provider. Since ADR 0098 the gateway passes the tools
+   through each provider's native tool API and keeps the text protocol as the fallback; methodologies did not change.
 
 ## Consequences
 - Adapters and MCPs are versioned and reviewed through changes like any node; secrets are references.
@@ -59,8 +62,8 @@ rooted in a different directory). Several organisations can work on one change, 
   graph outage makes MCP actions unschedulable rather than wrong.
 - Adapter code runs in the hub process (goja / yaegi, no file, network or process access, bounded), the same
   trust model as the algorithms of ADR 0018: authors of the domain library are trusted; sandboxing them with the
-  pool of ADR 0007 is the next step if that changes. The seeded definition
-  `localfs-document-repository` is the reference adapter.
+  pool of ADR 0007 is the next step if that changes. The definition `localfs-document-repository` of the demo data
+  (`internal/devseed`) is the reference adapter.
 - Web: one **Adapters** explorer manages MCPs, connectors and adapters together; an adapter opens in a dedicated editor
   (MCP and connector pickers showing which tools / operations the code handles, parameters, code editor) edits the
   `AdapterDef` node through a change. Domains cannot declare `adapter` algorithms any more (validation rejects them).

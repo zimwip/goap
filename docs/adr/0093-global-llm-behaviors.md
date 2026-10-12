@@ -19,7 +19,7 @@ talks to its models*, so it is platform configuration, next to the aliases and t
   retired never deleted). Attributes: `name`, `description`, `instruction` (the text, at most 4 KiB), `enabled`, `position`
   (`prepend` | `append`, default append), `order` (lower first, then by name), and scope selectors, all optional and ANDed:
   `aliases`, `models` (`provider/model`), `sources` (`engine`, `assistant`, `helper`, `indexer`, `intent`, `other`: the
-  `llm.CallMeta` source), `kinds` (`complete` only; `embed` is refused by validation) and `appliesToJSON` (default false).
+  `llm.CallMeta` source, `llmcfg.Sources()`), `kinds` (`complete` only; `embed` is refused by validation) and `appliesToJSON` (default false).
   Go model `llmcfg.Behavior` (`Props` / `BehaviorFromProps` / `Validate`); `Snapshot.Behaviors` holds the ones in force
   (enabled, not retired), `Snapshot.Off` the disabled ones for the administrators' listing; malformed ones are `Problems`.
 - **One built-in default, on.** `graphsvc.SeedBehaviors` (a step of `Boot` after `SeedProtectedAliases`) creates `terse`
@@ -39,7 +39,8 @@ talks to its models*, so it is platform configuration, next to the aliases and t
   fits is dropped, logged as a warning and recorded in the ledger as skipped (`!name`).
 - **JSON calls.** Every call that depends on structured output sets `llm.Request.JSON`: the engine's `llm` actions and their
   items / tool-call protocol (`pkg/engine/executors.go`, `llmSystem`), the planners (`planners.go`), the DSL `complete` with
-  `json`, the intent rankers, the helper (`suggest.go`) and the assistant turn all do. The gateway therefore skips, for a call
+  `json`, the intent rankers and the helper (`suggest.go`) do; the assistant turn did until ADR 0098 made its answer plain
+  text with native tool calls, so it now gets the behaviours as a free-text call (its compaction summary too). The gateway therefore skips, for a call
   with `JSON` true, every behaviour whose `appliesToJSON` is false (the default). One flagged `appliesToJSON` is applied wrapped:
   `These style rules apply to free-text fields only; the output format required by the other instructions is unchanged.`
   followed by the instruction (`llmcfg.JSONNotice`; "by the other instructions" rather than "below", since a behaviour may be

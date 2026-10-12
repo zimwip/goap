@@ -1,6 +1,7 @@
 # ADR 0021 — Model gateway configuration in the graph
 
-**Status**: accepted, implemented · **Date**: 2026-09
+**Status**: accepted, implemented; ADR 0084 (protected aliases) and ADR 0093 (behaviours) add node types of the same
+kind · **Date**: 2026-09
 
 ## Context
 
@@ -17,7 +18,9 @@ providers, catalog (quotas, roles) and aliases in SQL tables, with API keys seal
 3. An API key is never in the graph: `apiKeyRef` (`env:<VAR>` or `<vault path>#<field>`, alternatives separated by `|`) is
    resolved by the gateway at load time. A provider that needs a key and has none is reported inactive.
 4. The only state left in SQL is the token usage (`llm_usage`, keyed by the key of the model node, so it follows the node).
-   Migration `0002_graph_native` drops the configuration tables and re-keys the usage.
+   Migration `0002_graph_native` drops the configuration tables and re-keys the usage. Later SQL state is a record of
+   the calls, not configuration: the call ledger (`llm_call`, `llm_call_exchange`, ADR 0089) and the measured cost of
+   the behaviours (`llm_behavior_cost`, ADR 0093).
 5. The administration RPCs that wrote configuration are gone; the frontend writes the nodes through changes.
    The initial configuration (`GOAP_MODELS_CONFIG` or the default) seeds a graph with no provider once (`graphsvc.SeedModels`).
 

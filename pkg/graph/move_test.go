@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -176,4 +177,55 @@ func testMoveChangeRefusals(t *testing.T, repo Repo) {
 	st := domain.ChangeAbandoned
 	must[domain.Change](t)(g.UpdateChange(ctx, ab.ID, ChangePatch{Status: &st}))
 	refuse("an abandoned change", ab.ID, "PROJ-B", ErrConflict)
+}
+
+// projectChains is a guardian chain that depends on the project: "release" frames "sdlc" in PROJ-B only.
+type projectChains struct{ chainGate }
+
+func (projectChains) Guardians(_ context.Context, m, project string) ([]domain.GuardianRef, error) {
+	if m == "sdlc" && project == "PROJ-B" {
+		return []domain.GuardianRef{{Methodology: "release"}, {Methodology: "sdlc"}}, nil
+	}
+	return []domain.GuardianRef{{Methodology: m}}, nil
+}
+
+// A move computes the guardian chain of the change again for its new project, and of its sub-changes from it, in
+// the same change.updated entry (ADR 0106).
+func TestMoveChangeGuardians(t *testing.T) { forEachRepo(t, testMoveChangeGuardians) }
+
+func testMoveChangeGuardians(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	w := newMoveWorld(t, repo)
+	g := w.g
+	g.Lifecycles = &projectChains{}
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "c", Methodology: "sdlc", BaselineID: w.base.ID, OwnBranch: true, ProjectID: "PROJ-A"}))
+	sub := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "s", Methodology: "review", ParentID: c.ID}))
+	chain := func(c domain.Change) string {
+		var out []string
+		for _, r := range c.Guardians {
+			out = append(out, r.Methodology)
+		}
+		return strings.Join(out, ",")
+	}
+	if chain(c) != "sdlc" || chain(sub) != "sdlc,review" {
+		t.Fatalf("before the move: %s / %s", chain(c), chain(sub))
+	}
+	moved := must[domain.Change](t)(g.MoveChange(ctx, c.ID, "PROJ-B"))
+	if chain(moved) != "release,sdlc" {
+		t.Fatalf("the root takes the chain of its new project: %s", chain(moved))
+	}
+	if s := must[domain.Change](t)(g.Change(ctx, sub.ID)); chain(s) != "release,sdlc,review" {
+		t.Fatalf("the sub-change takes its chain from its parent's: %s", chain(s))
+	}
+	log, _, err := g.ChangeLog(ctx, domain.LogFilter{Change: c.ID, Types: []string{domain.LogChange + ".updated"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var h domain.HeaderEdit
+	if err := json.Unmarshal(log[len(log)-1].Payload, &h); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.Fields[HeaderGuardians]; !ok {
+		t.Fatalf("the chain is journaled with the move: %+v", h.Fields)
+	}
 }

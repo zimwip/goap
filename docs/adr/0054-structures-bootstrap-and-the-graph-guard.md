@@ -1,6 +1,7 @@
 # ADR 0054 — Structures, bootstrap and the guard of the graph
 
-**Status**: accepted, implemented · **Date**: 2026-10 ·
+**Status**: accepted, implemented; the default project superseded by ADR 0091 (a change names its project); the
+built-in names moved out of `pkg/domain` by ADR 0069 · **Date**: 2026-10 ·
 Builds on ADR 0012/0013 (domains, type catalogue), ADR 0039 (project), ADR 0040 (mandatory parenting), ADR 0049
 (mandatory change). Roots, default flag and bootstrap properties moved into the tag by ADR 0069. Supersedes ADR 0049's `LinkOrphanUnits` and the `organisation@owner` link, and ADR 0039's
 "empty project resolves to the root project" and its `Engine.Start` project gate.
@@ -20,8 +21,8 @@ referenced nothing, `link.change_id` too, a branch membership (`node_branch`) na
 optional cross-namespace `organisation@owner` link; nothing said in which project a node was created. A change's
 `owner_org` / `project_id` were optional text where "empty" meant "the default", resolved at read time, and the
 existence checks did not check the type (a `Policy` passed as an owner). The organisation and project types were
-hard-coded in three packages. `ORG-DEFAULT` and `PROJ-ROOT` were seeded by `graphsvc.SeedDefaults` in a background
-goroutine after other seeds had written (hence `LinkOrphanUnits`), the project rule lived in the engine
+hard-coded in three packages. `ORG-DEFAULT` and `PROJ-ROOT` were seeded by `graphsvc.SeedDefaults` (since removed:
+`Graph.Bootstrap` and `graphsvc.Boot`, ADR 0071) in a background goroutine after other seeds had written (hence `LinkOrphanUnits`), the project rule lived in the engine
 (`Engine.Start`), and the registry had no way to say which types build the organisation and the projects.
 
 ## Decision
@@ -57,7 +58,7 @@ store, SQLite, PostgreSQL and any storage to come, with or without constraints:
   and a node origin must name a change, and the change must exist;
 - a node version is owned by a unit and its node was created in a project, nodes of the tagged structures. A version
   that names neither gets them from the version it follows, else from its change (the unit holding it, the project it
-  acts in); the project of a node never changes; the owner changes only through a change (`NodeWrite.Owner`,
+  acts in); the project of a node never changes; the owner changes only through a change (`NodeUpdate.Owner`,
   `NodeEdit.Owner`, proto `owner`: the key of the unit it is transferred to);
 - a change names its unit and its project (never empty) and both are nodes of their structures.
 
@@ -65,11 +66,11 @@ Existence and type are checked when the transaction ends, before it commits, lik
 lets the bootstrap write the two roots, each referencing the other and itself.
 
 `CreateChange` resolves a change's scope once and stores it (`scopeChange`): an unset owner is the parent change's,
-else the root unit; an unset project the parent change's, else the **default project**. The default project is the
-`ProjectUnit` flagged by the property its tag names (`structure.default`, ADR 0069; the smallest key if several, the root project if
-none); the bootstrap flags the root project, and an administrator moves the flag in one change (Project tab, "Make
-default project"). The engine no longer refuses a process without a project (`ErrNoProject` is gone): its change acts
-in the default project, and the run takes the change's project for its role checks.
+else the root unit. An unset project was first the parent change's, else the **default project** (a `ProjectUnit`
+flagged by a property of the tag, the root project when none), and the engine stopped refusing a process without a
+project (`ErrNoProject` is gone). *Since then* (ADR 0091) the project is never defaulted: a sub-change takes its
+parent's, a root change naming none is refused with `ErrInvalid`, the edges resolve the caller's active project, and
+the `default` flag is gone. The run takes the change's project for its role checks.
 
 ### The storage repeats it
 
@@ -95,14 +96,12 @@ outside it, stays with the parent), an `organisation@Adapter` belongs to the uni
   with the types belonging to each, a `User` being a unit, `domain.Structures`) and build their snapshots from the
   answer: units and projects are the nodes of those types, their hierarchies the parent links named, the roots the
   keys named. The catalogue requires both structures to live in one namespace (the Assignment links a unit and a
-  project), so these services read one head. The built-in names stay in `pkg/domain` (`TypeOrgUnit`, ...) for the
-  untyped graph and for the seeds writing organisation data.
+  project), so these services read one head. The constants of the built-in organisation live in `pkg/access`
+  (`access.DefaultOrg`, `NodeTypeOrgUnit`, ..., moved out of `pkg/domain` by ADR 0069) for the seeds and tests
+  writing organisation data; the untyped graph uses `typecat.Builtin()`.
 - An existing database must be recreated (`make devlocal-reset` for the local mode): the new schema file cannot be
   applied over the old one, and fails loudly if tried.
 - Every change has a real project, so a role check on a change always has a project chain; "select a project before
   acting" remains a choice of the web (the project selector), no longer a refusal of the engine.
 - Baselines follow the same rule: see ADR 0056 (a baseline is the state a change leaves; the empty state before the
   first change is the empty baseline id, which nothing stores).
-
-> Superseded in part by ADR 0091: a change names its project (no default project, no `default` flag on the project
-> structure), and the project of a change moves through `MoveChange`.

@@ -1,6 +1,7 @@
 # ADR 0064 — Platform conditions become opt-in condition libraries
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0009 §4, 0036, 0058.
+**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0009 §4, 0036, 0058. ADR 0075 added the
+libraries `verification` and `derogations`.
 
 ## Context
 
@@ -12,7 +13,8 @@ generic default of the subscriptions of a transverse methodology also hardcoded 
 
 ## Decision
 
-1. **Libraries.** `pkg/condition` names two built-in libraries (`condition.LibraryNames`, `condition.Library(name)`):
+1. **Libraries.** `pkg/condition` names two built-in libraries (`condition.LibraryNames`, `condition.Library(name)`;
+   four since ADR 0075):
    - `decisions`: `open_questions`, `no_open_questions`, `decision_ready`, `decision_pending`, `no_decision_pending`,
      `ratification_pending`, `decision_escalated`, `options_open`, `options_evaluated`, `option_selected`;
    - `risks`: `open_risks`, `unmitigated_risks`, `risks_under_control`, `open_actions`, `no_open_actions`. Its
@@ -27,7 +29,7 @@ generic default of the subscriptions of a transverse methodology also hardcoded 
    set is not per methodology. `condition.Activation` binds `options`, `decisionPoints`, `questions`, `risks` and
    `actions` as memoized lazy values (`func() any`, called by CEL when the variable is read), so what no expression
    reads is never computed. An expression of a methodology may read them without importing a library; opt-in applies
-   to the injected definitions and to the cost.
+   to the injected definitions and to the cost. (`verifications` and `derogations` joined them with ADR 0075.)
 4. **Subscriptions.** The generic default of a transverse methodology without `on` is only `process.attached` and
    `step.completed`; the risk register's event (`change.item_added` filtered on risks and actions) is declared by the
    methodology that wants it (`risk-management.yaml` already did). A library does not contribute subscriptions.

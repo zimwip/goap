@@ -1,6 +1,7 @@
 # ADR 0103 — A sub-change works on its own branch; the operations on a change are a catalogue the roles allow
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Supersedes ADR 0081 (sub-changes land in their parent) and ADR
+**Status**: accepted, implemented; §1 amended by ADR 0105 (the parent's acceptances are one submitted review) and
+extended by ADR 0106 (a root change attached as a sub-change, or detached; the guardian chain) · **Date**: 2026-10 · Supersedes ADR 0081 (sub-changes land in their parent) and ADR
 0082 (rebase a sub-change onto its parent's drafts); amends ADR 0102 (a sub-change commits and merges like a root
 change) and ADR 0043 (a methodology's roles also say which operations on a change they allow).
 
@@ -28,8 +29,8 @@ change) and ADR 0043 (a methodology's roles also say which operations on a chang
   the merge (`checkParentDrafts`): the parent commits (or drops) it first, so the work meets on branches only.
 - The parent records the merged work as its own (`recordInParent`): for each node the sub-change landed, an impact of the
   parent (the existing one, else a new one `producedBy: graph.merge`, `derivedFrom` the sub-change's impact) gets an
-  accepted review carrying the sub-change's last review ("merged from sub-change …") and a `landed` event naming the head
-  of the parent's branch; the parent then has committed work to merge in turn. The work climbs one level per merge.
+  accepted review carrying the sub-change's last review ("merged from sub-change …"; since ADR 0105 all of them made by
+  one submitted review of `graph.merge`) and a `landed` event naming the head of the parent's branch; the parent then has committed work to merge in turn. The work climbs one level per merge.
 - Gone: `Draft.Inherited`, `inheritDraft`, `inheritedDrafts`, `integrateSub`, the rebase of a sub-change's drafts and its
   `integrated` events (old logs still read: the web's history keeps their edges).
 - Web: the change overview gives a sub-change the same *Commit* and *Merge* buttons ("Merge into parent") as a root

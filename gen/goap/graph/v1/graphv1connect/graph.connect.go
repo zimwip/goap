@@ -422,7 +422,9 @@ type GraphServiceClient interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	// What going from a baseline to another changes, node by node (same namespace).
 	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
-	// Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
+	// Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
+	// into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
+	// fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)
@@ -1736,7 +1738,9 @@ type GraphServiceHandler interface {
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
 	// What going from a baseline to another changes, node by node (same namespace).
 	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
-	// Integrates a committed change that waits for a resolution: merges its branch into the branch it forked from (ADR 0056).
+	// Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
+	// into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
+	// fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
 	MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error)
 	// Nodes the change shares with other open changes (a merge will be needed).
 	GetSharedNodes(context.Context, *connect.Request[v1.GetSharedNodesRequest]) (*connect.Response[v1.GetSharedNodesResponse], error)

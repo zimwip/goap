@@ -17,7 +17,8 @@ the same state towards the final goal, and the order comes from what each needs 
 
 - **The compiler refuses a condition that is both an input and an output of an action or of a step, whatever the
   values** (`actions[i].pre.x`, and for a step `<step>.pre.x` through its action or `<step>.done.x`). The issue is tied
-  to the step it is about (`Issue.Activity`, ADR 0050's lenient compile), so the flow marks it.
+  to the step it is about (`Issue.Activity`, kept by the lenient compile, one pipeline since ADR
+  0072), so the flow marks it.
 - The planner does not need the guard: the A* search never repeats an action whose effects already hold (the state does
   not change), and the utility planner skips actions whose effects already hold (`utilityPlan`).
 - The flow's level check (`GapNoop`) reports the same overlap on a step, or on the parent of a level, drawn red.

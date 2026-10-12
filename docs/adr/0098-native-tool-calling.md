@@ -55,8 +55,9 @@ even with native tools, and the scripted clients of the tests rely on it.
 
 ### The assistant (`internal/assistantsvc/toolspecs.go`, `turn.go`)
 
-The assistant declares its seven server tools (`serverTools`: what each does and the JSON schema of its arguments,
-moved out of the system text, which keeps the rules of their use) and the screen tools of the turn (`uiToolSpec`:
+The assistant declares its server tools (`serverTools`: seven then, eight since `search_changes`, ADR 0106, each turn
+declaring those of its frame; what each does and the JSON schema of its arguments, moved out of the system text, which
+keeps the rules of their use) and the screen tools of the turn (`uiToolSpec`:
 `ui.<name>`, the schema built from the descriptor's arguments, the level and guidance in the description, plus a
 `rationale` argument: the reason a proposal shows, which `readAnswer` takes out of the arguments before they are
 checked against the descriptor). Its answer is plain text; the calls come back natively and their results go back as
@@ -69,5 +70,4 @@ its results going back as text. The system prompt lists the screen tools by name
 - The tool protocol no longer costs prompt tokens on native providers; calls and results are structured end to end.
 - Not done: provider-side constrained output (a response schema) for the final answer: the item union is broad and the
   OpenAI-compatible servers differ in what they accept; the answer is still read and repaired by the engine.
-  The assistant (ADR 0087) moved too (see "The assistant" below).
 - `textToolsOnly` is per process: a restart probes a refusing model once more.

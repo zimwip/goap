@@ -1,7 +1,7 @@
 # ADR 0031 — Process signals, deferred change binding, trigger leadership, private vars
 
-**Status**: accepted, implemented (engine/MCP layer; the web UI for gap 7 below is not yet
-built) · **Date**: 2026-09 ·
+**Status**: accepted, implemented (engine, MCP and web; the follow-ups listed at the end
+remain open) · **Date**: 2026-09 ·
 Builds on ADR 0011 (execution journal), ADR 0017 (flow branches), ADR 0024 (change impacts),
 ADR 0028 (built-in MCPs and connectors, scope), ADR 0029 (event-sourced change impacts),
 ADR 0030 (one change log).
@@ -43,9 +43,9 @@ a `change_log` row (ADR 0030). `Ctx.Signal(name, data, target)` (`pkg/dsl/dsl.go
 `goap-change/signal` tool (`internal/connectors/builtin/change.go`, `pkg/mcpbuiltin/builtin.go`) both
 write it, mirroring the existing `AddArtifact`/`note` paths.
 
-On the read side, `"change.signal"` was added to `methodology.TriggerEvents`
-(`pkg/methodology/methodology.go`); `EventingGraph.AddItems` (`pkg/engine/eventing.go`) emits it
-whenever a written batch includes a `KindSignal` item, and `TriggerEvent` gained an
+On the read side, `"change.signal"` was added to the trigger events (`methodology.TriggerEvents`,
+now `events.All` of `pkg/events`, the one place naming them); `EventingGraph.AddItems`
+(`pkg/engine/eventing.go`) emits it whenever a written batch includes a `KindSignal` item, and `TriggerEvent` gained an
 `Items []domain.ChangeItem` field so a trigger's CEL `Filter` can match on payload content
 (`event.type == "change.signal" && event.items.exists(i, i.type == 'review_needed')`), not just
 the event type.
@@ -114,16 +114,17 @@ hard-errors on an empty id) when unbound, returning `domain.Blackboard{Vars: p.V
 
 Binding stays eager by default — zero migration for every existing methodology. `selectTarget`
 routes its default create-or-reuse call through the new
-`Engine.AttachChange(ctx, processID string, req AttachRequest) error`
-(`AttachRequest{ChangeID, Title, Intent, Namespace, OwnerOrg, BaselineID}`) instead of calling
-`CreateChange` directly, so every binding — eager or deferred — goes through one path and is
-journaled (`journal.attach`, a new `ExecutionRecord` kind) and eventing (`"process.attached"`,
+`bindChange` that `Engine.AttachChange(ctx, processID string, req AttachRequest) error` uses
+(`AttachRequest{ChangeID, Title, Intent, Namespace, OwnerOrg, ProjectID, BaselineID}`) instead of
+calling `CreateChange` directly, so every binding — eager or deferred — goes through one path and is
+journaled (`journal.attach`, a new record kind, `journal.KindAttach`) and eventing (`"process.attached"`,
 added to `TriggerEvents`, fired for every bind) uniformly. `selectTarget` skips its default bind
 only when the resolved `Agent` structurally declares its own action with
 `Effects["change_bound"]` (`agentBindsOwnChange`) — an opt-out signal, not a flag to set; no
-existing methodology declares this today, so behavior is provably unchanged for all of them. A
+shipped methodology declares this (only the test fixture `methodologies/examples/deferred-bind.yaml`),
+so behavior is unchanged for all of them. A
 methodology that wants a real orphan phase declares such an action and calls the new
-`goap-scheduler attach` op (`{process, change?, title?, intent?, namespace?, baseline?}`, scope
+`goap-scheduler attach` op (`{process, change?, title?, intent?, namespace?, unit?, baseline?}`, scope
 `agent`, proto `AttachChangeRequest`/`AttachChangeResponse` added to `engine.proto`) either with
 an existing `change` id (reuse) or none (create). `sdlc.yaml`'s `intake` agent was updated to call
 `attach` instead of spawning a second process and abandoning its own change when a better match
@@ -151,7 +152,8 @@ caller can explicitly place a process on an *already-opened* flow (the hook a fu
 branch," below, needs). Impacts (actual proposed graph/node mutations) intentionally do not
 follow any per-process isolation — they land on the change's own branch exactly as before,
 regardless of which process produced them. A bounded retry (3 attempts) on `graph.ErrConflict`
-was added around `applyNodeOps`'s three graph-mutating calls, wrapped individually rather than
+was added around `applyNodeOps`'s graph-mutating calls (`retryOnConflict`,
+`pkg/engine/nodeops.go`), wrapped individually rather than
 retrying the whole function (a partial retry must not re-declare an already-declared change
 impact). Caveat: `graph.ErrConflict` is one sentinel shared by roughly ten different conditions
 in `pkg/graph`, only some of them transient version races — the retry cannot yet tell them
@@ -192,7 +194,8 @@ the row body and its `Get`/`List` fold the turns back in from `process_log`
 an in-memory/serialization convenience (so `ProcessToPB` and the web UI keep working unchanged);
 only the *persistence* path moved off the full-row rewrite.
 
-This is also the primitive gap 5's `llm`-action follow-up needed: an `llm` action deferring its
+The engine serves it (`GetProcessLog`, `engine.v1`), shown by the run tab (`RunTab.svelte`, "Process
+log"). This is also the primitive gap 5's `llm`-action follow-up needed: an `llm` action deferring its
 own bind has no `Vars`-equivalent way to persist turn-by-turn state while unbound (item writes
 are correctly rejected with no Change). `process_log` is that primitive; a DSL/tool-call
 convenience wrapper for it, following the `SetVar`/`goap-change signal` pattern, is not yet
@@ -218,12 +221,11 @@ attach; both are simply readable side by side for the same process id from that 
 - A process's own history (starting with its identification dialogue) no longer forces a
   full-row rewrite per turn.
 
+- Gap 7's web side: the run tab shows a process's own log (`GetProcessLog`) whether it has a
+  change or not, the "My processes" explorer (`ProcessesExplorer.svelte`) lists the caller's
+  processes, and the run tab and the change's Audit pane (`ChangeAudit.svelte`) link to each other.
+
 **Follow-ups, explicitly out of scope here**:
-- Gap 7's web UI: `RunTab.svelte` rendering a process's trail standalone (via `process_log`, once
-  a read API for it is added — not yet built either), a top-level "My processes" view (the
-  engine/API side already supports this fully, `Engine.Store.List`/`goap-scheduler list` have no
-  `ChangeID` dependency; only the UI entry point is missing), and the bidirectional nav link with
-  `ChangeAudit.svelte`.
 - Solution-branch impact isolation and a real per-property merge-conflict resolution path for
   concurrent writers who explicitly want one (§6) — `KindMerge` remains a declared but
   never-constructed placeholder item kind.

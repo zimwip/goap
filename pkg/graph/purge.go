@@ -8,9 +8,9 @@ import (
 )
 
 // PurgeChange removes a change that landed nothing, with its whole log (ADR 0037). It is the exception to the
-// insert-only log of ADR 0030: what is removed was never part of the graph. A node version, once used, is never
-// removed, so a change is refused (ErrConflict) as soon as anything of it is applied or built upon: it is applied,
-// merged into, has sub-changes, or a baseline, a later version or a link of another change uses what it wrote.
+// insert-only log of ADR 0030: what is removed was never part of the graph. A change is refused (ErrConflict) unless it
+// is draft, active or abandoned, has produced no baseline (no commit), has no sub-change, and its own branch, when it has
+// one, has not moved since it was forked.
 func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	var c domain.Change
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {

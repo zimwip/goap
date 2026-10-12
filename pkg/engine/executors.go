@@ -634,7 +634,8 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		return ActionResult{Merge: task, Output: fmt.Sprintf("committed on %s; merge into %s waits for %d node(s) to settle", task.From, task.Into, len(task.Conflicts))}, nil
 	}
 	if c.ParentID != "" {
-		// a sub-change leaves no baseline: rebased onto its parent, it is integrated into its log (ADR 0081, 0082)
+		// a sub-change is merged into its parent change: rebased onto the head of the parent's branch, fast-forwarded
+		// into it, its work recorded on the parent's impacts (ADR 0103)
 		return ActionResult{Output: fmt.Sprintf("integrated into parent change %s", c.ParentID)}, nil
 	}
 	return ActionResult{Output: fmt.Sprintf("baseline %s (%s) created", b.Name, b.ID)}, nil

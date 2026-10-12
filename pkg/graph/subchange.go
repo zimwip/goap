@@ -148,9 +148,10 @@ func (g *Graph) checkDraft(ctx context.Context, ix *typeIndex, c domain.Change, 
 }
 
 // prepareSubChange applies the rules of a sub-change to c: its parent must be
-// open and have a branch of its own, the namespace is the parent's, and the
-// change starts from the head of the parent branch; it lands in the parent's log
-// (ADR 0081). Its organisational unit must be inside the unit of the parent.
+// open and is given a branch of its own when it has none, the namespace is the
+// parent's, and the change is forked from the head of the parent's branch, the
+// branch it merges into (ADR 0103). Its organisational unit must be inside the
+// unit of the parent.
 func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, in *NewChange) error {
 	if c.ParentID == "" {
 		return nil

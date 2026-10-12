@@ -9,11 +9,11 @@ agents, and linked to the reference repository it modifies.
 
 ## Decision
 A process's blackboard is a **Change** stored by the graph service. It holds the change's facts
-(items of kind `decision`, `artifact`, `merge`, `flow`) and its **change impacts** (ADR 0024): the
-nodes it declares, each with the exact version it starts from (`pre`) and the version it writes
-(`post`). Actions write facts and versions on the change's own branch (ADR 0015 §5); the target
-branch is modified only when the change is applied (`ApplyChange`, a merge that produces a new
-baseline).
+(items of kind `decision`, `artifact`, `merge`, `flow`, ...) and its **change impacts** (ADR 0024): the
+nodes it declares, each with the exact version it starts from (`pre`) and what it writes (`post`: a draft until
+the change lands, ADR 0079). Actions write facts and drafts on the change; its versions are written on the change's
+own branch when it is committed (`CommitChange`, ADR 0102), and the target branch is modified only when the change is
+merged (`MergeChange`; `ApplyChange` commits then merges), which produces a new baseline.
 
 ## Consequences
 - Full traceability (`producedBy` / `derivedFrom` provenance) and possible resumption of a process.

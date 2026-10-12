@@ -33,9 +33,9 @@ import (
 type Handler struct {
 	Graph  *graph.Graph
 	Events engine.Publisher
-	// Authz gates object creation (CreateObject, resource "object") and direct-write baseline creation
-	// (CreateBaseline, resource "baseline", always refused for the organisation namespace). Nil grants
-	// everything. Ordinary change impacts are not gated by it.
+	// Authz gates the creation of a node in a change (resource "object": ImpactNodeCreate, the successors of a
+	// merge or split, a graph import), the tags and the reading of prompts. Nil grants everything. The other
+	// impact operations are not gated by it.
 	Authz authz.Authorizer
 	// Floor gates changes to User and Policy nodes (resource "policy", action "write"). It must not depend
 	// on the policies themselves, so that no policy can lock the administrators out; nil falls back to Authz.

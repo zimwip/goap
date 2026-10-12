@@ -32,8 +32,8 @@ const (
 	FromIntegrator = "integrator"
 )
 
-// AnyMethodology in Integration.Methodologies integrates every methodology of the project that integrates nothing
-// itself.
+// AnyMethodology in Integration.Methodologies integrates every other methodology (IntegrationOf); a wildcard is not
+// followed by the check of integration cycles.
 const AnyMethodology = "*"
 
 // Integration names methodologies whose changes the changes of this one integrate as sub-changes.

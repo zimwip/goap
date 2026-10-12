@@ -2,7 +2,8 @@
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Supersedes in part ADR 0014 §1 and §3 (the `editable` state
 flag, reopening a node before editing it), ADR 0048 (`RestInEditable`) and ADR 0076 §4d (the initial state of a
-lifecycle must be editable).
+lifecycle must be editable). §3 amended by ADR 0102 (the refusal moved to the merge; the guardian's
+`ChangeLifecycles.Merge` replaced `Graph.LandingGate`).
 
 ## Context
 
@@ -22,11 +23,13 @@ transition first to restore a retired entry.
 2. **A state may opt out of landing**: `LifecycleState.NotLandable` (`notLandable: true` in YAML and JSON,
    `not_landable` in the registry proto). Every state is landable by default. `Lifecycle.Landable(state)` is true
    for no lifecycle, no state (`""`) and a state the lifecycle does not know, else `!NotLandable`.
-3. **Only a node whose state is landable can land.** `Apply` / `CommitChange` (`walkChangeImpacts`,
-   `settleChangeImpacts`) and the merge of a branch refuse when a node of the change ends in a state that is not
-   landable, naming each node: "the change leaves nodes in a state that cannot land, move them to a landable state
-   first: KEY (type) in state, ...". The refusal is unconditional (no `RestInEditable`); a landing gate that decides
-   (`Graph.LandingGate`, ADR 0066) replaces it, as it replaced the editable floor.
+3. **Only a node whose state is landable can land.** The landing of a change refuses when a node of the change ends
+   in a state that is not landable, naming each node: "the change leaves nodes in a state that cannot land, move them
+   to a landable state first: KEY (type) in state, ...". The refusal is unconditional (no `RestInEditable`); a guardian
+   that decides replaces it, as it replaced the editable floor. Decided first at `Apply` / `CommitChange` with the
+   landing gate `Graph.LandingGate` (ADR 0066); since ADR 0102 a commit only records the change's state on its branch
+   and the refusal is the merge's (`IntegrateChange`: `checkMerge`, where `ChangeLifecycles.Merge`, when it decides,
+   replaces this floor; and the three-way merge of a branch).
 4. **Lifecycle validation** (`Lifecycle.Issues`): a state flagged `notLandable` must be able to reach a landable
    state (else a node there could never land), a final state is not `notLandable` (it has no exit), and at least
    one state is landable (automatic unless all are flagged). The initial state may be flagged: a created node is born in
@@ -36,8 +39,7 @@ transition first to restore a retired entry.
    change; a retired node is simply edited and restored, with no move first (`reopens` is gone).
 6. **Blackboard**: `NodeView.Frozen` ("the state is not editable") becomes `NodeView.NotLandable` (proto
    `NodeView.not_landable`), and the CEL variable `editable` of a node becomes `landable`. It is derived from the state
-   of the version the change leaves, not from whether the version is frozen: a working or a checked-in version is
-   frozen by the guard (ADR 0076), which is unchanged.
+   of what the change leaves (a draft since ADR 0079), not from whether a version is frozen.
 
 Migration of the domains: only the states that were editable and not covered by `restInEditable` keep a meaning, and
 become `notLandable: true` (the `draft` of `alm`'s `requirement`, `release` and `maturity`). The `active` / `proposed`
@@ -48,8 +50,8 @@ states of `organisation` and `platform` that were editable at rest are ordinary 
 
 - No lifecycle needs an exception to rest in a state: a status is landable by default, a draft opts out.
 - A node is edited wherever it is; the web editors no longer disable Edit or offer "Reopen" buttons, and the change view
-  lists the nodes in a state that cannot land ("not landable" tag, `ChangeTab` blocks Apply).
-- The guard's own `editable` check (a version written by a past transaction, not a working version, cannot be edited)
-  is unchanged, and unrelated to the lifecycle.
+  lists the nodes in a state that cannot land ("not landable" tag, a mark on the overview of `ChangeTab`).
+- A written version cannot be edited (the guard; since ADR 0079 a version is written only at landing and immutable),
+  which is unrelated to the lifecycle.
 - Existing user-defined domains that declared `editable` or `restInEditable` must be republished (greenfield: no
   migration, no alias).

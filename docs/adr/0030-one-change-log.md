@@ -1,7 +1,8 @@
 # ADR 0030 — One log per change
 
 **Status**: accepted, implemented · **Date**: 2026-09 · Extends ADR 0011 (execution journal), ADR 0017 (the blackboard
-as a log), ADR 0029 (event-sourced change impacts). Replaces their three separate stores.
+as a log), ADR 0029 (event-sourced change impacts). Replaces their three separate stores. Later streams and columns:
+`model.call` (ADR 0059), `change.updated` (header edits), `causation` (ADR 0105).
 
 ## Context
 What happens to a change was recorded in three places, each append-only but with its own table and its own order:
@@ -31,6 +32,7 @@ A change has **one log**: every fact, journal record and impact event is an entr
 | `subject` | what it is about: the action, the fact type, the change impact, the flow operation |
 | `by_whom` | the principal, the agent or the component |
 | `at` | when |
+| `causation` | the entry this one follows from (ADR 0105: a decided review names the submitted review), `''` when none |
 | `payload` | the whole fact, record or event (JSON) |
 
 Indexed by change and position, by change and type, by change and flow, by process, by action run. Nothing updates or
@@ -55,10 +57,12 @@ too, to name the runs and draw the flow branches whatever the filters.
 ## Consequences
 - **Order**: an audit is the log in its order, not a merge by timestamp.
 - **Filtering**: by type, flow, process and action run in the store, without reading the payloads.
-- **Compatibility**: `Change.Items`, `Graph.Journal`, `ListExecutions` and `ListChangeEvents` read the same log.
+- **Compatibility**: `Change.Items`, `ListExecutions` and `ListChangeEvents` read the same log; the journal is read with
+  `journal.Read` over it (ADR 0066: the graph keeps a generic typed log, `Graph.AppendLog` / `ChangeLog`, and refuses
+  the `fact`, `impact` and `change` streams it writes itself).
   Journal records read back from the memory repository are decoded from JSON, as they always were from SQL (numbers of
   `Data` are floats).
-- **Migrations**: PostgreSQL `0017_change_log`, SQLite `0016_change_log` (they replace the `change_event` migration of
-  ADR 0029, which never left its branch).
+- **Migrations**: the table is part of the graph schema (`pkg/graph/migrations*/0001_schema.sql`, the schema started
+  from zero).
 
 **Note (ADR 0037)**: a change that landed nothing can be purged with its whole log (`Graph.PurgeChange`); nothing that is part of the graph is ever deleted.

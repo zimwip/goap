@@ -1,6 +1,7 @@
 # ADR 0084 — Protected model aliases
 
-**Status**: accepted, implemented (phase 1: aliases, guard, seed, web availability; no assistant UI yet) · **Date**: 2026-10 ·
+**Status**: accepted, implemented (aliases, guard, seed, web availability; the helper and the assistant that use them:
+ADR 0086, 0087, 0088) · **Date**: 2026-10 ·
 Builds on ADR 0021 (model gateway configuration as graph data), ADR 0048 (node validators), ADR 0076 (nodes are retired, never deleted).
 
 ## Context
@@ -31,4 +32,4 @@ holding no provider, so an existing install would not have them.
 
 ## Not done
 
-The assistant and the helper themselves; an alias rename is impossible, not offered by the catalog pane.
+An alias rename is impossible, not offered by the catalog pane.

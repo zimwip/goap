@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -152,6 +154,73 @@ func integratorOf(ancestors []domain.Change, methodology string) map[string]any 
 	for _, a := range ancestors {
 		if a.Methodology == methodology {
 			return map[string]any{"attached": true, "id": string(a.ID), "methodology": a.Methodology, "state": a.State, "status": string(a.Status)}
+		}
+	}
+	return nil
+}
+
+// integrationIssues reports a cycle of integrations (ADR 0106): m integrating, directly or through the methodologies
+// it integrates, a methodology that integrates m. Compared with the latest version of each stored methodology; a
+// wildcard ("*") is not followed. Nothing is reported when the store cannot be read.
+func (s *Service) integrationIssues(ctx context.Context, m *methodology.Methodology) def.Issues {
+	if len(m.Integrates) == 0 {
+		return nil
+	}
+	rs, err := s.Versions(ctx, false)
+	if err != nil {
+		return nil
+	}
+	integrates := map[string][]string{}
+	for _, r := range rs {
+		if r.Methodology.Name != m.Name {
+			integrates[r.Methodology.Name] = integratedNames(&r.Methodology)
+		}
+	}
+	integrates[m.Name] = integratedNames(m)
+	var out def.Issues
+	for i, in := range m.Integrates {
+		for _, n := range in.Methodologies {
+			if path := integrationPath(integrates, n, m.Name); path != nil {
+				out = append(out, def.Issue{Path: fmt.Sprintf("integrates[%d].methodologies", i),
+					Message: fmt.Sprintf("integration cycle: %s integrates %s", m.Name, strings.Join(path, " integrates "))})
+			}
+		}
+	}
+	return out
+}
+
+// integratedNames are the methodologies m names in its integrations, the wildcard left out.
+func integratedNames(m *methodology.Methodology) []string {
+	var out []string
+	for _, in := range m.Integrates {
+		for _, n := range in.Methodologies {
+			if n != methodology.AnyMethodology {
+				out = append(out, n)
+			}
+		}
+	}
+	return out
+}
+
+// integrationPath is a path of integrations from `from` to `to` (both included), nil when there is none.
+func integrationPath(integrates map[string][]string, from, to string) []string {
+	prev := map[string]string{from: ""}
+	queue := []string{from}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		if cur == to {
+			var path []string
+			for n := cur; n != ""; n = prev[n] {
+				path = append([]string{n}, path...)
+			}
+			return path
+		}
+		for _, n := range integrates[cur] {
+			if _, seen := prev[n]; !seen {
+				prev[n] = cur
+				queue = append(queue, n)
+			}
 		}
 	}
 	return nil

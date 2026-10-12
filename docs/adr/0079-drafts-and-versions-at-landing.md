@@ -4,7 +4,9 @@
 0076's storage of the working version in `node_version` (`checked_out`, `Tx.FreezeVersion`, `Tx.SetNodeState`,
 `SetNodeProps`, `DropWorkingVersion`, in-place edits of links) and the version-writing parts of ADR 0077 ("A transition on a
 working version is taken in place", "A user is one version" as a storage detail) and ADR 0025 §5 (flow branches that carry
-versions); refines ADR 0029 / 0030 (event-sourced impacts, one log).
+versions); refines ADR 0029 / 0030 (event-sourced impacts, one log). Amended by ADR 0102 (only a modification is accepted
+and committed: a draft equal to its base no longer lands; a rejected impact is reworked by editing it; the commit keeps
+the change open), ADR 0103 (sub-changes on their own branch) and ADR 0105 (every verdict is a submitted review).
 
 ## Context
 
@@ -97,14 +99,16 @@ and the copies.
   `base` and `new`); the guard and action algorithms (`dsl.AlgorithmInput`) run on the draft, and the properties an action
   sets are part of the `transitioned` event.
 - `ImpactNodeCancel` drops the draft of the flow (the impact goes back to the parent flow's draft, else to none; a creation
-  cancelled removes its impact: no node was ever written). `WithdrawImpact` takes the impact and its drafts out; it is no
+  cancelled removes its impact: no node was ever written; since ADR 0102 one the change committed falls back to the
+  version it committed). `WithdrawImpact` takes the impact and its drafts out; it is no
   longer refused once a version of it exists, for none does until landing.
 - Review is unchanged except that an accepted review checks the **draft** (`checkDraft`: attributes, validators, required
   links, link attributes; the origins gate) and writes only the `reviewed` event. An edit or a link edit after an
-  acceptance sends the review back to `proposed`; a transition does not.
+  acceptance sends the review back to `proposed`; a transition does not. (ADR 0102: only a draft that modifies its node
+  is accepted, and an edit sends a rejected review back to `proposed` too.)
 - **Reviews are always explicit** (user decision, with this ADR): no edit, no transition, no link edit reviews. The web
   edit flow, the engine and the DSL writes, the `goap-change` tools no longer accept after writing: the impact stays
-  `proposed` until someone runs `ImpactNodeReview`, and the audit trail of an edit reads `proposed`, `checkedOut`,
+  `proposed` until someone reviews it (since ADR 0105, through a submitted review), and the audit trail of an edit reads `proposed`, `checkedOut`,
   `updated`, `updated`, without a `reviewed` line. The bulk system paths — `Graph.Commit` / `CommitEdits`, the seeds,
   `EnsureUser`, `graphtest` — keep reviewing as the system principal: they are producers of a complete state, not edits (and
   the settings dialog's Save of a personal change, ADR 0037, is an explicit user action: accept and apply).
@@ -118,15 +122,17 @@ review comment, else the rationale), state and properties of the draft; `Project
 then the outgoing links, with their targets resolved to exact versions: a draft reference, or the version a draft was
 checked out from, of a node the change lands, becomes the version this landing writes for it (what `retarget` and
 `followVersion` did, now one rule); a link to the draft of a node that does not land is an error. A node that changed on the
-change's branch since the draft was checked out (a sub-change merged a version) is a conflict (ADR 0081: a sub-change no
-longer merges a version, it lands in its parent's log). The `landed` events then
+change's branch since the draft was checked out is a conflict (ADR 0103: a sub-change does not merge a node its parent
+holds an uncommitted modifying draft of, `checkParentDrafts`). The `landed` events then
 name the versions (the impact's post becomes the landed ref, `ImpactEvent` `landed` drops the drafts), the node index events
 are published for them. Branches, `IntegrateChange` (fast-forward, 3-way merge when a node changed on both sides,
 `Tx.JoinBranch`), baselines and `Apply` = commit + integrate are unchanged: **the commit step is where versions appear on
-the change's branch**. A landing conflict (the node moved on main meanwhile) merges or waits as before.
+the change's branch**. A target that moved meanwhile is handled at the merge (since ADR 0101 / 0102: the committed branch
+is rebased onto it, conflicts stop the merge).
 
-A draft equal to the version it was checked out from still lands a version of its own: the reviewer accepted a checkout, the
-graph does not compare content (simple, and a version carries its origin comment). A creation's key is only reserved at
+This ADR let a draft equal to the version it was checked out from land a version of its own (the graph did not compare
+content). ADR 0102 reversed it: a draft equal to its base is not a modification (`domain.DraftChanged`), it is neither
+accepted nor committed. A creation's key is only reserved at
 landing (the node row is written then): two changes creating the same key conflict when the second lands.
 
 The guard keeps one rule: **a persisted version is immutable**. `Tx` has no edit, freeze or drop of a version
@@ -164,5 +170,5 @@ landing is derived from it).
 - `domain.Node.CheckedOut`, `ImpactEvent.WritesVersion`, the proto `checked_out`, the DSL `ChangeImpact.checkedOut` (now
   `drafted`) and the web logic that tested `checkedOut` are gone: the draft state of the impact says it.
 - Greenfield: no migration; development databases are reset (the initial schema has no `checked_out` column and no draft table).
-- Not done: a comparison of a draft with its base to skip an unchanged version; the draft of a change that is committed is
-  gone with its landing (the audit reads the log).
+- The draft of a change that is committed is gone with its landing (the audit reads the log); a later checkout starts a
+  new draft from the version it committed (ADR 0102).

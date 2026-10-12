@@ -42,4 +42,4 @@ differ were as present as the ones that did, and nothing said whether an impact 
 - The diff reads drafts only: after landing the drafts are gone and the versions are the history (ADR 0079); comparing a
   landed change is a baseline comparison.
 - A rejected impact is not part of a flow at `written` (as in `ChangeView`).
-- Not done: the diff of a sub-change does not show the drafts inherited from its parent as impacts of their own.
+- A sub-change inherits no drafts from its parent (ADR 0103): its flows hold its own impacts only.

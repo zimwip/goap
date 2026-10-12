@@ -139,6 +139,11 @@ export const graph = {
    */
   moveChange: (changeId: string, projectId: string) =>
     rpc<{ changeId: string; projectId: string }, { change?: Change }>(GRAPH, 'MoveChange', { changeId, projectId }),
+  /** Attaches a root change to a change whose methodology integrates its own, as its sub-change (ADR 0106). */
+  attachChange: (changeId: string, parentId: string) =>
+    rpc<{ changeId: string; parentId: string }, { change?: Change }>(GRAPH, 'AttachChange', { changeId, parentId }),
+  /** Detaches a sub-change from the change integrating it: a root change again (ADR 0106). */
+  detachChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DetachChange', { changeId }),
   /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
   splitChange: (changeId: string) =>
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),
