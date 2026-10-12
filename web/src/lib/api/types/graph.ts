@@ -98,13 +98,13 @@ export interface ChangeLogQuery {
   limit?: number;
 }
 
-/** What a rebase did to an impact of a sub-change (ADR 0082). */
+/** What a rebase did to an impact of a change (ADR 0101, 0103). */
 export interface RebasedImpact {
   changeImpactId?: string;
   key?: string;
-  /** the merged draft differs from the sub-change's: its review went back to proposed */
+  /** the merged draft differs from the change's: its review went back to proposed */
   changed?: boolean;
-  /** the draft took values from the target (a root change, ADR 0101) */
+  /** the draft took values from the target branch */
   merged?: boolean;
   /** the fields changed on both sides: props.<key>, owner, state, link:<type>:<node>, node */
   conflicts?: string[];
@@ -117,7 +117,6 @@ export interface ImpactConflicts {
   conflicts?: string[];
 }
 
-/** Where a sub-change stands against its parent (ADR 0082). */
 /** What a change can commit and merge (ADR 0102), as the server judges it: the one source of the Commit and Merge buttons. */
 export interface CommitState {
   /** keys of the accepted modifications the next commit writes */
@@ -132,6 +131,7 @@ export interface CommitState {
   canMerge?: boolean;
 }
 
+/** Where a change stands against the head of the branch it was forked from (ADR 0101, 0103). */
 export interface RebaseState {
   /** the parent change ('' when the change is not a sub-change) */
   parentId?: string;

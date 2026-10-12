@@ -1,6 +1,6 @@
 <script lang="ts">
-  // A change against what it builds on: a sub-change against its parent (ADR 0082), a root change against the head of the
-  // branch it was forked from (ADR 0101). Rebase brings its drafts up to date, and the conflicts a rebase left are listed
+  // A change against the head of the branch it was forked from: main or a release branch for a root change (ADR 0101),
+  // the branch of its parent change for a sub-change (ADR 0103). Rebase brings its drafts up to date, and the conflicts a rebase left are listed
   // (an edit of the field settles one, "Keep mine" keeps the change's values for all of an impact's). Apply rebases by
   // itself; this pane says what stands in its way.
   import { graph, errorMessage, type Change, type RebaseState } from '../api';
@@ -18,9 +18,10 @@
   const behind = $derived(sync?.behindImpactIds ?? []);
   const conflicts = $derived(sync?.conflicts ?? []);
   const isSub = $derived(!!change.parentId);
-  // a root change that is committed, applied or abandoned is integrated or closed, never rebased
-  const live = $derived(isSub || !['committed', 'applied', 'abandoned'].includes(change.status ?? ''));
-  const onto = $derived(isSub ? '' : (sync?.onto ?? ''));
+  // a change that is committed (waiting for its three-way merge), applied or abandoned is integrated or closed, never rebased
+  const live = $derived(!['committed', 'applied', 'abandoned'].includes(change.status ?? ''));
+  const onto = $derived(sync?.onto ?? '');
+  const target = $derived(sync?.branch || (isSub ? "the parent's branch" : 'the target branch'));
   const keyOfImpact = (impact: string) => (change.nodes ?? []).find((n) => n.id === impact)?.key ?? impact;
 
   $effect(() => {
@@ -71,9 +72,9 @@
   }
 </script>
 
-{#if live && syncVisible({ isSub, behind: behind.length, onto, conflicts: conflicts.length, error })}
-  <section class="sync" aria-label={isSub ? 'Sub-change and its parent' : 'Change and its target branch'}>
-    {#if !isSub && onto}
+{#if live && syncVisible({ onto, conflicts: conflicts.length, error })}
+  <section class="sync" aria-label={isSub ? 'Sub-change and the branch of its parent' : 'Change and its target branch'}>
+    {#if onto}
       <div class="row">
         <span>{behindLine(sync?.branch ?? '', onto, behind.map(keyOfImpact))}</span>
         {#if !closed}
@@ -82,35 +83,23 @@
           </button>
         {/if}
       </div>
-    {:else if behind.length}
-      <div class="row">
-        <span>
-          The parent changed {behind.length} node{behind.length > 1 ? 's' : ''} this sub-change works on since it took {behind.length > 1 ? 'them' : 'it'}
-          ({behind.map(keyOfImpact).join(', ')}).
-        </span>
-        {#if !closed}
-          <button type="button" onclick={rebase} disabled={busy !== ''} title="Merge the parent's changes into this sub-change's drafts; the fields changed on both sides become conflicts">
-            {busy === 'rebase' ? 'Rebasing…' : 'Rebase'}
-          </button>
-        {/if}
-      </div>
     {/if}
     {#if conflicts.length}
-      <h4>Conflicts with {isSub ? 'the parent' : (sync?.branch ?? 'the target branch')}</h4>
+      <h4>Conflicts with {target}</h4>
       <ul>
         {#each conflicts as c (c.changeImpactId)}
           <li>
             <strong>{c.key}</strong>:
             {(c.conflicts ?? []).map(conflictLabel).join(', ')}
             {#if !closed}
-              <button type="button" class="link" onclick={() => keepMine(c.changeImpactId ?? '')} disabled={busy !== ''} title="Keep this sub-change's values for these fields (edit a field to settle it with another value)">
+              <button type="button" class="link" onclick={() => keepMine(c.changeImpactId ?? '')} disabled={busy !== ''} title="Keep this change's values for these fields (edit a field to settle it with another value)">
                 {busy === c.changeImpactId ? 'Keeping…' : 'Keep mine'}
               </button>
             {/if}
           </li>
         {/each}
       </ul>
-      <p class="hint">Edit a field to settle its conflict with another value; cancel the draft to take {isSub ? "the parent's" : 'the branch\'s'} node. A settled impact is reviewed again.</p>
+      <p class="hint">Edit a field to settle its conflict with another value; cancel the draft to take the node of {target}. A settled impact is reviewed again.</p>
     {/if}
     {#if error}<div class="error">{error}</div>{/if}
   </section>

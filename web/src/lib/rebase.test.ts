@@ -19,12 +19,11 @@ describe('root change behind its target (ADR 0101)', () => {
   });
 
   it('shows the pane only when there is something to say', () => {
-    const none = { isSub: false, behind: 0, onto: '', conflicts: 0, error: '' };
+    const none = { onto: '', conflicts: 0, error: '' };
     expect(syncVisible(none)).toBe(false);
     expect(syncVisible({ ...none, onto: 'T1' })).toBe(true);
     expect(syncVisible({ ...none, conflicts: 1 })).toBe(true);
-    expect(syncVisible({ ...none, isSub: true, onto: 'T1' })).toBe(false);
-    expect(syncVisible({ ...none, isSub: true, behind: 1 })).toBe(true);
+    expect(syncVisible({ ...none, error: 'boom' })).toBe(true);
   });
 });
 

@@ -273,10 +273,10 @@ export const graph = {
    * by the next commit. */
   withdrawImpact: (changeId: string, changeImpactId: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
-  /** Brings a sub-change up to date with its parent (ADR 0082): a three-way merge of the drafts the parent changed; the fields changed on both sides are conflicts. */
+  /** Rebases a change onto the head of the branch it was forked from (ADR 0101; a sub-change: its parent's branch, ADR 0103): the nodes changed on both sides are merged three-way, the fields changed on both sides are conflicts. */
   rebaseChange: (changeId: string) =>
     rpc<{ changeId: string }, { parentId?: string; impacts?: RebasedImpact[]; branch?: string; from?: string; onto?: string }>(GRAPH, 'RebaseChange', { changeId }),
-  /** Keeps the sub-change's values for the conflicts a rebase left on an impact (an edit of a field settles its own). */
+  /** Keeps the change's values for the conflicts a rebase left on an impact (an edit of a field settles its own). */
   impactNodeResolve: (changeId: string, changeImpactId: string) =>
     rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeResolve', { changeId, changeImpactId }),
   /** Where a sub-change stands against its parent: the impacts behind it, the conflicts to settle. */

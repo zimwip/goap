@@ -7,7 +7,6 @@
     isNotFound,
     formatDate,
     shortId,
-    type Baseline,
     ITEM_SUPERSEDED,
     type ChangeItem,
     type Change,
@@ -165,7 +164,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   let baselineName = $state('');
   let applying = $state(false);
-  let applied = $state<Baseline | undefined>();
   let moveOpen = $state(false);
   // the lifecycle definition the change follows, its decision points and the transition being taken (ADR 0058)
   let lcDef = $state<Lifecycle>();
@@ -267,7 +265,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     flows = [];
     defining = false;
     extraNodes = [];
-    applied = undefined;
     baselineName = '';
     if (!id) return;
     const ctrl = new AbortController();
@@ -459,9 +456,11 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   // applied, or applied on its own branch and waiting for its merge: nothing to apply any more
   const isApplied = $derived(change?.status === 'applied' || change?.status === 'committed');
   const closed = $derived(change?.status === 'applied' || change?.status === 'abandoned');
-  // a sub-change leaves no baseline: it is integrated into its parent (ADR 0081), so it has no baseline to name
+  // a sub-change commits on its own branch, forked from its parent's, and merges into it (ADR 0103): the same buttons as a
+  // root change, only the target is named differently
   const isSub = $derived(!!change?.parentId);
-  const unnamed = $derived(!isSub && !baselineName.trim());
+  const unnamed = $derived(!baselineName.trim());
+  const mergeTarget = $derived(isSub ? `parent change ${shortId(change?.parentId)}${mergeInto ? ` (${mergeInto})` : ''}` : mergeInto || 'the branch it was forked from');
   void loadTypes();
   const lcRows = $derived(lifecycleRows(typeCatalog.cat, nodes, attached, view?.nodes ?? [], posts, extraNodes, true));
   // the scope: what it shows, whether it can be edited, its colour
@@ -655,7 +654,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       const res = await graph.mergeChange(change.id, {});
       await load(change.id);
       if (res.change?.status === 'applied') {
-        notify(`Merged into ${mergeInto || 'its parent branch'}.`, 'ok');
+        notify(`Merged into ${mergeTarget}.`, 'ok');
         recordAction('merged the change');
       } else notify('The merge waits for its conflicts to be resolved.', 'info');
     } catch (e) {
@@ -702,27 +701,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     )
       void define({ status: 'abandoned' }, 'Change abandoned.');
   };
-
-  async function apply() {
-    if (!change?.id) return;
-    applying = true;
-    error = '';
-    try {
-      const parent = change.parentId;
-      applied = (await graph.applyChange(change.id, baselineName.trim())).baseline;
-      await load(change.id);
-      // a sub-change leaves no baseline: it is integrated into its parent (ADR 0081, 0082)
-      if (parent) applied = undefined;
-      notify(parent ? `Integrated into parent change ${shortId(parent)}.` : `Baseline ${applied?.name || shortId(applied?.id)} created.`, 'ok');
-    } catch (e) {
-      const message = errorMessage(e);
-      // a rebase that met conflicts stopped the apply: read the change again so the sync pane lists them (ADR 0101)
-      if (change?.id) await load(change.id).catch(() => undefined);
-      error = message;
-    } finally {
-      applying = false;
-    }
-  }
 
   /** Step one of apply (ADR 0056): the versions are written on the change's own branch; the merge into the branch it
    * was forked from stays a separate act (the "Committed" box below), e.g. when a release branch collects changes. */
@@ -953,25 +931,15 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         title: 'Ticks, actions, model calls, decisions and impacts of this change',
         run: () => openAudit(),
       },
-      isSub
-        ? {
-            id: 'apply',
-            label: applying ? 'Integrating…' : 'Integrate',
-            icon: 'check',
-            primary: true,
-            disabled: !change || applying || !commits.canMerge,
-            title: commits.mergeWhy ?? 'Merge the accepted modifications into the parent change',
-            run: apply,
-          }
-        : {
-            id: 'merge',
-            label: applying ? 'Merging…' : 'Merge',
-            icon: 'check',
-            primary: true,
-            disabled: !change || applying || !commits.canMerge,
-            title: commits.mergeWhy ?? `Merge the commits of the change into ${mergeInto || 'the branch it was forked from'} (rebased first when it moved)`,
-            run: mergeBranch,
-          },
+      {
+        id: 'merge',
+        label: applying ? 'Merging…' : 'Merge',
+        icon: 'check',
+        primary: true,
+        disabled: !change || applying || !commits.canMerge,
+        title: commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved)`,
+        run: mergeBranch,
+      },
     ],
   );
 </script>
@@ -1150,41 +1118,26 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
         <SubChangeSync change={ch} {closed} onchange={() => load(selected)} />
         <div class="apply row">
-          {#if isSub}
-            <p class="grow hint">Applying integrates this sub-change into its parent change, which lands it: no baseline of its own.</p>
-          {:else}
-            <div class="grow">
-              <label for="bname">Name of the new baseline</label>
-              <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
-            </div>
-          {/if}
-          {#if !isSub}
-            <button onclick={commit} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
-              {applying ? 'Working…' : 'Commit'}
-            </button>
-            <button class="primary" onclick={mergeBranch} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeInto || 'the branch it was forked from'} (rebased first when it moved); closes the change`}>
-              {applying ? 'Working…' : 'Merge'}
-            </button>
-          {:else}
-            <button class="primary" onclick={apply} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? 'Merge the accepted modifications into the parent change'}>
-              {applying ? 'Integrating…' : 'Integrate into parent'}
-            </button>
-          {/if}
+          <div class="grow">
+            <label for="bname">Name of the new baseline</label>
+            <input id="bname" type="text" bind:value={baselineName} disabled={isApplied} />
+          </div>
+          <button onclick={commit} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
+            {applying ? 'Working…' : 'Commit'}
+          </button>
+          <button class="primary" onclick={mergeBranch} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeTarget} (rebased first when it moved); closes the change`}>
+            {applying ? 'Working…' : isSub ? 'Merge into parent' : 'Merge'}
+          </button>
         </div>
-        {#if !isSub && committedOnBranch && !closed}
+        {#if committedOnBranch && !closed}
           <p class="hint" style="margin: 0.5rem 0 0">
-            Committed on {ch.branch}: the change stays open, edit and commit again, then merge it into {mergeInto || 'the branch it was forked from'}.
+            Committed on {ch.branch}: the change stays open, edit and commit again, then merge it into {mergeTarget}.
           </p>
         {/if}
         {#if awaiting.length}
           <div class="alert" role="status" style="margin: 0.75rem 0 0">
             {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
             <button type="button" class="link" onclick={() => (pane = 'reviews')}>Review them</button>
-          </div>
-        {/if}
-        {#if applied}
-          <div class="alert ok" style="margin: 0.75rem 0 0">
-            Baseline <button type="button" class="link" onclick={() => openBaseline(applied?.id)}>{applied.name || applied.id}</button> created.
           </div>
         {/if}
       </section>

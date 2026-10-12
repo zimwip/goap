@@ -1,4 +1,4 @@
-// A change rebased onto its parent (ADR 0082) or onto the head of its target branch (ADR 0101): the names of the conflicts a rebase leaves, read for people.
+// A change rebased onto the head of its target branch (ADR 0101; a sub-change: its parent's branch, ADR 0103): the names of the conflicts a rebase leaves, read for people.
 import { shortId } from './api';
 
 /** A conflict name (props.<key>, owner, state, link:<type>:<node>, node) as a reader sees it. */
@@ -21,9 +21,9 @@ export function behindLine(branch: string, onto: string, keys: string[]): string
   return keys.length ? `${base}: ${keys.join(', ')} changed there since this change took ${keys.length > 1 ? 'them' : 'it'}.` : `${base}.`;
 }
 
-/** Whether the sync pane has anything to say: a sub-change behind its parent, a root change behind its branch, conflicts, an error. */
-export function syncVisible(s: { isSub: boolean; behind: number; onto: string; conflicts: number; error: string }): boolean {
-  return (s.isSub ? s.behind > 0 : !!s.onto) || s.conflicts > 0 || !!s.error;
+/** Whether the sync pane has anything to say: the change is behind its target branch, conflicts, an error. */
+export function syncVisible(s: { onto: string; conflicts: number; error: string }): boolean {
+  return !!s.onto || s.conflicts > 0 || !!s.error;
 }
 
 /** What a "rebase" task of a run says conflicts, one line per impact: "REQ-1: property “title”, owner". */

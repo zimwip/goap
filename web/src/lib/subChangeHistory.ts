@@ -1,6 +1,8 @@
-// The history of a change and its sub-changes as one branch graph (ADR 0081, 0082): a lane per change, a row per event of
-// the impact log of its main flow, and the edges that tie the lanes: a sub-change copying a draft of its parent (the
-// fork), a rebase onto the parent's draft, the parent receiving a sub-change's draft (the integration).
+// The history of a change and its sub-changes as one branch graph: a lane per change, a row per event of the impact log of
+// its main flow, and the edges that tie the lanes. A sub-change works on its own branch forked from its parent's (ADR
+// 0103): its lane starts from where the parent stood, a rebase moves it onto the parent's branch, and its merge lands its
+// commits in the parent (the parent's `landed` event of the same version). The logs written before ADR 0103 keep their
+// edges: a copy of a parent's draft (the fork), a rebase onto the parent's draft, an integration of a sub-change's draft.
 import type { LaneEntry, LaneEdge } from './components/HistoryGraph.svelte';
 import { decodeLogEntry, shortId, type ImpactEvent, type LogEntry } from './api';
 
@@ -36,7 +38,19 @@ function patchOf(e: Event): Record<string, unknown> {
   return (e.patch ?? {}) as Record<string, unknown>;
 }
 
-function describe(e: Event, members: Map<string, FamilyMember>): Pick<HistoryItem, 'label' | 'kind'> {
+/** The change and log position that first landed a version, by `<node>@<version>`. */
+type Landings = Map<string, { change: string; seq: number; at: string }>;
+
+const landedKey = (e: Event) => (e.landed?.id ? `${e.landed.id}@${e.landed.version ?? 0}` : '');
+
+/** The sub-change whose merge this landing records: the version was landed first by a sub-change of the change. */
+function mergedFrom(e: Event, change: string, landings: Landings, members: Map<string, FamilyMember>): { change: string; seq: number } | undefined {
+  if (e.op !== 'landed') return undefined;
+  const first = landings.get(landedKey(e));
+  return first && first.change !== change && members.get(first.change)?.parentId === change ? first : undefined;
+}
+
+function describe(e: Event, members: Map<string, FamilyMember>, merged?: { change: string }): Pick<HistoryItem, 'label' | 'kind'> {
   const p = patchOf(e);
   const from = e.draft?.inherited ? ' from the parent’s draft' : '';
   switch (e.op) {
@@ -70,7 +84,13 @@ function describe(e: Event, members: Map<string, FamilyMember>): Pick<HistoryIte
     }
     case 'reviewed':
       return { label: `${e.review?.status ?? 'reviewed'}${e.review?.comment ? ` — ${e.review.comment}` : ''}`, kind: 'review' };
+    case 'rebased':
+      return { label: 'rebased onto the parent’s branch', kind: 'rebase' };
     case 'landed':
+      if (merged) {
+        const sub = members.get(merged.change);
+        return { label: `merged from sub-change ${sub?.title || shortId(merged.change)} as v${e.landed?.version ?? '?'}`, kind: 'integrate' };
+      }
       return { label: `landed as v${e.landed?.version ?? '?'}${e.branch ? ` on ${e.branch}` : ''}`, kind: 'land' };
     default:
       return { label: e.op ?? '', kind: 'edit' };
@@ -84,6 +104,20 @@ function describe(e: Event, members: Map<string, FamilyMember>): Pick<HistoryIte
 export function familyEntries(members: FamilyMember[], logs: Map<string, LogEntry[]>, key = ''): LaneEntry<HistoryItem>[] {
   const byId = new Map(members.map((m) => [m.id, m]));
   const items: { item: HistoryItem; event: Event }[] = [];
+  // the first landing of each version: a sub-change lands its commits on its own branch, then its merge lands them in
+  // the parent
+  const landings: Landings = new Map();
+  for (const m of members) {
+    for (const l of logs.get(m.id) ?? []) {
+      const e = decodeLogEntry<Event>(l);
+      const k = landedKey(e);
+      const seq = Number(l.seq ?? e.seq ?? 0);
+      if (e.op !== 'landed' || !k || e.flow) continue;
+      const had = landings.get(k);
+      if (!had || (e.at ?? '') < had.at) landings.set(k, { change: m.id, seq, at: e.at ?? '' });
+    }
+  }
+  const merges = new Map<string, { change: string; seq: number }>();
   for (const m of members) {
     const keys = new Map<string, string>();
     for (const l of logs.get(m.id) ?? []) {
@@ -94,6 +128,8 @@ export function familyEntries(members: FamilyMember[], logs: Map<string, LogEntr
       const k = keys.get(e.impactId) ?? shortId(e.impactId);
       if (key && k !== key) continue;
       const seq = Number(l.seq ?? e.seq ?? 0);
+      const merged = mergedFrom(e, m.id, landings, byId);
+      if (merged) merges.set(entryId(m.id, seq), merged);
       items.push({
         event: e,
         item: {
@@ -105,7 +141,7 @@ export function familyEntries(members: FamilyMember[], logs: Map<string, LogEntr
           impact: e.impactId,
           key: k,
           by: e.by,
-          ...describe(e, byId),
+          ...describe(e, byId, merged),
         },
       });
     }
@@ -141,6 +177,8 @@ export function familyEntries(members: FamilyMember[], logs: Map<string, LogEntr
           .at(-1);
         if (last) parents.push({ id: entryId(integrated.change, last.item.seq), label: 'integrated' });
       }
+      const merged = merges.get(entryId(m.id, item.seq));
+      if (merged && present.has(entryId(merged.change, merged.seq))) parents.push({ id: entryId(merged.change, merged.seq), label: 'merged' });
       const seen = new Set<string>();
       out.push({
         id: entryId(m.id, item.seq),

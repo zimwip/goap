@@ -1,8 +1,8 @@
 <script lang="ts">
-  // History of a change with its parent and its sub-changes (ADR 0081, 0082), as a branch graph: a lane per change, a row
-  // per event of its impact log, the parent's lane on the left. A sub-change copying a draft of its parent forks from the
-  // parent's event it copied, a rebase ties back to the parent's event it caught up with, an integration merges the
-  // sub-change's lane into the parent's. A node filter follows one node across the family.
+  // History of a change with its parent and its sub-changes (ADR 0103), as a branch graph: a lane per change, a row per
+  // event of its impact log, the parent's lane on the left. A sub-change's lane starts from where its parent stood (its
+  // branch is forked from the parent's), a rebase onto the parent's branch is named, and its merge ties the parent's
+  // landing of a version to the sub-change's own. A node filter follows one node across the family.
   import { graph, errorMessage, formatDate, type Change, type LogEntry } from '../api';
   import { stamp, keyOf } from '../flux/signals.svelte';
   import { openTab } from '../shell/tabs.svelte';
