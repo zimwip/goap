@@ -513,3 +513,29 @@ export interface DecisionPolicy {
   /** RFC 3339 */
   deadline?: string;
 }
+
+/** A graph snapshot as exported (ADR 0104): the document is JSON, format goap.graph.snapshot/v1. */
+export interface GraphExport {
+  document?: string;
+  filename?: string;
+  mediaType?: string;
+  nodes?: number;
+}
+
+export interface GraphImport {
+  document: string;
+  title?: string;
+  intent?: string;
+  methodology?: string;
+  ownerOrg?: string;
+  projectId?: string;
+}
+
+/** The outcome of an import: the change it created (none when the graph already holds the snapshot). */
+export interface GraphImportResult {
+  change?: Change;
+  created?: number;
+  updated?: number;
+  unchanged?: number;
+  warnings?: string[];
+}

@@ -5262,9 +5262,10 @@ func (*DeleteDomainResponse) Descriptor() ([]byte, []int) {
 }
 
 type ImportDomainRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Yaml          string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
-	Publish       bool                   `protobuf:"varint,2,opt,name=publish,proto3" json:"publish,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the definition, YAML or JSON
+	Yaml          string `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	Publish       bool   `protobuf:"varint,2,opt,name=publish,proto3" json:"publish,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5366,9 +5367,11 @@ func (x *ImportDomainResponse) GetIssues() []*Issue {
 }
 
 type ExportDomainRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Name    string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// yaml (default) | json
+	Format        string `protobuf:"bytes,3,opt,name=format,proto3" json:"format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5417,10 +5420,19 @@ func (x *ExportDomainRequest) GetVersion() string {
 	return ""
 }
 
+func (x *ExportDomainRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
 type ExportDomainResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Yaml          string                 `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
-	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the definition in the format asked (the field keeps its name for JSON too)
+	Yaml          string `protobuf:"bytes,1,opt,name=yaml,proto3" json:"yaml,omitempty"`
+	Filename      string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	MediaType     string `protobuf:"bytes,3,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5465,6 +5477,13 @@ func (x *ExportDomainResponse) GetYaml() string {
 func (x *ExportDomainResponse) GetFilename() string {
 	if x != nil {
 		return x.Filename
+	}
+	return ""
+}
+
+func (x *ExportDomainResponse) GetMediaType() string {
+	if x != nil {
+		return x.MediaType
 	}
 	return ""
 }
@@ -7935,13 +7954,16 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\apublish\x18\x02 \x01(\bR\apublish\"y\n" +
 	"\x14ImportDomainResponse\x120\n" +
 	"\x06domain\x18\x01 \x01(\v2\x18.goap.registry.v1.DomainR\x06domain\x12/\n" +
-	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"C\n" +
+	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"[\n" +
 	"\x13ExportDomainRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"F\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x16\n" +
+	"\x06format\x18\x03 \x01(\tR\x06format\"e\n" +
 	"\x14ExportDomainResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"E\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1d\n" +
+	"\n" +
+	"media_type\x18\x03 \x01(\tR\tmediaType\"E\n" +
 	"\x15GetDomainUsageRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"R\n" +

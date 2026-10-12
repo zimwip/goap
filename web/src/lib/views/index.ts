@@ -53,6 +53,7 @@ import RunTab from './editors/RunTab.svelte';
 import ChangeTab from './editors/ChangeTab.svelte';
 import PoliciesTab from './editors/PoliciesTab.svelte';
 import ImportTab from './editors/ImportTab.svelte';
+import { importKind, IMPORT_KINDS } from './editors/importKinds';
 
 import EventsConsole from './bottom/EventsConsole.svelte';
 import LogsConsole from './bottom/LogsConsole.svelte';
@@ -596,6 +597,6 @@ registerView({
   title: 'Import',
   icon: 'upload',
   component: ImportTab,
-  key: () => 'yaml',
-  tabTitle: () => 'Import YAML',
+  key: (p) => importKind(p.what),
+  tabTitle: (t) => IMPORT_KINDS[importKind(t.params.what)].title,
 });

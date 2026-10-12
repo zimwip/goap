@@ -88,7 +88,8 @@ export function domainActions(d: DomainDraft): ToolbarAction[] {
     }
   }
   if (!d.isNew) {
-    acts.push({ id: 'export', label: 'Export', icon: 'download', title: 'Export to YAML', disabled: busy, run: () => d.exportYaml() });
+    acts.push({ id: 'export', label: 'Export', icon: 'download', title: 'Export to YAML', disabled: busy, run: () => d.exportAs('yaml') });
+    acts.push({ id: 'exportJson', label: 'Export JSON', icon: 'download', title: 'Export to JSON', disabled: busy, run: () => d.exportAs('json') });
     if (!d.builtin) acts.push({
       id: 'version',
       label: 'New version',

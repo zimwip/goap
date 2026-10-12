@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -67,6 +67,11 @@ export const graph = {
   listChangeLog: (req: ChangeLogQuery, signal?: AbortSignal) =>
     rpc<ChangeLogQuery, { entries?: LogEntry[]; counts?: Record<string, number> }>(GRAPH, 'ListChangeLog', req, signal),
   /** The whole log of a change as W3C PROV-O provenance, a JSON-LD document (ADR 0057). */
+  /** The state of a namespace at a baseline (default: the head of main) as a JSON snapshot, without history (ADR 0104). */
+  exportGraph: (namespace: string, branch?: string, baselineId?: string) =>
+    rpc<{ namespace: string; branch?: string; baselineId?: string }, GraphExport>(GRAPH, 'ExportGraph', { namespace, branch, baselineId }),
+  /** Imports a JSON snapshot into main as one new change, left open for review (ADR 0104). */
+  importGraph: (req: GraphImport) => rpc<GraphImport, GraphImportResult>(GRAPH, 'ImportGraph', req),
   exportChangeProvenance: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { document?: string; filename?: string; mediaType?: string }>(
       GRAPH,

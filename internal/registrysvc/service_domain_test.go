@@ -186,9 +186,21 @@ func TestDomainImportExport(t *testing.T) {
 	if err != nil || r.Status != StatusPublished {
 		t.Fatalf("import: %+v %v", r, err)
 	}
-	out, name, err := s.ExportDomain(ctx, "alm", "1")
+	out, name, err := s.ExportDomain(ctx, "alm", "1", "")
 	if err != nil || name != "domain-alm-1.yaml" || !strings.Contains(string(out), "extends: Need") {
 		t.Fatalf("export: %s %s %v", name, out, err)
+	}
+	// JSON: the same document, imported back as another version
+	js, name, err := s.ExportDomain(ctx, "alm", "1", "json")
+	if err != nil || name != "domain-alm-1.json" || !strings.Contains(string(js), `"extends": "Need"`) {
+		t.Fatalf("export JSON: %s %s %v", name, js, err)
+	}
+	r2, _, err := s.ImportDomain(ctx, []byte(strings.Replace(string(js), `"version": "1"`, `"version": "2"`, 1)), false)
+	if err != nil || r2.Domain.Version != "2" || len(r2.Domain.NodeTypes) != 2 || len(r2.Domain.LinkTypes) != 1 {
+		t.Fatalf("import JSON: %+v %v", r2, err)
+	}
+	if _, _, err := s.ExportDomain(ctx, "alm", "1", "xml"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("unknown format: %v", err)
 	}
 }
 

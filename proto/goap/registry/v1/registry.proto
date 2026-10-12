@@ -746,6 +746,7 @@ message DeleteDomainRequest {
 message DeleteDomainResponse {}
 
 message ImportDomainRequest {
+  // the definition, YAML or JSON
   string yaml = 1;
   bool publish = 2;
 }
@@ -758,11 +759,15 @@ message ImportDomainResponse {
 message ExportDomainRequest {
   string name = 1;
   string version = 2;
+  // yaml (default) | json
+  string format = 3;
 }
 
 message ExportDomainResponse {
+  // the definition in the format asked (the field keeps its name for JSON too)
   string yaml = 1;
   string filename = 2;
+  string media_type = 3;
 }
 
 message GetDomainUsageRequest {

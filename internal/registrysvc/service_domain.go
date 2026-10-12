@@ -2,11 +2,14 @@ package registrysvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain/def"
@@ -397,14 +400,31 @@ func (s *Service) importPublishedDomain(ctx context.Context, d def.Domain) (Doma
 	return saved, nil, nil
 }
 
-// ExportDomain renders a version as YAML.
-func (s *Service) ExportDomain(ctx context.Context, name, version string) ([]byte, string, error) {
+// ExportDomain renders a version as YAML, or as JSON with format "json" (the same document: ImportDomain reads both).
+func (s *Service) ExportDomain(ctx context.Context, name, version, format string) ([]byte, string, error) {
 	r, err := s.GetDomain(ctx, name, version)
 	if err != nil {
 		return nil, "", err
 	}
 	out, err := r.Domain.YAML()
-	return out, fmt.Sprintf("domain-%s-%s.yaml", r.Domain.Name, r.Domain.Version), err
+	if err != nil {
+		return nil, "", err
+	}
+	base := fmt.Sprintf("domain-%s-%s", r.Domain.Name, r.Domain.Version)
+	switch format {
+	case "", "yaml":
+		return out, base + ".yaml", nil
+	case "json":
+		// through the YAML document, so that the JSON carries the same names and omissions
+		var doc any
+		if err := yaml.Unmarshal(out, &doc); err != nil {
+			return nil, "", err
+		}
+		js, err := json.MarshalIndent(doc, "", "  ")
+		return js, base + ".json", err
+	default:
+		return nil, "", fmt.Errorf("unknown export format %q (yaml or json): %w", format, ErrInvalid)
+	}
 }
 
 // SeedDomains imports and publishes the YAML files of dir whose domain version

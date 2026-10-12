@@ -72,7 +72,9 @@ export const COMMANDS: Command[] = [
   },
   { id: 'searchNodes', label: 'Search nodes', icon: 'search', shortcut: 'Ctrl+Shift+F', run: () => openSearch() },
   { id: 'tokenUsage', label: 'Token usage dashboard', icon: 'coins', run: () => openUsage() },
-  { id: 'import', label: 'Import a methodology (YAML)', icon: 'upload', run: () => openTab({ kind: 'import', params: {} }, { pin: true }) },
+  { id: 'import', label: 'Import a methodology (YAML or JSON)', icon: 'upload', run: () => openTab({ kind: 'import', params: {} }, { pin: true }) },
+  { id: 'importDomain', label: 'Import a domain (YAML or JSON)', icon: 'upload', run: () => openTab({ kind: 'import', params: { what: 'domain' } }, { pin: true }) },
+  { id: 'importGraph', label: 'Import a graph snapshot (JSON)', icon: 'upload', run: () => openTab({ kind: 'import', params: { what: 'graph' } }, { pin: true }) },
   { id: 'policies', label: 'Open access policies', icon: 'shield', run: () => openTab({ kind: 'policies', params: {} }) },
   { id: 'dsl', label: 'DSL Help', icon: 'help', run: () => showTool('right', 'dsl') },
   {

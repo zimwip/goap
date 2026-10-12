@@ -224,6 +224,50 @@ func (h *Handler) ExportChangeProvenance(ctx context.Context, r *connect.Request
 		Filename: "change-" + string(c.ID) + ".prov.jsonld", MediaType: prov.MediaType}), nil
 }
 
+// ExportGraph serves the state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+func (h *Handler) ExportGraph(ctx context.Context, r *connect.Request[graphv1.ExportGraphRequest]) (*connect.Response[graphv1.ExportGraphResponse], error) {
+	s, err := h.Graph.ExportSnapshot(ctx, r.Msg.Namespace, r.Msg.Branch, domain.BaselineID(r.Msg.BaselineId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	doc, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	name := fmt.Sprintf("graph-%s-%s.json", s.Namespace, s.ExportedAt.Format("20060102-150405"))
+	return connect.NewResponse(&graphv1.ExportGraphResponse{Document: string(doc), Filename: name, MediaType: "application/json", Nodes: int32(len(s.Nodes))}), nil
+}
+
+// ImportGraph imports a JSON snapshot as one new change of the caller (ADR 0104): every node type it writes is
+// authorized like a creation in that change (ABAC object:create on its project, the gate of the access nodes).
+func (h *Handler) ImportGraph(ctx context.Context, r *connect.Request[graphv1.ImportGraphRequest]) (*connect.Response[graphv1.ImportGraphResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	s, err := graph.ParseSnapshot([]byte(r.Msg.Document))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	owner, err := h.resolveOwner(ctx, r.Msg.OwnerOrg)
+	if err != nil {
+		return nil, err
+	}
+	out, err := h.Graph.ImportSnapshot(ctx, graph.SnapshotImport{Snapshot: s, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
+		OwnerOrg: owner, ProjectID: h.projectOf(ctx, r.Msg.ProjectId), By: authz.From(ctx).Subject,
+		Gate: func(c domain.Change, typ string) error { return h.checkCreate(ctx, c, typ) }})
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	resp := &graphv1.ImportGraphResponse{Created: int32(out.Created), Updated: int32(out.Updated), Unchanged: int32(out.Unchanged), Warnings: out.Warnings}
+	if out.Change != "" {
+		c, err := h.Graph.Change(ctx, out.Change)
+		if err != nil {
+			return nil, rpcerr.ToConnect(err)
+		}
+		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
+		resp.Change = pbconv.ChangeToPB(c)
+	}
+	return connect.NewResponse(resp), nil
+}
+
 func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graphv1.ListChangeEventsRequest]) (*connect.Response[graphv1.ListChangeEventsResponse], error) {
 	evs, err := h.Graph.ChangeEvents(ctx, domain.ChangeID(r.Msg.ChangeId))
 	if err != nil {

@@ -3,6 +3,7 @@
 // it is saved and published straight to the registry.
 import { SvelteMap } from 'svelte/reactivity';
 import { registry, errorMessage, bumpPatch, compareVersions, type Domain, type DomainSummary, type DomainUser, type Issue } from '../api';
+import { downloadText } from '../download';
 import { emptyDomainForm, fromDomainForm, toDomainForm, type DomainForm } from '../domainForm';
 import { normalizePath } from '../methodologyForm';
 import type { NormIssue } from './drafts.svelte';
@@ -261,17 +262,12 @@ export class DomainDraft {
     return res.domain?.version ?? v;
   }
 
-  async exportYaml(): Promise<void> {
+  /** Downloads the saved version as YAML or JSON (ImportDomain reads both). */
+  async exportAs(format: 'yaml' | 'json'): Promise<void> {
     await this.run('export', async () => {
-      const res = await registry.exportDomain(this.name, this.version);
-      const url = URL.createObjectURL(new Blob([res.yaml ?? ''], { type: 'application/yaml' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = res.filename || `domain-${this.name}-${this.version}.yaml`;
-      document.body.append(a);
-      a.click();
-      a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      const res = await registry.exportDomain(this.name, this.version, format);
+      const type = res.mediaType || (format === 'json' ? 'application/json' : 'application/yaml');
+      downloadText(res.yaml ?? '', res.filename || `domain-${this.name}-${this.version}.${format}`, type);
     });
   }
 

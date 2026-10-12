@@ -74,6 +74,12 @@ const (
 	// GraphServiceExportChangeProvenanceProcedure is the fully-qualified name of the GraphService's
 	// ExportChangeProvenance RPC.
 	GraphServiceExportChangeProvenanceProcedure = "/goap.graph.v1.GraphService/ExportChangeProvenance"
+	// GraphServiceExportGraphProcedure is the fully-qualified name of the GraphService's ExportGraph
+	// RPC.
+	GraphServiceExportGraphProcedure = "/goap.graph.v1.GraphService/ExportGraph"
+	// GraphServiceImportGraphProcedure is the fully-qualified name of the GraphService's ImportGraph
+	// RPC.
+	GraphServiceImportGraphProcedure = "/goap.graph.v1.GraphService/ImportGraph"
 	// GraphServiceCreateChangeProcedure is the fully-qualified name of the GraphService's CreateChange
 	// RPC.
 	GraphServiceCreateChangeProcedure = "/goap.graph.v1.GraphService/CreateChange"
@@ -312,6 +318,10 @@ type GraphServiceClient interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
+	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
+	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
+	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -544,6 +554,18 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceExportChangeProvenanceProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ExportChangeProvenance")),
+			connect.WithClientOptions(opts...),
+		),
+		exportGraph: connect.NewClient[v1.ExportGraphRequest, v1.ExportGraphResponse](
+			httpClient,
+			baseURL+GraphServiceExportGraphProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ExportGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		importGraph: connect.NewClient[v1.ImportGraphRequest, v1.ImportGraphResponse](
+			httpClient,
+			baseURL+GraphServiceImportGraphProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ImportGraph")),
 			connect.WithClientOptions(opts...),
 		),
 		createChange: connect.NewClient[v1.CreateChangeRequest, v1.CreateChangeResponse](
@@ -1010,6 +1032,8 @@ type graphServiceClient struct {
 	listChangeEvents       *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
 	listChangeLog          *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
 	exportChangeProvenance *connect.Client[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse]
+	exportGraph            *connect.Client[v1.ExportGraphRequest, v1.ExportGraphResponse]
+	importGraph            *connect.Client[v1.ImportGraphRequest, v1.ImportGraphResponse]
 	createChange           *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
 	getChange              *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
 	listChanges            *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
@@ -1159,6 +1183,16 @@ func (c *graphServiceClient) ListChangeLog(ctx context.Context, req *connect.Req
 // ExportChangeProvenance calls goap.graph.v1.GraphService.ExportChangeProvenance.
 func (c *graphServiceClient) ExportChangeProvenance(ctx context.Context, req *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error) {
 	return c.exportChangeProvenance.CallUnary(ctx, req)
+}
+
+// ExportGraph calls goap.graph.v1.GraphService.ExportGraph.
+func (c *graphServiceClient) ExportGraph(ctx context.Context, req *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error) {
+	return c.exportGraph.CallUnary(ctx, req)
+}
+
+// ImportGraph calls goap.graph.v1.GraphService.ImportGraph.
+func (c *graphServiceClient) ImportGraph(ctx context.Context, req *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error) {
+	return c.importGraph.CallUnary(ctx, req)
 }
 
 // CreateChange calls goap.graph.v1.GraphService.CreateChange.
@@ -1557,6 +1591,10 @@ type GraphServiceHandler interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
+	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
+	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
+	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -1785,6 +1823,18 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceExportChangeProvenanceProcedure,
 		svc.ExportChangeProvenance,
 		connect.WithSchema(graphServiceMethods.ByName("ExportChangeProvenance")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceExportGraphHandler := connect.NewUnaryHandler(
+		GraphServiceExportGraphProcedure,
+		svc.ExportGraph,
+		connect.WithSchema(graphServiceMethods.ByName("ExportGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceImportGraphHandler := connect.NewUnaryHandler(
+		GraphServiceImportGraphProcedure,
+		svc.ImportGraph,
+		connect.WithSchema(graphServiceMethods.ByName("ImportGraph")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceCreateChangeHandler := connect.NewUnaryHandler(
@@ -2263,6 +2313,10 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListChangeLogHandler.ServeHTTP(w, r)
 		case GraphServiceExportChangeProvenanceProcedure:
 			graphServiceExportChangeProvenanceHandler.ServeHTTP(w, r)
+		case GraphServiceExportGraphProcedure:
+			graphServiceExportGraphHandler.ServeHTTP(w, r)
+		case GraphServiceImportGraphProcedure:
+			graphServiceImportGraphHandler.ServeHTTP(w, r)
 		case GraphServiceCreateChangeProcedure:
 			graphServiceCreateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeProcedure:
@@ -2478,6 +2532,14 @@ func (UnimplementedGraphServiceHandler) ListChangeLog(context.Context, *connect.
 
 func (UnimplementedGraphServiceHandler) ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ExportChangeProvenance is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ExportGraph is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImportGraph is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error) {

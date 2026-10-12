@@ -91,8 +91,13 @@ export const registry = {
       'ImportDomain',
       publish ? { yaml, publish } : { yaml },
     ),
-  exportDomain: (name: string, version: string) =>
-    rpc<NameVersion, { yaml?: string; filename?: string }>(REGISTRY, 'ExportDomain', { name, version }),
+  /** The definition of a domain version, YAML (default) or JSON: the content is in `yaml` whatever the format. */
+  exportDomain: (name: string, version: string, format: 'yaml' | 'json' = 'yaml') =>
+    rpc<NameVersion & { format?: string }, { yaml?: string; filename?: string; mediaType?: string }>(REGISTRY, 'ExportDomain', {
+      name,
+      version,
+      ...(format === 'json' ? { format } : {}),
+    }),
   /** Methodology versions referencing a domain version (unpinned references included). */
   getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
     rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),

@@ -17,6 +17,7 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import Icon from '../../shell/Icon.svelte';
+  import { downloadText } from '../../download';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: not offered here by default.
@@ -137,8 +138,24 @@
     });
   }
 
+  /** Downloads the head of a branch of the namespace as a JSON snapshot, without history (ADR 0104). */
+  async function exportSnapshot(branch: string) {
+    const ns = baselineTool.namespace;
+    if (!ns) return;
+    try {
+      const res = await graph.exportGraph(ns, branch);
+      downloadText(res.document ?? '', res.filename || `graph-${ns}.json`, res.mediaType || 'application/json');
+      notify(`Exported ${res.nodes ?? 0} node(s) of ${ns} (${branch}).`, 'ok');
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
   function menu(e: MouseEvent, b: Branch) {
-    const items: ContextMenuItem[] = [{ label: 'Open branch from here…', icon: 'branch', disabled: !headOf(b)?.id, run: () => openFrom(b) }];
+    const items: ContextMenuItem[] = [
+      { label: 'Open branch from here…', icon: 'branch', disabled: !headOf(b)?.id, run: () => openFrom(b) },
+      { label: 'Export head (JSON snapshot)', icon: 'download', disabled: !headOf(b)?.id, run: () => exportSnapshot(b.name ?? 'main') },
+    ];
     if (isChangeBranch(b)) {
       // a change's branch is merged by its change (IntegrateChange), never by hand
       const change = changeOfBranch(b);
@@ -163,6 +180,21 @@
       {#if baselineTool.namespace && !namespaces.includes(baselineTool.namespace)}<option value={baselineTool.namespace}>{baselineTool.namespace}</option>{/if}
       {#each choices as ns (ns)}<option value={ns}>{ns}</option>{/each}
     </select>
+    <button
+      type="button"
+      class="ghost small"
+      title="Export the head of {baselineTool.branch || 'main'} as a JSON snapshot (no history)"
+      aria-label="Export graph"
+      disabled={!baselineTool.namespace}
+      onclick={() => exportSnapshot(baselineTool.branch || 'main')}><Icon name="download" size={14} /></button
+    >
+    <button
+      type="button"
+      class="ghost small"
+      title="Import a graph snapshot (JSON) as a new change"
+      aria-label="Import graph"
+      onclick={() => openTab({ kind: 'import', params: { what: 'graph' } }, { pin: true })}><Icon name="upload" size={14} /></button
+    >
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => reload++}
       ><Icon name="refresh" size={14} /></button
     >

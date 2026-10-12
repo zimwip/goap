@@ -240,11 +240,15 @@ func (h *Handler) ImportDomain(ctx context.Context, r *connect.Request[registryv
 }
 
 func (h *Handler) ExportDomain(ctx context.Context, r *connect.Request[registryv1.ExportDomainRequest]) (*connect.Response[registryv1.ExportDomainResponse], error) {
-	out, name, err := h.Service.ExportDomain(ctx, r.Msg.Name, r.Msg.Version)
+	out, name, err := h.Service.ExportDomain(ctx, r.Msg.Name, r.Msg.Version, r.Msg.Format)
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(&registryv1.ExportDomainResponse{Yaml: string(out), Filename: name}), nil
+	media := "application/yaml"
+	if r.Msg.Format == "json" {
+		media = "application/json"
+	}
+	return connect.NewResponse(&registryv1.ExportDomainResponse{Yaml: string(out), Filename: name, MediaType: media}), nil
 }
 
 func (h *Handler) GetDomainUsage(ctx context.Context, r *connect.Request[registryv1.GetDomainUsageRequest]) (*connect.Response[registryv1.GetDomainUsageResponse], error) {

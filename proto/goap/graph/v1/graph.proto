@@ -33,6 +33,10 @@ service GraphService {
   rpc ListChangeLog(ListChangeLogRequest) returns (ListChangeLogResponse);
   // The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
   rpc ExportChangeProvenance(ExportChangeProvenanceRequest) returns (ExportChangeProvenanceResponse);
+  // The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+  rpc ExportGraph(ExportGraphRequest) returns (ExportGraphResponse);
+  // Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
+  rpc ImportGraph(ImportGraphRequest) returns (ImportGraphResponse);
 
   // Change axis
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
@@ -580,6 +584,44 @@ message ExportChangeProvenanceResponse {
   string document = 1;
   string filename = 2;
   string media_type = 3;
+}
+
+message ExportGraphRequest {
+  string namespace = 1;
+  // the branch whose head is exported (default main), unless a baseline is named
+  string branch = 2;
+  string baseline_id = 3;
+}
+
+message ExportGraphResponse {
+  // the snapshot (format goap.graph.snapshot/v1)
+  string document = 1;
+  string filename = 2;
+  string media_type = 3;
+  int32 nodes = 4;
+}
+
+message ImportGraphRequest {
+  // the snapshot (format goap.graph.snapshot/v1)
+  string document = 1;
+  // title, intent and methodology of the change the import creates (defaults when empty)
+  string title = 2;
+  string intent = 3;
+  string methodology = 4;
+  // unit holding the change (empty: the default organisation; "@me": the caller's personal unit) and its project
+  // (empty: the caller's active project)
+  string owner_org = 5;
+  string project_id = 6;
+}
+
+message ImportGraphResponse {
+  // the change created; unset when the graph already holds the snapshot
+  Change change = 1;
+  int32 created = 2;
+  int32 updated = 3;
+  int32 unchanged = 4;
+  // what the import left out (unknown owner, link to a missing node, lifecycle state not reached)
+  repeated string warnings = 5;
 }
 
 message ListChangeEventsRequest {

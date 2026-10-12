@@ -177,6 +177,9 @@
     <button type="button" class="ghost small" title="New domain" aria-label="New domain" onclick={() => openTab(domainSpec('', ''), { pin: true })}
       ><Icon name="plus" size={14} /></button
     >
+    <button type="button" class="ghost small" title="Import a domain (YAML or JSON)" aria-label="Import a domain"
+      onclick={() => openTab({ kind: 'import', params: { what: 'domain' } }, { pin: true })}><Icon name="upload" size={14} /></button
+    >
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={domains.loading} onclick={() => refreshDomains()}
       ><Icon name="refresh" size={14} /></button
     >
