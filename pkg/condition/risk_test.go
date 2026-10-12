@@ -35,3 +35,22 @@ func TestRiskConditions(t *testing.T) {
 		t.Fatalf("register %+v", rs)
 	}
 }
+
+func TestDependencyConditions(t *testing.T) {
+	set, err := Compile(MustLibrary(LibraryDependencies))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bb domain.Blackboard
+	if state := set.Evaluate(bb).State; !state["dependencies_met"] || state["dependencies_pending"] {
+		t.Fatalf("no dependency: %v", state)
+	}
+	bb = bb.WithFacet(domain.FacetDependencies, []domain.Dependency{{ID: "a", Satisfied: true}, {ID: "b", Reason: "not merged yet"}})
+	if state := set.Evaluate(bb).State; state["dependencies_met"] || !state["dependencies_pending"] {
+		t.Fatalf("one dependency pending: %v", state)
+	}
+	ok, err := CheckGuard(`dependencies.size() == 2 && change.dependsOn.size() == 0`, bb, nil, "", "")
+	if err != nil || !ok {
+		t.Fatalf("the guards see the dependencies: %v %v", ok, err)
+	}
+}

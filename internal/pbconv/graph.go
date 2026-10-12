@@ -272,7 +272,8 @@ func ItemsFromPB(its []*graphv1.ChangeItem) []domain.ChangeItem {
 func ChangeToPB(c domain.Change) *graphv1.Change {
 	return &graphv1.Change{Id: string(c.ID), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentId: string(c.ParentID), OwnerOrg: c.OwnerOrg, Status: string(c.Status),
 		BaselineId: string(c.BaselineID), ResultBaselineId: string(c.ResultBaselineID), Data: Struct(c.Data), Items: ItemsToPB(c.Items), CreatedAt: Time(c.CreatedAt),
-		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansToPB(c.Guardians)}
+		Branch: domain.BranchOf(c.Branch), Nodes: ChangeImpactsToPB(c.Nodes), ProjectId: c.ProjectID, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansToPB(c.Guardians),
+		DependsOn: changeIDsToPB(c.DependsOn)}
 }
 
 func ChangeFromPB(c *graphv1.Change) domain.Change {
@@ -281,7 +282,8 @@ func ChangeFromPB(c *graphv1.Change) domain.Change {
 	}
 	return domain.Change{ID: domain.ChangeID(c.Id), Title: c.Title, Intent: c.Intent, Methodology: c.Methodology, Goal: c.Goal, Namespace: c.Namespace, ParentID: domain.ChangeID(c.ParentId), OwnerOrg: c.OwnerOrg, Status: domain.ChangeStatus(c.Status),
 		BaselineID: domain.BaselineID(c.BaselineId), ResultBaselineID: domain.BaselineID(c.ResultBaselineId), Data: Map(c.Data), Items: ItemsFromPB(c.Items), CreatedAt: FromTime(c.CreatedAt),
-		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: c.ProjectId, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansFromPB(c.Guardians)}
+		Branch: c.Branch, Nodes: ChangeImpactsFromPB(c.Nodes), ProjectID: c.ProjectId, Lifecycle: c.Lifecycle, State: c.State, Guardians: guardiansFromPB(c.Guardians),
+		DependsOn: ChangeIDsFromPB(c.DependsOn)}
 }
 
 func BranchToPB(b domain.Branch) *graphv1.Branch {
@@ -452,6 +454,43 @@ func guardiansFromPB(gs []*graphv1.GuardianRef) []domain.GuardianRef {
 	var out []domain.GuardianRef
 	for _, g := range gs {
 		out = append(out, domain.GuardianRef{Methodology: g.Methodology, Version: g.Version})
+	}
+	return out
+}
+
+func changeIDsToPB(ids []domain.ChangeID) []string {
+	var out []string
+	for _, id := range ids {
+		out = append(out, string(id))
+	}
+	return out
+}
+
+// ChangeIDsFromPB converts a list of change ids.
+func ChangeIDsFromPB(ids []string) []domain.ChangeID {
+	var out []domain.ChangeID
+	for _, id := range ids {
+		out = append(out, domain.ChangeID(id))
+	}
+	return out
+}
+
+// DependenciesToPB converts dependencies between changes (ADR 0108).
+func DependenciesToPB(ds []domain.Dependency) []*graphv1.Dependency {
+	var out []*graphv1.Dependency
+	for _, d := range ds {
+		out = append(out, &graphv1.Dependency{Id: string(d.ID), Title: d.Title, Methodology: d.Methodology, Status: string(d.Status),
+			State: d.State, ParentId: string(d.ParentID), Satisfied: d.Satisfied, Reason: d.Reason})
+	}
+	return out
+}
+
+// DependenciesFromPB converts dependencies between changes (ADR 0108).
+func DependenciesFromPB(ds []*graphv1.Dependency) []domain.Dependency {
+	var out []domain.Dependency
+	for _, d := range ds {
+		out = append(out, domain.Dependency{ID: domain.ChangeID(d.Id), Title: d.Title, Methodology: d.Methodology, Status: domain.ChangeStatus(d.Status),
+			State: d.State, ParentID: domain.ChangeID(d.ParentId), Satisfied: d.Satisfied, Reason: d.Reason})
 	}
 	return out
 }

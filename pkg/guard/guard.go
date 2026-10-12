@@ -21,7 +21,8 @@ import (
 // the conditions of a methodology do, the decision points of the change (`decisionPoints`) and the world state
 // (`world`: condition name to bool); `node` and `children` are empty then. The guardian of an outer methodology of the
 // guardian chain of a change (ADR 0106) sees `integrator` too: the change of that methodology the change is attached
-// to (`attached`, `id`, `methodology`, `state`, `status`; `attached` false and the rest empty when it is not).
+// to (`attached`, `id`, `methodology`, `state`, `status`; `attached` false and the rest empty when it is not). It sees
+// the changes the change depends on (`dependencies`, ADR 0108) as the conditions do.
 type Guard struct {
 	prog cel.Program
 }
@@ -41,6 +42,7 @@ func guardEnv() (*cel.Env, error) {
 		cel.Variable("criticalityPolicy", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("world", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("integrator", cel.MapType(cel.StringType, cel.DynType)),
+		cel.Variable("dependencies", cel.ListType(cel.DynType)),
 		ext.Strings(), ext.Lists(), ext.Sets())
 }
 
@@ -85,6 +87,8 @@ type Facts struct {
 	// Integrator is the change of an outer methodology of the guardian chain the change is attached to (ADR 0106);
 	// nil: NoIntegrator.
 	Integrator map[string]any
+	// Dependencies are the changes the change depends on (ADR 0108), as `dependencies`.
+	Dependencies []any
 }
 
 // NoIntegrator is what `integrator` holds when the change is attached to no change of the guardian being asked.
@@ -133,7 +137,8 @@ func (g *Guard) eval(node map[string]any, children []any, change map[string]any,
 		integrator = NoIntegrator()
 	}
 	v, _, err := g.prog.Eval(map[string]any{"integrator": integrator, "node": node, "children": children, "change": change, "impact": impact, "draft": draft, "decisionPoints": list(f.DecisionPoints), "actions": list(f.Actions), "risks": list(f.Risks),
-		"verifications": list(f.Verifications), "derogations": list(f.Derogations), "criticalityPolicy": policy, "world": world})
+		"verifications": list(f.Verifications), "derogations": list(f.Derogations), "criticalityPolicy": policy, "world": world,
+		"dependencies": list(f.Dependencies)})
 	if err != nil {
 		return false, err
 	}

@@ -10,21 +10,31 @@ import (
 // The merge of a change is held by its guardian (ADR 0102), the same as its transitions (ADR 0058): the lifecycle of
 // the change must be in a final state, then the methodology has its say (ChangeLifecycles.Merge: the goal of the
 // Activity the change is scoped to), else the landable states of the domain decide (ADR 0078); then the outer
-// guardians of its chain, innermost first (ADR 0106). Asked outside any transaction: the guardian may read the graph.
+// guardians of its chain, innermost first (ADR 0106). Before them, the changes it depends on must have reached the
+// branch it merges into (ADR 0108). Asked outside any transaction: the guardian may read the graph.
 
 // checkMerge asks the guardian of a change whether it may merge.
 func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 	var c domain.Change
 	var bb domain.Blackboard
 	var landed []domain.NodeView
+	var deps []domain.Dependency
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
+		if deps, err = dependenciesOf(ctx, tx, c); err != nil {
+			return err
+		}
 		bb, landed, err = g.mergeBlackboard(ctx, tx, c)
+		bb = bb.WithFacet(domain.FacetDependencies, deps)
 		return err
 	})
 	if err != nil {
+		return err
+	}
+	// first the changes it depends on (ADR 0108): their work has reached the branch it merges into
+	if err := checkDependencies(c, deps); err != nil {
 		return err
 	}
 	if c.Lifecycle != "" {

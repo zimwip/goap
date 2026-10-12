@@ -70,9 +70,12 @@ type Change struct {
 	// own last. Computed when the change is created (or attached to, or detached from, a parent) and saved, so the
 	// change keeps the rules it started with; each guardian has its say on its transitions and its merge. Empty: its
 	// own methodology only.
-	Guardians  []GuardianRef `json:"guardians,omitempty"`
-	Status     ChangeStatus  `json:"status"`
-	BaselineID BaselineID    `json:"baselineId"`
+	Guardians []GuardianRef `json:"guardians,omitempty"`
+	// DependsOn are the changes whose work must have reached the branch this change merges into before it merges
+	// (ADR 0108): set by Graph.SetChangeDependencies, never a cycle, never an ancestor or a sub-change of the change.
+	DependsOn  []ChangeID   `json:"dependsOn,omitempty"`
+	Status     ChangeStatus `json:"status"`
+	BaselineID BaselineID   `json:"baselineId"`
 	// Branch the change is applied to (default main).
 	Branch           string     `json:"branch,omitempty"`
 	ResultBaselineID BaselineID `json:"resultBaselineId,omitempty"`

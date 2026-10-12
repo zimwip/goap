@@ -180,8 +180,8 @@ detach it (`detach_change`): proposals the person confirms like `start_agent` (`
   change tab's *Attach to change…*, `goap-change/attach`, or the assistant's proposal).
 - `cmd/graph` (distributed) wires no `ChangeLifecycles` (no registry in process), so a change gets no chain and no
   outer guardian there, as for its lifecycle (ADR 0058).
-- Dependencies between changes are not declared: only the order of the merges into an integrator expresses them (a
-  `depends_on` relation checked by the integrator's guardian is the likely form).
+- Dependencies between changes: done by ADR 0108 (`depends_on`, held at the merge, the merge order of the sub-changes
+  of an integrator, runs waiting for `dependencies_met`).
 - Moving a change from one integrator to another is a detach then an attach while it has not merged; once merged, its
   work belongs to that integrator's change and leaves it only by withdrawing those impacts there.
 - Deliverables (a `project` built-in domain) are left to the follow-up.

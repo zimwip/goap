@@ -51,6 +51,9 @@ service GraphService {
   // Make a root change a sub-change of a change whose methodology integrates its own, or give it back (ADR 0106).
   rpc AttachChange(AttachChangeRequest) returns (AttachChangeResponse);
   rpc DetachChange(DetachChangeRequest) returns (DetachChangeResponse);
+  // The changes a change depends on, the open changes depending on it and the merge order of its sub-changes (ADR 0108).
+  rpc SetChangeDependencies(SetChangeDependenciesRequest) returns (SetChangeDependenciesResponse);
+  rpc GetChangeDependencies(GetChangeDependenciesRequest) returns (GetChangeDependenciesResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
@@ -321,6 +324,8 @@ message Change {
   string state = 21;
   // the guardian chain of the change, outermost first, its own methodology last (ADR 0106)
   repeated GuardianRef guardians = 22;
+  // the changes whose work reaches the branch it merges into before it merges (ADR 0108)
+  repeated string depends_on = 23;
 }
 
 // A methodology of the guardian chain of a change, at the version in force when the chain was computed (ADR 0106).
@@ -776,6 +781,43 @@ message DetachChangeRequest {
 
 message DetachChangeResponse {
   Change change = 1;
+}
+
+// SetChangeDependencies replaces the changes a change depends on (ADR 0108): no cycle, no ancestor, no sub-change.
+message SetChangeDependenciesRequest {
+  string change_id = 1;
+  repeated string depends_on = 2;
+}
+
+message SetChangeDependenciesResponse {
+  Change change = 1;
+}
+
+message GetChangeDependenciesRequest {
+  string change_id = 1;
+}
+
+// A change related to another by a dependency (ADR 0108), as the dependent change sees it.
+message Dependency {
+  string id = 1;
+  string title = 2;
+  string methodology = 3;
+  string status = 4;
+  string state = 5;
+  string parent_id = 6;
+  // the work of the dependency has reached the branch the dependent change merges into
+  bool satisfied = 7;
+  // why not
+  string reason = 8;
+}
+
+message GetChangeDependenciesResponse {
+  // the changes it depends on
+  repeated Dependency depends_on = 1;
+  // the open changes depending on it, satisfied: its work reached the branch each merges into
+  repeated Dependency dependents = 2;
+  // its open sub-changes in the order they merge, satisfied: their own dependencies are
+  repeated Dependency order = 3;
 }
 
 message AddItemsRequest {

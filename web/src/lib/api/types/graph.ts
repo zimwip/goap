@@ -283,14 +283,40 @@ export interface GuardianRef {
   version?: string;
 }
 
+/** A change related to another by a dependency, as the dependent change sees it (ADR 0108). */
+export interface Dependency {
+  id?: string;
+  title?: string;
+  methodology?: string;
+  status?: string;
+  state?: string;
+  parentId?: string;
+  /** the work of the dependency has reached the branch the dependent change merges into */
+  satisfied?: boolean;
+  /** why not */
+  reason?: string;
+}
+
+/** The dependencies around a change (ADR 0108). */
+export interface ChangeDependencies {
+  /** the changes it depends on */
+  dependsOn?: Dependency[];
+  /** the open changes depending on it; satisfied: its work reached the branch each merges into */
+  dependents?: Dependency[];
+  /** its open sub-changes in the order they merge; satisfied: their own dependencies are */
+  order?: Dependency[];
+}
+
 export interface Change {
   id?: string;
   namespace?: string;
   /** branch the change works on (change-<id> when it has its own) */
   branch?: string;
-  /** sub-change: parent change and responsible OrgUnit key */
   /** the methodologies framing the change, outermost first, its own last (ADR 0106) */
   guardians?: GuardianRef[];
+  /** the changes whose work reaches the branch it merges into before it merges (ADR 0108) */
+  dependsOn?: string[];
+  /** sub-change: parent change and responsible OrgUnit key */
   parentId?: string;
   ownerOrg?: string;
   /** key of the project the change acts in (ADR 0054) */

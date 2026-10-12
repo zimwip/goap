@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 	rsk "github.com/zimwip/goap/pkg/risk"
 )
@@ -246,5 +247,75 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 	})
 	if cs := companionOf(t, e, p.ChangeID); len(cs) != 1 {
 		t.Fatalf("one watch per change: %d", len(cs))
+	}
+}
+
+// a step waiting for the changes its change depends on (ADR 0108): no action produces `dependencies_met`, so the run
+// waits; the dependency merging wakes it (Engine.relay to the dependents).
+const dependentYAML = `
+name: dependent
+version: 1.0.0
+namespace: alm
+imports: [dependencies]
+processes:
+  - name: flow
+    steps:
+      - {name: deliver, instructions: Deliver once the changes it depends on have landed, pre: {dependencies_met: true}}
+`
+
+func TestRunWaitsForTheChangesItDependsOn(t *testing.T) {
+	ctx := context.Background()
+	e := stagedEngine(t)
+	g := e.Graph.(*graph.Graph)
+	m, err := methodology.Parse([]byte(dependentYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Methodologies.(StaticMethodologies)[c.Name] = c
+	head, err := g.BranchHead(ctx, "alm", domain.MainBranch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dep, err := g.CreateChange(ctx, graph.NewChange{Title: "first", Methodology: "dependent", Namespace: "alm", ProjectID: testProject,
+		BaselineID: head.ID, OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := e.Start(ctx, StartRequest{Methodology: "dependent", Goal: "flow", Intent: "deliver after the first", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.SetChangeDependencies(ctx, p.ChangeID, []domain.ChangeID{dep.ID}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ = e.Run(ctx, p.ID); !p.WaitsForConditions() || !slices.Equal(p.Pending.Conditions, []string{"dependencies_met"}) {
+		t.Fatalf("the run waits for its dependency: %s %+v", p.Status, p.Pending)
+	}
+	// the first change lands: it modifies a component
+	cn, err := g.ImpactNodeCheckout(ctx, dep.ID, graph.NodeCheckout{Key: "CMP-1", Rationale: "rename"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.ImpactNodeUpdate(ctx, dep.ID, cn.ID, graph.NodeUpdate{Properties: map[string]any{"title": "renamed"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.ImpactNodeReview(ctx, dep.ID, cn.ID, domain.ReviewAccepted, "u", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Apply(ctx, dep.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	applied, err := g.Change(ctx, dep.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Accompany(ctx, TriggerEvent{Type: "change.applied", Change: &applied})
+	e.Drain()
+	if p, _ = e.Store.Get(ctx, p.ID); p.Pending == nil || p.Pending.Action != "flow/deliver" {
+		t.Fatalf("the dependency landed: the run resumes: %s %+v", p.Status, p.Pending)
 	}
 }

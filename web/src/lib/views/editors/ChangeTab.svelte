@@ -33,6 +33,7 @@
   import ChangeTransitions from '../../components/ChangeTransitions.svelte';
   import MoveChange from '../../components/MoveChange.svelte';
   import AttachChange from '../../components/AttachChange.svelte';
+  import ChangeDependencies from '../../components/ChangeDependencies.svelte';
   import { attachable, detach, detachable, guardianChain } from '../../changeAttach';
   import { movable } from '../../changeProject';
   import type { Tab } from '../../shell/types';
@@ -1150,6 +1151,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             </dd>
           {/if}
         </dl>
+        <ChangeDependencies change={ch} onchange={() => load(selected)} />
         {#each related.filter((p) => !p.parentId) as p (p.id)}
           <ProcessProgress processId={p.id ?? ''} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
         {/each}

@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/operations"
@@ -157,6 +158,20 @@ func (g *Graph) attachableTx(ctx context.Context, tx Tx, id, parent domain.Chang
 			return c, p, err
 		}
 		a = ac.ParentID
+	}
+	// a dependency never joins an ancestor and its sub-change (ADR 0108)
+	up, err := ancestorIDs(ctx, tx, p)
+	if err != nil {
+		return c, p, err
+	}
+	for _, a := range append([]domain.ChangeID{p.ID}, up...) {
+		ac, err := tx.Change(ctx, a)
+		if err != nil {
+			return c, p, err
+		}
+		if slices.Contains(c.DependsOn, a) || slices.Contains(ac.DependsOn, c.ID) {
+			return c, p, fmt.Errorf("change %s and %s depend on one another: remove the dependency before attaching: %w", c.ID, a, ErrInvalid)
+		}
 	}
 	if ok, err := g.within(ctx, tx, domain.StructureProject, c.ProjectID, p.ProjectID); err != nil {
 		return c, p, err

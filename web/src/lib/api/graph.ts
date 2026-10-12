@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -144,6 +144,12 @@ export const graph = {
     rpc<{ changeId: string; parentId: string }, { change?: Change }>(GRAPH, 'AttachChange', { changeId, parentId }),
   /** Detaches a sub-change from the change integrating it: a root change again (ADR 0106). */
   detachChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DetachChange', { changeId }),
+  /** Replaces the changes a change depends on: no cycle, no ancestor, no sub-change (ADR 0108). */
+  setChangeDependencies: (changeId: string, dependsOn: string[]) =>
+    rpc<{ changeId: string; dependsOn: string[] }, { change?: Change }>(GRAPH, 'SetChangeDependencies', { changeId, dependsOn }),
+  /** The dependencies of a change, the open changes depending on it and the merge order of its sub-changes (ADR 0108). */
+  getChangeDependencies: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, ChangeDependencies>(GRAPH, 'GetChangeDependencies', { changeId }, signal),
   /** Splits a change into one sub-change per organisational unit owning impacted nodes. */
   splitChange: (changeId: string) =>
     rpc<{ changeId: string }, { changes?: Change[] }>(GRAPH, 'SplitChange', { changeId }),

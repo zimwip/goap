@@ -12,7 +12,7 @@ import (
 // conditions: the guard sees the change (`change`, with the transition asked for and, when a decision point gates it,
 // `change.decision`), its decision points, actions, risks, verifications and derogations (`decisionPoints`, `actions`,
 // `risks`, `verifications`, `derogations`), what its organisation requires of its criticality (`criticalityPolicy`, and
-// `change.criticality`) and the world state (`world`, the value of each condition of its methodology).
+// `change.criticality`), the changes it depends on (`dependencies`, ADR 0108) and the world state (`world`, the value of each condition of its methodology).
 func CheckGuard(expr string, bb domain.Blackboard, world map[string]bool, transition, decision string) (bool, error) {
 	gd, err := guard.Compile(expr)
 	if err != nil {
@@ -46,6 +46,7 @@ func guardInputs(bb domain.Blackboard, transition, decision string) (map[string]
 	f.Verifications, _ = Resolve(act["verifications"]).([]any)
 	f.Derogations, _ = Resolve(act["derogations"]).([]any)
 	f.CriticalityPolicy, _ = Resolve(act["criticalityPolicy"]).(map[string]any)
+	f.Dependencies, _ = Resolve(act["dependencies"]).([]any)
 	return change, f
 }
 

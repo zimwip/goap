@@ -3,6 +3,7 @@ package builtin_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
@@ -650,7 +651,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 			change = append(change, name)
 		}
 	}
-	if !slices.Equal(change, []string{"read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks", "derogations", "reviews"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
+	if !slices.Equal(change, []string{"dependencies", "read", "list", "validate", "options", "compare", "decisions", "brief", "trace", "risks", "derogations", "reviews"}) || slices.Contains(mcps, mcpbuiltin.Admin) {
 		t.Fatalf("ORG-CRM: goap-change tools %v, mcps %v", change, mcps)
 	}
 	ctx := as("carol", "ORG-CRM", "contributor")
@@ -668,7 +669,7 @@ func TestUnitRestrictsABuiltin(t *testing.T) {
 	out := p.call(t, as("root", "ORG-ACME", "admin"), "ORG-ACME", "goap-admin/mcps", map[string]any{"unit": "ORG-CRM"})
 	for _, m := range out["mcps"].([]any) {
 		m := m.(map[string]any)
-		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 11 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
+		if m["mcp"] == mcpbuiltin.Change && (len(m["tools"].([]any)) != 12 || m["restrictedBy"].([]any)[0] != "ORG-CRM" || m["definedIn"] != access.DefaultOrg) {
 			t.Fatalf("goap-change for ORG-CRM = %v", m)
 		}
 	}
@@ -830,5 +831,19 @@ func TestChangeCreateAndMoveProject(t *testing.T) {
 	moved := p.call(t, alice, "ORG-CHECKOUT", "goap-change/move", map[string]any{"change": c["id"], "project": "PROJ-MV"})["change"].(map[string]any)
 	if moved["project"] != "PROJ-MV" {
 		t.Fatalf("moved: %v", moved)
+	}
+	// a change depends on another (ADR 0108): added, read, removed
+	other := p.call(t, alice, "ORG-CHECKOUT", "goap-change/create", args)["change"].(map[string]any)
+	dep := p.call(t, alice, "ORG-CHECKOUT", "goap-change/depend", map[string]any{"change": c["id"], "add": []any{other["id"]}})["change"].(map[string]any)
+	if fmt.Sprint(dep["dependsOn"]) != fmt.Sprintf("[%v]", other["id"]) {
+		t.Fatalf("depends on: %v", dep["dependsOn"])
+	}
+	read := p.call(t, alice, "ORG-CHECKOUT", "goap-change/dependencies", map[string]any{"change": other["id"]})
+	if ds, _ := read["dependents"].([]any); len(ds) != 1 {
+		t.Fatalf("dependents: %v", read)
+	}
+	dep = p.call(t, alice, "ORG-CHECKOUT", "goap-change/depend", map[string]any{"change": c["id"], "remove": []any{other["id"]}})["change"].(map[string]any)
+	if dep["dependsOn"] != nil {
+		t.Fatalf("removed: %v", dep["dependsOn"])
 	}
 }

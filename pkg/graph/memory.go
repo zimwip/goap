@@ -420,6 +420,7 @@ func (t *memTx) MaterializeBaseline(_ context.Context, id domain.BaselineID, nod
 
 func (t *memTx) PutChange(_ context.Context, c domain.Change) error {
 	c.Items, c.Nodes = nil, nil // the facts are in the log
+	c.DependsOn = slices.Clone(c.DependsOn)
 	t.st.changes[c.ID] = c
 	return nil
 }

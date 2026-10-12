@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.5
+version: 0.5.6
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -14,7 +14,7 @@ namespace: alm
 goal: deliver
 
 # risks_under_control, the release train gate, is a condition of the `risks` library
-imports: [risks]
+imports: [risks, dependencies]
 
 conditions:
   # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,
@@ -864,8 +864,11 @@ processes:
         pre: {risks_under_control: true}
         process: release_train
       - name: application
-        description: Apply the change to the ALM repository once reviewed and rolled out
+        description: Apply the change to the ALM repository once reviewed and rolled out, after the changes it depends on
         roles: {responsible: release_manager, accountable: change_approver, informed: [product_owner, service_owner]}
+        # the changes it depends on (ADR 0108) have landed where it merges: the run waits for them, and is tried again
+        # when one of them moves
+        pre: {dependencies_met: true}
         action: apply_change
 
   - name: release_train

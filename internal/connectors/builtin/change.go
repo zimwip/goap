@@ -37,6 +37,8 @@ var changeOps = []op{
 	{"move", "Move a root change, draft or active, with its sub-changes, to another project: {change}", schema(map[string]string{"change": "string", "project": "string"}, "project")},
 	{"attach", "Attach a root change to a change whose methodology integrates its own, as its sub-change: {change}", schema(map[string]string{"change": "string", "parent": "string"}, "parent")},
 	{"detach", "Detach a sub-change from the change integrating it, a root change again: {change}", schema(map[string]string{"change": "string"})},
+	{"depend", "Add or remove changes this change depends on: {change, add: [ids], remove: [ids]}", schema(map[string]string{"change": "string", "add": "array", "remove": "array"})},
+	{"dependencies", "Read the dependencies of a change, its dependents and the merge order of its sub-changes: {change}", schema(map[string]string{"change": "string"})},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
 	{"reformulate", "Revise the title/intent of a change, superseding the previous definition (history kept): {change, item}",
@@ -135,6 +137,31 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			return nil, err
 		}
 		return result(map[string]any{"change": changeSummary(detached)})
+	case "depend":
+		cur, err := c.p.Graph.Change(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		deps := slices.Clone(cur.DependsOn)
+		for _, d := range asStrings(a["add"]) {
+			if d != "" && !slices.Contains(deps, domain.ChangeID(d)) {
+				deps = append(deps, domain.ChangeID(d))
+			}
+		}
+		for _, d := range asStrings(a["remove"]) {
+			deps = slices.DeleteFunc(deps, func(x domain.ChangeID) bool { return x == domain.ChangeID(d) })
+		}
+		set, err := c.p.Graph.SetChangeDependencies(ctx, id, deps)
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"change": changeSummary(set)})
+	case "dependencies":
+		d, err := c.p.Graph.ChangeDependencies(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"dependsOn": d.DependsOn, "dependents": d.Dependents, "mergeOrder": d.Order})
 	case "options", "option", "activate", "evaluate", "compare":
 		return c.options(ctx, who, id, op, a)
 	case "decisions", "decision", "rule", "answer":
@@ -618,7 +645,7 @@ func producer(ctx context.Context) string {
 func changeSummary(c domain.Change) map[string]any {
 	return map[string]any{"id": c.ID, "title": c.Title, "intent": c.Intent, "methodology": c.Methodology, "namespace": c.Namespace,
 		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID, "project": c.ProjectID,
-		"guardians": c.Guardians}
+		"guardians": c.Guardians, "dependsOn": c.DependsOn}
 }
 
 // working is one call on the blackboard of a change.

@@ -757,6 +757,9 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		// what the view of a flow does not carry: the options and the decision points of the change (ADR 0009)
 		now := g.now()
 		facets := g.facets(c, now)
+		if facets[domain.FacetDependencies], err = dependenciesOf(ctx, tx, c); err != nil { // ADR 0108
+			return err
+		}
 		full := c // the drafts are read with the flows of the change, the view of a flow has none
 		c = c.View(flow)
 		c.Nodes = slices.Clone(nodes)

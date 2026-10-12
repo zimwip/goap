@@ -40,10 +40,12 @@ func Activation(bb domain.Blackboard) map[string]any {
 	drg := lazy(func() []any { return derogations(&c, bb.At) })
 	pol := lazy(func() map[string]any { return criticalityPolicy(bb) })
 	dec := lazy(func() decisionView { return decisions(bb) })
+	dep := lazy(func() []any { return dependencies(bb) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
 			"criticality": string(criticality.Of(c.Data)), "lifecycle": c.Lifecycle, "state": c.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
+			"dependsOn": changeIDs(c.DependsOn),
 		},
 		"items":          items,
 		"changeImpacts":  h.changeImpacts(),
@@ -62,6 +64,9 @@ func Activation(bb domain.Blackboard) map[string]any {
 		// criticalityPolicy is what the organisation requires of the criticality of the change: the facet its provider
 		// gave the blackboard, else the compiled-in table (ADR 0075 §3; `policy` is a field of the decision points)
 		"criticalityPolicy": func() any { return pol() },
+		// dependencies are the changes the change depends on (ADR 0108), each saying whether its work has reached the
+		// branch the change merges into: the facet the graph fills
+		"dependencies": func() any { return dep() },
 	}
 }
 
@@ -345,4 +350,23 @@ func (h hydrator) currentProps(cn domain.ChangeImpact) map[string]any {
 		return orEmpty(h.bb.Nodes[*cn.Pre].Properties)
 	}
 	return map[string]any{}
+}
+
+// dependencies are the changes the change depends on (ADR 0108): {id, title, methodology, status, state, parent,
+// satisfied, reason}.
+func dependencies(bb domain.Blackboard) []any {
+	out := []any{}
+	for _, d := range domain.Facet[[]domain.Dependency](bb, domain.FacetDependencies) {
+		out = append(out, map[string]any{"id": string(d.ID), "title": d.Title, "methodology": d.Methodology, "status": string(d.Status),
+			"state": d.State, "parent": string(d.ParentID), "satisfied": d.Satisfied, "reason": d.Reason})
+	}
+	return out
+}
+
+func changeIDs(ids []domain.ChangeID) []any {
+	out := make([]any, len(ids))
+	for i, id := range ids {
+		out[i] = string(id)
+	}
+	return out
 }

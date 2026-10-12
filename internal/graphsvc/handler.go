@@ -483,6 +483,29 @@ func (h *Handler) DetachChange(ctx context.Context, r *connect.Request[graphv1.D
 	return connect.NewResponse(&graphv1.DetachChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
+// SetChangeDependencies replaces the changes a change depends on (ADR 0108); the graph publishes change.updated.
+func (h *Handler) SetChangeDependencies(ctx context.Context, r *connect.Request[graphv1.SetChangeDependenciesRequest]) (*connect.Response[graphv1.SetChangeDependenciesResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, err := h.Graph.SetChangeDependencies(ctx, domain.ChangeID(r.Msg.ChangeId), pbconv.ChangeIDsFromPB(r.Msg.DependsOn))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items, c.Nodes = nil, nil
+	return connect.NewResponse(&graphv1.SetChangeDependenciesResponse{Change: pbconv.ChangeToPB(c)}), nil
+}
+
+// GetChangeDependencies reads the dependencies of a change, its dependents and the merge order of its sub-changes
+// (ADR 0108).
+func (h *Handler) GetChangeDependencies(ctx context.Context, r *connect.Request[graphv1.GetChangeDependenciesRequest]) (*connect.Response[graphv1.GetChangeDependenciesResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	d, err := h.Graph.ChangeDependencies(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	return connect.NewResponse(&graphv1.GetChangeDependenciesResponse{DependsOn: pbconv.DependenciesToPB(d.DependsOn),
+		Dependents: pbconv.DependenciesToPB(d.Dependents), Order: pbconv.DependenciesToPB(d.Order)}), nil
+}
+
 func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddItemsRequest]) (*connect.Response[graphv1.AddItemsResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	proposed := pbconv.ItemsFromPB(r.Msg.Items)

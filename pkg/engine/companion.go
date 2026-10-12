@@ -94,7 +94,8 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 // relay carries the event of a change across the integration relation (ADR 0106): to the change integrating it (its
 // parent), whose methodology subscribes to the events of the changes it integrates (on.from integrated), and to the
 // changes it integrates (its open sub-changes), whose methodologies subscribe to the events of their integrator
-// (on.from integrator). Each runs the processes of that methodology on its own change, as a companion run, with the
+// (on.from integrator), and to the open changes depending on it (ADR 0108, on.from dependency): a dependency merging
+// wakes the runs of its dependents waiting for it (`dependencies_met`). Each runs the processes of that methodology on its own change, as a companion run, with the
 // event in vars.event (its "relation" says which side it came from); the runs of those changes waiting for conditions
 // are tried again.
 func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any, changeID domain.ChangeID) {
@@ -115,6 +116,9 @@ func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any,
 		for _, s := range subs {
 			if s.ParentID == changeID {
 				targets, from = append(targets, s), append(from, methodology.FromIntegrator)
+			}
+			if slices.Contains(s.DependsOn, changeID) { // a change depending on it (ADR 0108)
+				targets, from = append(targets, s), append(from, methodology.FromDependency)
 			}
 		}
 	}

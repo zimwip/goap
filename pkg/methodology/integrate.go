@@ -30,6 +30,8 @@ const (
 	FromIntegrated = "integrated"
 	// FromIntegrator: the events of the change of an integrator a change of the methodology is attached to.
 	FromIntegrator = "integrator"
+	// FromDependency: the events of the changes a change of the methodology depends on (ADR 0108).
+	FromDependency = "dependency"
 )
 
 // AnyMethodology in Integration.Methodologies integrates every other methodology (IntegrationOf); a wildcard is not
@@ -135,13 +137,13 @@ func (s *compileState) checkIntegration() {
 	for i, sub := range m.On {
 		path := fmt.Sprintf("on[%d].from", i)
 		switch sub.From {
-		case "", FromSelf, FromIntegrator:
+		case "", FromSelf, FromIntegrator, FromDependency:
 		case FromIntegrated:
 			if len(m.Integrates) == 0 {
 				s.add(path, "from %q needs integrates: the methodology integrates no change", FromIntegrated)
 			}
 		default:
-			s.add(path, "from must be %s, %s or %s", FromSelf, FromIntegrated, FromIntegrator)
+			s.add(path, "from must be %s, %s, %s or %s", FromSelf, FromIntegrated, FromIntegrator, FromDependency)
 		}
 	}
 }

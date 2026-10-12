@@ -354,7 +354,8 @@ func checkResponsibilities(add func(path, format string, args ...any), path stri
 
 // Subscription is an event a transverse methodology reacts to: its type and a CEL filter over `event` ({type, change,
 // process, step, items}). From says whose events (ADR 0106): the change the methodology runs on (FromSelf, default),
-// the changes it integrates (FromIntegrated) or the change integrating it (FromIntegrator).
+// the changes it integrates (FromIntegrated), the change integrating it (FromIntegrator) or the changes it depends on
+// (FromDependency, ADR 0108).
 type Subscription struct {
 	Event  string `yaml:"event" json:"event"`
 	Filter string `yaml:"filter,omitempty" json:"filter,omitempty"`

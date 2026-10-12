@@ -251,3 +251,15 @@ func TestCompositionOfTheRepository(t *testing.T) {
 		t.Fatalf("composition of the repository: %v, want %v", got, want)
 	}
 }
+
+// the events of the changes a change depends on (ADR 0108) come from changes of any methodology: nothing to check.
+func TestCompositionFromDependency(t *testing.T) {
+	m := work("work")
+	m.On = []Subscription{{Event: "change.applied", From: FromDependency}, {Event: "change.transitioned", From: FromDependency}}
+	if is := m.CompositionIssues(composition(release(nil))); len(is) != 0 {
+		t.Fatalf("from: dependency is not checked: %v", is)
+	}
+	if is := release(nil).CompositionIssues(composition(m)); len(is) != 0 {
+		t.Fatalf("no consumer of the release: %v", is)
+	}
+}

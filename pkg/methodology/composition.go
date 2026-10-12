@@ -141,6 +141,8 @@ func (ck *compositionCheck) sources(sub Subscription) (out []*Methodology, ok bo
 		return in, !wild
 	case FromIntegrator:
 		return ck.integrators(ck.m.Name), true
+	case FromDependency:
+		return nil, false // any change may be depended on (ADR 0108): its methodology is not known here
 	default:
 		if len(ck.m.AppliesTo) == 0 {
 			return []*Methodology{ck.m}, true
@@ -283,6 +285,8 @@ func (ck *compositionCheck) consumers() {
 				follows = slices.Contains(integratedNames(o), ck.m.Name)
 			case FromIntegrator:
 				follows = ck.m.IntegratesChangesOf(o.Name) && !slices.Contains(integratedNames(ck.m), AnyMethodology)
+			case FromDependency:
+				follows = false // the changes depended on are not known by methodology (ADR 0108)
 			default:
 				follows = slices.Contains(o.AppliesTo, ck.m.Name)
 			}

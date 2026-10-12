@@ -108,6 +108,16 @@ steps or conditions a filter or a guard names that do not exist, guards that nev
 chain of guardians (tried over every state and integrator); warnings, each with a fix (`Issue.Hint`), shown by the
 Problems console and the methodology editor (*Composition* card of the overview).
 
+**Dependencies between changes** ([ADR 0108](adr/0108-dependencies-between-changes.md)): a change lists the changes
+whose work must have reached the branch it merges into before it merges (`Change.DependsOn`,
+`Graph.SetChangeDependencies`, operation `change.depend`: no cycle, no ancestor, no sub-change, no abandoned change).
+A dependency is satisfied once its work reached main or the dependent's parent (two candidates of one release);
+`checkMerge` refuses the merge before that. `Graph.ChangeDependencies` gives the dependencies, the changes depending on
+a change and the merge order of its open sub-changes (`domain.DependencyOrder`). Conditions and guards read
+`dependencies` (the library `dependencies`: `dependencies_met`, which no action produces, so a step needing it waits;
+`sdlc`'s application step does), and `Engine.relay` wakes the dependents when a dependency moves (`on.from:
+dependency`). Set from `goap-change` (`depend`, `dependencies`) and the change tab's *Depends on* section.
+
 **Operations on a change** ([ADR 0103](adr/0103-sub-changes-on-their-own-branch-operation-rights.md)) are a catalogue
 the code owns: each method of `pkg/graph` a person performs on a change (checkout, edit, withdraw, review, commit,
 merge...) carries `//goap:operation <code> <doer|reviewer>` and calls `g.allow(ctx, id, operations.<Const>)` first;
@@ -293,13 +303,14 @@ Variables exposed to the expression:
 | `risks`, `actions` | the risk register and the actions of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): `{key, title, description, probability, impact, score, status, live, owner, actions, step, versions}` and `{key, title, status, owner, due, for, result, versions}`, the last version of each key |
 | `verifications`, `derogations` | the verification state of the effects of the action runs and the derogations of the change ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `{execution, action, impact, oracle, independent, state, producer, by, open}` and `{key, rule, target, reason, signatory, expires, status, open, expired, versions}` |
 | `change.criticality`, `criticalityPolicy` | the criticality level of the change and what the organisation requires of it: `{oracles, sampling, signatoryRole, maxDerogationHours}` (not `policy`, taken by decision points) |
+| `dependencies`, `change.dependsOn` | the changes the change depends on ([ADR 0108](adr/0108-dependencies-between-changes.md)): `{id, title, methodology, status, state, parent, satisfied, reason}`, `satisfied` when its work reached the branch the change merges into; and their ids |
 
 **Condition libraries** ([ADR 0064](adr/0064-condition-libraries.md)): a methodology gets no condition it did not
-declare, except those of the libraries it imports (`imports: [decisions, risks, verification, derogations]`, `condition.Library`). `decisions`:
+declare, except those of the libraries it imports (`imports: [decisions, risks, verification, derogations, dependencies]`, `condition.Library`). `decisions`:
 `open_questions`, `no_open_questions`, `decision_ready` (a point can be ruled now), `decision_pending`,
 `no_decision_pending`, `ratification_pending`, `decision_escalated`, `options_open`, `options_evaluated`,
 `option_selected`. `risks`: `open_risks`, `unmitigated_risks` (a live risk of score ≥ `condition.HighRisk`, 9, without
-an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verification`: `unverified_effects`, `all_verified`, `reserves_open`. `derogations`: `no_expired_derogation`, `derogation_debt` (`condition.DerogationDebtLimit`, 3 open). A condition the methodology declares under the
+an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verification`: `unverified_effects`, `all_verified`, `reserves_open`. `derogations`: `no_expired_derogation`, `derogation_debt` (`condition.DerogationDebtLimit`, 3 open). `dependencies`: `dependencies_met`, `dependencies_pending` (ADR 0108). A condition the methodology declares under the
 same name replaces the library one. The variables of the decision and risk concepts (`options`, `decisionPoints`,
 `questions`, `risks`, `actions`) are always in the environment, and computed only when an expression reads them.
 
@@ -652,8 +663,9 @@ first so that it is not woken by them; a parent waiting on a cancelled sub-proce
 cancelled companion run is not brought back by the events of its change. A transverse methodology has no namespace of its own.
 
 Events cross the integration relation too ([ADR 0106](adr/0106-methodologies-integrating-methodologies.md)): `on:`
-takes `from: self | integrated | integrator`, and the engine relays an event of a change to its parent and to its open
-sub-changes (`Engine.relay`), waking the subscribed processes of their methodologies on their own change with
+takes `from: self | integrated | integrator | dependency`, and the engine relays an event of a change to its parent, to
+its open sub-changes and to the open changes depending on it ([ADR 0108](adr/0108-dependencies-between-changes.md))
+(`Engine.relay`), waking the subscribed processes of their methodologies on their own change with
 `vars.event.relation`; the graph publishes `change.transitioned`, `change.committed`, `change.attached` and
 `change.detached` for that coupling.
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
@@ -1462,7 +1474,7 @@ or an LLM). Action specialization fields: `specializes`, `when`, `priority`, `ki
 node type subtyping: `extends`. An `incremental: true` action reaches its effects across several
 executions: an execution that produces items without reaching them is **progress**, not a failure.
 
-### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.5.1, on the shared `alm` domain of `domains/alm.yaml`)
+### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.5.6, on the shared `alm` domain of `domains/alm.yaml`)
 
 ALM domain (demo data: `internal/devseed/demo.go`):
 

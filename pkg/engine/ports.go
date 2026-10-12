@@ -20,6 +20,10 @@ type GraphPort interface {
 	// gives it back (ADR 0106).
 	AttachChange(ctx context.Context, id, parent domain.ChangeID) (domain.Change, error)
 	DetachChange(ctx context.Context, id domain.ChangeID) (domain.Change, error)
+	// SetChangeDependencies replaces the changes a change depends on; ChangeDependencies reads them, the changes
+	// depending on it and the merge order of its sub-changes (ADR 0108).
+	SetChangeDependencies(ctx context.Context, id domain.ChangeID, deps []domain.ChangeID) (domain.Change, error)
+	ChangeDependencies(ctx context.Context, id domain.ChangeID) (graph.ChangeDependencies, error)
 	// Change is the change as stored, its items of every flow included (the blackboard is a view of one flow).
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)

@@ -17,6 +17,9 @@ const (
 	// LibraryDerogations: the derogations of the change, waivers with a rule, a signatory and an expiry (ADR 0075 §2).
 	// A library of its own, not part of `risks`: a methodology that signs none imports none (ADR 0064).
 	LibraryDerogations = "derogations"
+	// LibraryDependencies: the changes the change depends on (ADR 0108). A step waiting for them (`dependencies_met`)
+	// waits for those changes to merge, which no action of the change produces.
+	LibraryDependencies = "dependencies"
 )
 
 // DerogationDebtLimit is the number of open derogations from which the debt is too high (`derogation_debt`): the
@@ -29,7 +32,7 @@ const DerogationDebtLimit = 3
 const HighRisk = 9
 
 // LibraryNames lists the built-in libraries, in a stable order.
-var LibraryNames = []string{LibraryDecisions, LibraryRisks, LibraryVerification, LibraryDerogations}
+var LibraryNames = []string{LibraryDecisions, LibraryRisks, LibraryVerification, LibraryDerogations, LibraryDependencies}
 
 var unmitigated = fmt.Sprintf(`risks.exists(r, r.live && r.score >= %d && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`, HighRisk)
 
@@ -61,6 +64,11 @@ var libraries = map[string][]Definition{
 		{Name: "unverified_effects", Expr: `verifications.exists(v, v.open)`},
 		{Name: "all_verified", Expr: `!verifications.exists(v, v.open)`},
 		{Name: "reserves_open", Expr: `verifications.exists(v, v.state == "accepted_with_reserve")`},
+	},
+	LibraryDependencies: {
+		// satisfied: the work of the dependency has reached the branch the change merges into
+		{Name: "dependencies_met", Expr: `!dependencies.exists(d, !d.satisfied)`},
+		{Name: "dependencies_pending", Expr: `dependencies.exists(d, !d.satisfied)`},
 	},
 	LibraryDerogations: {
 		// a change cannot land on a derogation that ran out; the debt is the count of the open ones

@@ -95,6 +95,29 @@ func (c *Client) DetachChange(ctx context.Context, id domain.ChangeID) (domain.C
 	return pbconv.ChangeFromPB(r.Msg.Change), nil
 }
 
+// SetChangeDependencies implements engine.GraphPort (ADR 0108).
+func (c *Client) SetChangeDependencies(ctx context.Context, id domain.ChangeID, deps []domain.ChangeID) (domain.Change, error) {
+	ids := make([]string, len(deps))
+	for i, d := range deps {
+		ids[i] = string(d)
+	}
+	r, err := c.rpc.SetChangeDependencies(ctx, connect.NewRequest(&graphv1.SetChangeDependenciesRequest{ChangeId: string(id), DependsOn: ids}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
+// ChangeDependencies implements engine.GraphPort (ADR 0108).
+func (c *Client) ChangeDependencies(ctx context.Context, id domain.ChangeID) (graph.ChangeDependencies, error) {
+	r, err := c.rpc.GetChangeDependencies(ctx, connect.NewRequest(&graphv1.GetChangeDependenciesRequest{ChangeId: string(id)}))
+	if err != nil {
+		return graph.ChangeDependencies{}, rpcerr.FromConnect(err)
+	}
+	return graph.ChangeDependencies{DependsOn: pbconv.DependenciesFromPB(r.Msg.DependsOn), Dependents: pbconv.DependenciesFromPB(r.Msg.Dependents),
+		Order: pbconv.DependenciesFromPB(r.Msg.Order)}, nil
+}
+
 func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error) {
 	req := &graphv1.UpdateChangeRequest{Id: string(id), Title: p.Title, Intent: p.Intent, Goal: p.Goal, Data: pbconv.Struct(p.Data)}
 	if p.Status != nil {

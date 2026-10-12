@@ -45,6 +45,9 @@ const (
 	// FacetCriticalityPolicy is what the organisation of the change requires of its criticality (ADR 0075 §3), set by a
 	// provider of Graph.Facets that reads the organisation; opaque to the graph. Absent: the compiled-in table.
 	FacetCriticalityPolicy = "criticalityPolicy"
+	// FacetDependencies are the changes the change depends on (ADR 0108), []Dependency, each saying whether its work has
+	// reached the branch the change merges into.
+	FacetDependencies = "dependencies"
 )
 
 // Facet is the facet of the blackboard with a name, as the type the caller expects (the zero value when absent or of
