@@ -118,6 +118,20 @@ export interface ImpactConflicts {
 }
 
 /** Where a sub-change stands against its parent (ADR 0082). */
+/** What a change can commit and merge (ADR 0102), as the server judges it: the one source of the Commit and Merge buttons. */
+export interface CommitState {
+  /** keys of the accepted modifications the next commit writes */
+  toCommit?: string[];
+  /** nodes withdrawn after their commit that the next commit reverts */
+  reverts?: number;
+  /** what holds the merge */
+  unsettled?: string[];
+  /** the change committed on its branch something it has not merged yet */
+  commits?: boolean;
+  canCommit?: boolean;
+  canMerge?: boolean;
+}
+
 export interface RebaseState {
   /** the parent change ('' when the change is not a sub-change) */
   parentId?: string;

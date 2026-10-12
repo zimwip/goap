@@ -9,98 +9,48 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// A change is applied in two steps (ADR 0056), two concepts that Apply runs one after the other:
+// A change lands in two acts (ADR 0056, 0102), the same for every change and every caller:
 //
-//   - CommitChange validates it: every rule of a change (reviews, properties, lifecycle and transitions, validators,
-//     the activity goals) is checked against the versions its accepted change impacts wrote, and the state it leaves
-//     is recorded on its own branch (its commit baseline, one `landed` event per impact). That depends on the change
-//     alone. A root change stays open (ADR 0102): edited and committed again, merged by IntegrateChange, which asks the
-//     methodology (final state, landing gate) and rebases the committed branch first (rebase_committed.go).
-//   - IntegrateChange integrates a committed change into the branch it was forked from (fast-forward or 3-way
-//     merge, a baseline on that branch, `landed` again on it), and the change is `applied`. Conflicts without a
-//     resolution leave it committed: the integration waits.
+//   - CommitChange writes the modifications the change accepted on its own branch, as versions (ADR 0079), and reverts
+//     there the nodes it no longer changes (an impact withdrawn after its commit). It checks the drafts as versions (their
+//     attributes, validators, required links, the moves of their lifecycle) and nothing else: neither the methodology
+//     nor the target branch. The change stays open; it is edited and committed again as often as needed. A commit that
+//     writes and reverts nothing is refused (ErrNothingToCommit). A sub-change has no branch of its own: it does not
+//     commit, its merge takes its accepted modifications into its parent (ADR 0081).
+//   - IntegrateChange (the merge) takes the work into what the change was forked from, once everything in it is
+//     settled: every impact committed (a sub-change: accepted), no open flow, decision point or sub-change. It first
+//     brings the change up to date (a root change: its branch rebased onto the head of its target, rebase_committed.go;
+//     a sub-change: rebased onto its parent, ADR 0082), asks the merge guards (mergeguard.go: the methodology's say),
+//     then fast-forwards; the change is applied, closed. Only a target moving in between falls back to the three-way
+//     merge, which leaves the change committed until it is resolved.
 //
-// Both first bring the change up to date: a root change is rebased onto the head of its target branch, so that its
-// integration is a fast-forward (ADR 0101); only a target that moves in between falls back to the three-way merge.
-//
-// Apply is both, in one transaction. The branch of a change is its workspace: a change without one gets it when it is
-// committed (a change that wrote a node has it already).
+// Apply is both: it commits what is pending, then merges.
 
-// Apply commits a change and integrates it into the branch it was forked from; it returns the baseline the change
-// left on the target branch, or its commit baseline when the integration waits for a resolution. A root change is first
-// rebased onto the head of its target branch (ADR 0101), in a transaction of its own: its conflicts stop the apply
-// (ErrConflict). A sub-change is first rebased onto its parent, then integrated into it as a fast-forward and leaves no baseline (ADR 0081, 0082): the result
-// is empty.
+// ErrNothingToCommit refuses a commit that would write nothing: no accepted modification, nothing to revert (ADR 0102).
+var ErrNothingToCommit = fmt.Errorf("nothing to commit: %w", ErrInvalid)
+
+// Apply commits what the change has pending, then merges it (IntegrateChange). It returns the baseline the change left
+// on the branch it was forked from, or its last commit when the merge waits for a resolution; nothing for a sub-change,
+// which lands in its parent (ADR 0081).
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	var result domain.Baseline
-	if c, err := g.Change(ctx, id); err != nil {
-		return result, err
-	} else if hasCommits(c) {
-		return g.applyCommitted(ctx, id, baselineName)
-	}
-	if err := g.rebaseFirst(ctx, id, false); err != nil {
-		return result, err
-	}
-	if err := g.checkFinalState(ctx, id); err != nil {
-		return result, err
-	}
-	landing, err := g.askLandingGate(ctx, id)
+	c, err := g.Change(ctx, id)
 	if err != nil {
 		return result, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		if result, err = g.commitTx(ctx, tx, id, baselineName, landing, true); err != nil {
-			return err
-		}
-		c, err := tx.Change(ctx, id)
-		if err != nil {
-			return err
-		}
-		if c, err = g.integrateTx(ctx, tx, c, nil); err != nil {
-			return err
-		}
-		if c.Status == domain.ChangeApplied && c.ResultBaselineID != "" { // a sub-change leaves no baseline (ADR 0081)
-			if result, err = tx.Baseline(ctx, c.ResultBaselineID); err != nil {
-				return err
-			}
-			// a name other than the title the change already carries is a tag on the state it leaves (ADR 0056)
-			if baselineName != "" && baselineName != c.Title {
-				_, err = g.tagTx(ctx, tx, c, baselineName, "")
-			}
-		}
-		return err
-	})
-	return result, err
-}
-
-// applyCommitted applies a change that committed on its own branch already (ADR 0102): what it holds uncommitted is
-// committed, then its branch is merged (mergeRoot).
-func (g *Graph) applyCommitted(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	var result domain.Baseline
-	var pending []string
-	if err := g.repo.InTx(ctx, func(tx Tx) error {
-		c, err := tx.Change(ctx, id)
-		if err != nil {
-			return err
-		}
-		pending, err = g.uncommitted(ctx, tx, c)
-		return err
-	}); err != nil {
-		return result, err
-	}
-	if len(pending) > 0 {
-		if _, err := g.CommitChange(ctx, id, baselineName); err != nil {
+	if c.ParentID == "" {
+		if _, err := g.CommitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
 			return result, err
 		}
 	}
-	c, err := g.mergeRoot(ctx, id, nil)
-	if err != nil {
+	if c, err = g.IntegrateChange(ctx, id, nil); err != nil || c.ResultBaselineID == "" {
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if result, err = tx.Baseline(ctx, c.ResultBaselineID); err != nil {
 			return err
 		}
+		// a name other than the title the change already carries is a tag on the state it leaves (ADR 0056)
 		if c.Status == domain.ChangeApplied && baselineName != "" && baselineName != c.Title {
 			_, err = g.tagTx(ctx, tx, c, baselineName, "")
 		}
@@ -109,152 +59,34 @@ func (g *Graph) applyCommitted(ctx context.Context, id domain.ChangeID, baseline
 	return result, err
 }
 
-// rebaseFirst rebases a change before it lands, in a transaction of its own: a sub-change onto its parent (ADR 0082 §3), a
-// root change onto the head of its target branch (ADR 0101 §3), so that its integration is a fast-forward. A rebase that
-// changed a draft of a sub-change, or left conflicts on a root change, stays, and the apply stops on it (ErrConflict),
-// naming what is to be reviewed again and settled. A committed or closed root change is left to the commit, which refuses
-// it (its versions are written, ADR 0101 §1); a sub-change is rebased by Apply only (rootOnly: CommitChange).
-func (g *Graph) rebaseFirst(ctx context.Context, id domain.ChangeID, rootOnly bool) error {
-	c, err := g.Change(ctx, id)
-	if err != nil {
-		return err
-	}
-	if c.ParentID != "" && rootOnly {
-		return nil
-	}
-	if c.ParentID == "" && (c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive || hasCommits(c)) {
-		return nil // a change that committed already is rebased when it is merged (ADR 0102)
-	}
-	res, err := g.RebaseChange(ctx, id)
-	if err != nil {
-		return err
-	}
-	if res.Changed() {
-		return fmt.Errorf("change %s %s: %w", id, res.summary(), ErrConflict)
-	}
-	return nil
-}
-
-// CommitChange validates a change and records the state it leaves on its own branch: the change is committed, not
-// integrated; IntegrateChange does that. It returns the commit baseline.
-//
-// A root change stays open once committed (ADR 0102): it is edited and committed again, as often as needed, and merged
-// by IntegrateChange; its methodology (the final state of its lifecycle, the landing gate) is asked at the merge. A
-// commit that modifies nothing is refused. A sub-change is checked as before (ADR 0081): it is committed, then integrated.
-func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
-	var result domain.Baseline
-	c, err := g.Change(ctx, id)
-	if err != nil {
-		return result, err
-	}
-	if err := g.rebaseFirst(ctx, id, true); err != nil {
-		return result, err
-	}
-	var landing *landingDecision
-	if c.ParentID != "" {
-		if err := g.checkFinalState(ctx, id); err != nil {
-			return result, err
+// CommitChange writes the accepted modifications of a root change on its own branch and reverts there the nodes it no
+// longer changes; it returns the commit baseline. The change stays open (ADR 0102).
+func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
 		}
-		if landing, err = g.askLandingGate(ctx, id); err != nil {
-			return result, err
+		if c.ParentID != "" {
+			return fmt.Errorf("change %s is a sub-change: it has no branch of its own, merge it into its parent: %w", id, ErrInvalid)
 		}
-	}
-	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		result, err = g.commitTx(ctx, tx, id, baselineName, landing, c.ParentID != "")
+		// the change is its branch: one that wrote nothing has none yet
+		if _, own, err := ownBranch(ctx, tx, c); err != nil {
+			return err
+		} else if !own {
+			if _, _, err := g.ensureOwnBranch(ctx, tx, c); err != nil {
+				return err
+			}
+		}
+		result, err = g.commitOnBranch(ctx, tx, id, baselineName)
 		return err
 	})
 	return result, err
 }
 
-// commitTx validates a change and records its commit baseline on its own branch.
-func (g *Graph) commitTx(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision, gate bool) (domain.Baseline, error) {
-	c, err := tx.Change(ctx, id)
-	if err != nil {
-		return domain.Baseline{}, err
-	}
-	if of := openFlows(c); len(of) > 0 {
-		return domain.Baseline{}, fmt.Errorf("change %s has an open flow (%s): adopt or discard it first: %w", id, of[0].ID, ErrConflict)
-	} else if pd := pendingDecisions(c, g.now(), g.DecisionPolicy); len(pd) > 0 {
-		return domain.Baseline{}, fmt.Errorf("change %s has a pending decision point (%q): decide it first: %w", id, pd[0].Question, ErrConflict)
-	}
-	if open, err := openSubChanges(ctx, tx, id); err != nil {
-		return domain.Baseline{}, err
-	} else if len(open) > 0 {
-		return domain.Baseline{}, fmt.Errorf("change %s has %d open sub-change(s), apply or abandon them first: %w", id, len(open), ErrConflict)
-	}
-	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
-		return domain.Baseline{}, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
-	}
-	if c.ParentID != "" {
-		// a sub-change lands in its parent's log, it writes no version (ADR 0081)
-		return domain.Baseline{}, g.commitSubTx(ctx, tx, c, landing)
-	}
-	// the change is its branch: one that wrote nothing has none yet
-	if _, own, err := ownBranch(ctx, tx, c); err != nil {
-		return domain.Baseline{}, err
-	} else if !own {
-		if _, _, err := g.ensureOwnBranch(ctx, tx, c); err != nil {
-			return domain.Baseline{}, err
-		}
-	}
-	return g.commitOnBranch(ctx, tx, id, baselineName, landing, gate)
-}
-
 // errCollected rolls back a pass that only reads what an authorization or a hook needs before the transaction that
 // writes (the stores are not reentrant).
 var errCollected = errors.New("transitions collected")
-
-// landingDecision is what Graph.LandingGate answered about a change.
-type landingDecision struct{ decided, ok bool }
-
-// askLandingGate asks LandingGate about the change before the transaction that applies it: the gate may read the graph
-// itself, which a transaction held by the apply would block (the stores are not reentrant). A pass that is rolled back
-// builds the blackboard it decides against. The lifecycle transitions are authorized when they are taken
-// (ImpactNodeTransition, ADR 0076), not here.
-func (g *Graph) askLandingGate(ctx context.Context, id domain.ChangeID) (landing *landingDecision, err error) {
-	if g.LandingGate == nil {
-		return nil, nil
-	}
-	var change domain.Change
-	var bb domain.Blackboard
-	var haveBB bool
-	var subErr error
-	// An error other than errCollected is met again by the apply in its own transaction.
-	_ = g.repo.InTx(ctx, func(tx Tx) error {
-		if c, err := tx.Change(ctx, id); err == nil && c.ParentID != "" {
-			// a sub-change writes no version (ADR 0081): the gate decides on its drafts
-			change = c
-			if bb, subErr = g.subLandingBlackboard(ctx, tx, c); subErr == nil {
-				haveBB = true
-			}
-			return errCollected
-		}
-		a, _, err := g.newApplier(ctx, tx, id)
-		if err != nil {
-			return err
-		}
-		a.collect = true
-		if err := a.prepareChangeImpacts(); err != nil {
-			return err
-		}
-		if err := a.checkChangeImpacts(); err != nil {
-			return err
-		}
-		change, bb, haveBB = a.change, a.landingBlackboard(), true
-		return errCollected
-	})
-	if subErr != nil {
-		return nil, subErr
-	}
-	if !haveBB {
-		return nil, nil
-	}
-	decided, ok, err := g.LandingGate(ctx, change, bb)
-	if err != nil {
-		return nil, err
-	}
-	return &landingDecision{decided: decided, ok: ok}, nil
-}
 
 // pendingMove is a lifecycle transition, from the state of node.
 type pendingMove struct {
@@ -298,18 +130,31 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	return &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: target}, parentBaseline, nil
 }
 
-// commitOnBranch validates a change on its own branch and records its commit baseline there.
-func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string, landing *landingDecision, gate bool) (domain.Baseline, error) {
+// commitOnBranch writes the accepted modifications of a change on its own branch and reverts the nodes it no longer
+// changes, then records its commit baseline there.
+func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
 	a, parentBaseline, err := g.newApplier(ctx, tx, id)
 	if err != nil {
 		return domain.Baseline{}, err
 	}
-	a.landing, a.noGate = landing, !gate
 	c := a.change
 	if err := a.prepareChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
 	}
-	if err := a.checkChangeImpacts(); err != nil {
+	own, ok, err := ownBranch(ctx, tx, c)
+	if err != nil {
+		return domain.Baseline{}, err
+	}
+	reverted := 0
+	if ok {
+		if reverted, err = a.revertWithdrawn(own); err != nil {
+			return domain.Baseline{}, err
+		}
+	}
+	if len(a.cposts) == 0 && reverted == 0 {
+		return domain.Baseline{}, fmt.Errorf("change %s: no accepted change impact modifies a node, and nothing it committed is withdrawn: %w", id, ErrNothingToCommit)
+	}
+	if _, err := a.walkChangeImpacts(); err != nil {
 		return domain.Baseline{}, err
 	}
 	if err := g.runNodeValidators(ctx, tx, a.target, a.cposts); err != nil {
@@ -319,11 +164,11 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 		baselineName = c.Title
 	}
 	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit, Nodes: a.target, CreatedAt: g.now()}
-	// the commit of a rebased change keeps where it was forked from before (ADR 0101 §4)
-	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
-		return domain.Baseline{}, err
-	} else if ok {
-		result.RebasedFrom = own.RebasedFrom
+	if ok {
+		result.RebasedFrom = own.RebasedFrom // the commit of a rebased change keeps where it was forked from before (ADR 0101 §4)
+	}
+	if reverted > 0 {
+		result.Kind = domain.BaselineRevert // a revert is no landed event: the state is stored whole
 	}
 	if err := tx.PutBaseline(ctx, result); err != nil {
 		return domain.Baseline{}, err
@@ -345,6 +190,32 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	}
 	c.ResultBaselineID = result.ID
 	return result, tx.PutChange(ctx, c)
+}
+
+// revertWithdrawn puts back, in what the commit leaves, the version the branch was forked from for every node the branch
+// changed that no change impact holds any more (withdrawn after its commit, ADR 0102); it returns how many.
+func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
+	fork, err := a.tx.Baseline(a.ctx, own.ForkBaseline)
+	if err != nil {
+		return 0, err
+	}
+	held := map[domain.NodeID]bool{}
+	for _, cn := range a.mainImpacts() {
+		held[nodeOf(cn)] = true
+	}
+	n := 0
+	for id, v := range a.target {
+		if held[id] || fork.Nodes[id] == v {
+			continue
+		}
+		if fv, ok := fork.Nodes[id]; ok {
+			a.target[id] = fv
+		} else {
+			delete(a.target, id)
+		}
+		n++
+	}
+	return n, nil
 }
 
 // advanceBranch moves the head of a branch (main is created on first use).
@@ -381,14 +252,6 @@ type applier struct {
 	target map[domain.NodeID]domain.Version
 	// cposts are the versions produced by the accepted change impacts (ADR 0024).
 	cposts []cpost
-	// collect marks the rolled-back pass of askLandingGate, which only builds the blackboard the gate decides against
-	collect bool
-	// noGate marks the commit of a root change on its own branch (CommitChange, ADR 0102): the methodology's gate and the
-	// landable states are asked when it is merged, not when it is committed.
-	noGate bool
-	// landing is the answer of LandingGate, asked by askLandingGate's rolled-back pass before this transaction (the
-	// hook may itself read the graph).
-	landing *landingDecision
 	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076),
 	// draft the draft of the node in the state it goes to and drafts the drafts the flow sees (ADR 0079).
 	impact *domain.ChangeImpact

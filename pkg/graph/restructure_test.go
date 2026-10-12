@@ -157,19 +157,18 @@ func testMergeFromTheParent(t *testing.T, repo Repo) {
 		t.Fatalf("events: created %d, removed %d, added %d", created, removed, added)
 	}
 
-	// the review gate: C waits for its origins
+	// the review gate: C waits for its origins, decided by the impact of their parent (via, ADR 0102); a source modifies
+	// nothing itself, it is not accepted
 	if _, err := g.ImpactNodeReview(ctx, c.ID, res.Successors[0].ID, domain.ReviewAccepted, "tester", "ok"); !errors.Is(err, ErrConflict) {
-		t.Fatalf("accepting C before A and B: %v", err)
+		t.Fatalf("accepting C before the merge of A and B: %v", err)
 	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, impactOf(t, res.Sources, "A").ID, domain.ReviewAccepted, "tester", "ok"))
-	if _, err := g.ImpactNodeReview(ctx, c.ID, res.Successors[0].ID, domain.ReviewAccepted, "tester", "ok"); !errors.Is(err, ErrConflict) {
-		t.Fatalf("accepting C with B proposed: %v", err)
-	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, impactOf(t, res.Sources, "B").ID, domain.ReviewAccepted, "tester", "ok"))
-	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
-		t.Fatal(err)
+	if _, err := g.ImpactNodeReview(ctx, c.ID, impactOf(t, res.Sources, "A").ID, domain.ReviewAccepted, "tester", "ok"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a source of the merge modifies nothing: %v", err)
 	}
 	if err := g.acceptImpact(ctx, c.ID, parent.ID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
 	base := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
@@ -298,13 +297,11 @@ func testSplit(t *testing.T, repo Repo) {
 			t.Errorf("%s origins %v", s.Key, got.Origins)
 		}
 	}
-	for _, imp := range res.Sources {
-		must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, imp.ID, domain.ReviewAccepted, "tester", "ok"))
-	}
+	// the split is decided by the impact of the parent: then the successors (ADR 0102)
+	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, res.Parents[0].ID, "tester", "ok"))
 	for _, s := range res.Successors {
 		must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, s.ID, "tester", "ok"))
 	}
-	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, res.Parents[0].ID, "tester", "ok"))
 	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 	if got := must[[]domain.Node](t)(g.DerivedNodes(ctx, a.Ref())); len(got) != 2 {
 		t.Errorf("A derives into C and D: %v", got)
@@ -398,7 +395,7 @@ func TestRestructureRefusesCreatedSources(t *testing.T) {
 	})
 }
 
-// The gate holds again at landing, when an origin goes back to proposed after the review of the successor.
+// The gate holds again at the commit, when an origin goes back to proposed after the review of the successor.
 func TestOriginsGateAtLanding(t *testing.T) { forEachRepo(t, testOriginsGateAtLanding) }
 
 func testOriginsGateAtLanding(t *testing.T, repo Repo) {
@@ -409,21 +406,18 @@ func testOriginsGateAtLanding(t *testing.T, repo Repo) {
 	d.link(t, "contains", f, b)
 	c := d.change(t)
 	res := must[Restructured](t)(g.ImpactNodeMerge(ctx, c.ID, MergeInput{Sources: []NodeName{{Key: "A"}, {Key: "B"}}, Into: NodeCreate{Key: "C", Type: "docs@Item", Rationale: "merge"}}))
-	for _, s := range res.Sources {
-		must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, s.ID, domain.ReviewAccepted, "tester", "ok"))
+	if err := g.acceptImpact(ctx, c.ID, res.Parents[0].ID, ""); err != nil {
+		t.Fatal(err)
 	}
 	if err := g.acceptImpact(ctx, c.ID, res.Successors[0].ID, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := g.acceptImpact(ctx, c.ID, res.Parents[0].ID, ""); err != nil {
-		t.Fatal(err)
-	}
-	// an origin goes back to proposed: the successor no longer lands
-	must[[]domain.ChangeImpactID](t)(g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{res.Sources[0].ID}, "rethink"))
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+	// the merge goes back to proposed (its parent's impact, which decides the origins): the successor no longer lands
+	must[[]domain.ChangeImpactID](t)(g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{res.Parents[0].ID}, "rethink"))
+	if _, err := g.CommitChange(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("landing with an origin awaiting its review: %v", err)
 	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, res.Sources[0].ID, domain.ReviewAccepted, "tester", "ok again"))
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, res.Parents[0].ID, domain.ReviewAccepted, "tester", "ok again"))
 	must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 }
 

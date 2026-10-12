@@ -25,6 +25,9 @@ func SeedChange(ctx context.Context, g *graph.Graph, namespace, title string, ed
 	}
 	_, err := g.Commit(ctx, graph.Commit{Namespace: namespace, Title: title, Intent: title, By: "graphsvc.seed", BaselineName: title, Edits: edits,
 		ProjectID: g.Structure(domain.StructureProject).Root}) // a seed acts in the root project (ADR 0091)
+	if errors.Is(err, graph.ErrNothingToCommit) {
+		return nil // the graph holds what the seed states already
+	}
 	return err
 }
 

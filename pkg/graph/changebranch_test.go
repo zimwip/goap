@@ -66,7 +66,8 @@ func testChangeBranch(t *testing.T, repo Repo) {
 		t.Fatalf("main not updated: %v", n.Properties)
 	}
 
-	// B changes the same property from the same base: the apply rebases it onto A and stops on the conflict (ADR 0101)
+	// B changes the same property from the same base: the apply commits it, rebases its branch onto A and stops on the
+	// conflict (ADR 0102)
 	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("apply with a conflict: %v", err)
 	}
@@ -77,7 +78,8 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "A title" {
 		t.Fatalf("pending change leaked on main: %v", n.Properties)
 	}
-	// the author settles it (B keeps its values) and applies: a fast-forward on top of A
+	// the author settles it (B keeps its values) and applies: its merge version (B's commit and A's version as parents)
+	// is committed, then a fast-forward on top of A
 	settle(t, g, b.ID)
 	bb, err := g.Apply(ctx, b.ID, "")
 	if err != nil {
@@ -86,7 +88,7 @@ func testChangeBranch(t *testing.T, repo Repo) {
 	if bb.Kind != domain.BaselineFastForward || bb.ParentID != ba.ID {
 		t.Fatalf("B's baseline = %s on %s, want a fast-forward of %s", bb.Kind, bb.ParentID, ba.ID)
 	}
-	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "B title" || len(n.Parents) != 1 {
+	if n, _ := g.Node(ctx, domain.NodeRef{ID: f.req.ID}); n.Properties["title"] != "B title" || len(n.Parents) != 2 {
 		t.Fatalf("B not landed on A: %v %v", n.Properties, n.Parents)
 	}
 }

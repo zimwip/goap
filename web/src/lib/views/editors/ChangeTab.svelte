@@ -11,6 +11,7 @@
     ITEM_SUPERSEDED,
     type ChangeItem,
     type Change,
+    type CommitState,
     type Flow,
     type DecisionPoint,
     type Lifecycle,
@@ -73,7 +74,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { verifications, derogationRegister, openDerogation } from '../../verification';
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import ScopeBar from '../../components/ScopeBar.svelte';
-  import { commitState, hasCommits, notAcceptableWhy } from '../../changeCommit';
+  import { commitButtons, notAcceptableWhy } from '../../changeCommit';
   import MergeResolver from '../../components/MergeResolver.svelte';
   import { MAIN_SCOPE, candidatesByOption, scopeColor, scopeName, scopeTabTitle, scopeWritable } from '../../changeScope';
 
@@ -482,8 +483,26 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const stuckNotLandable = $derived(lcRows.some((r) => r.lifecycle && !r.landable));
   // ADR 0102: a commit writes the accepted modifications on the change's branch and leaves it open; the merge takes the
   // branch into the one it was forked from once it holds a commit, and closes the change
-  const commits = $derived(commitState(change, change?.nodes ?? [], awaiting));
-  const committedOnBranch = $derived(hasCommits(change));
+  // the server judges what the change can commit and merge (graph.getCommitState): read again with the change
+  let commitInfo = $state<CommitState | undefined>(undefined);
+  $effect(() => {
+    const id = change?.id;
+    void change?.nodes; // every load of the change (a review, an edit, a commit) asks again
+    if (!id) {
+      commitInfo = undefined;
+      return;
+    }
+    const ctrl = new AbortController();
+    graph
+      .getCommitState(id, ctrl.signal)
+      .then((st) => (commitInfo = st))
+      .catch(() => {
+        if (!ctrl.signal.aborted) commitInfo = undefined;
+      });
+    return () => ctrl.abort();
+  });
+  const commits = $derived(commitButtons(commitInfo, closed));
+  const committedOnBranch = $derived(!!commitInfo?.commits);
   const panes = $derived<Pane[]>([
     { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
     { id: 'impacts', label: 'Impacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
@@ -566,8 +585,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
   }
 
-  /** Takes a node out of the change: its draft is dropped (a node the change creates goes away); refused
-   * once its version has landed (reject it instead, ADR 0076, 0079). */
+  /** Takes a node out of the change, at any time (ADR 0102): its draft is dropped (a node the change creates goes away),
+   * one committed already is reverted by the next commit. */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
     if (!change?.id || !row.impact?.id) return false;
     moving = `${row.node.id}:remove`;
@@ -611,7 +630,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   $effect(() => {
     const ch = change;
     mergeInto = '';
-    if ((ch?.status !== 'committed' && !hasCommits(ch)) || !ch?.branch) return;
+    if ((ch?.status !== 'committed' && !committedOnBranch) || !ch?.branch) return;
     graph
       .getBranch(namespaceOf(ch.namespace), ch.branch)
       .then((r) => (mergeInto = r.branch?.parent || 'main'))
@@ -940,8 +959,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             label: applying ? 'Integrating…' : 'Integrate',
             icon: 'check',
             primary: true,
-            disabled: !change || isApplied || applying || stuckNotLandable,
-            title: stuckNotLandable ? 'Move the nodes to a landable state first' : 'Integrate the change into its parent change',
+            disabled: !change || applying || !commits.canMerge,
+            title: commits.mergeWhy ?? 'Merge the accepted modifications into the parent change',
             run: apply,
           }
         : {
@@ -1140,14 +1159,14 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             </div>
           {/if}
           {#if !isSub}
-            <button onclick={commit} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? "Write the accepted modifications on the change's own branch: the change stays open"}>
+            <button onclick={commit} disabled={applying || unnamed || !commits.canCommit} title={commits.commitWhy ?? `Write ${commits.commitWhat} on the change's own branch: the change stays open`}>
               {applying ? 'Working…' : 'Commit'}
             </button>
             <button class="primary" onclick={mergeBranch} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? `Merge the commits of the change into ${mergeInto || 'the branch it was forked from'} (rebased first when it moved); closes the change`}>
               {applying ? 'Working…' : 'Merge'}
             </button>
           {:else}
-            <button class="primary" onclick={apply} disabled={isApplied || ch.status === 'committed' || applying || stuckNotLandable || awaiting.length > 0} title={stuckNotLandable ? 'Move the nodes to a landable state first' : awaiting.length ? 'Review the impacts first' : 'Integrate into the parent change'}>
+            <button class="primary" onclick={apply} disabled={applying || !commits.canMerge} title={commits.mergeWhy ?? 'Merge the accepted modifications into the parent change'}>
               {applying ? 'Integrating…' : 'Integrate into parent'}
             </button>
           {/if}
@@ -1159,7 +1178,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         {/if}
         {#if awaiting.length}
           <div class="alert" role="status" style="margin: 0.75rem 0 0">
-            {isSub ? 'Integration' : 'Commit'} is blocked: {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
+            {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
             <button type="button" class="link" onclick={() => (pane = 'reviews')}>Review them</button>
           </div>
         {/if}

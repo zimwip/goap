@@ -19,7 +19,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.LandingGate = reg.LandingGate
+	g.MergeGuards = []graph.MergeGuard{graph.FinalStateGuard{}, graph.LandingGate(reg.LandingGate), graph.LandableStatesGuard{}}
 
 	m := methodology.Methodology{
 		Name: "shipping", Version: "1", Namespace: "alm",
@@ -43,8 +43,19 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	}
 
 	// an empty change has nothing to commit (ADR 0102)
-	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) {
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrNothingToCommit) {
 		t.Fatalf("empty change: %v", err)
+	}
+	// it ships a node: committed, its merge is what the goal of the activity holds
+	cn, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: "SHIP-1", Type: "Shipment", Rationale: "ship"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewAccepted, "reviewer", "ok"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
+		t.Fatalf("goal unmet: %v", err)
 	}
 
 	// an unrelated artifact still doesn't satisfy it
@@ -71,7 +82,7 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	g := graph.New(graph.NewMemory())
 	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
 	reg := &Service{Store: store}
-	g.LandingGate = reg.LandingGate
+	g.MergeGuards = []graph.MergeGuard{graph.FinalStateGuard{}, graph.LandingGate(reg.LandingGate), graph.LandableStatesGuard{}}
 
 	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)
 	if err != nil {

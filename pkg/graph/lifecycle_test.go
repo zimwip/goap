@@ -95,7 +95,7 @@ func (w lcWorld) accept(t *testing.T, c domain.Change) {
 }
 
 // A change scoped to an Activity (architecture plan "Activity concept") is gated by its own goal condition
-// (Graph.LandingGate), not the node-type lifecycle's landable-state floor: the activity's call on content/state
+// (the LandingGate merge guard), not the node-type lifecycle's landable-state floor: the activity's call on content/state
 // maturity replaces the blanket "state cannot land" check, rather than adding to it.
 func TestActivityGoalsGateReplacesLandableFloor(t *testing.T) {
 	forEachRepo(t, testActivityGoalsGateReplacesLandableFloor)
@@ -124,14 +124,14 @@ func testActivityGoalsGateReplacesLandableFloor(t *testing.T, repo Repo) {
 	var gotRef string
 	var gotBB domain.Blackboard
 	met := false
-	w.g.LandingGate = func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	w.g.MergeGuards = []MergeGuard{FinalStateGuard{}, LandingGate(func(_ context.Context, c domain.Change, bb domain.Blackboard) (bool, bool, error) {
 		ref, _ := c.Data["scope"].(string)
 		if ref == "" {
 			return false, false, nil
 		}
 		gotRef, gotBB = ref, bb
 		return true, met, nil
-	}
+	}), LandableStatesGuard{}}
 
 	// the hook says no: refused, by the activity's own message, not the landable-state one
 	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
@@ -362,11 +362,15 @@ func testLifecycleDocumentValidatesChildren(t *testing.T, repo Repo) {
 	if err := w.write(c, spec, edit{State: "released"}); err != nil {
 		t.Fatal(err)
 	}
+	// the spec went back to the state it was in: not a modification (ADR 0102), the author withdraws it
+	if err := w.g.WithdrawImpact(ctx, c.ID, spec, "", ""); err != nil {
+		t.Fatal(err)
+	}
 	w.accept(t, c)
 	if _, err := w.g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatalf("spec release with approved children: %v", err)
 	}
-	// the spec went back to the state it was in: not a modification, no version of it (ADR 0102); REQ-2 lands
+	// no version of the spec; REQ-2 lands
 	if n, _ := stateOf(t, w.g, w.spec.ID); n.State != "released" || n.ChangeID == c.ID {
 		t.Fatalf("spec: %+v", n)
 	}
@@ -494,8 +498,8 @@ func testLifecycleGuardRequiresAReview(t *testing.T, repo Repo) {
 	if n, _ := w.g.ChangeNode(ctx, c.ID, "", *cn.Post); n.State != "approved" || !n.IsDraft() {
 		t.Fatalf("the transition moves the draft: %+v", n)
 	}
-	// back in the state it was checked out in: nothing to commit (ADR 0102)
-	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrInvalid) {
+	// back in the state it was checked out in: not a modification, to withdraw (ADR 0102)
+	if _, err := w.g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "modifies nothing") {
 		t.Fatalf("a node back where it was is not a modification: %v", err)
 	}
 }

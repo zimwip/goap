@@ -17,12 +17,12 @@ type cpost struct {
 	post domain.Node
 }
 
-// prepareChangeImpacts writes, from the drafts of the accepted change impacts, the versions the change produces (ADR
-// 0079): a node has no version until here. Every change impact must have been reviewed; a rejected one is left out, an
-// accepted one without a draft is a confirmation (a modified node: nothing to write) or an error (a created one). The
-// versions are written on the branch of the change with their outgoing links, the links to a node of the change
-// resolved to the version this landing writes for it; they are checked when written (checkChangeImpacts), the
-// transaction being rolled back when one fails.
+// prepareChangeImpacts writes, from the drafts of the change impacts, the versions the commit produces (ADR 0079): a node
+// has no version until here. One rule for every impact of the main flow (ADR 0102): the accepted modifications are
+// written; everything else stays in the change as it is (a candidate, a draft left as it was checked out, a modification
+// awaiting its review or rejected, one committed already). The versions are written on the branch of the change with
+// their outgoing links, the links to a node of the change resolved to the version this commit writes for it; they are
+// checked when written (walkChangeImpacts), the transaction being rolled back when one fails.
 func (a *applier) prepareChangeImpacts() error {
 	rows, err := a.g.drafts(a.ctx, a.tx, a.change.ID)
 	if err != nil {
@@ -34,49 +34,20 @@ func (a *applier) prepareChangeImpacts() error {
 	}
 	var todo []landing
 	impacts := a.mainImpacts()
-	strict := !isBulk(a.ctx) // ADR 0102: only modifications land; the bulk producer path confirms as before
-	for _, cn := range a.change.Nodes {
-		if len(cn.Items) > 0 {
-			continue // derived from items: their proposals are applied above
-		}
-		if cn.Flow != "" || cn.Superseded {
-			continue // a candidate of a flow that is not adopted, or replaced by one that is
+	for _, cn := range impacts {
+		if cn.Review != domain.ReviewAccepted {
+			continue
 		}
 		d := ownDraft(rows, cn.ID, "")
-		if strict {
-			// a candidate (no draft: an impact identified, or committed already and not checked out again) and a draft
-			// left as it was checked out stay in the change as they are: nothing of theirs is committed (ADR 0102)
-			if d == nil {
-				continue
-			}
-			if ok, err := a.g.draftModifies(a.ctx, a.tx, d); err != nil {
-				return err
-			} else if !ok {
-				continue
-			}
-		} else if d == nil && cn.Landed != nil {
-			continue // committed already
-		}
-		switch cn.Review {
-		case domain.ReviewRejected:
+		if ok, err := a.g.draftModifies(a.ctx, a.tx, d); err != nil {
+			return err
+		} else if !ok {
 			continue
-		case domain.ReviewProposed:
-			return fmt.Errorf("change impact %s (%s) awaits its review: %w", cn.Key, cn.ID, ErrConflict)
-		}
-		if d == nil {
-			if cn.Intent == domain.IntentModified {
-				continue // an impact confirmed, with no new version to write
-			}
-			return invalidf("change impact %s (%s) is accepted but its node is not written: write it or reject it", cn.Key, cn.ID)
 		}
 		if err := a.g.checkOrigins(impacts, cn, d); err != nil {
 			return err
 		}
 		todo = append(todo, landing{cn, *d})
-	}
-	// a change of items only (facts, decisions) commits as before; one that names nodes must modify one
-	if strict && len(todo) == 0 && (len(impacts) > 0 || len(a.change.Items) == 0) {
-		return invalidf("nothing to commit: no change impact of change %s modifies a node (check a node out and change it)", a.change.ID)
 	}
 	// 1. the versions: the next version of each node, whatever the branch it was written on
 	written := map[domain.NodeID]domain.Version{}
@@ -138,6 +109,12 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 	n := domain.Node{ID: d.Node, Branch: a.branch, Namespace: domain.NamespaceOf(a.change.Namespace), Key: d.Key, Type: d.Type, Properties: cloneMap(d.Properties),
 		State: d.State, ChangeID: a.change.ID, Owner: d.Owner, ChangeImpact: cn.ID, Comment: comment, Execution: d.Execution, Origins: slices.Clone(d.Origins), CreatedAt: a.g.now()}
 	if d.Base == nil {
+		// a key is one node's: another change may have created it meanwhile
+		if id, err := a.tx.NodeIDByKey(a.ctx, n.Namespace, n.Key); err == nil && id != n.ID {
+			return n, fmt.Errorf("%s (%s): the key is taken by a node another change created meanwhile: rename it or withdraw it: %w", d.Key, d.Type, ErrConflict)
+		} else if err != nil && !errors.Is(err, ErrNotFound) {
+			return n, err
+		}
 		n.Version, n.Reason = 1, domain.ReasonCreate
 		return n, a.tx.PutNode(a.ctx, n)
 	}
@@ -163,21 +140,7 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 }
 
 // mainImpacts are the impacts of the main flow that count at landing.
-func (a *applier) mainImpacts() []domain.ChangeImpact {
-	return slices.DeleteFunc(slices.Clone(a.change.Nodes), func(cn domain.ChangeImpact) bool { return cn.Flow != "" || cn.Superseded })
-}
-
-// checkChangeImpacts validates the versions produced by the change impacts once the target graph is known: property
-// validators, the states the nodes are left in and the transitions they went through, then what they leave (the landing
-// gate, else no node left in a state that cannot land). A transition was authorized, guarded and acted when it was taken
-// (ImpactNodeTransition, ADR 0076): the walk only checks that each state change on the branch is a move of the lifecycle.
-func (a *applier) checkChangeImpacts() error {
-	stuck, err := a.walkChangeImpacts()
-	if err != nil {
-		return err
-	}
-	return a.settleChangeImpacts(stuck)
-}
+func (a *applier) mainImpacts() []domain.ChangeImpact { return mainImpactsOf(a.change) }
 
 // walkChangeImpacts validates the properties of each produced version and walks its transitions: it returns the nodes
 // left in a state that cannot land (ADR 0078).
@@ -247,54 +210,6 @@ func (a *applier) walkTransitions(cp cpost, lc *domain.Lifecycle) error {
 		return invalidf("%s (%s) is in %s, the moves recorded for it end in %s", cp.post.Key, cp.post.Type, cp.post.State, at)
 	}
 	return nil
-}
-
-// settleChangeImpacts decides what the walk found: the landing gate, else the states left that cannot land.
-func (a *applier) settleChangeImpacts(stuck []string) error {
-	// LandingGate may itself need to read the graph, which this transaction would block (the stores are not
-	// reentrant): askLandingGate asks it in its own rolled-back pass before this transaction opens, and passes the
-	// answer in as a.landing. a.collect means this call IS that earlier pass: nothing to check yet, just leave the
-	// blackboard (landingBlackboard) for the caller to evaluate outside it.
-	if a.collect || a.noGate {
-		return nil
-	}
-	if a.g.LandingGate != nil && a.landing == nil {
-		return fmt.Errorf("change %s: the landing gate was not asked before this transaction: %w", a.change.ID, ErrInvalid)
-	}
-	switch {
-	case a.landing != nil && a.landing.decided:
-		if !a.landing.ok {
-			return invalidf("the change does not satisfy the goal of its landing gate")
-		}
-	case len(stuck) > 0:
-		return invalidf("the change leaves nodes in a state that cannot land, move them to a landable state first: %s", joinSorted(stuck))
-	}
-	return nil
-}
-
-// landingBlackboard builds the blackboard LandingGate decides against: the change with its impacts (for the
-// changeImpacts condition variable), hydrated with the pre/post node content this Apply already resolved (ADR
-// 0024) - not a fresh read, since this change's own pending writes are not yet visible outside this transaction.
-func (a *applier) landingBlackboard() domain.Blackboard {
-	bb := domain.Blackboard{Change: a.change, Nodes: map[domain.NodeRef]domain.NodeView{}}
-	add := func(n *domain.Node) {
-		if n == nil {
-			return
-		}
-		v := domain.NodeView{Node: *n}
-		if lc := a.ix.lifecycleOf(n.Type); lc != nil && n.State != "" {
-			v.NotLandable = !lc.Landable(n.State)
-		}
-		bb.Nodes[n.Ref()] = v
-	}
-	for _, cp := range a.cposts {
-		add(cp.pre)
-		post := cp.post
-		add(&post)
-		// the change impact still holds the draft reference (ADR 0079): it reads the version written from the draft
-		bb.Nodes[domain.DraftRef(post.ID)] = bb.Nodes[post.Ref()]
-	}
-	return bb
 }
 
 func joinSorted(s []string) string {

@@ -142,8 +142,8 @@ export async function writeNodeInChange(
   }
 }
 
-/** Takes a node the change works on out of it: its draft is dropped (a node the change created goes away);
- * refused once its version has landed (reject it instead). */
+/** Takes a node the change works on out of it, at any time (ADR 0102): its draft is dropped (a node the change created
+ * goes away); one the change committed already is reverted on its branch by the next commit. */
 export async function removeFromChange(changeId: string, cn: ChangeImpact, flow = ''): Promise<void> {
   if (cn.id) await graph.withdrawImpact(changeId, cn.id, flow);
 }

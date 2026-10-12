@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -51,6 +52,13 @@ func testChangeViewLevels(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, needW.ID, domain.ReviewRejected, "u", "no"))
 	if w := view(ViewWritten); !w.Contains(need) {
 		t.Fatalf("written view after the rejection: %v", w.Nodes)
+	}
+	// rejected: reworked or withdrawn before the change merges (ADR 0102)
+	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a rejected impact holds the merge: %v", err)
+	}
+	if err := g.WithdrawImpact(ctx, c.ID, needW.ID, "", ""); err != nil {
+		t.Fatal(err)
 	}
 	res := must[domain.Baseline](t)(g.Apply(ctx, c.ID, ""))
 	l := view(ViewLanded)

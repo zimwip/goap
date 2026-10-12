@@ -345,7 +345,7 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 			return out, err
 		}
 		if ownDraft(rows, hw.cn.ID, hw.flow) == nil {
-			if _, err := g.checkoutTx(ctx, tx, hw, execution, false); err != nil {
+			if _, err := g.checkoutTx(ctx, tx, hw, execution); err != nil {
 				return out, err
 			}
 			if hw, err = g.resolve(ctx, tx, id, target{Node: h.node.ID, Flow: flow, Execution: execution}); err != nil {
@@ -494,6 +494,11 @@ func (g *Graph) checkOrigins(impacts []domain.ChangeImpact, cn domain.ChangeImpa
 	var pending []string
 	for _, o := range d.Origins {
 		i := slices.IndexFunc(impacts, func(x domain.ChangeImpact) bool { return nodeOf(x) == o.ID })
+		// an origin is changed by the impact of its parent (via): that one decides it (ADR 0077, 0102)
+		if i >= 0 && impacts[i].Via != "" {
+			via := impacts[i].Via
+			i = slices.IndexFunc(impacts, func(x domain.ChangeImpact) bool { return x.ID == via })
+		}
 		switch {
 		case i < 0:
 			pending = append(pending, string(o.ID)+" (not in the change)")

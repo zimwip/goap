@@ -20,14 +20,15 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 	g := f.g
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "rework", BaselineID: f.base.ID}))
 
-	// a rejected checkout keeps its draft: reopened, it is edited again
+	// a rejected checkout keeps its draft: edited, it is proposed again (ADR 0102)
 	cn := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
 	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, cn.ID, domain.ReviewRejected, "bob", "not like this"))
 	if d := must[*domain.Draft](t)(g.draftOf(ctx, c.ID, "", cn.ID)); d == nil {
 		t.Fatalf("a rejected impact keeps its draft")
 	}
-	must[[]domain.ChangeImpactID](t)(g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{cn.ID}, "try again"))
-	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}}))
+	if cn = must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, cn.ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}})); cn.Review != domain.ReviewProposed {
+		t.Fatalf("reworked, it is proposed again: %+v", cn)
+	}
 
 	// removed: the draft goes, the node is back to its version, the impact leaves the change
 	if err := g.WithdrawImpact(ctx, c.ID, cn.ID, "", ""); err != nil {
@@ -51,6 +52,7 @@ func testWithdrawImpact(t *testing.T, repo Repo) {
 
 	// an accepted impact keeps its draft until the change lands: it is withdrawn like any other
 	cn = must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.test.ID, Rationale: "v2"}))
+	g.touch(t, c.ID, cn.ID)
 	if err := g.acceptImpact(ctx, c.ID, cn.ID, ""); err != nil {
 		t.Fatal(err)
 	}

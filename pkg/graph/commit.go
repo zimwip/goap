@@ -70,12 +70,13 @@ type CommitResult struct {
 
 // Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
-// each impact is accepted by the producer (the rationale is the comment: a bulk system path, not an edit), the state
-// edits are transitions (ImpactNodeTransition, on the draft, before its accept), and the change is applied. When the branch cannot be merged without conflict (another change moved
-// a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and rebuilds its edits.
+// the state edits are transitions (ImpactNodeTransition, on the draft), each impact that modifies its node is accepted by
+// the producer and one that modifies nothing withdrawn (ADR 0102), and the change is applied. A commit that lands nothing
+// (ErrNothingToCommit) or fails leaves no change behind (purged); when the branch cannot be merged without conflict
+// (another change moved a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and
+// rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
-	ctx = withBulk(ctx) // a producer confirms what it lists, changed or not (ADR 0102)
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
 	}
@@ -95,7 +96,11 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		if err == nil {
 			return
 		}
-		// a change that fails is abandoned: its drafts go with it, no node was written, no key is held (ADR 0079)
+		// a commit is all or nothing: a change that landed nothing leaves no trace (purged with its drafts and its log,
+		// no key is held, ADR 0079), else it is abandoned
+		if _, perr := g.PurgeChange(ctx, c.ID); perr == nil {
+			return
+		}
 		abandoned := domain.ChangeAbandoned
 		if _, aerr := g.UpdateChange(ctx, c.ID, ChangePatch{Status: &abandoned}); aerr != nil {
 			err = errors.Join(err, aerr)
@@ -209,19 +214,10 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			return res, fmt.Errorf("link %s from %s to %s: %w", x.l.Type, nodeName(in.Edits[x.from]), x.l.ToKey, err)
 		}
 	}
-	// A node with a draft is moved to its state first, then accepted. A node with none (a state-only edit) is accepted
-	// first (what the guard of a transition may ask), then moved: the move checks the node out (ADR 0079). Accepting is
-	// the review of a bulk producer acting as the system (seeds, EnsureUser, the settings dialog): a Commit is not a
-	// user edit, and reviews are otherwise always explicit (ADR 0079).
-	freeze := func(i int, e NodeEdit) error {
-		if impacts[i] == "" {
-			return nil
-		}
-		if _, err := g.ImpactNodeReview(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
-			return fmt.Errorf("%s: %w", nodeName(e), err)
-		}
-		return nil
-	}
+	// The producer's edits go through the rules of every change (ADR 0102): a state edit is a move of the node's draft (a
+	// node with none is checked out by the move); then each impact that modifies its node is accepted by the producer
+	// (the rationale is the comment) and one that modifies nothing (an edit restating what the node holds) is withdrawn.
+	// A commit left with nothing to land is ErrNothingToCommit.
 	move := func(i int, e NodeEdit) error {
 		var node domain.NodeID
 		var cur string
@@ -248,32 +244,32 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		return nil
 	}
 	for i, e := range in.Edits {
-		if e.State == "" {
-			continue
-		}
-		if posts[i] != nil {
+		if e.State != "" {
 			if err := move(i, e); err != nil {
 				return res, err
 			}
-			if err := freeze(i, e); err != nil {
-				return res, err
+		}
+	}
+	kept := 0
+	for i, e := range in.Edits {
+		if impacts[i] == "" {
+			continue
+		}
+		if modifies, err := g.ImpactModifies(ctx, c.ID, impacts[i]); err != nil {
+			return res, err
+		} else if !modifies {
+			if err := g.WithdrawImpact(ctx, c.ID, impacts[i], "", ""); err != nil {
+				return res, fmt.Errorf("%s: %w", nodeName(e), err)
 			}
 			continue
 		}
-		if err := freeze(i, e); err != nil {
-			return res, err
+		if _, err := g.ImpactNodeReview(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
+			return res, fmt.Errorf("%s: %w", nodeName(e), err)
 		}
-		if err := move(i, e); err != nil {
-			return res, err
-		}
+		kept++
 	}
-	for i, e := range in.Edits {
-		if e.State != "" {
-			continue
-		}
-		if err := freeze(i, e); err != nil {
-			return res, err
-		}
+	if kept == 0 {
+		return res, fmt.Errorf("commit %q: every edit restates what the graph holds: %w", in.Title, ErrNothingToCommit)
 	}
 	if res.Baseline, err = g.Apply(ctx, c.ID, in.BaselineName); err != nil {
 		return res, err

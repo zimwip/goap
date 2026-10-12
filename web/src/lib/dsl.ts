@@ -52,7 +52,7 @@ export const DSL_FUNCTIONS: DslFunction[] = [
   { name: 'answer', args: ['questionId', 'answer'], returns: '', doc: 'Answer an open question of a decision point.', group: 'write' },
   { name: 'impactNodeTransition', args: ['node', 'state'], returns: '', doc: 'Move a node along its lifecycle: always on the draft (a node with none is checked out first), never changing the review; authorized and guarded when it is taken.', group: 'write' },
   { name: 'impactNodeCancel', args: ['node'], returns: '', doc: 'Drop the working version of a node (a node the change created and not accepted yet goes away).', group: 'write' },
-  { name: 'withdrawImpact', args: ['node'], returns: '', doc: 'Take a node out of the change (its working version is dropped); refused once its accepted review froze a version of it.', group: 'write' },
+  { name: 'withdrawImpact', args: ['node'], returns: '', doc: 'Take a node out of the change, at any time (its draft is dropped; a version it committed is reverted by the next commit).', group: 'write' },
   { name: 'llm', args: ['prompt'], returns: 'string', doc: 'Text completion ("default" model).', group: 'call' },
   {
     name: 'complete',

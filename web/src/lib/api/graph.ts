@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, BaselineNodesQuery, Branch, Change, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -269,7 +269,8 @@ export const graph = {
   /** Drops the draft of an impact (a creation never accepted leaves no node). */
   impactNodeCancel: (changeId: string, changeImpactId: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; flow: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeCancel', { changeId, changeImpactId, flow }),
-  /** Takes an impact out of the change (its draft is dropped); refused once its version has landed. */
+  /** Takes an impact out of the change, at any time (ADR 0102): its draft is dropped, a version it committed is reverted
+   * by the next commit. */
   withdrawImpact: (changeId: string, changeImpactId: string, flow = '') =>
     rpc<{ changeId: string; changeImpactId: string; flow: string }, Empty>(GRAPH, 'WithdrawImpact', { changeId, changeImpactId, flow }),
   /** Brings a sub-change up to date with its parent (ADR 0082): a three-way merge of the drafts the parent changed; the fields changed on both sides are conflicts. */
@@ -279,6 +280,8 @@ export const graph = {
   impactNodeResolve: (changeId: string, changeImpactId: string) =>
     rpc<{ changeId: string; changeImpactId: string }, { node?: ChangeImpact }>(GRAPH, 'ImpactNodeResolve', { changeId, changeImpactId }),
   /** Where a sub-change stands against its parent: the impacts behind it, the conflicts to settle. */
+  /** What the change can commit and merge (ADR 0102). */
+  getCommitState: (changeId: string, signal?: AbortSignal) => rpc<{ changeId: string }, CommitState>(GRAPH, 'GetCommitState', { changeId }, signal),
   getRebaseState: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, RebaseState>(GRAPH, 'GetRebaseState', { changeId }, signal),
   /** Sends accepted or rejected impacts back to proposed (a rejected one is reworked); the comment is mandatory. */

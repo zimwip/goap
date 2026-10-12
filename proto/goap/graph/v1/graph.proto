@@ -77,6 +77,9 @@ service GraphService {
   rpc RebaseChange(RebaseChangeRequest) returns (RebaseChangeResponse);
   rpc ImpactNodeResolve(ImpactNodeResolveRequest) returns (ImpactNodeResolveResponse);
   rpc GetRebaseState(GetRebaseStateRequest) returns (GetRebaseStateResponse);
+  // What a change can commit and merge (ADR 0102): the accepted modifications the next commit writes, the withdrawn nodes
+  // it reverts, what holds the merge; the one source of the Commit and Merge buttons.
+  rpc GetCommitState(GetCommitStateRequest) returns (GetCommitStateResponse);
   rpc ImpactNodeReview(ImpactNodeReviewRequest) returns (ImpactNodeReviewResponse);
   // The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
   // own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
@@ -1273,6 +1276,23 @@ message ImpactNodeResolveResponse {
 
 message GetRebaseStateRequest {
   string change_id = 1;
+}
+
+message GetCommitStateRequest {
+  string change_id = 1;
+}
+
+message GetCommitStateResponse {
+  // keys of the accepted modifications the next commit writes
+  repeated string to_commit = 1;
+  // nodes withdrawn after their commit that the next commit reverts
+  int32 reverts = 2;
+  // what holds the merge (impacts to commit, review, rework or withdraw; open flows, decision points, sub-changes)
+  repeated string unsettled = 3;
+  // the change committed on its own branch something it has not merged yet
+  bool commits = 4;
+  bool can_commit = 5;
+  bool can_merge = 6;
 }
 
 // The conflicts a rebase left on a change impact, not settled yet.

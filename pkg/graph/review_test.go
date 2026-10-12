@@ -315,7 +315,7 @@ func TestReviewOnTheMainFlowWhileAnOptionIsActive(t *testing.T) {
 func ptr[T any](v T) *T { return &v }
 
 // A batch settles the origins of a successor first, whatever the order of its verdicts: the successor is listed
-// before the sources it derives from and the batch still stands (ADR 0077 gate, ADR 0080).
+// before the impact deciding the sources it derives from and the batch still stands (ADR 0077 gate, ADR 0080, 0102).
 func TestReviewBatchSettlesOriginsFirst(t *testing.T) {
 	forEachRepo(t, testReviewBatchSettlesOriginsFirst)
 }
@@ -329,13 +329,13 @@ func testReviewBatchSettlesOriginsFirst(t *testing.T, repo Repo) {
 	c := d.change(t)
 	res := must[Restructured](t)(g.ImpactNodeMerge(ctx, c.ID, MergeInput{Sources: []NodeName{{Key: "A"}, {Key: "B"}}, Into: NodeCreate{Key: "C", Type: "docs@Item", Rationale: "merge"}}))
 	vs := []domain.ImpactVerdict{{Impact: res.Successors[0].ID, Status: domain.ReviewAccepted, Comment: "c"}}
-	for _, s := range append(res.Sources, res.Parents...) {
+	for _, s := range res.Parents { // the merge is decided by the impact of the parent (ADR 0102)
 		vs = append(vs, domain.ImpactVerdict{Impact: s.ID, Status: domain.ReviewAccepted, Comment: "ok"})
 	}
 	if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "R", By: "alice", Verdicts: vs}); err != nil {
 		t.Fatalf("the origins are settled first: %v", err)
 	}
-	// without the sources in the batch, the gate still refuses it and nothing is written
+	// without the parent in the batch, the gate still refuses it and nothing is written
 	c2 := d.change(t)
 	res2 := must[Restructured](t)(g.ImpactNodeMerge(ctx, c2.ID, MergeInput{Sources: []NodeName{{Key: "A"}, {Key: "B"}}, Into: NodeCreate{Key: "C2", Type: "docs@Item", Rationale: "merge"}}))
 	_, err := g.ImpactNodeReviewBatch(ctx, c2.ID, domain.ReviewBatch{By: "alice", Verdicts: []domain.ImpactVerdict{{Impact: res2.Successors[0].ID, Status: domain.ReviewAccepted, Comment: "c"}}})

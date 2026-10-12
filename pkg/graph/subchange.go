@@ -387,16 +387,9 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 	return
 }
 
-// commitSubTx commits a sub-change (ADR 0081): the rules of a landing are checked on its drafts, as the versions written
-// from them would be, and nothing is written to a branch: the sub-change hands its drafts to its parent when it is
-// integrated. The states its nodes are left in are the parent's to land.
-func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing *landingDecision) error {
-	if g.LandingGate != nil && landing == nil {
-		return fmt.Errorf("change %s: the landing gate was not asked before this transaction: %w", c.ID, ErrInvalid)
-	}
-	if landing != nil && landing.decided && !landing.ok {
-		return invalidf("the change does not satisfy the goal of its landing gate")
-	}
+// checkSubDrafts checks the accepted modifications of a sub-change as the versions written from them would be (ADR 0081,
+// 0102): a sub-change writes nothing to a branch, its merge hands its drafts to its parent.
+func (g *Graph) checkSubDrafts(ctx context.Context, tx Tx, c domain.Change) error {
 	ix, err := g.typesAt(ctx, tx, c.BaselineID)
 	if err != nil {
 		return err
@@ -405,28 +398,16 @@ func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing
 	if err != nil {
 		return err
 	}
-	impacts := slices.DeleteFunc(slices.Clone(c.Nodes), func(cn domain.ChangeImpact) bool { return cn.Flow != "" || cn.Superseded })
+	impacts := mainImpactsOf(c)
 	reader, err := g.newDraftReader(ctx, tx, c, "", impacts)
 	if err != nil {
 		return err
 	}
 	resolve := draftResolver(ctx, tx, reader)
 	for _, cn := range impacts {
-		if len(cn.Items) > 0 {
-			continue
-		}
-		switch cn.Review {
-		case domain.ReviewRejected:
-			continue
-		case domain.ReviewProposed:
-			return fmt.Errorf("change impact %s (%s) awaits its review: %w", cn.Key, cn.ID, ErrConflict)
-		}
 		d := ownDraft(rows, cn.ID, "")
-		if d == nil {
-			if cn.Intent == domain.IntentModified {
-				continue // an impact confirmed, with nothing written
-			}
-			return invalidf("change impact %s (%s) is accepted but its node is not written: write it or reject it", cn.Key, cn.ID)
+		if cn.Review != domain.ReviewAccepted || d == nil {
+			continue
 		}
 		if err := g.checkOrigins(impacts, cn, d); err != nil {
 			return err
@@ -435,8 +416,7 @@ func (g *Graph) commitSubTx(ctx context.Context, tx Tx, c domain.Change, landing
 			return err
 		}
 	}
-	c.Status = domain.ChangeCommitted
-	return tx.PutChange(ctx, c)
+	return nil
 }
 
 // subInstall is a draft of a sub-change its integration installs in the parent change.
@@ -462,12 +442,12 @@ func (g *Graph) integrateSub(ctx context.Context, tx Tx, c domain.Change) (domai
 	var plan []subInstall
 	var behind, rejected []string
 	for _, cn := range c.Nodes {
-		if len(cn.Items) > 0 || cn.Flow != "" || cn.Superseded || cn.Review != domain.ReviewAccepted {
+		if cn.Flow != "" || cn.Superseded || cn.Review != domain.ReviewAccepted {
 			continue
 		}
 		d := ownDraft(rows, cn.ID, "")
 		if d == nil {
-			continue // confirmed, nothing written
+			continue // a source of a merge or a split its parent impact realizes
 		}
 		in := subInstall{cn: cn, d: *d, parent: p.impactOf(d.Node)}
 		switch {

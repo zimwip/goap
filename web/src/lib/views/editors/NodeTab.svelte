@@ -304,8 +304,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     }
   }
 
-  /** Takes the node out of the working change: its draft is dropped; refused once its version has landed (reject it
-   * instead). A node is never deleted (ADR 0076). */
+  /** Takes the node out of the working change, at any time (ADR 0102): its draft is dropped, a version it committed is
+   * reverted by the next commit. A node is never deleted (ADR 0076). */
   async function removeFromWork() {
     const imp = row?.impact;
     if (!imp?.id || !workId) return;
@@ -421,7 +421,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
               {#if !editing}
                 <button type="button" class="small primary" disabled={busy !== '' || stored.deleted} onclick={() => (editing = true)} title="Edit in the working change">Edit</button>
                 {#if inChange && row?.impact?.id && !row.impact.superseded}
-                  <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change (refused once its version has landed: reject it instead)" onclick={removeFromWork}>Remove from change</button>
+                  <button type="button" class="small danger" disabled={busy !== ''} title="Take the node out of the working change, at any time: one committed already is reverted by the next commit" onclick={removeFromWork}>Remove from change</button>
                 {/if}
               {/if}
             </div>

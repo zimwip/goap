@@ -752,6 +752,12 @@ func (h *Handler) GetRebaseState(ctx context.Context, r *connect.Request[graphv1
 	return res(out, err)
 }
 
+func (h *Handler) GetCommitState(ctx context.Context, r *connect.Request[graphv1.GetCommitStateRequest]) (*connect.Response[graphv1.GetCommitStateResponse], error) {
+	st, err := h.Graph.CommitState(ctx, domain.ChangeID(r.Msg.ChangeId))
+	return res(&graphv1.GetCommitStateResponse{ToCommit: st.ToCommit, Reverts: int32(st.Reverts), Unsettled: st.Unsettled, Commits: st.Commits,
+		CanCommit: st.CanCommit, CanMerge: st.CanMerge}, err)
+}
+
 func (h *Handler) ImpactNodeReview(ctx context.Context, r *connect.Request[graphv1.ImpactNodeReviewRequest]) (*connect.Response[graphv1.ImpactNodeReviewResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	status := domain.ReviewRejected

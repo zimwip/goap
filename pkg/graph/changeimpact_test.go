@@ -42,24 +42,28 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatalf("change should be active with 2 nodes: %s %d", ch.Status, len(ch.Nodes))
 	}
 
-	// accepting needs a comment
-	if _, err := g.accept(ctx, c.ID, got[0].ID, "alice", "  "); !errors.Is(err, ErrInvalid) {
+	// accepting needs a comment, and a modification (ADR 0102): a candidate is not accepted
+	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "  "); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a review needs a comment, got %v", err)
 	}
-	if _, err := g.accept(ctx, c.ID, got[0].ID, "alice", "impact confirmed with the PSP team"); err != nil {
+	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a candidate modifies nothing: not accepted, got %v", err)
+	}
+	// rejected as it is: to be reworked or withdrawn
+	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewRejected, "bob", "not like this"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewRejected, "bob", "no"); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a reviewed node cannot be reviewed again, got %v", err)
 	}
 
-	// a checkout realizes the impact: a working version written by the change, and the review starts over (ADR 0076)
+	// a checkout gives the impact its draft and modifies nothing: the review stands (ADR 0102)
 	cn, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: got[0].ID})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cn.Post == nil || cn.Planned() || cn.Review != domain.ReviewProposed {
-		t.Fatalf("post not set, or the review not back to proposed: %+v", cn)
+	if cn.Post == nil || cn.Planned() || cn.Review != domain.ReviewRejected {
+		t.Fatalf("post not set, or the review moved: %+v", cn)
 	}
 	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: got[0].ID}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a node is checked out once, got %v", err)
@@ -71,13 +75,16 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if g.versionCount(ctx, f.req.ID) != 1 {
 		t.Fatalf("no version exists while the change works (ADR 0079)")
 	}
+	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); !errors.Is(err, ErrConflict) {
+		t.Fatalf("a rejected impact is reviewed again once reworked, got %v", err)
+	}
+	// reworked: the edit proposes it again
+	if cn = must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, got[0].ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}})); cn.Review != domain.ReviewProposed {
+		t.Fatalf("a rejected impact edited is proposed again: %+v", cn)
+	}
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("landing needs an accepted review, got %v", err)
 	}
-	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("a draft that modifies nothing is not accepted (ADR 0102), got %v", err)
-	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeUpdate(ctx, c.ID, got[0].ID, NodeUpdate{Properties: map[string]any{"title": "Use PSP v2"}}))
 	if _, err := g.ImpactNodeReview(ctx, c.ID, got[0].ID, domain.ReviewAccepted, "alice", "impact confirmed with the PSP team"); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +96,7 @@ func testChangeImpacts(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 2 || list[0].Review != domain.ReviewAccepted || len(list[0].Reviews) != 3 || list[0].Reviews[0].By != "alice" || list[1].Key != "TST-2" || list[1].Planned() {
+	if len(list) != 2 || list[0].Review != domain.ReviewAccepted || len(list[0].Reviews) != 3 || list[0].Reviews[0].By != "bob" || list[1].Key != "TST-2" || list[1].Planned() {
 		t.Fatalf("unexpected list: %+v", list)
 	}
 	if list[0].Pre == nil || *list[0].Pre != pre {
@@ -245,7 +252,9 @@ func testChangeImpactsLifecycle(t *testing.T, repo Repo) {
 	if _, err := g.edit(ctx, c.ID, nodes[1].ID, edit{State: "approved"}); err != nil {
 		t.Fatal(err)
 	}
-	review(nodes[1].ID) // the checkout sent the review back to proposed
+	// the commit of the first apply wrote the versions on the change's branch, the merge refused them; the edit since
+	// sends the review back to proposed (ADR 0102), the moves do not
+	review(nodes[1].ID)
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {
 		t.Fatal(err)
 	}
@@ -276,10 +285,6 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := g.accept(ctx, c.ID, ns[0].ID, "alice", "ok"); err != nil {
-			t.Fatal(err)
-		}
-		// a checkout after the acceptance is reviewed again (ADR 0076)
 		if _, err := g.edit(ctx, c.ID, ns[0].ID, edit{Properties: props}); err != nil {
 			t.Fatal(err)
 		}
@@ -306,7 +311,7 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	if head.Properties["title"] != "A" || head.Properties["owner"] != "carol" || head.ChangeID != c.ID {
 		t.Fatalf("disjoint changes must merge: %+v", head)
 	}
-	// b changes the same property as a: the apply rebases it and stops on the conflict (ADR 0101)
+	// b changes the same property as a: the apply commits it, rebases its branch and stops on the conflict (ADR 0102)
 	if _, err := g.Apply(ctx, b.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("conflicting change must stop: %v", err)
 	}
@@ -323,8 +328,9 @@ func testChangeImpactsMerge(t *testing.T, repo Repo) {
 	if head.Properties["title"] != "B" || head.Properties["owner"] != "carol" || head.ChangeID != b.ID || list[0].Landed == nil || *list[0].Landed != head.Ref() {
 		t.Fatalf("the rebased change must land as the version of b: %+v %+v", head, list)
 	}
-	if len(head.Parents) != 1 || head.Parents[0] != before.Version {
-		t.Fatalf("a rebased version is parented to the version on main: %+v", head.Parents)
+	// b committed on its branch, then its rebase merged its version with main's: both are parents (ADR 0102)
+	if len(head.Parents) != 2 || head.Parents[1] != before.Version {
+		t.Fatalf("a rebased version is parented to b's commit and to the version on main: %+v", head.Parents)
 	}
 }
 
@@ -384,6 +390,7 @@ func testReviewPolicy(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	g.touch(t, c.ID, got[0].ID)
 	log := func() int {
 		entries, _, err := g.ChangeLog(ctx, domain.LogFilter{Change: c.ID})
 		if err != nil {
@@ -417,6 +424,7 @@ func TestNilReviewPolicyReviewsAsBefore(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		f.g.touch(t, c.ID, got[0].ID)
 		if f.g.ReviewPolicy != nil {
 			t.Fatal("unset by default")
 		}
@@ -442,6 +450,7 @@ func testReopenImpacts(t *testing.T, repo Repo) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	g.touch(t, c.ID, got[0].ID)
 	id := got[0].ID
 	if done, err := g.ReopenImpacts(ctx, c.ID, []domain.ChangeImpactID{id}, "why"); err != nil || len(done) != 0 {
 		t.Fatalf("a proposed impact is left alone: %v %v", done, err)

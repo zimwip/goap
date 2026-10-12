@@ -68,18 +68,14 @@ type Graph struct {
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
-	// LandingGate, when set, is asked at Apply / Commit time about every change, with the blackboard built from this
-	// Apply's own cposts (ADR 0024), not a fresh read, since it must see the change's own pending writes before they
-	// are visible outside this transaction. decided false: the gate has nothing to say about this change and the
-	// node-type lifecycle's landable-state floor applies unchanged; decided true: ok says whether the change may land, and
-	// the gate replaces that floor (a use case, e.g. the Activity a change is scoped to, judges the maturity of
-	// content and state instead of a fixed per-type flag). The graph knows no use case: what the gate reads from the
-	// change (Change.Data) and how it decides is the owner's (internal/registrysvc, wired from main). It may read the
-	// graph itself: it runs outside any transaction (authorizeMoves).
-	LandingGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
+	// MergeGuards are the rules a merge must pass (ADR 0102, mergeguard.go), asked in order outside any transaction, on
+	// what the change lands: the first that decides, decides. What holds a merge moves with the use cases (the lifecycle
+	// of the change, the goals of its activity, the landable states of a domain): the graph keeps the mechanism, the
+	// compositions plug the rules (LandingGate adapts the registry's goal of an Activity). Unset: DefaultMergeGuards.
+	MergeGuards []MergeGuard
 	// SubChangeValidator, when set, is asked by CreateChange about a sub-change before it is stored, with its parent
 	// as stored and the change as it is about to be (Data, Methodology, ...): an error refuses it (wrap ErrInvalid).
-	// Like LandingGate it runs outside any transaction and may read the graph.
+	// Like a merge guard it runs outside any transaction and may read the graph.
 	SubChangeValidator func(ctx context.Context, parent, child domain.Change) error
 
 	// Facets are the providers of the facets of a blackboard (domain.Blackboard.Facets) beyond the built-in ones (options,

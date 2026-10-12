@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -133,8 +134,7 @@ func (g *Graph) acceptImpact(ctx context.Context, id domain.ChangeID, impact dom
 		return err
 	}
 	if seen.Review == domain.ReviewProposed {
-		// a fixture confirms as a producer does (withBulk): what the change modifies is the subject of modification_test.go
-		if _, err := g.ImpactNodeReviewOn(withBulk(ctx), id, flow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
+		if _, err := g.ImpactNodeReviewOn(ctx, id, flow, "", impact, domain.ReviewAccepted, "tester", "ok"); err != nil {
 			return err
 		}
 	}
@@ -245,8 +245,7 @@ func (g *Graph) accept(ctx context.Context, id domain.ChangeID, impact domain.Ch
 
 // acceptOn accepts a change impact on a flow, freezing its working version there.
 func (g *Graph) acceptOn(ctx context.Context, id domain.ChangeID, flow, execution string, impact domain.ChangeImpactID, by, comment string) (domain.ChangeImpact, error) {
-	// a fixture confirms as a producer does (withBulk): what the change modifies is the subject of modification_test.go
-	if _, err := g.ImpactNodeReviewOn(withBulk(ctx), id, flow, execution, impact, domain.ReviewAccepted, by, comment); err != nil {
+	if _, err := g.ImpactNodeReviewOn(ctx, id, flow, execution, impact, domain.ReviewAccepted, by, comment); err != nil {
 		return domain.ChangeImpact{}, err
 	}
 	return g.seenImpact(ctx, id, impact, flow)
@@ -294,4 +293,12 @@ func (g *Graph) versionCount(ctx context.Context, node domain.NodeID) int {
 		return 0
 	}
 	return len(vs)
+}
+
+// touch modifies the node of a change impact (its title), so that it is a modification to review (ADR 0102).
+func (g *Graph) touch(t *testing.T, id domain.ChangeID, impact domain.ChangeImpactID) {
+	t.Helper()
+	if _, err := g.edit(context.Background(), id, impact, edit{Properties: map[string]any{"title": "touched"}}); err != nil {
+		t.Fatal(err)
+	}
 }

@@ -422,11 +422,8 @@ func (g *Graph) ReopenImpacts(ctx context.Context, id domain.ChangeID, impacts [
 }
 
 // checkModifies refuses to accept a change impact that modifies nothing (ADR 0102): a candidate never checked out, or a
-// draft left as it was checked out. Only a modification is reviewed; the bulk producer path is exempt (withBulk).
+// draft left as it was checked out. Only a modification is accepted, whoever accepts it.
 func (g *Graph) checkModifies(ctx context.Context, tx Tx, c domain.Change, flow string, cn domain.ChangeImpact) error {
-	if isBulk(ctx) || len(cn.Items) > 0 || cn.Via != "" {
-		return nil // a source of a merge or a split is changed by its parent's draft (ADR 0077)
-	}
 	d, err := g.seenDraft(ctx, tx, c, flow, cn.ID)
 	if err != nil {
 		return err

@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -59,7 +60,7 @@ func testIterateOnTheBranchOfAChange(t *testing.T, repo Repo) {
 	f := newFixture(t, repo)
 	g := f.g
 	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "iterate", BaselineID: f.base.ID, OwnBranch: true}))
-	if _, err := g.IntegrateChange(ctx, c.ID, nil); !errors.Is(err, ErrConflict) {
+	if _, err := g.IntegrateChange(ctx, c.ID, nil); !errors.Is(err, ErrNothingToCommit) {
 		t.Fatalf("nothing committed: nothing to merge: %v", err)
 	}
 	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
@@ -105,5 +106,50 @@ func testIterateOnTheBranchOfAChange(t *testing.T, repo Repo) {
 	}
 	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: req.ID}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("a merged change is closed: %v", err)
+	}
+}
+
+// ADR 0102: an impact is withdrawn at any time; one the change committed already is reverted on its branch by the next
+// commit (the node goes back to the version the branch was forked from), and the merge waits for that commit.
+func TestWithdrawACommittedImpact(t *testing.T) { forEachRepo(t, testWithdrawACommittedImpact) }
+
+func testWithdrawACommittedImpact(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	c := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "revert", BaselineID: f.base.ID, OwnBranch: true}))
+	req := must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Node: f.req.ID, Rationale: "v2"}))
+	g.touch(t, c.ID, req.ID)
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, req.ID, domain.ReviewAccepted, "bob", "ok"))
+	made := must[domain.ChangeImpact](t)(g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "D-2", Type: "Design", Rationale: "new"}))
+	must[domain.ChangeImpact](t)(g.ImpactNodeReview(ctx, c.ID, made.ID, domain.ReviewAccepted, "bob", "ok"))
+	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanMerge || len(st.ToCommit) != 2 || len(st.Unsettled) != 2 {
+		t.Fatalf("two modifications to commit, nothing to merge: %+v", st)
+	}
+	first := must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	if first.Nodes[f.req.ID] == f.req.Version {
+		t.Fatalf("REQ-1 committed: %+v", first.Nodes)
+	}
+
+	if err := g.WithdrawImpact(ctx, c.ID, made.ID, "", ""); err != nil {
+		t.Fatalf("a committed impact is withdrawn: %v", err)
+	}
+	if _, err := g.IntegrateChange(ctx, c.ID, nil); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "withdrawn") {
+		t.Fatalf("the withdrawal waits for a commit: %v", err)
+	}
+	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); !st.CanCommit || st.CanMerge || st.Reverts != 1 || !st.Commits || len(st.ToCommit) != 0 {
+		t.Fatalf("a revert to commit, nothing else: %+v", st)
+	}
+	second := must[domain.Baseline](t)(g.CommitChange(ctx, c.ID, ""))
+	if st := must[CommitState](t)(g.CommitState(ctx, c.ID)); st.CanCommit || !st.CanMerge || len(st.Unsettled) != 0 {
+		t.Fatalf("committed, ready to merge: %+v", st)
+	}
+	if _, ok := second.Nodes[nodeOf(made)]; ok || second.Nodes[f.req.ID] != first.Nodes[f.req.ID] || second.Kind != domain.BaselineRevert {
+		t.Fatalf("D-2 reverted, REQ-1 kept: %+v", second)
+	}
+	ch := must[domain.Change](t)(g.IntegrateChange(ctx, c.ID, nil))
+	head := must[domain.Baseline](t)(g.Baseline(ctx, ch.ResultBaselineID))
+	if _, ok := head.Nodes[nodeOf(made)]; ok || head.Nodes[f.req.ID] != first.Nodes[f.req.ID] {
+		t.Fatalf("main holds REQ-1's commit and no D-2: %+v", head.Nodes)
 	}
 }

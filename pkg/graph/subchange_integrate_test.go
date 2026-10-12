@@ -180,18 +180,22 @@ func testSubChangeConflictsWithTheParent(t *testing.T, repo Repo) {
 		t.Fatalf("parent = %q", got)
 	}
 
-	// taking the parent's: the sub-change cancels its draft, its impact is a confirmation, nothing goes into the parent
+	// taking the parent's: the sub-change withdraws its impact (ADR 0102), nothing goes into the parent and the sub-change,
+	// left with nothing to merge, is abandoned
 	late := w.sub(t, "late")
 	lcn := w.write(t, late, "CMP-2", "late")
 	w.write(t, w.parent, "CMP-2", "parent")
 	if _, err := g.Apply(ctx, late.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("the late sub-change took the stored version the parent then drafted: %v", err)
 	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, late.ID, lcn.ID, "", ""))
-	must[domain.ChangeImpact](t)(g.accept(ctx, late.ID, lcn.ID, "reviewer", "take the parent's"))
-	if _, err := g.Apply(ctx, late.ID, ""); err != nil {
+	if err := g.WithdrawImpact(ctx, late.ID, lcn.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := g.Apply(ctx, late.ID, ""); !errors.Is(err, ErrNothingToCommit) {
+		t.Fatalf("a sub-change left with nothing: %v", err)
+	}
+	gone := domain.ChangeAbandoned
+	must[domain.Change](t)(g.UpdateChange(ctx, late.ID, ChangePatch{Status: &gone}))
 	if got := w.title(t, w.parent, "CMP-2"); got != "parent" {
 		t.Fatalf("parent CMP-2 = %q", got)
 	}
@@ -268,8 +272,8 @@ func testSubChangeRejectedByTheParent(t *testing.T, repo Repo) {
 	if err := g.WithdrawImpact(ctx, sub.ID, scn.ID, "", ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.Apply(ctx, sub.ID, ""); err != nil {
-		t.Fatal(err)
+	if _, err := g.Apply(ctx, sub.ID, ""); !errors.Is(err, ErrNothingToCommit) {
+		t.Fatalf("withdrawn, the sub-change has nothing left to merge: %v", err)
 	}
 }
 
@@ -376,12 +380,12 @@ func testSubChangeLandingGate(t *testing.T, repo Repo) {
 	must[domain.ChangeImpact](t)(g.accept(ctx, sub.ID, child.ID, "reviewer", "ok"))
 	allow := false
 	var seen domain.Blackboard
-	g.LandingGate = func(_ context.Context, _ domain.Change, bb domain.Blackboard) (bool, bool, error) {
+	g.MergeGuards = []MergeGuard{LandingGate(func(_ context.Context, _ domain.Change, bb domain.Blackboard) (bool, bool, error) {
 		seen = bb
 		return true, allow, nil
-	}
+	})}
 	if _, err := g.Apply(ctx, sub.ID, ""); err == nil {
-		t.Fatal("a gate that refuses keeps the sub-change from committing")
+		t.Fatal("a gate that refuses keeps the sub-change from merging")
 	}
 	if v, ok := seen.Nodes[*child.Post]; !ok || v.Key != "NEW-2" || len(v.Out) != 1 || v.Out[0].To != *made.Post {
 		t.Fatalf("the gate sees the draft with its link to the parent's draft: %+v", seen.Nodes)

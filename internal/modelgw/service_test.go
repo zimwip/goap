@@ -162,7 +162,8 @@ func TestProviderKeyIsAReference(t *testing.T) {
 		t.Fatalf("without the key in its environment the provider is inactive: %+v", v)
 	}
 	t.Setenv("GOAP_TEST_MISTRAL_KEY", "sk-secret-1234")
-	change(t, g, updateNode(t, g, llmcfg.ProviderKey("mistral"), map[string]any{"name": "mistral", "kind": "mistral", "protocol": "openai", "enabled": true, "apiKeyRef": "env:GOAP_TEST_MISTRAL_KEY", "baseURL": "https://api.mistral.ai/v1"}))
+	// any change of the provider reloads it (a change modifies its node, ADR 0102)
+	change(t, g, updateNode(t, g, llmcfg.ProviderKey("mistral"), map[string]any{"name": "mistral", "kind": "mistral", "protocol": "openai", "enabled": true, "apiKeyRef": "env:GOAP_TEST_MISTRAL_KEY", "baseURL": "https://api.mistral.ai/v1/"}))
 	if v := view(); !v.Active || v.APIKeyRef != "env:GOAP_TEST_MISTRAL_KEY" {
 		t.Fatalf("with the key the provider is loaded: %+v", v)
 	}

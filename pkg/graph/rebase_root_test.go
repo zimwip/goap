@@ -80,7 +80,7 @@ func rebasedEvents(t *testing.T, g *Graph, id domain.ChangeID) []domain.ImpactEv
 }
 
 // test1 and test2 start from the same baseline and change different nodes: test2 moves onto test1's result, main reads
-// as two fast-forwards, the rebase is in test2's log and on its commit baseline.
+// as two fast-forwards, the rebase is in test2's log and is a baseline of its branch.
 func TestRebaseRootDifferentNodes(t *testing.T) { forEachRepo(t, testRebaseRootDifferentNodes) }
 
 func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
@@ -110,8 +110,13 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 	if got := rebaseMoves(t, g, t1.ID); len(got) != 0 {
 		t.Fatalf("test1 was not behind: %+v", got)
 	}
-	if got := baselineOfChange(t, g, t2.ID, domain.BaselineCommit); got.RebasedFrom != f.base.ID || got.ParentID != b1.ID {
+	// ADR 0102: test2 committed on its branch from B, the merge rebased the branch onto T1 (a rebase baseline), then
+	// fast-forwarded
+	if got := baselineOfChange(t, g, t2.ID, domain.BaselineCommit); got.RebasedFrom != "" || got.ParentID != f.base.ID {
 		t.Fatalf("test2's commit: %+v", got)
+	}
+	if got := baselineOfChange(t, g, t2.ID, domain.BaselineRebase); got.RebasedFrom != f.base.ID || got.MergedFrom != b1.ID {
+		t.Fatalf("test2's rebase: %+v", got)
 	}
 	if got := baselineOfChange(t, g, t1.ID, domain.BaselineCommit); got.RebasedFrom != "" {
 		t.Fatalf("test1's commit was never rebased: %+v", got)
@@ -124,8 +129,8 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 	}
 }
 
-// Both change the same node, different properties: test2's draft is merged with the version test1 wrote, and the version
-// test2 writes is parented to it.
+// Both change the same node, different properties: test2's commit is merged with the version test1 wrote at its merge, and
+// the version that lands is parented to both.
 func TestRebaseRootSameNodeLinear(t *testing.T) { forEachRepo(t, testRebaseRootSameNodeLinear) }
 
 func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
@@ -145,13 +150,14 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	if b2.Kind != domain.BaselineFastForward || b2.ParentID != b1.ID || b2.MergedFrom != "" {
 		t.Fatalf("T2 must fast-forward from T1: %+v", b2)
 	}
+	// test2's commit, then the merge of it with test1's version: both its parents (ADR 0102)
 	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
-	if n.ChangeID != t2.ID || !slices.Equal(n.Parents, []domain.Version{v1.Version}) || n.Properties["a"] != float64(1) && n.Properties["a"] != 1 || n.Properties["b"] != float64(2) && n.Properties["b"] != 2 {
+	if n.ChangeID != t2.ID || len(n.Parents) != 2 || n.Parents[1] != v1.Version || n.Properties["a"] != float64(1) && n.Properties["a"] != 1 || n.Properties["b"] != float64(2) && n.Properties["b"] != 2 {
 		t.Fatalf("test2's version = %+v, test1's = %+v", n, v1)
 	}
 	ev := rebasedEvents(t, g, t2.ID)
-	if len(ev) != 1 || ev[0].Draft == nil || ev[0].Draft.Base == nil || *ev[0].Draft.Base != v1.Ref() {
-		t.Fatalf("test2's log must hold the rebase of its draft onto %s: %+v", v1.Ref(), ev)
+	if len(ev) != 1 || ev[0].Draft == nil || ev[0].Draft.MergedWith == nil || *ev[0].Draft.MergedWith != v1.Ref() {
+		t.Fatalf("test2's log must hold the merge of its commit with %s: %+v", v1.Ref(), ev)
 	}
 	if r, _ := ev[0].Patch["rebased"].(map[string]any); r["branch"] != domain.MainBranch || r["baseline"] != string(b1.ID) {
 		t.Fatalf("rebased patch: %+v", ev[0].Patch)
@@ -244,7 +250,7 @@ func testRebaseRootConflict(t *testing.T, repo Repo) {
 	}
 }
 
-// A node both changes create collides on its key: the whole node is in conflict, settled by cancelling the creation.
+// A node both changes create collides on its key: the commit of the second refuses it, settled by withdrawing the creation.
 func TestRebaseRootCreationCollision(t *testing.T) { forEachRepo(t, testRebaseRootCreationCollision) }
 
 func testRebaseRootCreationCollision(t *testing.T, repo Repo) {
@@ -261,14 +267,14 @@ func testRebaseRootCreationCollision(t *testing.T, repo Repo) {
 	t1, _ := create("test1")
 	t2, i2 := create("test2")
 	must[domain.Baseline](t)(g.Apply(ctx, t1.ID, ""))
-	if _, err := g.Apply(ctx, t2.ID, ""); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "REQ-9 node") {
+	// the commit of test2 writes its REQ-9: the key is test1's now
+	if _, err := g.Apply(ctx, t2.ID, ""); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "REQ-9 (Requirement): the key is taken") {
 		t.Fatalf("the collision stops the apply: %v", err)
 	}
-	if st := must[RebaseState](t)(g.RebaseState(ctx, t2.ID)); len(st.Conflicts) != 1 || st.Conflicts[0].Conflicts[0] != domain.ConflictNode {
-		t.Fatalf("state = %+v", st)
+	if err := g.WithdrawImpact(ctx, t2.ID, i2, "", ""); err != nil {
+		t.Fatal(err)
 	}
-	must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, t2.ID, i2, "", ""))
-	if _, err := g.Apply(ctx, t2.ID, ""); !errors.Is(err, ErrInvalid) {
+	if _, err := g.Apply(ctx, t2.ID, ""); !errors.Is(err, ErrNothingToCommit) {
 		t.Fatalf("test2 is left with nothing to commit (ADR 0102): %v", err)
 	}
 	if n := must[domain.Node](t)(g.NodeByKey(ctx, "", "REQ-9")); n.Properties["title"] != "test1" || n.ChangeID != t1.ID {
@@ -329,12 +335,12 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	t2, _ := propChange(t, g, f.base.ID, "test2", f.req.Ref(), map[string]any{"x": 2})
 	t0, _ := propChange(t, g, f.base.ID, "test0", f.need.Ref(), map[string]any{"title": "N"})
 	must[domain.Baseline](t)(g.Apply(ctx, t0.ID, ""))
-	if err := g.rebaseFirst(ctx, t2.ID, false); err != nil { // the rebase of Apply onto test0...
+	if _, err := g.RebaseChange(ctx, t2.ID); err != nil { // test2 brought up to date with test0...
 		t.Fatal(err)
 	}
 	b1 := must[domain.Baseline](t)(g.Apply(ctx, t1.ID, "")) // ...then the target moves before test2 lands
 	if err := g.repo.InTx(ctx, func(tx Tx) error {
-		if _, err := g.commitTx(ctx, tx, t2.ID, "", nil, true); err != nil {
+		if _, err := g.commitOnBranch(ctx, tx, t2.ID, ""); err != nil {
 			return err
 		}
 		c, err := tx.Change(ctx, t2.ID)

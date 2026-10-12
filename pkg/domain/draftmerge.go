@@ -269,6 +269,9 @@ func DraftChanged(base *Draft, d Draft) bool {
 	if base == nil || d.Base == nil {
 		return true
 	}
+	if d.MergedWith != nil && *d.MergedWith != *d.Base {
+		return true // it brings another version in: a merge, whatever its values (ADR 0102)
+	}
 	if len(base.Properties) != len(d.Properties) {
 		return true
 	}

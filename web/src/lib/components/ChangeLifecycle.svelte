@@ -282,7 +282,7 @@
                     type="button"
                     class="small danger"
                     disabled={busy !== ''}
-                    title={r.created ? 'Discard this new node' : 'Take the node out of the change (refused once its version has landed: reject it instead)'}
+                    title={r.created ? 'Discard this new node' : 'Take the node out of the change, at any time: one committed already is reverted by the next commit'}
                     onclick={() => remove(r)}
                   >
                     {r.created ? 'Discard' : 'Remove from change'}

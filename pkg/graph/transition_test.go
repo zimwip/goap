@@ -115,10 +115,11 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 		t.Fatalf("an impact of a state the change left is frozen: %v", err)
 	}
 	impl := create("N-2")
-	if _, err := g.CommitChange(ctx, c.ID, ""); !errors.Is(err, ErrConflict) {
-		t.Fatalf("a change is committed in a final state only: %v", err)
-	}
 	w.accept(t, c)
+	// the merge guards hold a change that is not in a final state (ADR 0102: FinalStateGuard)
+	if err := g.checkMerge(ctx, c.ID); !errors.Is(err, ErrConflict) || !strings.Contains(err.Error(), "final state") {
+		t.Fatalf("a change is merged in a final state only: %v", err)
+	}
 
 	// going back needs a new decision: a point gates one transition only
 	if err := move("rework", first); !errors.Is(err, ErrConflict) {

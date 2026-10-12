@@ -140,6 +140,9 @@ const (
 	// GraphServiceGetRebaseStateProcedure is the fully-qualified name of the GraphService's
 	// GetRebaseState RPC.
 	GraphServiceGetRebaseStateProcedure = "/goap.graph.v1.GraphService/GetRebaseState"
+	// GraphServiceGetCommitStateProcedure is the fully-qualified name of the GraphService's
+	// GetCommitState RPC.
+	GraphServiceGetCommitStateProcedure = "/goap.graph.v1.GraphService/GetCommitState"
 	// GraphServiceImpactNodeReviewProcedure is the fully-qualified name of the GraphService's
 	// ImpactNodeReview RPC.
 	GraphServiceImpactNodeReviewProcedure = "/goap.graph.v1.GraphService/ImpactNodeReview"
@@ -352,6 +355,9 @@ type GraphServiceClient interface {
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
 	ImpactNodeResolve(context.Context, *connect.Request[v1.ImpactNodeResolveRequest]) (*connect.Response[v1.ImpactNodeResolveResponse], error)
 	GetRebaseState(context.Context, *connect.Request[v1.GetRebaseStateRequest]) (*connect.Response[v1.GetRebaseStateResponse], error)
+	// What a change can commit and merge (ADR 0102): the accepted modifications the next commit writes, the withdrawn nodes
+	// it reverts, what holds the merge; the one source of the Commit and Merge buttons.
+	GetCommitState(context.Context, *connect.Request[v1.GetCommitStateRequest]) (*connect.Response[v1.GetCommitStateResponse], error)
 	ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error)
 	// The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
 	// own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
@@ -676,6 +682,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetRebaseStateProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetRebaseState")),
+			connect.WithClientOptions(opts...),
+		),
+		getCommitState: connect.NewClient[v1.GetCommitStateRequest, v1.GetCommitStateResponse](
+			httpClient,
+			baseURL+GraphServiceGetCommitStateProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetCommitState")),
 			connect.WithClientOptions(opts...),
 		),
 		impactNodeReview: connect.NewClient[v1.ImpactNodeReviewRequest, v1.ImpactNodeReviewResponse](
@@ -1021,6 +1033,7 @@ type graphServiceClient struct {
 	rebaseChange           *connect.Client[v1.RebaseChangeRequest, v1.RebaseChangeResponse]
 	impactNodeResolve      *connect.Client[v1.ImpactNodeResolveRequest, v1.ImpactNodeResolveResponse]
 	getRebaseState         *connect.Client[v1.GetRebaseStateRequest, v1.GetRebaseStateResponse]
+	getCommitState         *connect.Client[v1.GetCommitStateRequest, v1.GetCommitStateResponse]
 	impactNodeReview       *connect.Client[v1.ImpactNodeReviewRequest, v1.ImpactNodeReviewResponse]
 	impactNodeReviewBatch  *connect.Client[v1.ImpactNodeReviewBatchRequest, v1.ImpactNodeReviewBatchResponse]
 	reviewOpen             *connect.Client[v1.ReviewOpenRequest, v1.ReviewResponse]
@@ -1261,6 +1274,11 @@ func (c *graphServiceClient) ImpactNodeResolve(ctx context.Context, req *connect
 // GetRebaseState calls goap.graph.v1.GraphService.GetRebaseState.
 func (c *graphServiceClient) GetRebaseState(ctx context.Context, req *connect.Request[v1.GetRebaseStateRequest]) (*connect.Response[v1.GetRebaseStateResponse], error) {
 	return c.getRebaseState.CallUnary(ctx, req)
+}
+
+// GetCommitState calls goap.graph.v1.GraphService.GetCommitState.
+func (c *graphServiceClient) GetCommitState(ctx context.Context, req *connect.Request[v1.GetCommitStateRequest]) (*connect.Response[v1.GetCommitStateResponse], error) {
+	return c.getCommitState.CallUnary(ctx, req)
 }
 
 // ImpactNodeReview calls goap.graph.v1.GraphService.ImpactNodeReview.
@@ -1582,6 +1600,9 @@ type GraphServiceHandler interface {
 	RebaseChange(context.Context, *connect.Request[v1.RebaseChangeRequest]) (*connect.Response[v1.RebaseChangeResponse], error)
 	ImpactNodeResolve(context.Context, *connect.Request[v1.ImpactNodeResolveRequest]) (*connect.Response[v1.ImpactNodeResolveResponse], error)
 	GetRebaseState(context.Context, *connect.Request[v1.GetRebaseStateRequest]) (*connect.Response[v1.GetRebaseStateResponse], error)
+	// What a change can commit and merge (ADR 0102): the accepted modifications the next commit writes, the withdrawn nodes
+	// it reverts, what holds the merge; the one source of the Commit and Merge buttons.
+	GetCommitState(context.Context, *connect.Request[v1.GetCommitStateRequest]) (*connect.Response[v1.GetCommitStateResponse], error)
 	ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error)
 	// The review object (ADR 0080): a reviewer builds a review up (a global comment, one entry per change impact with its
 	// own comment and outcome), then submits it; the submission reviews every impact in one transaction, all or none. An
@@ -1902,6 +1923,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetRebaseStateProcedure,
 		svc.GetRebaseState,
 		connect.WithSchema(graphServiceMethods.ByName("GetRebaseState")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceGetCommitStateHandler := connect.NewUnaryHandler(
+		GraphServiceGetCommitStateProcedure,
+		svc.GetCommitState,
+		connect.WithSchema(graphServiceMethods.ByName("GetCommitState")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceImpactNodeReviewHandler := connect.NewUnaryHandler(
@@ -2282,6 +2309,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceImpactNodeResolveHandler.ServeHTTP(w, r)
 		case GraphServiceGetRebaseStateProcedure:
 			graphServiceGetRebaseStateHandler.ServeHTTP(w, r)
+		case GraphServiceGetCommitStateProcedure:
+			graphServiceGetCommitStateHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeReviewProcedure:
 			graphServiceImpactNodeReviewHandler.ServeHTTP(w, r)
 		case GraphServiceImpactNodeReviewBatchProcedure:
@@ -2541,6 +2570,10 @@ func (UnimplementedGraphServiceHandler) ImpactNodeResolve(context.Context, *conn
 
 func (UnimplementedGraphServiceHandler) GetRebaseState(context.Context, *connect.Request[v1.GetRebaseStateRequest]) (*connect.Response[v1.GetRebaseStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetRebaseState is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetCommitState(context.Context, *connect.Request[v1.GetCommitStateRequest]) (*connect.Response[v1.GetCommitStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetCommitState is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ImpactNodeReview(context.Context, *connect.Request[v1.ImpactNodeReviewRequest]) (*connect.Response[v1.ImpactNodeReviewResponse], error) {

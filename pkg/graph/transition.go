@@ -306,20 +306,3 @@ func (g *Graph) reopenPhase(ctx context.Context, tx Tx, c domain.Change, to stri
 	}
 	return nil
 }
-
-// checkFinalState refuses to commit a change whose lifecycle has not reached a final state (ADR 0058 §4). It is made
-// before the transaction of the commit, the registry that resolves the lifecycle reading the graph.
-func (g *Graph) checkFinalState(ctx context.Context, id domain.ChangeID) error {
-	c, err := g.Change(ctx, id)
-	if err != nil || c.Lifecycle == "" {
-		return nil // a change that does not exist is refused by the commit
-	}
-	lc, err := g.changeLifecycle(ctx, c)
-	if err != nil {
-		return err
-	}
-	if s, ok := lc.State(c.State); !ok || !s.Final {
-		return fmt.Errorf("change %s is in state %s of lifecycle %s: it can be applied once it is in a final state: %w", c.ID, c.State, c.Lifecycle, ErrConflict)
-	}
-	return nil
-}

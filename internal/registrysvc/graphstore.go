@@ -293,6 +293,9 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		if errors.Is(err, graph.ErrConflict) && attempt < 3 {
 			continue // main moved: read again and rebuild
 		}
+		if errors.Is(err, graph.ErrNothingToCommit) {
+			return nil // the graph holds the definition already
+		}
 		return err
 	}
 }

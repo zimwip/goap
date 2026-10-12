@@ -228,17 +228,24 @@ export function savePending(): Promise<boolean> {
     pending.busy = true;
     try {
       for (const [ns, c] of Object.entries(pending.byNs)) {
+        // only a modification is accepted (ADR 0102): an edit put back as it was is given up like one never written
+        const checked = (await graph.getChange(c.changeId)).change?.nodes ?? [];
+        const unchanged = new Set(checked.filter((n) => n.validation?.modified === false).map((n) => n.id));
+        let kept = 0;
         for (const s of Object.values(c.nodes)) {
-          if (!s.written) {
+          if (!s.written || unchanged.has(s.impactId)) {
             await graph.withdrawImpact(c.changeId, s.impactId);
             continue;
           }
+          kept++;
           // Save is an explicit user action on a personal change (ADR 0037): the owner reviews their own staged edits here,
           // it is not a side effect of editing (an edit never reviews, ADR 0079). The acceptance runs the validations on
           // the draft (validators, required links); applying the change writes the versions.
           await graph.impactNodeReview(c.changeId, s.impactId, true, 'Saved by its owner');
         }
-        await graph.applyChange(c.changeId, '');
+        // nothing left to save: the change goes, it landed nothing
+        if (kept) await graph.applyChange(c.changeId, '');
+        else await graph.deleteChange(c.changeId);
         delete pending.byNs[ns];
       }
       pending.error = '';

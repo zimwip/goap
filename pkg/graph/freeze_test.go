@@ -224,10 +224,12 @@ func testTransitionChecksTheNodeOut(t *testing.T, repo Repo) {
 	g := w.g
 	c := w.change(t, "reopen")
 	imp := w.declare(t, c, w.req1) // REQ-1 is approved in the baseline
-	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, imp, "bob", "confirmed"))
+	if _, err := g.accept(ctx, c.ID, imp, "bob", "confirmed"); !errors.Is(err, ErrInvalid) {
+		t.Fatalf("a candidate is not accepted (ADR 0102): %v", err)
+	}
 	moved := must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, imp, edit{State: "draft"}))
-	if moved.Post == nil || !moved.Post.IsDraft() || moved.Review != domain.ReviewAccepted {
-		t.Fatalf("the move checked the node out, and is not an edit: the acceptance stands: %+v", moved)
+	if moved.Post == nil || !moved.Post.IsDraft() || moved.Review != domain.ReviewProposed {
+		t.Fatalf("the move checked the node out, a modification to review: %+v", moved)
 	}
 	if n := g.versionCount(ctx, w.req1.ID); n != int(w.req1.Version) {
 		t.Fatalf("no version written: %d", n)
@@ -239,7 +241,7 @@ func testTransitionChecksTheNodeOut(t *testing.T, repo Repo) {
 	for _, e := range must[[]domain.ImpactEvent](t)(g.ChangeEvents(ctx, c.ID)) {
 		ops = append(ops, e.Op)
 	}
-	if want := []domain.ImpactOp{domain.ImpactProposed, domain.ImpactReviewed, domain.ImpactCheckedOut, domain.ImpactTransitioned}; !slices.Equal(ops, want) {
+	if want := []domain.ImpactOp{domain.ImpactProposed, domain.ImpactCheckedOut, domain.ImpactTransitioned}; !slices.Equal(ops, want) {
 		t.Fatalf("log %v, want %v", ops, want)
 	}
 	back := must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, c.ID, imp, "", ""))

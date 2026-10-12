@@ -169,8 +169,12 @@ func TestSDLCDelivery(t *testing.T) {
 	var decisions []engine.ItemInput
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed {
-			// a candidate the run did not modify is turned down (ADR 0102)
-			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: n.Post != nil, Comment: "reviewed"}})
+			// a candidate the run did not modify is taken out of the change (ADR 0102)
+			op := &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}
+			if n.Post == nil {
+				op = &dsl.NodeOp{Op: "remove", Node: n.Key}
+			}
+			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: op})
 		}
 		if n.Intent == domain.IntentCreated {
 			count[n.Type]++
@@ -355,8 +359,12 @@ func TestSDLCProcess(t *testing.T) {
 	var decisions []engine.ItemInput
 	for _, n := range c.Nodes {
 		if n.Review == domain.ReviewProposed {
-			// a candidate the run did not modify is turned down (ADR 0102)
-			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: n.Post != nil, Comment: "reviewed"}})
+			// a candidate the run did not modify is taken out of the change (ADR 0102)
+			op := &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed"}
+			if n.Post == nil {
+				op = &dsl.NodeOp{Op: "remove", Node: n.Key}
+			}
+			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: op})
 		}
 	}
 	if _, err = e.Submit(ctx, train.ID, decisions); err != nil {

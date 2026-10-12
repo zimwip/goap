@@ -192,6 +192,9 @@ const (
 	// BaselineRebase is the state of the branch of a committed change moved onto the head of its target (ADR 0102): that
 	// head with what the change committed; stored whole (not derived).
 	BaselineRebase = "rebase"
+	// BaselineRevert is a commit that also puts back, on the branch of a change, the nodes it no longer changes (an impact
+	// withdrawn after its commit, ADR 0102): stored whole (not derived).
+	BaselineRevert = "revert"
 	// BaselineSnapshot is a state nothing derives (the bootstrap, a fixture): always stored.
 	BaselineSnapshot = "snapshot"
 )

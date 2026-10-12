@@ -139,11 +139,12 @@ func testImpactNodeCancel(t *testing.T, repo Repo) {
 	if len(impacts) != 1 || impacts[0].ID != mod.ID {
 		t.Fatalf("nor its impact: %+v", impacts)
 	}
-	// checked out again, accepted: cancelling still drops the draft, back to the impact without draft
+	// checked out again, modified, accepted: cancelling drops the draft, the impact is back to proposed without draft
 	must[domain.ChangeImpact](t)(g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: mod.ID}))
+	g.touch(t, c.ID, mod.ID)
 	must[domain.ChangeImpact](t)(g.accept(ctx, c.ID, mod.ID, "bob", "ok"))
-	if back := must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, c.ID, mod.ID, "", "")); back.Post != nil {
-		t.Fatalf("back to the impact without draft: %+v", back)
+	if back := must[domain.ChangeImpact](t)(g.ImpactNodeCancel(ctx, c.ID, mod.ID, "", "")); back.Post != nil || back.Review != domain.ReviewProposed {
+		t.Fatalf("back to the impact without draft, to review again: %+v", back)
 	}
 }
 

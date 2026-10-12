@@ -186,8 +186,8 @@ func testApplyRejectedAndConflicts(t *testing.T, repo Repo) {
 		return c
 	}
 	c1, c2 := change("c1", 1, false), change("c2", 1, true)
-	// the only change impact of c1 is rejected: it has nothing to commit (ADR 0102)
-	if _, err := g.Apply(ctx, c1.ID, ""); !errors.Is(err, ErrInvalid) {
+	// the only change impact of c1 is rejected: reworked or withdrawn before anything merges (ADR 0102)
+	if _, err := g.Apply(ctx, c1.ID, ""); !errors.Is(err, ErrConflict) {
 		t.Fatalf("rejected change impact applied: %v", err)
 	}
 	if _, err := g.Apply(ctx, c2.ID, ""); err != nil {

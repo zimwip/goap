@@ -332,9 +332,6 @@ func (g *Graph) working(ctx context.Context, tx Tx, w *work) (domain.Draft, erro
 		}
 		return domain.Draft{}, fmt.Errorf("%s is not checked out: check it out first: %w", draftOf(w.cn), ErrConflict)
 	}
-	if w.vcn.Review == domain.ReviewRejected {
-		return domain.Draft{}, fmt.Errorf("change impact %s is rejected: %w", w.cn.ID, ErrConflict)
-	}
 	return *d, nil
 }
 
@@ -412,15 +409,15 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 // ImpactNodeCheckout puts a node in edit mode in a change: it gives the node a draft on the flow, a copy of what the
 // flow sees of it (properties, state, owner and outgoing links), whatever its state (ADR 0078). The node is checked
 // out once per change and flow: it is refused while the flow holds a draft of it (update it, ADR 0079). A flow whose
-// parent flow holds a draft copies that one. A checkout of an impact that was decided sends its review back to
-// proposed: what is changed is reviewed again (the checkout a transition makes for itself keeps it: the move is not an edit).
+// parent flow holds a draft copies that one. A checkout modifies nothing: the review stands until the draft is edited
+// (editedAgain, ADR 0102).
 func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in NodeCheckout) (cn domain.ChangeImpact, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.resolve(ctx, tx, id, in.target())
 		if err != nil {
 			return err
 		}
-		ref, err := g.checkoutTx(ctx, tx, w, in.Execution, false)
+		ref, err := g.checkoutTx(ctx, tx, w, in.Execution)
 		if err != nil {
 			return err
 		}
@@ -431,11 +428,8 @@ func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in N
 }
 
 // checkoutTx is the checkout of the impact w selects, inside a transaction (see ImpactNodeCheckout).
-func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string, keepReview bool) (domain.NodeRef, error) {
+func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string) (domain.NodeRef, error) {
 	id := w.c.ID
-	if w.vcn.Review == domain.ReviewRejected {
-		return domain.NodeRef{}, fmt.Errorf("change impact %s is rejected: %w", w.cn.ID, ErrConflict)
-	}
 	rows, err := g.drafts(ctx, tx, id)
 	if err != nil {
 		return domain.NodeRef{}, err
@@ -482,13 +476,6 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 	ref := d.Ref()
 	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: execution, Post: &ref, Draft: &d}); err != nil {
 		return ref, err
-	}
-	if w.vcn.Review != domain.ReviewProposed && !keepReview {
-		r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: "checked out again", Flow: w.flow, Execution: execution}
-		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactReviewed, Flow: w.flow, Execution: execution, By: r.By, Review: &r}); err != nil {
-			return ref, err
-		}
-		w.vcn.Review = domain.ReviewProposed
 	}
 	return ref, nil
 }
@@ -566,8 +553,8 @@ func (g *Graph) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact
 	return
 }
 
-// emitUpdated records an edit of the draft ref (the updated event with its patch), then sends an accepted review back
-// to proposed (ADR 0077).
+// emitUpdated records an edit of the draft ref (the updated event with its patch), then sends a decided review back to
+// proposed (editedAgain).
 func (g *Graph) emitUpdated(ctx context.Context, tx Tx, w *work, ref domain.NodeRef, execution string, patch map[string]any) error {
 	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactUpdated, Flow: w.flow, Execution: execution, Post: &ref, Patch: patch}); err != nil {
 		return err
@@ -696,12 +683,16 @@ func (g *Graph) checkDraftOf(ctx context.Context, tx Tx, c domain.Change, flow s
 	return g.checkDraft(ctx, ix, c, *d, draftResolver(ctx, tx, r))
 }
 
-// editedAgain sends an accepted review back to proposed when its draft is edited again (ADR 0077): what was accepted
-// is no longer what is there. It follows the updated event.
+// editedAgain sends a decided review (accepted or rejected) back to proposed when the content of its draft changes (ADR
+// 0077, 0102): an edit of its properties, owner or links, a cancel. What was reviewed is no longer what is there: a
+// rejected impact is reworked this way, or withdrawn. A move of its lifecycle is no edit: it is judged by its transition
+// (authorization, guard) when it is taken, and leaves the review as it is (a guard may read it). It follows the event
+// that changed the draft.
 func (g *Graph) editedAgain(ctx context.Context, tx Tx, w *work, execution string) error {
-	if w.vcn.Review != domain.ReviewAccepted {
+	if w.vcn.Review == domain.ReviewProposed {
 		return nil
 	}
+	// accepted or rejected, the draft it was reviewed on is gone: the modification is proposed again (ADR 0102)
 	r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: "edited again", Flow: w.flow, Execution: execution}
 	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactReviewed, Flow: w.flow, Execution: execution, By: r.By, Review: &r}); err != nil {
 		return err
@@ -746,6 +737,11 @@ func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact
 		}
 		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactCancelled, Flow: w.flow, Execution: execution, Post: back}); err != nil {
 			return err
+		}
+		if w.cn.Intent == domain.IntentModified || w.cn.Landed != nil { // a creation cancelled is gone with its impact
+			if err := g.editedAgain(ctx, tx, w, execution); err != nil {
+				return err
+			}
 		}
 		cn = w.vcn
 		cn.Post = back
@@ -796,7 +792,7 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 		}
 		if ownDraft(rows, w.cn.ID, w.flow) == nil {
 			// the node is checked out first, the draft the move acts on
-			if _, err := g.checkoutTx(ctx, tx, w, in.Execution, true); err != nil {
+			if _, err := g.checkoutTx(ctx, tx, w, in.Execution); err != nil {
 				return err
 			}
 			if w, err = g.resolve(ctx, tx, id, target{Impact: w.cn.ID, Flow: in.Flow, Execution: in.Execution}); err != nil {
@@ -858,9 +854,6 @@ func (g *Graph) transitionOf(ctx context.Context, tx Tx, id domain.ChangeID, in 
 	if err != nil {
 		return nil, domain.Node{}, domain.Transition{}, err
 	}
-	if w.vcn.Review == domain.ReviewRejected {
-		return nil, domain.Node{}, domain.Transition{}, fmt.Errorf("change impact %s is rejected: %w", w.cn.ID, ErrConflict)
-	}
 	var cur *domain.Node
 	if d, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
 		return nil, domain.Node{}, domain.Transition{}, err
@@ -913,10 +906,12 @@ func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (map[domain.Node
 	return target, nil
 }
 
-// WithdrawImpact takes a change impact out of the change, explicitly (ADR 0076 §5b): its draft, if any, is dropped (a
-// creation leaves no node behind) and the impact leaves the list. A rejected impact keeps its draft until then, to be
-// reworked once reopened. Refused for an impact declared on another flow, one derived from items (their proposals
-// decide it) and one another impact realizes a removal through (Via).
+// WithdrawImpact takes a change impact out of the change, at any time while the change is open (ADR 0076 §5b, ADR 0102):
+// its draft, if any, is dropped (a creation leaves no node behind) and the impact leaves the list, whatever its review;
+// the impacts that come with it (via: the sources of a merge or a split its parent realizes) leave with it. One the
+// change committed already is reverted on its branch by the next commit (the node goes back to the version the branch
+// was forked from). A rejected impact is withdrawn this way, or reworked (editedAgain). Only the flow that declared an
+// impact withdraws it.
 func (g *Graph) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
 	return g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
@@ -926,17 +921,16 @@ func (g *Graph) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact d
 		if err := g.impact(ctx, tx, w, impact); err != nil {
 			return err
 		}
-		switch {
-		case w.cn.Flow != w.flow:
+		if w.cn.Flow != w.flow {
 			return fmt.Errorf("change impact %s was declared on another flow: %w", impact, ErrConflict)
-		case len(w.cn.Items) > 0:
-			return fmt.Errorf("change impact %s is derived from items: decide them instead: %w", impact, ErrConflict)
 		}
+		var events []domain.ImpactEvent
 		for _, o := range w.c.Nodes {
 			if o.Via == impact {
-				return fmt.Errorf("change impact %s realizes the removal of %s: %w", impact, o.Key, ErrConflict)
+				events = append(events, domain.ImpactEvent{Change: id, Impact: o.ID, Op: domain.ImpactWithdrawn, Flow: w.flow, Execution: execution})
 			}
 		}
-		return g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactWithdrawn, Flow: w.flow, Execution: execution})
+		events = append(events, domain.ImpactEvent{Change: id, Impact: impact, Op: domain.ImpactWithdrawn, Flow: w.flow, Execution: execution})
+		return g.emit(ctx, tx, events...)
 	})
 }

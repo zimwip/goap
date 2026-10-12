@@ -143,8 +143,8 @@
     return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
   }
 
-  /** Takes a node out of the change: its draft is dropped (a node the change creates goes away); refused
-   * once its version has landed (reject it instead, ADR 0076, 0079). */
+  /** Takes a node out of the change, at any time (ADR 0102): its draft is dropped (a node the change creates goes away),
+   * one committed already is reverted by the next commit. */
   async function removeNode(row: LifecycleRow): Promise<boolean> {
     if (!changeId || !row.impact?.id) return false;
     moving = `${row.node.id}:remove`;
