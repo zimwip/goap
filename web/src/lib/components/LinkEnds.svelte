@@ -56,6 +56,7 @@
         <div class="mid" aria-label="the link type">
           <code>{link.name || '(unnamed)'}</code>
           <span class="arrow">→</span>
+          <span class="hint" title="How the link reads from its source, then from its target">{link.label.trim() || link.name || '…'} / {link.inverseLabel.trim() || link.label.trim() || link.name || '…'}</span>
           {#if link.compose}<span class="hint">composition: the target is a part of the source</span>{/if}
         </div>
       {/if}

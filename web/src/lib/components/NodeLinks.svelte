@@ -66,7 +66,7 @@
       <tbody>
         {#each links as l (l.id)}
           <tr>
-            <td class="mono">{l.type}</td>
+            <td title={l.type}>{typeCatalog.cat.linkLabel(l.type, 'out')}</td>
             <td>
               <button type="button" class="link mono" onclick={() => onopen(l.to?.id ?? '')}>{keyOf(l.to)}</button>
               <span class="hint">v{l.to?.version}</span>

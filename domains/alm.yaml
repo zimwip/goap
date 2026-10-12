@@ -1,5 +1,5 @@
 name: alm
-version: 1.3.0
+version: 1.4.0
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -271,82 +271,122 @@ linkTypes:
     description: "A requirement satisfies a need"
     from: Requirement
     to: Need
+    label: "satisfies"
+    inverseLabel: "satisfied by"
   - name: refines
     description: "A requirement refines a more general requirement"
     from: Requirement
     to: Requirement
+    label: "refines"
+    inverseLabel: "refined by"
   - name: realizes
     description: "A function realizes a requirement"
     from: Function
     to: Requirement
+    label: "realizes"
+    inverseLabel: "realized by"
   - name: implements
     description: "A component implements a function"
     from: Component
     to: Function
+    label: "implements"
+    inverseLabel: "implemented by"
   - name: depends_on
     description: "A component depends on another component"
     from: Component
     to: Component
+    label: "depends on"
+    inverseLabel: "needed by"
   - name: accesses
     description: "A component reads or writes a data object"
     from: Component
     to: Data
+    label: "accesses"
+    inverseLabel: "accessed by"
   - name: built_from
     description: "A build artifact is built from a component"
     from: BuildArtifact
     to: Component
+    label: "built from"
+    inverseLabel: "built into"
   - name: composed_of
     description: "An application is composed of components"
     from: Application
     to: Component
+    label: "composed of"
+    inverseLabel: "part of"
   - name: deploys
     description: "An application deploys a build artifact"
     from: Application
     to: BuildArtifact
+    label: "deploys"
+    inverseLabel: "deployed by"
   - name: includes
     description: "A solution includes an application"
     from: Solution
     to: Application
+    label: "includes"
+    inverseLabel: "included in"
   - name: addresses
     description: "A solution addresses a need"
     from: Solution
     to: Need
+    label: "addresses"
+    inverseLabel: "addressed by"
   - name: owned_by
     description: "A data object is owned by an application"
     from: Data
     to: Application
+    label: "owned by"
+    inverseLabel: "owns"
   - name: exposed_by
     description: "An interface is exposed by an application"
     from: Interface
     to: Application
+    label: "exposed by"
+    inverseLabel: "exposes"
   - name: exchanges
     description: "An interface exchanges a data object"
     from: Interface
     to: Data
+    label: "exchanges"
+    inverseLabel: "exchanged through"
   - name: source
     description: "The application a flow starts from"
     from: Flow
     to: Application
+    label: "from"
+    inverseLabel: "source of"
   - name: target
     description: "The application a flow ends at"
     from: Flow
     to: Application
+    label: "to"
+    inverseLabel: "target of"
   - name: through
     description: "The interface a flow goes through"
     from: Flow
     to: Interface
+    label: "through"
+    inverseLabel: "used by flow"
   - name: carries
     description: "The data object a flow carries"
     from: Flow
     to: Data
+    label: "carries"
+    inverseLabel: "carried by"
   - name: verifies
     description: "A test case verifies a requirement"
     from: TestCase
     to: Requirement
+    label: "verifies"
+    inverseLabel: "verified by"
   - name: contains
     description: "A release contains a build artifact"
     from: Release
     to: BuildArtifact
+    label: "contains"
+    inverseLabel: "contained in"
   - name: releases
     description: "A release is a version of an application"
     from: Release

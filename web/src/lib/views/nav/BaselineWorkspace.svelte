@@ -28,7 +28,7 @@
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
   import { indexOf } from '../../graphIndex';
-  import { splitType } from '../../stores/types.svelte';
+  import { splitType, typeCatalog } from '../../stores/types.svelte';
   import { MAIN_BRANCH } from '../../namespace';
   import { baselineTool, selectBranch, selectBaseline } from '../../stores/baselineTool.svelte';
   import { loadRaw, save } from '../../shell/storage';
@@ -527,7 +527,7 @@
                     <tbody>
                       {#each allLinks as l (l.id)}
                         <tr class:sel={selectedLink?.id === l.id} onclick={() => selectLink(l)}>
-                          <td class="mono">{l.type}</td>
+                          <td title={l.type}>{typeCatalog.cat.linkLabel(l.type, 'out')}</td>
                           <td class="mono" title={l.from?.id}>{shortId(l.from?.id ?? '')}</td>
                           <td class="mono" title={l.to?.id}>{shortId(l.to?.id ?? '')}</td>
                         </tr>
@@ -589,7 +589,7 @@
                       {#each rows as r (r.l.id)}
                         <tr class:suspect={r.suspect} class:sel={selectedLink?.id === r.l.id}>
                           <td class="dir" title={r.outgoing ? 'Outgoing' : 'Incoming'}>{r.outgoing ? '→' : '←'}</td>
-                          <td class="mono"><button type="button" class="link mono" title="Show this link's properties" onclick={() => selectLink(r.l)}>{r.l.type}</button></td>
+                          <td><button type="button" class="link" title={`${r.l.type}: show this link's properties`} onclick={() => selectLink(r.l)}>{typeCatalog.cat.linkLabel(r.l.type, r.outgoing ? 'out' : 'in')}</button></td>
                           <td>
                             <button type="button" class="link mono" title={inBaseline(r.other) ? 'Show its neighbours' : 'Not in this baseline: open it in its editor'} onclick={() => selectNode(r.other)}>{r.other?.key ?? '?'}</button>
                             {#if nodeTitle(r.other)}<span class="hint"> {nodeTitle(r.other)}</span>{/if}
@@ -616,7 +616,7 @@
       <section class="card neighbours">
         {#if selectedLink}
           <div class="row head">
-            <h3 class="grow">Link <span class="mono">{selectedLink.type}</span></h3>
+            <h3 class="grow" title={selectedLink.type}>Link <span>{typeCatalog.cat.linkLabel(selectedLink.type, 'out')}</span></h3>
             <button type="button" class="ghost small" title="Close" aria-label="Close link view" onclick={() => (selectedLink = undefined)}>×</button>
           </div>
           {#if linkViewError}

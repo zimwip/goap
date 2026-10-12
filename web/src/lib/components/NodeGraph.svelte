@@ -6,6 +6,7 @@
   import { forceCollide, forceLink, forceManyBody, forceSimulation, forceX, forceY, type ForceLink, type Simulation } from 'd3-force';
   import { untrack } from 'svelte';
   import type { GraphIndex } from '../graphIndex';
+  import { typeCatalog } from '../stores/types.svelte';
 
   let {
     index,
@@ -216,6 +217,8 @@
     lx: number;
     ly: number;
     type: string;
+    /** the link read from the center: its inverse label when the center is its target */
+    label: string;
     color: string;
     touchesCenter: boolean;
     touchesBoth: boolean;
@@ -256,6 +259,7 @@
           lx: 0.25 * x1 + 0.5 * cx + 0.25 * x2,
           ly: 0.25 * y1 + 0.5 * cy + 0.25 * y2,
           type: l.type ?? '',
+          label: typeCatalog.cat.linkLabel(l.type, t.id === center && b.id !== center ? 'in' : 'out'),
           color: colorOf(l.type),
           touchesCenter: ends.has(center) || (!!secondaryCenter && ends.has(secondaryCenter)),
           touchesBoth: !!secondaryCenter && ends.has(center) && ends.has(secondaryCenter),
@@ -366,10 +370,10 @@
           <path d={e.d} />
           <polygon points={e.head} />
           <g transform={`translate(${e.lx} ${e.ly})`}>
-            <rect x={-(e.type.length * 3.2 + 6)} y="-8" width={e.type.length * 6.4 + 12} height="16" rx="8" />
-            <text y="3.5" text-anchor="middle">{e.type}</text>
+            <rect x={-(e.label.length * 3.2 + 6)} y="-8" width={e.label.length * 6.4 + 12} height="16" rx="8" />
+            <text y="3.5" text-anchor="middle">{e.label}</text>
           </g>
-          {#if onLinkSelect}<title>{e.type} — click for its properties.</title>{/if}
+          <title>{e.type}{onLinkSelect ? ' — click for its properties.' : ''}</title>
         </g>
       {/each}
       {#each boxes as b (b.id)}

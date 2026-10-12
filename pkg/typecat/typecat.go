@@ -93,6 +93,9 @@ type LinkType struct {
 	From, To domain.TypeRef
 	// Compose: the target is a part of the source (def.LinkType.Compose).
 	Compose bool
+	// Label and InverseLabel read the link from its source and from its target, fallbacks applied
+	// (def.LinkType.Labels).
+	Label, InverseLabel string
 	// Attributes are what a link of the type carries.
 	Attributes []Attribute
 	// AttributeValidators are the property validators of the attributes, bound to the attribute, in call order.
@@ -177,6 +180,7 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 		for _, l := range d.LinkTypes {
 			ref := domain.TypeRef{Namespace: d.Name, Name: l.Name}
 			lt := &LinkType{Ref: ref, Compose: l.Compose}
+			lt.Label, lt.InverseLabel = l.Labels()
 			lt.AttributeValidators, lt.Validators = d.OwnBoundLinkValidators(l)
 			for _, a := range l.Attributes {
 				ra := Attribute{Attribute: a}
@@ -201,7 +205,8 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 			if _, dup := c.links[ref]; dup {
 				// a link type declared for several pairs of ends: it accepts any pair
 				c.links[ref] = &LinkType{Ref: ref, Compose: l.Compose || c.links[ref].Compose, Attributes: c.links[ref].Attributes,
-					AttributeValidators: c.links[ref].AttributeValidators, Validators: c.links[ref].Validators}
+					AttributeValidators: c.links[ref].AttributeValidators, Validators: c.links[ref].Validators,
+					Label: c.links[ref].Label, InverseLabel: c.links[ref].InverseLabel}
 				continue
 			}
 			c.links[ref] = lt

@@ -82,6 +82,10 @@ export interface LinkTypeInfo {
   /** composition link: the target is a part of the source, shown as its child */
   compose?: boolean;
   attributes?: AttributeInfo[];
+  /** the link read from its source (fallback applied: the name) */
+  label?: string;
+  /** the link read from its target (fallback applied: the source label) */
+  inverseLabel?: string;
 }
 
 export type AttributeType = 'string' | 'number' | 'boolean' | 'date' | 'enum' | 'json';
@@ -216,6 +220,10 @@ export interface LinkType {
   compose?: boolean;
   /** link_validator instances checking a link as a whole, in call order (ADR 0100) */
   validators?: string[];
+  /** the link read from its source ("implements"); empty: the name */
+  label?: string;
+  /** the link read from its target ("implemented by"); empty: the label */
+  inverseLabel?: string;
 }
 
 export interface Condition {

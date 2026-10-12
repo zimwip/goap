@@ -260,7 +260,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     return () => ctrl.abort();
   });
   const addLink = (type: string, to: NodeRef) => propose('link', { addLinks: [{ type, to }] }, `Link ${stored?.key} ${type} ${head?.nodes.get(to.id ?? '')?.key ?? ''}`.trim());
-  const removeLink = (l: Link) => propose('link', { removeLinks: [l.id ?? ''] }, `Unlink ${stored?.key} ${l.type}`);
+  const removeLink = (l: Link) => propose('link', { removeLinks: [l.id ?? ''] }, `Unlink ${stored?.key} ${typeCatalog.cat.linkLabel(l.type, 'out')}`);
 
   const transition = (t: LifecycleTransition) => propose('move', { state: t.to }, `Move ${stored?.key} to ${t.to}`);
 

@@ -593,6 +593,14 @@ the editors read from the domain rather than knowing links by name. The methodol
 (`TypeCatalog.sectionsOf`, through `defines`), and shows under a process or a method the steps composed through `sub_activity` (`TypeCatalog.partsOf`); a new type composed by
 `defines` and bound to a draft collection (`TYPE_COLLECTION`, `methodologyTabs.ts`) gets its pane without editor code. The `role` and `step` node editors open the version's Roles pane and the owning process or method.
 
+A link is read from the node looking at it: a link type carries a **`label`**, how it reads from its source ("implements"), and an
+**`inverseLabel`**, how it reads from its target ("implemented by") (`def.LinkType.Labels`: the label falls back to the name, the inverse label
+to the label; `typecat.LinkType.Label` / `InverseLabel` and `LinkTypeInfo.label` / `inverseLabel` hold them with the fallbacks applied). Pure
+display metadata, the graph never reads them: the web shows a link with `TypeCatalog.linkLabel(ref, 'out' | 'in')` (every graph and link
+view: the node's links, the parents and children trees, the node graph seen from its center, the graph explorer, the links and
+neighbours of the Baseline explorer; the ontology graph of the domain editor reads them from the form) and keeps the qualified link type
+in the tooltip.
+
 ### 2.11 Agent triggers
 
 Outside the intent loop, an agent can be executed **automatically** by triggers

@@ -81,6 +81,17 @@ export class TypeCatalog {
     return this.links.filter((l) => l.ref && (!l.from || types.includes(l.from))).sort((a, b) => (a.ref ?? '').localeCompare(b.ref ?? ''));
   }
 
+  /**
+   * How a link of the type reads from the node looking at it: its label from the source (`out`), its inverse label
+   * from the target (`in`); a link type the catalogue does not know reads as its name.
+   */
+  linkLabel(ref: string | undefined, dir: 'out' | 'in'): string {
+    const l = this.links.find((x) => x.ref === ref);
+    const name = typeName(ref);
+    const label = l?.label || name;
+    return dir === 'out' ? label : l?.inverseLabel || label;
+  }
+
   /** Can a link of this type point to a node of the type? */
   linkAccepts(link: LinkTypeInfo, to: string | undefined): boolean {
     return !link.to || this.typesOf(to).includes(link.to);

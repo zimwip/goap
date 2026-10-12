@@ -4,6 +4,7 @@
   // (d3-force). Filter by namespace or text, start from the organisation (units, users, and what they own), select a
   // node to see its neighbourhood, focus on it, or open it in its editor.
   import { isMeta, ns as nsNames, types as nodeTypes } from '../../stores/session.svelte';
+  import { typeCatalog } from '../../stores/types.svelte';
   import { untrack } from 'svelte';
   import { forceSimulation, forceLink, forceManyBody, forceCenter, forceCollide, forceX, forceY, type SimulationNodeDatum, type SimulationLinkDatum } from 'd3-force';
   import type { Tab } from '../../shell/types';
@@ -165,9 +166,9 @@
       .filter((l) => (l.source as N).id === selected || (l.target as N).id === selected)
       .map((l) => {
         const out = (l.source as N).id === selected;
-        return { type: l.type, out, other: (out ? l.target : l.source) as N };
+        return { type: l.type, label: typeCatalog.cat.linkLabel(l.type, out ? 'out' : 'in'), out, other: (out ? l.target : l.source) as N };
       })
-      .sort((a, b) => a.type.localeCompare(b.type)),
+      .sort((a, b) => a.label.localeCompare(b.label)),
   );
 
   // pan and zoom
@@ -250,7 +251,7 @@
               x2={t.x}
               y2={t.y}
               stroke-width={1 / Math.sqrt(scale)}
-            ><title>{s.label} {shortType(l.type)} {t.label}</title></line>
+            ><title>{s.label} {typeCatalog.cat.linkLabel(l.type, 'out')} {t.label} · {t.label} {typeCatalog.cat.linkLabel(l.type, 'in')} {s.label}</title></line>
           {/each}
           {#each view.nodes as n (n.id)}
             <g
@@ -288,7 +289,7 @@
         <ul class="nb">
           {#each selLinks as x, i (i)}
             <li>
-              <span class="hint">{x.out ? '→' : '←'} {shortType(x.type)}</span>
+              <span class="hint" title={x.type}>{x.out ? '→' : '←'} {x.label}</span>
               <button type="button" class="link" onclick={() => (selected = x.other.id)}>{x.other.label}</button>
               <span class="hint">{shortType(x.other.node.type ?? '')}</span>
             </li>

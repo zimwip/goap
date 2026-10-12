@@ -119,6 +119,10 @@ export interface LinkTypeForm {
   compose: boolean;
   /** link_validator instances, in call order */
   validators: string[];
+  /** the link read from its source ('' : the name) */
+  label: string;
+  /** the link read from its target ('' : the label) */
+  inverseLabel: string;
 }
 
 /**
@@ -384,7 +388,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 // --- constructors --------------------------------------------------------------
 
 export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, validators: [], editor: '', search: [] });
-export const emptyLinkType = (): LinkTypeForm => ({ uid: newUid(), name: '', description: '', from: '', to: '', attributes: [], compose: false, validators: [] });
+export const emptyLinkType = (): LinkTypeForm => ({ uid: newUid(), name: '', description: '', from: '', to: '', attributes: [], compose: false, validators: [], label: '', inverseLabel: '' });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
 export function newUid(): string {
@@ -781,7 +785,7 @@ export function enumFromForm(e: EnumForm): Enum {
 }
 
 export function linkTypeToForm(l: LinkType): LinkTypeForm {
-  return { uid: newUid(), name: l.name ?? '', description: l.description ?? '', from: l.from ?? '', to: l.to ?? '', attributes: (l.attributes ?? []).map(attributeToForm), compose: l.compose === true, validators: [...(l.validators ?? [])] };
+  return { uid: newUid(), name: l.name ?? '', description: l.description ?? '', from: l.from ?? '', to: l.to ?? '', attributes: (l.attributes ?? []).map(attributeToForm), compose: l.compose === true, validators: [...(l.validators ?? [])], label: l.label ?? '', inverseLabel: l.inverseLabel ?? '' };
 }
 
 export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
@@ -810,6 +814,8 @@ export function linkTypeFromForm(l: LinkTypeForm): LinkType {
   if (l.attributes.length) o.attributes = l.attributes.map(attributeFromForm);
   if (l.compose) o.compose = true;
   put(o, 'validators', l.validators.map((v) => v.trim()).filter(Boolean));
+  put(o, 'label', l.label.trim());
+  put(o, 'inverseLabel', l.inverseLabel.trim());
   return o;
 }
 

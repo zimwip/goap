@@ -231,6 +231,25 @@ type LinkType struct {
 	// editor shows the targets as the children of the source. It is the semantics the editors read from the
 	// domain instead of knowing the link by name ("defines", "sub_activity").
 	Compose bool `yaml:"compose,omitempty" json:"compose,omitempty"`
+	// Label reads a link from its source ("implements"), InverseLabel from its target ("implemented by"): a link
+	// is shown from the node looking at it. Both are optional: Label falls back to the name, InverseLabel to Label
+	// (see Labels).
+	Label        string `yaml:"label,omitempty" json:"label,omitempty"`
+	InverseLabel string `yaml:"inverseLabel,omitempty" json:"inverseLabel,omitempty"`
+}
+
+// Labels returns the label of the link read from its source and the one read from its target, with their
+// fallbacks: the name, then the source label.
+func (l LinkType) Labels() (forward, inverse string) {
+	forward = l.Label
+	if forward == "" {
+		forward = l.Name
+	}
+	inverse = l.InverseLabel
+	if inverse == "" {
+		inverse = forward
+	}
+	return forward, inverse
 }
 
 // Issue is a validation problem located by a field path such as

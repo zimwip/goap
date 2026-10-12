@@ -3,6 +3,7 @@
   // links) or its parents (incoming links), followed as deep as wanted.
   import Self from './NodeTree.svelte';
   import type { GraphIndex } from '../graphIndex';
+  import { typeCatalog } from '../stores/types.svelte';
 
   let {
     index,
@@ -44,7 +45,7 @@
           {:else}
             <span class="tog"></span>
           {/if}
-          <span class="lt" title={dir === 'out' ? `${e.link.type} →` : `→ ${e.link.type}`}>{e.link.type}</span>
+          <span class="lt" title={dir === 'out' ? `${e.link.type} →` : `→ ${e.link.type}`}>{typeCatalog.cat.linkLabel(e.link.type, dir)}</span>
           <button type="button" class="link mono" title="Open the node" onclick={() => onopen(e.id)}>{n?.key}</button>
           <span class="hint">{n?.type}</span>
           {#if n?.state}<span class="state">{n.state}</span>{/if}

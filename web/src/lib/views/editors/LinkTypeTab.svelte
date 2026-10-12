@@ -109,6 +109,17 @@
           <label for="lt-desc">Description</label>
           <input id="lt-desc" type="text" bind:value={x.description} />
         </div>
+        <div class="grid">
+          <div class="field">
+            <label for="lt-label" title="How the link reads from its source node">Label (from the source)</label>
+            <input id="lt-label" type="text" bind:value={x.label} placeholder={x.name || 'implements'} data-path="{path}.label" />
+          </div>
+          <div class="field">
+            <label for="lt-inverse" title="How the link reads from its target node">Inverse label (from the target)</label>
+            <input id="lt-inverse" type="text" bind:value={x.inverseLabel} placeholder={x.label || x.name || 'implemented by'} data-path="{path}.inverseLabel" />
+          </div>
+        </div>
+        <p class="hint">A link is shown from the node looking at it: its source reads the label, its target the inverse label. Empty: the label falls back to the name, the inverse label to the label.</p>
         <label class="inline" title="A composition link: its target is a part of its source, shown as a child by the editors"><input type="checkbox" bind:checked={x.compose} data-path="{path}.compose" /> compose</label>
         <p class="hint">A composition link says its target is a part of its source: the editors show it as a child.</p>
 </section>

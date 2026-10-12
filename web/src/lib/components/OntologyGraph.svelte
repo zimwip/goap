@@ -16,6 +16,10 @@
     name: string;
     from: string;
     to: string;
+    /** the link read from its source ('' : the name) */
+    label?: string;
+    /** the link read from its target ('' : the label) */
+    inverseLabel?: string;
   }
 
   let {
@@ -130,10 +134,18 @@
     return { points: `${tip.x},${tip.y} ${l.x},${l.y} ${r.x},${r.y}`, base };
   }
 
+  const labelsOf = (l: LinkIn) => {
+    const label = l.label?.trim() || l.name;
+    return { label, inverse: l.inverseLabel?.trim() || label };
+  };
+
   interface GEdge {
     key: string;
     kind: 'link' | 'extends';
     name: string;
+    /** read from the source, then from the target (fallbacks applied) */
+    label: string;
+    inverse: string;
     from: string;
     to: string;
     index: number;
@@ -152,7 +164,7 @@
       const s = border(n, p);
       const e = border(p, n);
       const a = arrow(e, s, 15, 7);
-      out.push({ key: `x:${n.id}`, kind: 'extends', name: 'extends', from: n.id, to: p.id, index: n.index, path: `M${s.x},${s.y} L${a.base.x},${a.base.y}`, head: a.points, lx: 0, ly: 0, color: 'var(--muted)' });
+      out.push({ key: `x:${n.id}`, kind: 'extends', name: 'extends', label: '', inverse: '', from: n.id, to: p.id, index: n.index, path: `M${s.x},${s.y} L${a.base.x},${a.base.y}`, head: a.points, lx: 0, ly: 0, color: 'var(--muted)' });
     }
     // parallel links between two types are fanned out; self links are loops
     const groups = new Map<string, number[]>();
@@ -177,7 +189,7 @@
         const ex = a.x - a.w * 0.12;
         const tip = { x: ex, y: top - 1 };
         const ar = arrow(tip, { x: ex - 6, y: top - 22 }, 10, 4.5);
-        out.push({ key: `l:${i}`, kind: 'link', name: l.name, from: l.from, to: l.to, index: i, path: `M${sx},${top} C${sx + 34},${top - rise} ${ex - 34},${top - rise} ${ar.base.x},${ar.base.y}`, head: ar.points, lx: a.x, ly: top - rise * 0.75 - 4, color });
+        out.push({ key: `l:${i}`, kind: 'link', name: l.name, ...labelsOf(l), from: l.from, to: l.to, index: i, path: `M${sx},${top} C${sx + 34},${top - rise} ${ex - 34},${top - rise} ${ar.base.x},${ar.base.y}`, head: ar.points, lx: a.x, ly: top - rise * 0.75 - 4, color });
         continue;
       }
       // normal of the canonical direction, so opposite links fan out on opposite sides
@@ -190,7 +202,7 @@
       const s = border(a, c);
       const e = border(b, c);
       const ar = arrow(e, c, 10, 4.5);
-      out.push({ key: `l:${i}`, kind: 'link', name: l.name, from: l.from, to: l.to, index: i, path: `M${s.x},${s.y} Q${c.x},${c.y} ${ar.base.x},${ar.base.y}`, head: ar.points, lx: 0.25 * s.x + 0.5 * c.x + 0.25 * e.x, ly: 0.25 * s.y + 0.5 * c.y + 0.25 * e.y, color });
+      out.push({ key: `l:${i}`, kind: 'link', name: l.name, ...labelsOf(l), from: l.from, to: l.to, index: i, path: `M${s.x},${s.y} Q${c.x},${c.y} ${ar.base.x},${ar.base.y}`, head: ar.points, lx: 0.25 * s.x + 0.5 * c.x + 0.25 * e.x, ly: 0.25 * s.y + 0.5 * c.y + 0.25 * e.y, color });
     }
     return out;
   });
@@ -403,8 +415,9 @@
                 ondblclick={() => onopen?.('link', e.index)}
                 role="presentation"
               >
-                <rect x={-labelW(e.name) / 2} y="-9" width={labelW(e.name)} height="18" rx="9" />
-                <text y="4" text-anchor="middle">{e.name}</text>
+                <rect x={-labelW(e.label) / 2} y="-9" width={labelW(e.label)} height="18" rx="9" />
+                <text y="4" text-anchor="middle">{e.label}</text>
+                <title>{e.from} {e.label} {e.to} · {e.to} {e.inverse} {e.from} ({e.name})</title>
               </g>
             {/if}
           {/each}
@@ -461,16 +474,17 @@
       {/if}
       <ul class="links">
         {#each linksOf.out as e (e.key)}
-          <li><span class="sw" style={`background:${e.color}`}></span><code>{e.name}</code> →
+          <li><span class="sw" style={`background:${e.color}`}></span><code title={e.name}>{e.label}</code> →
             <button type="button" class="link" onclick={() => (sel = e.to)}>{e.to}</button></li>
         {/each}
         {#each linksOf.inn as e (e.key)}
           <li><span class="sw" style={`background:${e.color}`}></span>
-            <button type="button" class="link" onclick={() => (sel = e.from)}>{e.from}</button> → <code>{e.name}</code></li>
+            <code title={e.name}>{e.inverse}</code> ←
+            <button type="button" class="link" onclick={() => (sel = e.from)}>{e.from}</button></li>
         {/each}
         {#each linksOf.inh as { e, via } (e.key)}
           <li class="inh"><span class="sw" style={`background:${e.color}`}></span>
-            {e.from} → <code>{e.name}</code> → {e.to} <span class="hint">(via {via})</span></li>
+            {e.from} → <code title={e.name}>{e.label}</code> → {e.to} <span class="hint">(via {via})</span></li>
         {/each}
       </ul>
     {:else}

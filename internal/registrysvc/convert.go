@@ -267,7 +267,8 @@ func nodeTypesToPB(ns []def.NodeType) []*registryv1.NodeType {
 func linkTypesToPB(ls []def.LinkType) []*registryv1.LinkType {
 	var out []*registryv1.LinkType
 	for _, l := range ls {
-		out = append(out, &registryv1.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesToPB(l.Attributes), Validators: l.Validators})
+		out = append(out, &registryv1.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesToPB(l.Attributes), Validators: l.Validators,
+			Label: l.Label, InverseLabel: l.InverseLabel})
 	}
 	return out
 }
@@ -299,7 +300,8 @@ func DomainFromPB(p *registryv1.Domain) def.Domain {
 		d.NodeTypes = append(d.NodeTypes, nodeTypeFromPB(n))
 	}
 	for _, l := range p.LinkTypes {
-		d.LinkTypes = append(d.LinkTypes, def.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesFromPB(l.Attributes), Validators: l.Validators})
+		d.LinkTypes = append(d.LinkTypes, def.LinkType{Name: l.Name, Description: l.Description, From: l.From, To: l.To, Compose: l.Compose, Attributes: attributesFromPB(l.Attributes), Validators: l.Validators,
+			Label: l.Label, InverseLabel: l.InverseLabel})
 	}
 	d.Enums = enumsFromPB(p.Enums)
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)

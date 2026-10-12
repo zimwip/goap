@@ -253,6 +253,10 @@ message LinkType {
   string description = 6;
   // link_validator instances (ADR 0100) checking a link of the type as a whole, in call order
   repeated string validators = 7;
+  // the link read from its source ("implements"); empty: the name
+  string label = 8;
+  // the link read from its target ("implemented by"); empty: the label
+  string inverse_label = 9;
 }
 
 message Condition {
@@ -867,6 +871,9 @@ message LinkTypeInfo {
   string to = 3;
   bool compose = 4;
   repeated AttributeInfo attributes = 5;
+  // the link read from its source, then from its target (empty: the name, then the source label)
+  string label = 6;
+  string inverse_label = 7;
 }
 
 message GetProcessGraphRequest {
