@@ -184,6 +184,8 @@ func (it ChangeItem) Validate() error {
 		if s, _ := it.Data["to"].(string); s == "" {
 			return fmt.Errorf("transition item requires data.to")
 		}
+	case KindReview:
+		return validateReview(it)
 	default:
 		validate := itemKinds.get(it.Kind)
 		if validate == nil {

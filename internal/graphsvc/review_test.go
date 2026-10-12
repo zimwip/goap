@@ -15,13 +15,11 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/graph/graphtest"
-	"github.com/zimwip/goap/pkg/review"
 )
 
 // The review object over the RPCs (ADR 0080): open, update, submit, discard; the author or an administrator only; the
 // reviewer is the principal of the request; a refusal of the submit leaves the review open.
 func TestReviewRPCs(t *testing.T) {
-	review.Register()
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	authorizer, err := authz.NewCasbin(nil)

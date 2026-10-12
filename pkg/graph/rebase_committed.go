@@ -228,6 +228,15 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 	if err != nil {
 		return err
 	}
+	// the parent's acceptances are one review, recorded before them (ADR 0105)
+	type landedIn struct {
+		events []domain.ImpactEvent
+		id     domain.ChangeImpactID
+		ref    domain.NodeRef
+		review domain.Review
+	}
+	var todo []landedIn
+	var entries []domain.ReviewEntry
 	for _, cn := range mainImpactsOf(c) {
 		if cn.Landed == nil {
 			continue
@@ -258,13 +267,26 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 				last = r
 			}
 		}
-		r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(), ReviewID: last.ReviewID,
+		r := domain.Review{Status: domain.ReviewAccepted, By: last.By, At: g.now(),
 			Comment: strings.TrimSpace(fmt.Sprintf("merged from sub-change %s (%s): %s", c.Title, c.ID, last.Comment))}
-		events = append(events,
-			domain.ImpactEvent{Change: parent.ID, Impact: id, Op: domain.ImpactReviewed, By: r.By, Review: &r},
-			domain.ImpactEvent{Change: parent.ID, Impact: id, Op: domain.ImpactLanded, Landed: &ref, Baseline: head.ID, Branch: domain.BranchOf(parent.Branch)})
-		if err := g.emit(ctx, tx, events...); err != nil {
+		todo = append(todo, landedIn{events: events, id: id, ref: ref, review: r})
+		entries = append(entries, domain.ReviewEntry{Impact: string(id), Comment: r.Comment, Outcome: domain.ReviewOutcomeAccept})
+	}
+	if len(todo) > 0 {
+		key, cause, err := g.putReviewRecord(ctx, tx, parent.ID, "graph.merge", fmt.Sprintf("merge of sub-change %s (%s)", c.Title, c.ID), entries)
+		if err != nil {
 			return err
+		}
+		for _, t := range todo {
+			r := t.review
+			r.ReviewID = key
+			ref := t.ref
+			events := append(t.events,
+				domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactReviewed, By: r.By, Review: &r, Causation: cause},
+				domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactLanded, Landed: &ref, Baseline: head.ID, Branch: domain.BranchOf(parent.Branch)})
+			if err := g.emit(ctx, tx, events...); err != nil {
+				return err
+			}
 		}
 	}
 	// the parent's branch now holds the sub-change's commits: the parent has committed work to merge

@@ -177,6 +177,9 @@ func entry(n map[string]any, e domain.LogEntry) {
 	if e.Flow != "" {
 		set(n, "goap:flow", e.Flow)
 	}
+	if e.Causation != "" {
+		set(n, "goap:causation", e.Causation) // the id of the entry this one follows from (ADR 0105)
+	}
 	if len(e.Payload) > 0 {
 		add(n, "record", json.RawMessage(e.Payload))
 	}
@@ -579,9 +582,13 @@ func (b *builder) impact(c domain.Change, e domain.LogEntry, ev domain.ImpactEve
 		add(rv, "goap:partOf", ref(changeIRI(c.ID)))
 		add(rv, "goap:about", ref(imp))
 		if ev.Review != nil && ev.Review.ReviewID != "" {
-			// reviewed in a review object (ADR 0080): the object groups the events it submitted
+			// reviewed in a review object (ADR 0080): the object groups the events it submitted and, submitted, is the
+			// cause of each verdict (ADR 0105)
 			add(rv, "goap:partOf", ref(reviewObjectIRI(ev.Review.ReviewID)))
 			b.node(reviewObjectIRI(ev.Review.ReviewID), "prov:Activity", "goap:ReviewObject")
+			if e.Causation != "" {
+				add(rv, "prov:wasInformedBy", ref(reviewObjectIRI(ev.Review.ReviewID)))
+			}
 		}
 		if actor != "" {
 			add(rv, "prov:wasAssociatedWith", ref(actor))

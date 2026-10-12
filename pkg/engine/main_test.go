@@ -4,7 +4,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/zimwip/goap/pkg/review"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
@@ -13,6 +12,5 @@ import (
 func TestMain(m *testing.M) {
 	risk.Register()
 	verify.Register()
-	review.Register()
 	os.Exit(m.Run())
 }

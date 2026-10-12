@@ -188,6 +188,9 @@ func checkImpactLogs(t *testing.T, repo Repo) {
 			if err != nil {
 				return err
 			}
+			if err := checkVerdictCauses(context.Background(), tx, c.ID); err != nil {
+				t.Errorf("change %s: %v", c.ID, err)
+			}
 			if got, want := norm(domain.FoldImpacts(events)), norm(stored); got != want {
 				t.Errorf("change %s: the replay of its %d events differs from the projection\nreplay: %s\nstored: %s", c.ID, len(events), got, want)
 			}
@@ -273,4 +276,42 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 		t.Fatal(err)
 	}
 	return out
+}
+
+// checkVerdictCauses checks that every verdict of a change was made by a submitted review (ADR 0105): a decided
+// reviewed event names as its cause an earlier fact.review entry, the submitted record of the review whose key the
+// verdict carries, holding the impact with that outcome.
+func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
+	entries, err := tx.Log(ctx, domain.LogFilter{Change: id})
+	if err != nil {
+		return err
+	}
+	seen := map[string]domain.LogEntry{}
+	for _, e := range entries {
+		seen[e.ID] = e
+		if e.Type != domain.LogImpact+"."+string(domain.ImpactReviewed) {
+			continue
+		}
+		var ev domain.ImpactEvent
+		if err := json.Unmarshal(e.Payload, &ev); err != nil {
+			return err
+		}
+		if ev.Review == nil || (ev.Review.Status != domain.ReviewAccepted && ev.Review.Status != domain.ReviewRejected) {
+			continue
+		}
+		cause, ok := seen[e.Causation]
+		if !ok || cause.Type != domain.LogFact+"."+string(domain.KindReview) {
+			return fmt.Errorf("verdict %d on %s has no earlier review as its cause (%q)", e.Seq, ev.Impact, e.Causation)
+		}
+		var it domain.ChangeItem
+		if err := json.Unmarshal(cause.Payload, &it); err != nil {
+			return err
+		}
+		rec := domain.ReviewRecordOf(it.Data)
+		i := slices.IndexFunc(rec.Entries, func(x domain.ReviewEntry) bool { return x.Impact == string(ev.Impact) })
+		if rec.Status != domain.ReviewStatusSubmitted || rec.Key != ev.Review.ReviewID || i < 0 || rec.Entries[i].Outcome != domain.ReviewOutcome(ev.Review.Status) {
+			return fmt.Errorf("verdict %d on %s (review %s) is not recorded by its cause %+v", e.Seq, ev.Impact, ev.Review.ReviewID, rec)
+		}
+	}
+	return nil
 }

@@ -201,27 +201,27 @@ func (g *Graph) ImpactsOf(ctx context.Context, id domain.ChangeID, execution str
 
 // ImpactNodeReview accepts or rejects a proposed change impact; accepting checks its draft, if any, as the version
 // written from it will be (ADR 0079) and writes nothing: landing does. The comment is mandatory: it is kept in the review
-// history and, once the change lands, on the version itself, so the origin of a version can be read from the node.
+// history and, once the change lands, on the version itself, so the origin of a version can be read from the node. The
+// verdict is made by a review of one entry, submitted at once (ADR 0105).
 func (g *Graph) ImpactNodeReview(ctx context.Context, id domain.ChangeID, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error) {
 	return g.ImpactNodeReviewOn(ctx, id, "", "", node, status, by, comment)
 }
 
 // ImpactNodeReviewOn reviews a change impact as a flow sees it (ADR 0025): on a flow the review is a
-// candidate until the flow is adopted, and execution is the action run that made it.
+// candidate until the flow is adopted, and execution is the action run that made it. As every verdict (ADR 0105), it
+// is the submission of a review: one of a single entry, whose record the graph writes before the verdict.
 //
 //goap:operation impact.review reviewer
 func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (cn domain.ChangeImpact, err error) {
 	if err := g.allow(ctx, id, operations.ImpactReview); err != nil {
 		return cn, err
 	}
-	if err := checkVerdict(status, comment); err != nil {
+	out, err := g.reviewBatch(ctx, id, domain.ReviewBatch{Flow: flow, Execution: execution, By: by,
+		Verdicts: []domain.ImpactVerdict{{Impact: node, Status: status, Comment: comment}}})
+	if err != nil {
 		return cn, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
-		cn, err = g.reviewTx(ctx, tx, id, flow, execution, node, status, by, strings.TrimSpace(comment), "")
-		return err
-	})
-	return
+	return out[0], nil
 }
 
 func checkVerdict(status domain.NodeReview, comment string) error {
@@ -238,9 +238,10 @@ func checkVerdict(status domain.NodeReview, comment string) error {
 // reviews retries it once the others stood.
 var errOriginsPending = errors.New("settle the origins first")
 
-// reviewTx is one review inside a transaction: the policy, the acceptance gate, the reviewed event. Nothing is
-// written when it refuses. reviewID, when set, is stamped on the review (ADR 0080).
-func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment, reviewID string) (cn domain.ChangeImpact, err error) {
+// reviewTx is one verdict inside a transaction: the policy, the acceptance gate, the reviewed event. Nothing is
+// written when it refuses. reviewID is the key of the submitted review that makes the verdict, stamped on the review of
+// the impact (ADR 0080), and causation the log entry of its record, the cause of the reviewed event (ADR 0105).
+func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment, reviewID, causation string) (cn domain.ChangeImpact, err error) {
 	c, err := changeOpen(ctx, tx, id)
 	if err != nil {
 		return cn, err
@@ -300,81 +301,89 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, e
 		cn.Review = status
 	}
 	cn.Reviews = append(cn.Reviews, r)
-	return cn, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r})
+	return cn, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: cn.ID, Op: domain.ImpactReviewed, Flow: flow, Execution: execution, By: by, Review: &r, Causation: causation})
 }
 
-// ImpactNodeReviewBatch applies a set of reviews in one transaction (ADR 0080): every verdict is made as
-// ImpactNodeReviewOn would make it, and either all of them stand or none does. A refusal (the review policy, the gate of
-// an acceptance, an impact no longer proposed) names the verdict and writes nothing. Every review carries the batch's
-// ID; the batch's Item, when set, is written after the verdicts, in the same transaction. A verdict accepting a node
-// whose origins are accepted by the same batch stands: the origins are settled first.
+// ImpactNodeReviewBatch submits a review (ADR 0080, 0105): every verdict is made as ImpactNodeReviewOn would make it,
+// and either all of them stand or none does. A refusal (the review policy, the gate of an acceptance, an impact no
+// longer proposed) names the verdict and writes nothing. The record of the submitted review is written first, then the
+// verdicts, each reviewed event naming it as its cause; every review carries its key. The batch's Item, when set, is
+// that record (the use case's review built up, now submitted: kind review, status submitted, its entries the verdicts);
+// else the graph writes one, keyed by ID (allocated when empty). A verdict accepting a node whose origins are accepted
+// by the same batch stands: the origins are settled first.
 func (g *Graph) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) (out []domain.ChangeImpact, err error) {
 	if err := g.allow(ctx, id, operations.ImpactReview); err != nil {
 		return out, err
 	}
+	return g.reviewBatch(ctx, id, b)
+}
+
+// reviewBatch is ImpactNodeReviewBatch once the operation is allowed.
+func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) (out []domain.ChangeImpact, err error) {
 	if len(b.Verdicts) == 0 {
 		return nil, fmt.Errorf("a review batch needs at least one verdict: %w", ErrInvalid)
+	}
+	label := func(n int, impact string) string {
+		if len(b.Verdicts) == 1 {
+			return ""
+		}
+		return fmt.Sprintf("verdict %d (%s): ", n+1, impact)
 	}
 	seenImpact := map[domain.ChangeImpactID]bool{}
 	for n, v := range b.Verdicts {
 		if err := checkVerdict(v.Status, v.Comment); err != nil {
-			return nil, fmt.Errorf("verdict %d (%s): %w", n+1, v.Impact, err)
+			return nil, fmt.Errorf("%s%w", label(n, string(v.Impact)), err)
 		}
 		if seenImpact[v.Impact] {
 			return nil, fmt.Errorf("verdict %d: change impact %s is reviewed twice in the batch: %w", n+1, v.Impact, ErrInvalid)
 		}
 		seenImpact[v.Impact] = true
 	}
-	var item *domain.ChangeItem
-	if b.Item != nil {
-		it := *b.Item
-		switch it.Kind {
-		case domain.KindFlow, domain.KindTransition, domain.KindDecisionPoint:
-			return nil, fmt.Errorf("a %s item is recorded by its own operation, not by a review batch: %w", it.Kind, ErrInvalid)
-		}
-		if it.ID == "" {
-			it.ID = domain.ItemID(g.newID())
-		}
-		if it.Status == "" {
-			it.Status = domain.ItemProposed
-		}
-		it.CreatedAt = g.now()
-		if err := it.Validate(); err != nil {
-			return nil, fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
-		}
-		if err := g.authorizeItems(ctx, id, []domain.ChangeItem{it}); err != nil {
-			return nil, err
-		}
-		item = &it
+	it, err := g.reviewRecord(b)
+	if err != nil {
+		return nil, err
 	}
+	if err := g.authorizeItems(ctx, id, []domain.ChangeItem{it}); err != nil {
+		return nil, err
+	}
+	key := domain.ReviewRecordOf(it.Data).Key
 	err = g.repo.InTx(ctx, func(tx Tx) error {
+		c, err := tx.Change(ctx, id)
+		if err != nil {
+			return err
+		}
+		it := it
+		it.Flow = c.ResolveFlow(b.Flow) // the verdicts are made on this flow (ADR 0032 §6)
+		if err := putItem(ctx, tx, id, it); err != nil {
+			return err
+		}
 		out = make([]domain.ChangeImpact, len(b.Verdicts))
 		pending := make([]int, len(b.Verdicts))
 		for i := range pending {
 			pending[i] = i
 		}
-		label := func(i int) string {
+		name := func(i int) string {
 			v := b.Verdicts[i]
 			if c, err := tx.Change(ctx, id); err == nil {
 				if k, err := findChangeImpact(c, v.Impact); err == nil {
-					return fmt.Sprintf("verdict %d (%s)", i+1, c.Nodes[k].Key)
+					return label(i, c.Nodes[k].Key)
 				}
 			}
-			return fmt.Sprintf("verdict %d (%s)", i+1, v.Impact)
+			return label(i, string(v.Impact))
 		}
 		for len(pending) > 0 {
 			var next []int
 			var lastErr error
 			for _, i := range pending {
 				v := b.Verdicts[i]
-				cn, err := g.reviewTx(ctx, tx, id, b.Flow, b.Execution, v.Impact, v.Status, b.By, strings.TrimSpace(v.Comment), b.ID)
+				cn, err := g.reviewTx(ctx, tx, id, b.Flow, b.Execution, v.Impact, v.Status, b.By, strings.TrimSpace(v.Comment), key, string(it.ID))
 				switch {
 				case err == nil:
 					out[i] = cn
 				case errors.Is(err, errOriginsPending):
-					next, lastErr = append(next, i), fmt.Errorf("%s: %w", label(i), err)
+					next, lastErr = append(next, i), fmt.Errorf("%s%w", name(i), err)
 				default:
-					return fmt.Errorf("%s: %w", label(i), err)
+					return fmt.Errorf("%s%w", name(i), err)
 				}
 			}
 			if len(next) == len(pending) {
@@ -382,21 +391,70 @@ func (g *Graph) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b
 			}
 			pending = next
 		}
-		if item != nil {
-			c, err := tx.Change(ctx, id)
-			if err != nil {
-				return err
-			}
-			it := *item
-			it.Flow = c.ResolveFlow(b.Flow) // the verdicts were made on this flow (ADR 0032 §6)
-			return putItem(ctx, tx, id, it)
-		}
 		return nil
 	})
 	if err != nil {
 		out = nil
 	}
 	return out, err
+}
+
+// putReviewRecord writes the record of a review the graph submits on its own (a merge accepting what it lands, ADR
+// 0105) on the main flow of a change: by the component, its entries decided. It returns the key of the review and the
+// log entry of the record, the cause of the reviewed events that follow.
+func (g *Graph) putReviewRecord(ctx context.Context, tx Tx, change domain.ChangeID, by, comment string, entries []domain.ReviewEntry) (key, cause string, err error) {
+	rec := domain.ReviewRecord{Key: "REV-" + g.newID(), Comment: comment, Status: domain.ReviewStatusSubmitted, Entries: entries, By: by, SubmittedAt: g.now()}
+	it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindReview, Status: domain.ItemProposed, Data: rec.Data(), ProducedBy: by, CreatedAt: g.now()}
+	if err := it.Validate(); err != nil {
+		return "", "", fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
+	}
+	return rec.Key, string(it.ID), putItem(ctx, tx, change, it)
+}
+
+// reviewRecord is the item recording the submitted review of a batch: the batch's own, checked against its verdicts, or
+// one the graph makes of them.
+func (g *Graph) reviewRecord(b domain.ReviewBatch) (domain.ChangeItem, error) {
+	var it domain.ChangeItem
+	if b.Item != nil {
+		it = *b.Item
+		rec := domain.ReviewRecordOf(it.Data)
+		if it.Kind != domain.KindReview || rec.Status != domain.ReviewStatusSubmitted {
+			return it, fmt.Errorf("the item of a review batch is the submitted review, not a %s %s item: %w", rec.Status, it.Kind, ErrInvalid)
+		}
+		if b.ID != "" && rec.Key != b.ID {
+			return it, fmt.Errorf("review batch %s carries the record of review %s: %w", b.ID, rec.Key, ErrInvalid)
+		}
+		if len(rec.Entries) != len(b.Verdicts) {
+			return it, fmt.Errorf("review %s has %d entries for %d verdicts: %w", rec.Key, len(rec.Entries), len(b.Verdicts), ErrInvalid)
+		}
+		for _, v := range b.Verdicts {
+			i := slices.IndexFunc(rec.Entries, func(e domain.ReviewEntry) bool { return e.Impact == string(v.Impact) })
+			if i < 0 || rec.Entries[i].Outcome != domain.ReviewOutcome(v.Status) {
+				return it, fmt.Errorf("review %s does not record the verdict on %s: %w", rec.Key, v.Impact, ErrInvalid)
+			}
+		}
+	} else {
+		key := b.ID
+		if key == "" {
+			key = "REV-" + g.newID()
+		}
+		rec := domain.ReviewRecord{Key: key, Flow: b.Flow, Status: domain.ReviewStatusSubmitted, By: b.By, SubmittedAt: g.now()}
+		for _, v := range b.Verdicts {
+			rec.Entries = append(rec.Entries, domain.ReviewEntry{Impact: string(v.Impact), Comment: strings.TrimSpace(v.Comment), Outcome: domain.ReviewOutcome(v.Status)})
+		}
+		it = domain.ChangeItem{Kind: domain.KindReview, Data: rec.Data(), ProducedBy: b.By, Execution: b.Execution}
+	}
+	if it.ID == "" {
+		it.ID = domain.ItemID(g.newID())
+	}
+	if it.Status == "" {
+		it.Status = domain.ItemProposed
+	}
+	it.CreatedAt = g.now()
+	if err := it.Validate(); err != nil {
+		return it, fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
+	}
+	return it, nil
 }
 
 // ReopenImpacts sends decided change impacts of the main flow back to proposed (a review event, as when a change goes

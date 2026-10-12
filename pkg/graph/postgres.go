@@ -534,7 +534,7 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 
 func (t *pgTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	err := t.tx.QueryRow(ctx, dialectPG.sqlInsert("change_log", changeLogColumns, " RETURNING seq"),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.At, []byte(e.Payload)).Scan(&e.Seq)
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, e.At, []byte(e.Payload)).Scan(&e.Seq)
 	return e, mapErr(err, "log entry "+e.Type)
 }
 
@@ -569,7 +569,7 @@ func (t *pgTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, 
 		var e domain.LogEntry
 		var change string
 		var payload []byte
-		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.At, &payload); err != nil {
+		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.Causation, &e.At, &payload); err != nil {
 			return nil, err
 		}
 		e.Change, e.Payload = domain.ChangeID(change), json.RawMessage(payload)

@@ -2802,7 +2802,10 @@ type LogEntry struct {
 	By      string                 `protobuf:"bytes,9,opt,name=by,proto3" json:"by,omitempty"`
 	At      *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=at,proto3" json:"at,omitempty"`
 	// the whole fact, journal record or impact event, as JSON
-	Payload       string `protobuf:"bytes,11,opt,name=payload,proto3" json:"payload,omitempty"`
+	Payload string `protobuf:"bytes,11,opt,name=payload,proto3" json:"payload,omitempty"`
+	// the id of the entry this one follows from (ADR 0105): a decided review of a change impact names the submitted
+	// review (fact.review) that decided it; empty when none
+	Causation     string `protobuf:"bytes,12,opt,name=causation,proto3" json:"causation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2910,6 +2913,13 @@ func (x *LogEntry) GetAt() *timestamppb.Timestamp {
 func (x *LogEntry) GetPayload() string {
 	if x != nil {
 		return x.Payload
+	}
+	return ""
+}
+
+func (x *LogEntry) GetCausation() string {
+	if x != nil {
+		return x.Causation
 	}
 	return ""
 }
@@ -15362,7 +15372,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x03pre\x18\f \x01(\v2\x16.goap.graph.v1.NodeRefR\x03pre\x12.\n" +
 	"\x06landed\x18\r \x01(\v2\x16.goap.graph.v1.NodeRefR\x06landed\x12-\n" +
 	"\x06review\x18\x0e \x01(\v2\x15.goap.graph.v1.ReviewR\x06review\x12\x14\n" +
-	"\x05stale\x18\x0f \x03(\tR\x05stale\"\x9e\x02\n" +
+	"\x05stale\x18\x0f \x03(\tR\x05stale\"\xbc\x02\n" +
 	"\bLogEntry\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\x12\x1b\n" +
@@ -15376,7 +15386,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x02by\x18\t \x01(\tR\x02by\x12*\n" +
 	"\x02at\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x18\n" +
-	"\apayload\x18\v \x01(\tR\apayload\"\xd1\x01\n" +
+	"\apayload\x18\v \x01(\tR\apayload\x12\x1c\n" +
+	"\tcausation\x18\f \x01(\tR\tcausation\"\xd1\x01\n" +
 	"\x14ListChangeLogRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x14\n" +
 	"\x05types\x18\x02 \x03(\tR\x05types\x12\x14\n" +

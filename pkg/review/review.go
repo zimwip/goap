@@ -1,9 +1,10 @@
 // Package review is the review object of a change (ADR 0080): a reviewer builds a review up, with a global comment and
 // one entry per change impact (its own comment and outcome), then submits it; the submission applies every entry as an
-// ordinary review of the impact, all of them or none. The review is an item of the change of the kind this package
-// registers (Register), each version of the item the whole record of its data.key, as the register of pkg/risk; Reviews
-// folds the items, Service (service.go) is the use case over a Port. It is a use case: pkg/graph and pkg/domain know
-// nothing of it, the graph keeps the mechanism (domain.ReviewBatch).
+// ordinary review of the impact, all of them or none. The review is an item of the change of the built-in kind
+// domain.KindReview (ADR 0105: every verdict on an impact is made by a submitted review, the graph writes the record of
+// the ones it makes itself), each version of the item the whole record of its data.key; Reviews folds the items,
+// Service (service.go) is the use case over a Port that builds a review up and submits it. pkg/graph and pkg/domain
+// know nothing of this package: the record format is domain's, the mechanism the graph's (domain.ReviewBatch).
 //
 // Data of a review item: key, flow (the flow branch the entries are reviewed on, "" the main flow), comment (the global
 // comment), status (open, then submitted or discarded: both final), entries ([{impact, comment, outcome}]), by (the
@@ -12,7 +13,6 @@ package review
 
 import (
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -21,20 +21,20 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// KindReview is the kind of the items that hold a review of a change.
-const KindReview domain.ItemKind = "review"
+// KindReview is the kind of the items that hold a review of a change: built in (domain.KindReview, ADR 0105).
+const KindReview = domain.KindReview
 
 // Statuses of a review: it is open while the reviewer builds it, then submitted or discarded, which are final.
 const (
-	Open      = "open"
-	Submitted = "submitted"
-	Discarded = "discarded"
+	Open      = domain.ReviewStatusOpen
+	Submitted = domain.ReviewStatusSubmitted
+	Discarded = domain.ReviewStatusDiscarded
 )
 
 // Outcomes of an entry: the verdict on its change impact. Empty while the reviewer has not decided.
 const (
-	Accept = "accept"
-	Reject = "reject"
+	Accept = domain.ReviewOutcomeAccept
+	Reject = domain.ReviewOutcomeReject
 )
 
 // The refusals of the operations; the services map them as the graph's own (internal/rpcerr).
@@ -45,19 +45,8 @@ var (
 	ErrForbidden = authz.ErrForbidden
 )
 
-// Register makes the review item kind known to the graph (domain.RegisterItemKind). The services that write or read
-// such items call it at start, and so does a test that builds them; it may be called any number of times.
-func Register() { domain.RegisterItemKind(KindReview, validate) }
-
 // Entry is the review of one change impact: its own comment and outcome.
-type Entry struct {
-	Impact  string `json:"impact"`
-	Comment string `json:"comment,omitempty"`
-	Outcome string `json:"outcome,omitempty"`
-}
-
-// Decided reports whether the entry has an outcome.
-func (e Entry) Decided() bool { return e.Outcome == Accept || e.Outcome == Reject }
+type Entry = domain.ReviewEntry
 
 // Review is the current version of a review of the change.
 type Review struct {
@@ -106,103 +95,9 @@ func EffectiveComment(global, entry string) string {
 	return entry + "\n\nReview: " + global
 }
 
-func dataString(d map[string]any, k string) string {
-	s, _ := d[k].(string)
-	return strings.TrimSpace(s)
-}
-
-// entriesOf reads the entries of the data of an item.
-func entriesOf(d map[string]any) []Entry {
-	var out []Entry
-	add := func(m map[string]any) {
-		out = append(out, Entry{Impact: dataString(m, "impact"), Comment: strings.TrimSpace(dataString(m, "comment")), Outcome: dataString(m, "outcome")})
-	}
-	switch v := d["entries"].(type) {
-	case []Entry:
-		out = slices.Clone(v)
-	case []map[string]any:
-		for _, m := range v {
-			add(m)
-		}
-	case []any:
-		for _, x := range v {
-			if m, ok := x.(map[string]any); ok {
-				add(m)
-			}
-		}
-	}
-	return out
-}
-
 // dataOf is the data of an item holding the review (the whole record).
 func dataOf(r Review) map[string]any {
-	entries := make([]any, 0, len(r.Entries))
-	for _, e := range r.Entries {
-		m := map[string]any{"impact": e.Impact}
-		if e.Comment != "" {
-			m["comment"] = e.Comment
-		}
-		if e.Outcome != "" {
-			m["outcome"] = e.Outcome
-		}
-		entries = append(entries, m)
-	}
-	d := map[string]any{"key": r.Key, "status": r.Status, "entries": entries}
-	if r.Flow != "" {
-		d["flow"] = r.Flow
-	}
-	if r.Comment != "" {
-		d["comment"] = r.Comment
-	}
-	if r.By != "" {
-		d["by"] = r.By
-	}
-	if !r.SubmittedAt.IsZero() {
-		d["submittedAt"] = r.SubmittedAt.UTC().Format(time.RFC3339Nano)
-	}
-	return d
-}
-
-func validStatus(s string) bool { return s == Open || s == Submitted || s == Discarded }
-
-// validate checks the data of a review item: what any version satisfies, and what a submitted one adds.
-func validate(it domain.ChangeItem) error {
-	d := it.Data
-	if dataString(d, "key") == "" {
-		return fmt.Errorf("review item requires data.key")
-	}
-	status := dataString(d, "status")
-	if !validStatus(status) {
-		return fmt.Errorf("review status must be one of %s, %s, %s", Open, Submitted, Discarded)
-	}
-	entries := entriesOf(d)
-	seen := map[string]bool{}
-	for _, e := range entries {
-		if e.Impact == "" {
-			return fmt.Errorf("review entry requires its impact")
-		}
-		if seen[e.Impact] {
-			return fmt.Errorf("review names impact %s twice", e.Impact)
-		}
-		seen[e.Impact] = true
-		if e.Outcome != "" && e.Outcome != Accept && e.Outcome != Reject {
-			return fmt.Errorf("review entry outcome must be %s or %s", Accept, Reject)
-		}
-	}
-	if status == Submitted {
-		if len(entries) == 0 {
-			return fmt.Errorf("a submitted review has at least one entry")
-		}
-		for _, e := range entries {
-			if !e.Decided() {
-				return fmt.Errorf("a submitted review decides every entry: impact %s has no outcome", e.Impact)
-			}
-		}
-		if dataString(d, "submittedAt") == "" {
-			return fmt.Errorf("a submitted review requires data.submittedAt")
-		}
-	}
-	return nil
+	return domain.ReviewRecord{Key: r.Key, Flow: r.Flow, Comment: r.Comment, Status: r.Status, Entries: r.Entries, By: r.By, SubmittedAt: r.SubmittedAt}.Data()
 }
 
 // Reviews folds the items of a change into its reviews: the last version of each key, in the order the keys appeared.
@@ -215,18 +110,15 @@ func Reviews(items []domain.ChangeItem) []Review {
 		if it.Kind != KindReview || it.Status == domain.ItemRejected || it.Status == domain.ItemSuperseded {
 			continue
 		}
-		key := dataString(it.Data, "key")
-		status := dataString(it.Data, "status")
-		if key == "" || !validStatus(status) {
+		rec := domain.ReviewRecordOf(it.Data)
+		key := rec.Key
+		if key == "" || !domain.ValidReviewStatus(rec.Status) {
 			continue
 		}
-		r := Review{Key: key, Flow: it.Flow, Comment: dataString(it.Data, "comment"), Status: status, Entries: entriesOf(it.Data),
-			By: dataString(it.Data, "by"), Item: it.ID, Versions: 1}
+		r := Review{Key: key, Flow: it.Flow, Comment: rec.Comment, Status: rec.Status, Entries: rec.Entries, By: rec.By,
+			SubmittedAt: rec.SubmittedAt, Item: it.ID, Versions: 1}
 		if r.By == "" {
 			r.By = it.ProducedBy
-		}
-		if s := dataString(it.Data, "submittedAt"); s != "" {
-			r.SubmittedAt, _ = time.Parse(time.RFC3339Nano, s)
 		}
 		if i, ok := at[key]; ok {
 			if !out[i].Open() {

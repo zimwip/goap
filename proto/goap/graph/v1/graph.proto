@@ -553,6 +553,9 @@ message LogEntry {
   google.protobuf.Timestamp at = 10;
   // the whole fact, journal record or impact event, as JSON
   string payload = 11;
+  // the id of the entry this one follows from (ADR 0105): a decided review of a change impact names the submitted
+  // review (fact.review) that decided it; empty when none
+  string causation = 12;
 }
 
 message ListChangeLogRequest {

@@ -1,6 +1,8 @@
 # ADR 0080 — The review object: a review built up, then submitted
 
-**Status**: accepted, implemented (graph mechanism, `pkg/review`, services, `goap-change`, PROV-O, web) · **Date**: 2026-10 · Builds on
+**Status**: accepted, implemented (graph mechanism, `pkg/review`, services, `goap-change`, PROV-O, web); amended by
+[ADR 0105](0105-every-verdict-is-a-submitted-review.md) (every verdict is a submitted review, the record is built in, the
+verdicts name it as their cause) · **Date**: 2026-10 · Builds on
 ADR 0036 / 0065 (change items of a use case), ADR 0029 / 0030 (the impact log), ADR 0075 (`ReviewPolicy`), ADR 0079 (reviews are
 explicit, gated on the draft); the naming follows ADR 0077.
 

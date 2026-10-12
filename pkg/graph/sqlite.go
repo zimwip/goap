@@ -528,7 +528,7 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 
 func (t *sqliteTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("change_log", changeLogColumns, ""),
-		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, tsText(e.At), string(e.Payload))
+		e.ID, string(e.Change), e.Type, e.Flow, e.Process, e.Execution, e.Subject, e.By, e.Causation, tsText(e.At), string(e.Payload))
 	if err != nil {
 		return e, sqliteErr(err, "log entry "+e.Type)
 	}
@@ -566,7 +566,7 @@ func (t *sqliteTx) Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEnt
 	for rows.Next() {
 		var e domain.LogEntry
 		var change, at, payload string
-		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &at, &payload); err != nil {
+		if err := rows.Scan(&e.Seq, &e.ID, &change, &e.Type, &e.Flow, &e.Process, &e.Execution, &e.Subject, &e.By, &e.Causation, &at, &payload); err != nil {
 			return nil, err
 		}
 		e.Change, e.At, e.Payload = domain.ChangeID(change), tsParse(at), json.RawMessage(payload)

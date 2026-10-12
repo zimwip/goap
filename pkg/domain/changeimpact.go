@@ -38,8 +38,9 @@ type Review struct {
 	Flow       string `json:"flow,omitempty"`
 	Execution  string `json:"execution,omitempty"`
 	Superseded bool   `json:"superseded,omitempty"`
-	// ReviewID names the review (an opaque id, ADR 0080) a batch of verdicts was submitted in: every review the batch
-	// wrote carries it, so the audit groups them. Empty for a review made on its own.
+	// ReviewID names the review (the key of its KindReview record, ADR 0080) that decided the impact: every accepted or
+	// rejected review carries it (ADR 0105: a verdict is always made by a submitted review). Empty when the status went
+	// back to proposed (an edit, a reopening, a lifecycle move).
 	ReviewID string `json:"reviewId,omitempty"`
 }
 

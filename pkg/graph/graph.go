@@ -612,6 +612,9 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			if it.Kind == domain.KindDecisionPoint {
 				return fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)
 			}
+			if it.Kind == domain.KindReview && domain.ReviewRecordOf(it.Data).Status == domain.ReviewStatusSubmitted {
+				return fmt.Errorf("a review is submitted with its verdicts, by ImpactNodeReviewBatch (ADR 0105): %w", ErrInvalid)
+			}
 			if it.Flow != batchFlow {
 				return fmt.Errorf("the items of a batch belong to one flow: %w", ErrInvalid)
 			}

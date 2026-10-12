@@ -68,6 +68,8 @@ export interface LogEntry {
   at?: string;
   /** the whole fact, journal record or impact event, as JSON */
   payload?: string;
+  /** the id of the entry this one follows from (ADR 0105): a verdict names the submitted review that made it */
+  causation?: string;
 }
 
 /** The request and the answer of one LLM call (payload of a model.call log entry). */

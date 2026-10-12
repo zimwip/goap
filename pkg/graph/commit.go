@@ -250,7 +250,8 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			}
 		}
 	}
-	kept := 0
+	// the producer's acceptances are one review, submitted at once (ADR 0105)
+	accept := domain.ReviewBatch{By: in.By}
 	for i, e := range in.Edits {
 		if impacts[i] == "" {
 			continue
@@ -263,13 +264,13 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			}
 			continue
 		}
-		if _, err := g.ImpactNodeReview(ctx, c.ID, impacts[i], domain.ReviewAccepted, in.By, why(e)); err != nil {
-			return res, fmt.Errorf("%s: %w", nodeName(e), err)
-		}
-		kept++
+		accept.Verdicts = append(accept.Verdicts, domain.ImpactVerdict{Impact: impacts[i], Status: domain.ReviewAccepted, Comment: why(e)})
 	}
-	if kept == 0 {
+	if len(accept.Verdicts) == 0 {
 		return res, fmt.Errorf("commit %q: every edit restates what the graph holds: %w", in.Title, ErrNothingToCommit)
+	}
+	if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, accept); err != nil {
+		return res, fmt.Errorf("commit %q: %w", in.Title, err)
 	}
 	if res.Baseline, err = g.Apply(ctx, c.ID, in.BaselineName); err != nil {
 		return res, err

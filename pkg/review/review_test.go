@@ -87,7 +87,6 @@ func TestEffectiveCommentKeepsBoth(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	Register()
 	ok := func(d map[string]any) error { return item("1", d).Validate() }
 	e := func(imp, out string) map[string]any { return map[string]any{"impact": imp, "outcome": out} }
 	for name, c := range map[string]struct {

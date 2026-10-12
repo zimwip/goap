@@ -13,7 +13,6 @@ import (
 // reviewWorld is a change proposing the three nodes of the fixture: three impacts awaiting review.
 func reviewWorld(t *testing.T, repo Repo) (fixture, domain.Change, []domain.ChangeImpact, review.Service) {
 	t.Helper()
-	review.Register()
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	c, err := f.g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "review", BaselineID: f.base.ID})
@@ -74,7 +73,7 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	f, c, imps, _ := reviewWorld(t, repo)
 	g := f.g
 	item := domain.ChangeItem{Kind: review.KindReview, Data: map[string]any{"key": "REV-1", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
-		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}}}}
+		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}, map[string]any{"impact": string(imps[1].ID), "outcome": "reject"}}}}
 	out, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-1", By: "alice", Item: &item, Verdicts: []domain.ImpactVerdict{
 		{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "fine"},
 		{Impact: imps[1].ID, Status: domain.ReviewRejected, Comment: "no"},
@@ -96,13 +95,67 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	if rs := review.Reviews(ch.Items); len(rs) != 1 || rs[0].Status != review.Submitted {
 		t.Fatalf("item: %+v", rs)
 	}
-	// a review on its own carries no id
+	// the record of the review comes first, and is the cause of every verdict it decides (ADR 0105)
+	causes := causesOf(t, g, c.ID)
+	if len(causes) != 2 || causes[0].cause.ID != string(rs0(t, g, c.ID, "REV-1")) || causes[1].cause.ID != causes[0].cause.ID || causes[0].cause.Seq >= causes[0].seq {
+		t.Fatalf("causation: %+v", causes)
+	}
+	// a verdict on its own is a review of one entry, submitted at once
 	if _, err := g.accept(ctx, c.ID, imps[2].ID, "carol", "ok"); err != nil {
 		t.Fatal(err)
 	}
-	if evs := reviewedEvents(t, g, c.ID); evs[2].Review.ReviewID != "" {
-		t.Fatalf("a lone review has no review id: %+v", evs[2].Review)
+	evs = reviewedEvents(t, g, c.ID)
+	ch, _ = g.Change(ctx, c.ID)
+	lone, ok := review.Find(ch.Items, evs[2].Review.ReviewID)
+	if !ok || lone.Status != review.Submitted || lone.By != "carol" || len(lone.Entries) != 1 || lone.Entries[0] != (review.Entry{Impact: string(imps[2].ID), Comment: "ok", Outcome: review.Accept}) {
+		t.Fatalf("a lone verdict is a submitted review of one entry: %+v (%v)", lone, ok)
 	}
+	if causes := causesOf(t, g, c.ID); len(causes) != 3 || causes[2].cause.ID != string(lone.Item) {
+		t.Fatalf("the lone verdict is caused by its review: %+v", causes)
+	}
+}
+
+// causedVerdict is a reviewed entry of the log and the entry it names as its cause.
+type causedVerdict struct {
+	seq   int64
+	cause domain.LogEntry
+}
+
+// causesOf lists the decided reviewed entries of the log of a change with their cause, which must be a fact.review entry.
+func causesOf(t *testing.T, g *Graph, id domain.ChangeID) []causedVerdict {
+	t.Helper()
+	entries, _, err := g.ChangeLog(context.Background(), domain.LogFilter{Change: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]domain.LogEntry{}
+	var out []causedVerdict
+	for _, e := range entries {
+		byID[e.ID] = e
+		if e.Type != domain.LogImpact+"."+string(domain.ImpactReviewed) || e.Causation == "" {
+			continue
+		}
+		cause, ok := byID[e.Causation]
+		if !ok || cause.Type != domain.LogFact+"."+string(domain.KindReview) {
+			t.Fatalf("entry %d names cause %q, not an earlier review: %+v", e.Seq, e.Causation, cause)
+		}
+		out = append(out, causedVerdict{seq: e.Seq, cause: cause})
+	}
+	return out
+}
+
+// rs0 is the item holding the last version of a review.
+func rs0(t *testing.T, g *Graph, id domain.ChangeID, key string) domain.ItemID {
+	t.Helper()
+	c, err := g.Change(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, ok := review.Find(c.Items, key)
+	if !ok {
+		t.Fatalf("no review %s", key)
+	}
+	return r.Item
 }
 
 // One refused verdict refuses the whole batch: nothing is written, the error names the entry (ADR 0080).
@@ -124,7 +177,7 @@ func testReviewBatchIsAtomic(t *testing.T, repo Repo) {
 	}
 	before := logLen()
 	item := domain.ChangeItem{Kind: review.KindReview, Data: map[string]any{"key": "REV-2", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
-		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}}}}
+		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}, map[string]any{"impact": string(imps[1].ID), "outcome": "accept"}}}}
 	_, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-2", By: "bob", Item: &item, Verdicts: []domain.ImpactVerdict{
 		{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "ok"},
 		{Impact: imps[1].ID, Status: domain.ReviewAccepted, Comment: "twice"},
@@ -133,7 +186,7 @@ func testReviewBatchIsAtomic(t *testing.T, repo Repo) {
 		t.Fatalf("the failing entry is named: %v", err)
 	}
 	ch, _ := g.Change(ctx, c.ID)
-	if ch.Nodes[0].Review != domain.ReviewProposed || len(ch.Nodes[0].Reviews) != 0 || logLen() != before || len(review.Reviews(ch.Items)) != 0 {
+	if ch.Nodes[0].Review != domain.ReviewProposed || len(ch.Nodes[0].Reviews) != 0 || logLen() != before || len(review.Reviews(ch.Items)) != 1 { // the review of the earlier lone verdict
 		t.Fatalf("a refused batch writes nothing: %+v, log %d -> %d", ch.Nodes[0], before, logLen())
 	}
 	// the review policy refuses per impact too, whatever the position

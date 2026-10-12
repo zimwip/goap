@@ -595,8 +595,28 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	// 1. the merge versions, with the change impact that explains each: a node changed on one side only joins the
 	// target as is (ADR 0032), a node changed on both sides gets a merge version
 	res.Baseline.ID = domain.BaselineID(g.newID())
+	// the merge accepts what it lands in one review, recorded before the impacts it decides (ADR 0105)
+	whyOf := func(m *merged) string {
+		why := fmt.Sprintf("merge of %s into %s", in.From, plan.Into)
+		if len(m.cand.Conflicts) > 0 {
+			why += fmt.Sprintf(" (conflicts on %s, resolved)", strings.Join(m.cand.Conflicts, ", "))
+		}
+		return why
+	}
+	impactIDs := make([]domain.ChangeImpactID, len(todo))
+	var reviewKey, cause string
+	if len(todo) > 0 {
+		entries := make([]domain.ReviewEntry, len(todo))
+		for i, m := range todo {
+			impactIDs[i] = domain.ChangeImpactID(g.newID())
+			entries[i] = domain.ReviewEntry{Impact: string(impactIDs[i]), Comment: whyOf(m), Outcome: domain.ReviewOutcomeAccept}
+		}
+		if reviewKey, cause, err = g.putReviewRecord(ctx, tx, c.ID, "graph.merge", fmt.Sprintf("merge of %s into %s", in.From, plan.Into), entries); err != nil {
+			return res, err
+		}
+	}
 	var stuck []string
-	for _, m := range todo {
+	for i, m := range todo {
 		n := *m.from
 		n.Reason, n.Parents = domain.ReasonMerge, []domain.Version{m.from.Version}
 		deleted := m.from.Deleted
@@ -604,11 +624,8 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			n.Parents = []domain.Version{m.ours.Version, m.from.Version}
 			deleted = deleted || m.ours.Deleted
 		}
-		why := fmt.Sprintf("merge of %s into %s", in.From, plan.Into)
-		if len(m.cand.Conflicts) > 0 {
-			why += fmt.Sprintf(" (conflicts on %s, resolved)", strings.Join(m.cand.Conflicts, ", "))
-		}
-		cn := domain.ChangeImpact{ID: domain.ChangeImpactID(g.newID()), Key: n.Key, Type: n.Type, Intent: domain.IntentCreated, Rationale: why,
+		why := whyOf(m)
+		cn := domain.ChangeImpact{ID: impactIDs[i], Key: n.Key, Type: n.Type, Intent: domain.IntentCreated, Rationale: why,
 			Review: domain.ReviewAccepted, ProducedBy: "graph.merge", CreatedAt: g.now()}
 		if m.ours != nil {
 			cn.Intent, cn.Pre = domain.IntentModified, m.cand.Ours
@@ -633,7 +650,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		// target is a created event (the impact and its version), one it modifies is proposed, then written
 		declared := cn
 		declared.Review = domain.ReviewProposed
-		review := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now()}
+		review := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now(), ReviewID: reviewKey}
 		first := domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactProposed, By: "graph.merge", State: &declared}
 		var written []domain.ImpactEvent
 		if cn.Intent == domain.IntentCreated {
@@ -641,7 +658,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		} else {
 			written = append(written, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, By: "graph.merge", Post: &m.next})
 		}
-		events := append([]domain.ImpactEvent{first, {Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review}}, written...)
+		events := append([]domain.ImpactEvent{first, {Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: "graph.merge", Review: &review, Causation: cause}}, written...)
 		events = append(events, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, By: "graph.merge", Landed: &m.next, Baseline: res.Baseline.ID, Branch: domain.BranchOf(plan.Into)})
 		if err := g.emit(ctx, tx, events...); err != nil {
 			return res, err

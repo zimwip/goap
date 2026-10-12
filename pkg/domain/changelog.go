@@ -56,11 +56,14 @@ type LogEntry struct {
 	// Process is the process of a journal record; Execution the action run behind the entry (a journal record is
 	// its own); Subject what it is about (the action, the fact type, the change impact); By the principal or
 	// component.
-	Process   string          `json:"process,omitempty"`
-	Execution string          `json:"execution,omitempty"`
-	Subject   string          `json:"subject,omitempty"`
-	By        string          `json:"by,omitempty"`
-	At        time.Time       `json:"at"`
+	Process   string    `json:"process,omitempty"`
+	Execution string    `json:"execution,omitempty"`
+	Subject   string    `json:"subject,omitempty"`
+	By        string    `json:"by,omitempty"`
+	At        time.Time `json:"at"`
+	// Causation is the ID of the entry this one follows from (ADR 0105): a decided review of a change impact names the
+	// submitted review (fact.review) that decided it. Empty when the entry has no cause in the log.
+	Causation string          `json:"causation,omitempty"`
 	Payload   json.RawMessage `json:"payload"`
 }
 
@@ -131,5 +134,5 @@ func FactEntry(change ChangeID, it ChangeItem) (LogEntry, error) {
 func ImpactEntry(e ImpactEvent) (LogEntry, error) {
 	raw, err := json.Marshal(e)
 	return LogEntry{ID: e.ID, Change: e.Change, Type: LogImpact + "." + string(e.Op), Flow: e.Flow, Execution: e.Execution,
-		Subject: string(e.Impact), By: e.By, At: e.At, Payload: raw}, err
+		Subject: string(e.Impact), By: e.By, At: e.At, Causation: e.Causation, Payload: raw}, err
 }

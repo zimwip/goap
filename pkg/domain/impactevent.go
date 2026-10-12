@@ -88,6 +88,9 @@ type ImpactEvent struct {
 	Execution string    `json:"execution,omitempty"`
 	By        string    `json:"by,omitempty"`
 	At        time.Time `json:"at"`
+	// Causation is the log entry the event follows from (ADR 0105): on a decided reviewed event, the fact.review entry of
+	// the submitted review that decided it.
+	Causation string `json:"causation,omitempty"`
 
 	State *ChangeImpact `json:"state,omitempty"` // proposed, created
 	// Post is the draft reference of the node (Version 0) the event leaves the impact with, or a version (merge change).

@@ -186,6 +186,8 @@ CREATE TABLE change_log (
     execution  text        NOT NULL DEFAULT '',
     subject    text        NOT NULL DEFAULT '',
     by_whom    text        NOT NULL DEFAULT '',
+    -- ADR 0105: the entry this one follows from (a decided review of an impact: the submitted review), '' when none
+    causation  text        NOT NULL DEFAULT '',
     at         timestamptz NOT NULL,
     payload    jsonb       NOT NULL
 );
