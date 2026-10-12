@@ -9,5 +9,6 @@
 /.air/
 /web/.vitest/
 
-# compiled dev binary (built by `go build ./cmd/goap-dev`)
+# compiled binaries (built by `go build ./cmd/<name>` at the root)
 /goap-dev
+/registry
