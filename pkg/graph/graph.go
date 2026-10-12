@@ -106,6 +106,10 @@ type Graph struct {
 	// ChangeAuthorizer, when set, is asked before every transition of the lifecycle of a change (ADR 0058), like
 	// Authorizer is for the nodes.
 	ChangeAuthorizer ChangeTransitionAuthorizer
+	// OperationAuthorizer, when set, is asked before every operation of the catalogue (pkg/operations, ADR 0103) a
+	// caller performs on a change: who may check out, edit, withdraw, review, commit or merge, by the roles of its
+	// methodology. Nil: every operation is allowed.
+	OperationAuthorizer OperationAuthorizer
 	// ProjectMoveGate, when set, is asked before a change moves to another project (ADR 0091): who may move it and
 	// whether its methodology applies to both projects. Nil: no check beyond the graph's own rules.
 	ProjectMoveGate ProjectMoveGate

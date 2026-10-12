@@ -427,6 +427,8 @@ message Subscription {
 message Role {
   string name = 1;
   string description = 2;
+  // the operations on a change the role allows (ADR 0103): codes of the catalogue or kinds (doer, reviewer); none: all
+  repeated string operations = 3;
 }
 
 // Roles assigned to a step or a method, RACI style.

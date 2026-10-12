@@ -89,6 +89,9 @@ var DefaultPolicies = []Policy{
 	// when they declare none
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "action", Action: "run", Effect: "allow"},
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "agent", Action: "run", Effect: "allow"},
+	// an operation on a change (ADR 0103) its methodology restricts to some roles (r.obj.Roles): one of them, held on
+	// the project of the change; an operation no role allows is an administrator's
+	{Rule: `mayRun(r.sub, r.obj)`, Resource: "operation", Action: "perform", Effect: "allow"},
 	// signing a derogation (ADR 0075 §2): whoever holds the role of signatory (granted on the project); an administrator
 	// signs through the first rule
 	{Rule: `hasRole(r.sub, "derogation_signatory")`, Resource: "derogation", Action: "sign", Effect: "allow"},

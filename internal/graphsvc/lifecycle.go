@@ -99,3 +99,35 @@ func ItemAuthorizer(a authz.Authorizer, resolve criticality.Resolver) graph.Item
 		return nil
 	}
 }
+
+// OperationRoles resolves the roles of a methodology that allow an operation (registrysvc.Service.OperationRoles).
+type OperationRoles func(ctx context.Context, methodology, op string) (roles []string, restricted bool, err error)
+
+// noRole is a role name no one holds: an operation the methodology allows to no role is left to the administrators
+// (mayRun with no role would let any member of the project in).
+const noRole = "-"
+
+// OperationAuthorizer authorizes the operations of the catalogue (pkg/operations, ADR 0103) on a change for the caller:
+// when the methodology of the change restricts the operation to some of its roles, operation:perform is checked on the
+// project of the change with those roles (one of them, held there). A platform service acting by itself is not asked;
+// a nil authorizer or resolver grants everything.
+func OperationAuthorizer(a authz.Authorizer, roles OperationRoles) graph.OperationAuthorizer {
+	return func(ctx context.Context, c domain.Change, op string) error {
+		who := authz.From(ctx)
+		if a == nil || roles == nil || who.System() {
+			return nil
+		}
+		allowed, restricted, err := roles(ctx, c.Methodology, op)
+		if err != nil || !restricted {
+			return err
+		}
+		if len(allowed) == 0 {
+			allowed = []string{noRole}
+		}
+		if err := authz.Check(ctx, a, authz.Request{Subject: who, Action: "perform",
+			Resource: authz.Resource{Type: "operation", ID: string(c.ID), Name: op, Org: c.OwnerOrg, ProjectID: c.ProjectID, Roles: allowed}}); err != nil {
+			return fmt.Errorf("%s on change %s needs one of the roles %v of methodology %s: %w", op, c.ID, allowed, c.Methodology, err)
+		}
+		return nil
+	}
+}

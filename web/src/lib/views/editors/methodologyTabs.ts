@@ -112,7 +112,7 @@ const FACTORIES = { agents: emptyAgent, actions: emptyAction, conditions: emptyC
 /** Adds an element to the draft and opens it (a role: on the Roles pane of the methodology tab). */
 export function addElement(d: Draft, c: Collection): void {
   if (c === 'roles') {
-    d.form.roles.push({ name: '', description: '' });
+    d.form.roles.push({ name: '', description: '', operations: '' });
     const t = openTab(methodologySpec(d.name, d.version), { pin: true });
     t.params.pane = 'roles';
     requestReveal(t.id, `roles[${d.form.roles.length - 1}]`);

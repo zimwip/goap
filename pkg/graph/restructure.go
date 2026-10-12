@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/operations"
 )
 
 // Merge and split of nodes, seen from the parent side (ADR 0077, "Merge and split"). A node never disappears and a
@@ -75,7 +76,12 @@ type Restructured struct {
 // parent: a node holding a link of a type flagged `compose` to it. The links of other types to the sources are moved
 // to the new node too. Refused (ErrInvalid) for a source with no parent, nodes of another namespace or of a type
 // incompatible with the new node, or created by the change; (ErrConflict) for a source checked out.
+//
+//goap:operation impact.merge doer
 func (g *Graph) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in MergeInput) (out Restructured, err error) {
+	if err := g.allow(ctx, id, operations.ImpactMerge); err != nil {
+		return out, err
+	}
 	if len(in.Sources) < 2 {
 		return out, invalidf("a merge needs at least two nodes")
 	}
@@ -95,7 +101,12 @@ func (g *Graph) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in Merg
 
 // ImpactNodeSplit splits a node into new ones, in one transaction (see the top of the file). The links of other types
 // to the source are left and returned as suspect.
+//
+//goap:operation impact.split doer
 func (g *Graph) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in SplitInput) (out Restructured, err error) {
+	if err := g.allow(ctx, id, operations.ImpactSplit); err != nil {
+		return out, err
+	}
 	if len(in.Into) < 2 {
 		return out, invalidf("a split needs at least two new nodes")
 	}

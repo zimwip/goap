@@ -7,6 +7,7 @@ import (
 	"maps"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/operations"
 )
 
 // A change lands in two acts (ADR 0056, 0102), the same for every change and every caller:
@@ -56,7 +57,12 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 
 // CommitChange writes the accepted modifications of a change on its own branch and reverts there the nodes it no
 // longer changes; it returns the commit baseline. The change stays open (ADR 0102).
+//
+//goap:operation change.commit doer
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
+	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
+		return result, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {

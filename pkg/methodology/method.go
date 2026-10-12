@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/events"
+	"github.com/zimwip/goap/pkg/operations"
 	"maps"
 	"slices"
 	"strings"
@@ -247,6 +248,11 @@ func (c *Compiled) MethodGoal(name string) string { return c.methods.goals[name]
 type Role struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
+	// Operations are the operations on a change the role allows (ADR 0103): codes of the catalogue (pkg/operations,
+	// impact.review) or kinds of operation (doer, reviewer). A role listing none allows every operation; a methodology
+	// none of whose roles lists any restricts nothing. A reviewer is a role allowing [reviewer]: it accepts or rejects
+	// impacts and never checks out, edits or withdraws one.
+	Operations []string `yaml:"operations,omitempty" json:"operations,omitempty"`
 }
 
 // Responsibilities assign roles to a step or a method, RACI style: the responsible role carries it out (performs its
@@ -272,8 +278,39 @@ func (m *Methodology) compileRoles(add func(path, format string, args ...any)) m
 		default:
 			out[r.Name] = true
 		}
+		for j, op := range r.Operations {
+			if !operations.Known(op) {
+				add(fmt.Sprintf("roles[%d].operations[%d]", i, j), "unknown operation %q (a code of the catalogue, or doer / reviewer)", op)
+			}
+		}
 	}
 	return out
+}
+
+// Restricts reports whether a role of the methodology lists the operations it allows (ADR 0103): the methodology then
+// says who may perform each operation on its changes.
+func (m *Methodology) Restricts() bool {
+	for _, r := range m.Roles {
+		if len(r.Operations) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// OperationRoles returns the roles of the methodology that allow the operation of code (ADR 0103): the roles listing
+// it, or its kind, and the roles listing no operation. restricted is false when no role lists any: every operation
+// is then allowed, whatever the roles.
+func (m *Methodology) OperationRoles(code string) (roles []string, restricted bool) {
+	if !m.Restricts() {
+		return nil, false
+	}
+	for _, r := range m.Roles {
+		if len(r.Operations) == 0 || operations.Allows(r.Operations, code) {
+			roles = append(roles, r.Name)
+		}
+	}
+	return roles, true
 }
 
 // checkElementRoles reports the roles agents and actions name that the methodology does not declare (ADR 0043):

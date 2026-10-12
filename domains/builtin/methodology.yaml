@@ -111,6 +111,7 @@ nodeTypes:
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for (assigned RACI style by processes and methods)", type: string, widget: textarea, section: Identity, order: 2}
+      - {name: operations, label: Operations, description: "Operations on a change the role allows (ADR 0103): codes of the catalogue or kinds (doer, reviewer); none: all", type: json, widget: textarea, section: Access, order: 3}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # Activity (architecture plan "Activity concept, Activity Runs, Change scoping"): the common shape of

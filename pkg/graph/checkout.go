@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/operations"
 )
 
 // This file is how a change edits nodes (ADR 0076, 0079). Every write names the change; a node has no version during
@@ -322,7 +323,12 @@ func (w *work) checkDraftAttributes(d domain.Draft, props map[string]any) error 
 
 // ImpactNodeCreate creates a node in a change: one `created` event adds the change impact (intent created) and the
 // draft of the node (ADR 0076, 0077, 0079). There is no proposal of a new node, and no version until the change lands.
+//
+//goap:operation impact.create doer
 func (g *Graph) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in NodeCreate) (cn domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactCreate); err != nil {
+		return cn, err
+	}
 	if in.Key == "" || in.Type == "" {
 		return cn, invalidf("a node needs a key and a type")
 	}
@@ -381,7 +387,12 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 // out once per change and flow: it is refused while the flow holds a draft of it (update it, ADR 0079). A flow whose
 // parent flow holds a draft copies that one. A checkout modifies nothing: the review stands until the draft is edited
 // (editedAgain, ADR 0102).
+//
+//goap:operation impact.checkout doer
 func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in NodeCheckout) (cn domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactCheckout); err != nil {
+		return cn, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.resolve(ctx, tx, id, in.target())
 		if err != nil {
@@ -438,7 +449,12 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 
 // ImpactNodeUpdate edits the draft of a change impact: its properties (merged and validated) and its owner. No version
 // is written; the edit is an updated event of the impact log.
+//
+//goap:operation impact.update doer
 func (g *Graph) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in NodeUpdate) (cn domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactUpdate); err != nil {
+		return cn, err
+	}
 	if len(in.Properties) == 0 && in.Owner == "" {
 		return cn, invalidf("nothing to update")
 	}
@@ -486,7 +502,12 @@ func linkPatch(l domain.DraftLink) map[string]any {
 }
 
 // ImpactLinkCreate adds an outgoing link to the draft of a change impact.
+//
+//goap:operation impact.link.create doer
 func (g *Graph) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l LinkWrite, flow, execution string) (link domain.Link, err error) {
+	if err := g.allow(ctx, id, operations.ImpactLinkCreate); err != nil {
+		return link, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
 		if err != nil {
@@ -580,7 +601,12 @@ func (g *Graph) linkWork(ctx context.Context, tx Tx, id domain.ChangeID, link do
 }
 
 // ImpactLinkUpdate replaces the properties of an outgoing link of a draft.
+//
+//goap:operation impact.link.update doer
 func (g *Graph) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link domain.LinkID, props map[string]any, flow, execution string) (l domain.Link, err error) {
+	if err := g.allow(ctx, id, operations.ImpactLinkUpdate); err != nil {
+		return l, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, d, cur, err := g.linkWork(ctx, tx, id, link, flow)
 		if err != nil {
@@ -596,7 +622,12 @@ func (g *Graph) ImpactLinkUpdate(ctx context.Context, id domain.ChangeID, link d
 }
 
 // ImpactLinkDelete removes an outgoing link of a draft: removing a child is a modification of its parent (ADR 0024 §4).
+//
+//goap:operation impact.link.delete doer
 func (g *Graph) ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error {
+	if err := g.allow(ctx, id, operations.ImpactLinkDelete); err != nil {
+		return err
+	}
 	return g.repo.InTx(ctx, func(tx Tx) error {
 		w, d, l, err := g.linkWork(ctx, tx, id, link, flow)
 		if err != nil {
@@ -659,7 +690,12 @@ func (g *Graph) editedAgain(ctx context.Context, tx Tx, w *work, execution strin
 
 // ImpactNodeCancel drops the draft of a change impact on the flow: the impact goes back to what the flow saw before (the
 // draft of a parent flow), or to none. A creation cancelled leaves no node: the change impact is removed.
+//
+//goap:operation impact.cancel doer
 func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (cn domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactCancel); err != nil {
+		return cn, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
 		if err != nil {
@@ -711,7 +747,12 @@ func (g *Graph) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact
 // "to"}} and the properties its actions set. The transition is authorized before the transaction (Graph.Authorizer reads
 // the access graph), then its requirements, its guard (which sees the change, the impact of the node and its draft: a
 // transition may require a review) and its actions run on the draft.
+//
+//goap:operation impact.transition doer
 func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in NodeTransition) (cn domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactTransition); err != nil {
+		return cn, err
+	}
 	if in.To == "" {
 		return cn, invalidf("a transition names the state it goes to")
 	}
@@ -868,7 +909,12 @@ func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (map[domain.Node
 // change committed already is reverted on its branch by the next commit (the node goes back to the version the branch
 // was forked from). A rejected impact is withdrawn this way, or reworked (editedAgain). Only the flow that declared an
 // impact withdraws it.
+//
+//goap:operation impact.withdraw doer
 func (g *Graph) WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error {
+	if err := g.allow(ctx, id, operations.ImpactWithdraw); err != nil {
+		return err
+	}
 	return g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, flow)
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/operations"
 )
 
 // Rebasing a change (ADR 0101, 0102, 0103): what it committed on its branch is brought onto the head of the branch it was
@@ -67,7 +68,12 @@ func (r RebaseResult) summary() string {
 
 // RebaseChange brings what a change committed up to date with the head of the branch it was forked from (the branch of
 // its parent change for a sub-change, ADR 0103).
+//
+//goap:operation change.rebase doer
 func (g *Graph) RebaseChange(ctx context.Context, id domain.ChangeID) (res RebaseResult, err error) {
+	if err := g.allow(ctx, id, operations.ChangeRebase); err != nil {
+		return res, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
@@ -142,7 +148,12 @@ func (g *Graph) storedDraft(ctx context.Context, tx Tx, ref domain.NodeRef) (dom
 
 // ImpactNodeResolve settles the conflicts a rebase left on a change impact by keeping the change's values (ADR 0082 §2):
 // an updated event with {"resolved": true}. The impact is then reviewed as any.
+//
+//goap:operation impact.resolve doer
 func (g *Graph) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, execution string) (cn domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactResolve); err != nil {
+		return cn, err
+	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		w, err := g.workOn(ctx, tx, id, domain.MainFlow)
 		if err != nil {

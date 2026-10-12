@@ -47,7 +47,7 @@ func ToPB(r Record) *registryv1.Methodology {
 		out.Agents = append(out.Agents, pa)
 	}
 	for _, r := range m.Roles {
-		out.Roles = append(out.Roles, &registryv1.Role{Name: r.Name, Description: r.Description})
+		out.Roles = append(out.Roles, &registryv1.Role{Name: r.Name, Description: r.Description, Operations: r.Operations})
 	}
 	for _, me := range m.Methods {
 		out.Methods = append(out.Methods, &registryv1.Method{Name: me.Name, For: me.For, When: me.When, Priority: int32(me.Priority), Description: me.Description,
@@ -187,7 +187,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		m.Agents = append(m.Agents, ma)
 	}
 	for _, r := range p.Roles {
-		m.Roles = append(m.Roles, methodology.Role{Name: r.Name, Description: r.Description})
+		m.Roles = append(m.Roles, methodology.Role{Name: r.Name, Description: r.Description, Operations: nilIfNone(r.Operations)})
 	}
 	for _, me := range p.Methods {
 		m.Methods = append(m.Methods, methodology.Method{Name: me.Name, For: me.For, When: me.When, Priority: int(me.Priority), Description: me.Description,

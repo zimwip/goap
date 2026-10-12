@@ -47,6 +47,7 @@ function Tools {
 function Generate {
     Run buf lint
     Run buf generate
+    Run go generate ./pkg/operations/
 }
 
 function Build {
@@ -151,7 +152,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
 
   all               generate, build, test
   tools             install code generators (and air)
-  generate          regenerate connect-rpc code from proto/
+  generate          regenerate connect-rpc code from proto/ and the catalogue of operations
   build             build all services into bin\
   test              go test ./...
   web-test          unit tests of the web (needs npm install in web\)

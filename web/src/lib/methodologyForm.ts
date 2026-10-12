@@ -290,6 +290,8 @@ export interface ProcessForm extends Identified {
 export interface RoleForm {
   name: string;
   description: string;
+  /** operations on a change the role allows (ADR 0103), comma separated: codes of the catalogue or doer / reviewer; empty: all */
+  operations: string;
 }
 
 /** RACI roles of a step or a method; consulted and informed comma separated. */
@@ -867,7 +869,7 @@ export function toForm(m: Methodology): MethodologyForm {
       model: x.model ?? '',
       mcps: (x.mcps ?? []).join(', '),
     })),
-    roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '' })),
+    roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '', operations: (r.operations ?? []).join(', ') })),
     appliesTo: (m.appliesTo ?? []).join(', '),
     imports: (m.imports ?? []).join(', '),
     on: (m.on ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '' })),
@@ -1216,6 +1218,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       const o: MethodologyRole = {};
       put(o, 'name', r.name.trim());
       put(o, 'description', r.description.trim());
+      put(o, 'operations', csv(r.operations));
       return o;
     }),
   );

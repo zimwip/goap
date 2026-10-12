@@ -12,9 +12,10 @@ tools: ## install code generators
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
 	go install github.com/air-verse/air@latest
 
-generate: ## regenerate connect-rpc code from proto/
+generate: ## regenerate connect-rpc code from proto/ and the catalogue of operations (pkg/operations)
 	buf lint
 	buf generate
+	go generate ./pkg/operations/
 
 build:
 	@mkdir -p bin

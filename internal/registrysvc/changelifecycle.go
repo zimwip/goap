@@ -73,3 +73,21 @@ func (s *Service) Gate(ctx context.Context, bb domain.Blackboard, t domain.Trans
 	}
 	return condition.CheckGate(t, bb, c.Conditions.Evaluate(bb).State, decision)
 }
+
+// OperationRoles returns the roles of a methodology that allow an operation of the catalogue (pkg/operations, ADR
+// 0103), from its stored definition. restricted is false when the methodology lists the operations of none of its
+// roles, or the registry does not know it: the operation is then allowed to anyone the other rules let in.
+func (s *Service) OperationRoles(ctx context.Context, methodology, op string) (roles []string, restricted bool, err error) {
+	if methodology == "" {
+		return nil, false, nil
+	}
+	r, err := s.Store.Get(ctx, methodology, "")
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	roles, restricted = r.Methodology.OperationRoles(op)
+	return roles, restricted, nil
+}

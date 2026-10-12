@@ -78,18 +78,26 @@ A request started without a baseline or a change (the assistant, a trigger) open
 of the namespace its methodology acts on, known once the intent is identified.
 The organisation is a hierarchy of units in its own namespace (`organisation`); nodes reference their owner
 unit across namespaces, and a change is split into sub-changes along unit boundaries
-([ADR 0016](adr/0016-organisation-and-sub-changes.md)). A sub-change sees its parent's drafts and lands in its parent's
-log, not on a branch ([ADR 0081](adr/0081-sub-changes-land-in-their-parent.md)): its checkout of a node the parent holds a
-draft of copies it, remembering the parent's log position; its integration installs each accepted draft in the parent's main
-flow (accepted with the sub-change's review, an `integrated` event in its own log); it writes no version, the parent lands
-the work. The integration is a fast-forward: a sub-change whose parent changed a node meanwhile is first **rebased**
-([ADR 0082](adr/0082-rebase-a-sub-change-onto-its-parent.md), `RebaseChange`, done by `Apply`): a three-way merge per
-property, owner, state and link against the parent's draft as it was copied (folded from the parent's log), the fields changed
-on both sides named as conflicts the sub-change settles by editing its draft, the changed impacts reviewed again. The
-change's overview shows a sub-change's impacts behind its parent and its conflicts (`GetRebaseState`), with a Rebase
-action and "Keep mine" (`ImpactNodeResolve`); its Changes pane draws the history of the change with its parent and sub-changes as a branch
-graph (`SubChangeHistory.svelte` over `HistoryGraph`, `web/src/lib/subChangeHistory.ts`: a lane per change, a row per impact
-event of its main flow, the edges of a copy of the parent's draft, a rebase and an integration; a node filter).
+([ADR 0016](adr/0016-organisation-and-sub-changes.md)). A sub-change is a change on its own branch, forked from the
+branch of its parent change, recursively ([ADR 0103](adr/0103-sub-changes-on-their-own-branch-operation-rights.md),
+superseding ADR 0081 and 0082): it sees what its parent committed, never its drafts, commits on its branch and merges
+into its parent's like a root change into its target (rebased onto the head of the parent's branch, held by its own
+guardian, a fast-forward); a parent's uncommitted draft of a node the sub-change changed holds that merge. The parent
+records the merged work as accepted, landed impacts of its own (`recordInParent`) and merges it in turn: the work climbs
+one level per merge. The change's overview gives a sub-change the same Commit and Merge ("Merge into parent") buttons;
+its Changes pane draws the history of the change with its parent and sub-changes as a branch graph
+(`SubChangeHistory.svelte` over `HistoryGraph`, `web/src/lib/subChangeHistory.ts`: a lane per change, a row per impact
+event of its main flow, a sub-change's lane starting where its parent stood, its rebase, and the "merged" edge from its
+landing of a version to the parent's; a node filter).
+
+**Operations on a change** ([ADR 0103](adr/0103-sub-changes-on-their-own-branch-operation-rights.md)) are a catalogue
+the code owns: each method of `pkg/graph` a person performs on a change (checkout, edit, withdraw, review, commit,
+merge...) carries `//goap:operation <code> <doer|reviewer>` and calls `g.allow(ctx, id, operations.<Const>)` first;
+`cmd/goap-opgen` (`internal/opgen`, `go generate ./pkg/operations/`) generates `pkg/operations/operations_gen.go` from the
+annotations and refuses a duplicate code. A methodology's roles list the operations they allow (`roles[].operations`:
+codes or kinds; none listed anywhere: nothing restricted), so a reviewer (`operations: [reviewer]`) accepts or rejects
+and never edits or withdraws; the graph asks `Graph.OperationAuthorizer` (`graphsvc.OperationAuthorizer`:
+`operation:perform` with the roles allowed, from `registrysvc.Service.OperationRoles`).
 
 A **root change** is rebased the same way onto the head of the branch it was forked from ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-lands.md), `RebaseChange` / `GetRebaseState` also serve root changes; `Apply` and `CommitChange` rebase it first, conflicts stop with `ErrConflict`): a clean rebase keeps the reviews, the change and its branch move to the head (one `change.updated` entry with a `baselineId` `{from, to}` field, `Branch.rebasedFrom` set once), and landing is a fast-forward, so the history of the target is linear. Since [ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md) a change commits on its branch without being rebased and is rebased when it is merged: a `rebase` baseline on its branch, the nodes changed on both sides merged into drafts whose version takes the target's as second parent; a change that committed nothing has nothing to rebase. The same sync pane (`SubChangeSync.svelte`) shows "Behind <branch> (now at <head>)", Rebase and "Keep mine" for a root change.
 
@@ -221,8 +229,8 @@ makes for the person.
 | Adopt or discard a flow | Change → Overview (a flow no run works on is adopted straight on the graph) | `AdoptFlow`, `DiscardFlow` |
 | Apply | Change → Overview: *Apply* (a root change is rebased onto its target first; conflicts stop it and are listed on the overview) | `ApplyChange` |
 | Commit | Change → Overview: *Commit* (enabled from `GetCommitState`): the accepted modifications are written as versions on the change's own branch and the nodes withdrawn since their commit reverted; the change stays open, edited and committed again; the methodology is not asked ([ADR 0102](adr/0102-iterate-on-the-branch-of-a-change.md)). Only a modification is accepted and committed: a candidate or a draft left as it was checked out is not; a rejected impact is reworked (an edit proposes it again) or withdrawn, and an impact is withdrawn at any time | `CommitChange`, `GetCommitState`, `WithdrawImpact` |
-| Merge a change | Change → Overview / toolbar: *Merge* (a sub-change: *Integrate into parent*), once everything in the change is settled (every impact committed, none rejected or a candidate, no open flow, decision point or sub-change): rebased onto the head of its target when it moved (a clean rebase commits its merges), held by the guardian of the change (`ChangeLifecycles`: final state of its lifecycle, `Merge` the goal of its activity, else the landable states), then a fast-forward; the change is closed (`applied`) | `MergeChange` (`IntegrateChange`) |
-| Rebase a change | Change → Overview: when a root change or sub-change is behind what it builds on, *Rebase* (ADR 0082, 0101); *Keep mine* settles an impact's conflicts | `RebaseChange`, `GetRebaseState`, `ImpactNodeResolve` |
+| Merge a change | Change → Overview / toolbar: *Merge* (a sub-change: *Merge into parent*, into its parent's branch, ADR 0103), once everything in the change is settled (every impact committed, none rejected or a candidate, no open flow, decision point or sub-change): rebased onto the head of its target when it moved (a clean rebase commits its merges), held by the guardian of the change (`ChangeLifecycles`: final state of its lifecycle, `Merge` the goal of its activity, else the landable states), then a fast-forward; the change is closed (`applied`) | `MergeChange` (`IntegrateChange`) |
+| Rebase a change | Change → Overview: when a change is behind the head of the branch it was forked from (a sub-change: its parent's), *Rebase* (ADR 0101, 0103); *Keep mine* settles an impact's conflicts | `RebaseChange`, `GetRebaseState`, `ImpactNodeResolve` |
 | Merge a committed change | A `committed` change (its merge into the branch it was forked from, a release branch for instance, waits until someone merges it) shows each node changed on both sides: keep the target, or merge taking a side per conflicting property | `PlanMerge`, `MergeChange` (`IntegrateChange`) |
 | Merge in a run | The `graph.apply` action commits and merges; when the three-way merge cannot settle a property (both branches changed it apart) the run waits on a `merge` human task listing the value of each side and proposing the change's; *Merge and go on* completes the merge and resumes the run. Before that, when the rebase of the change onto its target (or parent) left conflicts, the apply stops and the run waits on a `rebase` task listing them per impact; once settled and reviewed again in the change tab, *Settled, continue* applies again (ADR 0101) | `ResolveMerge`, `ResolveRebase` (engine), `Engine.ResolveMerge`, `Engine.ResolveRebase` |
 | Branches | Baseline explorer → Branches: open one from a baseline, merge it into another (same resolver), abandon or reopen it | `ListBranches`, `CreateBranch`, `MergeBranch`, `SetBranchStatus` |

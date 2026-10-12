@@ -2551,9 +2551,11 @@ func (x *Subscription) GetFilter() string {
 
 // A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY").
 type Role struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
+	// the operations on a change the role allows (ADR 0103): codes of the catalogue or kinds (doer, reviewer); none: all
+	Operations    []string `protobuf:"bytes,3,rep,name=operations,proto3" json:"operations,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2600,6 +2602,13 @@ func (x *Role) GetDescription() string {
 		return x.Description
 	}
 	return ""
+}
+
+func (x *Role) GetOperations() []string {
+	if x != nil {
+		return x.Operations
+	}
+	return nil
 }
 
 // Roles assigned to a step or a method, RACI style.
@@ -7706,10 +7715,13 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"lifecycles\"<\n" +
 	"\fSubscription\x12\x14\n" +
 	"\x05event\x18\x01 \x01(\tR\x05event\x12\x16\n" +
-	"\x06filter\x18\x02 \x01(\tR\x06filter\"<\n" +
+	"\x06filter\x18\x02 \x01(\tR\x06filter\"\\\n" +
 	"\x04Role\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\"\x90\x01\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1e\n" +
+	"\n" +
+	"operations\x18\x03 \x03(\tR\n" +
+	"operations\"\x90\x01\n" +
 	"\x10Responsibilities\x12 \n" +
 	"\vresponsible\x18\x01 \x01(\tR\vresponsible\x12 \n" +
 	"\vaccountable\x18\x02 \x01(\tR\vaccountable\x12\x1c\n" +

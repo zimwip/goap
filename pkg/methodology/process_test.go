@@ -134,6 +134,11 @@ roles: [{name: dev}]
 processes:
   - name: x
     steps: [{name: s, roles: {responsible: dev, accountable: boss}}]`, `unknown role "boss"`},
+		"unknown operation": {`
+roles: [{name: reviewer, operations: [reviewer, impact.approve]}]
+processes:
+  - name: x
+    steps: [{name: s, roles: {responsible: reviewer}}]`, `unknown operation "impact.approve"`},
 		"reference without document": {`
 processes:
   - name: x
@@ -401,4 +406,19 @@ func hasIssue(issues def.Issues, path, msg string) bool {
 		}
 	}
 	return false
+}
+
+// The roles of a methodology list the operations they allow (ADR 0103): by code or by kind; a role listing none allows
+// all; a methodology none of whose roles lists any restricts nothing.
+func TestOperationRoles(t *testing.T) {
+	m := &Methodology{Roles: []Role{{Name: "author", Operations: []string{"doer"}}, {Name: "reviewer", Operations: []string{"impact.review"}}, {Name: "lead"}}}
+	if roles, restricted := m.OperationRoles("impact.review"); !restricted || strings.Join(roles, ",") != "reviewer,lead" {
+		t.Fatalf("impact.review: %v %v", roles, restricted)
+	}
+	if roles, _ := m.OperationRoles("impact.withdraw"); strings.Join(roles, ",") != "author,lead" {
+		t.Fatalf("impact.withdraw: %v", roles)
+	}
+	if _, restricted := (&Methodology{Roles: []Role{{Name: "dev"}}}).OperationRoles("impact.withdraw"); restricted {
+		t.Fatal("no role lists an operation: nothing is restricted")
+	}
 }

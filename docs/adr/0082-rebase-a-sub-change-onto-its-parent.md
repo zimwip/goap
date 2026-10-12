@@ -1,6 +1,6 @@
 # ADR 0082 — A sub-change is rebased onto its parent; its integration is a fast-forward
 
-**Status**: accepted, implemented (graph) · **Date**: 2026-10 · Amends ADR 0081 §5 (a conflict leaves the sub-change
+**Status**: superseded by ADR 0103 (a sub-change is rebased onto its parent's branch, like a root change); was accepted, implemented (graph) · **Date**: 2026-10 · Amends ADR 0081 §5 (a conflict leaves the sub-change
 committed until `IntegrateChange` gets a `Resolution`); builds on ADR 0079 (drafts folded from the log, reviews explicit,
 an edit after an acceptance sends the review back to `proposed`) and ADR 0081 (a sub-change lands in its parent's log).
 

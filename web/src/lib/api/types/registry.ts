@@ -550,6 +550,8 @@ export interface PlanStep {
 export interface MethodologyRole {
   name?: string;
   description?: string;
+  /** the operations on a change the role allows (ADR 0103): codes of the catalogue (impact.review) or kinds (doer, reviewer); none: all */
+  operations?: string[];
 }
 
 /** Roles assigned to a step or a method, RACI style (ADR 0035 §2). */

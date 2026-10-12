@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/operations"
 )
 
 // changeBranchName names the branch owned by a change.
@@ -79,7 +80,12 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 // IntegrateChange merges a change into what it was forked from (ADR 0102, merge): a root change that committed on its
 // own branch into the branch it was forked from, a sub-change into its parent. A root change whose three-way merge waits
 // for its resolutions (committed) is integrated with them.
+//
+//goap:operation change.merge doer
 func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
+	if err := g.allow(ctx, id, operations.ChangeMerge); err != nil {
+		return c, err
+	}
 	if c, err = g.Change(ctx, id); err != nil {
 		return c, err
 	}

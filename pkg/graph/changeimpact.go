@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/operations"
 )
 
 // changeOpen loads a change and checks that it still accepts change impacts.
@@ -36,7 +37,12 @@ func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (int, error) {
 // rationale; its pre version must be in the reference baseline. The impact has no version until a ImpactNodeCheckout
 // writes one (ADR 0076). A new node is not proposed: it is created by ImpactNodeCreate, which adds its impact and its
 // first version in one event (ADR 0077).
+//
+//goap:operation impact.propose doer
 func (g *Graph) ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) (out []domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactPropose); err != nil {
+		return out, err
+	}
 	for _, cn := range nodes {
 		if cn.Intent == domain.IntentCreated {
 			return nil, fmt.Errorf("change impact of %s: a new node is created with ImpactNodeCreate; ProposeImpact is for existing nodes: %w", cn.Key, ErrInvalid)
@@ -202,7 +208,12 @@ func (g *Graph) ImpactNodeReview(ctx context.Context, id domain.ChangeID, node d
 
 // ImpactNodeReviewOn reviews a change impact as a flow sees it (ADR 0025): on a flow the review is a
 // candidate until the flow is adopted, and execution is the action run that made it.
+//
+//goap:operation impact.review reviewer
 func (g *Graph) ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (cn domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactReview); err != nil {
+		return cn, err
+	}
 	if err := checkVerdict(status, comment); err != nil {
 		return cn, err
 	}
@@ -298,6 +309,9 @@ func (g *Graph) reviewTx(ctx context.Context, tx Tx, id domain.ChangeID, flow, e
 // ID; the batch's Item, when set, is written after the verdicts, in the same transaction. A verdict accepting a node
 // whose origins are accepted by the same batch stands: the origins are settled first.
 func (g *Graph) ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) (out []domain.ChangeImpact, err error) {
+	if err := g.allow(ctx, id, operations.ImpactReview); err != nil {
+		return out, err
+	}
 	if len(b.Verdicts) == 0 {
 		return nil, fmt.Errorf("a review batch needs at least one verdict: %w", ErrInvalid)
 	}

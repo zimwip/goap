@@ -328,18 +328,22 @@
         <section class="card" data-path="roles">
                 <div class="row head">
                   <h3 class="grow">Roles <span class="hint">{f.roles.length}</span></h3>
-                  {#if !d.readonly}<button type="button" class="small" onclick={() => f.roles.push({ name: '', description: '' })}>+ Role</button>{/if}
+                  {#if !d.readonly}<button type="button" class="small" onclick={() => f.roles.push({ name: '', description: '', operations: '' })}>+ Role</button>{/if}
                 </div>
                 <p class="hint">
                   The roles the processes and methods assign (responsible, accountable, consulted, informed). The methodology
                   names roles, never people: the organisation assigns them to users per unit (<code>developer@TEAM-PAY</code>), and a
-                  role held in a unit holds in the units below it.
+                  role held in a unit holds in the units below it. A role may list the operations on a change it allows
+                  (<code>doer</code>, <code>reviewer</code>, or codes such as <code>impact.review</code>): a reviewer accepts or
+                  rejects impacts and never edits or withdraws one. A role listing none allows all; when no role lists any,
+                  nothing is restricted.
                 </p>
                 <fieldset class="plain" disabled={d.readonly}>
                   {#each f.roles as r, i (i)}
                     <div class="role-row" class:bad={d.bad(`roles[${i}]`)}>
                       <input type="text" class="mono" aria-label="Role name" placeholder="developer" bind:value={r.name} data-path="roles[{i}].name" />
                       <input type="text" aria-label="Role description" placeholder="What the role does" bind:value={r.description} />
+                      <input type="text" class="mono" aria-label="Operations the role allows" placeholder="all operations" title="Operations on a change the role allows: doer, reviewer, or codes such as impact.review (comma separated); empty: all" bind:value={r.operations} data-path="roles[{i}].operations" />
                       {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the role" onclick={() => f.roles.splice(i, 1)}>✕</button>{/if}
                     </div>
                   {:else}
@@ -448,7 +452,7 @@
   }
   .role-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1.5fr) auto;
     gap: 6px;
     margin-bottom: 4px;
   }
