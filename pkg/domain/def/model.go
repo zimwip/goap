@@ -263,6 +263,8 @@ type Issue struct {
 	// Severity is SeverityError (the default, empty) or SeverityWarning: a warning is a remark that never refuses a
 	// validation, a compile or a publish (ADR 0097).
 	Severity string `json:"severity,omitempty"`
+	// Hint says how to fix the issue, when the check knows (the closest name, the names allowed, what to change).
+	Hint string `json:"hint,omitempty"`
 }
 
 // Severities of an Issue.

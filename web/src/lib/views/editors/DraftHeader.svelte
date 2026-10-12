@@ -43,7 +43,7 @@
     <strong>{ruled.length} rule{ruled.length === 1 ? '' : 's'} broken</strong>
     <ul>
       {#each ruled as i, k (k)}
-        <li>{#if where(i.norm)}<code>{where(i.norm)}</code> {/if}{i.message}</li>
+        <li>{#if where(i.norm)}<code>{where(i.norm)}</code> {/if}{i.message}{#if i.hint}<span class="fix">Fix: {i.hint}</span>{/if}</li>
       {/each}
     </ul>
   </div>
@@ -53,7 +53,7 @@
     <strong>{remarks.length} warning{remarks.length === 1 ? '' : 's'}</strong>
     <ul>
       {#each remarks as i, k (k)}
-        <li>{i.message}</li>
+        <li>{i.message}{#if i.hint}<span class="fix">Fix: {i.hint}</span>{/if}</li>
       {/each}
     </ul>
   </div>
@@ -76,6 +76,11 @@
 {/if}
 
 <style>
+  .fix {
+    display: block;
+    opacity: 0.8;
+    font-size: 0.9em;
+  }
   .broken ul {
     margin: 0.25rem 0 0;
     padding-left: 1.2rem;

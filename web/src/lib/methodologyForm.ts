@@ -5,7 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
-import type { Action, Agent, Attribute, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, Attribute, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -368,9 +368,38 @@ export interface MethodologyForm {
   appliesTo: string;
   /** the condition libraries it imports, comma separated (ADR 0064) */
   imports: string;
-  /** the events of their changes it reacts to */
-  on: { event: string; filter: string }[];
+  /** the events it reacts to; from: self (default), integrated, integrator (ADR 0106) */
+  on: SubscriptionForm[];
+  /** the lifecycle of its domain the changes follow (ADR 0058); "" : none */
+  lifecycle: string;
+  /** default criticality of its changes (ADR 0075 §3), kept as is */
+  criticality: string;
+  /** the methodologies whose changes its changes integrate (ADR 0106) */
+  integrates: IntegrationForm[];
+  /** guardian.merge: what a change it integrates must satisfy to merge (CEL, with `integrator`) */
+  guardianMerge: string;
+  /** guardian.transitions: a guard per transition of the lifecycle of the changes it integrates */
+  guardianTransitions: { name: string; expr: string }[];
 }
+
+export interface SubscriptionForm {
+  event: string;
+  filter: string;
+  /** "" (self), integrated, integrator */
+  from: string;
+}
+
+export interface IntegrationForm {
+  /** comma separated, or "*" */
+  methodologies: string;
+  exclusive: boolean;
+  /** "" (decision), auto */
+  attach: string;
+}
+
+/** Where the events of a subscription come from (ADR 0106). */
+export const SUBSCRIPTION_ORIGINS = ['', 'integrated', 'integrator'] as const;
+export const ATTACH_MODES = ['', 'auto'] as const;
 
 /** Sections whose elements open in a tab. */
 export type Section = 'agents' | 'actions' | 'conditions' | 'goals' | 'processes' | 'methods';
@@ -518,6 +547,11 @@ export function emptyForm(): MethodologyForm {
     appliesTo: '',
     imports: '',
     on: [],
+    lifecycle: '',
+    criticality: '',
+    integrates: [],
+    guardianMerge: '',
+    guardianTransitions: [],
   };
 }
 
@@ -878,7 +912,12 @@ export function toForm(m: Methodology): MethodologyForm {
     roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '', operations: (r.operations ?? []).join(', ') })),
     appliesTo: (m.appliesTo ?? []).join(', '),
     imports: (m.imports ?? []).join(', '),
-    on: (m.on ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '' })),
+    on: (m.on ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '', from: x.from === 'self' ? '' : (x.from ?? '') })),
+    lifecycle: m.lifecycle ?? '',
+    criticality: m.criticality ?? '',
+    integrates: (m.integrates ?? []).map((x) => ({ methodologies: (x.methodologies ?? []).join(', '), exclusive: !!x.exclusive, attach: x.attach === 'decision' ? '' : (x.attach ?? '') })),
+    guardianMerge: m.guardian?.merge ?? '',
+    guardianTransitions: Object.entries(m.guardian?.transitions ?? {}).map(([name, expr]) => ({ name, expr })),
   };
 }
 
@@ -1212,11 +1251,35 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
     f.on
       .filter((x) => x.event.trim())
       .map((x) => {
-        const o: { event?: string; filter?: string } = { event: x.event.trim() };
+        const o: { event?: string; filter?: string; from?: string } = { event: x.event.trim() };
         put(o, 'filter', x.filter.trim());
+        put(o, 'from', x.from.trim());
         return o;
       }),
   );
+  put(m, 'lifecycle', f.lifecycle.trim());
+  put(m, 'criticality', f.criticality.trim());
+  put(
+    m,
+    'integrates',
+    f.integrates
+      .filter((x) => csv(x.methodologies).length || x.exclusive || x.attach)
+      .map((x) => {
+        const o: MethodologyIntegration = {};
+        put(o, 'methodologies', csv(x.methodologies));
+        if (x.exclusive) o.exclusive = true;
+        put(o, 'attach', x.attach.trim());
+        return o;
+      }),
+  );
+  const transitions: Record<string, string> = {};
+  for (const t of f.guardianTransitions) if (t.name.trim() && t.expr.trim()) transitions[t.name.trim()] = t.expr.trim();
+  if (f.guardianMerge.trim() || Object.keys(transitions).length) {
+    const g: MethodologyGuardian = {};
+    put(g, 'merge', f.guardianMerge.trim());
+    if (Object.keys(transitions).length) g.transitions = transitions;
+    m.guardian = g;
+  }
   put(
     m,
     'roles',

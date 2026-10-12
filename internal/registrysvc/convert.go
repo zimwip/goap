@@ -242,7 +242,7 @@ func nilIfNone(s []string) []string {
 func IssuesToPB(is def.Issues) []*registryv1.Issue {
 	out := make([]*registryv1.Issue, len(is))
 	for i, x := range is {
-		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity, Severity: x.Severity}
+		out[i] = &registryv1.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity, Severity: x.Severity, Hint: x.Hint}
 	}
 	return out
 }
@@ -251,7 +251,7 @@ func IssuesToPB(is def.Issues) []*registryv1.Issue {
 func IssuesFromPB(is []*registryv1.Issue) def.Issues {
 	var out def.Issues
 	for _, x := range is {
-		out = append(out, def.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity, Severity: x.Severity})
+		out = append(out, def.Issue{Path: x.Path, Message: x.Message, Activity: x.Activity, Severity: x.Severity, Hint: x.Hint})
 	}
 	return out
 }

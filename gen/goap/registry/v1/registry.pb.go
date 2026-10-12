@@ -3568,7 +3568,9 @@ type Issue struct {
 	// flow path of the process, method or step the issue is about ("<process>/<step>/<sub-step>"); empty: none
 	Activity string `protobuf:"bytes,3,opt,name=activity,proto3" json:"activity,omitempty"`
 	// "warning" for a remark that never blocks; empty or "error": a blocking issue
-	Severity      string `protobuf:"bytes,4,opt,name=severity,proto3" json:"severity,omitempty"`
+	Severity string `protobuf:"bytes,4,opt,name=severity,proto3" json:"severity,omitempty"`
+	// how to fix it, when the check knows (the closest name, the names allowed, what to change)
+	Hint          string `protobuf:"bytes,5,opt,name=hint,proto3" json:"hint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3627,6 +3629,13 @@ func (x *Issue) GetActivity() string {
 func (x *Issue) GetSeverity() string {
 	if x != nil {
 		return x.Severity
+	}
+	return ""
+}
+
+func (x *Issue) GetHint() string {
+	if x != nil {
+		return x.Hint
 	}
 	return ""
 }
@@ -8021,12 +8030,13 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
 	"\fpublished_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x1c\n" +
-	"\tnamespace\x18\t \x01(\tR\tnamespace\"m\n" +
+	"\tnamespace\x18\t \x01(\tR\tnamespace\"\x81\x01\n" +
 	"\x05Issue\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1a\n" +
 	"\bactivity\x18\x03 \x01(\tR\bactivity\x12\x1a\n" +
-	"\bseverity\x18\x04 \x01(\tR\bseverity\"=\n" +
+	"\bseverity\x18\x04 \x01(\tR\bseverity\x12\x12\n" +
+	"\x04hint\x18\x05 \x01(\tR\x04hint\"=\n" +
 	"\x18ListMethodologiesRequest\x12!\n" +
 	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"g\n" +
 	"\x19ListMethodologiesResponse\x12J\n" +

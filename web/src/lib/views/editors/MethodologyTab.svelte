@@ -6,6 +6,8 @@
   import Icon from '../../shell/Icon.svelte';
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import DraftHeader from './DraftHeader.svelte';
+  import IssueHints from '../../components/IssueHints.svelte';
+  import { groupedMethodologies } from '../../stores/catalog.svelte';
   import { provideActions, useReveal, notify, revealState } from '../../shell/workbench.svelte';
   import { replaceTab } from '../../shell/tabs.svelte';
   import { drafts, getDraft } from '../../stores/drafts.svelte';
@@ -17,6 +19,8 @@
   import {
     walkSteps,
     goalChoices,
+    SUBSCRIPTION_ORIGINS,
+    ATTACH_MODES,
     type Section,
     type SectionItem,
   } from '../../methodologyForm';
@@ -267,21 +271,75 @@
           <fieldset class="plain" disabled={d.readonly}>
             <div class="field">
               <label for="m-applies">Applies to <span class="opt">(methodologies, comma separated; empty: not transverse)</span></label>
-              <input id="m-applies" type="text" class="mono" bind:value={f.appliesTo} class:bad={d.bad('appliesTo')} data-path="appliesTo" placeholder="sdlc" />
+              <input id="m-applies" type="text" class="mono" bind:value={f.appliesTo} class:bad={d.bad('appliesTo')} data-path="appliesTo" placeholder="sdlc" list="m-methodologies" />
+              <IssueHints draft={d} path="appliesTo" />
             </div>
-            {#if f.appliesTo.trim()}
-              <div class="label">Reacts to <span class="opt">(empty: a run attached, a step completed)</span></div>
-              {#each f.on as sub, i (i)}
-                <div class="role-row" class:bad={d.bad(`on[${i}]`)}>
-                  <select bind:value={sub.event} aria-label="Event" data-path="on[{i}].event">
-                    {#each TRIGGER_EVENTS as ev (ev)}<option value={ev}>{ev}</option>{/each}
-                  </select>
-                  <input type="text" class="mono" aria-label="Filter" placeholder={'CEL over event, e.g. event.step.process == "software_delivery"'} bind:value={sub.filter} data-path="on[{i}].filter" />
-                  {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the event" onclick={() => f.on.splice(i, 1)}>✕</button>{/if}
+          </fieldset>
+        </section>
+        <section class="card" data-path="integrates">
+          <h3>Composition</h3>
+          <p class="hint">
+            A methodology may integrate the changes of others as its sub-changes (a release above the changes it delivers),
+            require of them what its guardian says, and follow their events (<code>from: integrated</code>) or the ones of the
+            change integrating its own (<code>from: integrator</code>). Validation checks the composition against the other
+            methodologies: events they never emit, states and transitions they do not have, guards that never hold, alone or
+            together; each issue says how to fix it.
+          </p>
+          <fieldset class="plain" disabled={d.readonly}>
+            <div class="field">
+              <label for="m-lifecycle">Lifecycle <span class="opt">(of its domain, followed by its changes; empty: none)</span></label>
+              <input id="m-lifecycle" type="text" class="mono" bind:value={f.lifecycle} class:bad={d.bad('lifecycle')} data-path="lifecycle" placeholder="delivery" />
+              <IssueHints draft={d} path="lifecycle" />
+            </div>
+            <div class="label">Integrates <span class="opt">(the methodologies whose changes become its sub-changes)</span></div>
+            {#each f.integrates as it, i (i)}
+              <div class="integrate-row" class:bad={d.bad(`integrates[${i}]`)} data-path="integrates[{i}]">
+                <input type="text" class="mono" aria-label="Methodologies" placeholder="sdlc, or *" bind:value={it.methodologies} list="m-methodologies" data-path="integrates[{i}].methodologies" />
+                <label class="check"><input type="checkbox" bind:checked={it.exclusive} /> exclusive</label>
+                <select bind:value={it.attach} aria-label="Attach" data-path="integrates[{i}].attach">
+                  {#each ATTACH_MODES as a (a)}<option value={a}>{a || 'decision'}</option>{/each}
+                </select>
+                {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the integration" onclick={() => f.integrates.splice(i, 1)}>✕</button>{/if}
+              </div>
+              <IssueHints draft={d} path="integrates[{i}]" />
+            {/each}
+            {#if !d.readonly}<button type="button" class="small" onclick={() => f.integrates.push({ methodologies: '', exclusive: false, attach: '' })}>+ Integration</button>{/if}
+            {#if f.integrates.length || f.guardianMerge || f.guardianTransitions.length}
+              <div class="field" data-path="guardian">
+                <label for="m-guardian-merge">Guardian: merge <span class="opt">(CEL over change, world, integrator: what an integrated change needs to merge)</span></label>
+                <input id="m-guardian-merge" type="text" class="mono" bind:value={f.guardianMerge} class:bad={d.bad('guardian.merge')} data-path="guardian.merge" placeholder={'integrator.state == "integrating"'} />
+                <IssueHints draft={d} path="guardian.merge" />
+              </div>
+              <div class="label">Guardian: transitions <span class="opt">(a guard per transition of the lifecycle of the integrated changes)</span></div>
+              {#each f.guardianTransitions as gt, i (i)}
+                <div class="guard-row" class:bad={d.bad(`guardian.transitions.${gt.name}`)}>
+                  <input type="text" class="mono" aria-label="Transition" placeholder="ready" bind:value={gt.name} data-path="guardian.transitions.{gt.name}" />
+                  <input type="text" class="mono" aria-label="Guard" placeholder={'!integrator.attached || integrator.state != "frozen"'} bind:value={gt.expr} />
+                  {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the guard" onclick={() => f.guardianTransitions.splice(i, 1)}>✕</button>{/if}
                 </div>
+                {#if gt.name.trim()}<IssueHints draft={d} path="guardian.transitions.{gt.name.trim()}" />{/if}
               {/each}
-              {#if !d.readonly}<button type="button" class="small" onclick={() => f.on.push({ event: 'step.completed', filter: '' })}>+ Event</button>{/if}
+              {#if !d.readonly}<button type="button" class="small" onclick={() => f.guardianTransitions.push({ name: '', expr: '' })}>+ Transition guard</button>{/if}
+              <IssueHints draft={d} path="guardian" />
             {/if}
+            <div class="label">Reacts to <span class="opt">(empty: for a transverse methodology, a run attached and a step completed)</span></div>
+            {#each f.on as sub, i (i)}
+              <div class="on-row" class:bad={d.bad(`on[${i}]`)} data-path="on[{i}]">
+                <select bind:value={sub.event} aria-label="Event" data-path="on[{i}].event">
+                  {#each TRIGGER_EVENTS as ev (ev)}<option value={ev}>{ev}</option>{/each}
+                </select>
+                <select bind:value={sub.from} aria-label="From" data-path="on[{i}].from">
+                  {#each SUBSCRIPTION_ORIGINS as o (o)}<option value={o}>{o ? `from ${o}` : 'from self'}</option>{/each}
+                </select>
+                <input type="text" class="mono" aria-label="Filter" placeholder={'CEL over event, e.g. event.step.process == "software_delivery"'} bind:value={sub.filter} data-path="on[{i}].filter" />
+                {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the event" onclick={() => f.on.splice(i, 1)}>✕</button>{/if}
+              </div>
+              <IssueHints draft={d} path="on[{i}]" />
+            {/each}
+            {#if !d.readonly}<button type="button" class="small" onclick={() => f.on.push({ event: f.integrates.length ? 'change.committed' : 'step.completed', filter: '', from: f.integrates.length ? 'integrated' : '' })}>+ Event</button>{/if}
+            <datalist id="m-methodologies">
+              {#each groupedMethodologies() as g (g.name)}{#if g.name !== f.name}<option value={g.name}></option>{/if}{/each}
+            </datalist>
           </fieldset>
         </section>
       {/if}
@@ -449,6 +507,29 @@
     color: var(--danger);
     font-weight: 700;
     font-size: 0.8rem;
+  }
+  .integrate-row,
+  .guard-row,
+  .on-row {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 4px;
+    align-items: center;
+  }
+  .integrate-row {
+    grid-template-columns: minmax(0, 2fr) auto minmax(0, 1fr) auto;
+  }
+  .guard-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) auto;
+  }
+  .on-row {
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 2.5fr) auto;
+  }
+  .check {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    white-space: nowrap;
   }
   .role-row {
     display: grid;

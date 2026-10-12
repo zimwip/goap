@@ -606,12 +606,34 @@ export interface Methodology {
   goal?: string;
   /** the built-in condition libraries it imports (ADR 0064): decisions, risks, verification, derogations */
   imports?: string[];
-  /** the events of those changes it reacts to */
-  on?: { event?: string; filter?: string }[];
+  /** the events it reacts to; from: self (default), integrated (the changes it integrates), integrator (ADR 0106) */
+  on?: { event?: string; filter?: string; from?: string }[];
+  /** the lifecycle of its domain the changes follow (ADR 0058); empty: none */
+  lifecycle?: string;
+  /** the methodologies whose changes its changes integrate as sub-changes (ADR 0106) */
+  integrates?: MethodologyIntegration[];
+  /** what it requires of the changes it integrates, as an outer guardian of their chain (ADR 0106) */
+  guardian?: MethodologyGuardian;
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
   updatedBy?: string;
+}
+
+/** Methodologies whose changes the changes of a methodology integrate (ADR 0106). */
+export interface MethodologyIntegration {
+  methodologies?: string[];
+  /** those changes land only through a change of the integrator */
+  exclusive?: boolean;
+  /** decision (default) | auto */
+  attach?: string;
+}
+
+/** The guards a methodology adds to the changes it integrates (ADR 0106): CEL, with `integrator`. */
+export interface MethodologyGuardian {
+  merge?: string;
+  /** transition name -> guard */
+  transitions?: Record<string, string>;
 }
 
 /** Shared object part of the model: node types and link types, versioned on its own. */
@@ -686,4 +708,6 @@ export interface Issue {
   activity?: string;
   /** "warning": a remark that never blocks; empty or "error": a blocking issue */
   severity?: string;
+  /** how to fix it, when the check knows (the closest name, the names allowed, what to change) */
+  hint?: string;
 }

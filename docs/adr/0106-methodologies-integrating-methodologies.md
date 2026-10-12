@@ -103,6 +103,34 @@ methodology integrating, directly or through others, one that integrates it; the
 in the same `change.updated` entry (`guardians` field). `cmd/registry` gets `Applicable` from the organisation snapshot
 like `goap-dev`.
 
+**Composition checks.** A methodology compiles alone, but what it expects of the ones it is composed with holds only
+against their definitions. The registry's validation adds `compositionIssues` (`methodology.CompositionIssues`,
+`pkg/methodology/composition.go`: the latest version of every other stored methodology, the lifecycles of the domains
+in force), **warnings** each carrying a fix (`Issue.Hint`, proto `Issue.hint`), never an error, since the others change
+on their own:
+
+- an event a subscription waits for that its source cannot emit: `change.transitioned` of a methodology naming no
+  lifecycle, `from: integrator` while nothing integrates the methodology, `change.attached` of changes nothing
+  integrates, process events of a methodology running no process, `methodology.published` from another change;
+- a value a filter or a guard compares (`sel == "x"`, `sel in [...]`) that its source does not declare: a state
+  (`event.change.state`, `change.state`, `integrator.state`), a process, a step or step path, a methodology, a
+  condition of the world (`world.x`); a `guardian.transitions` key no transition of the integrated lifecycles has; an
+  `integrates` name no methodology has — the hint names the closest, else the list;
+- a guard that never holds: `MergeGuard` (with the exclusive `integrator.attached`) and each transition guard, tried
+  over every state the integrated change may be in (for a transition, the states it leaves), every integrator (none,
+  or a change of the guardian in each state of its lifecycle) and the world conditions it reads (at most 4); a guard
+  reading anything else is not judged;
+- a **composite** contradiction: the guardians of a chain (the guardian, the ones between it and the change, the
+  integrators above it) each satisfiable alone but never together on the same change — the change is shared, each
+  guardian sees its own integrator. A guardian frames every change below it, down the integrations.
+
+What a version of a methodology breaks for the ones following it is reported on it too (`lifecycle`, or the
+methodology): removing the lifecycle `release-based` follows the moves of. The web keeps the composition in the
+methodology form (lifecycle, integrates, guardian, `on[].from`, edited in the *Composition* card of the overview) and
+shows each issue with its fix in the Problems console, the header of the element and under the field
+(`IssueHints.svelte`). The check found the first gap at once: `release-based` follows `change.transitioned` of `sdlc`,
+which has no lifecycle yet.
+
 ### 4. `on:` crosses the relation — coupling by events
 
 `on:` (ADR 0036 §3) gets a `from`: `self` (default: the events of the change the methodology runs on), `integrated`

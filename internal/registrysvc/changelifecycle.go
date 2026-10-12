@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // Lifecycle implements pkg/graph.ChangeLifecycles (ADR 0058): the lifecycle the changes of a methodology follow, the
@@ -28,16 +29,25 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 	if err != nil {
 		return nil, err
 	}
+	found := lifecycleIn(recs, &m)
+	if found == nil {
+		return nil, fmt.Errorf("methodology %s names lifecycle %q, which no domain defines: %w", m.Name, m.Lifecycle, ErrInvalid)
+	}
+	return found, nil
+}
+
+// lifecycleIn is the lifecycle m names among the domains: the one of its namespace, else of any domain (nil: none).
+func lifecycleIn(recs []DomainRecord, m *methodology.Methodology) *domain.Lifecycle {
+	if m.Lifecycle == "" {
+		return nil
+	}
 	var found *domain.Lifecycle
 	for _, d := range recs {
 		if lc := d.Domain.Lifecycle(m.Lifecycle); lc != nil && (found == nil || d.Domain.Name == m.Namespace) {
 			found = lc
 		}
 	}
-	if found == nil {
-		return nil, fmt.Errorf("methodology %s names lifecycle %q, which no domain defines: %w", m.Name, m.Lifecycle, ErrInvalid)
-	}
-	return found, nil
+	return found
 }
 
 // DefaultGoal implements pkg/graph.ChangeLifecycles (ADR 0096): the main goal of a methodology, the goal its changes

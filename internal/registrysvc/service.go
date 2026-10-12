@@ -135,6 +135,7 @@ func (s *Service) validate(ctx context.Context, m *methodology.Methodology) def.
 		}
 	}
 	issues = append(issues, s.integrationIssues(ctx, m)...)
+	issues = append(issues, s.compositionIssues(ctx, m)...)
 	return append(issues, s.scopeIssues(ctx, m)...)
 }
 

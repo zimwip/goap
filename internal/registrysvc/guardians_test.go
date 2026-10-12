@@ -95,4 +95,21 @@ func TestGuardianChain(t *testing.T) {
 		Integrates: []methodology.Integration{{Methodologies: []string{"work"}}}}); len(issues) != 0 {
 		t.Fatalf("no cycle: %+v", issues)
 	}
+
+	// the composition (methodology.CompositionIssues): release follows a move of the work changes, which have no
+	// lifecycle; its guardian names a transition they do not have
+	rel3 := methodology.Methodology{Name: "release", Version: "3", Namespace: "alm", Processes: steps("release"),
+		Integrates: []methodology.Integration{{Methodologies: []string{"work"}}},
+		Guardian:   &methodology.Guardian{Transitions: map[string]string{"ready": "integrator.attached"}},
+		On:         []methodology.Subscription{{Event: "change.transitioned", From: methodology.FromIntegrated}}}
+	var got []string
+	for _, i := range reg.compositionIssues(ctx, &rel3) {
+		if !i.IsWarning() || i.Hint == "" {
+			t.Fatalf("a composition issue is a warning with a hint: %+v", i)
+		}
+		got = append(got, i.Path)
+	}
+	if !slices.Equal(got, []string{"on[0].event", "guardian.transitions.ready"}) {
+		t.Fatalf("composition: %v", got)
+	}
 }

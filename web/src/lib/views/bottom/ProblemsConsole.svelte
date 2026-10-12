@@ -19,6 +19,7 @@
       const it = d.items(section)[Number(m[2])];
       return `${SINGULAR[section]} ${it?.name || `#${Number(m[2]) + 1}`}${m[3] ? ` › ${m[3]}` : ''}`;
     }
+    if (/^(integrates|guardian|on\[|lifecycle|appliesTo)/.test(path)) return `Composition › ${path}`;
     return path ? `Methodology › ${path}` : 'Methodology';
   }
 
@@ -55,7 +56,8 @@
           <li>
             <button type="button" class="issue" class:warning={isWarning(i)} onclick={() => revealIssue(d, i.norm)}>
               <Icon name={isWarning(i) ? 'bell' : 'alert'} size={13} />
-              <span class="msg">{i.message}</span>
+              <span class="msg" title={i.hint ? `${i.message}\nFix: ${i.hint}` : i.message}>{i.message}</span>
+              {#if i.hint}<span class="fix" title={i.hint}>Fix: {i.hint}</span>{/if}
               <span class="where">{where(i.norm)}</span>
               {#if i.path}<code class="path">{i.path}</code>{/if}
             </button>
@@ -103,6 +105,14 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .fix {
+    color: var(--muted);
+    font-style: italic;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
   }
   .where {
     color: var(--muted);

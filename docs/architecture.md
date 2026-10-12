@@ -101,7 +101,12 @@ root change, by the registry over the methodologies applicable to its project; r
 or a transition needs the agreement of every guardian, its own first (`checkMerge`, `TransitionChange`), the outer
 ones evaluated by the registry (`ChangeLifecycles.CheckGuardians`). `methodologies/release-based.yaml` is the first
 integrator (of `sdlc`, exclusive). A person attaches from the change tab (*Attach to change…*, *Detach*, the
-*Guardians* row), `goap-change` (`attach`, `detach`) or the assistant's proposals (`attach_change`, `detach_change`).
+*Guardians* row), `goap-change` (`attach`, `detach`) or the assistant's proposals (`attach_change`, `detach_change`). The
+registry's validation checks the composition against the other methodologies (`compositionIssues`,
+`methodology.CompositionIssues`): events a subscription waits for that its source never emits, states, transitions,
+steps or conditions a filter or a guard names that do not exist, guards that never hold, alone or together along the
+chain of guardians (tried over every state and integrator); warnings, each with a fix (`Issue.Hint`), shown by the
+Problems console and the methodology editor (*Composition* card of the overview).
 
 **Operations on a change** ([ADR 0103](adr/0103-sub-changes-on-their-own-branch-operation-rights.md)) are a catalogue
 the code owns: each method of `pkg/graph` a person performs on a change (checkout, edit, withdraw, review, commit,

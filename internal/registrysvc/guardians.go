@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/condition"
@@ -224,4 +225,34 @@ func integrationPath(integrates map[string][]string, from, to string) []string {
 		}
 	}
 	return nil
+}
+
+// compositionIssues checks m against the methodologies it is composed with (ADR 0106, methodology.CompositionIssues):
+// the latest version of each other stored methodology and the lifecycles of the domains in force. Warnings only;
+// nothing is reported when the store cannot be read.
+func (s *Service) compositionIssues(ctx context.Context, m *methodology.Methodology) def.Issues {
+	rs, err := s.Versions(ctx, false)
+	if err != nil {
+		return nil
+	}
+	others := map[string]*methodology.Methodology{}
+	for _, r := range rs {
+		if r.Methodology.Name != m.Name && r.Status != StatusArchived {
+			mm := r.Methodology
+			others[mm.Name] = &mm
+		}
+	}
+	composed := len(m.Integrates) > 0 || m.Guardian != nil || len(m.On) > 0
+	for _, o := range others {
+		composed = composed || o.IntegratesChangesOf(m.Name) || m.IntegratesChangesOf(o.Name) || slices.Contains(o.AppliesTo, m.Name)
+	}
+	if !composed {
+		return nil
+	}
+	domains, err := s.DomainVersions(ctx, false)
+	if err != nil {
+		return nil
+	}
+	return m.CompositionIssues(methodology.Composition{Others: others,
+		Lifecycle: func(x *methodology.Methodology) *domain.Lifecycle { return lifecycleIn(domains, x) }})
 }

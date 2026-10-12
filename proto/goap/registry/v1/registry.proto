@@ -585,6 +585,8 @@ message Issue {
   string activity = 3;
   // "warning" for a remark that never blocks; empty or "error": a blocking issue
   string severity = 4;
+  // how to fix it, when the check knows (the closest name, the names allowed, what to change)
+  string hint = 5;
 }
 
 message ListMethodologiesRequest {
