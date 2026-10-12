@@ -210,6 +210,8 @@ func (it ChangeItem) Validate() error {
 		}
 	case KindReview:
 		return validateReview(it)
+	case KindEffect:
+		return EffectMarkOf(it.Data).Validate()
 	default:
 		validate := itemKinds.get(it.Kind)
 		if validate == nil {
