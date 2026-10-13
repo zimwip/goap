@@ -2,10 +2,10 @@ package engine
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -137,22 +137,10 @@ func TestForeachRunsOneStreamPerElement(t *testing.T) {
 	if p.Status != StatusCompleted {
 		t.Fatalf("not completed: %s %+v %s", p.Status, p.Pending, p.Error)
 	}
-	bb, _ := e.Graph.Blackboard(ctx, p.ChangeID)
-	for _, it := range bb.Change.Items {
-		if it.Type == methodology.ArtifactStepDone && it.Data["step"] == "delivery/build" {
-			ids, _ := it.Data["items"].([]any)
-			var s []string
-			for _, x := range ids {
-				s = append(s, x.(string))
-			}
-			slices.Sort(s)
-			if strings.Join(s, ",") != "api,docs,web" {
-				t.Fatalf("items %v", s)
-			}
-			return
-		}
+	// the step has run, and its run stands (ADR 0109)
+	if s, ok := historyOf(t, e, p.ChangeID).Last()["delivery/build"]; !ok || s.Outcome != journal.OutcomeSucceeded || !s.Current {
+		t.Fatalf("the history of the step: %+v", s)
 	}
-	t.Fatal("no step_done for the step")
 }
 
 // groupBy: one stream per group, whose item is {key, items}.

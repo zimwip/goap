@@ -29,7 +29,7 @@ const (
 )
 
 // ArtifactTypesSkipped are the bookkeeping artifacts the brief leaves out.
-var ArtifactTypesSkipped = []string{"step_done", "guidance"}
+var ArtifactTypesSkipped = []string{"guidance"}
 
 func short(s string, n int) string {
 	s = strings.Join(strings.Fields(s), " ")

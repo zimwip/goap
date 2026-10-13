@@ -138,13 +138,7 @@ func runForeach(ctx context.Context, ac ActionContext, expr string) (ActionResul
 	case len(failed) > 0:
 		return ActionResult{}, fmt.Errorf("step %s: stream(s) did not complete: %s", step, strings.Join(failed, ", "))
 	}
-	ids := make([]any, len(streams))
-	for i, st := range streams {
-		ids[i] = st.id
-	}
 	return ActionResult{
-		Items: []ItemInput{{Kind: string(domain.KindArtifact), Type: methodology.ArtifactStepDone,
-			Data: map[string]any{"step": step, "items": ids, "method": strings.Join(methods, ",")}}},
 		Method: strings.Join(methods, ","),
 		Output: fmt.Sprintf("step %s done for %d element(s) with %s", step, len(streams), strings.Join(methods, ", ")),
 	}, nil

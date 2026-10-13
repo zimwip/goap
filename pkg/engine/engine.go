@@ -568,11 +568,9 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	step := &p.Steps[i]
 	rec := uuid.NewString()
 	submitted := e.clock()
-	if a, ok := m.Action(waitedOn); ok && a.Step != "" && a.Implements == "" {
-		// a manual step of a process is done once a person has submitted it (ADR 0034)
-		items = append(slices.Clone(items), ItemInput{Kind: string(domain.KindArtifact), Type: methodology.ArtifactStepDone,
-			Data: map[string]any{"step": a.Step, "by": authz.From(ctx).Subject}})
-	}
+	// the submission is the run of the step: what it adds carries its record, and a step of a process is done once a
+	// person has submitted it (its step.ended record, ADR 0034, 0109)
+	step.Execution = rec
 	ids, nodes, points, err := e.addItems(ctx, p, items, p.Pending.Action, rec, true, firstNonEmpty(authz.From(ctx).Subject, p.Pending.Action))
 	if err != nil {
 		return nil, err
@@ -1148,8 +1146,13 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	return p, e.save(ctx, p, eventOf(p))
 }
 
-// finishStep re-observes the blackboard and checks the promised effects.
+// finishStep re-observes the blackboard and checks the promised effects. The run of a step of a process that ended
+// without error is recorded first (journal.KindStepEnded), so the history the observation reads has it (ADR 0109).
 func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Compiled, step *Step) error {
+	if a, ok := m.Action(step.Action); ok && a.Step != "" && step.Error == "" {
+		e.journal(ctx, p, journal.Record{Kind: journal.KindStepEnded, Step: step.Index, Action: step.Action, ActivityRef: a.Step,
+			StartedAt: step.StartedAt, EndedAt: e.clock(), Data: map[string]any{"execution": step.Execution, "children": slices.Clone(step.Children)}})
+	}
 	bb, err := e.observe(ctx, p, m)
 	if err != nil {
 		return err
@@ -1206,7 +1209,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 		bb = domain.Blackboard{Vars: p.Vars}
 	} else {
 		var err error
-		if bb, err = e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow); err != nil {
+		if bb, err = e.blackboard(ctx, p.ChangeID, p.Flow); err != nil {
 			return bb, err
 		}
 		bb.Vars = p.Vars

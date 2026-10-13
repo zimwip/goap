@@ -94,7 +94,7 @@ type StartingPointsOptions struct {
 // StartingPoints computes the steps of the methodology of the change that are possible now towards the goal of the
 // change. It reads the change and the methodology only; nothing is started.
 func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, opts StartingPointsOptions) (*StartingPoints, error) {
-	bb, err := e.Graph.Blackboard(ctx, changeID)
+	bb, err := e.blackboard(ctx, changeID, "")
 	if err != nil {
 		return nil, err
 	}

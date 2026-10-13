@@ -281,7 +281,7 @@ func (e *Engine) ExplainCondition(ctx context.Context, id, name string) (ex cond
 	if p.ChangeID == "" {
 		bb = domain.Blackboard{Vars: p.Vars}
 	} else {
-		if bb, err = e.Graph.BlackboardIn(ctx, p.ChangeID, p.Flow); err != nil {
+		if bb, err = e.blackboard(ctx, p.ChangeID, p.Flow); err != nil {
 			return ex, false, false, err
 		}
 		bb.Vars = p.Vars

@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
@@ -41,6 +42,7 @@ func Activation(bb domain.Blackboard) map[string]any {
 	pol := lazy(func() map[string]any { return criticalityPolicy(bb) })
 	dec := lazy(func() decisionView { return decisions(bb) })
 	dep := lazy(func() []any { return dependencies(bb) })
+	hist := lazy(func() map[string]any { return history(bb) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
@@ -67,6 +69,8 @@ func Activation(bb domain.Blackboard) map[string]any {
 		// dependencies are the changes the change depends on (ADR 0108), each saying whether its work has reached the
 		// branch the change merges into: the facet the graph fills
 		"dependencies": func() any { return dep() },
+		// history is what the runs on the change did, step by step (ADR 0109 §4): the facet the engine folds from the log
+		"history": func() any { return hist() },
 	}
 }
 
@@ -369,4 +373,22 @@ func changeIDs(ids []domain.ChangeID) []any {
 		out[i] = string(id)
 	}
 	return out
+}
+
+// history is the history of the change (ADR 0109 §4): {runs, steps, last}, last mapping each step path to its latest run.
+func history(bb domain.Blackboard) map[string]any {
+	h := domain.Facet[journal.History](bb, domain.FacetHistory)
+	runs, steps, last := make([]any, 0, len(h.Runs)), make([]any, 0, len(h.Steps)), map[string]any{}
+	for _, r := range h.Runs {
+		runs = append(runs, map[string]any{"process": r.Process, "parent": r.Parent, "methodology": r.Methodology, "agent": r.Agent,
+			"goal": r.Goal, "status": r.Status, "seq": r.Seq})
+	}
+	for _, s := range h.Steps {
+		m := map[string]any{"path": s.Path, "methodology": s.Methodology, "process": s.Process, "action": s.Action, "execution": s.Execution,
+			"outcome": s.Outcome, "succeeded": s.Outcome == journal.OutcomeSucceeded, "error": s.Error, "seq": s.Seq, "runs": int64(s.Runs),
+			"current": s.Current, "staleBy": s.StaleBy}
+		steps = append(steps, m)
+		last[s.Path] = m
+	}
+	return map[string]any{"runs": runs, "steps": steps, "last": last}
 }

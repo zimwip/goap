@@ -48,6 +48,9 @@ const (
 	// FacetDependencies are the changes the change depends on (ADR 0108), []Dependency, each saying whether its work has
 	// reached the branch the change merges into.
 	FacetDependencies = "dependencies"
+	// FacetHistory is the history of the change (ADR 0109 §4): what the runs on it did, step by step, folded from its
+	// log by whoever reads the blackboard to derive conditions (the engine); opaque to the graph.
+	FacetHistory = "history"
 )
 
 // Facet is the facet of the blackboard with a name, as the type the caller expects (the zero value when absent or of

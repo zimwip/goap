@@ -67,11 +67,11 @@ type Step struct {
 	// Roles assign the step, RACI style (ADR 0035 §2); sub-steps without their own inherit them.
 	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
 	// Pre are the entry conditions of the step (and of its sub-steps). A condition "step:<path>" is true once the
-	// step of that path, done once it has run, has run.
+	// step of that path, done once it has run, has run and its run still stands (ADR 0109 §5).
 	Pre map[string]bool `yaml:"pre,omitempty" json:"pre,omitempty"`
 	// Done are the exit criteria. Default: the effects of the action, the goal of the agent, the exit criteria of the
 	// sub-steps or of the nested process; for a manual step or a process of another methodology, the step is done
-	// once it has run (the "step:<path>" condition, over a step_done artifact).
+	// once it has run and its run still stands (the "step:<path>" condition, over the history of the change, ADR 0109).
 	Done  map[string]bool `yaml:"done,omitempty" json:"done,omitempty"`
 	Steps []Step          `yaml:"steps,omitempty" json:"steps,omitempty"`
 	// Action of the methodology that does the step, or Actions: alternatives the planner chooses among (the cheapest
@@ -103,10 +103,6 @@ const (
 	MethodProcess = "process"
 	MethodManual  = "manual"
 )
-
-// ArtifactStepDone is the type of the artifact recorded when a step run by an agent, a nested process or a person
-// ends: {step: <path>, process: <process id>}.
-const ArtifactStepDone = "step_done"
 
 // Method returns how the step is done.
 func (s Step) Method() string {
@@ -498,12 +494,12 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 		}
 	}
 	if done == nil {
-		// done once it has run: the builtin or the human task records a step_done artifact
+		// done once it has run, and its run still stands: the history of the change says so (ADR 0109 §5)
 		name := StepCondition(path)
 		if !w.known[name] {
 			w.known[name] = true
 			w.out.conditions = append(w.out.conditions, condition.Definition{Name: name,
-				Expr: fmt.Sprintf("artifacts.exists(a, a.type == %q && a.data.step == %q)", ArtifactStepDone, path)})
+				Expr: fmt.Sprintf("%q in history.last && history.last[%q].current", path, path)})
 		}
 		done = map[string]bool{name: true}
 	}
@@ -672,4 +668,54 @@ func (c *Compiled) StepByPath(path string) (StepInfo, bool) {
 func (c *Compiled) StepCriteria(path string) (entry, exit map[string]bool, ok bool) {
 	cr, ok := c.processes.criteria[path]
 	return cr.entry, cr.done, ok
+}
+
+// StepDependencies maps the path of each step of the processes to the paths of the steps it relies on, directly or
+// through other steps (ADR 0109 §5): a step relies on a step whose exit (the effects of its action) gives a condition
+// its entry (the pre of its action) requires, with the same value.
+func (c *Compiled) StepDependencies() map[string]map[string]bool {
+	type step struct{ pre, exit map[string]bool }
+	steps := map[string]step{}
+	for _, a := range c.actions {
+		if a.Step == "" {
+			continue
+		}
+		s := steps[a.Step]
+		if s.pre == nil {
+			s = step{pre: map[string]bool{}, exit: map[string]bool{}}
+		}
+		maps.Copy(s.pre, a.Pre)
+		maps.Copy(s.exit, a.Effects)
+		steps[a.Step] = s
+	}
+	direct := map[string][]string{}
+	for later, l := range steps {
+		for earlier, e := range steps {
+			if later == earlier {
+				continue
+			}
+			for k, v := range l.pre {
+				if w, ok := e.exit[k]; ok && w == v {
+					direct[later] = append(direct[later], earlier)
+					break
+				}
+			}
+		}
+	}
+	out := make(map[string]map[string]bool, len(direct))
+	for later := range direct {
+		seen := map[string]bool{}
+		var walk func(string)
+		walk = func(p string) {
+			for _, e := range direct[p] {
+				if !seen[e] && e != later {
+					seen[e] = true
+					walk(e)
+				}
+			}
+		}
+		walk(later)
+		out[later] = seen
+	}
+	return out
 }

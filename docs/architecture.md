@@ -304,6 +304,7 @@ Variables exposed to the expression:
 | `verifications`, `derogations` | the verification state of the effects of the action runs and the derogations of the change ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `{execution, action, impact, oracle, independent, state, producer, by, open}` and `{key, rule, target, reason, signatory, expires, status, open, expired, versions}` |
 | `change.criticality`, `criticalityPolicy` | the criticality level of the change and what the organisation requires of it: `{oracles, sampling, signatoryRole, maxDerogationHours}` (not `policy`, taken by decision points) |
 | `dependencies`, `change.dependsOn` | the changes the change depends on ([ADR 0108](adr/0108-dependencies-between-changes.md)): `{id, title, methodology, status, state, parent, satisfied, reason}`, `satisfied` when its work reached the branch the change merges into; and their ids |
+| `history` | what the runs on the change did ([ADR 0109](adr/0109-conditions-derived-scoped-history.md) §4), folded by the engine from the log of the change (`journal.Fold`, facet `domain.FacetHistory`): `runs` `{process, parent, methodology, agent, goal, status, seq}`, `steps` `{path, methodology, process, action, execution, outcome (succeeded / failed / running), succeeded, error, seq, runs, current, staleBy}` and `last` (the latest run of each step path). `current`: the success still stands, nothing it started from moved since (an edit, a rebase, a cancel, a new version of a keyed item) but by a step relying on it, and the steps it relies on stand and are older, so a stale step re-opens the steps after it (§5) |
 
 **Condition libraries** ([ADR 0064](adr/0064-condition-libraries.md)): a methodology gets no condition it did not
 declare, except those of the libraries it imports (`imports: [decisions, risks, verification, derogations, dependencies]`, `condition.Library`). `decisions`:
@@ -1420,8 +1421,9 @@ Steps are sequenced by their conditions, not by their position. A process compil
 goal of its name, and one action per step (named by its path, `software_delivery/analysis/scope`) whose preconditions
 are the step's entry — the `pre` of the steps containing it, its own, and those of what it runs (its action's `pre`,
 a nested process's prerequisites) — and whose effects are its exit criteria (`done`, default: the action's effects,
-the agent's goal, the sub-steps' criteria, the nested process's criteria, or a `step:<path>` condition over a
-`step_done` artifact once it has run, which other steps can name). `references` link a process or a step to its
+the agent's goal, the sub-steps' criteria, the nested process's criteria, or a `step:<path>` condition,
+`history.last["<path>"].current`, once it has run and while its run stands, which other steps can name; ADR 0109: the
+engine records the run of a step that ended without error, `journal.step.ended`, before it observes the change again). `references` link a process or a step to its
 reference documents (`doc:<key>`, `<mcp>:<path>`, URL). An agent or nested
 process step is the builtin `process.step`: a sub-agent on the same change, so processes nest. A step's `guidance`,
 `checklist`, `deliverables` and `references` reach whoever carries it out: its human tasks carry the step

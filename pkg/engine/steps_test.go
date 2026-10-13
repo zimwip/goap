@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -173,17 +175,23 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if got := strings.Join(steps, ","); got != "delivery/prepare/note,delivery/verify,delivery/approve" {
 		t.Fatalf("steps %s", got)
 	}
-	bb, _ := e.Graph.Blackboard(ctx, p.ChangeID)
-	done := map[string]bool{}
-	for _, it := range bb.Change.Items {
-		if it.Type == methodology.ArtifactStepDone {
-			done[it.Data["step"].(string)] = true
+	// every step ran to its end, its run standing (ADR 0109): the agent step, and the manual step once submitted
+	last := historyOf(t, e, p.ChangeID).Last()
+	for _, path := range []string{"delivery/prepare/note", "sign_off/sign"} {
+		if s := last[path]; s.Outcome != journal.OutcomeSucceeded || !s.Current {
+			t.Fatalf("the history of %s: %+v", path, s)
 		}
 	}
-	// the agent step is done by its goal (checked), the nested process by its criteria (its manual step submitted)
-	if done["delivery/prepare/note"] || !done["sign_off/sign"] {
-		t.Fatalf("only a manual step records step_done when submitted: %v", done)
+}
+
+// historyOf is the history of a change (ADR 0109), as the engine folds it.
+func historyOf(t *testing.T, e *Engine, id domain.ChangeID) journal.History {
+	t.Helper()
+	bb, err := e.blackboard(context.Background(), id, "")
+	if err != nil {
+		t.Fatal(err)
 	}
+	return domain.Facet[journal.History](bb, domain.FacetHistory)
 }
 
 func mustProgress(t *testing.T, e *Engine, id string) *ProcessProgress {
