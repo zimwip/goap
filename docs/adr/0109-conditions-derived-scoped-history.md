@@ -237,9 +237,15 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
   born before the run ended, made after it, by anything but the run itself (its execution, its sub-agents) or a step
   relying on it. `relies` comes from `methodology.Compiled.StepDependencies()` (transitive: a step relies on a step
   whose exit gives a condition of its entry).
-- `Engine.withHistory` / `Engine.blackboard` put it on the blackboard (`domain.FacetHistory`) where the engine derives
-  the world (`observe`, the explanation of a condition, `StartingPoints`); CEL `history` (`pkg/condition`). The graph's
-  own evaluations (lifecycle guards, guardians) do not read it yet.
+- The graph gives it with the blackboard: `Graph.LogFacets` (`graph.LogFacet{Types, Fold}`: the entries of those types
+  are read in the transaction of `BlackboardIn` and of the merge's blackboard, the fold runs after it, since it may ask
+  the registry), plugged by `graphsvc.LogFacets(deps)` as `domain.FacetHistory` (`journal.FoldWith`): `goap-dev` with
+  the step dependencies of the registry's compiled methodologies, `cmd/graph` with none (no registry: a success stands
+  while nothing it started from moved, rule 2 is not applied there). So the lifecycle guards, the gates, the guardians
+  and the merge read it (`history` in the guard environment, `guard.Facts.History`), and the world the registry
+  evaluates for them holds the `step:<path>` conditions. The engine folds it itself when the blackboard comes without it
+  (a graph reached over RPC carries no facet): `Engine.withHistory` / `Engine.blackboard` (`observe`, the explanation
+  of a condition, `StartingPoints`); CEL `history` (`pkg/condition`).
 - The generated `step:<path>` is `"<path>" in history.last && history.last["<path>"].current`; the `step_done` artifact
   (`methodology.ArtifactStepDone`) is gone.
 

@@ -19,8 +19,12 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 	var bb domain.Blackboard
 	var landed []domain.NodeView
 	var deps []domain.Dependency
+	var logs map[string][]domain.LogEntry
 	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
 		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		if logs, err = g.logEntries(ctx, tx, id); err != nil {
 			return err
 		}
 		if deps, err = dependenciesOf(ctx, tx, c); err != nil {
@@ -31,6 +35,10 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 		return err
 	})
 	if err != nil {
+		return err
+	}
+	// the facets folded from the log (the history of the change, ADR 0109), outside the transaction
+	if bb, err = g.withLogFacets(ctx, bb, logs); err != nil {
 		return err
 	}
 	// first the changes it depends on (ADR 0108): their work has reached the branch it merges into

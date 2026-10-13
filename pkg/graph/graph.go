@@ -78,6 +78,10 @@ type Graph struct {
 	// of a change without the graph knowing it. A provider is called inside the transaction that reads the blackboard,
 	// with the change as stored: it reads nothing else.
 	Facets map[string]BlackboardFacet
+	// LogFacets are the facets of a blackboard folded from the log of the change (the history of ADR 0109, folded by
+	// pkg/journal), by name: the entries of their types are read with the change, the fold runs outside the
+	// transaction (it may ask another service, as the registry for the methodologies).
+	LogFacets map[string]LogFacet
 
 	// DecisionPolicy is the rule of the decision points of the changes (ADR 0067): when a ruling settles a point, when
 	// only a person may rule it. Unset: domain.DefaultDecisionPolicy, a ruling of anyone settles the point. The graph
@@ -744,9 +748,13 @@ func (g *Graph) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blac
 // BlackboardIn is the blackboard as seen by the process running on a flow
 // branch ("" = the main flow, see domain.Change.View).
 func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (bb domain.Blackboard, err error) {
+	var logs map[string][]domain.LogEntry
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
+			return err
+		}
+		if logs, err = g.logEntries(ctx, tx, id); err != nil {
 			return err
 		}
 		flow := c.ResolveFlow(flow)                          // no flow: the active option (ADR 0032 §6)
@@ -797,7 +805,11 @@ func (g *Graph) BlackboardIn(ctx context.Context, id domain.ChangeID, flow strin
 		}
 		return nil
 	})
-	return
+	if err != nil {
+		return
+	}
+	// the facets folded from the log (the history, ADR 0109), outside the transaction
+	return g.withLogFacets(ctx, bb, logs)
 }
 
 func neighbor(ctx context.Context, tx Tx, reader *draftReader, into map[domain.NodeRef]domain.Node, r domain.NodeRef) error {

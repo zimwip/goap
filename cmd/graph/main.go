@@ -121,6 +121,8 @@ func main() {
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
+	// the history of a change (ADR 0109): no registry here, so no step relies on another for its standing
+	g.LogFacets = graphsvc.LogFacets(nil)
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, llmcfg.ProtectedAliasValidator{}}
 	// SubChangeValidator and Lifecycles, the guardian of the changes (ADR 0058, 0102), need the registry service itself
 	// (its methodology store): only goap-dev, which holds it in process, wires them; the registry client has no RPC for

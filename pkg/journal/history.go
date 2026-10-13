@@ -1,6 +1,7 @@
 package journal
 
 import (
+	"context"
 	"encoding/json"
 	"slices"
 
@@ -303,4 +304,29 @@ func stringList(v any) []string {
 		return s
 	}
 	return out
+}
+
+// StepDependencies gives the steps of a methodology each step relies on (methodology.Compiled.StepDependencies), nil
+// when the methodology is not known.
+type StepDependencies func(ctx context.Context, methodology string) map[string]map[string]bool
+
+// FoldWith is the fold of the history of a change whose steps rely on one another as deps says (nil: no step relies on
+// another), each methodology asked once per fold: what the graph plugs as the history facet of the blackboard
+// (graph.LogFacet with HistoryTypes) and the engine runs over the log it reads.
+func FoldWith(deps StepDependencies) func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error) {
+	return func(ctx context.Context, _ domain.Change, entries []domain.LogEntry) (any, error) {
+		var relies Relies
+		if deps != nil {
+			known := map[string]map[string]map[string]bool{}
+			relies = func(methodology, later, earlier string) bool {
+				d, ok := known[methodology]
+				if !ok {
+					d = deps(ctx, methodology)
+					known[methodology] = d
+				}
+				return d[later][earlier]
+			}
+		}
+		return Fold(entries, relies)
+	}
 }

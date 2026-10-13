@@ -38,6 +38,15 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	g.SubChangeValidator = reg.SubChangeValidator
 	// a change follows the lifecycle its methodology names, its gates read the conditions of the methodology (ADR 0058)
 	g.Lifecycles = reg
+	// the history of a change, read by the conditions and guards the graph evaluates; its steps rely on one another as
+	// their methodology says (ADR 0109)
+	g.LogFacets = graphsvc.LogFacets(func(ctx context.Context, name string) map[string]map[string]bool {
+		m, err := reg.Methodology(ctx, name)
+		if err != nil {
+			return nil
+		}
+		return m.StepDependencies()
+	})
 	// who may perform each operation on a change: the roles of its methodology (ADR 0103)
 	g.OperationAuthorizer = graphsvc.OperationAuthorizer(gp.authorizer, reg.OperationRoles)
 	// the one event stream of the web (ADR 0053): every publication of the platform also feeds it

@@ -413,6 +413,41 @@ func (g *Graph) ChangeGraph(ctx context.Context, id domain.ChangeID, flow string
 // replayed at now.
 type BlackboardFacet func(c domain.Change, now time.Time) any
 
+// LogFacet is a facet of the blackboard of a change folded from the entries of its log of the given types (a stream
+// "journal." or an exact type); the graph reads them, the use case that plugs it knows what they hold.
+type LogFacet struct {
+	Types []string
+	Fold  func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error)
+}
+
+// logEntries reads the entries of the log of a change each log facet folds.
+func (g *Graph) logEntries(ctx context.Context, tx Tx, id domain.ChangeID) (map[string][]domain.LogEntry, error) {
+	if len(g.LogFacets) == 0 {
+		return nil, nil
+	}
+	out := make(map[string][]domain.LogEntry, len(g.LogFacets))
+	for name, f := range g.LogFacets {
+		es, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: f.Types})
+		if err != nil {
+			return nil, err
+		}
+		out[name] = es
+	}
+	return out, nil
+}
+
+// withLogFacets folds the log facets of the blackboard from the entries read with it (outside any transaction).
+func (g *Graph) withLogFacets(ctx context.Context, bb domain.Blackboard, entries map[string][]domain.LogEntry) (domain.Blackboard, error) {
+	for name, es := range entries {
+		v, err := g.LogFacets[name].Fold(ctx, bb.Change, es)
+		if err != nil {
+			return bb, err
+		}
+		bb = bb.WithFacet(name, v)
+	}
+	return bb, nil
+}
+
 // builtinFacets are the facets the graph itself gives, the options and the decision points being its own mechanisms
 // (ADR 0009, 0032): what a view of a flow does not carry.
 var builtinFacets = map[string]BlackboardFacet{
