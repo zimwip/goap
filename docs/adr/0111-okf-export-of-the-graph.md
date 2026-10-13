@@ -31,16 +31,19 @@ matter (format `goap.okf/v1`):
 The front matter carries everything the JSON snapshot does for a node but the body attributes, which the body holds, so
 the tree is a faithful image of the baseline. Links to another namespace are left out, as in the snapshot.
 
-### 2. Choosing the state: a baseline
+### 2. Choosing the state: a baseline; a streamed zip
 
-The tree is the state of a baseline, chosen like the JSON export: `ExportGraph` takes `format` (`json`, the default,
-or `okf`) next to `namespace`, `branch` and `baseline_id`; with `okf` it answers a zip archive (`archive`, media type
-`application/zip`, file `graph-<namespace>-<time>.okf.zip`) instead of `document`. An unknown format is
-`InvalidArgument`.
+The tree is the state of a baseline, chosen like the JSON export (`namespace`, `branch`, `baseline_id`). It is served
+by a server-streaming RPC, `ExportGraphOkf`: `okf.Write` writes the zip into the response while it renders the files,
+one at a time (the archive is never held whole on the server): a first message names the archive (`filename`
+`graph-<namespace>-<time>.okf.zip`, `media_type` `application/zip`, `nodes`), the next ones carry its bytes in order
+(`chunk`, 64 KiB). A streaming call passes none of the unary interceptors of the graph service, so the handler
+identifies the caller itself (an anonymous one is `Unauthenticated`).
 
-Web: the Baseline workspace exports the baseline it shows (the head of the branch, or the row picked in the history)
-with *OKF* and *JSON*; the Baseline explorer's branch menu has *Export head (OKF Markdown)* next to the JSON one
-(`web/src/lib/download.ts`, `downloadGraphExport`).
+Web: `web/src/lib/okfExport.ts` (`downloadGraphOkf`, over `stream.ts`'s `serverStream`) gathers the chunks as they
+arrive and saves them as one file. The Baseline workspace exports the baseline it shows (the head of the branch, or the
+row picked in the history) with *OKF* and *JSON*; the Baseline explorer's branch menu has *Export head (OKF Markdown)*
+next to the JSON one.
 
 ## Consequences
 

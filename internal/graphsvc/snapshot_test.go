@@ -1,13 +1,18 @@
 package graphsvc_test
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
+	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/authz"
@@ -41,13 +46,6 @@ func TestImportGraphCreatesAChange(t *testing.T) {
 	if err != nil || exp.Msg.Nodes != 0 || exp.Msg.MediaType != "application/json" {
 		t.Fatalf("export of an empty namespace: %+v %v", exp, err)
 	}
-	okfExp, err := h.ExportGraph(ctx, connect.NewRequest(&graphv1.ExportGraphRequest{Namespace: "alm", Format: "okf"}))
-	if err != nil || okfExp.Msg.MediaType != "application/zip" || len(okfExp.Msg.Archive) == 0 || okfExp.Msg.Document != "" {
-		t.Fatalf("OKF export of an empty namespace, its index only (ADR 0111): %+v %v", okfExp, err)
-	}
-	if _, err := h.ExportGraph(ctx, connect.NewRequest(&graphv1.ExportGraphRequest{Namespace: "alm", Format: "csv"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Fatalf("an unknown export format: %v", err)
-	}
 	s := graph.Snapshot{Format: graph.SnapshotFormat, Namespace: "alm", Nodes: []graph.SnapshotNode{
 		{Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}},
 	}}
@@ -74,5 +72,51 @@ func TestImportGraphCreatesAChange(t *testing.T) {
 	}
 	if _, err := h.ImportGraph(ctx, connect.NewRequest(&graphv1.ImportGraphRequest{Document: "{"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
 		t.Fatalf("a malformed snapshot: %v", err)
+	}
+}
+
+// The OKF export streams a zip archive (ADR 0111): a first message naming it, then its bytes; an anonymous caller is
+// refused, a streaming call passing none of the unary interceptors.
+func TestExportGraphOkfStreamsAZip(t *testing.T) {
+	g := graph.New(graph.NewMemory())
+	_, h := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	srv := httptest.NewServer(h)
+	defer srv.Close()
+	client := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)
+	ctx := context.Background()
+
+	read := func(subject string) (*graphv1.ExportGraphOkfResponse, []byte, error) {
+		req := connect.NewRequest(&graphv1.ExportGraphOkfRequest{Namespace: "alm"})
+		if subject != "" {
+			req.Header().Set(identity.HeaderSubject, subject)
+		}
+		st, err := client.ExportGraphOkf(ctx, req)
+		if err != nil {
+			return nil, nil, err
+		}
+		var head *graphv1.ExportGraphOkfResponse
+		var data []byte
+		for st.Receive() {
+			if head == nil {
+				head = st.Msg()
+				continue
+			}
+			data = append(data, st.Msg().Chunk...)
+		}
+		return head, data, st.Err()
+	}
+	if _, _, err := read(""); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		t.Fatalf("an anonymous caller: %v", err)
+	}
+	head, data, err := read("u")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if head == nil || head.MediaType != "application/zip" || !strings.HasSuffix(head.Filename, ".okf.zip") {
+		t.Fatalf("head: %+v", head)
+	}
+	z, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil || len(z.File) != 1 || z.File[0].Name != "alm/index.md" {
+		t.Fatalf("an empty namespace is its index: %v %+v", err, z)
 	}
 }

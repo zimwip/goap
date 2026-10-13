@@ -37,12 +37,6 @@ type Options struct {
 	Body func(typ string) []BodyAttribute
 }
 
-// File is a file of the tree, its path relative to the root of the archive.
-type File struct {
-	Path    string
-	Content []byte
-}
-
 // FrontMatter is the YAML header of the file of a node.
 type FrontMatter struct {
 	Key       string `yaml:"key"`
@@ -86,9 +80,10 @@ type entry struct {
 	title string
 }
 
-// Render renders a snapshot as an OKF tree under a folder named after its namespace: `<namespace>/index.md` and one
-// `<namespace>/<Type>/<key>.md` per node (the key made a safe file name, unique in its folder).
-func Render(s graph.Snapshot, o Options) ([]File, error) {
+// Write renders a snapshot as an OKF tree into a zip archive written to w as it goes, one file at a time (nothing but
+// the snapshot is held): `<namespace>/index.md`, then one `<namespace>/<Type>/<key>.md` per node (the key made a safe
+// file name, unique in its folder). at stamps the files.
+func Write(w io.Writer, s graph.Snapshot, o Options, at time.Time) error {
 	root := safeName(s.Namespace)
 	entries := make([]*entry, 0, len(s.Nodes))
 	byKey := map[string]*entry{}
@@ -111,19 +106,32 @@ func Render(s graph.Snapshot, o Options) ([]File, error) {
 			incoming[l.To] = append(incoming[l.To], incomingLink{typ: l.Type, from: e})
 		}
 	}
-	files := make([]File, 0, len(entries)+1)
-	for _, e := range entries {
-		content, err := renderNode(s, e, byKey, incoming[e.node.Key], o)
+	z := zip.NewWriter(w)
+	put := func(name string, content []byte) error {
+		f, err := z.CreateHeader(&zip.FileHeader{Name: root + "/" + name, Method: zip.Deflate, Modified: at})
 		if err != nil {
-			return nil, fmt.Errorf("node %s: %w", e.node.Key, err)
+			return err
 		}
-		files = append(files, File{Path: root + "/" + e.path, Content: content})
+		_, err = f.Write(content)
+		return err
 	}
 	index, err := renderIndex(s, entries)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return append([]File{{Path: root + "/" + IndexFile, Content: index}}, files...), nil
+	if err := put(IndexFile, index); err != nil {
+		return err
+	}
+	for _, e := range entries {
+		content, err := renderNode(s, e, byKey, incoming[e.node.Key], o)
+		if err != nil {
+			return fmt.Errorf("node %s: %w", e.node.Key, err)
+		}
+		if err := put(e.path, content); err != nil {
+			return err
+		}
+	}
+	return z.Close()
 }
 
 type incomingLink struct {
@@ -246,22 +254,6 @@ func writeFrontMatter(b *bytes.Buffer, v any) error {
 	}
 	b.WriteString("---\n\n")
 	return nil
-}
-
-// Zip writes the files as a zip archive.
-func Zip(w io.Writer, files []File, at time.Time) error {
-	z := zip.NewWriter(w)
-	for _, f := range files {
-		h := &zip.FileHeader{Name: f.Path, Method: zip.Deflate, Modified: at}
-		fw, err := z.CreateHeader(h)
-		if err != nil {
-			return err
-		}
-		if _, err := fw.Write(f.Content); err != nil {
-			return err
-		}
-	}
-	return z.Close()
 }
 
 func bodyAttributes(typ string, o Options) []BodyAttribute {

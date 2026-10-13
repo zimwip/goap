@@ -2,7 +2,7 @@
 package graphsvc
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -233,13 +233,6 @@ func (h *Handler) ExportGraph(ctx context.Context, r *connect.Request[graphv1.Ex
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
-	switch r.Msg.Format {
-	case "", "json":
-	case "okf":
-		return h.exportOKF(s)
-	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown export format %q (json, okf)", r.Msg.Format))
-	}
 	doc, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -248,9 +241,21 @@ func (h *Handler) ExportGraph(ctx context.Context, r *connect.Request[graphv1.Ex
 	return connect.NewResponse(&graphv1.ExportGraphResponse{Document: string(doc), Filename: name, MediaType: "application/json", Nodes: int32(len(s.Nodes))}), nil
 }
 
-// exportOKF renders a snapshot as an OKF tree, one Markdown file per node, in a zip archive (ADR 0111); the names and
-// long texts of the nodes come from the type catalogue when the graph has one.
-func (h *Handler) exportOKF(s graph.Snapshot) (*connect.Response[graphv1.ExportGraphResponse], error) {
+// okfChunk is the size of the chunks of an OKF archive sent on the stream.
+const okfChunk = 64 << 10
+
+// ExportGraphOkf streams the state of a namespace at a baseline as an OKF tree, one Markdown file per node, in a zip
+// archive written while it is rendered (ADR 0111): a first message with the name of the archive, then its bytes in
+// chunks. A streaming call passes none of the unary interceptors: the caller is identified here.
+func (h *Handler) ExportGraphOkf(ctx context.Context, r *connect.Request[graphv1.ExportGraphOkfRequest], stream *connect.ServerStream[graphv1.ExportGraphOkfResponse]) error {
+	ctx = h.Identity.Context(ctx, r.Header())
+	if authz.From(ctx).Anonymous() {
+		return connect.NewError(connect.CodeUnauthenticated, errors.New("the caller is not identified"))
+	}
+	s, err := h.Graph.ExportSnapshot(ctx, r.Msg.Namespace, r.Msg.Branch, domain.BaselineID(r.Msg.BaselineId))
+	if err != nil {
+		return rpcerr.ToConnect(err)
+	}
 	var o okf.Options
 	if h.Graph.Types != nil {
 		if c, ok := h.Graph.Types().(interface {
@@ -259,16 +264,27 @@ func (h *Handler) exportOKF(s graph.Snapshot) (*connect.Response[graphv1.ExportG
 			o = okf.FromTypes(c.Type)
 		}
 	}
-	files, err := okf.Render(s, o)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-	var buf bytes.Buffer
-	if err := okf.Zip(&buf, files, s.ExportedAt); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
 	name := fmt.Sprintf("graph-%s-%s.okf.zip", s.Namespace, s.ExportedAt.Format("20060102-150405"))
-	return connect.NewResponse(&graphv1.ExportGraphResponse{Archive: buf.Bytes(), Filename: name, MediaType: "application/zip", Nodes: int32(len(s.Nodes))}), nil
+	if err := stream.Send(&graphv1.ExportGraphOkfResponse{Filename: name, MediaType: "application/zip", Nodes: int32(len(s.Nodes))}); err != nil {
+		return err
+	}
+	w := bufio.NewWriterSize(chunkSender(func(p []byte) error {
+		return stream.Send(&graphv1.ExportGraphOkfResponse{Chunk: p})
+	}), okfChunk)
+	if err := okf.Write(w, s, o, s.ExportedAt); err != nil {
+		return connect.NewError(connect.CodeInternal, err)
+	}
+	return w.Flush()
+}
+
+// chunkSender is an io.Writer sending every write as one message (a bufio.Writer in front sizes the chunks).
+type chunkSender func([]byte) error
+
+func (f chunkSender) Write(p []byte) (int, error) {
+	if err := f(slices.Clone(p)); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // ImportGraph imports a JSON snapshot as one new change of the caller (ADR 0104): every node type it writes is

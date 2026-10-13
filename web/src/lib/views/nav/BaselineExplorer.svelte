@@ -6,7 +6,7 @@
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { loadRaw, save } from '../../shell/storage';
-  import { graph, errorMessage, formatDate, type Baseline, type Branch, type GraphExportFormat } from '../../api';
+  import { graph, errorMessage, formatDate, type Baseline, type Branch } from '../../api';
   import { changeOfBranch, isChangeBranch, shownBranches } from '../../branchFilter';
   import { openTab } from '../../shell/tabs.svelte';
   import { loadTypes as loadCatalog, typeCatalog } from '../../stores/types.svelte';
@@ -17,7 +17,8 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import Icon from '../../shell/Icon.svelte';
-  import { downloadGraphExport } from '../../download';
+  import { downloadText } from '../../download';
+  import { downloadGraphOkf } from '../../okfExport';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: not offered here by default.
@@ -138,15 +139,20 @@
     });
   }
 
-  /** Downloads the head of a branch of the namespace without history: a JSON snapshot (ADR 0104) or an OKF archive, one
-   *  Markdown file per node (ADR 0111). */
-  async function exportSnapshot(branch: string, format: GraphExportFormat = 'json') {
+  /** Downloads the head of a branch of the namespace without history: a JSON snapshot (ADR 0104) or an OKF zip, one
+   *  Markdown file per node, streamed (ADR 0111). */
+  async function exportSnapshot(branch: string, format: 'json' | 'okf' = 'json') {
     const ns = baselineTool.namespace;
     if (!ns) return;
     try {
-      const res = await graph.exportGraph(ns, branch, undefined, format);
-      downloadGraphExport(res, `graph-${ns}`);
-      notify(`Exported ${res.nodes ?? 0} node(s) of ${ns} (${branch}).`, 'ok');
+      let nodes = 0;
+      if (format === 'okf') nodes = await downloadGraphOkf(ns, { branch });
+      else {
+        const res = await graph.exportGraph(ns, branch);
+        downloadText(res.document ?? '', res.filename || `graph-${ns}.json`, res.mediaType || 'application/json');
+        nodes = res.nodes ?? 0;
+      }
+      notify(`Exported ${nodes} node(s) of ${ns} (${branch}).`, 'ok');
     } catch (e) {
       error = errorMessage(e);
     }

@@ -33,9 +33,11 @@ service GraphService {
   rpc ListChangeLog(ListChangeLogRequest) returns (ListChangeLogResponse);
   // The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
   rpc ExportChangeProvenance(ExportChangeProvenanceRequest) returns (ExportChangeProvenanceResponse);
-  // The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104), or as an OKF tree in a zip
-  // archive: one Markdown file per node (ADR 0111).
+  // The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
   rpc ExportGraph(ExportGraphRequest) returns (ExportGraphResponse);
+  // The same state as an OKF tree, one Markdown file per node, streamed as a zip archive written while it is rendered
+  // (ADR 0111): the first message names the file, the next ones carry the bytes of the archive in order.
+  rpc ExportGraphOkf(ExportGraphOkfRequest) returns (stream ExportGraphOkfResponse);
   // Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
   rpc ImportGraph(ImportGraphRequest) returns (ImportGraphResponse);
 
@@ -612,19 +614,30 @@ message ExportGraphRequest {
   // the branch whose head is exported (default main), unless a baseline is named
   string branch = 2;
   string baseline_id = 3;
-  // "json" (default): the snapshot as one JSON document; "okf": a zip archive of one Markdown file per node, YAML
-  // front matter and Markdown body (ADR 0111)
-  string format = 4;
 }
 
 message ExportGraphResponse {
-  // the snapshot (format goap.graph.snapshot/v1), for the json format
+  // the snapshot (format goap.graph.snapshot/v1)
   string document = 1;
   string filename = 2;
   string media_type = 3;
   int32 nodes = 4;
-  // the zip archive, for the okf format
-  bytes archive = 5;
+}
+
+message ExportGraphOkfRequest {
+  string namespace = 1;
+  // the branch whose head is exported (default main), unless a baseline is named
+  string branch = 2;
+  string baseline_id = 3;
+}
+
+message ExportGraphOkfResponse {
+  // first message: the name and media type of the archive and the number of nodes it holds
+  string filename = 1;
+  string media_type = 2;
+  int32 nodes = 3;
+  // next messages: the bytes of the zip archive, in order
+  bytes chunk = 4;
 }
 
 message ImportGraphRequest {

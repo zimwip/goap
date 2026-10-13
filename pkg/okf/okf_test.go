@@ -3,6 +3,7 @@ package okf_test
 import (
 	"archive/zip"
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ import (
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
-// A snapshot renders as one Markdown file per node: the identity, properties and links in the YAML front matter, the
+// A snapshot is written as a zip of one Markdown file per node: the identity, properties and links in the YAML front matter, the
 // name as heading, the text area attributes as sections, links and back links as relative Markdown links.
 func TestRender(t *testing.T) {
 	ds, err := def.LoadDomains("../../domains")
@@ -33,13 +34,25 @@ func TestRender(t *testing.T) {
 			{Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Same file name"}},
 			{Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Card payment"}},
 		}}
-	files, err := okf.Render(s, okf.FromTypes(cat.Type))
+	var buf bytes.Buffer
+	if err := okf.Write(&buf, s, okf.FromTypes(cat.Type), s.ExportedAt); err != nil {
+		t.Fatal(err)
+	}
+	z, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
 		t.Fatal(err)
 	}
 	got := map[string]string{}
-	for _, f := range files {
-		got[f.Path] = string(f.Content)
+	for _, f := range z.File {
+		r, err := f.Open()
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(r)
+		got[f.Name] = string(b)
+	}
+	if z.File[0].Name != "alm/index.md" {
+		t.Fatalf("the index comes first: %s", z.File[0].Name)
 	}
 	need, ok := got["alm/Need/NEED-1.md"]
 	if !ok || got["alm/Need/NEED-1-2.md"] == "" || got["alm/Requirement/REQ-1.md"] == "" || got["alm/index.md"] == "" {
@@ -70,14 +83,6 @@ func TestRender(t *testing.T) {
 		t.Fatalf("index:\n%s", idx)
 	}
 
-	var buf bytes.Buffer
-	if err := okf.Zip(&buf, files, s.ExportedAt); err != nil {
-		t.Fatal(err)
-	}
-	z, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
-	if err != nil || len(z.File) != len(files) {
-		t.Fatalf("zip: %v %d", err, len(z.File))
-	}
 }
 
 func keys(m map[string]string) []string {

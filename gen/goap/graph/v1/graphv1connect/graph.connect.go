@@ -77,6 +77,9 @@ const (
 	// GraphServiceExportGraphProcedure is the fully-qualified name of the GraphService's ExportGraph
 	// RPC.
 	GraphServiceExportGraphProcedure = "/goap.graph.v1.GraphService/ExportGraph"
+	// GraphServiceExportGraphOkfProcedure is the fully-qualified name of the GraphService's
+	// ExportGraphOkf RPC.
+	GraphServiceExportGraphOkfProcedure = "/goap.graph.v1.GraphService/ExportGraphOkf"
 	// GraphServiceImportGraphProcedure is the fully-qualified name of the GraphService's ImportGraph
 	// RPC.
 	GraphServiceImportGraphProcedure = "/goap.graph.v1.GraphService/ImportGraph"
@@ -333,9 +336,11 @@ type GraphServiceClient interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
-	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104), or as an OKF tree in a zip
-	// archive: one Markdown file per node (ADR 0111).
+	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
+	// The same state as an OKF tree, one Markdown file per node, streamed as a zip archive written while it is rendered
+	// (ADR 0111): the first message names the file, the next ones carry the bytes of the archive in order.
+	ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest]) (*connect.ServerStreamForClient[v1.ExportGraphOkfResponse], error)
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
 	// Change axis
@@ -586,6 +591,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceExportGraphProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ExportGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		exportGraphOkf: connect.NewClient[v1.ExportGraphOkfRequest, v1.ExportGraphOkfResponse](
+			httpClient,
+			baseURL+GraphServiceExportGraphOkfProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ExportGraphOkf")),
 			connect.WithClientOptions(opts...),
 		),
 		importGraph: connect.NewClient[v1.ImportGraphRequest, v1.ImportGraphResponse](
@@ -1089,6 +1100,7 @@ type graphServiceClient struct {
 	listChangeLog          *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
 	exportChangeProvenance *connect.Client[v1.ExportChangeProvenanceRequest, v1.ExportChangeProvenanceResponse]
 	exportGraph            *connect.Client[v1.ExportGraphRequest, v1.ExportGraphResponse]
+	exportGraphOkf         *connect.Client[v1.ExportGraphOkfRequest, v1.ExportGraphOkfResponse]
 	importGraph            *connect.Client[v1.ImportGraphRequest, v1.ImportGraphResponse]
 	createChange           *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
 	getChange              *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
@@ -1249,6 +1261,11 @@ func (c *graphServiceClient) ExportChangeProvenance(ctx context.Context, req *co
 // ExportGraph calls goap.graph.v1.GraphService.ExportGraph.
 func (c *graphServiceClient) ExportGraph(ctx context.Context, req *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error) {
 	return c.exportGraph.CallUnary(ctx, req)
+}
+
+// ExportGraphOkf calls goap.graph.v1.GraphService.ExportGraphOkf.
+func (c *graphServiceClient) ExportGraphOkf(ctx context.Context, req *connect.Request[v1.ExportGraphOkfRequest]) (*connect.ServerStreamForClient[v1.ExportGraphOkfResponse], error) {
+	return c.exportGraphOkf.CallServerStream(ctx, req)
 }
 
 // ImportGraph calls goap.graph.v1.GraphService.ImportGraph.
@@ -1677,9 +1694,11 @@ type GraphServiceHandler interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
-	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104), or as an OKF tree in a zip
-	// archive: one Markdown file per node (ADR 0111).
+	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
+	// The same state as an OKF tree, one Markdown file per node, streamed as a zip archive written while it is rendered
+	// (ADR 0111): the first message names the file, the next ones carry the bytes of the archive in order.
+	ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest], *connect.ServerStream[v1.ExportGraphOkfResponse]) error
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
 	// Change axis
@@ -1926,6 +1945,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceExportGraphProcedure,
 		svc.ExportGraph,
 		connect.WithSchema(graphServiceMethods.ByName("ExportGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceExportGraphOkfHandler := connect.NewServerStreamHandler(
+		GraphServiceExportGraphOkfProcedure,
+		svc.ExportGraphOkf,
+		connect.WithSchema(graphServiceMethods.ByName("ExportGraphOkf")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceImportGraphHandler := connect.NewUnaryHandler(
@@ -2442,6 +2467,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceExportChangeProvenanceHandler.ServeHTTP(w, r)
 		case GraphServiceExportGraphProcedure:
 			graphServiceExportGraphHandler.ServeHTTP(w, r)
+		case GraphServiceExportGraphOkfProcedure:
+			graphServiceExportGraphOkfHandler.ServeHTTP(w, r)
 		case GraphServiceImportGraphProcedure:
 			graphServiceImportGraphHandler.ServeHTTP(w, r)
 		case GraphServiceCreateChangeProcedure:
@@ -2673,6 +2700,10 @@ func (UnimplementedGraphServiceHandler) ExportChangeProvenance(context.Context, 
 
 func (UnimplementedGraphServiceHandler) ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ExportGraph is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest], *connect.ServerStream[v1.ExportGraphOkfResponse]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ExportGraphOkf is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error) {
