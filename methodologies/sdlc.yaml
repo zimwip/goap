@@ -149,7 +149,7 @@ actions:
        "findings":[{"text":"<what is missing or ambiguous>","severity":"major|minor"}],
        "suggestion":"<a rewritten description, same language as the original, only if it can be improved>",
        "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>",
-       "rated":"<the title, a blank line, then the description, exactly as given above>"}}
+       "rated":"<the fp of the SUBJECT description line of the brief>"}}
       A score of 3 or more means the change can be worked on as described.
 
   # ======================= impact analysis

@@ -113,7 +113,65 @@ the LLM action (`pkg/brief`) carries the latest rating and the thread, so it ref
 discussion is part of the change (journaled, PROV), not of the conversation service (ADR 0085), and the rater's run is
 an ordinary run (Progress, journal, prompts), reachable from the bubble.
 
-### 6. As implemented
+### 6. Any subject can be rated: impacts and items, by fingerprint
+
+A rating is about a **subject** (`data.key` of the assessment, `data.about` of a comment), whose text `assess.Text`
+reads from the blackboard of the change as it is now:
+
+| Subject | Text |
+|---|---|
+| `description` | the title, a blank line, the intent |
+| `title`, `intent` | that field |
+| `impact:<node key>` | the node as the change has it (key, type, intent, state, properties, outgoing links), canonical JSON |
+| `item:<record key or id>` | the latest version of the record (kind, type, data), canonical JSON |
+
+`rated` holds the text rated **or its fingerprint** (`assess.Fingerprint`: FNV-1a 32 bits, 8 hex digits; the web's
+`fingerprint` is its twin). The brief prints the fingerprint of each subject (`SUBJECT description fp=…`, `fp=` on the
+impacts and artifacts, the current one on each `ASSESSMENT`), so a rater copies 8 characters, not a node. `current`
+holds while the subject reads as rated; a subject the change no longer has is not current. `assess.Assessments` /
+`Of` take the blackboard (the nodes of the impacts are hydrated there).
+
+### 7. Events of the methodology
+
+A methodology declares its own events next to the standard ones (`events.All`):
+
+```yaml
+events:
+  - {name: spec.ready, description: The spec is written}
+actions:
+  - {name: write_spec, kind: llm, effects: {spec_written: true}, emits: [spec.ready]}
+  - {name: notify, kind: human, effects: {notified: true}, on: [{event: spec.ready}]}
+```
+
+- **Declaring**: a name of lower case words separated by dots (`methodology.EventNameRE`), none of the standard
+  families (`change.`, `process.`, `step.`, `methodology.`), declared once. An `on` (of the methodology or of an
+  activity) and an event trigger may follow a standard event or a declared one, nothing else: the compiler refuses an
+  unknown event (`checkEvent`), whatever its origin; following another methodology's event means declaring it too.
+- **Raising**: an event is raised by a **signal item** of its name (`domain.KindSignal`, `Type` = the name) on the
+  change: an action lists it in `emits` and the engine adds the signal once the action reached its effects
+  (`Engine.emitEvents`, `data {action, step}`, in the step's items); a person, a script or an LLM may add one too
+  (`goap-change/signal`). `TriggerManager.Handle` turns the signals of a `change.item_added` into one event per name
+  (`engine.DeclaredEvents`, the signals in `event.items`; a standard name is never raised this way), then runs the
+  reactions, the companions, the relays and the triggers on it like any event, so it crosses NATS as the
+  `change.item_added` it comes from. The items of a reaction, and the events they raise, do not wake it again.
+- **Checking the composition**: `CompositionIssues` checks every subscription now (the methodology's and its
+  activities', `Methodology.AllSubscriptions`): an event followed `from: integrated | integrator` that its source does
+  not declare is a warning with its fix.
+
+Proto `Methodology.events` (`EventDef`), `Action.emits`; attributes `events` of `methodology@MethodologyVersion` and
+`emits` of `methodology@Action`.
+
+### 8. The editor of `on:`
+
+The methodology editor edits the `on` of the methodology, of each process, step, method and action with one form
+(`SubscriptionsEditor.svelte`): the event is picked among the standard events and those the methodology declares
+(two groups), an event it does not know is flagged at once, `from` (self, integrated, integrator, dependency) and the
+CEL filter beside it, the registry's issues under each row. The methodology tab declares the events, the action tab
+ticks what the action emits, the triggers of an agent list the declared events too. `fromForm` reports the unknown
+events, the badly named declarations and the unknown emits with the compiler's paths
+(`activityEventIssues`, `web/src/lib/subscriptions.ts`).
+
+### 9. As implemented
 
 - `pkg/events.ChangeEdited`, `domain.ChangeEvent.Fields`, `domain.EditedFields`; published by
   `graphsvc.Handler.UpdateChange` and `engine.EventingGraph.UpdateChange`; `TriggerEvent.Fields`, `event.fields`.
@@ -137,10 +195,6 @@ an ordinary run (Progress, journal, prompts), reachable from the bubble.
 - Any activity of any methodology can react to the events of its changes (description, title, items, transitions),
   with runs that are kept and discussed, not only the processes of transverse ones.
 - The rating is derived content: a new description is never "accepted" by an old rating.
-- `assessment` / `comment` are generic: the same mechanism rates other subjects later (`data.key`).
-
-## Not done
-
-- The editor of the methodology shows `on` as JSON (the attribute), with no dedicated form.
-- Only the header fields of the change are subjects with a text (`description`, `title`, `intent`); rating an impact
-  or an item needs its subject text in `assess.Text`.
+- `assessment` / `comment` rate any subject of the change: its description, an impact, an item.
+- A methodology names the moments of its own work (`spec.ready`) and its activities follow them like the standard
+  events, checked at compile and across the composition.

@@ -12,6 +12,7 @@
   import ModelAliasField from '../../components/ModelAliasField.svelte';
   import { modelChoices, refreshModelChoices } from '../../stores/modelChoices.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
+  import SubscriptionsEditor from './SubscriptionsEditor.svelte';
   import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { emptyStep, walkSteps, PLANNERS, LLM_PLANNERS } from '../../methodologyForm';
@@ -182,6 +183,7 @@
           </div>
         </div>
         <ReferencesEditor bind:refs={item.references} path="{p}.references" bad={d.bad} readonly={d.readonly} />
+        <SubscriptionsEditor bind:subs={item.on} draft={d} path={p} hint="the method runs again on a change of the methodology for each of them (ADR 0110)" />
         <ResponsibilitiesEditor
           bind:roles={item.roles}
           declared={d.form.roles.map((r) => r.name).filter(Boolean)}

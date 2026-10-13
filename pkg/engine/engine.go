@@ -1168,10 +1168,45 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 		}
 		return e.recordFailure(p, action.Name)
 	}
+	if err := e.emitEvents(ctx, p, action, step); err != nil {
+		return err
+	}
 	if action.Step != "" {
 		e.stepCompleted(ctx, p, action, step)
 	}
 	return nil
+}
+
+// emitEvents raises the events of the methodology an action declares in emits once it reached its effects (ADR 0110):
+// a signal item of each name on the change, which the platform publishes as an event of that name.
+func (e *Engine) emitEvents(ctx context.Context, p *Process, action methodology.Action, step *Step) error {
+	if len(action.Emits) == 0 || p.ChangeID == "" {
+		return nil
+	}
+	items := make([]domain.ChangeItem, 0, len(action.Emits))
+	for _, name := range action.Emits {
+		data := map[string]any{"action": cmp.Or(action.Implements, action.Name)}
+		if action.Step != "" {
+			data["step"] = action.Step
+		}
+		items = append(items, domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: domain.KindSignal, Type: name, Status: domain.ItemProposed,
+			Data: data, ProducedBy: action.Name, Execution: step.Execution, Flow: p.Flow})
+	}
+	added, err := e.Graph.AddItems(ctx, p.ChangeID, items)
+	if err != nil {
+		return fmt.Errorf("emit %s: %w", strings.Join(action.Emits, ", "), err)
+	}
+	step.Items = append(step.Items, itemIDs(added)...)
+	e.wakeOnSignals(ctx, p, added)
+	return nil
+}
+
+func itemIDs(items []domain.ChangeItem) []domain.ItemID {
+	out := make([]domain.ItemID, len(items))
+	for i, it := range items {
+		out[i] = it.ID
+	}
+	return out
 }
 
 func (e *Engine) recordFailure(p *Process, action string) error {

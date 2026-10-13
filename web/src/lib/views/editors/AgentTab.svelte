@@ -165,6 +165,7 @@
           bind:triggers={item.triggers}
           path="{p}.triggers"
           goals={item.goals.length ? item.goals : goalNames}
+          events={d.form.events}
           bad={d.bad}
           count={(x) => d.count(x)}
           readonly={d.readonly}

@@ -76,7 +76,7 @@ func TestReactiveStepReviewsTheDescription(t *testing.T) {
 	rate := func(score int, reply string) {
 		t.Helper()
 		bb, _ := e.Graph.Blackboard(ctx, ch.ID)
-		text, _ := assess.Text(bb.Change, assess.SubjectDescription)
+		text, _ := assess.Text(bb, assess.SubjectDescription)
 		p := rater()
 		if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: string(assess.KindAssessment), Data: map[string]any{"key": "description",
 			"score": score, "verdict": "unclear", "rated": text, "reply": reply}}}); err != nil {
@@ -128,7 +128,7 @@ func TestReactiveStepReviewsTheDescription(t *testing.T) {
 	waiting("edited")
 	rate(4, "clear")
 	bb, _ := e.Graph.Blackboard(ctx, ch.ID)
-	if a, ok := assess.Of(bb.Change, "description"); !ok || !a.Current || !a.Answered || a.Score != 4 || a.Versions != 3 {
+	if a, ok := assess.Of(bb, "description"); !ok || !a.Current || !a.Answered || a.Score != 4 || a.Versions != 3 {
 		t.Fatalf("assessment %+v", a)
 	}
 }
@@ -190,6 +190,96 @@ conditions: [{name: x, expr: "true"}]
 actions: [{name: a, kind: human, effects: {x: true}}]
 processes: [{name: p, steps: [{name: s, action: a, on: [{event: change.edited}]}]}]
 `,
+	} {
+		m, err := methodology.Parse([]byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if issues := m.Validate(); !issues.HasErrors() {
+			t.Errorf("%s: refused expected", name)
+		}
+	}
+}
+
+// eventfulYAML declares an event of its own (ADR 0110): the action writing the spec raises it, a reactive action
+// follows it.
+const eventfulYAML = `
+name: eventful
+version: 1.0.0
+namespace: alm
+events:
+  - {name: spec.ready, description: The spec is written}
+conditions:
+  - {name: written, expr: 'artifacts.exists(a, a.type == "spec")'}
+  - {name: notified, expr: 'artifacts.exists(a, a.type == "notice")'}
+actions:
+  - {name: write, kind: human, effects: {written: true}, emits: [spec.ready]}
+  - {name: notify, kind: human, effects: {notified: true}, on: [{event: spec.ready}]}
+processes:
+  - name: delivery
+    steps:
+      - {name: spec, action: write}
+`
+
+func TestDeclaredEventsAreEmittedAndFollowed(t *testing.T) {
+	ctx := context.Background()
+	e := stagedEngine(t)
+	m, err := methodology.Parse([]byte(eventfulYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Methodologies.(StaticMethodologies)["eventful"] = c
+	p, err := e.Start(ctx, StartRequest{Methodology: "eventful", Goal: "delivery", Intent: "write the spec", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ = e.Run(ctx, p.ID); p.Status != StatusWaiting {
+		t.Fatalf("the spec step waits: %s %s", p.Status, p.Error)
+	}
+	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "spec", Data: map[string]any{"text": "the spec"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ = e.Run(ctx, p.ID); p.Status != StatusCompleted {
+		t.Fatalf("delivered: %s %s", p.Status, p.Error)
+	}
+	bb, err := e.Graph.Blackboard(ctx, p.ChangeID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var signals []domain.ChangeItem
+	for _, it := range bb.Change.Items {
+		if it.Kind == domain.KindSignal {
+			signals = append(signals, it)
+		}
+	}
+	if len(signals) != 1 || signals[0].Type != "spec.ready" || signals[0].Data["step"] != "delivery/spec" {
+		t.Fatalf("the action raises its event: %+v", signals)
+	}
+
+	// the item added raises the declared event, which wakes the reactive action
+	ev := TriggerEvent{Type: "change.item_added", Change: &bb.Change, Items: signals}
+	if own := DeclaredEvents(ev); len(own) != 1 || own[0].Type != "spec.ready" || len(own[0].Items) != 1 {
+		t.Fatalf("declared events %+v", own)
+	}
+	(&TriggerManager{Engine: e}).Handle(ctx, ev)
+	e.Drain()
+	cs := companionOf(t, e, p.ChangeID)
+	if len(cs) != 1 || cs[0].Trigger != "companion:eventful/notify" || cs[0].Status != StatusWaiting {
+		t.Fatalf("the reaction to the declared event: %+v", cs)
+	}
+
+	// a signal of a standard name raises nothing more, an undeclared event is refused at compile
+	if own := DeclaredEvents(TriggerEvent{Type: "change.item_added", Items: []domain.ChangeItem{{Kind: domain.KindSignal, Type: "change.applied"}}}); len(own) != 0 {
+		t.Fatalf("a standard name is not a declared event: %+v", own)
+	}
+	for name, src := range map[string]string{
+		"undeclared": "name: bad\nversion: 1.0.0\nnamespace: alm\nconditions: [{name: x, expr: 'true'}]\nactions: [{name: a, kind: human, effects: {x: true}, on: [{event: spec.ready}]}]\n",
+		"reserved":   "name: bad\nversion: 1.0.0\nnamespace: alm\nevents: [{name: change.ready}]\nconditions: [{name: x, expr: 'true'}]\nactions: [{name: a, kind: human, effects: {x: true}}]\ngoals: [{name: g, pre: {x: true}}]\n",
+		"emits":      "name: bad\nversion: 1.0.0\nnamespace: alm\nconditions: [{name: x, expr: 'true'}]\nactions: [{name: a, kind: human, effects: {x: true}, emits: [nope]}]\ngoals: [{name: g, pre: {x: true}}]\n",
 	} {
 		m, err := methodology.Parse([]byte(src))
 		if err != nil {

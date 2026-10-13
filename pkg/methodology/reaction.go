@@ -3,7 +3,6 @@ package methodology
 import (
 	"fmt"
 	"maps"
-	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/condition"
@@ -120,9 +119,7 @@ func (s *compileState) forEachReactive(f func(path string, r Reaction)) {
 
 // checkSubscription checks one subscription of an activity: a known event, a filter that compiles, a known origin.
 func (s *compileState) checkSubscription(path string, sub Subscription) {
-	if !slices.Contains(TriggerEvents, sub.Event) {
-		s.add(path+".event", "event must be one of %s", strings.Join(TriggerEvents, ", "))
-	}
+	s.checkEvent(path+".event", sub.Event)
 	if _, err := condition.CompileEventFilter(sub.Filter); err != nil {
 		s.add(path+".filter", "%v", err)
 	}

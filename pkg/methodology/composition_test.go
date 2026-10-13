@@ -263,3 +263,28 @@ func TestCompositionFromDependency(t *testing.T) {
 		t.Fatalf("no consumer of the release: %v", is)
 	}
 }
+
+// TestCompositionDeclaredEvents: an event of a methodology (ADR 0110) followed from another one must be declared by the
+// source; a reactive activity's subscriptions are checked like the methodology's own.
+func TestCompositionDeclaredEvents(t *testing.T) {
+	follow := func(at func(m *Methodology)) *Methodology {
+		return release(func(m *Methodology) {
+			m.Events = []Event{{Name: "work.tested"}}
+			at(m)
+		})
+	}
+	viaOn := follow(func(m *Methodology) { m.On = []Subscription{{Event: "work.tested", From: FromIntegrated}} })
+	viaStep := follow(func(m *Methodology) {
+		m.Processes[0].Steps[0].On = []Subscription{{Event: "work.tested", From: FromIntegrated}}
+	})
+	for path, m := range map[string]*Methodology{"on[0].event": viaOn, "processes[0].steps[0].on[0].event": viaStep} {
+		if issueAt(m.CompositionIssues(composition(work("work"))), path, "work declares no event work.tested") == nil {
+			t.Errorf("%s: the source declares no such event", path)
+		}
+		declared := work("work")
+		declared.Events = []Event{{Name: "work.tested"}}
+		if is := m.CompositionIssues(composition(declared)); issueAt(is, path) != nil {
+			t.Errorf("%s: declared by the source, got %v", path, is)
+		}
+	}
+}

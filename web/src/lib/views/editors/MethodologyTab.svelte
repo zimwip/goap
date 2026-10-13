@@ -15,11 +15,12 @@
   import { requestReveal } from '../../shell/workbench.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openDomain } from './domainTabs';
-  import { formatDate, TRIGGER_EVENTS } from '../../api';
+  import { formatDate } from '../../api';
+  import SubscriptionsEditor from './SubscriptionsEditor.svelte';
+  import { eventIssues } from '../../subscriptions';
   import {
     walkSteps,
     goalChoices,
-    SUBSCRIPTION_ORIGINS,
     ATTACH_MODES,
     type Section,
     type SectionItem,
@@ -43,6 +44,8 @@
   // The component is recreated for each tab: the draft is resolved once.
   const d = untrack(() => draftOf(tab));
   const f = $derived(d.form);
+  // the declared events checked as the compiler does, at once (ADR 0110)
+  const eventProblems = $derived(Object.fromEntries(eventIssues(f.events).map((i) => [i.path ?? '', i.message ?? ''])));
   let root = $state<HTMLElement>();
 
   async function createNew() {
@@ -322,21 +325,25 @@
               {#if !d.readonly}<button type="button" class="small" onclick={() => f.guardianTransitions.push({ name: '', expr: '' })}>+ Transition guard</button>{/if}
               <IssueHints draft={d} path="guardian" />
             {/if}
-            <div class="label">Reacts to <span class="opt">(empty: for a transverse methodology, a run attached and a step completed)</span></div>
-            {#each f.on as sub, i (i)}
-              <div class="on-row" class:bad={d.bad(`on[${i}]`)} data-path="on[{i}]">
-                <select bind:value={sub.event} aria-label="Event" data-path="on[{i}].event">
-                  {#each TRIGGER_EVENTS as ev (ev)}<option value={ev}>{ev}</option>{/each}
-                </select>
-                <select bind:value={sub.from} aria-label="From" data-path="on[{i}].from">
-                  {#each SUBSCRIPTION_ORIGINS as o (o)}<option value={o}>{o ? `from ${o}` : 'from self'}</option>{/each}
-                </select>
-                <input type="text" class="mono" aria-label="Filter" placeholder={'CEL over event, e.g. event.step.process == "software_delivery"'} bind:value={sub.filter} data-path="on[{i}].filter" />
-                {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the event" onclick={() => f.on.splice(i, 1)}>✕</button>{/if}
+            <div class="label">Events <span class="opt">(its own, in addition to the standard ones: raised by a signal item of the name, an action's emits; followed by an on or a trigger)</span></div>
+            {#each f.events as ev, i (i)}
+              <div class="event-row" class:bad={d.bad(`events[${i}]`)} data-path="events[{i}]">
+                <input type="text" class="mono" aria-label="Event name" placeholder="spec.ready" bind:value={ev.name} data-path="events[{i}].name" />
+                <input type="text" aria-label="Event description" placeholder="what happened" bind:value={ev.description} data-path="events[{i}].description" />
+                {#if !d.readonly}<button type="button" class="small icon" aria-label="Remove the event" onclick={() => f.events.splice(i, 1)}>✕</button>{/if}
               </div>
-              <IssueHints draft={d} path="on[{i}]" />
+              {#if eventProblems[`events[${i}].name`]}<p class="unknown">{eventProblems[`events[${i}].name`]}</p>{/if}
+              <IssueHints draft={d} path="events[{i}]" />
             {/each}
-            {#if !d.readonly}<button type="button" class="small" onclick={() => f.on.push({ event: f.integrates.length ? 'change.committed' : 'step.completed', filter: '', from: f.integrates.length ? 'integrated' : '' })}>+ Event</button>{/if}
+            {#if !d.readonly}<button type="button" class="small" onclick={() => f.events.push({ name: '', description: '' })}>+ Declared event</button>{/if}
+            <SubscriptionsEditor
+              bind:subs={f.on}
+              draft={d}
+              path=""
+              hint="empty: for a transverse methodology, a run attached and a step completed"
+              newEvent={f.integrates.length ? 'change.committed' : 'step.completed'}
+              newFrom={f.integrates.length ? 'integrated' : ''}
+            />
             <datalist id="m-methodologies">
               {#each groupedMethodologies() as g (g.name)}{#if g.name !== f.name}<option value={g.name}></option>{/if}{/each}
             </datalist>
@@ -509,8 +516,7 @@
     font-size: 0.8rem;
   }
   .integrate-row,
-  .guard-row,
-  .on-row {
+  .guard-row {
     display: grid;
     gap: 6px;
     margin-bottom: 4px;
@@ -522,8 +528,17 @@
   .guard-row {
     grid-template-columns: minmax(0, 1fr) minmax(0, 3fr) auto;
   }
-  .on-row {
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 2.5fr) auto;
+  .event-row {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 4px;
+    align-items: center;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto;
+  }
+  .unknown {
+    color: var(--danger);
+    font-size: 0.8rem;
+    margin: 0 0 4px;
   }
   .check {
     display: flex;

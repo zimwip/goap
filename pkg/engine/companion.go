@@ -155,8 +155,9 @@ func (e *Engine) react(ctx context.Context, m *methodology.Compiled, ev TriggerE
 		if !matches(r.On, ev, act, from) {
 			continue
 		}
-		if ev.Type == events.ChangeItemAdded && !slices.ContainsFunc(ev.Items, func(it domain.ChangeItem) bool { return !r.Owns(it.ProducedBy) }) {
-			continue // its own productions do not wake it
+		raised := ev.Type == events.ChangeItemAdded || (len(ev.Items) > 0 && !methodology.StandardEvent(ev.Type))
+		if raised && !slices.ContainsFunc(ev.Items, func(it domain.ChangeItem) bool { return !r.Owns(it.ProducedBy) }) {
+			continue // its own productions (and the events they raise) do not wake it
 		}
 		event := maps.Clone(act)
 		maps.Copy(event, extra)

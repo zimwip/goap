@@ -51,8 +51,8 @@ func (c Composition) lifecycle(m *Methodology) *domain.Lifecycle {
 func (m *Methodology) CompositionIssues(c Composition) def.Issues {
 	ck := &compositionCheck{m: m, c: c}
 	ck.integrations()
-	for i, sub := range m.On {
-		ck.subscription(i, sub)
+	for _, ps := range m.AllSubscriptions() {
+		ck.subscription(ps.Path, ps.Sub)
 	}
 	ck.guardian()
 	ck.consumers()
@@ -174,14 +174,18 @@ func (ck *compositionCheck) emits(src *Methodology, event string) (bool, string,
 			return false, fmt.Sprintf("no methodology integrates %s: its changes are never attached", src.Name),
 				fmt.Sprintf("list %s in the integrates of the methodology that frames its changes", src.Name)
 		}
+	default:
+		if !StandardEvent(event) && !src.Declares(event) {
+			return false, fmt.Sprintf("%s declares no event %s", src.Name, event),
+				fmt.Sprintf("declare %s in the events of %s and emit it (an action's emits), or follow another event", event, src.Name)
+		}
 	}
 	return true, "", ""
 }
 
 // subscription checks one `on` entry of m: its source can emit its event, and the names its filter compares exist.
-func (ck *compositionCheck) subscription(i int, sub Subscription) {
-	path := fmt.Sprintf("on[%d]", i)
-	if !slices.Contains(TriggerEvents, sub.Event) {
+func (ck *compositionCheck) subscription(path string, sub Subscription) {
+	if !ck.m.KnowsEvent(sub.Event) {
 		return // the compiler reports it
 	}
 	if sub.Event == events.MethodologyPublished && sub.Origin() != FromSelf {
@@ -278,7 +282,8 @@ func (ck *compositionCheck) filterFindings(sub Subscription, srcs []*Methodology
 func (ck *compositionCheck) consumers() {
 	for _, n := range ck.otherNames() {
 		o := ck.c.Others[n]
-		for _, sub := range o.On {
+		for _, ps := range o.AllSubscriptions() {
+			sub := ps.Sub
 			var follows bool
 			switch sub.Origin() {
 			case FromIntegrated:
@@ -290,7 +295,7 @@ func (ck *compositionCheck) consumers() {
 			default:
 				follows = slices.Contains(o.AppliesTo, ck.m.Name)
 			}
-			if !follows || !slices.Contains(TriggerEvents, sub.Event) {
+			if !follows || !o.KnowsEvent(sub.Event) {
 				continue
 			}
 			if ok, why, hint := ck.emits(ck.m, sub.Event); !ok {

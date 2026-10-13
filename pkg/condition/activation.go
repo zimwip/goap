@@ -44,7 +44,7 @@ func Activation(bb domain.Blackboard) map[string]any {
 	dec := lazy(func() decisionView { return decisions(bb) })
 	dep := lazy(func() []any { return dependencies(bb) })
 	hist := lazy(func() map[string]any { return history(bb) })
-	asm := lazy(func() []any { return assessments(&c) })
+	asm := lazy(func() []any { return assessments(bb) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
@@ -114,8 +114,8 @@ func risks(c *domain.Change) []any {
 }
 
 // assessments are the ratings of the change (ADR 0110).
-func assessments(c *domain.Change) []any {
-	as := assess.Assessments(*c)
+func assessments(bb domain.Blackboard) []any {
+	as := assess.Assessments(bb)
 	out := make([]any, 0, len(as))
 	for _, a := range as {
 		fs := make([]any, len(a.Findings))
@@ -123,7 +123,7 @@ func assessments(c *domain.Change) []any {
 			fs[i] = map[string]any{"text": f.Text, "severity": f.Severity}
 		}
 		out = append(out, map[string]any{"key": a.Key, "score": int64(a.Score), "verdict": a.Verdict, "findings": fs, "suggestion": a.Suggestion,
-			"current": a.Current, "answered": a.Answered, "item": string(a.Item), "versions": int64(a.Versions)})
+			"rated": a.Rated, "current": a.Current, "answered": a.Answered, "item": string(a.Item), "versions": int64(a.Versions)})
 	}
 	return out
 }

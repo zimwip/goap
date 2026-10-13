@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accepted, assessmentOf, commentItem, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
+import { accepted, assessmentOf, commentItem, fingerprint, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
 import type { ChangeItem, Process } from './api';
 
 const change = { id: 'C1', methodology: 'sdlc', title: 'Pay', intent: 'Pay in 3 installments' };
@@ -31,6 +31,15 @@ describe('descriptionReview', () => {
     // an edit of the description makes the rating stale
     expect(state(assessmentOf({ ...change, intent: 'other', items }))).toBe('stale');
     expect(state(assessmentOf({ ...change, items: [] }))).toBe('none');
+  });
+
+  it('accepts a rating by the fingerprint of the text, as the server does', () => {
+    expect(fingerprint('abc')).toBe('1a47e90b');
+    expect(fingerprint('é')).toBe(fingerprint('\u00e9'));
+    const change = { title: 'T', intent: 'I' };
+    const items: ChangeItem[] = [{ id: 'a', kind: 'assessment', data: { key: 'description', score: 4, rated: fingerprint(subjectText(change)) } } as ChangeItem];
+    expect(assessmentOf({ ...change, items })?.current).toBe(true);
+    expect(assessmentOf({ ...change, intent: 'J', items })?.current).toBe(false);
   });
 
   it('finds the run of the rater and writes a comment', () => {

@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/events"
 )
 
-// The web keeps one copy of the trigger events (TRIGGER_EVENTS) and labels them in the triggers editor: both must
+// The web keeps one copy of the trigger events (TRIGGER_EVENTS) and labels them (web/src/lib/subscriptions.ts, the on and trigger editors): both must
 // list what the Go side lists.
 func TestWebListsTheTriggerEvents(t *testing.T) {
 	want := slices.Sorted(slices.Values(events.All))
@@ -30,13 +30,13 @@ func TestWebListsTheTriggerEvents(t *testing.T) {
 		t.Errorf("web TRIGGER_EVENTS %v, Go events.All %v", got, want)
 	}
 
-	editor, err := os.ReadFile("../../web/src/lib/views/editors/TriggersEditor.svelte")
+	editor, err := os.ReadFile("../../web/src/lib/subscriptions.ts")
 	if err != nil {
 		t.Fatal(err)
 	}
 	labels := regexp.MustCompile(`(?s)EVENT_LABELS: Record<string, string> = \{(.*?)\};`).FindSubmatch(editor)
 	if labels == nil {
-		t.Fatal("EVENT_LABELS not found in TriggersEditor.svelte")
+		t.Fatal("EVENT_LABELS not found in web/src/lib/subscriptions.ts")
 	}
 	got = nil
 	for _, m := range regexp.MustCompile(`(?m)^\s*'([^']+)':`).FindAllSubmatch(labels[1], -1) {

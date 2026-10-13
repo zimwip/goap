@@ -5,6 +5,7 @@
 // lists become text, JSON params become text. `toForm` / `fromForm` convert
 // between this model and the proto message.
 
+import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
 import type { Action, Agent, Attribute, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
@@ -183,6 +184,10 @@ export interface ActionForm extends Identified {
   incremental: boolean;
   /** MCPs used by an llm / script action, comma separated */
   mcps: string;
+  /** the events that make it reactive (ADR 0110) */
+  on: SubscriptionForm[];
+  /** the events of the methodology it raises when it reaches its effects, comma separated (ADR 0110) */
+  emits: string;
 }
 
 export interface TriggerForm {
@@ -274,6 +279,8 @@ export interface StepForm {
   deliverables: string;
   roles: ResponsibilitiesForm;
   steps: StepForm[];
+  /** the events that make it reactive (ADR 0110) */
+  on: SubscriptionForm[];
 }
 
 export interface ReferenceForm {
@@ -289,6 +296,8 @@ export interface ProcessForm extends Identified {
   examples: string;
   references: ReferenceForm[];
   steps: StepForm[];
+  /** the events that make it reactive (ADR 0110) */
+  on: SubscriptionForm[];
 }
 
 export interface RoleForm {
@@ -347,6 +356,8 @@ export interface MethodForm extends Identified {
   model: string;
   /** comma separated */
   mcps: string;
+  /** the events that make it reactive (ADR 0110) */
+  on: SubscriptionForm[];
 }
 
 export interface MethodologyForm {
@@ -370,6 +381,8 @@ export interface MethodologyForm {
   imports: string;
   /** the events it reacts to; from: self (default), integrated, integrator (ADR 0106) */
   on: SubscriptionForm[];
+  /** the events it declares, in addition to the standard ones (ADR 0110) */
+  events: EventForm[];
   /** the lifecycle of its domain the changes follow (ADR 0058); "" : none */
   lifecycle: string;
   /** default criticality of its changes (ADR 0075 §3), kept as is */
@@ -382,12 +395,6 @@ export interface MethodologyForm {
   guardianTransitions: { name: string; expr: string }[];
 }
 
-export interface SubscriptionForm {
-  event: string;
-  filter: string;
-  /** "" (self), integrated, integrator */
-  from: string;
-}
 
 export interface IntegrationForm {
   /** comma separated, or "*" */
@@ -397,8 +404,7 @@ export interface IntegrationForm {
   attach: string;
 }
 
-/** Where the events of a subscription come from (ADR 0106). */
-export const SUBSCRIPTION_ORIGINS = ['', 'integrated', 'integrator'] as const;
+export { SUBSCRIPTION_ORIGINS, type SubscriptionForm, type EventForm } from './subscriptions';
 export const ATTACH_MODES = ['', 'auto'] as const;
 
 /** Sections whose elements open in a tab. */
@@ -460,6 +466,8 @@ export const emptyAction = (): ActionForm => ({
   priority: 0,
   incremental: false,
   mcps: '',
+  on: [],
+  emits: '',
 });
 export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
 export const emptyAgent = (): AgentForm => ({
@@ -495,6 +503,7 @@ export const emptyStep = (name = ''): StepForm => ({
   deliverables: '',
   roles: emptyResponsibilities(),
   steps: [],
+  on: [],
 });
 export const emptyMethod = (): MethodForm => ({
   uid: newUid(),
@@ -514,8 +523,9 @@ export const emptyMethod = (): MethodForm => ({
   planner: 'goap',
   model: '',
   mcps: '',
+  on: [],
 });
-export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')] });
+export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')], on: [] });
 export const emptyTrigger = (): TriggerForm => ({
   name: '',
   description: '',
@@ -547,6 +557,7 @@ export function emptyForm(): MethodologyForm {
     appliesTo: '',
     imports: '',
     on: [],
+    events: [],
     lifecycle: '',
     criticality: '',
     integrates: [],
@@ -616,6 +627,8 @@ function actionToForm(a: Action, uid: string): ActionForm {
     priority: a.priority ?? 0,
     incremental: a.incremental ?? false,
     mcps: (a.mcps ?? []).join(', '),
+    on: subsToForm(a.on),
+    emits: (a.emits ?? []).join(', '),
   };
 }
 
@@ -889,6 +902,7 @@ export function toForm(m: Methodology): MethodologyForm {
       examples: (p.examples ?? []).join('\n'),
       references: refsToForm(p.references),
       steps: (p.steps ?? []).map(stepToForm),
+      on: subsToForm(p.on),
     })),
     methods: (m.methods ?? []).map((x, i) => ({
       uid: mu[i],
@@ -908,11 +922,13 @@ export function toForm(m: Methodology): MethodologyForm {
       planner: x.planner || 'goap',
       model: x.model ?? '',
       mcps: (x.mcps ?? []).join(', '),
+      on: subsToForm(x.on),
     })),
     roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '', operations: (r.operations ?? []).join(', ') })),
     appliesTo: (m.appliesTo ?? []).join(', '),
     imports: (m.imports ?? []).join(', '),
-    on: (m.on ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '', from: x.from === 'self' ? '' : (x.from ?? '') })),
+    on: subsToForm(m.on),
+    events: (m.events ?? []).map((e) => ({ name: e.name ?? '', description: e.description ?? '' })),
     lifecycle: m.lifecycle ?? '',
     criticality: m.criticality ?? '',
     integrates: (m.integrates ?? []).map((x) => ({ methodologies: (x.methodologies ?? []).join(', '), exclusive: !!x.exclusive, attach: x.attach === 'decision' ? '' : (x.attach ?? '') })),
@@ -951,6 +967,7 @@ function stepToForm(s: ProcessStep): StepForm {
     deliverables: (s.deliverables ?? []).join(', '),
     roles: respToForm(s.roles),
     steps: (s.steps ?? []).map(stepToForm),
+    on: subsToForm(s.on),
   };
 }
 
@@ -1003,6 +1020,7 @@ export function stepFromForm(s: StepForm): ProcessStep {
   );
   put(o, 'deliverables', csv(s.deliverables));
   put(o, 'roles', respFromForm(s.roles));
+  put(o, 'on', subsFromForm(s.on));
   switch (s.method) {
     case 'manual':
       put(o, 'instructions', s.instructions.trim());
@@ -1144,6 +1162,8 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
         }
         o.expects = e;
       }
+      put(o, 'on', subsFromForm(a.on));
+      put(o, 'emits', csv(a.emits));
       return o;
     }),
   );
@@ -1209,6 +1229,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       );
       put(o, 'references', refsFromForm(p.references));
       put(o, 'steps', p.steps.map(stepFromForm));
+      put(o, 'on', subsFromForm(p.on));
       return o;
     }),
   );
@@ -1240,23 +1261,25 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'planner', x.planner === 'goap' ? '' : x.planner);
       put(o, 'model', x.model.trim());
       put(o, 'mcps', csv(x.mcps));
+      put(o, 'on', subsFromForm(x.on));
       return o;
     }),
   );
   put(m, 'appliesTo', csv(f.appliesTo));
   put(m, 'imports', csv(f.imports));
+  put(m, 'on', subsFromForm(f.on));
   put(
     m,
-    'on',
-    f.on
-      .filter((x) => x.event.trim())
-      .map((x) => {
-        const o: { event?: string; filter?: string; from?: string } = { event: x.event.trim() };
-        put(o, 'filter', x.filter.trim());
-        put(o, 'from', x.from.trim());
+    'events',
+    f.events
+      .filter((e) => e.name.trim())
+      .map((e) => {
+        const o: { name?: string; description?: string } = { name: e.name.trim() };
+        put(o, 'description', e.description.trim());
         return o;
       }),
   );
+  issues.push(...activityEventIssues(f));
   put(m, 'lifecycle', f.lifecycle.trim());
   put(m, 'criticality', f.criticality.trim());
   put(
@@ -1292,6 +1315,36 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
     }),
   );
   return { methodology: m, issues };
+}
+
+/**
+ * The events the methodology follows and raises, checked as the compiler does (ADR 0110): every `on` and event trigger
+ * names a standard event or a declared one, every `emits` a declared one, the declared names are well formed.
+ */
+export function activityEventIssues(f: MethodologyForm): Issue[] {
+  const declared = declaredNames(f.events);
+  const out = [...eventIssues(f.events), ...subscriptionIssues('', f.on, declared)];
+  const steps = (list: StepForm[], at: string) => {
+    for (const x of walkSteps(list, '', `${at}.steps`)) out.push(...subscriptionIssues(x.at, x.step.on, declared));
+  };
+  f.processes.forEach((p, i) => {
+    out.push(...subscriptionIssues(`processes[${i}]`, p.on, declared));
+    steps(p.steps, `processes[${i}]`);
+  });
+  f.methods.forEach((me, i) => {
+    out.push(...subscriptionIssues(`methods[${i}]`, me.on, declared));
+    steps(me.steps, `methods[${i}]`);
+  });
+  f.actions.forEach((a, i) => {
+    out.push(...subscriptionIssues(`actions[${i}]`, a.on, declared), ...emitIssues(`actions[${i}]`, csv(a.emits), declared));
+  });
+  f.agents.forEach((ag, i) =>
+    ag.triggers.forEach((t, j) => {
+      if (t.type === 'event' && t.event.trim() && !declared.includes(t.event.trim()) && !isStandard(t.event.trim()))
+        out.push({ path: `agents[${i}].triggers[${j}].event`, message: `unknown event "${t.event.trim()}": one of the standard events or an event the methodology declares (events)` });
+    }),
+  );
+  return out;
 }
 
 /** Conditions usable in pre / effects: declared + generated `expect:<action>`. */

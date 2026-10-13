@@ -5,6 +5,9 @@
   import ActionEditor from '../../components/ActionEditor.svelte';
   import DraftHeader from './DraftHeader.svelte';
   import ItemMissing from './ItemMissing.svelte';
+  import SubscriptionsEditor from './SubscriptionsEditor.svelte';
+  import IssueHints from '../../components/IssueHints.svelte';
+  import { declaredNames } from '../../subscriptions';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem } from './methodologyTabs';
 
@@ -44,6 +47,13 @@
   const agents = $derived(
     item ? d.form.agents.filter((a) => a.actions.length === 0 || a.actions.includes(item.name)) : [],
   );
+  // the declared events the action may raise (ADR 0110)
+  const declared = $derived(declaredNames(d.form.events));
+  const emits = $derived(item ? item.emits.split(',').map((x) => x.trim()).filter(Boolean) : []);
+  function toggleEmit(name: string) {
+    if (!item) return;
+    item.emits = (emits.includes(name) ? emits.filter((x) => x !== name) : [...emits, name]).join(', ');
+  }
 </script>
 
 <div class="editor-page" bind:this={root}>
@@ -62,6 +72,22 @@
           readonly={d.readonly}
           onrename={(from, to) => d.rename('actions', from, to)}
         />
+      </section>
+      <section class="card" data-path="actions[{index}].on">
+        <h3>Reactions</h3>
+        <SubscriptionsEditor bind:subs={item.on} draft={d} path={`actions[${index}]`} label="Reacts to" hint="the action runs alone towards its effects on each of them (ADR 0110)" />
+        <div class="label">Emits <span class="opt">(events of the methodology it raises when it reaches its effects)</span></div>
+        <div class="emits" data-path="actions[{index}].emits">
+          {#each declared as name (name)}
+            <label class="check"><input type="checkbox" checked={emits.includes(name)} onchange={() => toggleEmit(name)} /> <span class="mono">{name}</span></label>
+          {:else}
+            <span class="hint">The methodology declares no event (Events, on the methodology).</span>
+          {/each}
+          {#each emits.filter((x) => !declared.includes(x)) as name (name)}
+            <label class="check bad"><input type="checkbox" checked onchange={() => toggleEmit(name)} /> <span class="mono">{name}</span> (unknown)</label>
+          {/each}
+        </div>
+        <IssueHints draft={d} path="actions[{index}].emits" />
       </section>
     </fieldset>
     {#if specialized}
@@ -91,3 +117,19 @@
     <ItemMissing draft={d} what="Action" />
   {/if}
 </div>
+
+<style>
+  .emits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+  }
+  .check {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .check.bad {
+    color: var(--danger);
+  }
+</style>

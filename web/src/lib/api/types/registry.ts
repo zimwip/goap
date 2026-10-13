@@ -299,6 +299,25 @@ export interface Action {
   incremental?: boolean;
   /** MCPs used by an llm / script action (a tool action names `<mcp>/<tool>`) */
   mcps?: string[];
+  /** the events that make it reactive (ADR 0110) */
+  on?: Subscription[];
+  /** the events of the methodology it raises when it reaches its effects (ADR 0110) */
+  emits?: string[];
+}
+
+/** An event an activity reacts to (ADR 0036 §3, 0106, 0110): a standard event or one the methodology declares. */
+export interface Subscription {
+  event?: string;
+  /** CEL over `event` */
+  filter?: string;
+  /** self (default), integrated, integrator, dependency */
+  from?: string;
+}
+
+/** An event a methodology declares, in addition to the standard ones (ADR 0110): raised by a signal item of its name. */
+export interface MethodologyEvent {
+  name?: string;
+  description?: string;
 }
 
 export type TriggerType = 'event' | 'schedule';
@@ -401,6 +420,8 @@ export interface ProcessStep {
   groupBy?: string;
   /** roles assigned to the step (its sub-steps inherit them) */
   roles?: Responsibilities;
+  /** the events that make it reactive (ADR 0110) */
+  on?: Subscription[];
 }
 
 /** Process (ADR 0034): the steps that reach an objective, run by an agent of its name towards a goal of its name. */
@@ -411,6 +432,8 @@ export interface MethodologyProcess {
   /** reference documents that describe the process */
   references?: DocumentReference[];
   steps?: ProcessStep[];
+  /** the events that make it reactive (ADR 0110) */
+  on?: Subscription[];
 }
 
 /**
@@ -440,6 +463,8 @@ export interface MethodologyMethod {
   planner?: string;
   model?: string;
   mcps?: string[];
+  /** the events that make it reactive (ADR 0110) */
+  on?: Subscription[];
 }
 
 /** A process as a graph: its steps, the edges its conditions draw, the methods of its capabilities (ADR 0036 §4). */
@@ -608,7 +633,9 @@ export interface Methodology {
   /** the built-in condition libraries it imports (ADR 0064): decisions, risks, verification, derogations */
   imports?: string[];
   /** the events it reacts to; from: self (default), integrated (the changes it integrates), integrator (ADR 0106) */
-  on?: { event?: string; filter?: string; from?: string }[];
+  on?: Subscription[];
+  /** the events of the methodology, in addition to the standard ones (ADR 0110) */
+  events?: MethodologyEvent[];
   /** the lifecycle of its domain the changes follow (ADR 0058); empty: none */
   lifecycle?: string;
   /** the methodologies whose changes its changes integrate as sub-changes (ADR 0106) */

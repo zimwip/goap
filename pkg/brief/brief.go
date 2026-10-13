@@ -59,6 +59,8 @@ func Of(bb domain.Blackboard, step *Step) string {
 	if c.Intent != "" {
 		line("INTENT %s", short(c.Intent, maxIntent))
 	}
+	// the fingerprint of the description, what a rater copies in rated (ADR 0110)
+	line("SUBJECT %s fp=%s", assess.SubjectDescription, assess.FingerprintOf(bb, assess.SubjectDescription))
 	if step != nil {
 		s := fmt.Sprintf("STEP %s", step.Path)
 		if step.Method != "" {
@@ -84,7 +86,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 		}
 	}
 	if len(impacts) > 0 {
-		line("IMPACTS %d (key type intent state review)", len(impacts))
+		line("IMPACTS %d (key type intent state review fp)", len(impacts))
 		for i, n := range impacts {
 			if i == maxImpacts {
 				line("- … %d more", len(impacts)-maxImpacts)
@@ -99,7 +101,8 @@ func Of(bb domain.Blackboard, step *Step) string {
 			case n.Post != nil:
 				state = "written"
 			}
-			s := fmt.Sprintf("- %s %s %s %s %s", n.Key, typeName(n.Type, c.Namespace), n.Intent, state, n.Review)
+			s := fmt.Sprintf("- %s %s %s %s %s fp=%s", n.Key, typeName(n.Type, c.Namespace), n.Intent, state, n.Review,
+				assess.FingerprintOf(bb, assess.ImpactPrefix+n.Key))
 			if n.Rationale != "" {
 				s += " — " + short(n.Rationale, 60)
 			}
@@ -171,14 +174,14 @@ func Of(bb domain.Blackboard, step *Step) string {
 	}
 
 	// the ratings and the threads discussing them (ADR 0110): the rater reads what was said since it last rated
-	for _, a := range assess.Assessments(c) {
+	for _, a := range assess.Assessments(bb) {
 		state := "current"
 		if !a.Current {
 			state = "stale: the subject changed since"
 		} else if !a.Answered {
 			state = "current, a comment awaits an answer"
 		}
-		line("ASSESSMENT %s score=%d/%d %s (%s)", a.Key, a.Score, assess.MaxScore, cmp.Or(a.Verdict, "-"), state)
+		line("ASSESSMENT %s score=%d/%d %s (%s) fp=%s", a.Key, a.Score, assess.MaxScore, cmp.Or(a.Verdict, "-"), state, cmp.Or(assess.FingerprintOf(bb, a.Key), "-"))
 		for _, f := range a.Findings {
 			line("- finding %s %q", cmp.Or(f.Severity, "-"), short(f.Text, 160))
 		}
@@ -207,9 +210,10 @@ func Of(bb domain.Blackboard, step *Step) string {
 	}
 	if len(arts) > 0 {
 		from := max(0, len(arts)-maxArtifacts)
-		line("ARTIFACTS %d (latest: id type summary)", len(arts))
+		line("ARTIFACTS %d (latest: id type summary fp)", len(arts))
 		for _, it := range arts[from:] {
-			line("- %s %s %s", shortID(string(it.ID)), cmp.Or(it.Type, "-"), short(summary(it.Data), maxText))
+			line("- %s %s %s fp=%s", shortID(string(it.ID)), cmp.Or(it.Type, "-"), short(summary(it.Data), maxText),
+				assess.FingerprintOf(bb, assess.ItemPrefix+string(it.ID)))
 		}
 	}
 	return b.String()

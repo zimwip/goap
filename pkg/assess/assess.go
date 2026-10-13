@@ -5,7 +5,10 @@
 package assess
 
 import (
+	"encoding/json"
 	"fmt"
+	"hash/fnv"
+	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
@@ -20,8 +23,16 @@ const (
 	KindComment domain.ItemKind = "comment"
 )
 
-// SubjectDescription is the subject of the rating of the description of a change: its title and its intent.
-const SubjectDescription = "description"
+// The subjects of a rating (data.key of an assessment, data.about of a comment): the description of the change (its
+// title and its intent), its title, its intent, an impact by the key of its node ("impact:<key>") and an item by the
+// key of its record or its id ("item:<key or id>").
+const (
+	SubjectDescription = "description"
+	SubjectTitle       = "title"
+	SubjectIntent      = "intent"
+	ImpactPrefix       = "impact:"
+	ItemPrefix         = "item:"
+)
 
 // MaxScore is the best score; a score goes from 0 to MaxScore.
 const MaxScore = 5
@@ -48,9 +59,10 @@ type Assessment struct {
 	// Suggestion is a wording the rater proposes, Reply what it says to the person (its answer in the thread).
 	Suggestion string `json:"suggestion,omitempty"`
 	Reply      string `json:"reply,omitempty"`
-	// Rated is the text of the subject the rating is about.
+	// Rated is what the rating is about: the text of the subject or its fingerprint (Fingerprint).
 	Rated string `json:"rated"`
-	// Current: the subject still reads as rated (a rating of another text says nothing of this one).
+	// Current: the subject still reads as rated (a rating of another text says nothing of this one); a subject the
+	// change no longer has is not current.
 	Current bool `json:"current"`
 	// Answered: no comment about the subject came after the rating.
 	Answered bool          `json:"answered"`
@@ -102,22 +114,89 @@ func validateComment(it domain.ChangeItem) error {
 	return nil
 }
 
-// Text is the text of a subject of the change as it is now: the description is the title and the intent; "" for a
-// subject the change does not hold as text.
-func Text(c domain.Change, key string) (string, bool) {
-	switch key {
-	case SubjectDescription:
+// Text is the text of a subject as the change has it now: the description is the title and the intent; an impact
+// is its node as the change has it (key, type, state, properties, outgoing links), an item its data (the latest version
+// of a record). False when the change has no such subject.
+func Text(bb domain.Blackboard, key string) (string, bool) {
+	c := bb.Change
+	switch {
+	case key == SubjectDescription:
 		return strings.TrimSpace(c.Title) + "\n\n" + strings.TrimSpace(c.Intent), true
-	case "title":
+	case key == SubjectTitle:
 		return strings.TrimSpace(c.Title), true
-	case "intent":
+	case key == SubjectIntent:
 		return strings.TrimSpace(c.Intent), true
+	case strings.HasPrefix(key, ImpactPrefix):
+		nodeKey := strings.TrimPrefix(key, ImpactPrefix)
+		for i := len(c.Nodes) - 1; i >= 0; i-- {
+			if n := c.Nodes[i]; n.Key == nodeKey && !n.Superseded {
+				return impactText(bb, n), true
+			}
+		}
+	case strings.HasPrefix(key, ItemPrefix):
+		ref := strings.TrimPrefix(key, ItemPrefix)
+		for i := len(c.Items) - 1; i >= 0; i-- {
+			it := c.Items[i]
+			if it.Kind == KindAssessment || it.Kind == KindComment || !c.Active(it.ID) {
+				continue
+			}
+			if string(it.ID) == ref || str(it.Data, "key") == ref {
+				return canonical(map[string]any{"kind": string(it.Kind), "type": it.Type, "data": it.Data}), true
+			}
+		}
 	}
 	return "", false
 }
 
+// impactText is the canonical text of the node of an impact as the change has it.
+func impactText(bb domain.Blackboard, n domain.ChangeImpact) string {
+	ref := n.Post
+	if ref == nil {
+		ref = n.Pre
+	}
+	doc := map[string]any{"key": n.Key, "type": n.Type, "intent": string(n.Intent)}
+	if ref != nil {
+		v := bb.Nodes[*ref]
+		links := make([]string, 0, len(v.Out))
+		for _, l := range v.Out {
+			links = append(links, l.Type+">"+string(l.To.ID))
+		}
+		slices.Sort(links)
+		doc["state"], doc["props"], doc["links"] = v.State, v.Properties, links
+	}
+	return canonical(doc)
+}
+
+func canonical(v any) string {
+	b, _ := json.Marshal(v) // maps are marshalled with sorted keys
+	return string(b)
+}
+
+// Fingerprint is the short fingerprint of the text of a subject (FNV-1a, 32 bits, hexadecimal): what a rater copies in
+// `rated` when the text is long, shown by the brief next to each subject.
+func Fingerprint(text string) string {
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(text))
+	return fmt.Sprintf("%08x", h.Sum32())
+}
+
+// FingerprintOf is the fingerprint of a subject of the change, "" when the change has no such subject.
+func FingerprintOf(bb domain.Blackboard, key string) string {
+	if text, ok := Text(bb, key); ok {
+		return Fingerprint(text)
+	}
+	return ""
+}
+
+// rates reports whether a rating made on rated is about text.
+func rates(rated, text string) bool {
+	rated = strings.TrimSpace(rated)
+	return rated == strings.TrimSpace(text) || rated == Fingerprint(text)
+}
+
 // Assessments returns the latest rating of each subject, in the order the subjects were first rated.
-func Assessments(c domain.Change) []Assessment {
+func Assessments(bb domain.Blackboard) []Assessment {
+	c := bb.Change
 	var order []string
 	last := map[string]domain.ChangeItem{}
 	at := map[string]int{}
@@ -148,10 +227,8 @@ func Assessments(c domain.Change) []Assessment {
 		d := it.Data
 		a := Assessment{Key: key, Score: num(d, "score"), Verdict: str(d, "verdict"), Findings: findings(d["findings"]),
 			Suggestion: str(d, "suggestion"), Reply: str(d, "reply"), Rated: str(d, "rated"), Item: it.ID, By: it.ProducedBy, Versions: versions[key]}
-		if text, ok := Text(c, key); ok {
-			a.Current = strings.TrimSpace(a.Rated) == text
-		} else {
-			a.Current = true
+		if text, ok := Text(bb, key); ok {
+			a.Current = rates(a.Rated, text)
 		}
 		i, commented := lastComment[key]
 		a.Answered = !commented || i < at[key]
@@ -161,8 +238,8 @@ func Assessments(c domain.Change) []Assessment {
 }
 
 // Of returns the latest rating of a subject.
-func Of(c domain.Change, key string) (Assessment, bool) {
-	for _, a := range Assessments(c) {
+func Of(bb domain.Blackboard, key string) (Assessment, bool) {
+	for _, a := range Assessments(bb) {
 		if a.Key == key {
 			return a, true
 		}

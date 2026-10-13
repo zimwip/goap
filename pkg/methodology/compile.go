@@ -104,6 +104,7 @@ func (s *compileState) add(path, format string, args ...any) {
 func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s := &compileState{m: m, known: map[string]bool{}, actions: map[string]Action{}, goals: map[string]bool{}, agents: map[string]Agent{}}
 	s.checkHeader()
+	s.checkEvents()
 	s.compileConditions()
 	s.injectLibraries()
 	s.compileActions()
@@ -478,9 +479,7 @@ func (s *compileState) compileAgents() {
 func (s *compileState) checkTrigger(tp string, ag Agent, tr Trigger) {
 	switch tr.Type {
 	case TriggerEvent:
-		if !slices.Contains(TriggerEvents, tr.Event) {
-			s.add(tp+".event", "event must be one of %s", strings.Join(TriggerEvents, ", "))
-		}
+		s.checkEvent(tp+".event", tr.Event)
 		if _, err := condition.CompileEventFilter(tr.Filter); err != nil {
 			s.add(tp+".filter", "%v", err)
 		}
@@ -523,9 +522,7 @@ func (s *compileState) checkTransverse() {
 		if len(m.AppliesTo) == 0 && sub.Origin() == FromSelf {
 			s.add(path, "on applies to transverse methodologies (appliesTo), or to the events of integrated or integrating changes (from)")
 		}
-		if !slices.Contains(TriggerEvents, sub.Event) {
-			s.add(path+".event", "event must be one of %s", strings.Join(TriggerEvents, ", "))
-		}
+		s.checkEvent(path+".event", sub.Event)
 		if _, err := condition.CompileEventFilter(sub.Filter); err != nil {
 			s.add(path+".filter", "%v", err)
 		}

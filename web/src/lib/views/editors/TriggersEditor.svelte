@@ -3,6 +3,7 @@
   import CodeEditor from '../../components/CodeEditor.svelte';
   import RowTools from '../../components/RowTools.svelte';
   import { TRIGGER_EVENTS } from '../../api';
+  import { EVENT_LABELS, type EventForm } from '../../subscriptions';
   import { emptyTrigger, moveItem, TRIGGER_TARGETS, type TriggerForm } from '../../methodologyForm';
 
   let {
@@ -11,6 +12,7 @@
     goals,
     bad,
     count,
+    events = [],
     readonly = false,
   }: {
     triggers: TriggerForm[];
@@ -20,26 +22,11 @@
     goals: string[];
     bad: (path: string, exact?: boolean) => boolean;
     count: (path: string) => number;
+    /** the events the methodology declares (ADR 0110) */
+    events?: EventForm[];
     readonly?: boolean;
   } = $props();
 
-  const EVENT_LABELS: Record<string, string> = {
-    'change.created': 'change.created — change created',
-    'change.applied': 'change.applied — change applied',
-    'change.item_added': 'change.item_added — item added to a change',
-    'process.completed': 'process.completed — run completed',
-    'process.failed': 'process.failed — run failed',
-    'process.stuck': 'process.stuck — run stuck (no plan)',
-    'process.attached': 'process.attached — run attached to a change',
-    'step.completed': 'step.completed — step of a process completed',
-    'change.signal': 'change.signal — signal emitted on a change',
-    'change.transitioned': 'change.transitioned — change moved in its lifecycle',
-    'change.committed': 'change.committed — change committed on its branch',
-    'change.attached': 'change.attached — change attached to a change integrating it',
-    'change.detached': 'change.detached — change detached from the change integrating it',
-    'change.edited': 'change.edited — a field of the change header (title, description, goal) was edited',
-    'methodology.published': 'methodology.published — methodology published',
-  };
   const TARGET_LABELS: Record<string, string> = {
     new_change: 'new change (latest baseline)',
     event_change: 'change from the event',
@@ -120,8 +107,15 @@
           <div class="field">
             <label for="{p}-event">Event</label>
             <select id="{p}-event" bind:value={t.event} class:bad={bad(`${p}.event`)} data-path="{p}.event">
-              {#if t.event && !(TRIGGER_EVENTS as readonly string[]).includes(t.event)}<option value={t.event}>{t.event} (unknown)</option>{/if}
-              {#each TRIGGER_EVENTS as e (e)}<option value={e}>{EVENT_LABELS[e]}</option>{/each}
+              {#if t.event && !(TRIGGER_EVENTS as readonly string[]).includes(t.event) && !events.some((e) => e.name.trim() === t.event)}<option value={t.event}>{t.event} (unknown)</option>{/if}
+              <optgroup label="Standard">
+                {#each TRIGGER_EVENTS as e (e)}<option value={e}>{EVENT_LABELS[e] ?? e}</option>{/each}
+              </optgroup>
+              {#if events.some((e) => e.name.trim())}
+                <optgroup label="This methodology">
+                  {#each events.filter((e) => e.name.trim()) as e (e.name)}<option value={e.name.trim()}>{e.name.trim()}{e.description.trim() ? ` — ${e.description.trim()}` : ''}</option>{/each}
+                </optgroup>
+              {/if}
             </select>
           </div>
         </div>

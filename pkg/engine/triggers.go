@@ -255,7 +255,37 @@ func (t *TriggerManager) States() []TriggerState {
 }
 
 // Handle fires the event triggers matching ev, and runs the transverse processes alongside the changes it concerns.
+// Items added to a change raise, after it, the events of the methodologies their signals name (ADR 0110).
 func (t *TriggerManager) Handle(ctx context.Context, ev TriggerEvent) {
+	t.handle(ctx, ev)
+	for _, own := range DeclaredEvents(ev) {
+		t.handle(ctx, own)
+	}
+}
+
+// DeclaredEvents are the events of methodologies (methodology.Event) raised by the signal items of a change.item_added
+// event: one per signal name that is not a standard event, with the signals of that name in Items.
+func DeclaredEvents(ev TriggerEvent) []TriggerEvent {
+	if ev.Type != events.ChangeItemAdded {
+		return nil
+	}
+	var out []TriggerEvent
+	at := map[string]int{}
+	for _, it := range ev.Items {
+		if it.Kind != domain.KindSignal || it.Type == "" || methodology.StandardEvent(it.Type) || !methodology.EventNameRE.MatchString(it.Type) {
+			continue
+		}
+		i, ok := at[it.Type]
+		if !ok {
+			i, at[it.Type] = len(out), len(out)
+			out = append(out, TriggerEvent{Type: it.Type, Change: ev.Change, Process: ev.Process})
+		}
+		out[i].Items = append(out[i].Items, it)
+	}
+	return out
+}
+
+func (t *TriggerManager) handle(ctx context.Context, ev TriggerEvent) {
 	t.Engine.Accompany(ctx, ev)
 	if ev.Type == events.MethodologyPublished {
 		if err := t.Reload(ctx); err != nil {

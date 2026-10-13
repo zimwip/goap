@@ -681,7 +681,15 @@ activity holds ends at once. Items produced by a reaction's own actions do not w
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
 `sdlc`'s `description_review` process rates the description of every change (items `assessment`, `pkg/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the change tab shows the rating
-as a comment bubble (`DescriptionReview.svelte`, `web/src/lib/descriptionReview.ts`).
+as a comment bubble (`DescriptionReview.svelte`, `web/src/lib/descriptionReview.ts`). A rating is about any subject:
+`description`, `title`, `intent`, `impact:<node key>`, `item:<record key or id>` (`assess.Text` over the blackboard),
+`rated` holding the text or its fingerprint (`assess.Fingerprint`, FNV-1a 32 bits, printed `fp=` by the brief).
+A methodology declares its own events (`events: [{name, description}]`, names out of the standard families) and
+follows them like the standard ones; an unknown event is refused at compile, one followed from a related methodology
+that does not declare it is a composition warning. A signal item of that name raises it: an action's `emits` (added
+by the engine once its effects hold, `Engine.emitEvents`), a person or a script; `TriggerManager.Handle` turns the
+signals of a `change.item_added` into those events (`engine.DeclaredEvents`). The web edits every `on:` with one form
+(`SubscriptionsEditor.svelte`, `web/src/lib/subscriptions.ts`: standard and declared events, unknown ones flagged).
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
 are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
 

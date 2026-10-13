@@ -317,6 +317,8 @@ message Action {
   Verify verify = 23;
   // the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
   repeated Subscription on = 24;
+  // the events of the methodology it raises when it reaches its effects (ADR 0110)
+  repeated string emits = 25;
 }
 
 // The verification an action declares (ADR 0075): the kind of verifier its effect needs.
@@ -420,6 +422,14 @@ message Methodology {
   repeated Integration integrates = 27;
   // what it requires of the changes it integrates, as an outer guardian of their chain (ADR 0106)
   Guardian guardian = 28;
+  // the events of the methodology, in addition to the standard ones (ADR 0110)
+  repeated EventDef events = 29;
+}
+
+// EventDef is an event a methodology declares (ADR 0110), raised by a signal item of its name.
+message EventDef {
+  string name = 1;
+  string description = 2;
 }
 
 // Methodologies whose changes the changes of a methodology integrate (ADR 0106).

@@ -47,6 +47,23 @@ export function subjectText(change: { title?: string; intent?: string }): string
   return `${(change.title ?? '').trim()}\n\n${(change.intent ?? '').trim()}`;
 }
 
+/** fingerprint is the short fingerprint of a subject text a rater may copy in `rated` (FNV-1a 32 bits over UTF-8, the
+ *  twin of assess.Fingerprint). */
+export function fingerprint(text: string): string {
+  let h = 0x811c9dc5;
+  for (const b of new TextEncoder().encode(text)) {
+    h ^= b;
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
+/** rates says whether a rating made on `rated` (the text or its fingerprint) is about `text`. */
+export function rates(rated: string, text: string): boolean {
+  const r = rated.trim();
+  return r === text.trim() || r === fingerprint(text);
+}
+
 function inEffect(items: ChangeItem[]): ChangeItem[] {
   const superseded = new Set(items.flatMap((it) => it.supersedes ?? []));
   return items.filter((it) => it.status !== 'rejected' && it.status !== 'superseded' && !superseded.has(it.id ?? ''));
@@ -81,7 +98,7 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
     suggestion: str(d.suggestion),
     reply: str(d.reply),
     rated,
-    current: key === DESCRIPTION ? rated.trim() === subjectText(change) : true,
+    current: key === DESCRIPTION ? rates(rated, subjectText(change)) : true,
     answered: commented < at,
     versions,
     by: last.producedBy ?? '',

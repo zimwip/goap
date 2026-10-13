@@ -13,7 +13,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Events: eventsToPB(m.Events), Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
@@ -22,7 +22,7 @@ func ToPB(r Record) *registryv1.Methodology {
 		pa := &registryv1.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost,
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
 			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On)}
+			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On), Emits: a.Emits}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
 			if e.Link != nil {
@@ -77,6 +77,22 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
 			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process, On: subsFromPB(s.On)})
+	}
+	return out
+}
+
+func eventsToPB(evs []methodology.Event) []*registryv1.EventDef {
+	var out []*registryv1.EventDef
+	for _, e := range evs {
+		out = append(out, &registryv1.EventDef{Name: e.Name, Description: e.Description})
+	}
+	return out
+}
+
+func eventsFromPB(evs []*registryv1.EventDef) []methodology.Event {
+	var out []methodology.Event
+	for _, e := range evs {
+		out = append(out, methodology.Event{Name: e.Name, Description: e.Description})
 	}
 	return out
 }
@@ -181,7 +197,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		return methodology.Methodology{}
 	}
 	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal,
-		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian)}
+		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events)}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr})
 	}
@@ -189,7 +205,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		ma := methodology.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: nilIfEmpty(a.Pre), Effects: nilIfEmpty(a.Effects),
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
 			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On)}
+			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On), Emits: nilIfNone(a.Emits)}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
 			if e.Produce != nil {

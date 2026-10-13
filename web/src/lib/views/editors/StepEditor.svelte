@@ -7,6 +7,7 @@
   import RowTools from '../../components/RowTools.svelte';
   import PickList from './PickList.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
+  import SubscriptionsEditor from './SubscriptionsEditor.svelte';
   import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
   import { STEP_METHODS, emptyStep, moveItem, type StepForm } from '../../methodologyForm';
   import type { Draft } from '../../stores/drafts.svelte';
@@ -189,6 +190,10 @@
         <summary>Inputs, outputs, reference documents</summary>
         <StepIO {step} {path} draft={d} />
         <ReferencesEditor bind:refs={step.references} path="{path}.references" bad={d.bad} readonly={d.readonly} />
+      </details>
+      <details class="more" open={step.on.length > 0}>
+        <summary>Reacts to {#if step.on.length}<span class="hint">{step.on.length}</span>{/if}</summary>
+        <SubscriptionsEditor bind:subs={step.on} draft={d} {path} label="Events" hint="the step runs again on a change of the methodology for each of them; its exit says whether there is work (ADR 0110)" />
       </details>
 
       {#if step.method === 'steps'}

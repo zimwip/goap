@@ -68,6 +68,9 @@ type Methodology struct {
 	// On are the events of those changes a transverse methodology reacts to (ADR 0036 §3): each matching event runs its
 	// processes again, with the event in vars.event. Default: a process attached to the change, a step completed.
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
+	// Events are the events of the methodology (ADR 0110), in addition to the standard ones (events.All): a signal
+	// item of that name raises one (an action's emits, a person, a script), and an on or a trigger may follow it.
+	Events []Event `yaml:"events,omitempty" json:"events,omitempty"`
 	// Integrates names the methodologies whose changes the changes of this one integrate as sub-changes (ADR 0106):
 	// a methodology integrating others is one level above them (a release above the changes it delivers).
 	Integrates []Integration `yaml:"integrates,omitempty" json:"integrates,omitempty"`
@@ -236,6 +239,9 @@ type Action struct {
 	// On makes the action reactive (ADR 0110): it runs again on a change of its methodology for each matching event,
 	// towards its effects, through an agent generated for it (ReactionAgent).
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
+	// Emits are the events of the methodology (Methodology.Events) the action raises when it reaches its effects
+	// (ADR 0110): the engine adds a signal item of each name to the change.
+	Emits []string `yaml:"emits,omitempty" json:"emits,omitempty"`
 	// Step is set on the actions generated for the steps of a process (ADR 0034): the step path
 	// "<process>/<step>/<sub-step>"; Implements names the declared action a step runs (its
 	// specializations apply).
