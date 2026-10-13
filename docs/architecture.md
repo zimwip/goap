@@ -303,6 +303,7 @@ Variables exposed to the expression:
 | `verifications`, `derogations` | the verification state of the effects of the action runs and the derogations of the change ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `{execution, action, impact, oracle, independent, state, producer, by, open}` and `{key, rule, target, reason, signatory, expires, status, open, expired, versions}` |
 | `change.criticality`, `criticalityPolicy` | the criticality level of the change and what the organisation requires of it: `{oracles, sampling, signatoryRole, maxDerogationHours}` (not `policy`, taken by decision points) |
 | `dependencies`, `change.dependsOn` | the changes the change depends on ([ADR 0108](adr/0108-dependencies-between-changes.md)): `{id, title, methodology, status, state, parent, satisfied, reason}`, `satisfied` when its work reached the branch the change merges into; and their ids |
+| `assessments` | the latest rating of each subject of the change ([ADR 0110](adr/0110-reactive-activities-review-of-the-description.md), `pkg/assess`): `{key, score (0-5), verdict, findings, suggestion, current, answered, item, versions}`; `current` the subject (`description`: the title and the intent) still reads as rated, `answered` no `comment` about it came after the rating |
 | `history` | what the runs on the change did ([ADR 0109](adr/0109-conditions-derived-scoped-history.md) §4), folded from the log of the change (`journal.Fold`, facet `domain.FacetHistory`: by the graph with every blackboard, `Graph.LogFacets`, so lifecycle guards, gates and guardians read it too, else by the engine): `runs` `{process, parent, methodology, agent, goal, status, seq}`, `steps` `{path, methodology, process, action, execution, outcome (succeeded / failed / running), succeeded, error, seq, runs, current, staleBy}` and `last` (the latest run of each step path). `current`: the success still stands, nothing it started from moved since (an edit, a rebase, a cancel, a new version of a keyed item) but by a step relying on it, and the steps it relies on stand and are older, so a stale step re-opens the steps after it (§5) |
 
 **Condition libraries** ([ADR 0064](adr/0064-condition-libraries.md)): a methodology gets no condition it did not
@@ -310,7 +311,7 @@ declare, except those of the libraries it imports (`imports: [decisions, risks, 
 `open_questions`, `no_open_questions`, `decision_ready` (a point can be ruled now), `decision_pending`,
 `no_decision_pending`, `ratification_pending`, `decision_escalated`, `options_open`, `options_evaluated`,
 `option_selected`. `risks`: `open_risks`, `unmitigated_risks` (a live risk of score ≥ `condition.HighRisk`, 9, without
-an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verification`: `unverified_effects`, `all_verified`, `reserves_open`. `derogations`: `no_expired_derogation`, `derogation_debt` (`condition.DerogationDebtLimit`, 3 open). `dependencies`: `dependencies_met`, `dependencies_pending` (ADR 0108). A condition the methodology declares under the
+an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verification`: `unverified_effects`, `all_verified`, `reserves_open`. `derogations`: `no_expired_derogation`, `derogation_debt` (`condition.DerogationDebtLimit`, 3 open). `dependencies`: `dependencies_met`, `dependencies_pending` (ADR 0108). `assessments`: `description_rated`, `description_reviewed` (rated and answered), `description_accepted` (score ≥ `condition.AcceptableScore`, 3) (ADR 0110). A condition the methodology declares under the
 same name replaces the library one. The variables of the decision and risk concepts (`options`, `decisionPoints`,
 `questions`, `risks`, `actions`) are always in the environment, and computed only when an expression reads them.
 
@@ -669,6 +670,18 @@ its open sub-changes and to the open changes depending on it ([ADR 0108](adr/010
 (`Engine.relay`), waking the subscribed processes of their methodologies on their own change with
 `vars.event.relation`; the graph publishes `change.transitioned`, `change.committed`, `change.attached` and
 `change.detached` for that coupling.
+**Reactive activities** ([ADR 0110](adr/0110-reactive-activities-review-of-the-description.md)): any activity of a
+methodology (a process, a step of a process or of a method, a method, an action) may declare `on:` (the same
+subscriptions, `from` included). On each matching event of a change of its methodology the engine runs it on that change
+as a companion run kept per change and activity (`companion:<methodology>/<activity path>`, re-run in place, inbox):
+a process or a method with its agent towards its goal, a step with the agent of its process (or method) towards the
+step path, an action alone with the agent `on.<action>` towards its effects (`methodology.Compiled.Reactions`,
+`Engine.react`). The event says when to look, the conditions whether there is work: a run woken while the exit of its
+activity holds ends at once. Items produced by a reaction's own actions do not wake it. The graph publishes
+`change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
+`sdlc`'s `description_review` process rates the description of every change (items `assessment`, `pkg/assess`) and
+answers the requester's `comment` items; the analysis waits for `description_accepted`; the change tab shows the rating
+as a comment bubble (`DescriptionReview.svelte`, `web/src/lib/descriptionReview.ts`).
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
 are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
 

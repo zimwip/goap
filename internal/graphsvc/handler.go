@@ -435,7 +435,17 @@ func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.U
 		st := domain.ChangeStatus(*r.Msg.Status)
 		p.Status = &st
 	}
+	before, err := h.Graph.Change(ctx, domain.ChangeID(r.Msg.Id))
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
 	c, err := h.Graph.UpdateChange(ctx, domain.ChangeID(r.Msg.Id), p)
+	if fields := domain.EditedFields(before, c); err == nil && fields != nil {
+		// what a reactive activity of the methodology may want to look at again (ADR 0110)
+		ev := c
+		ev.Items, ev.Nodes = nil, nil
+		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeEdited), domain.ChangeEvent{Type: events.ChangeEdited, Change: ev, Fields: fields})
+	}
 	return res(&graphv1.UpdateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 

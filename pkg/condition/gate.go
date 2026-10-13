@@ -48,6 +48,7 @@ func guardInputs(bb domain.Blackboard, transition, decision string) (map[string]
 	f.CriticalityPolicy, _ = Resolve(act["criticalityPolicy"]).(map[string]any)
 	f.Dependencies, _ = Resolve(act["dependencies"]).([]any)
 	f.History, _ = Resolve(act["history"]).(map[string]any)
+	f.Assessments, _ = Resolve(act["assessments"]).([]any)
 	return change, f
 }
 

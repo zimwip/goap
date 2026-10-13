@@ -51,6 +51,8 @@ type Method struct {
 	Planner string   `yaml:"planner,omitempty" json:"planner,omitempty"`
 	Model   string   `yaml:"model,omitempty" json:"model,omitempty"`
 	MCPs    []string `yaml:"mcps,omitempty" json:"mcps,omitempty"`
+	// On makes the method reactive (ADR 0110): it runs again on a change of its methodology for each matching event.
+	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 }
 
 // ActorAgent is the agent generated for the method (ADR 0050): the agent instance that applies it, of its name.

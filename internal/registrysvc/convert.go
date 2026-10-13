@@ -22,7 +22,7 @@ func ToPB(r Record) *registryv1.Methodology {
 		pa := &registryv1.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost,
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
 			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs}
+			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On)}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
 			if e.Link != nil {
@@ -52,10 +52,10 @@ func ToPB(r Record) *registryv1.Methodology {
 	for _, me := range m.Methods {
 		out.Methods = append(out.Methods, &registryv1.Method{Name: me.Name, For: me.For, When: me.When, Priority: int32(me.Priority), Description: me.Description,
 			Guidance: me.Guidance, Checklist: me.Checklist, Deliverables: me.Deliverables, References: refsToPB(me.References), Roles: respToPB(me.Roles),
-			Steps: stepsToPB(me.Steps), Actions: me.Actions, Done: me.Done, Planner: me.Planner, Model: me.Model, Mcps: me.MCPs})
+			Steps: stepsToPB(me.Steps), Actions: me.Actions, Done: me.Done, Planner: me.Planner, Model: me.Model, Mcps: me.MCPs, On: subsToPB(me.On)})
 	}
 	for _, p := range m.Processes {
-		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Steps: stepsToPB(p.Steps), References: refsToPB(p.References)})
+		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Steps: stepsToPB(p.Steps), References: refsToPB(p.References), On: subsToPB(p.On)})
 	}
 	return out
 }
@@ -64,7 +64,7 @@ func stepsToPB(steps []methodology.Step) []*registryv1.Step {
 	out := make([]*registryv1.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
-			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Process: s.Process})
+			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Process: s.Process, On: subsToPB(s.On)})
 	}
 	return out
 }
@@ -76,7 +76,7 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	out := make([]methodology.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
-			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process})
+			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process, On: subsFromPB(s.On)})
 	}
 	return out
 }
@@ -189,7 +189,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		ma := methodology.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: nilIfEmpty(a.Pre), Effects: nilIfEmpty(a.Effects),
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
 			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps}
+			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On)}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
 			if e.Produce != nil {
@@ -223,10 +223,10 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	for _, me := range p.Methods {
 		m.Methods = append(m.Methods, methodology.Method{Name: me.Name, For: me.For, When: me.When, Priority: int(me.Priority), Description: me.Description,
 			Guidance: me.Guidance, Checklist: nilIfNone(me.Checklist), Deliverables: nilIfNone(me.Deliverables), References: refsFromPB(me.References), Roles: respFromPB(me.Roles),
-			Steps: stepsFromPB(me.Steps), Actions: nilIfNone(me.Actions), Done: me.Done, Planner: me.Planner, Model: me.Model, MCPs: nilIfNone(me.Mcps)})
+			Steps: stepsFromPB(me.Steps), Actions: nilIfNone(me.Actions), Done: me.Done, Planner: me.Planner, Model: me.Model, MCPs: nilIfNone(me.Mcps), On: subsFromPB(me.On)})
 	}
 	for _, p := range p.Processes {
-		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Steps: stepsFromPB(p.Steps), References: refsFromPB(p.References)})
+		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Steps: stepsFromPB(p.Steps), References: refsFromPB(p.References), On: subsFromPB(p.On)})
 	}
 	return m
 }
@@ -458,7 +458,7 @@ func ProcessGraphToPB(g methodology.ProcessGraph) *registryv1.ProcessGraph {
 	for _, me := range g.Methods {
 		out.Methods = append(out.Methods, &registryv1.Method{Name: me.Name, For: me.For, When: me.When, Priority: int32(me.Priority), Description: me.Description,
 			Guidance: me.Guidance, Checklist: me.Checklist, Deliverables: me.Deliverables, References: refsToPB(me.References),
-			Roles: respToPB(me.Roles), Steps: stepsToPB(me.Steps), Actions: me.Actions, Done: me.Done, Planner: me.Planner, Model: me.Model, Mcps: me.MCPs})
+			Roles: respToPB(me.Roles), Steps: stepsToPB(me.Steps), Actions: me.Actions, Done: me.Done, Planner: me.Planner, Model: me.Model, Mcps: me.MCPs, On: subsToPB(me.On)})
 		out.MethodGoals[me.Name] = me.AgentGoal
 	}
 	for _, a := range g.Agents {

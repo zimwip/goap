@@ -37,6 +37,7 @@
     'change.committed': 'change.committed — change committed on its branch',
     'change.attached': 'change.attached — change attached to a change integrating it',
     'change.detached': 'change.detached — change detached from the change integrating it',
+    'change.edited': 'change.edited — a field of the change header (title, description, goal) was edited',
     'methodology.published': 'methodology.published — methodology published',
   };
   const TARGET_LABELS: Record<string, string> = {

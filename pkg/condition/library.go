@@ -20,7 +20,12 @@ const (
 	// LibraryDependencies: the changes the change depends on (ADR 0108). A step waiting for them (`dependencies_met`)
 	// waits for those changes to merge, which no action of the change produces.
 	LibraryDependencies = "dependencies"
+	// LibraryAssessments: the ratings of what a person wrote on the change, the description first (ADR 0110).
+	LibraryAssessments = "assessments"
 )
+
+// AcceptableScore is the score (0 to 5) from which a rated description is accepted (`description_accepted`).
+const AcceptableScore = 3
 
 // DerogationDebtLimit is the number of open derogations from which the debt is too high (`derogation_debt`): the
 // parameter of the conditions of the `derogations` library, like HighRisk for the risks. A gate guard or a decision
@@ -32,7 +37,7 @@ const DerogationDebtLimit = 3
 const HighRisk = 9
 
 // LibraryNames lists the built-in libraries, in a stable order.
-var LibraryNames = []string{LibraryDecisions, LibraryRisks, LibraryVerification, LibraryDerogations, LibraryDependencies}
+var LibraryNames = []string{LibraryDecisions, LibraryRisks, LibraryVerification, LibraryDerogations, LibraryDependencies, LibraryAssessments}
 
 var unmitigated = fmt.Sprintf(`risks.exists(r, r.live && r.score >= %d && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`, HighRisk)
 
@@ -69,6 +74,12 @@ var libraries = map[string][]Definition{
 		// satisfied: the work of the dependency has reached the branch the change merges into
 		{Name: "dependencies_met", Expr: `!dependencies.exists(d, !d.satisfied)`},
 		{Name: "dependencies_pending", Expr: `dependencies.exists(d, !d.satisfied)`},
+	},
+	LibraryAssessments: {
+		// current: the rating is about the description as it reads now; answered: no comment came after it
+		{Name: "description_rated", Expr: `assessments.exists(a, a.key == "description" && a.current)`},
+		{Name: "description_reviewed", Expr: `assessments.exists(a, a.key == "description" && a.current && a.answered)`},
+		{Name: "description_accepted", Expr: fmt.Sprintf(`assessments.exists(a, a.key == "description" && a.current && a.score >= %d)`, AcceptableScore)},
 	},
 	LibraryDerogations: {
 		// a change cannot land on a derogation that ran out; the debt is the count of the open ones

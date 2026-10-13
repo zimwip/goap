@@ -44,6 +44,7 @@ func guardEnv() (*cel.Env, error) {
 		cel.Variable("integrator", cel.MapType(cel.StringType, cel.DynType)),
 		cel.Variable("dependencies", cel.ListType(cel.DynType)),
 		cel.Variable("history", cel.MapType(cel.StringType, cel.DynType)),
+		cel.Variable("assessments", cel.ListType(cel.DynType)),
 		ext.Strings(), ext.Lists(), ext.Sets())
 }
 
@@ -90,6 +91,8 @@ type Facts struct {
 	Integrator map[string]any
 	// Dependencies are the changes the change depends on (ADR 0108), as `dependencies`.
 	Dependencies []any
+	// Assessments are the ratings of the change (ADR 0110).
+	Assessments []any
 	// History is the history of the change (ADR 0109 §4), as `history`: {runs, steps, last}; nil: nothing ran.
 	History map[string]any
 }
@@ -150,7 +153,7 @@ func (g *Guard) eval(node map[string]any, children []any, change map[string]any,
 	}
 	v, _, err := g.prog.Eval(map[string]any{"integrator": integrator, "node": node, "children": children, "change": change, "impact": impact, "draft": draft, "decisionPoints": list(f.DecisionPoints), "actions": list(f.Actions), "risks": list(f.Risks),
 		"verifications": list(f.Verifications), "derogations": list(f.Derogations), "criticalityPolicy": policy, "world": world,
-		"dependencies": list(f.Dependencies), "history": history})
+		"dependencies": list(f.Dependencies), "history": history, "assessments": list(f.Assessments)})
 	if err != nil {
 		return false, err
 	}

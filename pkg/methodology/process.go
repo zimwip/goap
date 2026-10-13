@@ -27,6 +27,8 @@ type Process struct {
 	// References are the reference documents that describe the process.
 	References []Reference `yaml:"references,omitempty" json:"references,omitempty"`
 	Steps      []Step      `yaml:"steps" json:"steps"`
+	// On makes the process reactive (ADR 0110): it runs again on a change of its methodology for each matching event.
+	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 }
 
 // Reference points at a document of the documentary repository that describes a process or a step: a document of the
@@ -94,6 +96,8 @@ type Step struct {
 	// together (the Java components in one build, the Go ones in another). In a stream, `vars.item` is the group
 	// `{key, items}`.
 	GroupBy string `yaml:"groupBy,omitempty" json:"groupBy,omitempty"`
+	// On makes the step reactive (ADR 0110): it runs again on a change of its methodology for each matching event.
+	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 }
 
 // Step methods.

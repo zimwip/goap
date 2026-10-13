@@ -316,6 +316,7 @@ export const TRIGGER_EVENTS = [
   'change.committed',
   'change.attached',
   'change.detached',
+  'change.edited',
   'methodology.published',
 ] as const;
 

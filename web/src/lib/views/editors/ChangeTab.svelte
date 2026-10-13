@@ -65,6 +65,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import CompareDialog from '../../components/CompareDialog.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ChangeRisks from '../../components/ChangeRisks.svelte';
+  import DescriptionReview from '../../components/DescriptionReview.svelte';
   import ChangeCriticality from '../../components/ChangeCriticality.svelte';
   import ChangeVerification from '../../components/ChangeVerification.svelte';
   import ChangeDerogations from '../../components/ChangeDerogations.svelte';
@@ -1111,6 +1112,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             </div>
           </form>
         {:else if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
+        {#if !defining}
+          <DescriptionReview change={ch} {closed} onchange={() => load(selected)} onapply={(intent) => define({ intent }, 'Description updated: it is rated again.')} />
+        {/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}

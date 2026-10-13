@@ -318,6 +318,8 @@ message Action {
   repeated string mcps = 22;
   // how the effect is verified (ADR 0075)
   Verify verify = 23;
+  // the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+  repeated Subscription on = 24;
 }
 
 // The verification an action declares (ADR 0075): the kind of verifier its effect needs.
@@ -494,6 +496,8 @@ message Method {
   string planner = 16;
   string model = 17;
   repeated string mcps = 18;
+  // the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+  repeated Subscription on = 19;
 }
 
 // A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).
@@ -506,6 +510,8 @@ message Process {
   repeated Step steps = 5;
   // the reference documents that describe the process
   repeated Reference references = 6;
+  // the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+  repeated Subscription on = 7;
 }
 
 // A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL.
@@ -551,6 +557,8 @@ message Step {
   string foreach = 20;
   // CEL key of the group of each element of foreach: one stream per group, whose item is {key, items}
   string group_by = 21;
+  // the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+  repeated Subscription on = 22;
 }
 
 message GoalSummary {

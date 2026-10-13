@@ -2,6 +2,7 @@ package domain
 
 import (
 	"fmt"
+	"reflect"
 	"slices"
 	"sync"
 	"time"
@@ -117,6 +118,28 @@ type ChangeEvent struct {
 	Change   Change       `json:"change"`
 	Baseline *Baseline    `json:"baseline,omitempty"`
 	Items    []ChangeItem `json:"items,omitempty"`
+	// Fields are the fields of the header a change.edited event changed (ADR 0110).
+	Fields map[string]HeaderValue `json:"fields,omitempty"`
+}
+
+// EditedFields returns the fields of the header a person reads that differ between two versions of a change: title,
+// intent, goal and the keys of data ("data.<key>"). Nil when none differs.
+func EditedFields(before, after Change) map[string]HeaderValue {
+	out := map[string]HeaderValue{}
+	for name, v := range map[string][2]string{"title": {before.Title, after.Title}, "intent": {before.Intent, after.Intent}, "goal": {before.Goal, after.Goal}} {
+		if v[0] != v[1] {
+			out[name] = HeaderValue{From: v[0], To: v[1]}
+		}
+	}
+	for k, v := range after.Data {
+		if old, ok := before.Data[k]; !ok || !reflect.DeepEqual(old, v) {
+			out["data."+k] = HeaderValue{From: old, To: v}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // ItemKind classifies the facts of the blackboard (the nodes a change acts on are its change impacts).

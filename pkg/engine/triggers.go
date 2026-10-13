@@ -32,10 +32,19 @@ type TriggerEvent struct {
 	Items []domain.ChangeItem `json:"items,omitempty"`
 	// Step is the step that completed (step.completed, ADR 0036 §3).
 	Step *StepEvent `json:"step,omitempty"`
+	// Fields are the fields of the header a change.edited event changed (ADR 0110).
+	Fields map[string]domain.HeaderValue `json:"fields,omitempty"`
 }
 
 func (ev TriggerEvent) activation() map[string]any {
-	out := map[string]any{"type": ev.Type, "change": map[string]any{}, "process": map[string]any{}, "methodology": map[string]any{}, "step": map[string]any{}}
+	out := map[string]any{"type": ev.Type, "change": map[string]any{}, "process": map[string]any{}, "methodology": map[string]any{}, "step": map[string]any{}, "fields": map[string]any{}}
+	if len(ev.Fields) > 0 {
+		fields := make(map[string]any, len(ev.Fields))
+		for k, v := range ev.Fields {
+			fields[k] = map[string]any{"from": v.From, "to": v.To}
+		}
+		out["fields"] = fields
+	}
 	if s := ev.Step; s != nil {
 		out["step"] = map[string]any{"path": s.Path, "process": s.Process, "name": s.Name, "action": s.Action, "method": s.Method}
 	}

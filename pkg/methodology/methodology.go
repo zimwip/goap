@@ -233,6 +233,9 @@ type Action struct {
 	// per technology, per batch…): an execution that produced items without
 	// reaching the effects is progress, not a failure.
 	Incremental bool `yaml:"incremental,omitempty" json:"incremental,omitempty"`
+	// On makes the action reactive (ADR 0110): it runs again on a change of its methodology for each matching event,
+	// towards its effects, through an agent generated for it (ReactionAgent).
+	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 	// Step is set on the actions generated for the steps of a process (ADR 0034): the step path
 	// "<process>/<step>/<sub-step>"; Implements names the declared action a step runs (its
 	// specializations apply).
@@ -320,6 +323,8 @@ type Compiled struct {
 	// methods are the valid methods and the guards of their contexts (ADR 0035 §1)
 	methods      compiledMethods
 	methodGuards *condition.Set
+	// reactions are the activities declaring on (ADR 0110)
+	reactions []Reaction
 }
 
 // Action returns an action by name.
@@ -347,7 +352,7 @@ func (c *Compiled) Goal(name string) (Goal, bool) {
 			return Goal{Name: name, Description: s.Description, Pre: maps.Clone(s.Exit)}, true
 		}
 	}
-	return Goal{}, false
+	return c.reactionGoal(name)
 }
 
 // NeededBy returns the conditions a state needs to reach the goal conditions, by backward closure over the actions

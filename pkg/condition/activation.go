@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zimwip/goap/pkg/assess"
 	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/journal"
@@ -43,6 +44,7 @@ func Activation(bb domain.Blackboard) map[string]any {
 	dec := lazy(func() decisionView { return decisions(bb) })
 	dep := lazy(func() []any { return dependencies(bb) })
 	hist := lazy(func() map[string]any { return history(bb) })
+	asm := lazy(func() []any { return assessments(&c) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
@@ -70,6 +72,8 @@ func Activation(bb domain.Blackboard) map[string]any {
 		"dependencies": func() any { return dep() },
 		// history is what the runs on the change did, step by step (ADR 0109 §4): the facet the engine folds from the log
 		"history": func() any { return hist() },
+		// assessments are the latest ratings of the subjects of the change, the description first (ADR 0110)
+		"assessments": func() any { return asm() },
 	}
 }
 
@@ -105,6 +109,21 @@ func risks(c *domain.Change) []any {
 		out = append(out, map[string]any{"key": r.Key, "title": r.Title, "description": r.Description, "probability": int64(r.Probability),
 			"impact": int64(r.Impact), "score": int64(r.Score()), "status": r.Status, "live": r.Live(), "owner": r.Owner, "actions": acts,
 			"step": r.Step, "item": string(r.Item), "versions": int64(r.Versions)})
+	}
+	return out
+}
+
+// assessments are the ratings of the change (ADR 0110).
+func assessments(c *domain.Change) []any {
+	as := assess.Assessments(*c)
+	out := make([]any, 0, len(as))
+	for _, a := range as {
+		fs := make([]any, len(a.Findings))
+		for i, f := range a.Findings {
+			fs[i] = map[string]any{"text": f.Text, "severity": f.Severity}
+		}
+		out = append(out, map[string]any{"key": a.Key, "score": int64(a.Score), "verdict": a.Verdict, "findings": fs, "suggestion": a.Suggestion,
+			"current": a.Current, "answered": a.Answered, "item": string(a.Item), "versions": int64(a.Versions)})
 	}
 	return out
 }

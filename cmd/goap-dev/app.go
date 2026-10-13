@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/pkg/assess"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
@@ -42,6 +43,7 @@ type env struct {
 func newApp(parent context.Context, cfg config, log *slog.Logger) (*app, error) {
 	// the facts of the risk register are items of a change (ADR 0065)
 	risk.Register()
+	assess.Register()
 	verify.Register()
 	ctx, cancel := context.WithCancel(parent)
 	dev := cfg.Dev

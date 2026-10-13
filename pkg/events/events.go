@@ -13,10 +13,13 @@ const (
 	// ChangeTransitioned, ChangeCommitted, ChangeAttached and ChangeDetached couple the changes of methodologies
 	// integrating one another (ADR 0106): a lifecycle move, a commit on its branch, an attachment to a change
 	// integrating it, a detachment from it.
-	ChangeTransitioned   = "change.transitioned"
-	ChangeCommitted      = "change.committed"
-	ChangeAttached       = "change.attached"
-	ChangeDetached       = "change.detached"
+	ChangeTransitioned = "change.transitioned"
+	ChangeCommitted    = "change.committed"
+	ChangeAttached     = "change.attached"
+	ChangeDetached     = "change.detached"
+	// ChangeEdited: a field of the header was edited (title, intent, goal, data), the fields in event.fields
+	// (ADR 0110).
+	ChangeEdited         = "change.edited"
 	ProcessCompleted     = "process.completed"
 	ProcessFailed        = "process.failed"
 	ProcessStuck         = "process.stuck"
@@ -29,7 +32,7 @@ const (
 // (TRIGGER_EVENTS in web/src/lib/api/types/registry.ts), checked against this list by a test.
 var All = []string{
 	ChangeCreated, ChangeApplied, ChangeItemAdded, ChangeSignal,
-	ChangeTransitioned, ChangeCommitted, ChangeAttached, ChangeDetached,
+	ChangeTransitioned, ChangeCommitted, ChangeAttached, ChangeDetached, ChangeEdited,
 	ProcessCompleted, ProcessFailed, ProcessStuck, ProcessAttached,
 	StepCompleted, MethodologyPublished,
 }

@@ -1,0 +1,202 @@
+package engine
+
+import (
+	"context"
+	"testing"
+
+	"github.com/zimwip/goap/pkg/assess"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/methodology"
+)
+
+// describedYAML reviews the description of its changes with a reactive step (ADR 0110): the step runs on the change
+// when it is created, when its description is edited and when a person comments on the rating.
+const describedYAML = `
+name: described
+version: 1.0.0
+namespace: alm
+imports: [assessments]
+actions:
+  - {name: rate, kind: human, description: Rate the description, effects: {description_reviewed: true}}
+  - {name: write, kind: human, description: Write the note, pre: {description_accepted: true}, effects: {noted: true}}
+conditions:
+  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
+processes:
+  - name: delivery
+    steps:
+      - {name: note, action: write}
+  - name: review
+    steps:
+      - name: rate
+        action: rate
+        on:
+          - {event: change.created}
+          - {event: change.edited, filter: '"intent" in event.fields || "title" in event.fields'}
+          - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "comment" && i.data.about == "description")'}
+`
+
+func TestReactiveStepReviewsTheDescription(t *testing.T) {
+	ctx := context.Background()
+	e := stagedEngine(t)
+	m, err := methodology.Parse([]byte(describedYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rs := c.Reactions(); len(rs) != 1 || rs[0].Activity != "review/rate" || rs[0].Agent != "review" || rs[0].Goal != "review/rate" || !rs[0].Owns("review/rate") {
+		t.Fatalf("reactions %+v", rs)
+	}
+	e.Methodologies.(StaticMethodologies)["described"] = c
+
+	ch, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Note", Intent: "write a note", Methodology: "described", Namespace: "alm", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := func(typ string, items []domain.ChangeItem, fields map[string]domain.HeaderValue) {
+		t.Helper()
+		bb, err := e.Graph.Blackboard(ctx, ch.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		e.Accompany(ctx, TriggerEvent{Type: typ, Change: &bb.Change, Items: items, Fields: fields})
+		e.Drain()
+	}
+	rater := func() *Process {
+		t.Helper()
+		cs := companionOf(t, e, ch.ID)
+		if len(cs) != 1 {
+			t.Fatalf("one run of the reaction per change: %d", len(cs))
+		}
+		return cs[0]
+	}
+	rate := func(score int, reply string) {
+		t.Helper()
+		bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+		text, _ := assess.Text(bb.Change, assess.SubjectDescription)
+		p := rater()
+		if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: string(assess.KindAssessment), Data: map[string]any{"key": "description",
+			"score": score, "verdict": "unclear", "rated": text, "reply": reply}}}); err != nil {
+			t.Fatal(err)
+		}
+		if p, _ = e.Run(ctx, p.ID); p.Status != StatusCompleted {
+			t.Fatalf("rated: %s %s", p.Status, p.Error)
+		}
+	}
+	waiting := func(why string) {
+		t.Helper()
+		if p := rater(); p.Status != StatusWaiting || p.Pending == nil || p.Pending.Action != "review/rate" {
+			t.Fatalf("%s: the rater runs again, got %s %+v", why, p.Status, p.Pending)
+		}
+	}
+
+	// the change is created: the step rates its description
+	event("change.created", nil, nil)
+	if p := rater(); p.Trigger != "companion:described/review/rate" || p.Goal != "review/rate" {
+		t.Fatalf("reaction run %+v", p)
+	}
+	waiting("created")
+	rate(2, "say what the note is about")
+	run := rater().ID
+
+	// the person answers in the thread: the same run is woken and rates again
+	items, err := e.Graph.AddItems(ctx, ch.ID, []domain.ChangeItem{{Kind: assess.KindComment, Status: domain.ItemProposed, ProducedBy: "alice",
+		Data: map[string]any{"about": "description", "text": "it is the release note"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event("change.item_added", items, nil)
+	waiting("commented")
+	rate(2, "then say so in the description")
+	if rater().ID != run {
+		t.Fatal("the reaction keeps its run")
+	}
+
+	// an edit of the goal is not one of its events; an edit of the description is
+	event("change.edited", nil, map[string]domain.HeaderValue{"goal": {From: "a", To: "b"}})
+	if p := rater(); p.Status != StatusCompleted {
+		t.Fatalf("filtered out: %s", p.Status)
+	}
+	intent := "write the release note of 1.2"
+	if _, err := e.Graph.UpdateChange(ctx, ch.ID, graph.ChangePatch{Intent: &intent}); err != nil {
+		t.Fatal(err)
+	}
+	event("change.edited", nil, map[string]domain.HeaderValue{"intent": {From: "write a note", To: intent}})
+	waiting("edited")
+	rate(4, "clear")
+	bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+	if a, ok := assess.Of(bb.Change, "description"); !ok || !a.Current || !a.Answered || a.Score != 4 || a.Versions != 3 {
+		t.Fatalf("assessment %+v", a)
+	}
+}
+
+func TestReactiveActionsAndTheirChecks(t *testing.T) {
+	m, err := methodology.Parse([]byte(`
+name: nudging
+version: 1.0.0
+namespace: alm
+conditions:
+  - {name: nudged, expr: 'artifacts.exists(a, a.type == "nudge")'}
+actions:
+  - {name: nudge, kind: human, effects: {nudged: true}, on: [{event: change.edited}]}
+processes:
+  - name: main
+    steps:
+      - {name: one, action: nudge}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs := c.Reactions()
+	if len(rs) != 1 || rs[0].Kind != methodology.ReactAction || rs[0].Agent != "on.nudge" {
+		t.Fatalf("reactions %+v", rs)
+	}
+	if g, ok := c.Goal("on.nudge"); !ok || !g.Pre["nudged"] {
+		t.Fatalf("goal of a reactive action: %+v", g)
+	}
+	if ag, ok := c.Agent("on.nudge"); !ok || len(c.AgentActions(ag)) != 1 {
+		t.Fatalf("agent of a reactive action: %+v", ag)
+	}
+	for name, src := range map[string]string{
+		"no effects": `
+name: bad
+version: 1.0.0
+namespace: alm
+actions:
+  - {name: nudge, kind: human, on: [{event: change.edited}]}
+goals: [{name: g, pre: {x: true}}]
+conditions: [{name: x, expr: "true"}]
+`,
+		"unknown event": `
+name: bad
+version: 1.0.0
+namespace: alm
+conditions: [{name: x, expr: "true"}]
+actions: [{name: a, kind: human, effects: {x: true}}]
+processes: [{name: p, on: [{event: change.nothing}], steps: [{name: s, action: a}]}]
+`,
+		"transverse": `
+name: bad
+version: 1.0.0
+appliesTo: [staged]
+conditions: [{name: x, expr: "true"}]
+actions: [{name: a, kind: human, effects: {x: true}}]
+processes: [{name: p, steps: [{name: s, action: a, on: [{event: change.edited}]}]}]
+`,
+	} {
+		m, err := methodology.Parse([]byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if issues := m.Validate(); !issues.HasErrors() {
+			t.Errorf("%s: refused expected", name)
+		}
+	}
+}

@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.5.6
+version: 0.6.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -14,7 +14,8 @@ namespace: alm
 goal: deliver
 
 # risks_under_control, the release train gate, is a condition of the `risks` library
-imports: [risks, dependencies]
+# description_accepted, the gate of the framing, is a condition of the `assessments` library (ADR 0110)
+imports: [risks, dependencies, assessments]
 
 conditions:
   # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,
@@ -127,6 +128,29 @@ actions:
       4. Once it is clear, call goap-change/reformulate with the clarified title, a one-paragraph
          intent (concrete outcome and scope) and a rationale, then finish with
          {"kind":"artifact","type":"change_formulated","data":{"continued":false,"changeId":"{{ .Change.ID }}"}}.
+
+  - name: rate_description
+    kind: llm
+    description: >
+      Rate how well the title and the description of the change say what is wanted (outcome, scope, reason),
+      propose a better wording, and answer the requester's remarks in the thread of the rating.
+    effects: {description_reviewed: true}
+    cost: 1
+    model: default
+    prompt: |
+      You review the description of a change before anyone works on it. It must state a concrete, observable
+      outcome, its scope (the applications, requirements or data it touches) and why it is needed.
+      Title: "{{ .Change.Title }}"
+      Description: "{{ .Change.Intent }}"
+      The brief shows your previous ASSESSMENT of it, if any, and the THREAD of the requester's remarks: when they
+      answered you, take their answer into account and refine your rating rather than start over.
+      Finish with exactly one item:
+      {"kind":"assessment","data":{"key":"description","score":<0 to 5>,"verdict":"clear|unclear|insufficient",
+       "findings":[{"text":"<what is missing or ambiguous>","severity":"major|minor"}],
+       "suggestion":"<a rewritten description, same language as the original, only if it can be improved>",
+       "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>",
+       "rated":"<the title, a blank line, then the description, exactly as given above>"}}
+      A score of 3 or more means the change can be worked on as described.
 
   # ======================= impact analysis
   - name: identify_scope
@@ -832,9 +856,11 @@ processes:
         references:
           - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
       - name: analysis
-        description: Scope, impacts, requirements, traceability and test plan, once the change is framed
+        description: Scope, impacts, requirements, traceability and test plan, once the change is framed and its description accepted
         roles: {responsible: business_analyst, accountable: product_owner, consulted: [solution_architect]}
-        pre: {"step:software_delivery/framing": true}
+        # the rating of the current description accepts it (ADR 0110): the requester edits the description, the
+        # description_review process rates it again by itself, and the run waiting here is tried again
+        pre: {"step:software_delivery/framing": true, description_accepted: true}
         steps:
           - name: scope
             description: Identify the elements the change directly concerns
@@ -870,6 +896,17 @@ processes:
         # when one of them moves
         pre: {dependencies_met: true}
         action: apply_change
+
+  - name: description_review
+    description: Rate the description of the change and discuss it with the requester, each time it changes or they answer (ADR 0110)
+    steps:
+      - name: rate
+        description: Rate the title and the description, propose a better wording, answer the requester's remarks
+        action: rate_description
+        on:
+          - {event: change.created}
+          - {event: change.edited, filter: '"intent" in event.fields || "title" in event.fields'}
+          - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "comment" && i.data.about == "description")'}
 
   - name: release_train
     description: Release — plan the releases, write the release note, review, deploy environment by environment

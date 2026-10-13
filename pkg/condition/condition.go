@@ -37,7 +37,7 @@ type compiled struct {
 
 // Variables exposed to expressions.
 var Variables = []string{"change", "items", "changeImpacts", "decisions", "artifacts", "vars",
-	"options", "activeOption", "decisionPoints", "questions", "risks", "actions", "verifications", "derogations", "criticalityPolicy", "dependencies", "history"}
+	"options", "activeOption", "decisionPoints", "questions", "risks", "actions", "verifications", "derogations", "criticalityPolicy", "dependencies", "history", "assessments"}
 
 // NewEnv returns the CEL environment used for conditions.
 func NewEnv() (*cel.Env, error) {
@@ -55,6 +55,7 @@ func NewEnv() (*cel.Env, error) {
 		cel.Variable("questions", cel.ListType(cel.DynType)),
 		// the risk register and the actions of the change (ADR 0036 §1)
 		cel.Variable("risks", cel.ListType(cel.DynType)),
+		cel.Variable("assessments", cel.ListType(cel.DynType)),
 		cel.Variable("actions", cel.ListType(cel.DynType)),
 		// the verification of the effects of the action runs (ADR 0075)
 		cel.Variable("verifications", cel.ListType(cel.DynType)),

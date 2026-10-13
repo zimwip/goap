@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/zimwip/goap/pkg/assess"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/risk"
 )
@@ -25,6 +26,9 @@ const (
 	maxRisks     = 15
 	maxActions   = 15
 	maxText      = 90
+	// maxIntent is long enough for a description being rated (ADR 0110)
+	maxIntent = 1500
+	maxThread = 12
 )
 
 // ArtifactTypesSkipped are the bookkeeping artifacts the brief leaves out.
@@ -53,7 +57,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 	line := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
 	line("CHANGE %s %q status=%s ns=%s goal=%s", shortID(string(c.ID)), short(c.Title, maxText), c.Status, c.Namespace, c.Goal)
 	if c.Intent != "" {
-		line("INTENT %s", short(c.Intent, 400))
+		line("INTENT %s", short(c.Intent, maxIntent))
 	}
 	if step != nil {
 		s := fmt.Sprintf("STEP %s", step.Path)
@@ -166,6 +170,34 @@ func Of(bb domain.Blackboard, step *Step) string {
 		}
 	}
 
+	// the ratings and the threads discussing them (ADR 0110): the rater reads what was said since it last rated
+	for _, a := range assess.Assessments(c) {
+		state := "current"
+		if !a.Current {
+			state = "stale: the subject changed since"
+		} else if !a.Answered {
+			state = "current, a comment awaits an answer"
+		}
+		line("ASSESSMENT %s score=%d/%d %s (%s)", a.Key, a.Score, assess.MaxScore, cmp.Or(a.Verdict, "-"), state)
+		for _, f := range a.Findings {
+			line("- finding %s %q", cmp.Or(f.Severity, "-"), short(f.Text, 160))
+		}
+		if a.Suggestion != "" {
+			line("- suggested %q", short(a.Suggestion, 400))
+		}
+	}
+	for _, key := range threadKeys(c) {
+		msgs := assess.Thread(c, key)
+		line("THREAD %s %d messages (oldest first)", key, len(msgs))
+		for _, m := range msgs[max(0, len(msgs)-maxThread):] {
+			who := "person"
+			if m.Kind == assess.KindAssessment {
+				who = fmt.Sprintf("rater score=%d", m.Score)
+			}
+			line("- %s: %q", who, short(m.Text, 400))
+		}
+	}
+
 	// the latest artifacts
 	var arts []domain.ChangeItem
 	for _, it := range c.Items {
@@ -181,6 +213,20 @@ func Of(bb domain.Blackboard, step *Step) string {
 		}
 	}
 	return b.String()
+}
+
+// threadKeys are the subjects someone commented on, in the order of their first comment.
+func threadKeys(c domain.Change) []string {
+	var out []string
+	for _, it := range c.Items {
+		if it.Kind != assess.KindComment || !c.Active(it.ID) {
+			continue
+		}
+		if k, _ := it.Data["about"].(string); k != "" && !slices.Contains(out, k) {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // summary is the most telling text of an artifact's data.

@@ -23,6 +23,7 @@ import (
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
+	"github.com/zimwip/goap/pkg/assess"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
@@ -39,6 +40,7 @@ func main() {
 	ctx := context.Background()
 	// the facts of the risk register are items of a change (ADR 0065)
 	risk.Register()
+	assess.Register()
 	verify.Register()
 	log := platform.Logger("engine")
 	defer telemetry.Setup(ctx, log, "engine")(ctx)

@@ -62,6 +62,21 @@ func (g EventingGraph) DetachChange(ctx context.Context, id domain.ChangeID) (do
 	return c, err
 }
 
+// UpdateChange implements GraphPort: change.edited when a field of the header changed (ADR 0110).
+func (g EventingGraph) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error) {
+	before, err := g.GraphPort.Change(ctx, id)
+	if err != nil {
+		return before, err
+	}
+	c, err := g.GraphPort.UpdateChange(ctx, id, p)
+	if fields := domain.EditedFields(before, c); err == nil && fields != nil && g.OnEvent != nil {
+		ev := c
+		ev.Items, ev.Nodes = nil, nil
+		g.OnEvent(ctx, domain.ChangeEvent{Type: events.ChangeEdited, Change: ev, Fields: fields})
+	}
+	return c, err
+}
+
 // AddItems implements GraphPort.
 func (g EventingGraph) AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error) {
 	out, err := g.GraphPort.AddItems(ctx, id, items)
@@ -102,7 +117,7 @@ func (g EventingGraph) IntegrateChange(ctx context.Context, id domain.ChangeID, 
 // TriggerEventOf converts a change event.
 func TriggerEventOf(ev domain.ChangeEvent) TriggerEvent {
 	c := ev.Change
-	return TriggerEvent{Type: ev.Type, Change: &c, Items: ev.Items}
+	return TriggerEvent{Type: ev.Type, Change: &c, Items: ev.Items, Fields: ev.Fields}
 }
 
 // WatchProcesses feeds process events of the broker to the trigger manager

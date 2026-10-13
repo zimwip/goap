@@ -130,6 +130,7 @@ nodeTypes:
       - {name: input, label: Input, description: "Conditions the activity takes", type: json, widget: textarea, section: Definition, order: 3}
       - {name: goals, label: Goals, description: "Goals the activity names", type: json, widget: textarea, section: Definition, order: 4}
       - {name: output, label: Output, description: "Conditions the activity produces", type: json, widget: textarea, section: Definition, order: 5}
+      - {name: on, label: "Reacts to", description: "Events that run the activity again on a change of its methodology (ADR 0110): event, filter (CEL over event), from", type: json, widget: textarea, section: Reactions, order: 6}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # ADR 0034: the steps and sub-steps that reach an objective, each done by an action, an agent, a nested process or a person

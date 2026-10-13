@@ -1711,7 +1711,9 @@ type Action struct {
 	// MCPs the action uses (llm and script actions); a tool action is "<mcp>/<tool>"
 	Mcps []string `protobuf:"bytes,22,rep,name=mcps,proto3" json:"mcps,omitempty"`
 	// how the effect is verified (ADR 0075)
-	Verify        *Verify `protobuf:"bytes,23,opt,name=verify,proto3" json:"verify,omitempty"`
+	Verify *Verify `protobuf:"bytes,23,opt,name=verify,proto3" json:"verify,omitempty"`
+	// the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+	On            []*Subscription `protobuf:"bytes,24,rep,name=on,proto3" json:"on,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1903,6 +1905,13 @@ func (x *Action) GetMcps() []string {
 func (x *Action) GetVerify() *Verify {
 	if x != nil {
 		return x.Verify
+	}
+	return nil
+}
+
+func (x *Action) GetOn() []*Subscription {
+	if x != nil {
+		return x.On
 	}
 	return nil
 }
@@ -2866,9 +2875,11 @@ type Method struct {
 	// exit criteria of a method without steps
 	Done map[string]bool `protobuf:"bytes,15,rep,name=done,proto3" json:"done,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	// planner (goap by default), LLM alias and MCPs of the agent applying the method
-	Planner       string   `protobuf:"bytes,16,opt,name=planner,proto3" json:"planner,omitempty"`
-	Model         string   `protobuf:"bytes,17,opt,name=model,proto3" json:"model,omitempty"`
-	Mcps          []string `protobuf:"bytes,18,rep,name=mcps,proto3" json:"mcps,omitempty"`
+	Planner string   `protobuf:"bytes,16,opt,name=planner,proto3" json:"planner,omitempty"`
+	Model   string   `protobuf:"bytes,17,opt,name=model,proto3" json:"model,omitempty"`
+	Mcps    []string `protobuf:"bytes,18,rep,name=mcps,proto3" json:"mcps,omitempty"`
+	// the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+	On            []*Subscription `protobuf:"bytes,19,rep,name=on,proto3" json:"on,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3015,6 +3026,13 @@ func (x *Method) GetMcps() []string {
 	return nil
 }
 
+func (x *Method) GetOn() []*Subscription {
+	if x != nil {
+		return x.On
+	}
+	return nil
+}
+
 // A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).
 type Process struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
@@ -3023,7 +3041,9 @@ type Process struct {
 	Examples    []string               `protobuf:"bytes,3,rep,name=examples,proto3" json:"examples,omitempty"`
 	Steps       []*Step                `protobuf:"bytes,5,rep,name=steps,proto3" json:"steps,omitempty"`
 	// the reference documents that describe the process
-	References    []*Reference `protobuf:"bytes,6,rep,name=references,proto3" json:"references,omitempty"`
+	References []*Reference `protobuf:"bytes,6,rep,name=references,proto3" json:"references,omitempty"`
+	// the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+	On            []*Subscription `protobuf:"bytes,7,rep,name=on,proto3" json:"on,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3089,6 +3109,13 @@ func (x *Process) GetSteps() []*Step {
 func (x *Process) GetReferences() []*Reference {
 	if x != nil {
 		return x.References
+	}
+	return nil
+}
+
+func (x *Process) GetOn() []*Subscription {
+	if x != nil {
+		return x.On
 	}
 	return nil
 }
@@ -3185,7 +3212,9 @@ type Step struct {
 	// CEL list on the blackboard: the step naming a capability runs once per element, in parallel streams (ADR 0050)
 	Foreach string `protobuf:"bytes,20,opt,name=foreach,proto3" json:"foreach,omitempty"`
 	// CEL key of the group of each element of foreach: one stream per group, whose item is {key, items}
-	GroupBy       string `protobuf:"bytes,21,opt,name=group_by,json=groupBy,proto3" json:"group_by,omitempty"`
+	GroupBy string `protobuf:"bytes,21,opt,name=group_by,json=groupBy,proto3" json:"group_by,omitempty"`
+	// the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
+	On            []*Subscription `protobuf:"bytes,22,rep,name=on,proto3" json:"on,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3337,6 +3366,13 @@ func (x *Step) GetGroupBy() string {
 		return x.GroupBy
 	}
 	return ""
+}
+
+func (x *Step) GetOn() []*Subscription {
+	if x != nil {
+		return x.On
+	}
+	return nil
 }
 
 type GoalSummary struct {
@@ -7818,7 +7854,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\bfor_each\x18\x01 \x01(\tR\aforEach\x12\x14\n" +
 	"\x05where\x18\x02 \x01(\tR\x05where\x127\n" +
 	"\aproduce\x18\x03 \x01(\v2\x1d.goap.registry.v1.ProduceSpecR\aproduce\x12.\n" +
-	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xde\x06\n" +
+	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\x8e\a\n" +
 	"\x06Action\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -7845,7 +7881,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\bpriority\x18\x14 \x01(\x05R\bpriority\x12 \n" +
 	"\vincremental\x18\x15 \x01(\bR\vincremental\x12\x12\n" +
 	"\x04mcps\x18\x16 \x03(\tR\x04mcps\x120\n" +
-	"\x06verify\x18\x17 \x01(\v2\x18.goap.registry.v1.VerifyR\x06verify\x1a6\n" +
+	"\x06verify\x18\x17 \x01(\v2\x18.goap.registry.v1.VerifyR\x06verify\x12.\n" +
+	"\x02on\x18\x18 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
@@ -7950,7 +7987,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vresponsible\x18\x01 \x01(\tR\vresponsible\x12 \n" +
 	"\vaccountable\x18\x02 \x01(\tR\vaccountable\x12\x1c\n" +
 	"\tconsulted\x18\x03 \x03(\tR\tconsulted\x12\x1a\n" +
-	"\binformed\x18\x04 \x03(\tR\binformed\"\xeb\x04\n" +
+	"\binformed\x18\x04 \x03(\tR\binformed\"\x9b\x05\n" +
 	"\x06Method\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03for\x18\x02 \x01(\tR\x03for\x12\x12\n" +
@@ -7969,11 +8006,12 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x04done\x18\x0f \x03(\v2\".goap.registry.v1.Method.DoneEntryR\x04done\x12\x18\n" +
 	"\aplanner\x18\x10 \x01(\tR\aplanner\x12\x14\n" +
 	"\x05model\x18\x11 \x01(\tR\x05model\x12\x12\n" +
-	"\x04mcps\x18\x12 \x03(\tR\x04mcps\x1a7\n" +
+	"\x04mcps\x18\x12 \x03(\tR\x04mcps\x12.\n" +
+	"\x02on\x18\x13 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x1a7\n" +
 	"\tDoneEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fR\x05agentR\x04goal\"\xd6\x01\n" +
+	"\x10\vJ\x04\b\v\x10\fR\x05agentR\x04goal\"\x86\x02\n" +
 	"\aProcess\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
@@ -7981,11 +8019,12 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05steps\x18\x05 \x03(\v2\x16.goap.registry.v1.StepR\x05steps\x12;\n" +
 	"\n" +
 	"references\x18\x06 \x03(\v2\x1b.goap.registry.v1.ReferenceR\n" +
-	"referencesJ\x04\b\x04\x10\x05R\bparallel\"M\n" +
+	"references\x12.\n" +
+	"\x02on\x18\a \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02onJ\x04\b\x04\x10\x05R\bparallel\"M\n" +
 	"\tReference\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x18\n" +
-	"\asection\x18\x03 \x01(\tR\asection\"\x8c\x06\n" +
+	"\asection\x18\x03 \x01(\tR\asection\"\xbc\x06\n" +
 	"\x04Step\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\"\n" +
@@ -8005,7 +8044,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x06method\x18\x12 \x01(\tR\x06method\x128\n" +
 	"\x05roles\x18\x13 \x01(\v2\".goap.registry.v1.ResponsibilitiesR\x05roles\x12\x18\n" +
 	"\aforeach\x18\x14 \x01(\tR\aforeach\x12\x19\n" +
-	"\bgroup_by\x18\x15 \x01(\tR\agroupBy\x1a6\n" +
+	"\bgroup_by\x18\x15 \x01(\tR\agroupBy\x12.\n" +
+	"\x02on\x18\x16 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a7\n" +
@@ -8579,167 +8619,171 @@ var file_goap_registry_v1_registry_proto_depIdxs = []int32{
 	20,  // 20: goap.registry.v1.Action.expects:type_name -> goap.registry.v1.Expectation
 	124, // 21: goap.registry.v1.Action.params:type_name -> google.protobuf.Struct
 	22,  // 22: goap.registry.v1.Action.verify:type_name -> goap.registry.v1.Verify
-	24,  // 23: goap.registry.v1.Agent.triggers:type_name -> goap.registry.v1.Trigger
-	106, // 24: goap.registry.v1.Goal.pre:type_name -> goap.registry.v1.Goal.PreEntry
-	17,  // 25: goap.registry.v1.Methodology.conditions:type_name -> goap.registry.v1.Condition
-	21,  // 26: goap.registry.v1.Methodology.actions:type_name -> goap.registry.v1.Action
-	25,  // 27: goap.registry.v1.Methodology.goals:type_name -> goap.registry.v1.Goal
-	125, // 28: goap.registry.v1.Methodology.created_at:type_name -> google.protobuf.Timestamp
-	125, // 29: goap.registry.v1.Methodology.updated_at:type_name -> google.protobuf.Timestamp
-	125, // 30: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
-	23,  // 31: goap.registry.v1.Methodology.agents:type_name -> goap.registry.v1.Agent
-	33,  // 32: goap.registry.v1.Methodology.processes:type_name -> goap.registry.v1.Process
-	32,  // 33: goap.registry.v1.Methodology.methods:type_name -> goap.registry.v1.Method
-	30,  // 34: goap.registry.v1.Methodology.roles:type_name -> goap.registry.v1.Role
-	29,  // 35: goap.registry.v1.Methodology.on:type_name -> goap.registry.v1.Subscription
-	27,  // 36: goap.registry.v1.Methodology.integrates:type_name -> goap.registry.v1.Integration
-	28,  // 37: goap.registry.v1.Methodology.guardian:type_name -> goap.registry.v1.Guardian
-	107, // 38: goap.registry.v1.Guardian.transitions:type_name -> goap.registry.v1.Guardian.TransitionsEntry
-	34,  // 39: goap.registry.v1.Method.references:type_name -> goap.registry.v1.Reference
-	31,  // 40: goap.registry.v1.Method.roles:type_name -> goap.registry.v1.Responsibilities
-	35,  // 41: goap.registry.v1.Method.steps:type_name -> goap.registry.v1.Step
-	108, // 42: goap.registry.v1.Method.done:type_name -> goap.registry.v1.Method.DoneEntry
-	35,  // 43: goap.registry.v1.Process.steps:type_name -> goap.registry.v1.Step
-	34,  // 44: goap.registry.v1.Process.references:type_name -> goap.registry.v1.Reference
-	109, // 45: goap.registry.v1.Step.pre:type_name -> goap.registry.v1.Step.PreEntry
-	110, // 46: goap.registry.v1.Step.done:type_name -> goap.registry.v1.Step.DoneEntry
-	35,  // 47: goap.registry.v1.Step.steps:type_name -> goap.registry.v1.Step
-	34,  // 48: goap.registry.v1.Step.references:type_name -> goap.registry.v1.Reference
-	31,  // 49: goap.registry.v1.Step.roles:type_name -> goap.registry.v1.Responsibilities
-	36,  // 50: goap.registry.v1.MethodologySummary.goals:type_name -> goap.registry.v1.GoalSummary
-	37,  // 51: goap.registry.v1.MethodologySummary.agents:type_name -> goap.registry.v1.AgentSummary
-	125, // 52: goap.registry.v1.MethodologySummary.updated_at:type_name -> google.protobuf.Timestamp
-	125, // 53: goap.registry.v1.MethodologySummary.published_at:type_name -> google.protobuf.Timestamp
-	38,  // 54: goap.registry.v1.ListMethodologiesResponse.methodologies:type_name -> goap.registry.v1.MethodologySummary
-	26,  // 55: goap.registry.v1.GetMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	26,  // 56: goap.registry.v1.SaveMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
-	26,  // 57: goap.registry.v1.SaveMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	39,  // 58: goap.registry.v1.SaveMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
-	26,  // 59: goap.registry.v1.ValidateMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
-	39,  // 60: goap.registry.v1.ValidateMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
-	26,  // 61: goap.registry.v1.PublishMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	26,  // 62: goap.registry.v1.CreateVersionResponse.methodology:type_name -> goap.registry.v1.Methodology
-	26,  // 63: goap.registry.v1.ImportMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
-	39,  // 64: goap.registry.v1.ImportMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
-	0,   // 65: goap.registry.v1.Domain.node_types:type_name -> goap.registry.v1.NodeType
-	16,  // 66: goap.registry.v1.Domain.link_types:type_name -> goap.registry.v1.LinkType
-	11,  // 67: goap.registry.v1.Domain.lifecycles:type_name -> goap.registry.v1.Lifecycle
-	6,   // 68: goap.registry.v1.Domain.enums:type_name -> goap.registry.v1.Enum
-	9,   // 69: goap.registry.v1.Domain.algorithms:type_name -> goap.registry.v1.Algorithm
-	10,  // 70: goap.registry.v1.Domain.algorithm_instances:type_name -> goap.registry.v1.AlgorithmInstance
-	125, // 71: goap.registry.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
-	125, // 72: goap.registry.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
-	125, // 73: goap.registry.v1.Domain.published_at:type_name -> google.protobuf.Timestamp
-	125, // 74: goap.registry.v1.DomainSummary.updated_at:type_name -> google.protobuf.Timestamp
-	125, // 75: goap.registry.v1.DomainSummary.published_at:type_name -> google.protobuf.Timestamp
-	59,  // 76: goap.registry.v1.ListDomainsResponse.domains:type_name -> goap.registry.v1.DomainSummary
-	58,  // 77: goap.registry.v1.GetDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	58,  // 78: goap.registry.v1.SaveDomainRequest.domain:type_name -> goap.registry.v1.Domain
-	58,  // 79: goap.registry.v1.SaveDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	39,  // 80: goap.registry.v1.SaveDomainResponse.issues:type_name -> goap.registry.v1.Issue
-	58,  // 81: goap.registry.v1.ValidateDomainRequest.domain:type_name -> goap.registry.v1.Domain
-	39,  // 82: goap.registry.v1.ValidateDomainResponse.issues:type_name -> goap.registry.v1.Issue
-	58,  // 83: goap.registry.v1.PublishDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	58,  // 84: goap.registry.v1.CreateDomainVersionResponse.domain:type_name -> goap.registry.v1.Domain
-	58,  // 85: goap.registry.v1.ImportDomainResponse.domain:type_name -> goap.registry.v1.Domain
-	39,  // 86: goap.registry.v1.ImportDomainResponse.issues:type_name -> goap.registry.v1.Issue
-	79,  // 87: goap.registry.v1.GetDomainUsageResponse.methodologies:type_name -> goap.registry.v1.DomainUser
-	9,   // 88: goap.registry.v1.RunAlgorithmRequest.algorithm:type_name -> goap.registry.v1.Algorithm
-	124, // 89: goap.registry.v1.RunAlgorithmRequest.values:type_name -> google.protobuf.Struct
-	124, // 90: goap.registry.v1.RunAlgorithmRequest.input:type_name -> google.protobuf.Struct
-	124, // 91: goap.registry.v1.RunAlgorithmResponse.set:type_name -> google.protobuf.Struct
-	85,  // 92: goap.registry.v1.ListTypesResponse.types:type_name -> goap.registry.v1.TypeInfo
-	86,  // 93: goap.registry.v1.ListTypesResponse.link_types:type_name -> goap.registry.v1.LinkTypeInfo
-	111, // 94: goap.registry.v1.ListTypesResponse.domains:type_name -> goap.registry.v1.ListTypesResponse.DomainsEntry
-	7,   // 95: goap.registry.v1.TypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
-	11,  // 96: goap.registry.v1.TypeInfo.lifecycle:type_name -> goap.registry.v1.Lifecycle
-	7,   // 97: goap.registry.v1.LinkTypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
-	26,  // 98: goap.registry.v1.GetProcessGraphRequest.methodology:type_name -> goap.registry.v1.Methodology
-	95,  // 99: goap.registry.v1.GetProcessGraphResponse.graph:type_name -> goap.registry.v1.ProcessGraph
-	39,  // 100: goap.registry.v1.GetProcessGraphResponse.issues:type_name -> goap.registry.v1.Issue
-	26,  // 101: goap.registry.v1.CheckLevelsRequest.methodology:type_name -> goap.registry.v1.Methodology
-	91,  // 102: goap.registry.v1.CheckLevelsResponse.levels:type_name -> goap.registry.v1.LevelCheck
-	39,  // 103: goap.registry.v1.CheckLevelsResponse.issues:type_name -> goap.registry.v1.Issue
-	112, // 104: goap.registry.v1.CheckLevelsResponse.conditions:type_name -> goap.registry.v1.CheckLevelsResponse.ConditionsEntry
-	113, // 105: goap.registry.v1.LevelCheck.inputs:type_name -> goap.registry.v1.LevelCheck.InputsEntry
-	114, // 106: goap.registry.v1.LevelCheck.outputs:type_name -> goap.registry.v1.LevelCheck.OutputsEntry
-	93,  // 107: goap.registry.v1.LevelCheck.order:type_name -> goap.registry.v1.LevelStep
-	94,  // 108: goap.registry.v1.LevelCheck.gaps:type_name -> goap.registry.v1.LevelGap
-	92,  // 109: goap.registry.v1.LevelCheck.steps:type_name -> goap.registry.v1.LevelNode
-	97,  // 110: goap.registry.v1.LevelCheck.edges:type_name -> goap.registry.v1.GraphEdge
-	115, // 111: goap.registry.v1.LevelNode.entry:type_name -> goap.registry.v1.LevelNode.EntryEntry
-	116, // 112: goap.registry.v1.LevelNode.exit:type_name -> goap.registry.v1.LevelNode.ExitEntry
-	96,  // 113: goap.registry.v1.ProcessGraph.steps:type_name -> goap.registry.v1.GraphStep
-	97,  // 114: goap.registry.v1.ProcessGraph.edges:type_name -> goap.registry.v1.GraphEdge
-	32,  // 115: goap.registry.v1.ProcessGraph.methods:type_name -> goap.registry.v1.Method
-	117, // 116: goap.registry.v1.ProcessGraph.method_goals:type_name -> goap.registry.v1.ProcessGraph.MethodGoalsEntry
-	98,  // 117: goap.registry.v1.ProcessGraph.agents:type_name -> goap.registry.v1.GraphAgent
-	34,  // 118: goap.registry.v1.ProcessGraph.references:type_name -> goap.registry.v1.Reference
-	118, // 119: goap.registry.v1.GraphStep.entry:type_name -> goap.registry.v1.GraphStep.EntryEntry
-	119, // 120: goap.registry.v1.GraphStep.exit:type_name -> goap.registry.v1.GraphStep.ExitEntry
-	31,  // 121: goap.registry.v1.GraphStep.roles:type_name -> goap.registry.v1.Responsibilities
-	34,  // 122: goap.registry.v1.GraphStep.references:type_name -> goap.registry.v1.Reference
-	99,  // 123: goap.registry.v1.GraphAgent.actions:type_name -> goap.registry.v1.GraphAction
-	120, // 124: goap.registry.v1.GraphAction.pre:type_name -> goap.registry.v1.GraphAction.PreEntry
-	121, // 125: goap.registry.v1.GraphAction.effects:type_name -> goap.registry.v1.GraphAction.EffectsEntry
-	26,  // 126: goap.registry.v1.PreviewPlanRequest.methodology:type_name -> goap.registry.v1.Methodology
-	122, // 127: goap.registry.v1.PreviewPlanRequest.overrides:type_name -> goap.registry.v1.PreviewPlanRequest.OverridesEntry
-	102, // 128: goap.registry.v1.PreviewPlanResponse.preview:type_name -> goap.registry.v1.PlanPreview
-	39,  // 129: goap.registry.v1.PreviewPlanResponse.issues:type_name -> goap.registry.v1.Issue
-	103, // 130: goap.registry.v1.PlanPreview.actions:type_name -> goap.registry.v1.PlanStep
-	40,  // 131: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
-	42,  // 132: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
-	44,  // 133: goap.registry.v1.RegistryService.SaveMethodology:input_type -> goap.registry.v1.SaveMethodologyRequest
-	46,  // 134: goap.registry.v1.RegistryService.ValidateMethodology:input_type -> goap.registry.v1.ValidateMethodologyRequest
-	87,  // 135: goap.registry.v1.RegistryService.GetProcessGraph:input_type -> goap.registry.v1.GetProcessGraphRequest
-	89,  // 136: goap.registry.v1.RegistryService.CheckLevels:input_type -> goap.registry.v1.CheckLevelsRequest
-	100, // 137: goap.registry.v1.RegistryService.PreviewPlan:input_type -> goap.registry.v1.PreviewPlanRequest
-	48,  // 138: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
-	50,  // 139: goap.registry.v1.RegistryService.CreateVersion:input_type -> goap.registry.v1.CreateVersionRequest
-	52,  // 140: goap.registry.v1.RegistryService.DeleteMethodology:input_type -> goap.registry.v1.DeleteMethodologyRequest
-	54,  // 141: goap.registry.v1.RegistryService.ImportMethodology:input_type -> goap.registry.v1.ImportMethodologyRequest
-	56,  // 142: goap.registry.v1.RegistryService.ExportMethodology:input_type -> goap.registry.v1.ExportMethodologyRequest
-	60,  // 143: goap.registry.v1.RegistryService.ListDomains:input_type -> goap.registry.v1.ListDomainsRequest
-	62,  // 144: goap.registry.v1.RegistryService.GetDomain:input_type -> goap.registry.v1.GetDomainRequest
-	64,  // 145: goap.registry.v1.RegistryService.SaveDomain:input_type -> goap.registry.v1.SaveDomainRequest
-	66,  // 146: goap.registry.v1.RegistryService.ValidateDomain:input_type -> goap.registry.v1.ValidateDomainRequest
-	68,  // 147: goap.registry.v1.RegistryService.PublishDomain:input_type -> goap.registry.v1.PublishDomainRequest
-	70,  // 148: goap.registry.v1.RegistryService.CreateDomainVersion:input_type -> goap.registry.v1.CreateDomainVersionRequest
-	72,  // 149: goap.registry.v1.RegistryService.DeleteDomain:input_type -> goap.registry.v1.DeleteDomainRequest
-	74,  // 150: goap.registry.v1.RegistryService.ImportDomain:input_type -> goap.registry.v1.ImportDomainRequest
-	76,  // 151: goap.registry.v1.RegistryService.ExportDomain:input_type -> goap.registry.v1.ExportDomainRequest
-	78,  // 152: goap.registry.v1.RegistryService.GetDomainUsage:input_type -> goap.registry.v1.GetDomainUsageRequest
-	83,  // 153: goap.registry.v1.RegistryService.ListTypes:input_type -> goap.registry.v1.ListTypesRequest
-	81,  // 154: goap.registry.v1.RegistryService.RunAlgorithm:input_type -> goap.registry.v1.RunAlgorithmRequest
-	41,  // 155: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
-	43,  // 156: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
-	45,  // 157: goap.registry.v1.RegistryService.SaveMethodology:output_type -> goap.registry.v1.SaveMethodologyResponse
-	47,  // 158: goap.registry.v1.RegistryService.ValidateMethodology:output_type -> goap.registry.v1.ValidateMethodologyResponse
-	88,  // 159: goap.registry.v1.RegistryService.GetProcessGraph:output_type -> goap.registry.v1.GetProcessGraphResponse
-	90,  // 160: goap.registry.v1.RegistryService.CheckLevels:output_type -> goap.registry.v1.CheckLevelsResponse
-	101, // 161: goap.registry.v1.RegistryService.PreviewPlan:output_type -> goap.registry.v1.PreviewPlanResponse
-	49,  // 162: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
-	51,  // 163: goap.registry.v1.RegistryService.CreateVersion:output_type -> goap.registry.v1.CreateVersionResponse
-	53,  // 164: goap.registry.v1.RegistryService.DeleteMethodology:output_type -> goap.registry.v1.DeleteMethodologyResponse
-	55,  // 165: goap.registry.v1.RegistryService.ImportMethodology:output_type -> goap.registry.v1.ImportMethodologyResponse
-	57,  // 166: goap.registry.v1.RegistryService.ExportMethodology:output_type -> goap.registry.v1.ExportMethodologyResponse
-	61,  // 167: goap.registry.v1.RegistryService.ListDomains:output_type -> goap.registry.v1.ListDomainsResponse
-	63,  // 168: goap.registry.v1.RegistryService.GetDomain:output_type -> goap.registry.v1.GetDomainResponse
-	65,  // 169: goap.registry.v1.RegistryService.SaveDomain:output_type -> goap.registry.v1.SaveDomainResponse
-	67,  // 170: goap.registry.v1.RegistryService.ValidateDomain:output_type -> goap.registry.v1.ValidateDomainResponse
-	69,  // 171: goap.registry.v1.RegistryService.PublishDomain:output_type -> goap.registry.v1.PublishDomainResponse
-	71,  // 172: goap.registry.v1.RegistryService.CreateDomainVersion:output_type -> goap.registry.v1.CreateDomainVersionResponse
-	73,  // 173: goap.registry.v1.RegistryService.DeleteDomain:output_type -> goap.registry.v1.DeleteDomainResponse
-	75,  // 174: goap.registry.v1.RegistryService.ImportDomain:output_type -> goap.registry.v1.ImportDomainResponse
-	77,  // 175: goap.registry.v1.RegistryService.ExportDomain:output_type -> goap.registry.v1.ExportDomainResponse
-	80,  // 176: goap.registry.v1.RegistryService.GetDomainUsage:output_type -> goap.registry.v1.GetDomainUsageResponse
-	84,  // 177: goap.registry.v1.RegistryService.ListTypes:output_type -> goap.registry.v1.ListTypesResponse
-	82,  // 178: goap.registry.v1.RegistryService.RunAlgorithm:output_type -> goap.registry.v1.RunAlgorithmResponse
-	155, // [155:179] is the sub-list for method output_type
-	131, // [131:155] is the sub-list for method input_type
-	131, // [131:131] is the sub-list for extension type_name
-	131, // [131:131] is the sub-list for extension extendee
-	0,   // [0:131] is the sub-list for field type_name
+	29,  // 23: goap.registry.v1.Action.on:type_name -> goap.registry.v1.Subscription
+	24,  // 24: goap.registry.v1.Agent.triggers:type_name -> goap.registry.v1.Trigger
+	106, // 25: goap.registry.v1.Goal.pre:type_name -> goap.registry.v1.Goal.PreEntry
+	17,  // 26: goap.registry.v1.Methodology.conditions:type_name -> goap.registry.v1.Condition
+	21,  // 27: goap.registry.v1.Methodology.actions:type_name -> goap.registry.v1.Action
+	25,  // 28: goap.registry.v1.Methodology.goals:type_name -> goap.registry.v1.Goal
+	125, // 29: goap.registry.v1.Methodology.created_at:type_name -> google.protobuf.Timestamp
+	125, // 30: goap.registry.v1.Methodology.updated_at:type_name -> google.protobuf.Timestamp
+	125, // 31: goap.registry.v1.Methodology.published_at:type_name -> google.protobuf.Timestamp
+	23,  // 32: goap.registry.v1.Methodology.agents:type_name -> goap.registry.v1.Agent
+	33,  // 33: goap.registry.v1.Methodology.processes:type_name -> goap.registry.v1.Process
+	32,  // 34: goap.registry.v1.Methodology.methods:type_name -> goap.registry.v1.Method
+	30,  // 35: goap.registry.v1.Methodology.roles:type_name -> goap.registry.v1.Role
+	29,  // 36: goap.registry.v1.Methodology.on:type_name -> goap.registry.v1.Subscription
+	27,  // 37: goap.registry.v1.Methodology.integrates:type_name -> goap.registry.v1.Integration
+	28,  // 38: goap.registry.v1.Methodology.guardian:type_name -> goap.registry.v1.Guardian
+	107, // 39: goap.registry.v1.Guardian.transitions:type_name -> goap.registry.v1.Guardian.TransitionsEntry
+	34,  // 40: goap.registry.v1.Method.references:type_name -> goap.registry.v1.Reference
+	31,  // 41: goap.registry.v1.Method.roles:type_name -> goap.registry.v1.Responsibilities
+	35,  // 42: goap.registry.v1.Method.steps:type_name -> goap.registry.v1.Step
+	108, // 43: goap.registry.v1.Method.done:type_name -> goap.registry.v1.Method.DoneEntry
+	29,  // 44: goap.registry.v1.Method.on:type_name -> goap.registry.v1.Subscription
+	35,  // 45: goap.registry.v1.Process.steps:type_name -> goap.registry.v1.Step
+	34,  // 46: goap.registry.v1.Process.references:type_name -> goap.registry.v1.Reference
+	29,  // 47: goap.registry.v1.Process.on:type_name -> goap.registry.v1.Subscription
+	109, // 48: goap.registry.v1.Step.pre:type_name -> goap.registry.v1.Step.PreEntry
+	110, // 49: goap.registry.v1.Step.done:type_name -> goap.registry.v1.Step.DoneEntry
+	35,  // 50: goap.registry.v1.Step.steps:type_name -> goap.registry.v1.Step
+	34,  // 51: goap.registry.v1.Step.references:type_name -> goap.registry.v1.Reference
+	31,  // 52: goap.registry.v1.Step.roles:type_name -> goap.registry.v1.Responsibilities
+	29,  // 53: goap.registry.v1.Step.on:type_name -> goap.registry.v1.Subscription
+	36,  // 54: goap.registry.v1.MethodologySummary.goals:type_name -> goap.registry.v1.GoalSummary
+	37,  // 55: goap.registry.v1.MethodologySummary.agents:type_name -> goap.registry.v1.AgentSummary
+	125, // 56: goap.registry.v1.MethodologySummary.updated_at:type_name -> google.protobuf.Timestamp
+	125, // 57: goap.registry.v1.MethodologySummary.published_at:type_name -> google.protobuf.Timestamp
+	38,  // 58: goap.registry.v1.ListMethodologiesResponse.methodologies:type_name -> goap.registry.v1.MethodologySummary
+	26,  // 59: goap.registry.v1.GetMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	26,  // 60: goap.registry.v1.SaveMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
+	26,  // 61: goap.registry.v1.SaveMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	39,  // 62: goap.registry.v1.SaveMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	26,  // 63: goap.registry.v1.ValidateMethodologyRequest.methodology:type_name -> goap.registry.v1.Methodology
+	39,  // 64: goap.registry.v1.ValidateMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	26,  // 65: goap.registry.v1.PublishMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	26,  // 66: goap.registry.v1.CreateVersionResponse.methodology:type_name -> goap.registry.v1.Methodology
+	26,  // 67: goap.registry.v1.ImportMethodologyResponse.methodology:type_name -> goap.registry.v1.Methodology
+	39,  // 68: goap.registry.v1.ImportMethodologyResponse.issues:type_name -> goap.registry.v1.Issue
+	0,   // 69: goap.registry.v1.Domain.node_types:type_name -> goap.registry.v1.NodeType
+	16,  // 70: goap.registry.v1.Domain.link_types:type_name -> goap.registry.v1.LinkType
+	11,  // 71: goap.registry.v1.Domain.lifecycles:type_name -> goap.registry.v1.Lifecycle
+	6,   // 72: goap.registry.v1.Domain.enums:type_name -> goap.registry.v1.Enum
+	9,   // 73: goap.registry.v1.Domain.algorithms:type_name -> goap.registry.v1.Algorithm
+	10,  // 74: goap.registry.v1.Domain.algorithm_instances:type_name -> goap.registry.v1.AlgorithmInstance
+	125, // 75: goap.registry.v1.Domain.created_at:type_name -> google.protobuf.Timestamp
+	125, // 76: goap.registry.v1.Domain.updated_at:type_name -> google.protobuf.Timestamp
+	125, // 77: goap.registry.v1.Domain.published_at:type_name -> google.protobuf.Timestamp
+	125, // 78: goap.registry.v1.DomainSummary.updated_at:type_name -> google.protobuf.Timestamp
+	125, // 79: goap.registry.v1.DomainSummary.published_at:type_name -> google.protobuf.Timestamp
+	59,  // 80: goap.registry.v1.ListDomainsResponse.domains:type_name -> goap.registry.v1.DomainSummary
+	58,  // 81: goap.registry.v1.GetDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	58,  // 82: goap.registry.v1.SaveDomainRequest.domain:type_name -> goap.registry.v1.Domain
+	58,  // 83: goap.registry.v1.SaveDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	39,  // 84: goap.registry.v1.SaveDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	58,  // 85: goap.registry.v1.ValidateDomainRequest.domain:type_name -> goap.registry.v1.Domain
+	39,  // 86: goap.registry.v1.ValidateDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	58,  // 87: goap.registry.v1.PublishDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	58,  // 88: goap.registry.v1.CreateDomainVersionResponse.domain:type_name -> goap.registry.v1.Domain
+	58,  // 89: goap.registry.v1.ImportDomainResponse.domain:type_name -> goap.registry.v1.Domain
+	39,  // 90: goap.registry.v1.ImportDomainResponse.issues:type_name -> goap.registry.v1.Issue
+	79,  // 91: goap.registry.v1.GetDomainUsageResponse.methodologies:type_name -> goap.registry.v1.DomainUser
+	9,   // 92: goap.registry.v1.RunAlgorithmRequest.algorithm:type_name -> goap.registry.v1.Algorithm
+	124, // 93: goap.registry.v1.RunAlgorithmRequest.values:type_name -> google.protobuf.Struct
+	124, // 94: goap.registry.v1.RunAlgorithmRequest.input:type_name -> google.protobuf.Struct
+	124, // 95: goap.registry.v1.RunAlgorithmResponse.set:type_name -> google.protobuf.Struct
+	85,  // 96: goap.registry.v1.ListTypesResponse.types:type_name -> goap.registry.v1.TypeInfo
+	86,  // 97: goap.registry.v1.ListTypesResponse.link_types:type_name -> goap.registry.v1.LinkTypeInfo
+	111, // 98: goap.registry.v1.ListTypesResponse.domains:type_name -> goap.registry.v1.ListTypesResponse.DomainsEntry
+	7,   // 99: goap.registry.v1.TypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
+	11,  // 100: goap.registry.v1.TypeInfo.lifecycle:type_name -> goap.registry.v1.Lifecycle
+	7,   // 101: goap.registry.v1.LinkTypeInfo.attributes:type_name -> goap.registry.v1.AttributeInfo
+	26,  // 102: goap.registry.v1.GetProcessGraphRequest.methodology:type_name -> goap.registry.v1.Methodology
+	95,  // 103: goap.registry.v1.GetProcessGraphResponse.graph:type_name -> goap.registry.v1.ProcessGraph
+	39,  // 104: goap.registry.v1.GetProcessGraphResponse.issues:type_name -> goap.registry.v1.Issue
+	26,  // 105: goap.registry.v1.CheckLevelsRequest.methodology:type_name -> goap.registry.v1.Methodology
+	91,  // 106: goap.registry.v1.CheckLevelsResponse.levels:type_name -> goap.registry.v1.LevelCheck
+	39,  // 107: goap.registry.v1.CheckLevelsResponse.issues:type_name -> goap.registry.v1.Issue
+	112, // 108: goap.registry.v1.CheckLevelsResponse.conditions:type_name -> goap.registry.v1.CheckLevelsResponse.ConditionsEntry
+	113, // 109: goap.registry.v1.LevelCheck.inputs:type_name -> goap.registry.v1.LevelCheck.InputsEntry
+	114, // 110: goap.registry.v1.LevelCheck.outputs:type_name -> goap.registry.v1.LevelCheck.OutputsEntry
+	93,  // 111: goap.registry.v1.LevelCheck.order:type_name -> goap.registry.v1.LevelStep
+	94,  // 112: goap.registry.v1.LevelCheck.gaps:type_name -> goap.registry.v1.LevelGap
+	92,  // 113: goap.registry.v1.LevelCheck.steps:type_name -> goap.registry.v1.LevelNode
+	97,  // 114: goap.registry.v1.LevelCheck.edges:type_name -> goap.registry.v1.GraphEdge
+	115, // 115: goap.registry.v1.LevelNode.entry:type_name -> goap.registry.v1.LevelNode.EntryEntry
+	116, // 116: goap.registry.v1.LevelNode.exit:type_name -> goap.registry.v1.LevelNode.ExitEntry
+	96,  // 117: goap.registry.v1.ProcessGraph.steps:type_name -> goap.registry.v1.GraphStep
+	97,  // 118: goap.registry.v1.ProcessGraph.edges:type_name -> goap.registry.v1.GraphEdge
+	32,  // 119: goap.registry.v1.ProcessGraph.methods:type_name -> goap.registry.v1.Method
+	117, // 120: goap.registry.v1.ProcessGraph.method_goals:type_name -> goap.registry.v1.ProcessGraph.MethodGoalsEntry
+	98,  // 121: goap.registry.v1.ProcessGraph.agents:type_name -> goap.registry.v1.GraphAgent
+	34,  // 122: goap.registry.v1.ProcessGraph.references:type_name -> goap.registry.v1.Reference
+	118, // 123: goap.registry.v1.GraphStep.entry:type_name -> goap.registry.v1.GraphStep.EntryEntry
+	119, // 124: goap.registry.v1.GraphStep.exit:type_name -> goap.registry.v1.GraphStep.ExitEntry
+	31,  // 125: goap.registry.v1.GraphStep.roles:type_name -> goap.registry.v1.Responsibilities
+	34,  // 126: goap.registry.v1.GraphStep.references:type_name -> goap.registry.v1.Reference
+	99,  // 127: goap.registry.v1.GraphAgent.actions:type_name -> goap.registry.v1.GraphAction
+	120, // 128: goap.registry.v1.GraphAction.pre:type_name -> goap.registry.v1.GraphAction.PreEntry
+	121, // 129: goap.registry.v1.GraphAction.effects:type_name -> goap.registry.v1.GraphAction.EffectsEntry
+	26,  // 130: goap.registry.v1.PreviewPlanRequest.methodology:type_name -> goap.registry.v1.Methodology
+	122, // 131: goap.registry.v1.PreviewPlanRequest.overrides:type_name -> goap.registry.v1.PreviewPlanRequest.OverridesEntry
+	102, // 132: goap.registry.v1.PreviewPlanResponse.preview:type_name -> goap.registry.v1.PlanPreview
+	39,  // 133: goap.registry.v1.PreviewPlanResponse.issues:type_name -> goap.registry.v1.Issue
+	103, // 134: goap.registry.v1.PlanPreview.actions:type_name -> goap.registry.v1.PlanStep
+	40,  // 135: goap.registry.v1.RegistryService.ListMethodologies:input_type -> goap.registry.v1.ListMethodologiesRequest
+	42,  // 136: goap.registry.v1.RegistryService.GetMethodology:input_type -> goap.registry.v1.GetMethodologyRequest
+	44,  // 137: goap.registry.v1.RegistryService.SaveMethodology:input_type -> goap.registry.v1.SaveMethodologyRequest
+	46,  // 138: goap.registry.v1.RegistryService.ValidateMethodology:input_type -> goap.registry.v1.ValidateMethodologyRequest
+	87,  // 139: goap.registry.v1.RegistryService.GetProcessGraph:input_type -> goap.registry.v1.GetProcessGraphRequest
+	89,  // 140: goap.registry.v1.RegistryService.CheckLevels:input_type -> goap.registry.v1.CheckLevelsRequest
+	100, // 141: goap.registry.v1.RegistryService.PreviewPlan:input_type -> goap.registry.v1.PreviewPlanRequest
+	48,  // 142: goap.registry.v1.RegistryService.PublishMethodology:input_type -> goap.registry.v1.PublishMethodologyRequest
+	50,  // 143: goap.registry.v1.RegistryService.CreateVersion:input_type -> goap.registry.v1.CreateVersionRequest
+	52,  // 144: goap.registry.v1.RegistryService.DeleteMethodology:input_type -> goap.registry.v1.DeleteMethodologyRequest
+	54,  // 145: goap.registry.v1.RegistryService.ImportMethodology:input_type -> goap.registry.v1.ImportMethodologyRequest
+	56,  // 146: goap.registry.v1.RegistryService.ExportMethodology:input_type -> goap.registry.v1.ExportMethodologyRequest
+	60,  // 147: goap.registry.v1.RegistryService.ListDomains:input_type -> goap.registry.v1.ListDomainsRequest
+	62,  // 148: goap.registry.v1.RegistryService.GetDomain:input_type -> goap.registry.v1.GetDomainRequest
+	64,  // 149: goap.registry.v1.RegistryService.SaveDomain:input_type -> goap.registry.v1.SaveDomainRequest
+	66,  // 150: goap.registry.v1.RegistryService.ValidateDomain:input_type -> goap.registry.v1.ValidateDomainRequest
+	68,  // 151: goap.registry.v1.RegistryService.PublishDomain:input_type -> goap.registry.v1.PublishDomainRequest
+	70,  // 152: goap.registry.v1.RegistryService.CreateDomainVersion:input_type -> goap.registry.v1.CreateDomainVersionRequest
+	72,  // 153: goap.registry.v1.RegistryService.DeleteDomain:input_type -> goap.registry.v1.DeleteDomainRequest
+	74,  // 154: goap.registry.v1.RegistryService.ImportDomain:input_type -> goap.registry.v1.ImportDomainRequest
+	76,  // 155: goap.registry.v1.RegistryService.ExportDomain:input_type -> goap.registry.v1.ExportDomainRequest
+	78,  // 156: goap.registry.v1.RegistryService.GetDomainUsage:input_type -> goap.registry.v1.GetDomainUsageRequest
+	83,  // 157: goap.registry.v1.RegistryService.ListTypes:input_type -> goap.registry.v1.ListTypesRequest
+	81,  // 158: goap.registry.v1.RegistryService.RunAlgorithm:input_type -> goap.registry.v1.RunAlgorithmRequest
+	41,  // 159: goap.registry.v1.RegistryService.ListMethodologies:output_type -> goap.registry.v1.ListMethodologiesResponse
+	43,  // 160: goap.registry.v1.RegistryService.GetMethodology:output_type -> goap.registry.v1.GetMethodologyResponse
+	45,  // 161: goap.registry.v1.RegistryService.SaveMethodology:output_type -> goap.registry.v1.SaveMethodologyResponse
+	47,  // 162: goap.registry.v1.RegistryService.ValidateMethodology:output_type -> goap.registry.v1.ValidateMethodologyResponse
+	88,  // 163: goap.registry.v1.RegistryService.GetProcessGraph:output_type -> goap.registry.v1.GetProcessGraphResponse
+	90,  // 164: goap.registry.v1.RegistryService.CheckLevels:output_type -> goap.registry.v1.CheckLevelsResponse
+	101, // 165: goap.registry.v1.RegistryService.PreviewPlan:output_type -> goap.registry.v1.PreviewPlanResponse
+	49,  // 166: goap.registry.v1.RegistryService.PublishMethodology:output_type -> goap.registry.v1.PublishMethodologyResponse
+	51,  // 167: goap.registry.v1.RegistryService.CreateVersion:output_type -> goap.registry.v1.CreateVersionResponse
+	53,  // 168: goap.registry.v1.RegistryService.DeleteMethodology:output_type -> goap.registry.v1.DeleteMethodologyResponse
+	55,  // 169: goap.registry.v1.RegistryService.ImportMethodology:output_type -> goap.registry.v1.ImportMethodologyResponse
+	57,  // 170: goap.registry.v1.RegistryService.ExportMethodology:output_type -> goap.registry.v1.ExportMethodologyResponse
+	61,  // 171: goap.registry.v1.RegistryService.ListDomains:output_type -> goap.registry.v1.ListDomainsResponse
+	63,  // 172: goap.registry.v1.RegistryService.GetDomain:output_type -> goap.registry.v1.GetDomainResponse
+	65,  // 173: goap.registry.v1.RegistryService.SaveDomain:output_type -> goap.registry.v1.SaveDomainResponse
+	67,  // 174: goap.registry.v1.RegistryService.ValidateDomain:output_type -> goap.registry.v1.ValidateDomainResponse
+	69,  // 175: goap.registry.v1.RegistryService.PublishDomain:output_type -> goap.registry.v1.PublishDomainResponse
+	71,  // 176: goap.registry.v1.RegistryService.CreateDomainVersion:output_type -> goap.registry.v1.CreateDomainVersionResponse
+	73,  // 177: goap.registry.v1.RegistryService.DeleteDomain:output_type -> goap.registry.v1.DeleteDomainResponse
+	75,  // 178: goap.registry.v1.RegistryService.ImportDomain:output_type -> goap.registry.v1.ImportDomainResponse
+	77,  // 179: goap.registry.v1.RegistryService.ExportDomain:output_type -> goap.registry.v1.ExportDomainResponse
+	80,  // 180: goap.registry.v1.RegistryService.GetDomainUsage:output_type -> goap.registry.v1.GetDomainUsageResponse
+	84,  // 181: goap.registry.v1.RegistryService.ListTypes:output_type -> goap.registry.v1.ListTypesResponse
+	82,  // 182: goap.registry.v1.RegistryService.RunAlgorithm:output_type -> goap.registry.v1.RunAlgorithmResponse
+	159, // [159:183] is the sub-list for method output_type
+	135, // [135:159] is the sub-list for method input_type
+	135, // [135:135] is the sub-list for extension type_name
+	135, // [135:135] is the sub-list for extension extendee
+	0,   // [0:135] is the sub-list for field type_name
 }
 
 func init() { file_goap_registry_v1_registry_proto_init() }

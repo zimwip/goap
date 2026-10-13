@@ -10,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/pkg/assess"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
@@ -268,6 +269,12 @@ func TestSDLCProcess(t *testing.T) {
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "sdlc", Goal: "software_delivery", BaselineID: base,
 		Title: "Payment in 3 installments", Intent: "Allow payment in 3 installments with no fees", ProjectID: testProject})
 	if err != nil {
+		t.Fatal(err)
+	}
+	// the analysis waits for the description to be accepted (ADR 0110): the description_review process rated it
+	if _, err := g.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Kind: assess.KindAssessment, Status: domain.ItemProposed, ProducedBy: "description_review/rate",
+		Data: map[string]any{"key": assess.SubjectDescription, "score": 4, "verdict": assess.VerdictClear,
+			"rated": "Payment in 3 installments\n\nAllow payment in 3 installments with no fees"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
