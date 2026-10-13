@@ -45,8 +45,8 @@ const (
 	// KindAttach records a process being bound to a change (ADR 0031): the eager default at Start, or an agent's own
 	// explicit bind of a deferred process.
 	KindAttach = "attach"
-	// KindUnblock records a person's decision on a run waiting for conditions or stuck (ADR 0036 §3): waive
-	// conditions, retry, abandon.
+	// KindUnblock records a person's decision on a run waiting for conditions or stuck (ADR 0036 §3): retry or
+	// abandon.
 	KindUnblock = "unblock"
 )
 

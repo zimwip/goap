@@ -109,8 +109,8 @@ type EngineServiceClient interface {
 	// Decide a pending approval (an action needing a permission the initiator
 	// lacks) with the caller's permissions.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
-	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
-	// conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
+	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): retry the
+	// actions it gave up on, or abandon it. A condition is established by changing the change, never declared (ADR 0109 §6).
 	UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error)
 	// Stops a process that has not ended (whoever answers for the run may): a run in flight is interrupted, the process
 	// and its live sub-processes are cancelled.
@@ -446,8 +446,8 @@ type EngineServiceHandler interface {
 	// Decide a pending approval (an action needing a permission the initiator
 	// lacks) with the caller's permissions.
 	ApproveAction(context.Context, *connect.Request[v1.ApproveActionRequest]) (*connect.Response[v1.ApproveActionResponse], error)
-	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
-	// conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
+	// A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): retry the
+	// actions it gave up on, or abandon it. A condition is established by changing the change, never declared (ADR 0109 §6).
 	UnblockProcess(context.Context, *connect.Request[v1.UnblockProcessRequest]) (*connect.Response[v1.UnblockProcessResponse], error)
 	// Stops a process that has not ended (whoever answers for the run may): a run in flight is interrupted, the process
 	// and its live sub-processes are cancelled.

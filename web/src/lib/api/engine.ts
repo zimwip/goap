@@ -25,12 +25,11 @@ export const engine = {
       approve,
       comment,
     }),
-  /** Unblocks a run waiting for conditions or stuck (ADR 0036 §3): waive conditions (with a reason), retry, or abandon (with a reason). */
-  unblockProcess: (processId: string, decision: 'waive' | 'retry' | 'abandon', conditions: string[] = [], reason = '') =>
-    rpc<{ processId: string; decision: string; conditions: string[]; reason: string }, { process?: Process }>(ENGINE, 'UnblockProcess', {
+  /** Unblocks a run waiting for conditions or stuck (ADR 0036 §3): retry, or abandon (with a reason). A condition is established on the change, never declared (ADR 0109 §6). */
+  unblockProcess: (processId: string, decision: 'retry' | 'abandon', reason = '') =>
+    rpc<{ processId: string; decision: string; reason: string }, { process?: Process }>(ENGINE, 'UnblockProcess', {
       processId,
       decision,
-      conditions,
       reason,
     }),
   /** Stops a run that has not ended (whoever answers for it may): a run in flight is interrupted, its live sub-runs are cancelled with it. */

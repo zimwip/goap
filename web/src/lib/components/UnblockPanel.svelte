@@ -1,7 +1,8 @@
 <script lang="ts">
   // A run waiting for conditions established outside it, or stuck, is never left without a way out (ADR 0036 §3):
-  // whoever answers for it (its initiator, the accountable role of its step, a member of its organisation) declares
-  // conditions established (a waiver recorded on the change, with its reason), retries what it gave up on, or abandons it.
+  // whoever answers for it (its initiator, the accountable role of its step, a member of its organisation) retries it, once
+  // the change establishes what it needs, or abandons it. Nobody declares a condition established: it holds when the
+  // change says so (ADR 0109 §6).
   import { engine, errorMessage, type Process } from '../api';
 
   let { process, ondecided }: { process: Process; ondecided: (p: Process) => void } = $props();
@@ -9,25 +10,16 @@
   const stuck = $derived(process.status === 'stuck');
   const conditions = $derived(process.pending?.conditions ?? []);
   const disabled = $derived(process.disabled ?? []);
-  let chosen = $state<string[]>([]);
   let reason = $state('');
   let busy = $state(false);
   let error = $state('');
 
-  $effect(() => {
-    chosen = [...conditions];
-  });
-
-  function toggle(c: string) {
-    chosen = chosen.includes(c) ? chosen.filter((x) => x !== c) : [...chosen, c];
-  }
-
-  async function decide(decision: 'waive' | 'retry' | 'abandon') {
+  async function decide(decision: 'retry' | 'abandon') {
     if (!process.id) return;
     busy = true;
     error = '';
     try {
-      const res = await engine.unblockProcess(process.id, decision, decision === 'waive' ? chosen : [], reason.trim());
+      const res = await engine.unblockProcess(process.id, decision, reason.trim());
       if (res.process) ondecided(res.process);
     } catch (err) {
       error = errorMessage(err);
@@ -52,25 +44,21 @@
     <div class="conds">
       <span class="hint">{stuck ? 'Would unblock it:' : 'Waiting for:'}</span>
       {#each conditions as c (c)}
-        <label class="cond"><input type="checkbox" checked={chosen.includes(c)} onchange={() => toggle(c)} /> <code>{c}</code></label>
+        <code class="cond">{c}</code>
       {/each}
     </div>
+    <p class="hint">Establish them on the change, then retry.</p>
   {/if}
   {#if disabled.length}
     <p class="hint">Given up on: {#each disabled as a, i (a)}{i ? ', ' : ''}<code>{a}</code>{/each}</p>
   {/if}
   <label class="field">
-    <span>Reason (recorded on the change; required to waive or abandon)</span>
+    <span>Reason (recorded on the change; required to abandon)</span>
     <textarea rows="2" bind:value={reason}></textarea>
   </label>
   {#if error}<div class="alert">{error}</div>{/if}
   <div class="row">
-    {#if conditions.length}
-      <button class="primary" disabled={busy || !chosen.length || !reason.trim()} onclick={() => decide('waive')}>Declare established and continue</button>
-    {/if}
-    {#if stuck}
-      <button disabled={busy} onclick={() => decide('retry')}>Retry</button>
-    {/if}
+    <button class="primary" disabled={busy} onclick={() => decide('retry')}>Retry</button>
     <button class="danger" disabled={busy || !reason.trim()} onclick={() => decide('abandon')}>Abandon the run</button>
   </div>
 </section>

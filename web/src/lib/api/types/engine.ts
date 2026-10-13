@@ -206,12 +206,9 @@ export interface ConditionExplanation {
   expr?: string;
   value?: boolean;
   error?: string;
-  /** declared established by a person whatever the formula says */
-  waived?: boolean;
   root?: ConditionTerm;
   /** blackboard variables the formula reads, as JSON text */
   inputs?: Record<string, string>;
-  note?: string;
 }
 
 export interface ProcessProgress {

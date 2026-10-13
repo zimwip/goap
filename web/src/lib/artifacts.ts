@@ -4,7 +4,7 @@ import type { ChangeItem } from './api';
 
 /** Item kinds with a dedicated pane or tab (Reviews, Risks & actions, Verification, Derogations, Decisions, Changes, Audit). */
 export const DEDICATED_KINDS: readonly string[] = [
-  'artifact', 'decision', 'review', 'risk', 'action', 'waiver', 'verification', 'derogation', 'decision_point', 'transition', 'flow',
+  'artifact', 'decision', 'review', 'risk', 'action', 'verification', 'derogation', 'decision_point', 'transition', 'flow',
 ];
 
 export const artifactsOf = (items: ChangeItem[]): ChangeItem[] => items.filter((i) => i.kind === 'artifact');

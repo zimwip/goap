@@ -10,9 +10,8 @@ import (
 )
 
 // KindDerogation is a waiver with a rule, a signatory and an expiry (ADR 0075 §2): the decision to accept a gap (a
-// waived postcondition, gate criterion or policy rule) for a bounded time, by a person who answers for it. Unlike a
-// waiver (KindWaiver, which unblocks one run and never ends), it names what it waives, covers a target, is signed and
-// expires. It is an item of the change versioned by its key like a risk: closing it adds a version.
+// waived postcondition, gate criterion or policy rule) for a bounded time, by a person who answers for it. It names
+// what it waives, covers a target, is signed and expires. It is an item of the change versioned by its key like a risk: closing it adds a version.
 //
 // Data: key, rule (what is waived), target (the change impact, action run or gate it applies to), reason, signatory
 // (the principal who answers for it, checked by the ABAC permission derogation:sign when the item is written), expires

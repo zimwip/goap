@@ -10,11 +10,8 @@ goal: bound
 
 conditions:
   - name: change_bound
-    description: >
-      Engine-managed (ADR 0031): true once the process is bound to a change.
-      The expression here is a placeholder only, to satisfy validation — the
-      engine always overrides this fact from the process's own ChangeID.
-    expr: "false"
+    description: True once the process is bound to a change (ADR 0031, ADR 0109 §1).
+    expr: 'change.id != ""'
 
 actions:
   - name: bind

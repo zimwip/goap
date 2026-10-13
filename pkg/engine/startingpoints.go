@@ -131,7 +131,6 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 	}
 	bb.Supertypes = e.supertypesOf(m)
 	world := m.Conditions.Evaluate(bb).State
-	world["change_bound"] = true
 	if len(goal.Pre) > 0 && satisfiesAll(world, goal.Pre) {
 		out.Reason = "the goal is reached"
 		return out, nil

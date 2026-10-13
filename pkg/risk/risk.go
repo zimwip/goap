@@ -1,5 +1,5 @@
-// Package risk is the risk register of a change (ADR 0036 §1, ADR 0065): risks, actions and waivers are items of
-// the change whose kinds this package registers (Register), and the free functions Risks, Actions and Waivers fold
+// Package risk is the risk register of a change (ADR 0036 §1, ADR 0065): risks, actions and derogations are items of
+// the change whose kinds this package registers (Register), and the free functions Risks, Actions and Derogations fold
 // them. It is a use case: pkg/graph and pkg/domain know nothing of it.
 package risk
 

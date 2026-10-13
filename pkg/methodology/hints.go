@@ -21,8 +21,8 @@ func (c *Compiled) Hints() def.Issues {
 	if !ok || len(g.Pre) == 0 {
 		return nil
 	}
-	world := c.Conditions.Evaluate(domain.Blackboard{}).State
-	world["change_bound"] = true
+	// an empty change: one that exists, with nothing on it yet
+	world := c.Conditions.Evaluate(domain.Blackboard{Change: domain.Change{ID: "empty"}}).State
 	holds := func(want map[string]bool) bool {
 		for k, v := range want {
 			if world[k] != v {

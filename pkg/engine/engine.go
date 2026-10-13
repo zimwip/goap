@@ -26,7 +26,6 @@ import (
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
-	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Engine runs processes.
@@ -1198,11 +1197,11 @@ func (e *Engine) recordFailure(p *Process, action string) error {
 
 // observe reads the blackboard of p and evaluates the methodology's conditions
 // against it. A process not yet bound to a change (ADR 0031, gap 5) has no
-// graph-backed blackboard to read: it observes only its own Vars, and the
-// synthetic change_bound fact is false. change_bound is ordinary condition
-// data a methodology may reference in its own Pre/Effects — it is never
-// implied by the engine onto a goal (CLAUDE.md rule 2 gates graph writes, not
-// a process's existence: a process that never writes may finish unbound).
+// graph-backed blackboard to read: it observes only its own Vars. The world is
+// what the conditions derive from the context, nothing overrides it (ADR 0109
+// §1): a methodology that defers its bind declares `change_bound` as an
+// ordinary condition (`change.id != ""`) (CLAUDE.md rule 2 gates graph writes,
+// not a process's existence: a process that never writes may finish unbound).
 func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compiled) (domain.Blackboard, error) {
 	var bb domain.Blackboard
 	if p.ChangeID == "" {
@@ -1218,12 +1217,6 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	}
 	bb.Supertypes = e.supertypesOf(m)
 	res := m.Conditions.Evaluate(bb)
-	res.State["change_bound"] = p.ChangeID != ""
-	// what people declared established for this run (Engine.Unblock)
-	for k, v := range risk.Waivers(bb.Change, p.ID) {
-		res.State[k] = v
-		delete(res.Errors, k)
-	}
 	p.World = res.State
 	p.Unknown = res.Errors
 	return bb, nil

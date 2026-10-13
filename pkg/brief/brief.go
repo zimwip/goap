@@ -6,7 +6,6 @@ package brief
 import (
 	"cmp"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -50,7 +49,6 @@ func typeName(t, ns string) string {
 // Of renders the brief of a change as seen on a blackboard, for a reader carrying out step (nil: none).
 func Of(bb domain.Blackboard, step *Step) string {
 	c := bb.Change
-	fx := c.Effects()
 	var b strings.Builder
 	line := func(format string, args ...any) { fmt.Fprintf(&b, format+"\n", args...) }
 	line("CHANGE %s %q status=%s ns=%s goal=%s", shortID(string(c.ID)), short(c.Title, maxText), c.Status, c.Namespace, c.Goal)
@@ -98,7 +96,6 @@ func Of(bb domain.Blackboard, step *Step) string {
 				state = "written"
 			}
 			s := fmt.Sprintf("- %s %s %s %s %s", n.Key, typeName(n.Type, c.Namespace), n.Intent, state, n.Review)
-			s += effectsOf(fx.OfImpact(n.ID))
 			if n.Rationale != "" {
 				s += " — " + short(n.Rationale, 60)
 			}
@@ -146,7 +143,6 @@ func Of(bb domain.Blackboard, step *Step) string {
 			if len(r.Actions) > 0 {
 				s += " actions=" + strings.Join(r.Actions, ",")
 			}
-			s += effectsOf(fx.OfRecord(risk.KindRisk, r.Key))
 			line("%s", s)
 		}
 	}
@@ -166,7 +162,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 				line("- … %d more", len(open)-maxActions)
 				break
 			}
-			line("- %s %s %s %s %q%s", a.Key, cmp.Or(a.Owner, "-"), cmp.Or(a.Due, "-"), cmp.Or(a.For, "-"), short(a.Title, 70), effectsOf(fx.OfRecord(risk.KindAction, a.Key)))
+			line("- %s %s %s %s %q", a.Key, cmp.Or(a.Owner, "-"), cmp.Or(a.Due, "-"), cmp.Or(a.For, "-"), short(a.Title, 70))
 		}
 	}
 
@@ -181,27 +177,10 @@ func Of(bb domain.Blackboard, step *Step) string {
 		from := max(0, len(arts)-maxArtifacts)
 		line("ARTIFACTS %d (latest: id type summary)", len(arts))
 		for _, it := range arts[from:] {
-			line("- %s %s %s%s", shortID(string(it.ID)), cmp.Or(it.Type, "-"), short(summary(it.Data), maxText), effectsOf(fx.OfItem(it)))
+			line("- %s %s %s", shortID(string(it.ID)), cmp.Or(it.Type, "-"), short(summary(it.Data), maxText))
 		}
 	}
 	return b.String()
-}
-
-// effectsOf renders the effects of a subject (ADR 0107): " effects=a,b=x" (a true effect by its name alone), "" when
-// none.
-func effectsOf(es map[string]domain.Effect) string {
-	if len(es) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(es))
-	for _, n := range slices.Sorted(maps.Keys(es)) {
-		if v := es[n].Value; v == true {
-			parts = append(parts, n)
-		} else {
-			parts = append(parts, fmt.Sprintf("%s=%v", n, v))
-		}
-	}
-	return " effects=" + strings.Join(parts, ",")
 }
 
 // summary is the most telling text of an artifact's data.

@@ -7,19 +7,15 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/google/uuid"
-
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/journal"
-	"github.com/zimwip/goap/pkg/risk"
 )
 
 // Unblock decisions (ADR 0036 §3): a run waiting for conditions established outside it, or stuck, is never left
-// without a way out.
+// without a way out. Nobody declares a condition established: it holds when the change says so, so a person
+// establishes it by working on the change (ADR 0109 §6).
 const (
-	// UnblockWaive declares conditions established for the run: a waiver item on the change, with its reason.
-	UnblockWaive = "waive"
 	// UnblockRetry tries again the actions the run gave up on (disabled after failures or a rejection).
 	UnblockRetry = "retry"
 	// UnblockAbandon ends the run: it fails, with the reason (its parent step fails with it).
@@ -29,9 +25,7 @@ const (
 // UnblockRequest is a person's decision on a blocked run.
 type UnblockRequest struct {
 	Decision string
-	// Conditions declared established (UnblockWaive): "name" true, "!name" false; conditions of the methodology.
-	Conditions []string
-	Reason     string
+	Reason   string
 }
 
 // PermissionUnblock lets a principal unblock runs beyond those who answer for a run (by default, process:* of the
@@ -60,29 +54,6 @@ func (e *Engine) Unblock(ctx context.Context, id string, req UnblockRequest) (*P
 	reason := strings.TrimSpace(req.Reason)
 	data := map[string]any{"decision": req.Decision, "reason": reason, "status": string(p.Status)}
 	switch req.Decision {
-	case UnblockWaive:
-		if p.ChangeID == "" {
-			return nil, fmt.Errorf("process %s has no change to record the waiver on: %w", id, ErrInvalidState)
-		}
-		if reason == "" || len(req.Conditions) == 0 {
-			return nil, fmt.Errorf("a waiver names the conditions and gives its reason: %w", ErrInvalidState)
-		}
-		m, err := e.Methodologies.Methodology(ctx, p.Methodology)
-		if err != nil {
-			return nil, err
-		}
-		for _, c := range req.Conditions {
-			if name := strings.TrimPrefix(c, "!"); !m.Conditions.Has(name) {
-				return nil, fmt.Errorf("unknown condition %q: %w", name, ErrInvalidState)
-			}
-		}
-		rec := uuid.NewString()
-		if _, err := e.addPlainItems(ctx, p, []ItemInput{{Kind: string(risk.KindWaiver),
-			Data: map[string]any{"process": p.ID, "conditions": slices.Clone(req.Conditions), "reason": reason, "by": who.Subject}}}, "unblock", rec); err != nil {
-			return nil, err
-		}
-		data["conditions"] = slices.Clone(req.Conditions)
-		e.journal(ctx, p, journal.Record{ID: rec, Kind: journal.KindUnblock, Step: len(p.Steps), Actor: who.Subject, Data: data})
 	case UnblockRetry:
 		data["disabled"] = slices.Sorted(maps.Keys(p.Disabled))
 		p.Disabled = map[string]bool{}
@@ -96,7 +67,7 @@ func (e *Engine) Unblock(ctx context.Context, id string, req UnblockRequest) (*P
 		p.Status, p.Error = StatusFailed, fmt.Sprintf("abandoned by %s: %s", who.Subject, reason)
 		return p, e.save(ctx, p, string(StatusFailed))
 	default:
-		return nil, fmt.Errorf("unknown decision %q (waive, retry or abandon): %w", req.Decision, ErrInvalidState)
+		return nil, fmt.Errorf("unknown decision %q (retry or abandon): %w", req.Decision, ErrInvalidState)
 	}
 	p.Status, p.Error, p.Plan, p.Pending = StatusRunning, "", nil, nil
 	e.queue(ctx, p, "unblocked", map[string]any{"decision": req.Decision, "by": who.Subject})
@@ -128,7 +99,7 @@ func (e *Engine) mayUnblock(ctx context.Context, p *Process, who authz.Principal
 	return e.allowed(ctx, p, who, PermissionUnblock)
 }
 
-// unblocking are the conditions that would unblock a stuck process if a person declared them established: those no
+// unblocking are the conditions that would unblock a stuck process once the change establishes them: those no
 // admissible action establishes, when assuming them lets the admissible actions reach the goal; else the goal's own
 // conditions that do not hold.
 func (e *Engine) unblocking(world goap.WorldState, admissible []goap.Action, goal goap.Goal) []string {

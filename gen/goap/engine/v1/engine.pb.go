@@ -842,7 +842,7 @@ type HumanTask struct {
 	Step         int32                  `protobuf:"varint,4,opt,name=step,proto3" json:"step,omitempty"`
 	// input (submit items) | approval (approve or reject the action) | agent | flow (adopt or discard a relaunched flow) | board | relaunched
 	// | condition (conditions established outside the process: another process, a person, the state of the change)
-	// | unblock (the process is stuck: a person waives conditions, retries or abandons it, UnblockProcess)
+	// | unblock (the process is stuck: a person retries or abandons it, UnblockProcess)
 	Kind string `protobuf:"bytes,5,opt,name=kind,proto3" json:"kind,omitempty"`
 	// permission required to approve
 	Permission string `protobuf:"bytes,6,opt,name=permission,proto3" json:"permission,omitempty"`
@@ -3569,11 +3569,9 @@ func (x *ApproveActionResponse) GetProcess() *Process {
 type UnblockProcessRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	ProcessId string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
-	// waive | retry | abandon
+	// retry | abandon
 	Decision string `protobuf:"bytes,2,opt,name=decision,proto3" json:"decision,omitempty"`
-	// waive: the conditions declared established ("name" true, "!name" false)
-	Conditions []string `protobuf:"bytes,3,rep,name=conditions,proto3" json:"conditions,omitempty"`
-	// required to waive or abandon
+	// required to abandon
 	Reason        string `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3621,13 +3619,6 @@ func (x *UnblockProcessRequest) GetDecision() string {
 		return x.Decision
 	}
 	return ""
-}
-
-func (x *UnblockProcessRequest) GetConditions() []string {
-	if x != nil {
-		return x.Conditions
-	}
-	return nil
 }
 
 func (x *UnblockProcessRequest) GetReason() string {
@@ -4322,18 +4313,14 @@ type ExplainConditionResponse struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Condition string                 `protobuf:"bytes,1,opt,name=condition,proto3" json:"condition,omitempty"`
 	Expr      string                 `protobuf:"bytes,2,opt,name=expr,proto3" json:"expr,omitempty"`
-	// the condition as the run sees it (a waiver may override the formula)
+	// the condition as the run sees it
 	Value bool `protobuf:"varint,3,opt,name=value,proto3" json:"value,omitempty"`
 	// the formula could not be evaluated
 	Error string `protobuf:"bytes,4,opt,name=error,proto3" json:"error,omitempty"`
-	// the value was declared established by a person (Engine.Unblock) whatever the formula says
-	Waived bool `protobuf:"varint,5,opt,name=waived,proto3" json:"waived,omitempty"`
 	// the formula as a tree of its parts
 	Root *ConditionTerm `protobuf:"bytes,6,opt,name=root,proto3" json:"root,omitempty"`
 	// the blackboard variables the formula reads, as JSON text
-	Inputs map[string]string `protobuf:"bytes,7,rep,name=inputs,proto3" json:"inputs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// a synthetic condition of the engine has no formula
-	Note          string `protobuf:"bytes,8,opt,name=note,proto3" json:"note,omitempty"`
+	Inputs        map[string]string `protobuf:"bytes,7,rep,name=inputs,proto3" json:"inputs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4396,13 +4383,6 @@ func (x *ExplainConditionResponse) GetError() string {
 	return ""
 }
 
-func (x *ExplainConditionResponse) GetWaived() bool {
-	if x != nil {
-		return x.Waived
-	}
-	return false
-}
-
 func (x *ExplainConditionResponse) GetRoot() *ConditionTerm {
 	if x != nil {
 		return x.Root
@@ -4415,13 +4395,6 @@ func (x *ExplainConditionResponse) GetInputs() map[string]string {
 		return x.Inputs
 	}
 	return nil
-}
-
-func (x *ExplainConditionResponse) GetNote() string {
-	if x != nil {
-		return x.Note
-	}
-	return ""
 }
 
 type ConditionTerm struct {
@@ -5763,15 +5736,13 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\aapprove\x18\x02 \x01(\bR\aapprove\x12\x18\n" +
 	"\acomment\x18\x03 \x01(\tR\acomment\"J\n" +
 	"\x15ApproveActionResponse\x121\n" +
-	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"\x8a\x01\n" +
+	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"|\n" +
 	"\x15UnblockProcessRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1a\n" +
-	"\bdecision\x18\x02 \x01(\tR\bdecision\x12\x1e\n" +
-	"\n" +
-	"conditions\x18\x03 \x03(\tR\n" +
-	"conditions\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reason\"M\n" +
+	"\bdecision\x18\x02 \x01(\tR\bdecision\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reasonJ\x04\b\x03\x10\x04R\n" +
+	"conditions\"M\n" +
 	"\x14CancelProcessRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x16\n" +
@@ -5817,19 +5788,17 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x17ExplainConditionRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1c\n" +
-	"\tcondition\x18\x02 \x01(\tR\tcondition\"\xe0\x02\n" +
+	"\tcondition\x18\x02 \x01(\tR\tcondition\"\xce\x02\n" +
 	"\x18ExplainConditionResponse\x12\x1c\n" +
 	"\tcondition\x18\x01 \x01(\tR\tcondition\x12\x12\n" +
 	"\x04expr\x18\x02 \x01(\tR\x04expr\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\bR\x05value\x12\x14\n" +
-	"\x05error\x18\x04 \x01(\tR\x05error\x12\x16\n" +
-	"\x06waived\x18\x05 \x01(\bR\x06waived\x121\n" +
+	"\x05error\x18\x04 \x01(\tR\x05error\x121\n" +
 	"\x04root\x18\x06 \x01(\v2\x1d.goap.engine.v1.ConditionTermR\x04root\x12L\n" +
-	"\x06inputs\x18\a \x03(\v24.goap.engine.v1.ExplainConditionResponse.InputsEntryR\x06inputs\x12\x12\n" +
-	"\x04note\x18\b \x01(\tR\x04note\x1a9\n" +
+	"\x06inputs\x18\a \x03(\v24.goap.engine.v1.ExplainConditionResponse.InputsEntryR\x06inputs\x1a9\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9e\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x05\x10\x06J\x04\b\b\x10\tR\x06waivedR\x04note\"\x9e\x01\n" +
 	"\rConditionTerm\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x18\n" +

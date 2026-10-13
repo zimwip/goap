@@ -229,9 +229,8 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 | **Model exchange** | The request and the answer of one LLM call of an action, an entry `model.call` of the change log ([ADR 0059](adr/0059-prompts-in-the-change-log.md)): capped, read with `prompt:inspect`, shown by the Tokens console (the call itself is a row of the gateway's ledger, ADR 0089, which stores the exchange of every call this log does not keep); the journal record keeps the token counts only (`pkg/journal`, ADR 0066). |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
-| **Effect** | A named value attached to a change impact or an item of the change ([ADR 0107](adr/0107-effects-on-impacts-and-items.md)): "formulated" on an impact, "assessed" on a risk. Set by items of the built-in kind `effect` (`domain.EffectMark`: subject `impact` / `item`, id, `effects {name: value}`, `null` clears), the latest value winning; a version of a keyed record (risk, action...) carries them for the whole record. Folded by `Change.Effects()`, read by conditions as `effects` on each entry of `changeImpacts`, `items`, `risks`, `actions`, shown in the brief, written by `goap-change/effect`. Their use by methodologies is still to come. |
 | **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of the built-in kind `review` (`domain.KindReview`; `pkg/review` the use case), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. Every verdict is made by a submitted review ([ADR 0105](adr/0105-every-verdict-is-a-submitted-review.md)): a single verdict, a producer's commit, an action's review and a merge each write the record of a submitted review first, and each decided `impact.reviewed` log entry names it as its `causation`. |
-| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `pkg/risk` registers the item kinds (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Waivers`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
+| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `pkg/risk` registers the item kinds (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Derogations`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
 
 Applying a Change (`ApplyChange`) commits its accepted modifications on its branch and merges it (ADR 0102: the same two acts as *Commit* then *Merge*), creating a new baseline. The Change remains the explainable history of *why* the graph changed.
 
@@ -654,8 +653,9 @@ establishes (`risks_under_control`, a condition of the `risks` library): the pro
 told from a genuinely **stuck** one (nothing established outside would unblock it, `Engine.awaited`); both are tried
 again when the change moves (`Engine.Accompany`, fed by the trigger manager's events). Neither is an end: a person who
 answers for the run (its initiator, the accountable role of its step, a member of its organisation) can always unblock
-it (`Engine.Unblock`): waive conditions (a `waiver` item on the change, with its reason, applied to that run only),
-retry the actions it gave up on, or abandon it. The same person can **cancel** any run that has not ended
+it (`Engine.Unblock`): retry the actions it gave up on, or abandon it. Nobody declares a condition established: it
+holds when the change says so, so a person establishes it by working on the change, then retries
+([ADR 0109](adr/0109-conditions-derived-scoped-history.md) §6). The same person can **cancel** any run that has not ended
 (`Engine.Cancel`, RPC `CancelProcess`, "Cancel run" on the run tab): a run in flight is interrupted through its context
 (its model and tool calls end; `Engine.Run` keeps the cancel function of each run in flight and stops without failing
 when a cancellation was asked), then the process is `cancelled` (terminal, `Error` "cancelled by <subject>: <reason>",
@@ -674,7 +674,7 @@ are reviewed, and every high one gets an action; sdlc's release waits for `risks
 
 A process can now run, and even finish, without ever being attached to a Change — binding stays
 eager by default for existing methodologies; an agent can declare its own binding action to defer
-it (`change_bound` condition, `Engine.AttachChange`, `goap-scheduler attach`), and a fixed
+it (`change_bound`, an ordinary condition `change.id != ""` of the methodology, `Engine.AttachChange`, `goap-scheduler attach`), and a fixed
 `"process.attached"` event plus the custom `"change.signal"` event (above) both fire on a bind,
 for different purposes — see ADR 0031.
 

@@ -52,8 +52,6 @@ var changeOps = []op{
 	{"cancel", "Cancel the checkout of a node of the change: its draft is dropped (a node created by the change goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"remove", "Take a node out of the change (its draft is dropped), or several at once with keys (all or none): {removed}", schema(map[string]string{"change": "string", "key": "string", "keys": "array"})},
 	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
-	{"effect", "Set effects on a node of the change (impact: its key or impact id) or on an item (item: its id, or the key of a risk / action...), such as {\"formulated\": true} or {\"assessed\": \"high\"}; a null value clears one: {item}",
-		schema(map[string]string{"change": "string", "impact": "string", "item": "string", "effects": "object"}, "effects")},
 	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
 	{"options", "List the options of the change and the active one: {active, options}", schema(map[string]string{"change": "string"})},
@@ -227,8 +225,6 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			return nil, err
 		}
 		return result(map[string]any{"item": items[0]})
-	case "effect":
-		return c.effect(ctx, w, a)
 	case "signal":
 		typ, err := a.required("type")
 		if err != nil {
@@ -661,46 +657,6 @@ type working struct {
 
 // impact returns the change impact of a node as the flow the call works on sees it (the main flow, or the active
 // option: the blackboard is the one of that flow).
-// effect sets effects on an impact or an item of the change (ADR 0107).
-func (c Change) effect(ctx context.Context, w *working, a args) (map[string]any, error) {
-	effects := a.object("effects")
-	if len(effects) == 0 {
-		return nil, errors.New(`argument "effects" is required`)
-	}
-	m := domain.EffectMark{Effects: effects}
-	switch ch := &w.bb.Change; {
-	case a.str("impact") != "" && a.str("item") != "":
-		return nil, errors.New(`name an impact or an item, not both`)
-	case a.str("impact") != "":
-		ref := a.str("impact")
-		m.Subject, m.ID = domain.EffectOnImpact, ref
-		if imp, ok := w.impact(ref); ok {
-			m.ID = string(imp.ID)
-		}
-	case a.str("item") != "":
-		ref := a.str("item")
-		m.Subject, m.ID = domain.EffectOnItem, ref
-		if !slices.ContainsFunc(ch.Items, func(it domain.ChangeItem) bool { return string(it.ID) == ref }) {
-			// the key of a record: its latest version in force
-			for i := len(ch.Items) - 1; i >= 0; i-- {
-				if it := ch.Items[i]; it.Kind != domain.KindEffect && it.Data["key"] == ref && ch.Active(it.ID) {
-					m.ID = string(it.ID)
-					break
-				}
-			}
-		}
-	default:
-		return nil, errors.New(`argument "impact" or "item" is required`)
-	}
-	it := m.Item()
-	it.ProducedBy = producer(ctx)
-	items, err := c.p.Graph.AddItems(ctx, w.bb.Change.ID, []domain.ChangeItem{it})
-	if err != nil {
-		return nil, err
-	}
-	return result(map[string]any{"item": items[0]})
-}
-
 func (w *working) impact(key string) (domain.ChangeImpact, bool) {
 	for _, n := range w.bb.Change.Nodes {
 		if n.Key == key && !n.Superseded {

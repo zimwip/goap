@@ -78,8 +78,6 @@
       {:else if failure}
         <p class="error">{failure}</p>
       {:else if ex}
-        {#if ex.waived}<p class="note">Declared established by a person: the run takes this value whatever the formula gives.</p>{/if}
-        {#if ex.note}<p class="muted">{ex.note}</p>{/if}
         {#if ex.error}<p class="error">{ex.error}</p>{/if}
         {#if ex.expr}
           <h4>Formula</h4>
@@ -138,8 +136,7 @@
     text-transform: uppercase;
     color: var(--muted);
   }
-  .muted,
-  .note {
+  .muted {
     color: var(--muted);
   }
   .error {

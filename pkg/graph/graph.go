@@ -598,10 +598,8 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			return fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 		}
 		known := map[domain.ItemID]bool{}
-		kinds := map[domain.ItemID]domain.ItemKind{}
 		for _, it := range c.Items {
 			known[it.ID] = true
-			kinds[it.ID] = it.Kind
 		}
 		items = slices.Clone(items)
 		for i := range items {
@@ -649,16 +647,10 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			if it.Decision != nil && !known[it.Decision.Item] {
 				return fmt.Errorf("decision %s targets unknown item %s: %w", it.ID, it.Decision.Item, ErrInvalid)
 			}
-			if it.Kind == domain.KindEffect {
-				if err := checkEffectSubject(c, known, kinds, it); err != nil {
-					return err
-				}
-			}
 			if err := putItem(ctx, tx, id, it); err != nil {
 				return err
 			}
 			known[it.ID] = true
-			kinds[it.ID] = it.Kind
 			out = append(out, it)
 		}
 		if c.Status == domain.ChangeDraft {
@@ -668,26 +660,6 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		return nil
 	})
 	return out, err
-}
-
-// checkEffectSubject refuses an effect item whose subject is not on the change (ADR 0107): an impact it does not have,
-// an item it does not hold (earlier in the batch included), or another effect item.
-func checkEffectSubject(c domain.Change, known map[domain.ItemID]bool, kinds map[domain.ItemID]domain.ItemKind, it domain.ChangeItem) error {
-	m := domain.EffectMarkOf(it.Data)
-	switch m.Subject {
-	case domain.EffectOnImpact:
-		if !slices.ContainsFunc(c.Nodes, func(n domain.ChangeImpact) bool { return string(n.ID) == m.ID }) {
-			return fmt.Errorf("effect %s targets unknown change impact %s: %w", it.ID, m.ID, ErrInvalid)
-		}
-	case domain.EffectOnItem:
-		if !known[domain.ItemID(m.ID)] {
-			return fmt.Errorf("effect %s targets unknown item %s: %w", it.ID, m.ID, ErrInvalid)
-		}
-		if kinds[domain.ItemID(m.ID)] == domain.KindEffect {
-			return fmt.Errorf("effect %s targets another effect %s: %w", it.ID, m.ID, ErrInvalid)
-		}
-	}
-	return nil
 }
 
 // ItemAuthorizer judges the write of an item whose kind asks a permission of its writer: the permission it asks, the

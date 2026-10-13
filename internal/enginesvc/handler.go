@@ -311,7 +311,7 @@ func (h *Handler) ApproveAction(ctx context.Context, r *connect.Request[enginev1
 
 func (h *Handler) UnblockProcess(ctx context.Context, r *connect.Request[enginev1.UnblockProcessRequest]) (*connect.Response[enginev1.UnblockProcessResponse], error) {
 	p, err := h.Engine.Unblock(h.principal(ctx, r.Header()), r.Msg.ProcessId,
-		engine.UnblockRequest{Decision: r.Msg.Decision, Conditions: r.Msg.Conditions, Reason: r.Msg.Reason})
+		engine.UnblockRequest{Decision: r.Msg.Decision, Reason: r.Msg.Reason})
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -441,20 +441,15 @@ func (h *Handler) ExplainCondition(ctx context.Context, r *connect.Request[engin
 	if err := h.authorize(ctx, "read", "", p); err != nil {
 		return nil, toConnect(err)
 	}
-	ex, waived, ok, err := h.Engine.ExplainCondition(ctx, p.ID, r.Msg.Condition)
+	ex, ok, err := h.Engine.ExplainCondition(ctx, p.ID, r.Msg.Condition)
 	if err != nil {
 		return nil, toConnect(err)
 	}
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("condition %q is not defined by the methodology", r.Msg.Condition))
 	}
-	out := &enginev1.ExplainConditionResponse{Condition: ex.Name, Expr: ex.Expr, Value: ex.Value, Error: ex.Error, Waived: waived,
-		Inputs: ex.Inputs}
-	if ex.Expr == "" {
-		out.Note = "Set by the engine: true once the run is bound to a change."
-	} else {
-		out.Root = termToPB(ex.Root)
-	}
+	out := &enginev1.ExplainConditionResponse{Condition: ex.Name, Expr: ex.Expr, Value: ex.Value, Error: ex.Error,
+		Inputs: ex.Inputs, Root: termToPB(ex.Root)}
 	return connect.NewResponse(out), nil
 }
 

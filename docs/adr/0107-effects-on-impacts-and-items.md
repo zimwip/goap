@@ -1,6 +1,6 @@
 # ADR 0107 — Effects on impacts and items of the blackboard
 
-**Status**: accepted, implemented (the blackboard side; the methodology side is to come) · **Date**: 2026-10
+**Status**: withdrawn by [ADR 0109](0109-conditions-derived-scoped-history.md) (removed from the code: conditions are derived from the context, effects are declarations) · **Date**: 2026-10
 
 ## Context
 

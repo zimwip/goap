@@ -443,37 +443,6 @@ func TestChangeSignal(t *testing.T) {
 	}
 }
 
-// goap-change/effect sets effects on a node of the change, by its key, and on a risk, by its key (ADR 0107); the brief
-// shows them.
-func TestChangeEffect(t *testing.T) {
-	p := newPlatform(t)
-	ctx := as("alice", "ORG-CHECKOUT", "contributor")
-	created := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/create", map[string]any{"title": "Refunds by voucher", "intent": "Customers may be refunded by voucher",
-		"namespace": "alm", "methodology": "sdlc"})["change"].(map[string]any)
-	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: created["id"].(string), Process: "P1"})
-	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/write", map[string]any{"key": "REQ-9", "type": "alm@Requirement",
-		"properties": map[string]any{"title": "Refund by voucher", "priority": "medium"}, "rationale": "new refund mode"})
-	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/risk", map[string]any{"key": "RSK-1", "title": "fraud", "probability": 2, "impact": 3})
-	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/effect", map[string]any{"impact": "REQ-9", "effects": map[string]any{"formulated": true}})
-	if item := out["item"].(map[string]any); item["kind"] != "effect" || item["producedBy"] != "P1" {
-		t.Fatalf("item = %v", item)
-	}
-	p.call(t, ctx, "ORG-CHECKOUT", "goap-change/effect", map[string]any{"item": "RSK-1", "effects": map[string]any{"assessed": "medium"}})
-	for _, bad := range []map[string]any{
-		{"impact": "REQ-404", "effects": map[string]any{"formulated": true}},
-		{"impact": "REQ-9"},
-		{"effects": map[string]any{"formulated": true}},
-	} {
-		if _, err := p.hub.Call(ctx, "ORG-CHECKOUT", "goap-change/effect", bad); err == nil {
-			t.Fatalf("%v accepted", bad)
-		}
-	}
-	b := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/brief", nil)["brief"].(string)
-	if !strings.Contains(b, "effects=formulated") || !strings.Contains(b, "effects=assessed=medium") {
-		t.Fatalf("brief:\n%s", b)
-	}
-}
-
 // A request either continues an open change or needs a new one: goap-change.list finds the
 // candidates, filtered by namespace, status and unit, the latest first, capped by limit.
 func TestChangeList(t *testing.T) {

@@ -14,8 +14,8 @@ service EngineService {
   // Decide a pending approval (an action needing a permission the initiator
   // lacks) with the caller's permissions.
   rpc ApproveAction(ApproveActionRequest) returns (ApproveActionResponse);
-  // A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): waive
-  // conditions (a waiver on the change), retry the actions it gave up on, or abandon it.
+  // A person unblocks a run waiting for conditions established outside it, or stuck (ADR 0036 §3): retry the
+  // actions it gave up on, or abandon it. A condition is established by changing the change, never declared (ADR 0109 §6).
   rpc UnblockProcess(UnblockProcessRequest) returns (UnblockProcessResponse);
   // Stops a process that has not ended (whoever answers for the run may): a run in flight is interrupted, the process
   // and its live sub-processes are cancelled.
@@ -153,7 +153,7 @@ message HumanTask {
   int32 step = 4;
   // input (submit items) | approval (approve or reject the action) | agent | flow (adopt or discard a relaunched flow) | board | relaunched
   // | condition (conditions established outside the process: another process, a person, the state of the change)
-  // | unblock (the process is stuck: a person waives conditions, retries or abandons it, UnblockProcess)
+  // | unblock (the process is stuck: a person retries or abandons it, UnblockProcess)
   string kind = 5;
   // permission required to approve
   string permission = 6;
@@ -498,11 +498,11 @@ message ApproveActionResponse {
 
 message UnblockProcessRequest {
   string process_id = 1;
-  // waive | retry | abandon
+  // retry | abandon
   string decision = 2;
-  // waive: the conditions declared established ("name" true, "!name" false)
-  repeated string conditions = 3;
-  // required to waive or abandon
+  reserved 3;
+  reserved "conditions";
+  // required to abandon
   string reason = 4;
 }
 
@@ -579,18 +579,18 @@ message ExplainConditionRequest {
 message ExplainConditionResponse {
   string condition = 1;
   string expr = 2;
-  // the condition as the run sees it (a waiver may override the formula)
+  // the condition as the run sees it
   bool value = 3;
   // the formula could not be evaluated
   string error = 4;
-  // the value was declared established by a person (Engine.Unblock) whatever the formula says
-  bool waived = 5;
+  reserved 5;
+  reserved "waived";
   // the formula as a tree of its parts
   ConditionTerm root = 6;
   // the blackboard variables the formula reads, as JSON text
   map<string, string> inputs = 7;
-  // a synthetic condition of the engine has no formula
-  string note = 8;
+  reserved 8;
+  reserved "note";
 }
 
 message ConditionTerm {

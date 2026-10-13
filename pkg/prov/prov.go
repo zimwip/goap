@@ -380,15 +380,6 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 			add(n, "prov:wasInfluencedBy", ref(itemIRI(domain.ItemID(d))))
 		}
 	}
-	if it.Kind == domain.KindEffect {
-		// an effect set on a change impact or an item (ADR 0107): the entity it qualifies
-		switch m := domain.EffectMarkOf(it.Data); m.Subject {
-		case domain.EffectOnImpact:
-			add(n, "goap:qualifies", ref(impactIRI(domain.ChangeImpactID(m.ID))))
-		case domain.EffectOnItem:
-			add(n, "goap:qualifies", ref(itemIRI(domain.ItemID(m.ID))))
-		}
-	}
 	if it.Kind == verify.KindVerification {
 		b.verification(n, it)
 	}

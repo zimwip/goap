@@ -1,6 +1,6 @@
 # ADR 0109 — Conditions are derived from the context, scoped to a subject, and read the history of the change
 
-**Status**: accepted (rev. 3); step (a) implemented (the history, `current`, the default `done` of a step), the rest to come · **Date**: 2026-10 · Builds on ADR 0002 (conditions in CEL), 0034 /
+**Status**: accepted (rev. 3); steps (a) (the history, `current`, the default `done` of a step) and (b) (removal of ADR 0107, of the waiver, `change_bound` an ordinary condition) implemented, the rest to come · **Date**: 2026-10 · Builds on ADR 0002 (conditions in CEL), 0034 /
 0035 (processes, steps, `foreach`), 0051 (an input is never an output), 0064 (condition libraries), 0097 (starting
 points), 0102 / 0103 (rebase of a change, sub-changes); **supersedes ADR 0107** (effects on impacts and items) and the
 `waive` decision of ADR 0036 §3 (`Engine.Unblock`); touches ADR 0011 / 0030 (journal in the change log)
@@ -248,6 +248,19 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
   of a condition, `StartingPoints`); CEL `history` (`pkg/condition`).
 - The generated `step:<path>` is `"<path>" in history.last && history.last["<path>"].current`; the `step_done` artifact
   (`methodology.ArtifactStepDone`) is gone.
+
+## Step (b), as implemented
+
+- ADR 0107 is removed: no item kind `effect` (`domain.KindEffect`, `EffectMark`, `Change.Effects()` / `EffectIndex`), no
+  `effects` on the entries of `changeImpacts`, `items`, `risks`, `actions`, nothing in the brief, no `goap-change/effect`
+  tool, no `goap:qualifies` in the PROV-O export. Effect items already in a log are ordinary items of an unknown kind.
+- The waiver is removed: no item kind `waiver` (`risk.KindWaiver`, `risk.Waivers`), no override of the world in
+  `Engine.observe`, no `waive` decision in `Engine.Unblock` (retry, abandon), no `waived` in the explanation of a
+  condition; the proto fields `UnblockProcessRequest.conditions` and `ExplainConditionResponse.waived` / `note` are
+  reserved. The web's Unblock panel lists what the run waits for and offers *Retry* once the change establishes it.
+- `change_bound` is no longer injected: a methodology that defers its bind declares it (`change.id != ""`,
+  `methodologies/examples/deferred-bind.yaml`); `StartingPoints` and `Compiled.Hints` evaluate the conditions on an
+  existing change and set nothing either.
 
 ## The inputs of a step
 

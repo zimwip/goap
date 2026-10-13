@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -80,7 +81,7 @@ func TestAPersonCanAlwaysUnblockAStuckRun(t *testing.T) {
 	}
 }
 
-func TestAPersonCanWaiveWhatARunWaitsFor(t *testing.T) {
+func TestAPersonEstablishesWhatARunWaitsFor(t *testing.T) {
 	ctx := authz.With(context.Background(), contributor)
 	e := stagedEngine(t)
 	m, err := methodology.Parse([]byte(choreoYAML))
@@ -104,21 +105,16 @@ func TestAPersonCanWaiveWhatARunWaitsFor(t *testing.T) {
 	if p, _ = e.Run(ctx, p.ID); !p.WaitsForConditions() {
 		t.Fatalf("waits for the risks: %s %+v", p.Status, p.Pending)
 	}
-	// no one manages the risks of this change: its owner takes them, and says why
-	if _, err := e.Unblock(ctx, p.ID, UnblockRequest{Decision: UnblockWaive, Conditions: []string{"risks_under_control"}}); !errors.Is(err, ErrInvalidState) {
-		t.Fatalf("a reason is required: %v", err)
+	// nobody declares the risks under control (ADR 0109 §6): a person mitigates the risk on the change, and the run,
+	// asked to retry, sees it
+	if _, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Kind: risk.KindAction,
+		Data: map[string]any{"key": "ACT-1", "title": "review the note", "status": "open", "for": "RSK-1"}}}); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := e.Unblock(ctx, p.ID, UnblockRequest{Decision: UnblockWaive, Conditions: []string{"nonsense"}, Reason: "x"}); !errors.Is(err, ErrInvalidState) {
-		t.Fatalf("a condition of the methodology: %v", err)
-	}
-	if p, err = e.Unblock(ctx, p.ID, UnblockRequest{Decision: UnblockWaive, Conditions: []string{"risks_under_control"}, Reason: "low-risk change"}); err != nil {
+	if p, err = e.Unblock(ctx, p.ID, UnblockRequest{Decision: UnblockRetry}); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ = e.Run(ctx, p.ID); p.Pending == nil || p.Pending.Action != "flow/approve" {
 		t.Fatalf("resumes to its approval: %s %+v", p.Status, p.Pending)
-	}
-	bb, _ := e.Graph.Blackboard(ctx, p.ChangeID)
-	if w := bb.Change.ItemsOfKind(risk.KindWaiver); len(w) != 1 || w[0].Data["reason"] != "low-risk change" {
-		t.Fatalf("the waiver is a fact of the change: %+v", w)
 	}
 }

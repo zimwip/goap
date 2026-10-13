@@ -80,7 +80,6 @@ Rejected results go back through the normal retry / escalation path (decision po
 
 A derogation is an item of the change: `rule`, `target`, `reason`, `signatory`, **mandatory `expires`**. No expiry, no derogation.
 Expiry sends the covered impacts back to `proposed` through the normal review path (never a clock inside the graph).
-Compare the **waiver** (ADR 0036 §3), which only unblocks one run and stays.
 
 | Notion | GOAP | Status |
 |---|---|---|

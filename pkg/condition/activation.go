@@ -17,7 +17,7 @@ import (
 // Absent optional values are null so expressions can test them with `== null`.
 func Activation(bb domain.Blackboard) map[string]any {
 	c := bb.Change
-	h := hydrator{bb: bb, fx: c.Effects()}
+	h := hydrator{bb: bb}
 	items := make([]any, 0, len(c.Items))
 	byKind := map[domain.ItemKind][]any{}
 	for _, it := range c.Items {
@@ -35,8 +35,8 @@ func Activation(bb domain.Blackboard) map[string]any {
 	// the variables of the decision and risk concepts are computed when an expression reads them (lazy bindings of
 	// CEL), so a methodology that reads none of them pays nothing
 	opts := lazy(func() []any { return h.options() })
-	rsk := lazy(func() []any { return risks(&c, h.fx) })
-	act := lazy(func() []any { return actionItems(&c, h.fx) })
+	rsk := lazy(func() []any { return risks(&c) })
+	act := lazy(func() []any { return actionItems(&c) })
 	vrf := lazy(func() []any { return verifications(&c) })
 	drg := lazy(func() []any { return derogations(&c, bb.At) })
 	pol := lazy(func() map[string]any { return criticalityPolicy(bb) })
@@ -95,7 +95,7 @@ func lazy[T any](f func() T) func() T {
 type decisionView struct{ points, questions []any }
 
 // risks is the risk register of the change (ADR 0036 §1).
-func risks(c *domain.Change, fx domain.EffectIndex) []any {
+func risks(c *domain.Change) []any {
 	rs := risk.Risks(*c)
 	out := make([]any, 0, len(rs))
 	for _, r := range rs {
@@ -105,18 +105,18 @@ func risks(c *domain.Change, fx domain.EffectIndex) []any {
 		}
 		out = append(out, map[string]any{"key": r.Key, "title": r.Title, "description": r.Description, "probability": int64(r.Probability),
 			"impact": int64(r.Impact), "score": int64(r.Score()), "status": r.Status, "live": r.Live(), "owner": r.Owner, "actions": acts,
-			"step": r.Step, "item": string(r.Item), "versions": int64(r.Versions), "effects": effects(fx.OfRecord(risk.KindRisk, r.Key))})
+			"step": r.Step, "item": string(r.Item), "versions": int64(r.Versions)})
 	}
 	return out
 }
 
 // actionItems are the actions of the change (ADR 0036 §1).
-func actionItems(c *domain.Change, fx domain.EffectIndex) []any {
+func actionItems(c *domain.Change) []any {
 	as := risk.Actions(*c)
 	out := make([]any, 0, len(as))
 	for _, a := range as {
 		out = append(out, map[string]any{"key": a.Key, "title": a.Title, "status": a.Status, "owner": a.Owner, "due": a.Due, "for": a.For,
-			"result": a.Result, "item": string(a.Item), "versions": int64(a.Versions), "effects": effects(fx.OfRecord(risk.KindAction, a.Key))})
+			"result": a.Result, "item": string(a.Item), "versions": int64(a.Versions)})
 	}
 	return out
 }
@@ -225,23 +225,6 @@ func policyView(p map[string]any) map[string]any {
 
 type hydrator struct {
 	bb domain.Blackboard
-	fx domain.EffectIndex // the effects on the impacts and items of the change (ADR 0107)
-}
-
-// effects are the values of effects by name, as CEL values.
-func effects(es map[string]domain.Effect) map[string]any {
-	out := domain.EffectValues(es)
-	for n, v := range out {
-		switch x := v.(type) {
-		case int:
-			out[n] = int64(x)
-		case int32:
-			out[n] = int64(x)
-		case float32:
-			out[n] = float64(x)
-		}
-	}
-	return out
 }
 
 func (h hydrator) item(it domain.ChangeItem) map[string]any {
@@ -255,8 +238,6 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 		"producedBy": it.ProducedBy, "derivedFrom": derived, "data": orEmpty(it.Data), "decision": nil,
 		// when it was written, in milliseconds since the epoch: compared with vars.event.at (ADR 0036 §3)
 		"at": it.CreatedAt.UnixMilli(),
-		// the effects set on the item, or on its record when it is a version of one (ADR 0107)
-		"effects": effects(h.fx.OfItem(it)),
 	}
 	if d := it.Decision; d != nil {
 		m["decision"] = map[string]any{"item": string(d.Item), "accept": d.Accept, "comment": d.Comment}
@@ -339,7 +320,6 @@ func (h hydrator) changeImpacts() []any {
 			"pre": ref(cn.Pre), "post": ref(cn.Post), "landed": ref(cn.Landed),
 			"planned": cn.Post == nil, "hasPost": cn.Post != nil, "drafted": cn.Drafted(), "recheck": cn.Recheck, "props": h.currentProps(cn),
 			"via": string(cn.Via), "producedBy": cn.ProducedBy, "items": items,
-			"effects": effects(h.fx.OfImpact(cn.ID)),
 		})
 	}
 	return out

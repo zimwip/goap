@@ -134,9 +134,9 @@ const (
 	// (another process, a person, the state of the change will): the process waits for them, and is tried again
 	// when the change moves. A process that no such condition would unblock is stuck.
 	TaskCondition = "condition"
-	// TaskUnblock: the process is stuck; whoever answers for it declares conditions established (a waiver on the
-	// change), retries the actions it gave up on, or abandons it (Engine.Unblock). The same decision answers a
-	// TaskCondition: a person may always unblock a run instead of waiting.
+	// TaskUnblock: the process is stuck; whoever answers for it retries the actions it gave up on, or abandons it
+	// (Engine.Unblock), after working on the change if a condition is missing (ADR 0109 §6). The same decision answers
+	// a TaskCondition: a person may always unblock a run instead of waiting.
 	TaskUnblock = "unblock"
 	// TaskMerge: the change is committed on its own branch but its merge into the branch it was forked from found
 	// nodes both sides changed the same way apart (Merge): a person picks a side per property (the change's value is
