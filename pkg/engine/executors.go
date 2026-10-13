@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zimwip/goap/pkg/assess"
 	"maps"
 	"slices"
 	"strings"
@@ -121,6 +122,8 @@ type PromptData struct {
 	DecisionPoints []domain.DecisionPoint
 	// Step is the step of a process the action carries out (nil outside processes): {{ .Step.Guidance }}.
 	Step *StepContext
+	// Subject is the subject a scoped action runs for (ADR 0109 §3.5), as the conditions see it: {{ .Subject.key }}.
+	Subject map[string]any
 }
 
 // ChangeImpactView is a change impact with its hydrated pre and post versions.
@@ -157,12 +160,19 @@ func filterNamespace(nodes []domain.Node, namespace string) []domain.Node {
 
 // RenderPrompt renders an action prompt against the blackboard.
 func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
-	tpl, err := template.New(ac.Action.Name).Funcs(funcs).Option("missingkey=zero").Parse(ac.Action.Prompt)
+	// fingerprint gives the fingerprint of a subject of the change, what a rating copies in `rated` (ADR 0110)
+	fingerprint := func(key string) string { return assess.FingerprintOf(ac.Blackboard, key) }
+	// isa tells whether a node type is a type or a subtype of another one: {{ if isa .Type "alm@Requirement" }}
+	isa := func(typ, of string) bool { return slices.Contains(ac.Blackboard.TypesOf(typ), any(of)) }
+	tpl, err := template.New(ac.Action.Name).Funcs(funcs).Funcs(template.FuncMap{"fingerprint": fingerprint, "isa": isa}).Option("missingkey=zero").Parse(ac.Action.Prompt)
 	if err != nil {
 		return "", fmt.Errorf("prompt template: %w", err)
 	}
 	d := PromptData{Change: ac.Blackboard.Change, Goal: ac.Process.Goal, Action: ac.Action, Vars: ac.Process.Vars,
 		Options: domain.OptionsOf(ac.Blackboard), ActiveOption: domain.ActiveOptionOf(ac.Blackboard), DecisionPoints: domain.DecisionPointsOf(ac.Blackboard), Step: ac.Step}
+	if item, ok := ac.Blackboard.Vars["item"].(map[string]any); ok && ac.Action.IsScoped() {
+		d.Subject, d.Vars = item, actionVars(ac)
+	}
 	nodes, _, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
 	if err != nil {
 		return "", err
@@ -538,8 +548,14 @@ func DefaultBuiltins() BuiltinExecutor {
 }
 
 // Propagate follows links backwards from impacted nodes (an impact on the
-// target of a link propagates to its source) within the reference baseline.
-// Params: maxDepth (default 3), linkTypes (default all).
+// target of a link propagates to its source) within the reference baseline,
+// and forwards along the link types of `forward` (an impact on the source of
+// such a link propagates to its target). Params: maxDepth (default 3),
+// linkTypes (followed backwards, default all), forward (followed forwards,
+// default none), declare (the node types it declares as impacts, subtypes
+// included; default all: the others are only walked through, so that one
+// pass of an analysis declares the nodes of its layer, ADR 0109), layer (a
+// name written on the `propagation` artifact).
 func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	maxDepth := 3
 	switch v := ac.Action.Params["maxDepth"].(type) {
@@ -548,12 +564,17 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	case float64:
 		maxDepth = int(v)
 	}
-	allowed := map[string]bool{}
-	if lts, ok := ac.Action.Params["linkTypes"].([]any); ok {
-		for _, lt := range lts {
-			allowed[fmt.Sprint(lt)] = true
+	set := func(name string) map[string]bool {
+		out := map[string]bool{}
+		if l, ok := ac.Action.Params[name].([]any); ok {
+			for _, x := range l {
+				out[fmt.Sprint(x)] = true
+			}
 		}
+		return out
 	}
+	allowed, forward, declare := set("linkTypes"), set("forward"), set("declare")
+	layer, _ := ac.Action.Params["layer"].(string)
 	nodes, links, err := readGraph(ctx, ac.Graph, ac.Blackboard.Change.ID, ac.Process.Flow, ac.Blackboard.Change.BaselineID)
 	if err != nil {
 		return ActionResult{}, err
@@ -562,11 +583,29 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	for _, n := range nodes {
 		byRef[n.Ref()] = n
 	}
-	incoming := map[domain.NodeRef][]domain.Link{}
+	type edge struct {
+		typ  string
+		next domain.NodeRef
+	}
+	adjacent := map[domain.NodeRef][]edge{}
 	for _, l := range links {
 		if len(allowed) == 0 || allowed[l.Type] {
-			incoming[l.To] = append(incoming[l.To], l)
+			adjacent[l.To] = append(adjacent[l.To], edge{l.Type, l.From})
 		}
+		if forward[l.Type] {
+			adjacent[l.From] = append(adjacent[l.From], edge{l.Type, l.To})
+		}
+	}
+	declared := func(n domain.Node) bool {
+		if len(declare) == 0 {
+			return true
+		}
+		for _, t := range ac.Blackboard.TypesOf(n.Type) {
+			if declare[fmt.Sprint(t)] {
+				return true
+			}
+		}
+		return declare[n.Type]
 	}
 	type entry struct {
 		ref   domain.NodeRef
@@ -574,10 +613,14 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	}
 	seen := map[domain.NodeRef]bool{}
 	var queue []entry
-	// the nodes the change modifies are the seeds; each propagated node is declared as an impact
+	// the nodes the change modifies are the seeds; a node the change already acts on is not declared again; each
+	// propagated node of a declared type is declared as an impact
 	for _, cn := range ac.Blackboard.Change.Nodes {
-		if cn.Pre != nil && cn.Intent == domain.IntentModified {
-			seen[*cn.Pre] = true
+		if cn.Pre == nil {
+			continue
+		}
+		seen[*cn.Pre] = true
+		if cn.Intent == domain.IntentModified {
 			queue = append(queue, entry{ref: *cn.Pre})
 		}
 	}
@@ -588,19 +631,24 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 		if e.depth >= maxDepth {
 			continue
 		}
-		for _, l := range incoming[e.ref] {
-			if seen[l.From] {
+		for _, l := range adjacent[e.ref] {
+			if seen[l.next] {
 				continue
 			}
-			seen[l.From] = true
-			src := byRef[l.From]
-			ops = append(ops, dsl.NodeOp{Op: "declare", Ref: fmt.Sprintf("#p%d", len(ops)), Intent: string(domain.IntentModified), Key: src.Key,
-				Rationale: fmt.Sprintf("propagated (depth %d): %s %s %s", e.depth+1, src.Key, l.Type, byRef[e.ref].Key)})
-			queue = append(queue, entry{ref: l.From, depth: e.depth + 1})
+			seen[l.next] = true
+			n := byRef[l.next]
+			if declared(n) {
+				ops = append(ops, dsl.NodeOp{Op: "declare", Ref: fmt.Sprintf("#p%d", len(ops)), Intent: string(domain.IntentModified), Key: n.Key,
+					Rationale: fmt.Sprintf("propagated (depth %d): %s %s %s", e.depth+1, n.Key, l.typ, byRef[e.ref].Key)})
+			}
+			queue = append(queue, entry{ref: l.next, depth: e.depth + 1})
 		}
 	}
-	items := []ItemInput{{Kind: string(domain.KindArtifact), Type: "propagation",
-		Data: map[string]any{"propagated": len(ops), "maxDepth": maxDepth}}}
+	data := map[string]any{"propagated": len(ops), "maxDepth": maxDepth}
+	if layer != "" {
+		data["layer"] = layer
+	}
+	items := []ItemInput{{Kind: string(domain.KindArtifact), Type: "propagation", Data: data}}
 	return ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d propagated impacts", len(ops))}, nil
 }
 

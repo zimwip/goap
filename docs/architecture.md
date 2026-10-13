@@ -315,6 +315,17 @@ an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verificat
 same name replaces the library one. The variables of the decision and risk concepts (`options`, `decisionPoints`,
 `questions`, `risks`, `actions`) are always in the environment, and computed only when an expression reads them.
 
+**Scoped conditions and aggregates** ([ADR 0109](adr/0109-conditions-derived-scoped-history.md) §3): a condition may
+have a `scope` (`impact`, `item`, `risk`, `action`, `step`; default `change`) and a `where`; it is evaluated per subject
+of its scope (`self`), its values carried by the entries of the scope (`changeImpacts[i].conditions.x`, `self.conditions.x`
+for another condition of the same subject). An aggregate (`all:` / `any:` / `none:` of a scoped condition, `where`,
+`empty`: the value of `all` on no subject, default false) brings them to the level of the change, the only level the
+planner and the goals see. A **scoped action** (`scope`, `where`) runs once per pending subject (its scoped pre holds,
+its scoped effects do not), one subject per step with `vars.item` / `vars.subject`; the planner sees it lifted (pre
+`pending:<action>`, effects the `all:` aggregates of its scoped effects over its subjects). A step running one may
+narrow its subjects (`where` on the step, with its `done`): one action, one pass per part (the layers of the `sdlc`
+impact analysis).
+
 Each node reference of a change impact (`pre`, `post`, `landed`, link endpoints) is **hydrated**:
 `{id, version, key, type, props, out: [{type, to}], in: [{type, from}], latest}`. A condition can thus
 navigate the *reference* domain without a network call during evaluation (hydration is done
@@ -1432,8 +1443,8 @@ processes:
       - name: analysis                       # sub-steps; the phase's pre applies to them
         pre: {"step:software_delivery/framing": true}
         steps:
-          - {name: scope, actions: [identify_scope, select_scope]}   # alternatives the planner chooses among
-          - {name: impacts, action: propagate_impacts}
+          - {name: scope, actions: [identify_requirements, select_scope]}   # alternatives the planner chooses among
+          - {name: impacts, method: impact_analysis}   # a capability, carried out by a method
       - {name: design, agent: architect, pre: {requirements_specified: true}}   # an agent plans it
       - {name: release, process: release_train}   # a nested process (or <methodology>/<process>)
 ```

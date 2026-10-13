@@ -68,6 +68,8 @@ nodeTypes:
       - {name: expects, label: Expectation, description: "Expectation on the produced items, compiled to a condition", type: json, widget: textarea, section: Planning, order: 10}
       - {name: incremental, label: Incremental, description: "Reaches its effects over several executions: an execution that produced items is progress", type: boolean, section: Planning, order: 11}
       - {name: emits, label: Emits, description: "Events of the methodology the action raises when it reaches its effects (ADR 0110)", type: json, widget: textarea, section: Reactions, order: 7}
+      - {name: scope, label: Scope, description: "Runs once per pending subject of this scope (impact, item, risk, action, step; ADR 0109): pre and effects name conditions of the scope", type: string, section: Planning, order: 12}
+      - {name: where, label: Where, description: "Subjects of the scope the action runs for (CEL, self the subject)", type: string, widget: textarea, section: Planning, order: 13}
       - {name: permission, label: Permission, description: "Permission required from the initiator to run the action automatically", type: string, section: Access, order: 12}
       - {name: model, label: Model, description: "Model alias of an llm action", type: string, section: Execution, order: 13}
       - {name: prompt, label: Prompt, description: "Prompt of an llm action", type: string, widget: textarea, section: Execution, order: 14}
@@ -91,7 +93,13 @@ nodeTypes:
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
-      - {name: expr, label: Expression, description: "CEL predicate over the blackboard", type: string, widget: textarea, section: Definition, order: 3}
+      - {name: expr, label: Expression, description: "CEL predicate over the blackboard (self is the subject of a scoped condition)", type: string, widget: textarea, section: Definition, order: 3}
+      - {name: scope, label: Scope, description: "Kind of subject the condition is about (ADR 0109): change (default), impact, item, risk, action, step", type: string, section: Definition, order: 4}
+      - {name: where, label: Where, description: "Subjects of a scoped condition or an aggregate (CEL, self the subject)", type: string, widget: textarea, section: Definition, order: 5}
+      - {name: all, label: All, description: "Aggregate: every subject satisfies this scoped condition", type: string, section: Aggregate, order: 6}
+      - {name: any, label: Any, description: "Aggregate: some subject satisfies this scoped condition", type: string, section: Aggregate, order: 7}
+      - {name: none, label: None, description: "Aggregate: no subject satisfies this scoped condition", type: string, section: Aggregate, order: 8}
+      - {name: empty, label: Empty, description: "Value of an all aggregate over no subject (default false)", type: boolean, section: Aggregate, order: 9}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   - name: Goal
@@ -189,6 +197,7 @@ nodeTypes:
       - {name: method, label: Method, description: "Capability whose applicable method does the step", type: string, section: Execution, order: 11}
       - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
       - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
+      - {name: where, label: "Where", description: "CEL condition of the scope (self): the subjects of the scoped action the step runs it for", type: string, section: Execution, order: 14}
   - name: MethodStep
     description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person"
     extends: Activity
@@ -208,6 +217,7 @@ nodeTypes:
       - {name: method, label: Method, description: "Capability whose applicable method does the step", type: string, section: Execution, order: 11}
       - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
       - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
+      - {name: where, label: "Where", description: "CEL condition of the scope (self): the subjects of the scoped action the step runs it for", type: string, section: Execution, order: 14}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - name: ToolRequest
     description: "MCP tool requested by the self-observation of a methodology"

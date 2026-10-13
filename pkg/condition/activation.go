@@ -384,7 +384,7 @@ func history(bb domain.Blackboard) map[string]any {
 	for _, s := range h.Steps {
 		m := map[string]any{"path": s.Path, "methodology": s.Methodology, "process": s.Process, "action": s.Action, "execution": s.Execution,
 			"outcome": s.Outcome, "succeeded": s.Outcome == journal.OutcomeSucceeded, "error": s.Error, "seq": s.Seq, "runs": int64(s.Runs),
-			"current": s.Current, "staleBy": s.StaleBy}
+			"current": s.Current, "staleBy": s.StaleBy, "subject": s.Subject}
 		steps = append(steps, m)
 		last[s.Path] = m
 	}

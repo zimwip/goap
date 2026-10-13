@@ -49,7 +49,8 @@ type Engine struct {
 	// Schedule runs a process in the background (default: a goroutine).
 	Schedule func(id string)
 	Log      *slog.Logger
-	// MaxSteps bounds the number of actions of a process (default 50).
+	// MaxSteps bounds the number of actions of a process (default 50); the runs of a scoped action for its subjects
+	// count once per action, each subject being given up after a few failures (ADR 0109 §3.5).
 	MaxSteps int
 	// MaxFailures disables an action after that many executions without the
 	// promised effects (default 2).
@@ -639,7 +640,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 		if err := ctx.Err(); err != nil {
 			return p, err
 		}
-		if len(p.Steps) >= maxSteps {
+		if counted(p.Steps) >= maxSteps {
 			e.fail(p, fmt.Errorf("step limit %d reached", maxSteps))
 			break
 		}
@@ -1150,6 +1151,7 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Compiled, step *Step) error {
 	if a, ok := m.Action(step.Action); ok && a.Step != "" && step.Error == "" {
 		e.journal(ctx, p, journal.Record{Kind: journal.KindStepEnded, Step: step.Index, Action: step.Action, ActivityRef: a.Step,
+			Subject: step.Subject, SubjectRef: step.SubjectRef,
 			StartedAt: step.StartedAt, EndedAt: e.clock(), Data: map[string]any{"execution": step.Execution, "children": slices.Clone(step.Children)}})
 	}
 	bb, err := e.observe(ctx, p, m)
@@ -1161,6 +1163,10 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 	step.After = maps.Clone(p.World)
 	step.EndedAt = e.clock()
 	step.EffectsMet = p.World.Satisfies(action.Effects)
+	if action.IsScoped() {
+		// a run for one subject: its effects are those of the subject, the aggregates come once every subject is done
+		step.EffectsMet = subjectHolds(p, action, step.Subject) && p.World.Satisfies(changeEffects(action))
+	}
 	if !step.EffectsMet {
 		if action.Incremental && len(step.Items)+len(step.Nodes)+len(step.Decisions) > 0 {
 			step.Progress = true // the action runs again on the next cycle
@@ -1171,7 +1177,7 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 	if err := e.emitEvents(ctx, p, action, step); err != nil {
 		return err
 	}
-	if action.Step != "" {
+	if action.Step != "" && p.World.Satisfies(action.Effects) {
 		e.stepCompleted(ctx, p, action, step)
 	}
 	return nil
@@ -1210,13 +1216,14 @@ func itemIDs(items []domain.ChangeItem) []domain.ItemID {
 }
 
 func (e *Engine) recordFailure(p *Process, action string) error {
-	max := e.MaxFailures
-	if max == 0 {
-		max = 2
-	}
+	max := e.maxFailures()
 	n := 0
 	for _, s := range p.Steps {
 		if s.Action == action && !s.EffectsMet && !s.Progress && !s.EndedAt.IsZero() {
+			if s.Subject != "" {
+				// a scoped action fails subject by subject: its subjects are given up one by one (pendingSubject)
+				return nil
+			}
 			n++
 		}
 	}
@@ -1254,6 +1261,7 @@ func (e *Engine) observe(ctx context.Context, p *Process, m *methodology.Compile
 	res := m.Conditions.Evaluate(bb)
 	p.World = res.State
 	p.Unknown = res.Errors
+	p.Subjects = res.Subjects
 	return bb, nil
 }
 

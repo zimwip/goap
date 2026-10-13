@@ -52,6 +52,10 @@ type StepRun struct {
 	Execution   string `json:"execution,omitempty"`
 	Outcome     string `json:"outcome"`
 	Error       string `json:"error,omitempty"`
+	// Subject is the subject a scoped run was for (ADR 0109 §3.5); its inputs are that subject alone (SubjectRef, what
+	// the log names it by).
+	Subject    string `json:"subject,omitempty"`
+	SubjectRef string `json:"subjectRef,omitempty"`
 	// Seq is the position in the log where the run ended (succeeded or failed); Runs counts the runs of the path up to
 	// this one.
 	Seq  int64 `json:"seq"`
@@ -133,7 +137,7 @@ func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
 				ended[exec] = len(h.Steps)
 				procOf[exec] = r.ProcessID
 				h.Steps = append(h.Steps, StepRun{Path: r.ActivityRef, Methodology: r.Methodology, Process: r.ProcessID, Action: r.Action,
-					Execution: exec, Outcome: OutcomeSucceeded, Seq: e.Seq, children: stringList(r.Data["children"])})
+					Execution: exec, Outcome: OutcomeSucceeded, Seq: e.Seq, Subject: r.Subject, SubjectRef: r.SubjectRef, children: stringList(r.Data["children"])})
 			case KindAction:
 				procOf[r.ID] = r.ProcessID
 				if r.ActivityRef == "" {
@@ -152,7 +156,7 @@ func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
 				}
 				h.dropRunning(r.ActivityRef, r.ProcessID, ended)
 				h.Steps = append(h.Steps, StepRun{Path: r.ActivityRef, Methodology: r.Methodology, Process: r.ProcessID, Action: r.Action,
-					Execution: r.ID, Outcome: outcome, Error: r.Error, Seq: e.Seq})
+					Execution: r.ID, Outcome: outcome, Error: r.Error, Seq: e.Seq, Subject: r.Subject, SubjectRef: r.SubjectRef})
 			}
 		case domain.LogImpact:
 			if _, ok := born[e.Subject]; !ok {
@@ -198,6 +202,9 @@ func (h *History) dropRunning(path, process string, ended map[string]int) {
 		s := h.Steps[i]
 		if s.Path != path || s.Process != process {
 			continue
+		}
+		if s.Subject != "" && s.Outcome != OutcomeRunning {
+			return // a scoped step runs once per subject: an earlier subject's run is not run again
 		}
 		if s.Outcome == OutcomeRunning {
 			h.Steps = slices.Delete(h.Steps, i, i+1)
@@ -247,7 +254,7 @@ func (h *History) current(parent, procOf map[string]string, born map[string]int6
 		s.Current = true
 		// (1) a write after it, on what existed before it ended, by nothing relying on it
 		for _, w := range writes {
-			if w.seq <= s.Seq || born[w.subject] >= s.Seq {
+			if w.seq <= s.Seq || born[w.subject] >= s.Seq || (s.SubjectRef != "" && w.subject != s.SubjectRef) {
 				continue
 			}
 			if j, ok := stepOf(w.execution); ok && (j == i || rel(h.Steps[j], *s)) {

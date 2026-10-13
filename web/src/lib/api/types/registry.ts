@@ -229,8 +229,18 @@ export interface LinkType {
 export interface Condition {
   name?: string;
   description?: string;
-  /** CEL expression evaluated against the blackboard. */
+  /** CEL expression evaluated against the blackboard (`self` is the subject of a scoped condition). */
   expr?: string;
+  /** Kind of subject (ADR 0109): change (default), impact, item, risk, action, step. */
+  scope?: string;
+  /** Subjects of a scoped condition or an aggregate (CEL, `self` the subject). */
+  where?: string;
+  /** Aggregate: the scoped condition every / some / no subject satisfies. */
+  all?: string;
+  any?: string;
+  none?: string;
+  /** Value of an `all` aggregate over no subject (default false). */
+  empty?: boolean;
 }
 
 export interface ProduceSpec {
@@ -303,6 +313,9 @@ export interface Action {
   on?: Subscription[];
   /** the events of the methodology it raises when it reaches its effects (ADR 0110) */
   emits?: string[];
+  /** runs once per pending subject of this scope (ADR 0109), within `where` */
+  scope?: string;
+  where?: string;
 }
 
 /** An event an activity reacts to (ADR 0036 §3, 0106, 0110): a standard event or one the methodology declares. */
@@ -422,6 +435,8 @@ export interface ProcessStep {
   roles?: Responsibilities;
   /** the events that make it reactive (ADR 0110) */
   on?: Subscription[];
+  /** CEL condition of the scope (self): the subjects of the scoped action the step runs it for (ADR 0109) */
+  where?: string;
 }
 
 /** Process (ADR 0034): the steps that reach an objective, run by an agent of its name towards a goal of its name. */

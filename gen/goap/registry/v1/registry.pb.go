@@ -1447,8 +1447,18 @@ type Condition struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	Name        string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
-	// CEL expression over the blackboard
-	Expr          string `protobuf:"bytes,3,opt,name=expr,proto3" json:"expr,omitempty"`
+	// CEL expression over the blackboard (self is the subject of a scoped condition)
+	Expr string `protobuf:"bytes,3,opt,name=expr,proto3" json:"expr,omitempty"`
+	// kind of subject (ADR 0109): change (empty), impact, item, risk, action, step
+	Scope string `protobuf:"bytes,4,opt,name=scope,proto3" json:"scope,omitempty"`
+	// subjects of a scoped condition or an aggregate (CEL, self the subject)
+	Where string `protobuf:"bytes,5,opt,name=where,proto3" json:"where,omitempty"`
+	// aggregate: the scoped condition every / some / no subject satisfies
+	All  string `protobuf:"bytes,6,opt,name=all,proto3" json:"all,omitempty"`
+	Any  string `protobuf:"bytes,7,opt,name=any,proto3" json:"any,omitempty"`
+	None string `protobuf:"bytes,8,opt,name=none,proto3" json:"none,omitempty"`
+	// value of an all aggregate over no subject
+	Empty         bool `protobuf:"varint,9,opt,name=empty,proto3" json:"empty,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1502,6 +1512,48 @@ func (x *Condition) GetExpr() string {
 		return x.Expr
 	}
 	return ""
+}
+
+func (x *Condition) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *Condition) GetWhere() string {
+	if x != nil {
+		return x.Where
+	}
+	return ""
+}
+
+func (x *Condition) GetAll() string {
+	if x != nil {
+		return x.All
+	}
+	return ""
+}
+
+func (x *Condition) GetAny() string {
+	if x != nil {
+		return x.Any
+	}
+	return ""
+}
+
+func (x *Condition) GetNone() string {
+	if x != nil {
+		return x.None
+	}
+	return ""
+}
+
+func (x *Condition) GetEmpty() bool {
+	if x != nil {
+		return x.Empty
+	}
+	return false
 }
 
 type ProduceSpec struct {
@@ -1715,7 +1767,10 @@ type Action struct {
 	// the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
 	On []*Subscription `protobuf:"bytes,24,rep,name=on,proto3" json:"on,omitempty"`
 	// the events of the methodology it raises when it reaches its effects (ADR 0110)
-	Emits         []string `protobuf:"bytes,25,rep,name=emits,proto3" json:"emits,omitempty"`
+	Emits []string `protobuf:"bytes,25,rep,name=emits,proto3" json:"emits,omitempty"`
+	// runs once per pending subject of this scope (ADR 0109), within where
+	Scope         string `protobuf:"bytes,26,opt,name=scope,proto3" json:"scope,omitempty"`
+	Where         string `protobuf:"bytes,27,opt,name=where,proto3" json:"where,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1923,6 +1978,20 @@ func (x *Action) GetEmits() []string {
 		return x.Emits
 	}
 	return nil
+}
+
+func (x *Action) GetScope() string {
+	if x != nil {
+		return x.Scope
+	}
+	return ""
+}
+
+func (x *Action) GetWhere() string {
+	if x != nil {
+		return x.Where
+	}
+	return ""
 }
 
 // The verification an action declares (ADR 0075): the kind of verifier its effect needs.
@@ -3286,7 +3355,9 @@ type Step struct {
 	// CEL key of the group of each element of foreach: one stream per group, whose item is {key, items}
 	GroupBy string `protobuf:"bytes,21,opt,name=group_by,json=groupBy,proto3" json:"group_by,omitempty"`
 	// the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
-	On            []*Subscription `protobuf:"bytes,22,rep,name=on,proto3" json:"on,omitempty"`
+	On []*Subscription `protobuf:"bytes,22,rep,name=on,proto3" json:"on,omitempty"`
+	// CEL condition of the scope (self): the subjects of the scoped action the step runs it for (ADR 0109 §3.5)
+	Where         string `protobuf:"bytes,23,opt,name=where,proto3" json:"where,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3445,6 +3516,13 @@ func (x *Step) GetOn() []*Subscription {
 		return x.On
 	}
 	return nil
+}
+
+func (x *Step) GetWhere() string {
+	if x != nil {
+		return x.Where
+	}
+	return ""
 }
 
 type GoalSummary struct {
@@ -7911,11 +7989,17 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"validators\x18\a \x03(\tR\n" +
 	"validators\x12\x14\n" +
 	"\x05label\x18\b \x01(\tR\x05label\x12#\n" +
-	"\rinverse_label\x18\t \x01(\tR\finverseLabel\"U\n" +
+	"\rinverse_label\x18\t \x01(\tR\finverseLabel\"\xcf\x01\n" +
 	"\tCondition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
-	"\x04expr\x18\x03 \x01(\tR\x04expr\":\n" +
+	"\x04expr\x18\x03 \x01(\tR\x04expr\x12\x14\n" +
+	"\x05scope\x18\x04 \x01(\tR\x05scope\x12\x14\n" +
+	"\x05where\x18\x05 \x01(\tR\x05where\x12\x10\n" +
+	"\x03all\x18\x06 \x01(\tR\x03all\x12\x10\n" +
+	"\x03any\x18\a \x01(\tR\x03any\x12\x12\n" +
+	"\x04none\x18\b \x01(\tR\x04none\x12\x14\n" +
+	"\x05empty\x18\t \x01(\bR\x05empty\":\n" +
 	"\vProduceSpec\x12\x0e\n" +
 	"\x02op\x18\x01 \x01(\tR\x02op\x12\x1b\n" +
 	"\tnode_type\x18\x02 \x01(\tR\bnodeType\"<\n" +
@@ -7926,7 +8010,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\bfor_each\x18\x01 \x01(\tR\aforEach\x12\x14\n" +
 	"\x05where\x18\x02 \x01(\tR\x05where\x127\n" +
 	"\aproduce\x18\x03 \x01(\v2\x1d.goap.registry.v1.ProduceSpecR\aproduce\x12.\n" +
-	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xa4\a\n" +
+	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xd0\a\n" +
 	"\x06Action\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -7955,7 +8039,9 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x04mcps\x18\x16 \x03(\tR\x04mcps\x120\n" +
 	"\x06verify\x18\x17 \x01(\v2\x18.goap.registry.v1.VerifyR\x06verify\x12.\n" +
 	"\x02on\x18\x18 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x12\x14\n" +
-	"\x05emits\x18\x19 \x03(\tR\x05emits\x1a6\n" +
+	"\x05emits\x18\x19 \x03(\tR\x05emits\x12\x14\n" +
+	"\x05scope\x18\x1a \x01(\tR\x05scope\x12\x14\n" +
+	"\x05where\x18\x1b \x01(\tR\x05where\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
@@ -8096,7 +8182,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\tReference\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x18\n" +
-	"\asection\x18\x03 \x01(\tR\asection\"\x86\x06\n" +
+	"\asection\x18\x03 \x01(\tR\asection\"\x9c\x06\n" +
 	"\x04Step\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\"\n" +
@@ -8117,7 +8203,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05roles\x18\x13 \x01(\v2\".goap.registry.v1.ResponsibilitiesR\x05roles\x12\x18\n" +
 	"\aforeach\x18\x14 \x01(\tR\aforeach\x12\x19\n" +
 	"\bgroup_by\x18\x15 \x01(\tR\agroupBy\x12.\n" +
-	"\x02on\x18\x16 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x1a6\n" +
+	"\x02on\x18\x16 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x12\x14\n" +
+	"\x05where\x18\x17 \x01(\tR\x05where\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a7\n" +

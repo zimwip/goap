@@ -27,13 +27,42 @@ import (
 // sdlcModel answers the LLM actions of methodologies/sdlc.yaml. The matched
 // substrings come from the prompt templates in methodologies/sdlc.yaml.
 func sdlcModel(t *testing.T) llm.Client {
+	return sdlcModelOf(t, new([]string))
+}
+
+// between is the text of s between the first from and the next to.
+func between(s, from, to string) string {
+	_, rest, _ := strings.Cut(s, from)
+	out, _, _ := strings.Cut(rest, to)
+	return out
+}
+
+// sdlcModelOf is sdlcModel recording the impacts it qualified.
+func sdlcModelOf(t *testing.T, record *[]string) llm.Client {
 	return llm.ClientFunc(func(_ context.Context, req llm.Request) (llm.Response, error) {
 		p := req.Messages[0].Content
 		var out string
 		switch {
-		case strings.Contains(p, "DIRECTLY concerned"):
+		case strings.Contains(p, `"layer":"requirements"`):
+			// the first pass of the impact analysis names what the intent directly concerns
 			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
-			{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}}]}`
+			{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}},
+			{"kind":"artifact","type":"impact_pass","data":{"layer":"requirements","summary":"the payment need and its PSP requirement"}}]}`
+		case strings.Contains(p, `"type":"impact_pass","data":{"layer":"`):
+			// the next passes name nothing directly: the propagation finds their elements
+			layer := between(p, `"type":"impact_pass","data":{"layer":"`, `"`)
+			out = `{"items":[{"kind":"artifact","type":"impact_pass","data":{"layer":"` + layer + `","summary":"nothing beyond what propagates"}}]}`
+		case strings.Contains(p, "You qualify ONE suspected impact"):
+			// one suspected impact at a time: the settlement batch, its artifact and its settlement file are not concerned
+			key, fp := between(p, "Suspected impact: ", " ("), between(p, `"rated":"`, `"`)
+			verdict, ops := "confirmed", ""
+			if key == "CMP-3" || key == "ART-3" || key == "ITF-3" {
+				verdict = "refuted"
+				ops = `,{"kind":"changeImpact","changeImpact":{"op":"review","node":"` + key + `","accept":false,"comment":"not impacted: settlement is untouched"}},
+				{"kind":"changeImpact","changeImpact":{"op":"remove","node":"` + key + `"}}`
+			}
+			*record = append(*record, key)
+			out = `{"items":[{"kind":"assessment","data":{"key":"impact:` + key + `","score":4,"verdict":"` + verdict + `","findings":[],"rated":"` + fp + `"}}` + ops + `]}`
 		case strings.Contains(p, "Revise the impacted requirements"):
 			// REQ-1 starts proposed: a transition moves it to draft, then it is written, the way the
 			// system prompt's lifecycle instructions ask of any compliant agent (llmSystem, ADR 0076). REQ-10 is
@@ -126,6 +155,57 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	return e, g, head.ID
 }
 
+// validation is what a person submits to validate the impact analysis.
+var validation = engine.ItemInput{Kind: "artifact", Type: "impact_validation", Data: map[string]any{"accepted": true, "comment": "the four layers are right"}}
+
+// qualified are the subjects the qualify step of the impact analysis ran for, in order.
+func qualified(p *engine.Process) []string {
+	var out []string
+	for _, s := range p.Steps {
+		if s.Subject != "" {
+			out = append(out, s.Subject)
+		}
+	}
+	return out
+}
+
+// checkImpactAnalysis checks what the four passes of the impact analysis left: the propagated impacts qualified
+// once each, the ones the change does not concern rejected with their reason and withdrawn.
+func checkImpactAnalysis(t *testing.T, g *graph.Graph, id domain.ChangeID, qualified []string) {
+	t.Helper()
+	t.Logf("qualified: %v", qualified)
+	seen := map[string]bool{}
+	for _, k := range qualified {
+		if seen[k] {
+			t.Fatalf("%s qualified twice: %v", k, qualified)
+		}
+		seen[k] = true
+	}
+	for _, k := range []string{"CMP-3", "ART-3", "ITF-3"} {
+		if !seen[k] {
+			t.Fatalf("%s not qualified: %v", k, qualified)
+		}
+	}
+	c, err := g.Change(context.Background(), id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys := map[string]bool{}
+	for _, n := range c.Nodes {
+		keys[n.Key] = true
+	}
+	for _, k := range []string{"NEED-1", "REQ-1", "FCT-1", "APP-1", "CMP-1"} {
+		if !keys[k] {
+			t.Fatalf("%s is not an impact: %v", k, keys)
+		}
+	}
+	for _, k := range []string{"CMP-3", "ART-3", "ITF-3"} {
+		if keys[k] {
+			t.Fatalf("%s is not concerned and must be withdrawn", k)
+		}
+	}
+}
+
 func TestSDLCDelivery(t *testing.T) {
 	ctx, rm, approver := devCtx, rmCtx, approverCtx
 	e, g, base := sdlcSetup(t)
@@ -135,6 +215,17 @@ func TestSDLCDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	// run as the background scheduler does, without a caller: the run acts for the initiator
+	if p, err = e.Run(context.Background(), p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// the impact analysis runs its four passes, then a person validates it
+	if p.Status != engine.StatusWaiting || p.Pending.Action != "validate_impact_analysis" {
+		t.Fatalf("must wait for the validation of the impact analysis: %s %s %+v", p.Status, p.Error, p.Pending)
+	}
+	checkImpactAnalysis(t, g, p.ChangeID, qualified(p))
+	if _, err = e.Submit(ctx, p.ID, []engine.ItemInput{validation}); err != nil {
+		t.Fatal(err)
+	}
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +253,8 @@ func TestSDLCDelivery(t *testing.T) {
 		if (e.Op == domain.ImpactProposed || e.Op.WritesPost()) && e.Execution == "" {
 			t.Fatalf("event %d (%s of %s) has no action run", e.Seq, e.Op, e.Impact)
 		}
-		if e.By != "dev" {
+		// a review an action makes is the action's (the verifier is not the producer, ADR 0075)
+		if e.By != "dev" && !(e.Op == domain.ImpactReviewed && e.By == "qualify_impact") {
 			t.Fatalf("event %d (%s of %s) is recorded for %q, not the initiator", e.Seq, e.Op, e.Impact, e.By)
 		}
 	}
@@ -198,7 +290,7 @@ func TestSDLCDelivery(t *testing.T) {
 	}
 	// dev, test, staging are deployed; production waits for a release manager
 	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusWaiting || p.Pending.Permission != "release:deploy" {
-		t.Fatalf("production must wait for a release manager: %v %s %+v", err, p.Status, p.Pending)
+		t.Fatalf("production must wait for a release manager: %v %s %s %+v", err, p.Status, p.Error, p.Pending)
 	}
 	if _, err := e.Approve(approver, p.ID, true, ""); err == nil {
 		t.Fatal("an approver is not a release manager")
@@ -292,6 +384,39 @@ func TestSDLCProcess(t *testing.T) {
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
+	// the impacts step names a capability: the impact_analysis method runs its four passes as a sub-agent, then
+	// waits for a person to validate them
+	if p.Status != engine.StatusWaiting || p.Pending.Kind != engine.TaskAgent || p.Pending.Action != "software_delivery/analysis/impacts" {
+		t.Fatalf("expected the impact analysis: %s %s %+v", p.Status, p.Error, p.Pending)
+	}
+	analysis, err := e.Store.Get(ctx, p.Pending.ChildProcessID)
+	if err != nil || analysis.Agent != "impact_analysis" || analysis.Pending == nil || analysis.Pending.Action != "impact_analysis/validation" {
+		t.Fatalf("impact analysis %s %s %+v %v", analysis.Status, analysis.Error, analysis.Pending, err)
+	}
+	var passes []string
+	for _, s := range analysis.Steps {
+		if len(passes) == 0 || passes[len(passes)-1] != s.Action {
+			passes = append(passes, s.Action)
+		}
+	}
+	wantPasses := []string{"impact_analysis/requirements/identify:identify_requirements", "impact_analysis/requirements/propagate", "impact_analysis/requirements/qualify",
+		"impact_analysis/functions/identify", "impact_analysis/functions/propagate", "impact_analysis/functions/qualify",
+		"impact_analysis/applications/identify", "impact_analysis/applications/propagate", "impact_analysis/applications/qualify",
+		"impact_analysis/components/identify", "impact_analysis/components/propagate", "impact_analysis/components/qualify", "impact_analysis/validation"}
+	if !slices.Equal(passes, wantPasses) {
+		t.Fatalf("passes %v", passes)
+	}
+	checkImpactAnalysis(t, g, p.ChangeID, qualified(analysis))
+	if _, err = e.Submit(ctx, analysis.ID, []engine.ItemInput{validation}); err != nil {
+		t.Fatal(err)
+	}
+	if analysis, err = e.Run(ctx, analysis.ID); err != nil || analysis.Status != engine.StatusCompleted {
+		t.Fatalf("impact analysis: %v %s %s", err, analysis.Status, analysis.Error)
+	}
+	e.Drain()
+	if p, err = e.Store.Get(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
 	// the nested release process waits for the review
 	if p.Status != engine.StatusWaiting || p.Pending.Kind != engine.TaskAgent || p.Pending.Action != "software_delivery/release" {
 		t.Fatalf("expected the release train: %s %s %+v", p.Status, p.Error, p.Pending)
@@ -302,7 +427,7 @@ func TestSDLCProcess(t *testing.T) {
 			steps = append(steps, s.Action)
 		}
 	}
-	want := []string{"software_delivery/framing", "software_delivery/analysis/scope:identify_scope", "software_delivery/analysis/impacts",
+	want := []string{"software_delivery/framing", "software_delivery/analysis/impacts",
 		// the traceability sub-step is skipped: its criteria hold (the new requirement satisfies a need)
 		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/analysis/specification/test_plan", "software_delivery/design", "software_delivery/build", "software_delivery/release"}
 	if !slices.Equal(steps, want) {
@@ -331,7 +456,7 @@ func TestSDLCProcess(t *testing.T) {
 			t.Fatalf("%s is %s, want %s (%v)", path, states[path], want, states)
 		}
 	}
-	if pr.Total != 10 || pr.Done != 8 {
+	if pr.Total != 9 || pr.Done != 7 {
 		t.Fatalf("progress %d/%d", pr.Done, pr.Total)
 	}
 	var builds []string

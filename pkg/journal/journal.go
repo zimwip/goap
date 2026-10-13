@@ -83,6 +83,10 @@ type Record struct {
 	Before         map[string]bool `json:"before,omitempty"`
 	After          map[string]bool `json:"after,omitempty"`
 	EffectsMet     *bool           `json:"effectsMet,omitempty"`
+	// Subject is the subject a scoped action ran for (ADR 0109 §3.5), SubjectRef what the log names it by (an impact
+	// id, "<kind>:<key>" of a keyed item): the only input of that run.
+	Subject    string `json:"subject,omitempty"`
+	SubjectRef string `json:"subjectRef,omitempty"`
 	// Items produced by the action (they carry this record id as provenance).
 	Items []domain.ItemID `json:"items,omitempty"`
 	// Nodes are the change impacts the action declared (they carry this record id as their execution).

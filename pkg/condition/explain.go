@@ -51,6 +51,12 @@ func (s *Set) Explain(name string, bb domain.Blackboard) (Explanation, bool) {
 		}
 	}
 	if !found {
+		if a := s.aggregateOf(name); a != nil {
+			return s.explainAggregate(*a, bb), true
+		}
+		if scope := s.ScopeOf(name); scope != "" {
+			return s.explainScoped(name, bb), true
+		}
 		return Explanation{}, false
 	}
 	ex := Explanation{Name: name, Expr: expr, Inputs: map[string]string{}}

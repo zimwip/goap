@@ -1,6 +1,6 @@
 # ADR 0109 — Conditions are derived from the context, scoped to a subject, and read the history of the change
 
-**Status**: accepted (rev. 3); steps (a) (the history, `current`, the default `done` of a step) and (b) (removal of ADR 0107, of the waiver, `change_bound` an ordinary condition) implemented, the rest to come · **Date**: 2026-10 · Builds on ADR 0002 (conditions in CEL), 0034 /
+**Status**: accepted (rev. 3); steps (a) (the history, `current`, the default `done` of a step), (b) (removal of ADR 0107, of the waiver, `change_bound` an ordinary condition), (c) (scoped conditions and aggregates) and (d) (scoped actions) implemented, (e) (web) to come · **Date**: 2026-10 · Builds on ADR 0002 (conditions in CEL), 0034 /
 0035 (processes, steps, `foreach`), 0051 (an input is never an output), 0064 (condition libraries), 0097 (starting
 points), 0102 / 0103 (rebase of a change, sub-changes); **supersedes ADR 0107** (effects on impacts and items) and the
 `waive` decision of ADR 0036 §3 (`Engine.Unblock`); touches ADR 0011 / 0030 (journal in the change log)
@@ -261,6 +261,56 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
 - `change_bound` is no longer injected: a methodology that defers its bind declares it (`change.id != ""`,
   `methodologies/examples/deferred-bind.yaml`); `StartingPoints` and `Compiled.Hints` evaluate the conditions on an
   existing change and set nothing either.
+
+## Step (c), as implemented
+
+- `condition.Definition` gains `Scope`, `Where`, `All` / `Any` / `None` and `Empty` (`pkg/condition/scope.go`; scopes
+  `change` (default), `impact`, `item`, `risk`, `action`, `step`, `condition.Scopes`). `CheckDefinition` checks one
+  definition alone (known scope, `self` only in a scoped condition or a where, an aggregate names one condition and no
+  expression, a plain condition no where); `Set.Compile` orders the scoped conditions so that one comes after those it
+  reads on its subject (`self.conditions.x`, `SelfReads`), refusing a cycle, a read of another scope and an aggregate
+  of an unknown or unscoped condition.
+- Evaluation (`Set.Evaluate`): the scoped conditions first, per subject of their scope within their where
+  (`Result.Subjects`: `condition.Subject{ID, Values, Errors}`, the id is the key of an impact, the id of an item, the
+  key of a risk or action record, `<path>#<runs>` of a step); every entry of a scope then carries `conditions`, so the
+  conditions of the change read them (`changeImpacts.filter(i, !i.conditions.x)`); then the conditions of the change,
+  then the aggregates, unknown when a counted subject has an error. `all` on an empty set is `empty` (default false),
+  `any` false, `none` true. `Explain` of an aggregate lists the subjects counted and the failing ones, of a scoped
+  condition its value per subject.
+- Methodologies: `methodology.Condition` carries the same fields (YAML, proto `Condition` fields 4 to 9, attributes of
+  `methodology@Condition`); the compiler refuses a scoped condition in a goal, in a step's entry or exit (name an
+  aggregate of it) and in an unscoped action. The planner's world is the change level only: `pkg/goap` is unchanged.
+- Not done: `impact.conditions` in the guard environment (§3.6), the failing subjects in `Progress` / `StartingPoints`.
+
+## Step (d), as implemented
+
+- An action declares `scope` (+ `where`, proto `Action` fields 26 / 27, attributes of `methodology@Action`); its `pre`
+  and `effects` may name conditions of that scope (and of the change). `compileState.compileScope` lifts it: the
+  generated scoped condition `subject:<action>` (its scoped pre holds, its scoped effects do not, within its where) and
+  the condition of the change `pending:<action>` (`any:` of it); lifted pre = its pre of the change plus
+  `pending:<action>`; lifted effects = its effects of the change plus every `all:` (`none:` for an effect false)
+  aggregate of each scoped effect over its subjects or a part of them (the aggregate's where is the action's, or that
+  where narrowed by `&& ...`), else over every subject; none: a compile issue suggesting one
+  (`Action.ScopedPre` / `ScopedEffects` / `Lifted`, compiled only).
+- A step may narrow the subjects of the scoped action it runs (`Step.where`, proto `Step.where`, attribute of
+  `methodology@Step` / `MethodStep`): its own where is the action's `&&` the step's, its generated conditions are named
+  after the step (`Action.Narrowed`), it lifts to the aggregates over its subjects, and it states its exit criteria.
+  So several steps run one action, each over its part: the passes of an analysis, layer by layer.
+- The engine (`pkg/engine/scoped.go`, `cycle.go`) runs a scoped action for one pending subject per step, the first
+  in the order of its scope, giving it `vars.item` (the entry) and `vars.subject` (its id); the step records `Subject`
+  and `SubjectRef` (the impact id or `<kind>:<key>`, also on the action record of the journal and on
+  `journal.step.ended`). Its effects are met when its scoped effects hold on the subject (a subject gone, an impact
+  withdrawn, has nothing left to do) and its effects of the change hold; the step of a process is done only once the
+  lifted effects hold. A subject failing `maxFailures` times is given up (the others go on); with no pending subject
+  left the action is disabled for the run. The step limit of a process counts the runs of a scoped action once.
+- The history (`journal.Fold`) keeps the runs of a scoped step per subject (a run for another subject does not
+  replace it) and the staleness of such a run is about its subject only.
+- The runs are sequential, one subject per step: the parallel lanes of `foreach` are not used.
+- `sdlc` 0.7.0 is the first user: the impact analysis method in four passes (requirements, functions, applications,
+  components), each one `identify_<layer>` (llm), `propagate_<layer>` (`graph.propagate` with a `layer`) and the one
+  scoped action `qualify_impact` (one LLM call per suspected impact: an assessment `impact:<key>`, verdict `confirmed`
+  or `refuted`; a refuted impact is rejected with its reason, then withdrawn) narrowed per layer, then
+  `validate_impact_analysis` (human).
 
 ## The inputs of a step
 

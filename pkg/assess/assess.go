@@ -37,11 +37,14 @@ const (
 // MaxScore is the best score; a score goes from 0 to MaxScore.
 const MaxScore = 5
 
-// Verdicts of an assessment.
+// Verdicts of an assessment: of a text (clear, unclear, insufficient) or of a claim made about its subject, such as
+// a suspected impact (confirmed, refuted).
 const (
 	VerdictClear        = "clear"
 	VerdictUnclear      = "unclear"
 	VerdictInsufficient = "insufficient"
+	VerdictConfirmed    = "confirmed"
+	VerdictRefuted      = "refuted"
 )
 
 // Finding is one remark of an assessment.
@@ -100,9 +103,9 @@ func validateAssessment(it domain.ChangeItem) error {
 		return fmt.Errorf("assessment score must be between 0 and %d", MaxScore)
 	}
 	switch str(d, "verdict") {
-	case "", VerdictClear, VerdictUnclear, VerdictInsufficient:
+	case "", VerdictClear, VerdictUnclear, VerdictInsufficient, VerdictConfirmed, VerdictRefuted:
 	default:
-		return fmt.Errorf("assessment verdict must be %s, %s or %s", VerdictClear, VerdictUnclear, VerdictInsufficient)
+		return fmt.Errorf("assessment verdict must be %s, %s, %s, %s or %s", VerdictClear, VerdictUnclear, VerdictInsufficient, VerdictConfirmed, VerdictRefuted)
 	}
 	return nil
 }

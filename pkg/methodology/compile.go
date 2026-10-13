@@ -82,19 +82,23 @@ func (m *Methodology) CompileLenient() (*Compiled, def.Issues) {
 // compileWith: the order matters (the expect:* conditions are known once the actions are compiled, the agents are
 // complete before methods and processes are merged in).
 type compileState struct {
-	m         *Methodology
-	issues    def.Issues
-	defs      []condition.Definition
-	known     map[string]bool
-	actions   map[string]Action
-	utilities []condition.Definition
-	whens     []condition.Definition
-	goals     map[string]bool
-	agents    map[string]Agent
-	roles     map[string]bool
-	meths     compiledMethods
-	procs     compiledProcesses
-	reactions []Reaction
+	m      *Methodology
+	issues def.Issues
+	defs   []condition.Definition
+	known  map[string]bool
+	// scopes gives the scope of each scoped condition (declared or generated); aggregates the operator and condition
+	// of each aggregate
+	scopes     map[string]string
+	aggregates map[string]Condition
+	actions    map[string]Action
+	utilities  []condition.Definition
+	whens      []condition.Definition
+	goals      map[string]bool
+	agents     map[string]Agent
+	roles      map[string]bool
+	meths      compiledMethods
+	procs      compiledProcesses
+	reactions  []Reaction
 }
 
 func (s *compileState) add(path, format string, args ...any) {
@@ -102,7 +106,7 @@ func (s *compileState) add(path, format string, args ...any) {
 }
 
 func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
-	s := &compileState{m: m, known: map[string]bool{}, actions: map[string]Action{}, goals: map[string]bool{}, agents: map[string]Agent{}}
+	s := &compileState{m: m, known: map[string]bool{}, scopes: map[string]string{}, aggregates: map[string]Condition{}, actions: map[string]Action{}, goals: map[string]bool{}, agents: map[string]Agent{}}
 	s.checkHeader()
 	s.checkEvents()
 	s.compileConditions()
@@ -115,6 +119,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.checkTransverse()
 	s.checkIntegration()
 	s.mergeRolesMethodsProcesses()
+	s.checkStepScopes()
 	s.compileReactions()
 	s.checkMainGoal()
 	return s.finish(lenient)
@@ -152,8 +157,11 @@ func (s *compileState) checkMainGoal() {
 	s.add("goal", "unknown goal %q: name a goal or a process of the methodology", g)
 }
 
-// compileConditions compiles each expression on its own to report every error.
+// compileConditions compiles each expression on its own to report every error, then the scoped conditions and the
+// aggregates together (what they read of each other, ADR 0109 §3).
 func (s *compileState) compileConditions() {
+	var scoped []condition.Definition
+	paths := map[string]string{}
 	for i, c := range s.m.Conditions {
 		path := fmt.Sprintf("conditions[%d]", i)
 		switch {
@@ -165,13 +173,171 @@ func (s *compileState) compileConditions() {
 			continue
 		}
 		s.known[c.Name] = true
-		d := condition.Definition{Name: c.Name, Expr: c.Expr}
-		if _, err := condition.Compile([]condition.Definition{d}); err != nil {
-			s.add(path+".expr", "%s", strings.TrimPrefix(err.Error(), fmt.Sprintf("condition %q: ", c.Name)))
+		d := c.Definition()
+		field := ".expr"
+		if d.IsAggregate() || d.Where != "" {
+			field = ".where"
+		}
+		if d.IsScoped() && !slices.Contains(condition.Scopes, d.Scope) {
+			field = ".scope"
+		}
+		if err := condition.CheckDefinition(d); err != nil {
+			s.add(path+field, "%s", err)
+			continue
+		}
+		if d.IsScoped() || d.IsAggregate() {
+			paths[d.Name] = path
+			scoped = append(scoped, d)
+			if d.IsScoped() {
+				s.scopes[d.Name] = d.Scope
+			}
 			continue
 		}
 		s.defs = append(s.defs, d)
 	}
+	for _, d := range scoped {
+		if op, of := d.Aggregate(); op != "" {
+			if s.scopes[of] == "" {
+				s.add(paths[d.Name]+"."+op, "%s %q: name a scoped condition (scope: impact, item, ...)", op, of)
+				continue
+			}
+			c := s.m.Conditions[slices.IndexFunc(s.m.Conditions, func(c Condition) bool { return c.Name == d.Name })]
+			s.aggregates[d.Name] = c
+		}
+	}
+	if len(scoped) == 0 {
+		return
+	}
+	if _, err := condition.Compile(scoped); err != nil {
+		s.add("conditions", "%s", err)
+		return
+	}
+	s.defs = append(s.defs, scoped...)
+}
+
+// checkStepScopes refuses a step whose entry or exit names a scoped condition: steps, goals and the planner reason on
+// the change, a scoped condition reaches them through an aggregate.
+func (s *compileState) checkStepScopes() {
+	for _, path := range slices.Sorted(maps.Keys(s.procs.criteria)) {
+		cr := s.procs.criteria[path]
+		for _, set := range []map[string]bool{cr.entry, cr.done} {
+			for _, k := range slices.Sorted(maps.Keys(set)) {
+				if scope := s.scopes[k]; scope != "" {
+					s.add("processes", "step %s names %s, a condition of scope %s: name an aggregate of it (all, any, none)", path, k, scope)
+				}
+			}
+		}
+	}
+}
+
+// compileScope lifts a scoped action for the planner (ADR 0109 §3.5): its pre becomes "some subject is pending"
+// plus its conditions of the change, its effects the aggregates of its scoped effects; it generates the scoped
+// condition of a pending subject and the condition of the change saying one is pending.
+func (s *compileState) compileScope(path string, a Action) Action {
+	if !a.IsScoped() {
+		if a.Where != "" {
+			s.add(path+".where", "where applies to a scoped action (scope)")
+		}
+		return a
+	}
+	if !slices.Contains(condition.Scopes, a.Scope) {
+		s.add(path+".scope", "unknown scope %q (one of %s)", a.Scope, strings.Join(condition.Scopes, ", "))
+		return a
+	}
+	if a.Where != "" {
+		if err := condition.CheckDefinition(condition.Definition{Name: "where", Scope: a.Scope, Expr: a.Where}); err != nil {
+			s.add(path+".where", "%s", err)
+			return a
+		}
+	}
+	split := func(field string, set map[string]bool) (scoped, change map[string]bool, ok bool) {
+		scoped, change, ok = map[string]bool{}, map[string]bool{}, true
+		for _, k := range slices.Sorted(maps.Keys(set)) {
+			switch sc := s.scopes[k]; {
+			case sc == "":
+				change[k] = set[k]
+			case sc == a.Scope:
+				scoped[k] = set[k]
+			default:
+				s.add(path+"."+field+"."+k, "%s is a condition of scope %s, the action is of scope %s", k, sc, a.Scope)
+				ok = false
+			}
+		}
+		return
+	}
+	pre, changePre, ok1 := split("pre", a.Pre)
+	eff, changeEff, ok2 := split("effects", a.Effects)
+	if !ok1 || !ok2 {
+		return a
+	}
+	if len(eff) == 0 {
+		s.add(path+".effects", "a scoped action makes conditions of its scope (%s) true on its subject: declare them in its effects", a.Scope)
+		return a
+	}
+	// a subject is pending: its pre holds, its effects do not all hold yet
+	term := func(k string, v bool) string {
+		return fmt.Sprintf("(%q in self.conditions && self.conditions[%q] == %v)", k, k, v)
+	}
+	var have, want []string
+	for _, k := range slices.Sorted(maps.Keys(pre)) {
+		have = append(have, term(k, pre[k]))
+	}
+	for _, k := range slices.Sorted(maps.Keys(eff)) {
+		want = append(want, term(k, eff[k]))
+	}
+	expr := "!(" + strings.Join(want, " && ") + ")"
+	if len(have) > 0 {
+		expr = strings.Join(have, " && ") + " && " + expr
+	}
+	subject, pending := a.SubjectCondition(), a.PendingCondition()
+	gen := []condition.Definition{{Name: subject, Scope: a.Scope, Where: a.Where, Expr: expr}, {Name: pending, Any: subject}}
+	s.defs = append(s.defs, gen...)
+	s.known[subject], s.known[pending], s.scopes[subject] = true, true, a.Scope
+	a.ScopedPre, a.ScopedEffects = pre, eff
+	a.Pre = changePre
+	a.Pre[pending] = true
+	a.Lifted = map[string]bool{}
+	for _, k := range slices.Sorted(maps.Keys(eff)) {
+		aggs := s.liftedAggregates(k, eff[k], a.Where)
+		if len(aggs) == 0 {
+			op := condition.AggregateAll
+			if !eff[k] {
+				op = condition.AggregateNone
+			}
+			s.add(path+".effects."+k, "declare the aggregate the plan reaches once every subject has %s %v: {name: <name>, %s: %s}", k, eff[k], op, k)
+			continue
+		}
+		for _, agg := range aggs {
+			changeEff[agg] = true
+			a.Lifted[agg] = true
+		}
+	}
+	a.Effects = changeEff
+	return a
+}
+
+// liftedAggregates are the aggregates a scoped effect is lifted to: `all` of the condition (`none` for an effect
+// false) over the subjects of the action or a part of them (the where of the action, or that where narrowed by
+// `&& ...`), else, when there is none, over every subject (no where).
+func (s *compileState) liftedAggregates(cond string, value bool, where string) []string {
+	var within, plain []string
+	for name, c := range s.aggregates {
+		op, of := c.Definition().Aggregate()
+		if of != cond || (value && op != condition.AggregateAll) || (!value && op != condition.AggregateNone) {
+			continue
+		}
+		switch {
+		case c.Where == where || (where != "" && strings.HasPrefix(c.Where, where+" && ")) || (where == "" && c.Where != ""):
+			within = append(within, name)
+		case c.Where == "":
+			plain = append(plain, name)
+		}
+	}
+	if len(within) == 0 {
+		within = plain
+	}
+	slices.Sort(within)
+	return within
 }
 
 // injectLibraries adds the conditions of the libraries the methodology imports (ADR 0064), unless it declares its own.
@@ -229,6 +395,7 @@ func (s *compileState) compileActions() {
 		if len(a.Effects) == 0 && !a.IsSpecialization() {
 			s.add(path+".effects", "no effect: the action can never be planned")
 		}
+		a = s.compileScope(path, a)
 		s.actions[a.Name] = a
 	}
 }
@@ -378,14 +545,15 @@ func (s *compileState) checkSpecializations() {
 // been compiled) and that none is both an input and an output of one (ADR 0051).
 func (s *compileState) checkReferences() {
 	for i, a := range s.m.Actions {
-		for k := range a.Pre {
-			if !s.known[k] {
-				s.add(fmt.Sprintf("actions[%d].pre.%s", i, k), "unknown condition %q", k)
-			}
-		}
-		for k := range a.Effects {
-			if !s.known[k] {
-				s.add(fmt.Sprintf("actions[%d].effects.%s", i, k), "unknown condition %q", k)
+		for field, set := range map[string]map[string]bool{"pre": a.Pre, "effects": a.Effects} {
+			for k := range set {
+				switch {
+				case !s.known[k]:
+					s.add(fmt.Sprintf("actions[%d].%s.%s", i, field, k), "unknown condition %q", k)
+				case s.scopes[k] != "" && !a.IsScoped():
+					s.add(fmt.Sprintf("actions[%d].%s.%s", i, field, k), "%s is a condition of scope %s: name it in an action of that scope (scope: %s), or name an aggregate of it",
+						k, s.scopes[k], s.scopes[k])
+				}
 			}
 		}
 		for _, k := range overlap(a.Pre, a.Effects) {
@@ -409,6 +577,8 @@ func (s *compileState) compileGoals() {
 		for k := range g.Pre {
 			if !s.known[k] {
 				s.add(path+".pre."+k, "unknown condition %q", k)
+			} else if sc := s.scopes[k]; sc != "" {
+				s.add(path+".pre."+k, "%s is a condition of scope %s: a goal names conditions of the change (an aggregate of it)", k, sc)
 			}
 		}
 	}
@@ -564,7 +734,13 @@ func (s *compileState) mergeRolesMethodsProcesses() {
 	procs.goals = append(procs.goals, methGen.goals...)
 	s.procs = procs
 	s.defs = append(s.defs, procs.conditions...)
-	for _, a := range procs.actions {
+	for i, a := range procs.actions {
+		if a.Narrowed {
+			// a step narrowing the subjects of a scoped action: lifted again over its own subjects
+			a = s.compileScope("processes."+a.Name, a)
+			maps.Copy(a.Effects, a.stepDone)
+			procs.actions[i] = a
+		}
 		s.actions[a.Name] = a
 	}
 	for _, ag := range procs.agents {

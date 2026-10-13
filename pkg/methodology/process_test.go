@@ -330,8 +330,8 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 		edges[e.From+" -> "+e.To] = strings.Join(e.Conditions, ",")
 	}
 	for from, to := range map[string]string{
-		"software_delivery/framing":                             "software_delivery/analysis/scope",
-		"software_delivery/analysis/scope":                      "software_delivery/analysis/impacts",
+		"software_delivery/framing":                             "software_delivery/analysis/impacts",
+		"software_delivery/analysis/impacts":                    "software_delivery/analysis/specification/requirements",
 		"software_delivery/analysis/specification/traceability": "software_delivery/design",
 		"software_delivery/release":                             "software_delivery/application",
 	} {
@@ -343,8 +343,9 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 	if _, ok := edges["software_delivery/framing -> software_delivery/application"]; ok {
 		t.Error("implied edge kept")
 	}
-	if len(g.Methods) != 2 || g.Methods[0].AgentGoal != "solution_design" {
-		t.Fatalf("methods of the design capability: %+v", g.Methods)
+	// the methods of the capabilities of the process: the impact analysis, then the two of the design
+	if len(g.Methods) != 3 || g.Methods[0].AgentGoal != "impact_analysis" || g.Methods[1].AgentGoal != "solution_design" {
+		t.Fatalf("methods of the capabilities: %+v", g.Methods)
 	}
 	var architect *GraphAgent
 	for i := range g.Agents {

@@ -17,16 +17,31 @@ import (
 	"github.com/zimwip/goap/pkg/goap"
 )
 
-// Definition is a named condition expression.
+// Definition is a named condition: an expression at the level of the change, an expression about one subject of a
+// scope (Scope, Where: ADR 0109 §3), or an aggregate of a scoped condition at the level of the change (All, Any or
+// None, with Where and Empty).
 type Definition struct {
 	Name string
 	Expr string
+	// Scope is the kind of subject the condition is about (ScopeImpact, ...); empty or ScopeChange: the change.
+	Scope string
+	// Where (CEL, `self` the subject) narrows the subjects of a scoped condition or of an aggregate; a subject outside
+	// it has no value.
+	Where string
+	// All, Any, None name the scoped condition an aggregate is over (one of them).
+	All, Any, None string
+	// Empty is the value of an `all` aggregate over no subject (default false: no vacuous truth).
+	Empty bool
 }
 
 // Set is a compiled set of conditions.
 type Set struct {
 	env   *cel.Env
 	progs []compiled
+	// scoped are the scoped conditions in the order they are evaluated (a condition after those it reads);
+	// aggregates the aggregates, each with the index of its scoped condition in scoped.
+	scoped     []scopedCond
+	aggregates []aggregate
 }
 
 type compiled struct {
@@ -81,6 +96,7 @@ func Compile(defs []Definition) (*Set, error) {
 	}
 	s := &Set{env: env}
 	seen := map[string]bool{}
+	var scoped, aggs []Definition
 	for _, d := range defs {
 		if d.Name == "" {
 			return nil, fmt.Errorf("condition without name")
@@ -89,11 +105,25 @@ func Compile(defs []Definition) (*Set, error) {
 			return nil, fmt.Errorf("duplicate condition %q", d.Name)
 		}
 		seen[d.Name] = true
+		switch {
+		case d.IsAggregate():
+			aggs = append(aggs, d)
+			continue
+		case d.IsScoped():
+			scoped = append(scoped, d)
+			continue
+		}
+		if d.Where != "" {
+			return nil, fmt.Errorf("condition %q: where applies to a scoped condition or an aggregate", d.Name)
+		}
 		p, err := compileExpr(env, d.Expr)
 		if err != nil {
 			return nil, fmt.Errorf("condition %q: %w", d.Name, err)
 		}
 		s.progs = append(s.progs, compiled{name: d.Name, expr: d.Expr, prog: p})
+	}
+	if err := s.compileScoped(scoped, aggs); err != nil {
+		return nil, err
 	}
 	return s, nil
 }
@@ -109,33 +139,44 @@ func compileExpr(env *cel.Env, expr string) (cel.Program, error) {
 	return env.Program(ast, cel.CostLimit(1_000_000))
 }
 
-// Names returns the condition names, sorted.
+// Names returns the names of the conditions of the level of the change (the world of the planner: expressions and
+// aggregates), sorted.
 func (s *Set) Names() []string {
-	out := make([]string, 0, len(s.progs))
+	out := make([]string, 0, len(s.progs)+len(s.aggregates))
 	for _, p := range s.progs {
 		out = append(out, p.name)
+	}
+	for _, a := range s.aggregates {
+		out = append(out, a.name)
 	}
 	sort.Strings(out)
 	return out
 }
 
-// Has reports whether a condition is defined.
-// Exprs maps every condition of the set to its expression.
+// Exprs maps every condition of the set to its expression (an aggregate as "all: <condition>", a scoped condition
+// prefixed by its scope).
 func (s *Set) Exprs() map[string]string {
-	out := make(map[string]string, len(s.progs))
+	out := make(map[string]string, len(s.progs)+len(s.scoped)+len(s.aggregates))
 	for _, p := range s.progs {
 		out[p.name] = p.expr
+	}
+	for _, c := range s.scoped {
+		out[c.name] = c.text()
+	}
+	for _, a := range s.aggregates {
+		out[a.name] = a.text()
 	}
 	return out
 }
 
+// Has reports whether a condition is defined (of any level).
 func (s *Set) Has(name string) bool {
 	for _, p := range s.progs {
 		if p.name == name {
 			return true
 		}
 	}
-	return false
+	return s.ScopeOf(name) != "" || s.aggregateOf(name) != nil
 }
 
 // Result is the outcome of an evaluation.
@@ -143,12 +184,17 @@ type Result struct {
 	State goap.WorldState
 	// Errors holds the conditions that could not be evaluated (unknown).
 	Errors map[string]string
+	// Subjects are the values of the scoped conditions, per scope, subject by subject in the order of the context
+	// (ADR 0109 §3); nil when the set has none.
+	Subjects map[string][]Subject
 }
 
-// Evaluate evaluates every condition against the blackboard.
+// Evaluate evaluates every condition against the blackboard: the scoped conditions per subject first (their values
+// are then visible as `conditions` on the entries of their scope), the conditions of the change, then the aggregates.
 func (s *Set) Evaluate(bb domain.Blackboard) Result {
 	act := Activation(bb)
 	res := Result{State: goap.WorldState{}, Errors: map[string]string{}}
+	entries := s.evaluateScoped(act, &res)
 	for _, p := range s.progs {
 		out, _, err := p.prog.Eval(act)
 		if err != nil {
@@ -162,5 +208,6 @@ func (s *Set) Evaluate(bb domain.Blackboard) Result {
 		}
 		res.State[p.name] = b
 	}
+	s.evaluateAggregates(act, entries, &res)
 	return res
 }

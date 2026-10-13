@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/goap"
 	"github.com/zimwip/goap/pkg/journal"
@@ -40,6 +41,22 @@ func (e *Engine) cycle(ctx context.Context, p *Process, m *methodology.Compiled)
 	if impl, spec, err := e.specialize(ctx, p, m, action, bb); err == nil && spec != "" {
 		permission = impl.Permission
 		step.Specialization = spec
+	}
+	if action.IsScoped() {
+		// a scoped action runs for one pending subject at a time, given to it as vars.item (ADR 0109 §3.5)
+		id, ok := e.pendingSubject(p, action)
+		if !ok {
+			e.disable(p, action.Name, "no pending subject left to run it for")
+			return nil
+		}
+		step.Subject = id
+		bb.Vars = maps.Clone(bb.Vars)
+		if bb.Vars == nil {
+			bb.Vars = map[string]any{}
+		}
+		entry := condition.SubjectEntry(bb, action.Scope, id)
+		bb.Vars["item"], bb.Vars["subject"] = entry, id
+		step.SubjectRef = subjectRef(action.Scope, entry)
 	}
 	if waiting, err := e.gateAction(ctx, p, m, action, step, permission); err != nil || waiting {
 		return err

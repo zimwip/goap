@@ -96,6 +96,11 @@ type Step struct {
 	// together (the Java components in one build, the Go ones in another). In a stream, `vars.item` is the group
 	// `{key, items}`.
 	GroupBy string `yaml:"groupBy,omitempty" json:"groupBy,omitempty"`
+	// Where narrows the subjects of the scoped action the step runs (ADR 0109 §3.5), a condition of its scope
+	// (`self`) added to the action's own where: the step runs it for those subjects only, and reaches the aggregates
+	// over them, which it names as its exit criteria (done). Several steps can so run one action, each over its part
+	// (one pass per layer).
+	Where string `yaml:"where,omitempty" json:"where,omitempty"`
 	// On makes the step reactive (ADR 0110): it runs again on a change of its methodology for each matching event.
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 }
@@ -284,7 +289,8 @@ func prerequisites(actions []Action) map[string]bool {
 	out, conflict := map[string]bool{}, map[string]bool{}
 	for _, a := range actions {
 		for k, v := range a.Pre {
-			if produced[k] {
+			if produced[k] || (a.IsScoped() && k == a.PendingCondition()) {
+				// a scoped action's pending subjects come with the work of the process, not before it
 				continue
 			}
 			if have, ok := out[k]; ok && have != v {
@@ -428,7 +434,22 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 			alt.Pre = maps.Clone(need)
 			w.merge(field, alt.Pre, a.Pre)
 			alt.Effects = maps.Clone(a.Effects)
+			if s.Where != "" {
+				switch {
+				case !a.IsScoped():
+					w.add(sp+".where", "where applies to a step running a scoped action (scope)")
+					return nil
+				case len(s.Done) == 0:
+					w.add(sp+".done", "a step narrowing the subjects of %s states its exit criteria: the aggregates over its subjects", a.Name)
+					return nil
+				}
+				// the subjects are narrowed: the action is lifted again over them once the steps are compiled
+				alt = narrow(alt, s.Where, need)
+			}
 			w.merge(sp+".done", alt.Effects, done)
+			if alt.Narrowed {
+				alt.stepDone = maps.Clone(done)
+			}
 			w.out.actions = append(w.out.actions, alt)
 		}
 		return done
@@ -722,4 +743,44 @@ func (c *Compiled) StepDependencies() map[string]map[string]bool {
 		out[later] = seen
 	}
 	return out
+}
+
+// narrow is the action of a step running the scoped action a over a part of its subjects (Step.Where): its scoped
+// pre and effects back as they were declared, to be lifted again over the narrowed subjects (compileState.narrowed).
+func narrow(a Action, where string, need map[string]bool) Action {
+	pre := maps.Clone(need)
+	for k, v := range a.Pre {
+		if k != a.PendingCondition() {
+			pre[k] = v
+		}
+	}
+	maps.Copy(pre, a.ScopedPre)
+	eff := map[string]bool{}
+	for k, v := range a.Effects {
+		if !a.Lifted[k] {
+			eff[k] = v
+		}
+	}
+	maps.Copy(eff, a.ScopedEffects)
+	a.Pre, a.Effects, a.Where, a.Narrowed = pre, eff, andWhere(a.Where, where), true
+	a.ScopedPre, a.ScopedEffects, a.Lifted = nil, nil, nil
+	return a
+}
+
+// andWhere is the conjunction of two where expressions, "a && b" (each side parenthesized when it holds an
+// alternative), the form an aggregate over the narrowed subjects is written in.
+func andWhere(a, b string) string {
+	wrap := func(x string) string {
+		if strings.Contains(x, "||") || strings.Contains(x, "?") {
+			return "(" + x + ")"
+		}
+		return x
+	}
+	switch {
+	case a == "":
+		return b
+	case b == "":
+		return a
+	}
+	return wrap(a) + " && " + wrap(b)
 }

@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.6.0
+version: 0.7.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -17,6 +17,10 @@ goal: deliver
 # description_accepted, the gate of the framing, is a condition of the `assessments` library (ADR 0110)
 imports: [risks, dependencies, assessments]
 
+# the events of the methodology (ADR 0110), raised by the actions that emit them
+events:
+  - {name: impact.analysed, description: "A person validated the impact analysis of the change (its four passes done)"}
+
 conditions:
   # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,
   # written when its new version exists, reviewed when it has received a decision.
@@ -24,13 +28,68 @@ conditions:
   - name: formulated
     description: The request has been attached to a change (an open one it continues, or this new one, now well-defined)
     expr: artifacts.exists(a, a.type == "change_formulated")
-  # --- analysis
-  - name: scoped
-    description: The scope of the change is identified (directly impacted elements)
-    expr: changeImpacts.exists(n, n.intent == "modified")
-  - name: propagated
-    description: Impacts are propagated along the ALM links
-    expr: artifacts.exists(a, a.type == "propagation")
+  # --- impact analysis (ADR 0109): four passes, from the need down to what is built, one layer each:
+  # requirements (needs and requirements), functions (the functional layer), applications (the logical layer:
+  # applications, solutions, interfaces, flows, data) and components (the physical layer: components, build artifacts).
+  # A pass identifies what of its layer the change directly concerns, propagates the impacts of the layers above down
+  # to its own, then qualifies each propagated (suspected) impact, one at a time: an impact the change does not
+  # concern is rejected with its reason, then withdrawn (the rejection stays in the log of the change).
+  - name: requirements_identified
+    description: The pass on the requirements named the needs and requirements the change directly concerns
+    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "requirements")
+  - name: requirements_propagated
+    description: The impacts are propagated to the requirements (needs, refinements)
+    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "requirements")
+  - name: functions_identified
+    description: The pass on the functional layer named the functions the change directly concerns
+    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "functions")
+  - name: functions_propagated
+    description: The impacts are propagated to the functions realizing the impacted requirements
+    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "functions")
+  - name: applications_identified
+    description: The pass on the logical layer named the applications, interfaces, flows and data the change directly concerns
+    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "applications")
+  - name: applications_propagated
+    description: The impacts are propagated to the logical layer (applications, solutions, interfaces, flows, data)
+    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "applications")
+  - name: components_identified
+    description: The pass on the physical layer named the components and artifacts the change directly concerns
+    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "components")
+  - name: components_propagated
+    description: The impacts are propagated to the physical layer (components, build artifacts)
+    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "components")
+  # one impact
+  - name: suspected
+    scope: impact
+    description: The impact was found by propagation along the ALM links, not named directly; it is to be qualified
+    expr: self.rationale.startsWith("propagated (")
+  - {name: in_requirements, scope: impact, description: A need or a requirement, expr: '["alm@Need", "alm@Requirement"].exists(t, t in self.types)'}
+  - {name: in_functions, scope: impact, description: An element of the functional layer, expr: '"alm@Function" in self.types'}
+  - {name: in_applications, scope: impact, description: An element of the logical layer,
+     expr: '["alm@Application", "alm@Solution", "alm@Interface", "alm@Flow", "alm@Data"].exists(t, t in self.types)'}
+  - {name: in_components, scope: impact, description: An element of the physical layer, expr: '["alm@Component", "alm@BuildArtifact"].exists(t, t in self.types)'}
+  - name: qualified
+    scope: impact
+    description: The impact has a rating of whether the change really concerns it (the change then works on the node, the rating stands)
+    expr: 'assessments.exists(a, a.key == "impact:" + self.key)'
+  - name: confirmed
+    scope: impact
+    description: The rating confirms the change concerns the node (one it does not concern is withdrawn)
+    expr: 'assessments.exists(a, a.key == "impact:" + self.key && a.verdict == "confirmed")'
+  # every suspected impact of a layer is confirmed (an empty layer is: nothing to qualify)
+  - {name: impacts_confirmed, all: confirmed, where: self.conditions.suspected, empty: true,
+     description: Every suspected impact is confirmed (the others were withdrawn)}
+  - {name: requirements_confirmed, all: confirmed, where: self.conditions.suspected && self.conditions.in_requirements, empty: true,
+     description: Every suspected need or requirement is confirmed}
+  - {name: functions_confirmed, all: confirmed, where: self.conditions.suspected && self.conditions.in_functions, empty: true,
+     description: Every suspected function is confirmed}
+  - {name: applications_confirmed, all: confirmed, where: self.conditions.suspected && self.conditions.in_applications, empty: true,
+     description: Every suspected element of the logical layer is confirmed}
+  - {name: components_confirmed, all: confirmed, where: self.conditions.suspected && self.conditions.in_components, empty: true,
+     description: Every suspected element of the physical layer is confirmed}
+  - name: impact_analysis_validated
+    description: A person validated the impact analysis, the four passes done
+    expr: artifacts.exists(a, a.type == "impact_validation" && a.data.accepted == true)
   # --- specification
   - name: requirements_specified
     description: Requirements are created or revised
@@ -152,53 +211,202 @@ actions:
        "rated":"<the fp of the SUBJECT description line of the brief>"}}
       A score of 3 or more means the change can be worked on as described.
 
-  # ======================= impact analysis
-  - name: identify_scope
+  # ======================= impact analysis (four passes: requirements, functions, applications, components)
+  - name: identify_requirements
     kind: llm
-    description: Identify the ALM elements directly impacted by the intent
-    
-    effects: {scoped: true}
+    description: "First pass: name the needs and requirements the intent directly concerns"
+    effects: {requirements_identified: true}
     cost: 2
     model: default
     prompt: |
-      You are an analyst in a software development lifecycle. Change intent:
-      "{{ .Change.Intent }}"
+      You are an analyst in a software development lifecycle, on the pass of the impact analysis about the needs and requirements.
+      Change intent: "{{ .Change.Intent }}"
 
-      ALM repository (key, type, properties):
-      {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      What the change already concerns (impacts of the layers above, confirmed):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
       {{ end }}
-      Identify the elements DIRECTLY concerned (needs, requirements, functions,
-      components, interfaces, flows, data). For each one, declare a change impact:
+      Needs and requirements of the ALM repository (key, type, properties):
+      {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Need") (isa .Type "alm@Requirement") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ end }}{{ end }}
+      Name only the elements of this layer the change itself concerns DIRECTLY; the propagation along the ALM links
+      follows, and qualifies what it finds. For each one, declare a change impact:
       {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      Finish with the summary of the pass (also when the layer is not concerned):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"requirements","summary":"<what changes at this layer, and why>"}}
+
+  - name: propagate_requirements
+    kind: builtin
+    builtin: graph.propagate
+    description: Propagate the impacts to the needs and requirements (satisfies, refines)
+    pre: {requirements_identified: true}
+    effects: {requirements_propagated: true}
+    cost: 1
+    params:
+      layer: requirements
+      maxDepth: 6
+      linkTypes: [alm@satisfies, alm@refines]
+      declare: [alm@Need, alm@Requirement]
+
+  - name: identify_functions
+    kind: llm
+    description: "Second pass: name the functions the change directly concerns, once the requirements are settled"
+    pre: {requirements_propagated: true, requirements_confirmed: true}
+    effects: {functions_identified: true}
+    cost: 2
+    model: default
+    prompt: |
+      You are an analyst in a software development lifecycle, on the pass of the impact analysis about the functions (the functional layer).
+      Change intent: "{{ .Change.Intent }}"
+
+      What the change already concerns (impacts of the layers above, confirmed):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
+      {{ end }}
+      Functions of the ALM repository (key, type, properties):
+      {{ range .Baseline.Nodes }}{{ if isa .Type "alm@Function" }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ end }}{{ end }}
+      Name only the elements of this layer the change itself concerns (a new behaviour of an existing function, beyond what the impacted requirements carry); the propagation along the ALM links
+      follows, and qualifies what it finds. For each one, declare a change impact:
+      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      Finish with the summary of the pass (also when the layer is not concerned):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"functions","summary":"<what changes at this layer, and why>"}}
+
+  - name: propagate_functions
+    kind: builtin
+    builtin: graph.propagate
+    description: Propagate the impacts of the requirements to the functions realizing them
+    pre: {functions_identified: true}
+    effects: {functions_propagated: true}
+    cost: 1
+    params:
+      layer: functions
+      maxDepth: 2
+      linkTypes: [alm@realizes]
+      declare: [alm@Function]
+
+  - name: identify_applications
+    kind: llm
+    description: "Third pass: name the elements of the logical layer the change directly concerns, once the functions are settled"
+    pre: {functions_propagated: true, functions_confirmed: true}
+    effects: {applications_identified: true}
+    cost: 2
+    model: default
+    prompt: |
+      You are an analyst in a software development lifecycle, on the pass of the impact analysis about the applications, solutions, interfaces, flows and data (the logical layer).
+      Change intent: "{{ .Change.Intent }}"
+
+      What the change already concerns (impacts of the layers above, confirmed):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
+      {{ end }}
+      Applications, solutions, interfaces, flows and data of the ALM repository (key, type, properties):
+      {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Application") (isa .Type "alm@Solution") (isa .Type "alm@Interface") (isa .Type "alm@Flow") (isa .Type "alm@Data") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ end }}{{ end }}
+      Name only the elements of this layer the change itself concerns (a contract, a flow or a data structure to change); the propagation along the ALM links
+      follows, and qualifies what it finds. For each one, declare a change impact:
+      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      Finish with the summary of the pass (also when the layer is not concerned):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"applications","summary":"<what changes at this layer, and why>"}}
+
+  - name: propagate_applications
+    kind: builtin
+    builtin: graph.propagate
+    description: "Propagate the impacts to the logical layer: the applications composed of the components implementing the functions, their solutions, interfaces, flows and data"
+    pre: {applications_identified: true}
+    effects: {applications_propagated: true}
+    cost: 1
+    params:
+      layer: applications
+      maxDepth: 6
+      linkTypes: [alm@implements, alm@composed_of, alm@includes, alm@addresses, alm@exposed_by, alm@source, alm@target, alm@through, alm@owned_by, alm@exchanges, alm@carries]
+      declare: [alm@Application, alm@Solution, alm@Interface, alm@Flow, alm@Data]
+
+  - name: identify_components
+    kind: llm
+    description: "Fourth pass: name the components the change directly concerns, once the logical layer is settled"
+    pre: {applications_propagated: true, applications_confirmed: true}
+    effects: {components_identified: true}
+    cost: 2
+    model: default
+    prompt: |
+      You are an analyst in a software development lifecycle, on the pass of the impact analysis about the components and build artifacts (the physical layer).
+      Change intent: "{{ .Change.Intent }}"
+
+      What the change already concerns (impacts of the layers above, confirmed):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
+      {{ end }}
+      Components and build artifacts of the ALM repository (key, type, properties):
+      {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Component") (isa .Type "alm@BuildArtifact") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
+      {{ end }}{{ end }}
+      Name only the elements of this layer the change itself concerns (a technical change no function or application carries); the propagation along the ALM links
+      follows, and qualifies what it finds. For each one, declare a change impact:
+      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      Finish with the summary of the pass (also when the layer is not concerned):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"components","summary":"<what changes at this layer, and why>"}}
+
+  - name: propagate_components
+    kind: builtin
+    builtin: graph.propagate
+    description: "Propagate the impacts to the physical layer: the components implementing the functions or composing the applications, those depending on them, their artifacts"
+    pre: {components_identified: true}
+    effects: {components_propagated: true}
+    cost: 1
+    params:
+      layer: components
+      maxDepth: 6
+      linkTypes: [alm@implements, alm@depends_on, alm@built_from, alm@accesses]
+      forward: [alm@composed_of, alm@deploys]
+      declare: [alm@Component, alm@BuildArtifact]
 
   - name: select_scope
     kind: human
-    description: Manually designate the elements directly impacted (fallback)
-    
-    effects: {scoped: true}
+    description: Manually designate the needs and requirements directly impacted (fallback of the first pass)
+    effects: {requirements_identified: true}
     cost: 8
-    instructions: Indicate the elements of the ALM repository directly concerned by the change, and why (impacted change impacts).
+    instructions: >
+      Indicate the needs and requirements of the ALM repository the change directly concerns, and why (impacted change
+      impacts), then record the pass: an artifact impact_pass with data {layer: requirements, summary}.
 
-  - name: propagate_impacts
-    kind: builtin
-    builtin: graph.propagate
-    description: >
-      Propagate impacts along the ALM links: need → requirements → functions →
-      components → artifacts, applications → solutions, interfaces, flows, data, tests
-    pre: {scoped: true}
-    effects: {propagated: true}
+  # one suspected impact at a time (scope impact, ADR 0109 §3.5): the planner sees "a suspected impact is pending" and
+  # reaches the aggregates of `confirmed`; the engine runs it for each pending impact, given as .Subject
+  - name: qualify_impact
+    kind: llm
+    scope: impact
+    where: self.conditions.suspected
+    description: Qualify a suspected impact found by propagation; reject with the reason, then withdraw, what the change does not concern
+    effects: {confirmed: true}
     cost: 1
-    params:
-      maxDepth: 6
-      linkTypes: [alm@satisfies, alm@refines, alm@realizes, alm@implements, alm@depends_on, alm@built_from, alm@composed_of, alm@deploys,
-                  alm@includes, alm@addresses, alm@owned_by, alm@exposed_by, alm@exchanges, alm@source, alm@target, alm@through, alm@carries, alm@verifies,
-                  alm@contains, alm@releases, alm@of_release]
+    model: default
+    prompt: |
+      You qualify ONE suspected impact of a change, found by propagation along the ALM links: does the change really
+      concern this element, or did the propagation go too far?
+      Change: "{{ .Change.Title }}"
+      Intent: "{{ .Change.Intent }}"
+      Suspected impact: {{ .Subject.key }} ({{ .Subject.type }}), {{ .Subject.rationale }}
+      Its properties: {{ json .Subject.props }}
+      The brief lists the other impacts of the change and the passes of the analysis. Finish with your rating:
+      {"kind":"assessment","data":{"key":"impact:{{ .Subject.key }}","score":<0 to 5, how sure you are>,
+       "verdict":"confirmed|refuted","findings":[{"text":"<why>","severity":"major|minor"}],
+       "rated":"{{ fingerprint (printf "impact:%s" .Subject.key) }}"}}
+      When the change does not concern it, also reject it with the reason, then withdraw it, in this order:
+      {"kind":"changeImpact","changeImpact":{"op":"review","node":"{{ .Subject.key }}","accept":false,"comment":"not impacted: <the reason>"}}
+      {"kind":"changeImpact","changeImpact":{"op":"remove","node":"{{ .Subject.key }}"}}
+
+  - name: validate_impact_analysis
+    kind: human
+    description: Validate the impact analysis once its four passes are done
+    pre: {components_propagated: true, requirements_confirmed: true, functions_confirmed: true, applications_confirmed: true, components_confirmed: true}
+    effects: {impact_analysis_validated: true}
+    emits: [impact.analysed]
+    cost: 1
+    instructions: >
+      Review the impacts of the change, layer by layer (requirements, functions, applications, components): add what is
+      missing, withdraw what is not concerned (reject it with the reason first). Then validate: an artifact
+      impact_validation with data {accepted: true, comment}.
 
   # ======================= specification
   - name: specify_requirements
     kind: llm
     description: Revise the impacted requirements and create the new requirements
-    pre: {propagated: true}
+    pre: {impact_analysis_validated: true}
     effects: {requirements_specified: true}
     cost: 3
     model: default
@@ -220,7 +428,7 @@ actions:
   - name: write_requirements
     kind: human
     description: Write the requirements (fallback)
-    pre: {propagated: true}
+    pre: {impact_analysis_validated: true}
     effects: {requirements_specified: true}
     cost: 8
     nodeTypes: [alm@Requirement, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement]
@@ -392,7 +600,7 @@ actions:
       Build the impacted or created components. Abstract action: each
       execution builds the components of one technology (specialization), until
       all of them have their artifact.
-    pre: {propagated: true, design_checked: true}
+    pre: {impact_analysis_validated: true, design_checked: true}
     effects: {build_complete: true}
     cost: 2
     incremental: true
@@ -710,9 +918,9 @@ goals:
     pre: {formulated: true}
     value: 1
   - name: analyze_impact
-    description: Measure the impact of a change on the ALM chain
+    description: Measure the impact of a change on the ALM chain, layer by layer, validated by a person
     examples: ["what is the impact", "what does this break", "impact analysis"]
-    pre: {propagated: true}
+    pre: {impact_analysis_validated: true}
     value: 3
   - name: specify
     description: Specify the requirements of a change, traced and verified
@@ -752,14 +960,14 @@ agents:
     description: Analyst — scope, impacts, requirements, traceability, test plan
     examples: ["impact analysis", "specify the requirements", "what is the impact of this need"]
     planner: goap
-    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
+    actions: [identify_requirements, select_scope, propagate_requirements, identify_functions, propagate_functions, identify_applications, propagate_applications, identify_components, propagate_components, qualify_impact, validate_impact_analysis, specify_requirements, write_requirements,
               trace_requirements, trace_manually, plan_tests]
     goals: [analyze_impact, specify]
   - name: builder
     description: Integrator — build the components according to their technology
     examples: ["build the components", "build"]
     planner: goap
-    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
+    actions: [identify_requirements, select_scope, propagate_requirements, identify_functions, propagate_functions, identify_applications, propagate_applications, identify_components, propagate_components, qualify_impact, validate_impact_analysis, specify_requirements, write_requirements,
               trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design, build]
     goals: [build_components]
   - name: release_manager
@@ -793,6 +1001,52 @@ roles:
 # and has access to them, and to the tools their actions declare. A step names the capability (`method: design`); the
 # applicable method with the highest priority is chosen at execution, and its guidance and references reach its agent.
 methods:
+  # The impact analysis (ADR 0109): four passes, one layer each, so that nothing is done all at once and each layer
+  # starts from what the layer above settled. Each pass names what its layer directly carries of the change,
+  # propagates the impacts of the layers above down to its own along the ALM links, then qualifies the impacts the
+  # propagation found one by one (a scoped action, run once per suspected impact): one the change does not concern is
+  # rejected with its reason, then withdrawn, the rejection staying in the log of the change. A person validates the
+  # whole at the end.
+  - name: impact_analysis
+    for: impact_analysis
+    description: Impact analysis in four passes, from the need down to what is built (requirements, functional, logical, physical)
+    guidance: >
+      Go down the layers in order and finish one before starting the next: the requirements (needs and requirements),
+      the functional layer (functions), the logical layer (applications, with their solutions, interfaces, flows and
+      data), the physical layer (components and their build artifacts). In each pass, name only what the change
+      itself carries at that layer; the propagation finds the rest, and every element it finds is qualified: kept when
+      the change concerns it, rejected with the reason and withdrawn otherwise.
+    deliverables: [ImpactAnalysis]
+    roles: {responsible: business_analyst, accountable: product_owner, consulted: [solution_architect]}
+    steps:
+      - name: requirements
+        description: "First pass: the needs and requirements the change concerns"
+        steps:
+          - {name: identify, description: "Name the needs and requirements the intent directly concerns (a person if it fails)", actions: [identify_requirements, select_scope]}
+          - {name: propagate, description: "Propagate to the needs and requirements (satisfies, refines)", action: propagate_requirements}
+          - {name: qualify, description: "Qualify each suspected need or requirement", action: qualify_impact, where: self.conditions.in_requirements, done: {requirements_confirmed: true}}
+      - name: functions
+        description: "Second pass, the functional layer: the functions realizing the impacted requirements"
+        steps:
+          - {name: identify, description: "Name the functions the change directly concerns", action: identify_functions}
+          - {name: propagate, description: "Propagate to the functions realizing the impacted requirements", action: propagate_functions}
+          - {name: qualify, description: "Qualify each suspected function", action: qualify_impact, where: self.conditions.in_functions, done: {functions_confirmed: true}}
+      - name: applications
+        description: "Third pass, the logical layer: applications, solutions, interfaces, flows and data"
+        steps:
+          - {name: identify, description: "Name the elements of the logical layer the change directly concerns", action: identify_applications}
+          - {name: propagate, description: "Propagate to the applications, solutions, interfaces, flows and data", action: propagate_applications}
+          - {name: qualify, description: "Qualify each suspected element of the logical layer", action: qualify_impact, where: self.conditions.in_applications, done: {applications_confirmed: true}}
+      - name: components
+        description: "Fourth pass, the physical layer: components and build artifacts"
+        steps:
+          - {name: identify, description: "Name the components the change directly concerns", action: identify_components}
+          - {name: propagate, description: "Propagate to the components and their build artifacts", action: propagate_components}
+          - {name: qualify, description: "Qualify each suspected component or artifact", action: qualify_impact, where: self.conditions.in_components, done: {components_confirmed: true}}
+      - name: validation
+        description: A person reviews the impacts layer by layer and validates the analysis
+        roles: {responsible: business_analyst, accountable: product_owner}
+        action: validate_impact_analysis
   - name: solution_design
     for: design
     description: Architecture of the components, interfaces, flows and data the change touches
@@ -806,7 +1060,7 @@ methods:
     deliverables: [DesignDossier]
     roles: {responsible: solution_architect, accountable: tech_lead, consulted: [business_analyst]}
     planner: hybrid
-    actions: [identify_scope, select_scope, propagate_impacts, specify_requirements, write_requirements,
+    actions: [identify_requirements, select_scope, propagate_requirements, identify_functions, propagate_functions, identify_applications, propagate_applications, identify_components, propagate_components, qualify_impact, validate_impact_analysis, specify_requirements, write_requirements,
               trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design]
     steps:
       - {name: allocation, description: "Allocate the requirements to functions", action: allocate_functions}
@@ -856,18 +1110,15 @@ processes:
         references:
           - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
       - name: analysis
-        description: Scope, impacts, requirements, traceability and test plan, once the change is framed and its description accepted
+        description: Impacts, requirements, traceability and test plan, once the change is framed and its description accepted
         roles: {responsible: business_analyst, accountable: product_owner, consulted: [solution_architect]}
         # the rating of the current description accepts it (ADR 0110): the requester edits the description, the
         # description_review process rates it again by itself, and the run waiting here is tried again
         pre: {"step:software_delivery/framing": true, description_accepted: true}
         steps:
-          - name: scope
-            description: Identify the elements the change directly concerns
-            actions: [identify_scope, select_scope]
           - name: impacts
-            description: Propagate the impacts along the ALM links (once scoped)
-            action: propagate_impacts
+            description: The impact analysis, in four passes (the impact_analysis method)
+            method: impact_analysis
           - name: specification
             description: Requirements (once the impacts are known), then their traceability and their tests
             steps:
@@ -876,7 +1127,7 @@ processes:
               - {name: test_plan, action: plan_tests}
       - name: design
         description: Allocate the functions and design the solution, by the method that fits the change, once the requirements are specified
-        pre: {propagated: true, requirements_specified: true, requirements_traced: true}
+        pre: {impact_analysis_validated: true, requirements_specified: true, requirements_traced: true}
         method: design
       - name: build
         description: Build every component in scope, according to its technology (once the design is checked)

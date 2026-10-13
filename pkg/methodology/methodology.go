@@ -157,11 +157,28 @@ type Trigger struct {
 	Enabled bool     `yaml:"enabled" json:"enabled"`
 }
 
-// Condition is a named CEL predicate on the blackboard.
+// Condition is a named CEL predicate on the blackboard: about the change (the default), about one subject of a scope
+// (Scope, Where: `self` is the subject, ADR 0109 §3), or an aggregate bringing a scoped condition to the level of the
+// change (All, Any or None, Where, Empty).
 type Condition struct {
 	Name        string `yaml:"name" json:"name"`
 	Description string `yaml:"description,omitempty" json:"description,omitempty"`
-	Expr        string `yaml:"expr" json:"expr"`
+	Expr        string `yaml:"expr,omitempty" json:"expr,omitempty"`
+	// Scope is the kind of subject: change (default), impact, item, risk, action or step.
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
+	// Where narrows the subjects of a scoped condition or an aggregate (CEL, `self` the subject).
+	Where string `yaml:"where,omitempty" json:"where,omitempty"`
+	// All, Any, None: the scoped condition an aggregate is over.
+	All  string `yaml:"all,omitempty" json:"all,omitempty"`
+	Any  string `yaml:"any,omitempty" json:"any,omitempty"`
+	None string `yaml:"none,omitempty" json:"none,omitempty"`
+	// Empty is the value of an all aggregate over no subject (default false).
+	Empty bool `yaml:"empty,omitempty" json:"empty,omitempty"`
+}
+
+// Definition is the condition as the condition package compiles it.
+func (c Condition) Definition() condition.Definition {
+	return condition.Definition{Name: c.Name, Expr: c.Expr, Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty}
 }
 
 // Action kinds.
@@ -247,7 +264,41 @@ type Action struct {
 	// specializations apply).
 	Step       string `yaml:"-" json:"-"`
 	Implements string `yaml:"-" json:"-"`
+	// Scope makes the action scoped (ADR 0109 §3.5): it runs once per pending subject of that scope (within Where),
+	// its pre and effects naming conditions of that scope. The planner sees it lifted: its pre is "some subject is
+	// pending" (PendingCondition), its effects the aggregates of its scoped effects.
+	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
+	Where string `yaml:"where,omitempty" json:"where,omitempty"`
+	// ScopedPre / ScopedEffects are the scoped conditions of a compiled scoped action, checked on its subject; Lifted
+	// are the aggregates its effects were lifted to (compiled only).
+	ScopedPre     map[string]bool `yaml:"-" json:"-"`
+	ScopedEffects map[string]bool `yaml:"-" json:"-"`
+	Lifted        map[string]bool `yaml:"-" json:"-"`
+	// Narrowed is set on the action of a step whose where narrows the subjects of the scoped action it runs: its
+	// subjects are its own (the generated conditions are named after the step) and its effects are lifted to the
+	// aggregates over them (compiled only).
+	Narrowed bool `yaml:"-" json:"-"`
+	// stepDone are the exit criteria of the step of a narrowed action, merged again once it is lifted.
+	stepDone map[string]bool
 }
+
+// scopeName names the generated conditions of a scoped action: the declared action, or the step narrowing it.
+func (a Action) scopeName() string {
+	if a.Narrowed {
+		return a.Name
+	}
+	return a.Declared()
+}
+
+// SubjectCondition is the generated scoped condition of a scoped action: true on a subject it is pending for (its
+// scoped pre holds there, its scoped effects do not).
+func (a Action) SubjectCondition() string { return "subject:" + a.scopeName() }
+
+// PendingCondition is the generated condition of the change of a scoped action: some subject is pending.
+func (a Action) PendingCondition() string { return "pending:" + a.scopeName() }
+
+// IsScoped reports whether the action runs per subject of a scope.
+func (a Action) IsScoped() bool { return a.Scope != "" && a.Scope != condition.ScopeChange }
 
 // Oracles: the kinds of verifier of an action's effect (ADR 0075).
 const (

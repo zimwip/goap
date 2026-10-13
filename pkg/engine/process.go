@@ -5,6 +5,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"github.com/zimwip/goap/pkg/condition"
 	"maps"
 	"sort"
 	"sync"
@@ -96,8 +97,11 @@ type Process struct {
 	Plan        []string           `json:"plan,omitempty"`
 	World       goap.WorldState    `json:"world,omitempty"`
 	Unknown     map[string]string  `json:"unknown,omitempty"`
-	Steps       []Step             `json:"steps"`
-	Vars        map[string]any     `json:"vars,omitempty"`
+	// Subjects are the values of the scoped conditions at the last observation, per scope and subject (ADR 0109 §3):
+	// a scoped action runs for a subject pending there.
+	Subjects map[string][]condition.Subject `json:"subjects,omitempty"`
+	Steps    []Step                         `json:"steps"`
+	Vars     map[string]any                 `json:"vars,omitempty"`
 	// Step is the step of a process of the parent that this process carries out (a sub-agent started by
 	// process.step, ADR 0034): its guidance reaches the actions of this process.
 	Step *StepContext `json:"step,omitempty"`
@@ -308,6 +312,10 @@ type Step struct {
 	// LastItem is the last item of the flow when the step started (the fork point of a relaunch).
 	LastItem   domain.ItemID `json:"lastItem,omitempty"`
 	EffectsMet bool          `json:"effectsMet"`
+	// Subject is the subject a scoped action ran for (ADR 0109 §3.5), SubjectRef what the log names it by (an impact
+	// id, "<kind>:<key>" of a keyed item).
+	Subject    string `json:"subject,omitempty"`
+	SubjectRef string `json:"subjectRef,omitempty"`
 	// Progress: an incremental action produced items without reaching its effects yet.
 	Progress   bool       `json:"progress,omitempty"`
 	ApprovedBy string     `json:"approvedBy,omitempty"`
