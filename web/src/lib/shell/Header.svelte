@@ -1,6 +1,6 @@
 <script lang="ts">
   // Header: product, search / command palette, stream status,
-  // user menu (profile, sign-out in local mode, access token with hs256, theme: a shortcut to the
+  // today's LLM usage (opens the Token usage dashboard), user menu (profile, sign-out in local mode, access token with hs256, theme: a shortcut to the
   // preference, saved as it changes).
   import Icon, { type IconName } from './Icon.svelte';
   import { COMMANDS } from './commands';
@@ -26,6 +26,7 @@
   import Popover from './Popover.svelte';
   import ProjectSelector from './ProjectSelector.svelte';
   import OnlineUsers from './OnlineUsers.svelte';
+  import UsageToday from './UsageToday.svelte';
 
   $effect(() => startHealth());
 
@@ -279,6 +280,8 @@
   </div>
 
   <div class="right">
+    <UsageToday />
+
     <button
       type="button"
       class="stream {combined}"

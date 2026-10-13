@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketsOf, bucketTime, callOf, exchangeRequestOf, hasExchange, inChangeLog, keyLabel, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf } from './tokenStats';
+import { bucketsOf, bucketTime, callOf, compactTokens, periodStart, USAGE_PERIODS, exchangeRequestOf, hasExchange, inChangeLog, keyLabel, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf } from './tokenStats';
 
 describe('source labels', () => {
   it('names every source and falls back to Other', () => {
@@ -97,5 +97,21 @@ describe('time buckets', () => {
   });
   it('is empty with no data and no start', () => {
     expect(bucketsOf([], false, 0, Date.now())).toEqual([]);
+  });
+});
+
+describe('usage periods', () => {
+  it('starts today at local midnight and the rolling periods from now', () => {
+    const now = new Date(2026, 9, 13, 17, 30, 12).getTime();
+    expect(periodStart('today', now)).toBe(new Date(2026, 9, 13).getTime());
+    expect(periodStart('24h', now)).toBe(now - 86_400_000);
+    expect(periodStart('7d', now)).toBe(now - 7 * 86_400_000);
+    expect(periodStart('all', now)).toBe(0);
+    expect(periodStart('unknown', now)).toBe(0);
+    expect(USAGE_PERIODS.map(([id]) => id)).toEqual(['today', '24h', '7d', '30d', 'all']);
+  });
+
+  it('writes token counts compactly', () => {
+    expect([0, 950, 12_345, 4_100_000].map(compactTokens)).toEqual(['0', '950', '12.3k', '4.1M']);
   });
 });

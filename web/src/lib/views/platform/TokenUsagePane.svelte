@@ -9,20 +9,13 @@
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openSettings } from '../../shell/settingsState.svelte';
-  import { closeUsage } from '../../shell/usageState.svelte';
+  import { closeUsage, usageState } from '../../shell/usageState.svelte';
   import { models, errorMessage, formatDate, int, shortId, type CatalogModel, type LLMCall, type UsageFilter, type UsageGroup, type UsageSummaryRow } from '../../api';
   import { processes as known } from '../../stores/live.svelte';
   import { prefs } from '../../stores/preferences.svelte';
   import { usage, attachUsage, setUsagePlatform, usageSubject } from '../../stores/usage.svelte';
-  import { bucketsOf, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf, type Dim, type Slice } from '../../tokenStats';
+  import { bucketsOf, compactTokens, periodStart, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf, USAGE_PERIODS, type Dim, type Slice } from '../../tokenStats';
   import { behaviorsLine } from '../../behaviors';
-
-  const RANGES: [string, string, number][] = [
-    ['24h', 'Last 24 hours', 86_400_000],
-    ['7d', 'Last 7 days', 7 * 86_400_000],
-    ['30d', 'Last 30 days', 30 * 86_400_000],
-    ['all', 'All history', 0],
-  ];
 
   interface Loaded {
     by: Record<Dim, UsageSummaryRow[]>;
@@ -35,7 +28,8 @@
 
   let loading = $state(true);
   let error = $state('');
-  let range = $state(prefs.values.usagePeriod);
+  // the period asked by whoever opened the dialog (the header's "today"), else the preference
+  let range = $state(usageState.period || prefs.values.usagePeriod);
   let sort = $state<'total' | 'input' | 'output' | 'calls'>('total');
   let data = $state<Loaded | null>(null);
   let catalog = $state<CatalogModel[]>([]);
@@ -56,10 +50,9 @@
   async function load() {
     const mine = ++epoch;
     loading = true;
-    const ms = RANGES.find((r) => r[0] === range)?.[2] ?? 0;
     const to = Date.now();
-    const from = ms ? to - ms : 0;
-    const hourly = !!ms && ms <= 2 * 86_400_000;
+    const from = periodStart(range, to);
+    const hourly = !!from && to - from <= 2 * 86_400_000;
     const filter: UsageFilter = { subject: usageSubject(), from: from ? new Date(from).toISOString() : undefined };
     const dims: [Dim, UsageGroup][] = [['model', 'model'], ['alias', 'alias'], ['source', 'source'], ['agent', 'agent'], ['action', 'action'], ['process', 'process'], ['subject', 'subject']];
     try {
@@ -113,7 +106,7 @@
   const top = $derived(topCalls(data?.calls ?? []));
 
   const n = (v: number) => Math.round(v).toLocaleString('en-US');
-  const compact = (v: number) => (v >= 1e6 ? `${(v / 1e6).toFixed(1)}M` : v >= 1e3 ? `${(v / 1e3).toFixed(1)}k` : String(Math.round(v)));
+  const compact = compactTokens;
   const pct = (v: number, of: number) => (of ? Math.round((v / of) * 100) : 0);
 
   // --- time chart -----------------------------------------------------------------------
@@ -157,7 +150,7 @@
     <span class="grow"></span>
     <button type="button" class="small refresh" disabled={loading} onclick={() => void load()}><Icon name="refresh" size={13} />Refresh</button>
     <select aria-label="Period" bind:value={range}>
-      {#each RANGES as [v, l] (v)}<option value={v}>{l}</option>{/each}
+      {#each USAGE_PERIODS as [v, l] (v)}<option value={v}>{l}</option>{/each}
     </select>
   </div>
   {#if error}<div class="alert">{error}</div>{/if}

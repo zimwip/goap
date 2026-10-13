@@ -69,6 +69,7 @@
       <div class="field">
         <label for="pref-usage-period">Default period</label>
         <select id="pref-usage-period" value={prefs.values.usagePeriod} onchange={(e) => set('usagePeriod', e.currentTarget.value)}>
+          <option value="today">Today</option>
           <option value="24h">Last 24 hours</option>
           <option value="7d">Last 7 days</option>
           <option value="30d">Last 30 days</option>

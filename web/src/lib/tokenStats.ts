@@ -163,3 +163,32 @@ export function topCalls(calls: LLMCall[], n = 10): LLMCall[] {
   const total = (c: LLMCall) => int(c.inputTokens) + int(c.outputTokens);
   return [...calls].sort((a, b) => total(b) - total(a)).slice(0, n);
 }
+
+/** The periods of the usage views, `[id, label]`. `today` starts at local midnight: the person's working day. */
+export const USAGE_PERIODS: [string, string][] = [
+  ['today', 'Today'],
+  ['24h', 'Last 24 hours'],
+  ['7d', 'Last 7 days'],
+  ['30d', 'Last 30 days'],
+  ['all', 'All history'],
+];
+
+const PERIOD_MS: Record<string, number> = { '24h': DAY, '7d': 7 * DAY, '30d': 30 * DAY };
+
+/** Start (ms) of a period ending at `now`: local midnight for `today`, 0 (no bound) for all history or an unknown id. */
+export function periodStart(period: string, now: number): number {
+  if (period === 'today') {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+  const ms = PERIOD_MS[period];
+  return ms ? now - ms : 0;
+}
+
+/** A token count in a few characters: 950, 12.3k, 4.1M. */
+export function compactTokens(v: number): string {
+  if (v >= 1e6) return `${(v / 1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `${(v / 1e3).toFixed(1)}k`;
+  return String(Math.round(v));
+}
