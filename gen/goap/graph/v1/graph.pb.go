@@ -3253,8 +3253,11 @@ type ExportGraphRequest struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// the branch whose head is exported (default main), unless a baseline is named
-	Branch        string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
-	BaselineId    string `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	Branch     string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
+	BaselineId string `protobuf:"bytes,3,opt,name=baseline_id,json=baselineId,proto3" json:"baseline_id,omitempty"`
+	// "json" (default): the snapshot as one JSON document; "okf": a zip archive of one Markdown file per node, YAML
+	// front matter and Markdown body (ADR 0111)
+	Format        string `protobuf:"bytes,4,opt,name=format,proto3" json:"format,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3310,13 +3313,22 @@ func (x *ExportGraphRequest) GetBaselineId() string {
 	return ""
 }
 
+func (x *ExportGraphRequest) GetFormat() string {
+	if x != nil {
+		return x.Format
+	}
+	return ""
+}
+
 type ExportGraphResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the snapshot (format goap.graph.snapshot/v1)
-	Document      string `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
-	Filename      string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
-	MediaType     string `protobuf:"bytes,3,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
-	Nodes         int32  `protobuf:"varint,4,opt,name=nodes,proto3" json:"nodes,omitempty"`
+	// the snapshot (format goap.graph.snapshot/v1), for the json format
+	Document  string `protobuf:"bytes,1,opt,name=document,proto3" json:"document,omitempty"`
+	Filename  string `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`
+	MediaType string `protobuf:"bytes,3,opt,name=media_type,json=mediaType,proto3" json:"media_type,omitempty"`
+	Nodes     int32  `protobuf:"varint,4,opt,name=nodes,proto3" json:"nodes,omitempty"`
+	// the zip archive, for the okf format
+	Archive       []byte `protobuf:"bytes,5,opt,name=archive,proto3" json:"archive,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3377,6 +3389,13 @@ func (x *ExportGraphResponse) GetNodes() int32 {
 		return x.Nodes
 	}
 	return 0
+}
+
+func (x *ExportGraphResponse) GetArchive() []byte {
+	if x != nil {
+		return x.Archive
+	}
+	return nil
 }
 
 type ImportGraphRequest struct {
@@ -16083,18 +16102,20 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bdocument\x18\x01 \x01(\tR\bdocument\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1d\n" +
 	"\n" +
-	"media_type\x18\x03 \x01(\tR\tmediaType\"k\n" +
+	"media_type\x18\x03 \x01(\tR\tmediaType\"\x83\x01\n" +
 	"\x12ExportGraphRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x1f\n" +
 	"\vbaseline_id\x18\x03 \x01(\tR\n" +
-	"baselineId\"\x82\x01\n" +
+	"baselineId\x12\x16\n" +
+	"\x06format\x18\x04 \x01(\tR\x06format\"\x9c\x01\n" +
 	"\x13ExportGraphResponse\x12\x1a\n" +
 	"\bdocument\x18\x01 \x01(\tR\bdocument\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12\x1d\n" +
 	"\n" +
 	"media_type\x18\x03 \x01(\tR\tmediaType\x12\x14\n" +
-	"\x05nodes\x18\x04 \x01(\x05R\x05nodes\"\xbc\x01\n" +
+	"\x05nodes\x18\x04 \x01(\x05R\x05nodes\x12\x18\n" +
+	"\aarchive\x18\x05 \x01(\fR\aarchive\"\xbc\x01\n" +
 	"\x12ImportGraphRequest\x12\x1a\n" +
 	"\bdocument\x18\x01 \x01(\tR\bdocument\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +

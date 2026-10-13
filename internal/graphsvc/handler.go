@@ -2,6 +2,7 @@
 package graphsvc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -24,8 +25,10 @@ import (
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/journal"
+	"github.com/zimwip/goap/pkg/okf"
 	"github.com/zimwip/goap/pkg/prov"
 	"github.com/zimwip/goap/pkg/review"
+	"github.com/zimwip/goap/pkg/typecat"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -230,12 +233,42 @@ func (h *Handler) ExportGraph(ctx context.Context, r *connect.Request[graphv1.Ex
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
+	switch r.Msg.Format {
+	case "", "json":
+	case "okf":
+		return h.exportOKF(s)
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown export format %q (json, okf)", r.Msg.Format))
+	}
 	doc, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	name := fmt.Sprintf("graph-%s-%s.json", s.Namespace, s.ExportedAt.Format("20060102-150405"))
 	return connect.NewResponse(&graphv1.ExportGraphResponse{Document: string(doc), Filename: name, MediaType: "application/json", Nodes: int32(len(s.Nodes))}), nil
+}
+
+// exportOKF renders a snapshot as an OKF tree, one Markdown file per node, in a zip archive (ADR 0111); the names and
+// long texts of the nodes come from the type catalogue when the graph has one.
+func (h *Handler) exportOKF(s graph.Snapshot) (*connect.Response[graphv1.ExportGraphResponse], error) {
+	var o okf.Options
+	if h.Graph.Types != nil {
+		if c, ok := h.Graph.Types().(interface {
+			Type(string) (*typecat.Type, bool)
+		}); ok {
+			o = okf.FromTypes(c.Type)
+		}
+	}
+	files, err := okf.Render(s, o)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	var buf bytes.Buffer
+	if err := okf.Zip(&buf, files, s.ExportedAt); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	name := fmt.Sprintf("graph-%s-%s.okf.zip", s.Namespace, s.ExportedAt.Format("20060102-150405"))
+	return connect.NewResponse(&graphv1.ExportGraphResponse{Archive: buf.Bytes(), Filename: name, MediaType: "application/zip", Nodes: int32(len(s.Nodes))}), nil
 }
 
 // ImportGraph imports a JSON snapshot as one new change of the caller (ADR 0104): every node type it writes is

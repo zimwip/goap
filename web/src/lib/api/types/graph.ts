@@ -549,11 +549,17 @@ export interface DecisionPolicy {
 }
 
 /** A graph snapshot as exported (ADR 0104): the document is JSON, format goap.graph.snapshot/v1. */
+/** `json`: one snapshot document (ADR 0104); `okf`: a zip archive, one Markdown file per node (ADR 0111). */
+export type GraphExportFormat = 'json' | 'okf';
+
 export interface GraphExport {
+  /** the snapshot, for the json format */
   document?: string;
   filename?: string;
   mediaType?: string;
   nodes?: number;
+  /** the zip archive in base64, for the okf format */
+  archive?: string;
 }
 
 export interface GraphImport {

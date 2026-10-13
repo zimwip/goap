@@ -6,7 +6,7 @@
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { loadRaw, save } from '../../shell/storage';
-  import { graph, errorMessage, formatDate, type Baseline, type Branch } from '../../api';
+  import { graph, errorMessage, formatDate, type Baseline, type Branch, type GraphExportFormat } from '../../api';
   import { changeOfBranch, isChangeBranch, shownBranches } from '../../branchFilter';
   import { openTab } from '../../shell/tabs.svelte';
   import { loadTypes as loadCatalog, typeCatalog } from '../../stores/types.svelte';
@@ -17,7 +17,7 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { notify } from '../../shell/workbench.svelte';
   import Icon from '../../shell/Icon.svelte';
-  import { downloadText } from '../../download';
+  import { downloadGraphExport } from '../../download';
 
   // Methodologies are nodes typed by the meta-domain methodology (ADR 0023), authored in their own editors and
   // explorer: not offered here by default.
@@ -138,13 +138,14 @@
     });
   }
 
-  /** Downloads the head of a branch of the namespace as a JSON snapshot, without history (ADR 0104). */
-  async function exportSnapshot(branch: string) {
+  /** Downloads the head of a branch of the namespace without history: a JSON snapshot (ADR 0104) or an OKF archive, one
+   *  Markdown file per node (ADR 0111). */
+  async function exportSnapshot(branch: string, format: GraphExportFormat = 'json') {
     const ns = baselineTool.namespace;
     if (!ns) return;
     try {
-      const res = await graph.exportGraph(ns, branch);
-      downloadText(res.document ?? '', res.filename || `graph-${ns}.json`, res.mediaType || 'application/json');
+      const res = await graph.exportGraph(ns, branch, undefined, format);
+      downloadGraphExport(res, `graph-${ns}`);
       notify(`Exported ${res.nodes ?? 0} node(s) of ${ns} (${branch}).`, 'ok');
     } catch (e) {
       error = errorMessage(e);
@@ -155,6 +156,7 @@
     const items: ContextMenuItem[] = [
       { label: 'Open branch from here…', icon: 'branch', disabled: !headOf(b)?.id, run: () => openFrom(b) },
       { label: 'Export head (JSON snapshot)', icon: 'download', disabled: !headOf(b)?.id, run: () => exportSnapshot(b.name ?? 'main') },
+      { label: 'Export head (OKF Markdown)', icon: 'download', disabled: !headOf(b)?.id, run: () => exportSnapshot(b.name ?? 'main', 'okf') },
     ];
     if (isChangeBranch(b)) {
       // a change's branch is merged by its change (IntegrateChange), never by hand

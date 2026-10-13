@@ -333,7 +333,8 @@ type GraphServiceClient interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
-	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104), or as an OKF tree in a zip
+	// archive: one Markdown file per node (ADR 0111).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
@@ -1676,7 +1677,8 @@ type GraphServiceHandler interface {
 	ListChangeLog(context.Context, *connect.Request[v1.ListChangeLogRequest]) (*connect.Response[v1.ListChangeLogResponse], error)
 	// The whole log of a change as W3C PROV-O provenance, in JSON-LD (ADR 0057).
 	ExportChangeProvenance(context.Context, *connect.Request[v1.ExportChangeProvenanceRequest]) (*connect.Response[v1.ExportChangeProvenanceResponse], error)
-	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104).
+	// The state of a namespace at a baseline as a JSON snapshot, without history (ADR 0104), or as an OKF tree in a zip
+	// archive: one Markdown file per node (ADR 0111).
 	ExportGraph(context.Context, *connect.Request[v1.ExportGraphRequest]) (*connect.Response[v1.ExportGraphResponse], error)
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)

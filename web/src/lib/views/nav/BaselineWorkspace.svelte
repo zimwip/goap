@@ -17,7 +17,10 @@
     type GraphNode,
     type Link,
     type TypeCount,
+    type GraphExportFormat,
   } from '../../api';
+  import { downloadGraphExport } from '../../download';
+  import { notify } from '../../shell/workbench.svelte';
   import Icon from '../../shell/Icon.svelte';
   import NodeGraph from '../../components/NodeGraph.svelte';
   import BaselineCompare from '../../components/BaselineCompare.svelte';
@@ -107,6 +110,24 @@
     const br = branchOf(baselines.find((b) => b.id === id) ?? {});
     if (br !== baselineTool.branch) selectBranch(br);
     selectBaseline(id);
+  }
+
+  /** Downloads the state of the shown baseline, without history: a JSON snapshot (ADR 0104) or an OKF archive, one
+   *  Markdown file per node with a YAML front matter (ADR 0111). */
+  let exporting = $state(false);
+  async function exportBaseline(format: GraphExportFormat) {
+    const id = shownId;
+    if (!namespace || !id || isOpenHead(id)) return;
+    exporting = true;
+    try {
+      const res = await graph.exportGraph(namespace, undefined, id, format);
+      downloadGraphExport(res, `graph-${namespace}-${shortId(id)}`);
+      notify(`Exported ${res.nodes ?? 0} node(s) of ${namespace} at ${shortId(id)}.`, 'ok');
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      exporting = false;
+    }
   }
 
   // ---- node types + filtered/paged node list, for `shownId` --------------------------------------
@@ -416,6 +437,20 @@
       </span>
     {/if}
     <span class="grow"></span>
+    <button
+      type="button"
+      class="ghost small"
+      title="Export this baseline as an OKF tree: a zip of one Markdown file per node (YAML front matter, Markdown body)"
+      disabled={!baseline || exporting}
+      onclick={() => exportBaseline('okf')}><Icon name="download" size={14} /> OKF</button
+    >
+    <button
+      type="button"
+      class="ghost small"
+      title="Export this baseline as a JSON snapshot (no history)"
+      disabled={!baseline || exporting}
+      onclick={() => exportBaseline('json')}><Icon name="download" size={14} /> JSON</button
+    >
     <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={loading} onclick={() => reload++}><Icon name="refresh" size={14} /></button>
   </div>
   {#if error}<div class="alert">{error}</div>{/if}

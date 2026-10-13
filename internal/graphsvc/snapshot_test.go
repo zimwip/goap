@@ -41,6 +41,13 @@ func TestImportGraphCreatesAChange(t *testing.T) {
 	if err != nil || exp.Msg.Nodes != 0 || exp.Msg.MediaType != "application/json" {
 		t.Fatalf("export of an empty namespace: %+v %v", exp, err)
 	}
+	okfExp, err := h.ExportGraph(ctx, connect.NewRequest(&graphv1.ExportGraphRequest{Namespace: "alm", Format: "okf"}))
+	if err != nil || okfExp.Msg.MediaType != "application/zip" || len(okfExp.Msg.Archive) == 0 || okfExp.Msg.Document != "" {
+		t.Fatalf("OKF export of an empty namespace, its index only (ADR 0111): %+v %v", okfExp, err)
+	}
+	if _, err := h.ExportGraph(ctx, connect.NewRequest(&graphv1.ExportGraphRequest{Namespace: "alm", Format: "csv"})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("an unknown export format: %v", err)
+	}
 	s := graph.Snapshot{Format: graph.SnapshotFormat, Namespace: "alm", Nodes: []graph.SnapshotNode{
 		{Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}},
 	}}
