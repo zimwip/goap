@@ -257,7 +257,7 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
 - The waiver is removed: no item kind `waiver` (`risk.KindWaiver`, `risk.Waivers`), no override of the world in
   `Engine.observe`, no `waive` decision in `Engine.Unblock` (retry, abandon), no `waived` in the explanation of a
   condition; the proto fields `UnblockProcessRequest.conditions` and `ExplainConditionResponse.waived` / `note` are
-  reserved. The web's Unblock panel lists what the run waits for and offers *Retry* once the change establishes it.
+  gone (the protos keep no reserved fields: clients and servers ship together). The web's Unblock panel lists what the run waits for and offers *Retry* once the change establishes it.
 - `change_bound` is no longer injected: a methodology that defers its bind declares it (`change.id != ""`,
   `methodologies/examples/deferred-bind.yaml`); `StartingPoints` and `Compiled.Hints` evaluate the conditions on an
   existing change and set nothing either.

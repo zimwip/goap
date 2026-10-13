@@ -3195,6 +3195,7 @@ type Step struct {
 	Done   map[string]bool `protobuf:"bytes,5,rep,name=done,proto3" json:"done,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	Steps  []*Step         `protobuf:"bytes,8,rep,name=steps,proto3" json:"steps,omitempty"`
 	Action string          `protobuf:"bytes,9,opt,name=action,proto3" json:"action,omitempty"`
+	// an agent is the actor of a method, not a way to do a step
 	// nested process: "<process>" or "<methodology>/<process>"
 	Process string `protobuf:"bytes,12,opt,name=process,proto3" json:"process,omitempty"`
 	// alternative actions the planner chooses among (instead of action)
@@ -7777,14 +7778,14 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1a\n" +
 	"\brequired\x18\x04 \x01(\bR\brequired\x12;\n" +
 	"\rdefault_value\x18\x05 \x01(\v2\x16.google.protobuf.ValueR\fdefaultValue\x12\x16\n" +
-	"\x06values\x18\x06 \x03(\tR\x06values\"\xdb\x01\n" +
+	"\x06values\x18\x06 \x03(\tR\x06values\"\xbf\x01\n" +
 	"\tAlgorithm\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x12\n" +
 	"\x04code\x18\x05 \x01(\tR\x04code\x128\n" +
-	"\x06params\x18\x06 \x03(\v2 .goap.registry.v1.AlgorithmParamR\x06paramsJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\x03mcpR\tconnector\"\x98\x01\n" +
+	"\x06params\x18\x06 \x03(\v2 .goap.registry.v1.AlgorithmParamR\x06params\"\x98\x01\n" +
 	"\x11AlgorithmInstance\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1c\n" +
@@ -7924,7 +7925,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x05 \x01(\x01R\x05value\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xce\b\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x86\b\n" +
 	"\vMethodology\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -7958,11 +7959,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"integrates\x18\x1b \x03(\v2\x1d.goap.registry.v1.IntegrationR\n" +
 	"integrates\x126\n" +
-	"\bguardian\x18\x1c \x01(\v2\x1a.goap.registry.v1.GuardianR\bguardianJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\n" +
-	"node_typesR\n" +
-	"link_typesR\n" +
-	"domain_refR\n" +
-	"lifecycles\"i\n" +
+	"\bguardian\x18\x1c \x01(\v2\x1a.goap.registry.v1.GuardianR\bguardian\"i\n" +
 	"\vIntegration\x12$\n" +
 	"\rmethodologies\x18\x01 \x03(\tR\rmethodologies\x12\x1c\n" +
 	"\texclusive\x18\x02 \x01(\bR\texclusive\x12\x16\n" +
@@ -7987,7 +7984,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vresponsible\x18\x01 \x01(\tR\vresponsible\x12 \n" +
 	"\vaccountable\x18\x02 \x01(\tR\vaccountable\x12\x1c\n" +
 	"\tconsulted\x18\x03 \x03(\tR\tconsulted\x12\x1a\n" +
-	"\binformed\x18\x04 \x03(\tR\binformed\"\x9b\x05\n" +
+	"\binformed\x18\x04 \x03(\tR\binformed\"\x82\x05\n" +
 	"\x06Method\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03for\x18\x02 \x01(\tR\x03for\x12\x12\n" +
@@ -8010,8 +8007,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x02on\x18\x13 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x1a7\n" +
 	"\tDoneEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fR\x05agentR\x04goal\"\x86\x02\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xf6\x01\n" +
 	"\aProcess\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
@@ -8020,11 +8016,11 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"references\x18\x06 \x03(\v2\x1b.goap.registry.v1.ReferenceR\n" +
 	"references\x12.\n" +
-	"\x02on\x18\a \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02onJ\x04\b\x04\x10\x05R\bparallel\"M\n" +
+	"\x02on\x18\a \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\"M\n" +
 	"\tReference\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x10\n" +
 	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x18\n" +
-	"\asection\x18\x03 \x01(\tR\asection\"\xbc\x06\n" +
+	"\asection\x18\x03 \x01(\tR\asection\"\x86\x06\n" +
 	"\x04Step\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\"\n" +
@@ -8051,8 +8047,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a7\n" +
 	"\tDoneEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fR\x05afterR\bparallelR\x05agentR\x04goal\"C\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"C\n" +
 	"\vGoalSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\"^\n" +
@@ -8080,10 +8075,10 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x18ListMethodologiesRequest\x12!\n" +
 	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"g\n" +
 	"\x19ListMethodologiesResponse\x12J\n" +
-	"\rmethodologies\x18\x01 \x03(\v2$.goap.registry.v1.MethodologySummaryR\rmethodologies\"[\n" +
+	"\rmethodologies\x18\x01 \x03(\v2$.goap.registry.v1.MethodologySummaryR\rmethodologies\"E\n" +
 	"\x15GetMethodologyRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversionJ\x04\b\x03\x10\x04R\x0eresolve_domain\"Y\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"Y\n" +
 	"\x16GetMethodologyResponse\x12?\n" +
 	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"Y\n" +
 	"\x16SaveMethodologyRequest\x12?\n" +
@@ -8122,7 +8117,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"K\n" +
 	"\x19ExportMethodologyResponse\x12\x12\n" +
 	"\x04yaml\x18\x01 \x01(\tR\x04yaml\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xe0\x05\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xd2\x05\n" +
 	"\x06Domain\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -8148,7 +8143,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"updated_by\x18\n" +
 	" \x01(\tR\tupdatedBy\x12\x18\n" +
-	"\abuiltin\x18\x0e \x01(\bR\abuiltinJ\x04\b\x0f\x10\x10R\x06frozen\"\xe9\x02\n" +
+	"\abuiltin\x18\x0e \x01(\bR\abuiltin\"\xdb\x02\n" +
 	"\rDomainSummary\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -8159,8 +8154,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x12=\n" +
 	"\fpublished_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\vpublishedAt\x12\x18\n" +
-	"\abuiltin\x18\t \x01(\bR\abuiltinJ\x04\b\n" +
-	"\x10\vR\x06frozen\"7\n" +
+	"\abuiltin\x18\t \x01(\bR\abuiltin\"7\n" +
 	"\x12ListDomainsRequest\x12!\n" +
 	"\fall_versions\x18\x01 \x01(\bR\vallVersions\"P\n" +
 	"\x13ListDomainsResponse\x129\n" +

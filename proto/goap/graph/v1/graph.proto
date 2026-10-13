@@ -278,7 +278,6 @@ message ChangeItem {
   string kind = 2;
   string type = 3;
   string status = 4;
-  reserved 5, 6, 14; // target, proposal, post (the nodes a change acts on are its change impacts, ADR 0024)
   Decision decision = 7;
   google.protobuf.Struct data = 8;
   string produced_by = 9;
@@ -313,12 +312,10 @@ message Change {
   // sub-change: the parent change and the responsible OrgUnit key
   string parent_id = 14;
   string owner_org = 15;
-  reserved 16;
   // the nodes the change reads, modifies or creates: stored, and derived from its items (ADR 0024)
   repeated ChangeImpact nodes = 17;
   // key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
   string project_id = 18;
-  reserved 19;
   // the lifecycle the change follows (named by its methodology) and its state (ADR 0058); empty: none
   string lifecycle = 20;
   string state = 21;
@@ -682,7 +679,6 @@ message Structure {
   bool self_parent = 6;
   // the tagged type and its subtypes
   repeated string types = 7;
-  reserved 8;
   // the initial properties of the root node
   google.protobuf.Struct bootstrap = 9;
 }
@@ -709,7 +705,6 @@ message CreateChangeRequest {
   // key of the responsible OrgUnit (organisation namespace); "@me": the personal unit of the caller, which
   // makes the change personal (ADR 0037)
   string owner_org = 10;
-  reserved 11;
   // key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
   string project_id = 12;
 }
@@ -1045,8 +1040,6 @@ message ModelCall {
   int64 output_tokens = 4;
   int64 duration_ms = 5;
   string error = 6;
-  // what was sent and answered is an entry of the log of the change of its own (model.call), never part of the record
-  reserved 7;
 }
 
 message ToolUse {
@@ -1616,11 +1609,8 @@ message FlowEvent {
   string flow = 2;
   string parent = 3;
   string fork_after = 4;
-  reserved 5, 6, 7, 8; // from_step, execution, process, reason (now in origin, ADR 0067)
   repeated string stale = 9;
   string by = 10;
-  reserved 11, 12, 13, 14; // branch, items, merged, nodes (MaterializeFlow is gone: the flow branch is the preview)
-  reserved 15; // stale_executions (now stale_runs)
   // open: the flow is an option of the change (ADR 0009 §3); evaluate: the evaluation
   Option option = 16;
   string comment = 17;
@@ -1641,7 +1631,6 @@ message Flow {
   string id = 1;
   string parent = 2;
   string fork_after = 3;
-  reserved 4, 5, 6, 7; // from_step, execution, process, reason (now in origin, ADR 0067)
   // open | adopted | discarded
   string status = 8;
   // items the relaunched step invalidated (stale while open, superseded once adopted)
@@ -1649,10 +1638,8 @@ message Flow {
   google.protobuf.Timestamp opened_at = 10;
   google.protobuf.Timestamp decided_at = 11;
   string decided_by = 12;
-  reserved 13, 14, 15, 16; // branch, branches, materialized, merged
   // adopted flows that replace the same items: an open flow that competes cannot be adopted
   repeated string competes_with = 17;
-  reserved 18; // stale_executions (now stale_runs)
   // set on an option: its hypothesis, its status (exploring | evaluated | selected | rejected), its last evaluation,
   // and whether the change works on it
   Option option = 19;
@@ -1670,7 +1657,6 @@ message OpenFlowRequest {
   string parent = 2;
   string fork_after = 3;
   repeated string seeds = 4;
-  reserved 5, 6, 7, 8, 9, 10, 11; // from_step, execution, process, reason, guidance, by, stale_executions
   // opaque producer ids the flow invalidates (ADR 0025)
   repeated string stale_runs = 12;
   // opaque record of the opener, stored on the flow and never read by the graph (ADR 0067)
@@ -1906,7 +1892,6 @@ message DecisionEvent {
   string question = 3;
   repeated string options = 4;
   repeated string criteria = 5;
-  reserved 6, 7, 8, 9; // decider, threshold, max_rounds, deadline (now in policy, ADR 0067)
   string outcome = 10;
   string option = 11;
   double confidence = 12;
@@ -1953,12 +1938,10 @@ message DecisionPoint {
   string question = 2;
   repeated string options = 3;
   repeated string criteria = 4;
-  reserved 5, 6, 7, 8; // decider, threshold, max_rounds, deadline (now in policy, ADR 0067)
   google.protobuf.Timestamp opened_at = 9;
   string opened_by = 10;
   // open | blocked | ratifying | escalated | decided
   string status = 11;
-  reserved 12; // rounds (now in policy)
   repeated Question questions = 13;
   Ruling ruling = 14;
   // why the policy reserved the point to a person (empty: not escalated)
@@ -1979,7 +1962,6 @@ message OpenDecisionRequest {
   repeated string options = 3;
   bool all_options = 4;
   repeated string criteria = 5;
-  reserved 6, 7, 8, 9; // decider, threshold, max_rounds, max_duration (now in policy)
   // the policy values the opener gives (who decides, a threshold, rounds, a duration): resolved by the graph's
   // decision policy (ADR 0067)
   google.protobuf.Struct policy = 10;

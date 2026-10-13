@@ -180,9 +180,6 @@ message Algorithm {
   string language = 4;
   string code = 5;
   repeated AlgorithmParam params = 6;
-  // 7 and 8 were the MCP and connector of an adapter: adapters are not domain algorithms (ADR 0061)
-  reserved 7, 8;
-  reserved "mcp", "connector";
 }
 
 // AlgorithmInstance sets the parameter values of an algorithm; it is what gets plugged.
@@ -391,8 +388,6 @@ message Methodology {
   string description = 3;
   // draft | published | archived (read only)
   string status = 4;
-  reserved 5, 6, 15, 16;
-  reserved "node_types", "link_types", "domain_ref", "lifecycles";
   repeated Condition conditions = 7;
   repeated Action actions = 8;
   repeated Goal goals = 9;
@@ -480,9 +475,6 @@ message Method {
   repeated string checklist = 7;
   repeated string deliverables = 8;
   repeated Reference references = 9;
-  // 10 and 11 were agent and goal: a method names no actor (ADR 0050)
-  reserved 10, 11;
-  reserved "agent", "goal";
   // the roles involved when the method is used (replacing those of the step)
   Responsibilities roles = 12;
   // composes the method from its own steps and sub-steps, the same shape and compilation as a process's,
@@ -505,8 +497,6 @@ message Process {
   string name = 1;
   string description = 2;
   repeated string examples = 3;
-  reserved 4;
-  reserved "parallel";
   repeated Step steps = 5;
   // the reference documents that describe the process
   repeated Reference references = 6;
@@ -532,13 +522,9 @@ message Step {
   map<string, bool> pre = 4;
   // exit criteria (default: derived from the method)
   map<string, bool> done = 5;
-  reserved 6, 7;
-  reserved "after", "parallel";
   repeated Step steps = 8;
   string action = 9;
   // an agent is the actor of a method, not a way to do a step
-  reserved 10, 11;
-  reserved "agent", "goal";
   // nested process: "<process>" or "<methodology>/<process>"
   string process = 12;
   // alternative actions the planner chooses among (instead of action)
@@ -609,8 +595,6 @@ message ListMethodologiesResponse {
 message GetMethodologyRequest {
   string name = 1;
   string version = 2;
-  reserved 3;
-  reserved "resolve_domain";
 }
 
 message GetMethodologyResponse {
@@ -701,8 +685,6 @@ message Domain {
   string updated_by = 10;
   // built into the platform (methodology, organisation, platform): published and frozen, it changes with the code
   bool builtin = 14;
-  reserved 15;
-  reserved "frozen";
 }
 
 message DomainSummary {
@@ -716,8 +698,6 @@ message DomainSummary {
   google.protobuf.Timestamp published_at = 8;
   // built into the platform: published and frozen
   bool builtin = 9;
-  reserved 10;
-  reserved "frozen";
 }
 
 message ListDomainsRequest {

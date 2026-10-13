@@ -500,8 +500,6 @@ message UnblockProcessRequest {
   string process_id = 1;
   // retry | abandon
   string decision = 2;
-  reserved 3;
-  reserved "conditions";
   // required to abandon
   string reason = 4;
 }
@@ -583,14 +581,10 @@ message ExplainConditionResponse {
   bool value = 3;
   // the formula could not be evaluated
   string error = 4;
-  reserved 5;
-  reserved "waived";
   // the formula as a tree of its parts
   ConditionTerm root = 6;
   // the blackboard variables the formula reads, as JSON text
   map<string, string> inputs = 7;
-  reserved 8;
-  reserved "note";
 }
 
 message ConditionTerm {

@@ -15854,7 +15854,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bDecision\x12\x12\n" +
 	"\x04item\x18\x01 \x01(\tR\x04item\x12\x16\n" +
 	"\x06accept\x18\x02 \x01(\bR\x06accept\x12\x18\n" +
-	"\acomment\x18\x03 \x01(\tR\acomment\"\x9f\x04\n" +
+	"\acomment\x18\x03 \x01(\tR\acomment\"\x8d\x04\n" +
 	"\n" +
 	"ChangeItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -15876,7 +15876,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x0f \x01(\tR\x04flow\x127\n" +
 	"\n" +
 	"flow_event\x18\x10 \x01(\v2\x18.goap.graph.v1.FlowEventR\tflowEvent\x12C\n" +
-	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEventJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\x0e\x10\x0f\"\xd7\x05\n" +
+	"\x0edecision_event\x18\x11 \x01(\v2\x1c.goap.graph.v1.DecisionEventR\rdecisionEvent\"\xcb\x05\n" +
 	"\x06Change\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05title\x18\x02 \x01(\tR\x05title\x12\x16\n" +
@@ -15903,7 +15903,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05state\x18\x15 \x01(\tR\x05state\x128\n" +
 	"\tguardians\x18\x16 \x03(\v2\x1a.goap.graph.v1.GuardianRefR\tguardians\x12\x1d\n" +
 	"\n" +
-	"depends_on\x18\x17 \x03(\tR\tdependsOnJ\x04\b\x10\x10\x11J\x04\b\x13\x10\x14\"I\n" +
+	"depends_on\x18\x17 \x03(\tR\tdependsOn\"I\n" +
 	"\vGuardianRef\x12 \n" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\"\xe5\x01\n" +
@@ -16123,7 +16123,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\"8\n" +
 	"\x17IsAdminOnlyTypeResponse\x12\x1d\n" +
 	"\n" +
-	"admin_only\x18\x01 \x01(\bR\tadminOnly\"\xf1\x01\n" +
+	"admin_only\x18\x01 \x01(\bR\tadminOnly\"\xeb\x01\n" +
 	"\tStructure\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1c\n" +
@@ -16133,11 +16133,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\vself_parent\x18\x06 \x01(\bR\n" +
 	"selfParent\x12\x14\n" +
 	"\x05types\x18\a \x03(\tR\x05types\x125\n" +
-	"\tbootstrap\x18\t \x01(\v2\x17.google.protobuf.StructR\tbootstrapJ\x04\b\b\x10\t\"Q\n" +
+	"\tbootstrap\x18\t \x01(\v2\x17.google.protobuf.StructR\tbootstrap\"Q\n" +
 	"\x15GetStructuresResponse\x128\n" +
 	"\n" +
 	"structures\x18\x01 \x03(\v2\x18.goap.graph.v1.StructureR\n" +
-	"structures\"\xe7\x02\n" +
+	"structures\"\xe1\x02\n" +
 	"\x13CreateChangeRequest\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12\x16\n" +
 	"\x06intent\x18\x02 \x01(\tR\x06intent\x12 \n" +
@@ -16153,7 +16153,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\towner_org\x18\n" +
 	" \x01(\tR\bownerOrg\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\f \x01(\tR\tprojectIdJ\x04\b\v\x10\f\"E\n" +
+	"project_id\x18\f \x01(\tR\tprojectId\"E\n" +
 	"\x14CreateChangeResponse\x12-\n" +
 	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\"\n" +
 	"\x10GetChangeRequest\x12\x0e\n" +
@@ -16362,7 +16362,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04plan\x18\x03 \x01(\v2\x18.goap.graph.v1.MergePlanR\x04plan\"E\n" +
 	"\x10AppendLogRequest\x121\n" +
 	"\aentries\x18\x01 \x03(\v2\x17.goap.graph.v1.LogEntryR\aentries\"\x13\n" +
-	"\x11AppendLogResponse\"\xc2\x01\n" +
+	"\x11AppendLogResponse\"\xbc\x01\n" +
 	"\tModelCall\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12!\n" +
@@ -16370,7 +16370,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\routput_tokens\x18\x04 \x01(\x03R\foutputTokens\x12\x1f\n" +
 	"\vduration_ms\x18\x05 \x01(\x03R\n" +
 	"durationMs\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05errorJ\x04\b\a\x10\b\"T\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\"T\n" +
 	"\aToolUse\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vduration_ms\x18\x02 \x01(\x03R\n" +
@@ -16751,7 +16751,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x15ListSubChangesRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\"I\n" +
 	"\x16ListSubChangesResponse\x12/\n" +
-	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\"\xdb\x02\n" +
+	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\"\xa5\x02\n" +
 	"\tFlowEvent\x12\x0e\n" +
 	"\x02op\x18\x01 \x01(\tR\x02op\x12\x12\n" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\x12\x16\n" +
@@ -16765,12 +16765,12 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\acomment\x18\x11 \x01(\tR\acomment\x12\x1d\n" +
 	"\n" +
 	"stale_runs\x18\x12 \x03(\tR\tstaleRuns\x12/\n" +
-	"\x06origin\x18\x13 \x01(\v2\x17.google.protobuf.StructR\x06originJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10\"<\n" +
+	"\x06origin\x18\x13 \x01(\v2\x17.google.protobuf.StructR\x06origin\"<\n" +
 	"\x06Option\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
 	"\n" +
 	"hypothesis\x18\x02 \x01(\tR\n" +
-	"hypothesis\"\xc5\x04\n" +
+	"hypothesis\"\x8f\x04\n" +
 	"\x04Flow\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06parent\x18\x02 \x01(\tR\x06parent\x12\x1d\n" +
@@ -16793,7 +16793,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06active\x18\x16 \x01(\bR\x06active\x12\x1d\n" +
 	"\n" +
 	"stale_runs\x18\x17 \x03(\tR\tstaleRuns\x12/\n" +
-	"\x06origin\x18\x18 \x01(\v2\x17.google.protobuf.StructR\x06originJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x12\x10\x13\"\xa6\x02\n" +
+	"\x06origin\x18\x18 \x01(\v2\x17.google.protobuf.StructR\x06origin\"\xfc\x01\n" +
 	"\x0fOpenFlowRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x16\n" +
 	"\x06parent\x18\x02 \x01(\tR\x06parent\x12\x1d\n" +
@@ -16803,9 +16803,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\n" +
 	"stale_runs\x18\f \x03(\tR\tstaleRuns\x12/\n" +
 	"\x06origin\x18\r \x01(\v2\x17.google.protobuf.StructR\x06origin\x12/\n" +
-	"\x05items\x18\x0e \x03(\v2\x19.goap.graph.v1.ChangeItemR\x05itemsJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\f\";\n" +
+	"\x05items\x18\x0e \x03(\v2\x19.goap.graph.v1.ChangeItemR\x05items\";\n" +
 	"\x10OpenFlowResponse\x12'\n" +
 	"\x04flow\x18\x01 \x01(\v2\x13.goap.graph.v1.FlowR\x04flow\"C\n" +
 	"\x10AdoptFlowRequest\x12\x1b\n" +
@@ -16939,7 +16937,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04flow\x18\x02 \x01(\tR\x04flow\"n\n" +
 	"\x16GetChangeGraphResponse\x12)\n" +
 	"\x05nodes\x18\x01 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +
-	"\x05links\x18\x02 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\"\x91\x04\n" +
+	"\x05links\x18\x02 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\"\xf9\x03\n" +
 	"\rDecisionEvent\x12\x0e\n" +
 	"\x02op\x18\x01 \x01(\tR\x02op\x12\x14\n" +
 	"\x05point\x18\x02 \x01(\tR\x05point\x12\x1a\n" +
@@ -16962,8 +16960,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x06accept\x18\x13 \x01(\bR\x06accept\x12\x18\n" +
 	"\acomment\x18\x14 \x01(\tR\acomment\x12\x0e\n" +
 	"\x02by\x18\x15 \x01(\tR\x02by\x12/\n" +
-	"\x06policy\x18\x16 \x01(\v2\x17.google.protobuf.StructR\x06policyJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"\"\xe6\x01\n" +
+	"\x06policy\x18\x16 \x01(\v2\x17.google.protobuf.StructR\x06policy\"\xe6\x01\n" +
 	"\bQuestion\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05point\x18\x02 \x01(\tR\x05point\x12\x12\n" +
@@ -16983,7 +16980,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\rjustification\x18\x04 \x01(\tR\rjustification\x12\x0e\n" +
 	"\x02by\x18\x05 \x01(\tR\x02by\x12\x14\n" +
 	"\x05human\x18\x06 \x01(\bR\x05human\x12*\n" +
-	"\x02at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"\xc5\x04\n" +
+	"\x02at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x02at\"\xa7\x04\n" +
 	"\rDecisionPoint\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
 	"\bquestion\x18\x02 \x01(\tR\bquestion\x12\x18\n" +
@@ -17005,7 +17002,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"decided_by\x18\x12 \x01(\tR\tdecidedBy\x12/\n" +
 	"\x06policy\x18\x13 \x01(\v2\x17.google.protobuf.StructR\x06policy\x12\x1d\n" +
 	"\n" +
-	"human_only\x18\x14 \x01(\bR\thumanOnlyJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\f\x10\r\"\xee\x01\n" +
+	"human_only\x18\x14 \x01(\bR\thumanOnly\"\xd6\x01\n" +
 	"\x13OpenDecisionRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1a\n" +
 	"\bquestion\x18\x02 \x01(\tR\bquestion\x12\x18\n" +
@@ -17014,8 +17011,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"allOptions\x12\x1a\n" +
 	"\bcriteria\x18\x05 \x03(\tR\bcriteria\x12/\n" +
 	"\x06policy\x18\n" +
-	" \x01(\v2\x17.google.protobuf.StructR\x06policyJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"\"J\n" +
+	" \x01(\v2\x17.google.protobuf.StructR\x06policy\"J\n" +
 	"\x14OpenDecisionResponse\x122\n" +
 	"\x05point\x18\x01 \x01(\v2\x1c.goap.graph.v1.DecisionPointR\x05point\"\xf4\x01\n" +
 	"\x13RuleDecisionRequest\x12\x1b\n" +

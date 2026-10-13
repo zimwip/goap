@@ -96,7 +96,6 @@ message Adapter {
   string mcp = 2;
   // name of the AdapterDef (platform namespace) this is an instance of
   string adapter = 3;
-  reserved 4, 5;
   // parameter values (secrets as references: "<vault path>#<field>" or "env:<VARIABLE>")
   google.protobuf.Struct params = 6;
   // restrictions of the MCP for the unit and its sub-units (ADR 0028); they add up along the unit

@@ -5736,13 +5736,12 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\aapprove\x18\x02 \x01(\bR\aapprove\x12\x18\n" +
 	"\acomment\x18\x03 \x01(\tR\acomment\"J\n" +
 	"\x15ApproveActionResponse\x121\n" +
-	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"|\n" +
+	"\aprocess\x18\x01 \x01(\v2\x17.goap.engine.v1.ProcessR\aprocess\"j\n" +
 	"\x15UnblockProcessRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1a\n" +
 	"\bdecision\x18\x02 \x01(\tR\bdecision\x12\x16\n" +
-	"\x06reason\x18\x04 \x01(\tR\x06reasonJ\x04\b\x03\x10\x04R\n" +
-	"conditions\"M\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"M\n" +
 	"\x14CancelProcessRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x16\n" +
@@ -5788,7 +5787,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x17ExplainConditionRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1c\n" +
-	"\tcondition\x18\x02 \x01(\tR\tcondition\"\xce\x02\n" +
+	"\tcondition\x18\x02 \x01(\tR\tcondition\"\xb4\x02\n" +
 	"\x18ExplainConditionResponse\x12\x1c\n" +
 	"\tcondition\x18\x01 \x01(\tR\tcondition\x12\x12\n" +
 	"\x04expr\x18\x02 \x01(\tR\x04expr\x12\x14\n" +
@@ -5798,7 +5797,7 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x06inputs\x18\a \x03(\v24.goap.engine.v1.ExplainConditionResponse.InputsEntryR\x06inputs\x1a9\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x05\x10\x06J\x04\b\b\x10\tR\x06waivedR\x04note\"\x9e\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9e\x01\n" +
 	"\rConditionTerm\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value\x12\x18\n" +

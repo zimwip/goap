@@ -1418,7 +1418,7 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\x05scope\x18\x04 \x01(\tR\x05scope\"\x11\n" +
 	"\x0fListMcpsRequest\"8\n" +
 	"\x10ListMcpsResponse\x12$\n" +
-	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"\xe9\x01\n" +
+	"\x04mcps\x18\x01 \x03(\v2\x10.goap.mcp.v1.McpR\x04mcps\"\xdd\x01\n" +
 	"\aAdapter\x12\x12\n" +
 	"\x04unit\x18\x01 \x01(\tR\x04unit\x12\x10\n" +
 	"\x03mcp\x18\x02 \x01(\tR\x03mcp\x12\x18\n" +
@@ -1428,7 +1428,7 @@ const file_goap_mcp_v1_mcp_proto_rawDesc = "" +
 	"\x05tools\x18\b \x03(\tR\x05tools\x12\x12\n" +
 	"\x04deny\x18\t \x03(\tR\x04deny\x12\x1b\n" +
 	"\tread_only\x18\n" +
-	" \x01(\bR\breadOnlyJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x9e\x02\n" +
+	" \x01(\bR\breadOnly\"\x9e\x02\n" +
 	"\fEffectiveMcp\x12\"\n" +
 	"\x03mcp\x18\x01 \x01(\v2\x10.goap.mcp.v1.McpR\x03mcp\x12.\n" +
 	"\aadapter\x18\x02 \x01(\v2\x14.goap.mcp.v1.AdapterR\aadapter\x12\x1c\n" +
