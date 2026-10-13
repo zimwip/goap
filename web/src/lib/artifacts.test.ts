@@ -9,7 +9,7 @@ const items: ChangeItem[] = [
   { id: 'd2', kind: 'decision', createdAt: '2026-01-02T00:00:00Z', decision: { item: 'a1', accept: true, comment: 'yes' } },
   { id: 'd3', kind: 'decision', decision: { item: 'x9', accept: true } },
   { id: 'r', kind: 'review' },
-  { id: 'm', kind: 'merge' },
+  { id: 'm', kind: 'note' },
   { id: 's', kind: 'signal' },
 ];
 

@@ -120,15 +120,6 @@ func onBranch(ctx context.Context, tx Tx, ref domain.NodeRef, branch string) (bo
 	return false, nil
 }
 
-// parentsOf returns the parents of a version (legacy versions without
-// parents descend from the previous version).
-func parentsOf(n domain.Node) []domain.Version {
-	if len(n.Parents) > 0 || n.Version <= 1 {
-		return n.Parents
-	}
-	return []domain.Version{n.Version - 1}
-}
-
 // CommonAncestor returns the most recent common ancestor of two versions of
 // a node (a version is its own ancestor).
 func CommonAncestor(ctx context.Context, tx Tx, id domain.NodeID, a, b domain.Version) (domain.NodeRef, error) {
@@ -138,7 +129,7 @@ func CommonAncestor(ctx context.Context, tx Tx, id domain.NodeID, a, b domain.Ve
 	}
 	parents := map[domain.Version][]domain.Version{}
 	for _, n := range vs {
-		parents[n.Version] = parentsOf(n)
+		parents[n.Version] = n.Parents
 	}
 	ancestors := func(v domain.Version) map[domain.Version]bool {
 		seen := map[domain.Version]bool{}

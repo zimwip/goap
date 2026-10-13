@@ -8,8 +8,8 @@ import (
 
 // Drafts and versions at landing (ADR 0079). During a change a node has no version: its working state in the change is a
 // Draft, one per change impact and flow, the fold (ADR 0029, 0030) of the impact events that carry it (not stored): `created`
-// and `checkedOut` carry the initial state, `updated` and `transitioned` patches, `cancelled`, `withdrawn`, `landed` and
-// `integrated` (ADR 0081) drop it. Landing (CommitChange) writes the node version from the draft and the draft goes.
+// and `checkedOut` carry the initial state, `updated` and `transitioned` patches, `cancelled`, `withdrawn` and `landed`
+// drop it. Landing (CommitChange) writes the node version from the draft and the draft goes.
 
 // IsDraft reports a reference to the draft of a node in a change: the node, no version (Version 0). Outside a change a
 // reference with Version 0 means the latest version of the node on main.
@@ -226,7 +226,7 @@ func ApplyDraftEvent(drafts []Draft, e ImpactEvent, impacts []ChangeImpact) []Dr
 		case next != nil:
 			out = append(out, *next)
 		}
-	case ImpactWithdrawn, ImpactLanded, ImpactIntegrated:
+	case ImpactWithdrawn, ImpactLanded:
 		out = slices.DeleteFunc(out, func(d Draft) bool { return d.Impact == e.Impact })
 	case ImpactAdopted:
 		// the adopted flow's drafts were installed on the main flow by the events that follow (see the adoption)
@@ -256,12 +256,12 @@ func DraftSeenBy(events []ImpactEvent, impact ChangeImpactID, chain []string, st
 	order := append(slices.Clone(chain), "")
 	rows := map[string]*Draft{}
 	for _, e := range events {
-		gone := e.Op == ImpactLanded || e.Op == ImpactWithdrawn || e.Op == ImpactIntegrated
+		gone := e.Op == ImpactLanded || e.Op == ImpactWithdrawn
 		if e.Impact != impact || !slices.Contains(order, e.Flow) || (stale(e.Execution) && !gone) {
 			continue
 		}
 		switch e.Op {
-		case ImpactWithdrawn, ImpactLanded, ImpactIntegrated:
+		case ImpactWithdrawn, ImpactLanded:
 			clear(rows)
 		case ImpactCreated, ImpactCheckedOut, ImpactTransitioned, ImpactUpdated, ImpactCancelled:
 			rows[e.Flow] = applyDraft(rows[e.Flow], e)

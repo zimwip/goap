@@ -21,9 +21,7 @@
 
   const branchOf = (v: GraphNode) => v.branch || MAIN_BRANCH;
 
-  /** parents of a version (legacy versions without parents descend from the previous one, as pkg/graph) */
-  const parentsOf = (v: GraphNode): number[] =>
-    v.parents?.length ? v.parents : (v.version ?? 0) > 1 ? [(v.version ?? 0) - 1] : [];
+  const parentsOf = (v: GraphNode): number[] => v.parents ?? [];
 
   const entries = $derived<LaneEntry<GraphNode>[]>(
     [...versions]

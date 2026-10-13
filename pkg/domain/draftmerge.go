@@ -199,7 +199,7 @@ func PendingConflicts(events []ImpactEvent, impact ChangeImpactID) []string {
 			continue
 		}
 		switch e.Op {
-		case ImpactCreated, ImpactCheckedOut, ImpactCancelled, ImpactWithdrawn, ImpactLanded, ImpactIntegrated:
+		case ImpactCreated, ImpactCheckedOut, ImpactCancelled, ImpactWithdrawn, ImpactLanded:
 			pending = nil
 		case ImpactTransitioned:
 			if r, ok := e.Patch["rebased"]; ok && r != nil {
@@ -207,7 +207,7 @@ func PendingConflicts(events []ImpactEvent, impact ChangeImpactID) []string {
 				continue
 			}
 			if e.Draft != nil {
-				pending = nil // a draft installed wholesale (an adoption, an integration)
+				pending = nil // a draft installed wholesale (an adoption)
 				continue
 			}
 			if e.Patch["state"] != nil {

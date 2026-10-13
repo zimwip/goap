@@ -50,18 +50,7 @@ const (
 	ImpactLanded ImpactOp = "landed"
 	// ImpactRebased moves the pre version of a planned change impact to a newer head, to re-check (Pre).
 	ImpactRebased ImpactOp = "rebased"
-	// ImpactIntegrated is a legacy event, still read from old logs and never written since ADR 0103 (a sub-change merges
-	// its branch into its parent's): it recorded, in the log of a sub-change, that its change impact was integrated into
-	// its parent change (Into: the parent and its change impact, ADR 0081), the draft going to the parent and dropped
-	// here; a conflict skipped by its resolution was integrated with no install in the parent (Into named no impact).
-	ImpactIntegrated ImpactOp = "integrated"
 )
-
-// ImpactRef names a change impact of a change.
-type ImpactRef struct {
-	Change ChangeID       `json:"changeId"`
-	Impact ChangeImpactID `json:"impactId,omitempty"`
-}
 
 // WritesPost reports whether the operation sets the post of a change impact: the draft of its node (or, in the merge
 // change, a version).
@@ -105,12 +94,9 @@ type ImpactEvent struct {
 	Baseline BaselineID `json:"baseline,omitempty"`
 	// Branch is, on landed, the branch the version landed on: the change's own branch at commit, the branch it is
 	// integrated into after (the main flow's: BranchOf).
-	Branch string  `json:"branch,omitempty"`
-	Review *Review `json:"review,omitempty"` // reviewed, discarded
-	// Into is, on integrated (a legacy event), the parent change and the change impact the draft was installed in
-	// (ADR 0081).
-	Into  *ImpactRef `json:"into,omitempty"`
-	Stale []string   `json:"stale,omitempty"` // adopted: the stale executions
+	Branch string   `json:"branch,omitempty"`
+	Review *Review  `json:"review,omitempty"` // reviewed, discarded
+	Stale  []string `json:"stale,omitempty"`  // adopted: the stale executions
 	// Patch is what an updated event changed on the draft: {"props": {...}, "unset": [...], "owner": unit key, "ownerId":
 	// unit node, "addLink": {id, type, to, toId, toVersion, props}, "updateLink": {id, props}, "removeLink": {id, type,
 	// to}}; a transitioned event: {"state": {"from", "to"}} and the "props" / "unset" its actions made. ApplyDraftEvent
@@ -151,8 +137,6 @@ func (e ImpactEvent) Validate() error {
 		return need(e.Impact != "" && e.Post != nil && len(e.Patch) > 0, "a change impact, its draft and a patch")
 	case ImpactCancelled, ImpactWithdrawn:
 		return need(e.Impact != "", "a change impact")
-	case ImpactIntegrated:
-		return need(e.Impact != "" && e.Into != nil && e.Into.Change != "", "a change impact and the change it went into")
 	}
 	return fmt.Errorf("unknown event operation %q", e.Op)
 }

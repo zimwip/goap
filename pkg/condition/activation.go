@@ -53,7 +53,6 @@ func Activation(bb domain.Blackboard) map[string]any {
 		"changeImpacts":  h.changeImpacts(),
 		"decisions":      orEmptyList(byKind[domain.KindDecision]),
 		"artifacts":      orEmptyList(byKind[domain.KindArtifact]),
-		"merges":         orEmptyList(byKind[domain.KindMerge]),
 		"vars":           vars,
 		"options":        func() any { return opts() },
 		"activeOption":   domain.ActiveOptionOf(bb),

@@ -224,10 +224,6 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
     case 'rebased':
       summary = `pre moved to ${v(e.pre)}, to re-check`;
       break;
-    case 'integrated':
-      // a sub-change hands its draft to its parent change (ADR 0081)
-      summary = e.into?.impactId ? `draft integrated into parent change ${shortId(e.into.changeId)}` : `left out of parent change ${shortId(e.into?.changeId)} (conflict resolved)`;
-      break;
   }
   return {
     key: `e:${e.id}`,
@@ -241,7 +237,7 @@ function fromEvent(e: ImpactEvent, keys: Map<string, string>, parents: Map<strin
     by: e.by ?? '',
     execution: e.execution ?? '',
     processId: '',
-    tone: e.op === 'discarded' || e.op === 'rebased' || e.review?.status === 'rejected' || ((e.patch?.['conflicts'] as unknown[] | undefined)?.length ?? 0) > 0 ? 'warn' : e.op === 'landed' || e.op === 'integrated' ? 'ok' : 'neutral',
+    tone: e.op === 'discarded' || e.op === 'rebased' || e.review?.status === 'rejected' || ((e.patch?.['conflicts'] as unknown[] | undefined)?.length ?? 0) > 0 ? 'warn' : e.op === 'landed' ? 'ok' : 'neutral',
     event: e,
     reviewId: e.review?.reviewId || undefined,
   };

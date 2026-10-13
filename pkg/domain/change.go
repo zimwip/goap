@@ -125,8 +125,6 @@ type ItemKind string
 const (
 	KindDecision ItemKind = "decision"
 	KindArtifact ItemKind = "artifact"
-	// KindMerge records a merge of the change and its resolution.
-	KindMerge ItemKind = "merge"
 	// KindFlow is an event of the action flow: a step is relaunched on a new flow
 	// branch, and the branch is adopted or discarded (see flow.go).
 	KindFlow ItemKind = "flow"
@@ -202,7 +200,7 @@ func (it ChangeItem) Validate() error {
 		if it.Decision == nil || it.Decision.Item == "" {
 			return fmt.Errorf("decision item requires decision.item")
 		}
-	case KindArtifact, KindMerge:
+	case KindArtifact:
 	case KindSignal:
 		if it.Type == "" {
 			return fmt.Errorf("signal item requires type")
