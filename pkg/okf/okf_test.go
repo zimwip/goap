@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -32,7 +33,7 @@ func TestRender(t *testing.T) {
 			{Key: "NEED:1", Type: "alm@Need", State: "draft", Owner: "ORG-DEFAULT", Properties: map[string]any{"title": "Pay online", "description": "The customer\npays by card."},
 				Links: []graph.SnapshotLink{{Type: "alm@refines", To: "REQ-1", Properties: map[string]any{"why": "x"}}}},
 			{Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Same file name"}},
-			{Key: "REQ-1", Type: "alm@Requirement", Properties: map[string]any{"title": "Card payment"}},
+			{Key: "REQ-1", Type: "alm@Requirement", State: "approved", Properties: map[string]any{"title": "Card payment", "state": "x"}},
 		}}
 	var buf bytes.Buffer
 	if err := okf.Write(&buf, s, okf.FromTypes(cat.Type), s.ExportedAt); err != nil {
@@ -62,14 +63,21 @@ func TestRender(t *testing.T) {
 	if len(parts) != 3 || parts[0] != "" {
 		t.Fatalf("front matter: %q", need)
 	}
-	var fm okf.FrontMatter
+	var fm map[string]any
 	if err := yaml.Unmarshal([]byte(parts[1]), &fm); err != nil {
 		t.Fatal(err)
 	}
-	if fm.Key != "NEED:1" || fm.Type != "alm@Need" || fm.Title != "Pay online" || fm.State != "draft" || fm.Baseline != "B1" ||
-		fm.Properties["title"] != "Pay online" || fm.Properties["description"] != nil ||
-		len(fm.Links) != 1 || fm.Links[0].Path != "../Requirement/REQ-1.md" || fm.Links[0].Properties["why"] != "x" {
-		t.Fatalf("front matter: %+v", fm)
+	want := map[string]any{
+		"key": "NEED:1", "type": "alm@Need", "title": "Pay online", "state": "draft", "owner": "ORG-DEFAULT", "namespace": "alm", "baseline": "B1",
+		"aliases": []any{"NEED:1"}, "tags": []any{"alm/Need", "state/draft"},
+		"refines":        []any{"[[Requirement/REQ-1|Card payment]]"},
+		"linkProperties": []any{map[string]any{"type": "alm@refines", "to": "REQ-1", "properties": map[string]any{"why": "x"}}},
+	}
+	if !reflect.DeepEqual(fm, want) {
+		t.Fatalf("front matter:\n%#v\nwant\n%#v", fm, want)
+	}
+	if !strings.Contains(parts[1], `- '[[Requirement/REQ-1|Card payment]]'`) || !strings.HasPrefix(parts[1], "key: ") {
+		t.Fatalf("ordered front matter, quoted wikilinks:\n%s", parts[1])
 	}
 	for _, want := range []string{"# Pay online\n", "## Description\n\nThe customer\npays by card.\n", "- refines: [Card payment](../Requirement/REQ-1.md)"} {
 		if !strings.Contains(parts[2], want) {
@@ -78,6 +86,9 @@ func TestRender(t *testing.T) {
 	}
 	if req := got["alm/Requirement/REQ-1.md"]; !strings.Contains(req, "## Referenced by\n\n- [Pay online](../Need/NEED-1.md) refines") {
 		t.Fatalf("back link:\n%s", req)
+	}
+	if req := got["alm/Requirement/REQ-1.md"]; !strings.Contains(req, "\nprop_state: x\n") {
+		t.Fatalf("a property named like a key of the front matter takes the prefix:\n%s", req)
 	}
 	if idx := got["alm/index.md"]; !strings.Contains(idx, "format: goap.okf/v1") || !strings.Contains(idx, "- [Card payment](Requirement/REQ-1.md) `REQ-1`") {
 		t.Fatalf("index:\n%s", idx)

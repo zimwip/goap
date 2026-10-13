@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"maps"
 	"path"
 	"slices"
 	"strings"
@@ -37,27 +38,64 @@ type Options struct {
 	Body func(typ string) []BodyAttribute
 }
 
-// FrontMatter is the YAML header of the file of a node.
-type FrontMatter struct {
-	Key       string `yaml:"key"`
-	Type      string `yaml:"type"`
-	Title     string `yaml:"title,omitempty"`
-	State     string `yaml:"state,omitempty"`
-	Owner     string `yaml:"owner,omitempty"`
-	Namespace string `yaml:"namespace"`
-	Baseline  string `yaml:"baseline,omitempty"`
-	// Properties are the properties of the node but the ones rendered in the body.
-	Properties map[string]any `yaml:"properties,omitempty"`
-	Links      []Link         `yaml:"links,omitempty"`
-}
+// The front matter of a node is flat, so that Obsidian shows it as properties and draws its links (ADR 0111):
+// the identity keys below, `aliases` (the key) and `tags` (`<namespace>/<Type>`, `state/<state>`), then one key per
+// outgoing link type (its local name) listing wikilinks to the targets' files, then the properties of the node by
+// name (a property named like a key already written takes the prefix PropertyPrefix, unless it holds the same
+// value: the title), then `linkProperties`, the
+// properties of the links that carry some.
+const (
+	KeyKey            = "key"
+	KeyType           = "type"
+	KeyTitle          = "title"
+	KeyState          = "state"
+	KeyOwner          = "owner"
+	KeyNamespace      = "namespace"
+	KeyBaseline       = "baseline"
+	KeyAliases        = "aliases"
+	KeyTags           = "tags"
+	KeyLinkProperties = "linkProperties"
+	PropertyPrefix    = "prop_"
+)
 
-// Link is an outgoing link of a node: its type, the key of its target and the path of the target's file relative to
-// the file of the node.
-type Link struct {
+// LinkProperties are the properties of one outgoing link, in the front matter (`linkProperties`).
+type LinkProperties struct {
 	Type       string         `yaml:"type"`
 	To         string         `yaml:"to"`
-	Path       string         `yaml:"path"`
-	Properties map[string]any `yaml:"properties,omitempty"`
+	Properties map[string]any `yaml:"properties"`
+}
+
+// mapping is an ordered YAML mapping.
+type mapping struct{ node yaml.Node }
+
+func newMapping() *mapping { return &mapping{node: yaml.Node{Kind: yaml.MappingNode}} }
+
+func (m *mapping) has(k string) bool {
+	for i := 0; i < len(m.node.Content); i += 2 {
+		if m.node.Content[i].Value == k {
+			return true
+		}
+	}
+	return false
+}
+
+// scalar is the string value of a key, when it is a string.
+func (m *mapping) scalar(k string) (string, bool) {
+	for i := 0; i < len(m.node.Content); i += 2 {
+		if m.node.Content[i].Value == k && m.node.Content[i+1].Kind == yaml.ScalarNode && m.node.Content[i+1].Tag == "!!str" {
+			return m.node.Content[i+1].Value, true
+		}
+	}
+	return "", false
+}
+
+func (m *mapping) set(k string, v any) error {
+	var n yaml.Node
+	if err := n.Encode(v); err != nil {
+		return err
+	}
+	m.node.Content = append(m.node.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k}, &n)
+	return nil
 }
 
 // Index is the YAML header of the index of a namespace.
@@ -142,24 +180,15 @@ type incomingLink struct {
 func renderNode(s graph.Snapshot, e *entry, byKey map[string]*entry, in []incomingLink, o Options) ([]byte, error) {
 	n := e.node
 	body := bodyAttributes(n.Type, o)
-	fm := FrontMatter{Key: n.Key, Type: n.Type, Title: e.title, State: n.State, Owner: n.Owner, Namespace: s.Namespace, Baseline: s.Baseline}
 	inBody := map[string]bool{}
 	for _, a := range body {
 		if _, ok := n.Properties[a.Name].(string); ok {
 			inBody[a.Name] = true
 		}
 	}
-	for k, v := range n.Properties {
-		if inBody[k] {
-			continue
-		}
-		if fm.Properties == nil {
-			fm.Properties = map[string]any{}
-		}
-		fm.Properties[k] = v
-	}
-	for _, l := range n.Links {
-		fm.Links = append(fm.Links, Link{Type: l.Type, To: l.To, Path: relPath(e, byKey[l.To]), Properties: l.Properties})
+	fm, err := frontMatter(s, e, byKey, inBody)
+	if err != nil {
+		return nil, err
 	}
 	var b bytes.Buffer
 	if err := writeFrontMatter(&b, fm); err != nil {
@@ -196,6 +225,92 @@ func renderNode(s graph.Snapshot, e *entry, byKey map[string]*entry, in []incomi
 		}
 	}
 	return b.Bytes(), nil
+}
+
+// frontMatter builds the flat front matter of a node (see KeyKey).
+func frontMatter(s graph.Snapshot, e *entry, byKey map[string]*entry, inBody map[string]bool) (*mapping, error) {
+	n := e.node
+	m := newMapping()
+	var err error
+	put := func(k string, v any) {
+		if err == nil {
+			err = m.set(k, v)
+		}
+	}
+	put(KeyKey, n.Key)
+	put(KeyType, n.Type)
+	put(KeyTitle, e.title)
+	if n.State != "" {
+		put(KeyState, n.State)
+	}
+	if n.Owner != "" {
+		put(KeyOwner, n.Owner)
+	}
+	put(KeyNamespace, s.Namespace)
+	if s.Baseline != "" {
+		put(KeyBaseline, s.Baseline)
+	}
+	put(KeyAliases, []string{n.Key})
+	tags := []string{tagOf(s.Namespace) + "/" + tagOf(typeName(n.Type))}
+	if n.State != "" {
+		tags = append(tags, "state/"+tagOf(n.State))
+	}
+	put(KeyTags, tags)
+	byType := map[string][]string{}
+	var types []string
+	var props []LinkProperties
+	for _, l := range n.Links {
+		t := typeName(l.Type)
+		if _, ok := byType[t]; !ok {
+			types = append(types, t)
+		}
+		byType[t] = append(byType[t], wikilink(byKey[l.To]))
+		if len(l.Properties) > 0 {
+			props = append(props, LinkProperties{Type: l.Type, To: l.To, Properties: l.Properties})
+		}
+	}
+	for _, t := range types {
+		if !m.has(t) {
+			put(t, byType[t])
+		}
+	}
+	for _, k := range slices.Sorted(maps.Keys(n.Properties)) {
+		if inBody[k] {
+			continue
+		}
+		name := k
+		if v, ok := m.scalar(name); ok && v == n.Properties[k] {
+			continue // the same value is already there (the title)
+		}
+		if m.has(name) || name == KeyLinkProperties || strings.HasPrefix(name, PropertyPrefix) {
+			name = PropertyPrefix + k
+		}
+		put(name, n.Properties[k])
+	}
+	if len(props) > 0 {
+		put(KeyLinkProperties, props)
+	}
+	return m, err
+}
+
+// wikilink is an Obsidian link to the file of a node: its path without extension (resolved from the vault root or as
+// a path suffix, so the vault may be the namespace folder or the folder above), its title as label.
+func wikilink(t *entry) string {
+	return "[[" + strings.TrimSuffix(t.path, ".md") + "|" + strings.NewReplacer("|", "-", "]", ")", "[", "(").Replace(oneLine(t.title)) + "]]"
+}
+
+// tagOf makes a value a valid tag: letters, digits, '_', '-' and '/' kept, anything else '-'.
+func tagOf(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '_', r == '-', r == '/':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('-')
+		}
+	}
+	return b.String()
 }
 
 func renderIndex(s graph.Snapshot, entries []*entry) ([]byte, error) {
@@ -246,6 +361,9 @@ func writeFrontMatter(b *bytes.Buffer, v any) error {
 	b.WriteString("---\n")
 	enc := yaml.NewEncoder(b)
 	enc.SetIndent(2)
+	if m, ok := v.(*mapping); ok {
+		v = &m.node
+	}
 	if err := enc.Encode(v); err != nil {
 		return err
 	}

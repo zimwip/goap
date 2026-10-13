@@ -21,15 +21,23 @@ matter (format `goap.okf/v1`):
   then the nodes listed by type as links to their files.
 - `<namespace>/<Type>/<key>.md`, one per node (`<Type>` the local name of its type, the key made a portable file name:
   any character but letters, digits, `.`, `_`, `-` becomes `-`, a collision in a folder takes a `-2` suffix):
-  - front matter `{key, type, title, state, owner, namespace, baseline, properties, links: [{type, to, path,
-    properties}]}`: `to` the key of the target, `path` its file relative to this one; `owner` the key of the owning unit;
+  - a flat front matter, so that Obsidian shows it as properties and draws the links in its graph: `key`, `type`,
+    `title`, `state`, `owner` (the key of the owning unit), `namespace`, `baseline`, `aliases` (the key), `tags`
+    (`<namespace>/<Type>`, `state/<state>`); then one key per outgoing link type (its local name, `refines`) listing
+    wikilinks to the targets' files (`[[Requirement/REQ-1|Card payment]]`: the path without extension, which Obsidian
+    resolves from the vault root or as a path suffix, so the vault may be the unzipped folder or the namespace
+    folder); then the properties of the node by name (one named like a key already written takes the prefix
+    `prop_`, unless it holds the same value, the title); then `linkProperties` `[{type, to, properties}]` for the
+    links that carry properties;
   - body: `# <title>` (the `asName` attribute of the type, else `title` or `name`, else the key), one `## <label>`
     section per string attribute edited as a text area (`widget: textarea`; a type the catalogue does not know:
     `description`), these properties left out of the front matter; `## Links` (outgoing, as relative Markdown links)
     and `## Referenced by` (incoming, from the other nodes of the snapshot).
 
 The front matter carries everything the JSON snapshot does for a node but the body attributes, which the body holds, so
-the tree is a faithful image of the baseline. Links to another namespace are left out, as in the snapshot.
+the tree is a faithful image of the baseline. The unzipped tree opens as an Obsidian vault: the properties show in the
+properties panel (only a property whose value is itself an object, a `json` attribute, shows as raw text), the
+wikilinks of the front matter and the relative Markdown links of the body feed the graph view and the backlinks. Links to another namespace are left out, as in the snapshot.
 
 ### 2. Choosing the state: a baseline; a streamed zip
 
