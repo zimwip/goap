@@ -2,6 +2,8 @@ import { rpc } from './transport';
 import type {
   AssistantContext,
   AssistantSendResponse,
+  CancelRequest,
+  CancelResponse,
   ConfirmActionRequest,
   ConfirmActionResponse,
   ReportActionRequest,
@@ -37,4 +39,9 @@ export const assistantApi = {
    * or `failed`. FAILED_PRECONDITION: the action is in another state; ABORTED: an outcome was already reported.
    */
   reportAction: (req: ReportActionRequest) => rpc<ReportActionRequest, ReportActionResponse>(ASSISTANT, 'ReportAction', req),
+  /**
+   * Stops the answer being written: the pending message becomes `cancelled` at once (keeping the actions it recorded) and
+   * the turn stops before its next model call. With nothing pending, returns the last message as it is.
+   */
+  cancel: (conversationId: string) => rpc<CancelRequest, CancelResponse>(ASSISTANT, 'Cancel', { conversationId }),
 };

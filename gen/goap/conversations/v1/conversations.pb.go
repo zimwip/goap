@@ -112,7 +112,7 @@ type Message struct {
 	Actions []*structpb.Struct `protobuf:"bytes,6,rep,name=actions,proto3" json:"actions,omitempty"`
 	// the engine run that produced an assistant message (optional)
 	ProcessId string `protobuf:"bytes,7,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
-	// pending | done | error
+	// pending | done | error | cancelled (the person stopped the answer)
 	Status    string                 `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
 	Error     string                 `protobuf:"bytes,9,opt,name=error,proto3" json:"error,omitempty"`
 	CreatedAt *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`

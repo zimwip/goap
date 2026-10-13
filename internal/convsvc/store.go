@@ -32,6 +32,8 @@ const (
 	StatusPending = "pending"
 	StatusDone    = "done"
 	StatusError   = "error"
+	// StatusCancelled is an answer the person stopped: final, it keeps what the turn recorded before it stopped.
+	StatusCancelled = "cancelled"
 )
 
 // Conversation is a thread of messages owned by one subject.

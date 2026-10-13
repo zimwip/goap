@@ -22,6 +22,8 @@ var (
 	ErrAnonymous = errors.New("conversations need an identified caller")
 	// ErrForbidden is returned when the caller may not do that on a conversation they can see.
 	ErrForbidden = errors.New("forbidden")
+	// ErrCancelled is returned when an assistant message the person stopped would be given another status.
+	ErrCancelled = fmt.Errorf("%w: the answer was stopped", ErrInvalid)
 )
 
 // Limits: they protect the storage of the service, not the use of the assistant.
@@ -227,9 +229,9 @@ func (c Content) check() error {
 		return fmt.Errorf("%w: the error is %d bytes, at most %d", ErrInvalid, len(c.Error), MaxErrorBytes)
 	}
 	switch c.Status {
-	case StatusPending, StatusDone, StatusError:
+	case StatusPending, StatusDone, StatusError, StatusCancelled:
 	default:
-		return fmt.Errorf("%w: status %q is not pending, done or error", ErrInvalid, c.Status)
+		return fmt.Errorf("%w: status %q is not pending, done, error or cancelled", ErrInvalid, c.Status)
 	}
 	for i, a := range c.Actions {
 		if t, _ := a["type"].(string); t == "" {
@@ -291,7 +293,8 @@ func (s *Service) Append(ctx context.Context, p authz.Principal, conversationID,
 }
 
 // UpdateMessage replaces the content of an assistant message (a platform service only): its text, actions, status
-// and error; the process is set when given.
+// and error; the process is set when given. A cancelled message stays cancelled (ErrCancelled otherwise): the turn
+// that was stopped may still record what it did, never an answer.
 func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id string, c Content) (Message, error) {
 	if p.Anonymous() {
 		return Message{}, ErrAnonymous
@@ -308,6 +311,9 @@ func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id strin
 	out, err := s.Store.UpdateMessage(ctx, id, s.now(), func(m Message) (Message, error) {
 		if m.Role != RoleAssistant {
 			return Message{}, fmt.Errorf("%w: only an assistant message is updated", ErrInvalid)
+		}
+		if m.Status == StatusCancelled && c.Status != StatusCancelled {
+			return Message{}, ErrCancelled
 		}
 		m.Text, m.Actions, m.Status, m.Error = c.Text, c.Actions, c.Status, c.Error
 		if c.ProcessID != "" {

@@ -38,6 +38,8 @@ export const assistant = $state({
   loaded: false,
   loading: false,
   sending: false,
+  /** a Stop asked for the answer being written */
+  stopping: false,
   error: '',
   /** the floating panel */
   panelOpen: false,
@@ -271,6 +273,26 @@ export async function send(text: string): Promise<boolean> {
 }
 
 /** Sends again the text of the user message before an assistant message that failed. */
+/**
+ * Stops the answer being written (assistant `Cancel`): the message turns `cancelled` at once, keeping the proposals it
+ * made; its screen actions are not run. The model may finish its current call, but no further step is taken.
+ */
+export async function stop(): Promise<void> {
+  const id = assistant.currentId;
+  if (!id || !isPending() || assistant.stopping) return;
+  assistant.stopping = true;
+  try {
+    const r = await assistantApi.cancel(id);
+    if (r.message?.status !== 'pending') watching.delete(r.message.id);
+    if (r.message) applyMessage(r.message);
+    assistant.error = '';
+  } catch (e) {
+    assistant.error = `Could not stop the answer: ${errorMessage(e)}`;
+  } finally {
+    assistant.stopping = false;
+  }
+}
+
 export async function retry(messageId: string): Promise<boolean> {
   const i = assistant.messages.findIndex((m) => m.id === messageId);
   const prev = i > 0 ? assistant.messages[i - 1] : undefined;

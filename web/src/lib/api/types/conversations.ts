@@ -3,7 +3,8 @@
 import type { Struct } from './common';
 
 export type MessageRole = 'user' | 'assistant';
-export type MessageStatus = 'pending' | 'done' | 'error';
+/** `cancelled`: the person stopped the answer (it keeps the actions recorded before). */
+export type MessageStatus = 'pending' | 'done' | 'error' | 'cancelled';
 
 /** A UI action the assistant asked the web to run; `type` and `args` are the web's own vocabulary. */
 export interface ConversationAction {

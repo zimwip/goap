@@ -46,7 +46,14 @@ and ask it to start a change or to take them to one. The conversation is stored 
   turn in the background and returns. The turn runs **as the calling principal** (the model call through the gateway,
   so role allow-lists, quotas and token counters apply; the tools) and writes the answer into the pending message **as `authz.System("assistant")`** (ADR 0085: only a
   platform service writes the assistant's words): text, actions, `status` `done`, or `error` with a short error. The web
-  polls `GetConversation`. A turn has a 90-second budget.
+  polls `GetConversation`. A turn has a 5-minute budget (`TurnTimeout`; a pending message older than `StaleAfter`, 7
+  minutes, no longer blocks the conversation). **The person can stop a turn** (`assistant.v1.Cancel {conversationId}`,
+  owner only, `Service.Cancel`): the pending message becomes `cancelled` at once (a final status of `convsvc`, kept with
+  the actions recorded so far: proposals stay to decide, `UpdateMessage` refuses any other status afterwards,
+  `convsvc.ErrCancelled`), the turn of this process has its context cancelled (cause `errStopped`), and a turn served
+  by another process reads its message between its rounds and stops before the next model call; tools already run stay
+  done. With nothing pending, `Cancel` returns the last message. The history tells the model an answer was stopped.
+  Web: the Send button becomes Stop (and Esc in the input) while an answer is pending.
 - **The run is the pending message.** No engine `Process` is attached: there is no process to step, pause or resume, the
   turn is one bounded loop, and an engine record would be a second source of truth for what the message already says
   (`conversationId`, `status`, `error`, `createdAt`). `Message.processId` stays empty for the assistant.
@@ -56,8 +63,9 @@ and ask it to start a change or to take them to one. The conversation is stored 
   the JSON form still read (`readAnswer`). With tool calls, each is run and all the results go back to the model (tool
   results, or one user turn marked as data for a JSON answer), except when every call only hands something to the
   person (`start_agent`, `open_change`, a `ui.*` tool), all succeeded and the answer has a message: that message is final
-  (`settling`, a model call saved, the latency of a turn being its model calls); at most **4 model calls** per turn
-  (`MaxRounds`): the tools asked for in the last one are not run, its message is the answer, or the turn fails with
+  (`settling`, a model call saved, the latency of a turn being its model calls); at most **16 model calls** per turn
+  (`MaxRounds`, 4 at first, raised so that agents can chain tool calls; the person can stop a turn instead): the last
+  one is offered no tool and told to answer with what it found, its message is the answer, or the turn fails with
   `error` when it has none. At most 4 tool calls per round (the others get an error result). An unknown tool name, or one not of the turn's frame, is an error
   fed back, **never run**. The prompt (`prompt.go`, the Go constant `systemRules`) says what the assistant is for, gives
   the frame of the turn with its server tools, asks it to take keys and ids from the person or from tool results only,

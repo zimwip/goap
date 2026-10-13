@@ -36,12 +36,17 @@ type fakeModel struct {
 	got       []llm.Request
 	who       []authz.Principal
 	metas     []llm.CallMeta
+	// onCall, when set, runs before the n-th call (1-based) is answered
+	onCall func(n int)
 }
 
 func (m *fakeModel) Complete(ctx context.Context, req llm.Request) (llm.Response, error) {
 	m.got = append(m.got, req)
 	m.metas = append(m.metas, llm.MetaFrom(ctx))
 	m.who = append(m.who, authz.From(ctx))
+	if m.onCall != nil {
+		m.onCall(len(m.got))
+	}
 	if m.err != nil {
 		return llm.Response{}, m.err
 	}
@@ -565,9 +570,105 @@ func TestRoundsAreCapped(t *testing.T) {
 	if len(e.model.got) != MaxRounds {
 		t.Fatalf("%d model calls", len(e.model.got))
 	}
+	// the last round is offered no tool and told to answer
+	last := e.model.got[MaxRounds-1]
+	if last.Tools != nil || !strings.Contains(last.System, "last step") || e.model.got[0].Tools == nil {
+		t.Fatalf("last round: %d tools, system %q", len(last.Tools), last.System[len(last.System)-200:])
+	}
 	a := e.answer(t)
 	if a.Status != convsvc.StatusError || !strings.Contains(a.Error, "did not finish") {
 		t.Fatalf("%+v", a)
+	}
+}
+
+func TestLastRoundAnswersWithWhatItHas(t *testing.T) {
+	answers := make([]string, MaxRounds)
+	for i := range answers[:MaxRounds-1] {
+		answers[i] = call(ToolListMethodologies, `{}`)
+	}
+	answers[MaxRounds-1] = `{"message":"Here is what I found so far."}`
+	e := newEnv(t, answers...)
+	if _, _, err := e.send("dig", Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if a := e.answer(t); a.Status != convsvc.StatusDone || a.Text != "Here is what I found so far." || len(e.model.got) != MaxRounds {
+		t.Fatalf("%d calls, %+v", len(e.model.got), a)
+	}
+}
+
+func TestCancelStopsTheTurnInThisProcess(t *testing.T) {
+	e := newEnv(t, call(ToolOpenChange, `{"changeId":"CHG-1"}`))
+	e.model.onCall = func(n int) {
+		if n == 2 {
+			m, err := e.svc.Cancel(e.ctx, e.conv.ID)
+			if err != nil || m.Status != convsvc.StatusCancelled {
+				t.Errorf("cancel: %+v %v", m, err)
+			}
+		}
+	}
+	if _, _, err := e.send("loop", Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(e.model.got) != 2 {
+		t.Fatalf("%d model calls after the stop", len(e.model.got))
+	}
+	// what the turn recorded stays, never an answer
+	a := e.answer(t)
+	if a.Status != convsvc.StatusCancelled || a.Text != "" || len(a.Actions) == 0 {
+		t.Fatalf("%+v", a)
+	}
+	// the conversation is free again, and the model is told the answer was stopped
+	e.model.onCall, e.model.answers, e.model.got = nil, []string{`{"message":"ok"}`}, nil
+	if _, _, err := e.send("again", Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if a := e.answer(t); a.Status != convsvc.StatusDone || a.Text != "ok" {
+		t.Fatalf("%+v", a)
+	}
+	var sent strings.Builder
+	for _, m := range e.model.got[0].Messages {
+		sent.WriteString(m.Content)
+	}
+	if !strings.Contains(sent.String(), "stopped this answer") {
+		t.Fatalf("history: %q", sent.String())
+	}
+}
+
+func TestCancelFromAnotherProcess(t *testing.T) {
+	e := newEnv(t, call(ToolOpenChange, `{"changeId":"CHG-1"}`))
+	other := &Service{Convs: e.convs} // a replica serving the Cancel: the turn is not its own
+	e.model.onCall = func(n int) {
+		if n == 3 {
+			if _, err := other.Cancel(e.ctx, e.conv.ID); err != nil {
+				t.Error(err)
+			}
+		}
+	}
+	if _, _, err := e.send("loop", Context{}); err != nil {
+		t.Fatal(err)
+	}
+	// the turn sees its message cancelled before its next round
+	if len(e.model.got) != 3 {
+		t.Fatalf("%d model calls", len(e.model.got))
+	}
+	if a := e.answer(t); a.Status != convsvc.StatusCancelled || len(a.Actions) == 0 {
+		t.Fatalf("%+v", a)
+	}
+}
+
+func TestCancelWithNothingPending(t *testing.T) {
+	e := newEnv(t, `{"message":"done"}`)
+	if _, _, err := e.send("hi", Context{}); err != nil {
+		t.Fatal(err)
+	}
+	m, err := e.svc.Cancel(e.ctx, e.conv.ID)
+	if err != nil || m.Status != convsvc.StatusDone || m.Text != "done" {
+		t.Fatalf("%+v %v", m, err)
+	}
+	// someone else's conversation
+	other := authz.Principal{Subject: "u2"}
+	if _, err := e.svc.Cancel(authz.With(context.Background(), other), e.conv.ID); err == nil {
+		t.Fatal("cancelled the conversation of another")
 	}
 }
 

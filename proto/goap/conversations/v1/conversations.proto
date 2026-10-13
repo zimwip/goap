@@ -45,7 +45,7 @@ message Message {
   repeated google.protobuf.Struct actions = 6;
   // the engine run that produced an assistant message (optional)
   string process_id = 7;
-  // pending | done | error
+  // pending | done | error | cancelled (the person stopped the answer)
   string status = 8;
   string error = 9;
   google.protobuf.Timestamp created_at = 10;

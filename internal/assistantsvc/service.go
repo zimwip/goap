@@ -39,6 +39,8 @@ var (
 	ErrUnavailable = errors.New("the assistant is not available")
 	// ErrBusy is returned when the assistant is still answering the previous message of the conversation.
 	ErrBusy = errors.New("the assistant is still answering the previous message")
+	// errStopped is the cause of the context of a turn the person stopped (Cancel).
+	errStopped = errors.New("the person stopped the answer")
 )
 
 // Alias is the model alias that serves the assistant (a protected alias, ADR 0084).
@@ -47,8 +49,9 @@ const Alias = llmcfg.AssistantAlias
 // Limits.
 const (
 	// MaxRounds is the number of model calls of a turn: each may ask for tools, whose results go back to the model
-	// in the next call; tools asked for in the last one are not run.
-	MaxRounds = 4
+	// in the next call; the last one is offered no tool and must answer with what it has. The person can stop a turn
+	// at any time (Cancel).
+	MaxRounds = 16
 	// MaxToolCalls caps the tools run in one round; the others get an error as their result.
 	MaxToolCalls = 4
 	// MaxTextBytes caps a user message.
@@ -63,8 +66,8 @@ const (
 	MaxHistoryBytes    = 16 << 10
 	// TurnTimeout bounds one turn; a pending message older than StaleAfter belongs to a turn that died with its
 	// process and no longer blocks the conversation.
-	TurnTimeout = 90 * time.Second
-	StaleAfter  = 3 * time.Minute
+	TurnTimeout = 5 * time.Minute
+	StaleAfter  = 7 * time.Minute
 
 	maxAnswerBytes  = 8 << 10
 	maxToolResult   = 8 << 10
@@ -151,7 +154,13 @@ type Service struct {
 	Go  func(func())
 
 	mu      sync.Mutex
-	running map[string]bool // conversation ids with a turn in this process
+	running map[string]*liveTurn // conversation ids with a turn in this process
+}
+
+// liveTurn is a turn of this process: its context is cancelled when the person stops it.
+type liveTurn struct {
+	cancel  context.CancelCauseFunc // nil until the turn has started
+	stopped bool                    // stopped before it started
 }
 
 // Principal is the identity under which the answers are written (ADR 0085: only a platform service writes the words
@@ -192,13 +201,41 @@ type SendInput struct {
 func (s *Service) acquire(id string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.running[id] {
+	if s.running[id] != nil {
 		return false
 	}
 	if s.running == nil {
-		s.running = map[string]bool{}
+		s.running = map[string]*liveTurn{}
 	}
-	s.running[id] = true
+	s.running[id] = &liveTurn{}
+	return true
+}
+
+// started records the cancel function of the turn of a conversation; a turn stopped before it started is cancelled
+// at once.
+func (s *Service) started(id string, cancel context.CancelCauseFunc) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if r := s.running[id]; r != nil {
+		r.cancel = cancel
+		if r.stopped {
+			cancel(errStopped)
+		}
+	}
+}
+
+// stop cancels the turn of a conversation running in this process; it reports whether there was one.
+func (s *Service) stop(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	r := s.running[id]
+	if r == nil {
+		return false
+	}
+	r.stopped = true
+	if r.cancel != nil {
+		r.cancel(errStopped)
+	}
 	return true
 }
 
@@ -286,7 +323,10 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 		uiTools: toolIndex(in.UITools), summary: summary, older: compactable(msgs[:from], summary.UpTo), searched: searchedIn(msgs)}
 	run := func() {
 		tctx := authz.With(context.WithoutCancel(ctx), p)
-		t.run(tctx)
+		rctx, cancel := context.WithCancelCause(tctx)
+		s.started(in.ConversationID, cancel)
+		t.run(rctx)
+		cancel(nil)
 		s.release(in.ConversationID) // the next message need not wait for the summary
 		t.compact(tctx)
 	}
@@ -299,6 +339,38 @@ func (s *Service) Send(ctx context.Context, in SendInput) (user, pending convsvc
 	return user, pending, nil
 }
 
+// Cancel stops the answer being written in a conversation of the caller: the pending assistant message becomes
+// cancelled at once (with what it holds) and the turn, in this process or in another one (it reads the message between
+// its rounds), stops before its next model call; tools already run stay done, proposals already made stay to decide.
+// With no answer pending it returns the last message as it is.
+func (s *Service) Cancel(ctx context.Context, conversationID string) (convsvc.Message, error) {
+	p := authz.From(ctx)
+	if p.Anonymous() {
+		return convsvc.Message{}, convsvc.ErrAnonymous
+	}
+	if p.System() {
+		return convsvc.Message{}, convsvc.ErrForbidden
+	}
+	_, msgs, err := s.Convs.Get(ctx, p, conversationID) // the owner only
+	if err != nil {
+		return convsvc.Message{}, err
+	}
+	if len(msgs) == 0 {
+		return convsvc.Message{}, fmt.Errorf("%w: the conversation has no message", ErrInvalid)
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != convsvc.RoleAssistant || last.Status != convsvc.StatusPending {
+		return last, nil
+	}
+	wctx := authz.With(context.WithoutCancel(ctx), Principal)
+	m, err := s.Convs.UpdateMessage(wctx, Principal, last.ID, convsvc.Content{Text: last.Text, Actions: last.Actions, Status: convsvc.StatusCancelled})
+	if err != nil && !errors.Is(err, convsvc.ErrCancelled) {
+		return convsvc.Message{}, err
+	}
+	s.stop(conversationID)
+	return m, nil
+}
+
 // historyOf is what is sent of the conversation before the new message: its last messages that fit the caps, oldest
 // first, the pending and the empty ones left out. from is the index in msgs of the oldest message the window holds
 // (len(msgs) when none): the ones before are the summary's (compact.go).
@@ -308,6 +380,9 @@ func historyOf(msgs []convsvc.Message) (out []llm.Message, from int) {
 	for i := len(msgs) - 1; i >= 0 && len(out) < MaxHistoryMessages-1; i-- {
 		m := msgs[i]
 		text := strings.TrimSpace(m.Text)
+		if m.Status == convsvc.StatusCancelled && text == "" {
+			text = "[the person stopped this answer]"
+		}
 		if m.Status == convsvc.StatusPending || text == "" {
 			continue
 		}

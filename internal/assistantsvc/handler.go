@@ -97,6 +97,19 @@ func (h *Handler) ReportAction(ctx context.Context, r *connect.Request[assistant
 	return connect.NewResponse(&assistantv1.ReportActionResponse{Message: pb}), nil
 }
 
+func (h *Handler) Cancel(ctx context.Context, r *connect.Request[assistantv1.CancelRequest]) (*connect.Response[assistantv1.CancelResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	m, err := h.Service.Cancel(ctx, r.Msg.GetConversationId())
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	pb, err := convsvc.MessageToPB(m)
+	if err != nil {
+		return nil, rpcErr(err)
+	}
+	return connect.NewResponse(&assistantv1.CancelResponse{Message: pb}), nil
+}
+
 func contextFromPB(c *assistantv1.PageContext) Context {
 	var o Context
 	if a := c.GetApp(); a != nil {

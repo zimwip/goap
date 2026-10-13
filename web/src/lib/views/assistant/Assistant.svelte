@@ -24,6 +24,7 @@
     renameConversation,
     retry,
     send,
+    stop,
   } from '../../stores/assistant.svelte';
   import { project, loadApplicable } from '../../stores/project.svelte';
 
@@ -73,6 +74,12 @@
   }
 
   function keydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && pending) {
+      e.preventDefault();
+      e.stopPropagation();
+      void stop();
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
       void submit();
@@ -193,6 +200,7 @@
             {:else}
               <div class="bubble bot">
                 {#if m.text}<div class="text">{m.text}</div>{/if}
+                {#if m.status === 'cancelled'}<div class="muted stopped">Stopped.</div>{/if}
                 {#if m.actions?.length}
                   <div class="chips">
                     {#each m.actions as a, i (i)}
@@ -236,10 +244,17 @@
         data-no-pin
       ></textarea>
       <VoiceButton ontranscript={appendTranscript} />
-      <button type="submit" class="primary" disabled={assistant.sending || pending || !assistant.draft.trim()}>
-        <Icon name="send" size={14} />
-        {assistant.sending ? 'Sending…' : 'Send'}
-      </button>
+      {#if pending}
+        <button type="button" onclick={() => void stop()} disabled={assistant.stopping} title="Stop the answer (Esc)">
+          <Icon name="x" size={14} />
+          {assistant.stopping ? 'Stopping…' : 'Stop'}
+        </button>
+      {:else}
+        <button type="submit" class="primary" disabled={assistant.sending || !assistant.draft.trim()}>
+          <Icon name="send" size={14} />
+          {assistant.sending ? 'Sending…' : 'Send'}
+        </button>
+      {/if}
     </form>
   {/if}
 </div>
@@ -324,6 +339,10 @@
   }
   .muted {
     color: var(--muted);
+  }
+  .stopped {
+    font-size: 0.85em;
+    font-style: italic;
   }
   .sugg {
     display: grid;

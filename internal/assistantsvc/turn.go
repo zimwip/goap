@@ -83,16 +83,44 @@ func (t *turn) run(ctx context.Context) {
 	ctx, end := t.startTurn(ctx)
 	text, err := t.loop(ctx)
 	end(err)
+	// a stopped turn keeps what it recorded (proposals to decide, screen actions), never an answer
+	stopped := convsvc.Content{Actions: t.actions, Status: convsvc.StatusCancelled}
 	c := convsvc.Content{Text: text, Actions: t.actions, Status: convsvc.StatusDone}
-	if err != nil {
+	switch {
+	case errors.Is(err, errStopped) || errors.Is(context.Cause(ctx), errStopped):
+		c = stopped
+	case err != nil:
 		t.s.log().Warn("assistant turn failed", "conversation", t.conversation, "subject", t.p.Subject, "err", err)
 		c = convsvc.Content{Status: convsvc.StatusError, Error: clip(err.Error(), maxErrorText)}
 	}
 	// the answer is written by the platform, not by the caller; the caller's context may have ended
 	wctx := authz.With(context.WithoutCancel(ctx), Principal)
-	if _, err := t.s.Convs.UpdateMessage(wctx, Principal, t.message, c); err != nil {
+	_, err = t.s.Convs.UpdateMessage(wctx, Principal, t.message, c)
+	if errors.Is(err, convsvc.ErrCancelled) {
+		// stopped from another process while this one finished
+		_, err = t.s.Convs.UpdateMessage(wctx, Principal, t.message, stopped)
+	}
+	if err != nil {
 		t.s.log().Error("assistant answer not stored", "conversation", t.conversation, "err", err)
 	}
+}
+
+// stoppedByPerson reports whether the person stopped the turn: its context says so (Cancel in this process), or its
+// message was cancelled (Cancel served by another process).
+func (t *turn) stoppedByPerson(ctx context.Context) bool {
+	if errors.Is(context.Cause(ctx), errStopped) {
+		return true
+	}
+	_, msgs, err := t.s.Convs.Get(ctx, t.p, t.conversation)
+	if err != nil {
+		return false
+	}
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ID == t.message {
+			return msgs[i].Status == convsvc.StatusCancelled
+		}
+	}
+	return false
 }
 
 // messages is the discussion sent to the model: the history, the new message, then the rounds of the turn; turns of
@@ -120,7 +148,7 @@ func (d *discussion) add(role, text string) {
 
 // loop is the tool loop: the model gets the tools of the turn (toolSpecs, ADR 0098) and answers with text and tool
 // calls; the tools it calls are run and their results go back to it, until it calls none or MaxRounds model calls were
-// made. It returns the final text. An answer written as the JSON {"message", "tool_calls"} is still read so.
+// made (the last one is offered no tool), or the person stops it (errStopped). It returns the final text. An answer written as the JSON {"message", "tool_calls"} is still read so.
 func (t *turn) loop(ctx context.Context) (string, error) {
 	ctx = llm.WithMeta(ctx, llm.CallMeta{Source: llm.SourceAssistant, ConversationID: t.conversation}) // the ledger of the gateway (ADR 0089)
 	var d discussion
@@ -129,11 +157,19 @@ func (t *turn) loop(ctx context.Context) (string, error) {
 	}
 	d.add("user", t.in.Text)
 	for round := 1; ; round++ {
+		if round > 1 && t.stoppedByPerson(ctx) {
+			return "", errStopped
+		}
 		t0 := time.Now()
 		// the frame of each round: select_project and search_changes change what the next round offers
 		f := t.frame(ctx)
 		specs := t.toolSpecs(f)
 		sys := systemPrompt(t.in.Context, t.project, t.in.UITools, t.summary.Text, f, f.tools(t.searched), t.searched)
+		if round == MaxRounds {
+			// the results of more tools could not be given back: the last round answers with what it has
+			specs = nil
+			sys += "\n\nThis is your last step: no tool can be called any more. Answer the person now with what you found, and say what is left to do."
+		}
 		// the rounds of a turn send the same system text, tools and history again: cache them
 		t.rounds = round
 		resp, err := t.s.Model.Complete(ctx, llm.Request{Model: Alias, System: sys, Messages: slices.Clone(d), Tools: specs, MaxTokens: 2048, Cache: true})

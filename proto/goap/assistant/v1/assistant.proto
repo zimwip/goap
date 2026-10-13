@@ -28,6 +28,10 @@ service AssistantService {
   // conversation; any other state of the action is FAILED_PRECONDITION, an outcome already reported ABORTED. The next
   // turn's history tells the assistant what happened.
   rpc ReportAction(ReportActionRequest) returns (ReportActionResponse);
+  // Stops the answer being written in a conversation of the caller (the owner only): the pending assistant message
+  // becomes "cancelled" at once, keeping the actions it recorded, and the turn stops before its next model call; tools
+  // already run stay done. With no answer pending, the last message is returned as it is.
+  rpc Cancel(CancelRequest) returns (CancelResponse);
 }
 
 // What the person was looking at when they wrote the message, in three layers, the most specific first (ADR 0092):
@@ -164,5 +168,14 @@ message ReportActionResponse {
 
 message ConfirmActionResponse {
   // the assistant message with the action updated
+  goap.conversations.v1.Message message = 1;
+}
+
+message CancelRequest {
+  string conversation_id = 1;
+}
+
+message CancelResponse {
+  // the last message of the conversation: the assistant message stopped, or the one already answered
   goap.conversations.v1.Message message = 1;
 }

@@ -1079,6 +1079,95 @@ func (x *ConfirmActionResponse) GetMessage() *v1.Message {
 	return nil
 }
 
+type CancelRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	ConversationId string                 `protobuf:"bytes,1,opt,name=conversation_id,json=conversationId,proto3" json:"conversation_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *CancelRequest) Reset() {
+	*x = CancelRequest{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelRequest) ProtoMessage() {}
+
+func (x *CancelRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelRequest.ProtoReflect.Descriptor instead.
+func (*CancelRequest) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *CancelRequest) GetConversationId() string {
+	if x != nil {
+		return x.ConversationId
+	}
+	return ""
+}
+
+type CancelResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the last message of the conversation: the assistant message stopped, or the one already answered
+	Message       *v1.Message `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelResponse) Reset() {
+	*x = CancelResponse{}
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelResponse) ProtoMessage() {}
+
+func (x *CancelResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_assistant_v1_assistant_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelResponse.ProtoReflect.Descriptor instead.
+func (*CancelResponse) Descriptor() ([]byte, []int) {
+	return file_goap_assistant_v1_assistant_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *CancelResponse) GetMessage() *v1.Message {
+	if x != nil {
+		return x.Message
+	}
+	return nil
+}
+
 var File_goap_assistant_v1_assistant_proto protoreflect.FileDescriptor
 
 const file_goap_assistant_v1_assistant_proto_rawDesc = "" +
@@ -1172,11 +1261,16 @@ const file_goap_assistant_v1_assistant_proto_rawDesc = "" +
 	"\x14ReportActionResponse\x128\n" +
 	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage\"Q\n" +
 	"\x15ConfirmActionResponse\x128\n" +
-	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage2\xa0\x02\n" +
+	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage\"8\n" +
+	"\rCancelRequest\x12'\n" +
+	"\x0fconversation_id\x18\x01 \x01(\tR\x0econversationId\"J\n" +
+	"\x0eCancelResponse\x128\n" +
+	"\amessage\x18\x01 \x01(\v2\x1e.goap.conversations.v1.MessageR\amessage2\xef\x02\n" +
 	"\x10AssistantService\x12G\n" +
 	"\x04Send\x12\x1e.goap.assistant.v1.SendRequest\x1a\x1f.goap.assistant.v1.SendResponse\x12b\n" +
 	"\rConfirmAction\x12'.goap.assistant.v1.ConfirmActionRequest\x1a(.goap.assistant.v1.ConfirmActionResponse\x12_\n" +
-	"\fReportAction\x12&.goap.assistant.v1.ReportActionRequest\x1a'.goap.assistant.v1.ReportActionResponseB\xc7\x01\n" +
+	"\fReportAction\x12&.goap.assistant.v1.ReportActionRequest\x1a'.goap.assistant.v1.ReportActionResponse\x12M\n" +
+	"\x06Cancel\x12 .goap.assistant.v1.CancelRequest\x1a!.goap.assistant.v1.CancelResponseB\xc7\x01\n" +
 	"\x15com.goap.assistant.v1B\x0eAssistantProtoP\x01Z8github.com/zimwip/goap/gen/goap/assistant/v1;assistantv1\xa2\x02\x03GAX\xaa\x02\x11Goap.Assistant.V1\xca\x02\x11Goap\\Assistant\\V1\xe2\x02\x1dGoap\\Assistant\\V1\\GPBMetadata\xea\x02\x13Goap::Assistant::V1b\x06proto3"
 
 var (
@@ -1191,7 +1285,7 @@ func file_goap_assistant_v1_assistant_proto_rawDescGZIP() []byte {
 	return file_goap_assistant_v1_assistant_proto_rawDescData
 }
 
-var file_goap_assistant_v1_assistant_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_goap_assistant_v1_assistant_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_goap_assistant_v1_assistant_proto_goTypes = []any{
 	(*PageContext)(nil),           // 0: goap.assistant.v1.PageContext
 	(*AppContext)(nil),            // 1: goap.assistant.v1.AppContext
@@ -1209,41 +1303,46 @@ var file_goap_assistant_v1_assistant_proto_goTypes = []any{
 	(*ReportActionRequest)(nil),   // 13: goap.assistant.v1.ReportActionRequest
 	(*ReportActionResponse)(nil),  // 14: goap.assistant.v1.ReportActionResponse
 	(*ConfirmActionResponse)(nil), // 15: goap.assistant.v1.ConfirmActionResponse
-	nil,                           // 16: goap.assistant.v1.PageTab.ParamsEntry
-	nil,                           // 17: goap.assistant.v1.Entity.PropsEntry
-	nil,                           // 18: goap.assistant.v1.UiArgs.PropertiesEntry
-	(*v1.Message)(nil),            // 19: goap.conversations.v1.Message
+	(*CancelRequest)(nil),         // 16: goap.assistant.v1.CancelRequest
+	(*CancelResponse)(nil),        // 17: goap.assistant.v1.CancelResponse
+	nil,                           // 18: goap.assistant.v1.PageTab.ParamsEntry
+	nil,                           // 19: goap.assistant.v1.Entity.PropsEntry
+	nil,                           // 20: goap.assistant.v1.UiArgs.PropertiesEntry
+	(*v1.Message)(nil),            // 21: goap.conversations.v1.Message
 }
 var file_goap_assistant_v1_assistant_proto_depIdxs = []int32{
 	1,  // 0: goap.assistant.v1.PageContext.app:type_name -> goap.assistant.v1.AppContext
 	3,  // 1: goap.assistant.v1.PageContext.screen:type_name -> goap.assistant.v1.ScreenContext
 	6,  // 2: goap.assistant.v1.PageContext.focus:type_name -> goap.assistant.v1.FocusContext
 	2,  // 3: goap.assistant.v1.AppContext.tab:type_name -> goap.assistant.v1.PageTab
-	16, // 4: goap.assistant.v1.PageTab.params:type_name -> goap.assistant.v1.PageTab.ParamsEntry
+	18, // 4: goap.assistant.v1.PageTab.params:type_name -> goap.assistant.v1.PageTab.ParamsEntry
 	4,  // 5: goap.assistant.v1.ScreenContext.entities:type_name -> goap.assistant.v1.Entity
-	17, // 6: goap.assistant.v1.Entity.props:type_name -> goap.assistant.v1.Entity.PropsEntry
+	19, // 6: goap.assistant.v1.Entity.props:type_name -> goap.assistant.v1.Entity.PropsEntry
 	5,  // 7: goap.assistant.v1.FocusContext.element:type_name -> goap.assistant.v1.Element
 	8,  // 8: goap.assistant.v1.UiTool.args:type_name -> goap.assistant.v1.UiArgs
-	18, // 9: goap.assistant.v1.UiArgs.properties:type_name -> goap.assistant.v1.UiArgs.PropertiesEntry
+	20, // 9: goap.assistant.v1.UiArgs.properties:type_name -> goap.assistant.v1.UiArgs.PropertiesEntry
 	9,  // 10: goap.assistant.v1.UiParam.items:type_name -> goap.assistant.v1.UiParam
 	0,  // 11: goap.assistant.v1.SendRequest.context:type_name -> goap.assistant.v1.PageContext
 	7,  // 12: goap.assistant.v1.SendRequest.ui_tools:type_name -> goap.assistant.v1.UiTool
-	19, // 13: goap.assistant.v1.SendResponse.user_message:type_name -> goap.conversations.v1.Message
-	19, // 14: goap.assistant.v1.SendResponse.assistant_message:type_name -> goap.conversations.v1.Message
-	19, // 15: goap.assistant.v1.ReportActionResponse.message:type_name -> goap.conversations.v1.Message
-	19, // 16: goap.assistant.v1.ConfirmActionResponse.message:type_name -> goap.conversations.v1.Message
-	9,  // 17: goap.assistant.v1.UiArgs.PropertiesEntry.value:type_name -> goap.assistant.v1.UiParam
-	10, // 18: goap.assistant.v1.AssistantService.Send:input_type -> goap.assistant.v1.SendRequest
-	12, // 19: goap.assistant.v1.AssistantService.ConfirmAction:input_type -> goap.assistant.v1.ConfirmActionRequest
-	13, // 20: goap.assistant.v1.AssistantService.ReportAction:input_type -> goap.assistant.v1.ReportActionRequest
-	11, // 21: goap.assistant.v1.AssistantService.Send:output_type -> goap.assistant.v1.SendResponse
-	15, // 22: goap.assistant.v1.AssistantService.ConfirmAction:output_type -> goap.assistant.v1.ConfirmActionResponse
-	14, // 23: goap.assistant.v1.AssistantService.ReportAction:output_type -> goap.assistant.v1.ReportActionResponse
-	21, // [21:24] is the sub-list for method output_type
-	18, // [18:21] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	21, // 13: goap.assistant.v1.SendResponse.user_message:type_name -> goap.conversations.v1.Message
+	21, // 14: goap.assistant.v1.SendResponse.assistant_message:type_name -> goap.conversations.v1.Message
+	21, // 15: goap.assistant.v1.ReportActionResponse.message:type_name -> goap.conversations.v1.Message
+	21, // 16: goap.assistant.v1.ConfirmActionResponse.message:type_name -> goap.conversations.v1.Message
+	21, // 17: goap.assistant.v1.CancelResponse.message:type_name -> goap.conversations.v1.Message
+	9,  // 18: goap.assistant.v1.UiArgs.PropertiesEntry.value:type_name -> goap.assistant.v1.UiParam
+	10, // 19: goap.assistant.v1.AssistantService.Send:input_type -> goap.assistant.v1.SendRequest
+	12, // 20: goap.assistant.v1.AssistantService.ConfirmAction:input_type -> goap.assistant.v1.ConfirmActionRequest
+	13, // 21: goap.assistant.v1.AssistantService.ReportAction:input_type -> goap.assistant.v1.ReportActionRequest
+	16, // 22: goap.assistant.v1.AssistantService.Cancel:input_type -> goap.assistant.v1.CancelRequest
+	11, // 23: goap.assistant.v1.AssistantService.Send:output_type -> goap.assistant.v1.SendResponse
+	15, // 24: goap.assistant.v1.AssistantService.ConfirmAction:output_type -> goap.assistant.v1.ConfirmActionResponse
+	14, // 25: goap.assistant.v1.AssistantService.ReportAction:output_type -> goap.assistant.v1.ReportActionResponse
+	17, // 26: goap.assistant.v1.AssistantService.Cancel:output_type -> goap.assistant.v1.CancelResponse
+	23, // [23:27] is the sub-list for method output_type
+	19, // [19:23] is the sub-list for method input_type
+	19, // [19:19] is the sub-list for extension type_name
+	19, // [19:19] is the sub-list for extension extendee
+	0,  // [0:19] is the sub-list for field type_name
 }
 
 func init() { file_goap_assistant_v1_assistant_proto_init() }
@@ -1257,7 +1356,7 @@ func file_goap_assistant_v1_assistant_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_assistant_v1_assistant_proto_rawDesc), len(file_goap_assistant_v1_assistant_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

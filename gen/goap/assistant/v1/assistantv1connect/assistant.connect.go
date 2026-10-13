@@ -41,6 +41,8 @@ const (
 	// AssistantServiceReportActionProcedure is the fully-qualified name of the AssistantService's
 	// ReportAction RPC.
 	AssistantServiceReportActionProcedure = "/goap.assistant.v1.AssistantService/ReportAction"
+	// AssistantServiceCancelProcedure is the fully-qualified name of the AssistantService's Cancel RPC.
+	AssistantServiceCancelProcedure = "/goap.assistant.v1.AssistantService/Cancel"
 )
 
 // AssistantServiceClient is a client for the goap.assistant.v1.AssistantService service.
@@ -64,6 +66,10 @@ type AssistantServiceClient interface {
 	// conversation; any other state of the action is FAILED_PRECONDITION, an outcome already reported ABORTED. The next
 	// turn's history tells the assistant what happened.
 	ReportAction(context.Context, *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error)
+	// Stops the answer being written in a conversation of the caller (the owner only): the pending assistant message
+	// becomes "cancelled" at once, keeping the actions it recorded, and the turn stops before its next model call; tools
+	// already run stay done. With no answer pending, the last message is returned as it is.
+	Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
 }
 
 // NewAssistantServiceClient constructs a client for the goap.assistant.v1.AssistantService service.
@@ -95,6 +101,12 @@ func NewAssistantServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(assistantServiceMethods.ByName("ReportAction")),
 			connect.WithClientOptions(opts...),
 		),
+		cancel: connect.NewClient[v1.CancelRequest, v1.CancelResponse](
+			httpClient,
+			baseURL+AssistantServiceCancelProcedure,
+			connect.WithSchema(assistantServiceMethods.ByName("Cancel")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -103,6 +115,7 @@ type assistantServiceClient struct {
 	send          *connect.Client[v1.SendRequest, v1.SendResponse]
 	confirmAction *connect.Client[v1.ConfirmActionRequest, v1.ConfirmActionResponse]
 	reportAction  *connect.Client[v1.ReportActionRequest, v1.ReportActionResponse]
+	cancel        *connect.Client[v1.CancelRequest, v1.CancelResponse]
 }
 
 // Send calls goap.assistant.v1.AssistantService.Send.
@@ -118,6 +131,11 @@ func (c *assistantServiceClient) ConfirmAction(ctx context.Context, req *connect
 // ReportAction calls goap.assistant.v1.AssistantService.ReportAction.
 func (c *assistantServiceClient) ReportAction(ctx context.Context, req *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error) {
 	return c.reportAction.CallUnary(ctx, req)
+}
+
+// Cancel calls goap.assistant.v1.AssistantService.Cancel.
+func (c *assistantServiceClient) Cancel(ctx context.Context, req *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error) {
+	return c.cancel.CallUnary(ctx, req)
 }
 
 // AssistantServiceHandler is an implementation of the goap.assistant.v1.AssistantService service.
@@ -141,6 +159,10 @@ type AssistantServiceHandler interface {
 	// conversation; any other state of the action is FAILED_PRECONDITION, an outcome already reported ABORTED. The next
 	// turn's history tells the assistant what happened.
 	ReportAction(context.Context, *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error)
+	// Stops the answer being written in a conversation of the caller (the owner only): the pending assistant message
+	// becomes "cancelled" at once, keeping the actions it recorded, and the turn stops before its next model call; tools
+	// already run stay done. With no answer pending, the last message is returned as it is.
+	Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error)
 }
 
 // NewAssistantServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -168,6 +190,12 @@ func NewAssistantServiceHandler(svc AssistantServiceHandler, opts ...connect.Han
 		connect.WithSchema(assistantServiceMethods.ByName("ReportAction")),
 		connect.WithHandlerOptions(opts...),
 	)
+	assistantServiceCancelHandler := connect.NewUnaryHandler(
+		AssistantServiceCancelProcedure,
+		svc.Cancel,
+		connect.WithSchema(assistantServiceMethods.ByName("Cancel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/goap.assistant.v1.AssistantService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AssistantServiceSendProcedure:
@@ -176,6 +204,8 @@ func NewAssistantServiceHandler(svc AssistantServiceHandler, opts ...connect.Han
 			assistantServiceConfirmActionHandler.ServeHTTP(w, r)
 		case AssistantServiceReportActionProcedure:
 			assistantServiceReportActionHandler.ServeHTTP(w, r)
+		case AssistantServiceCancelProcedure:
+			assistantServiceCancelHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -195,4 +225,8 @@ func (UnimplementedAssistantServiceHandler) ConfirmAction(context.Context, *conn
 
 func (UnimplementedAssistantServiceHandler) ReportAction(context.Context, *connect.Request[v1.ReportActionRequest]) (*connect.Response[v1.ReportActionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.assistant.v1.AssistantService.ReportAction is not implemented"))
+}
+
+func (UnimplementedAssistantServiceHandler) Cancel(context.Context, *connect.Request[v1.CancelRequest]) (*connect.Response[v1.CancelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.assistant.v1.AssistantService.Cancel is not implemented"))
 }

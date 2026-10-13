@@ -175,6 +175,15 @@ export interface ReportActionRequest {
   error?: string;
 }
 
+export interface CancelRequest {
+  conversationId: string;
+}
+
+/** The last message of the conversation: the assistant message stopped, or the one already answered. */
+export interface CancelResponse {
+  message: ConversationMessage;
+}
+
 /** The assistant message with its action updated. */
 export interface ReportActionResponse {
   message: ConversationMessage;
