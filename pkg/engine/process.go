@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/zimwip/goap/pkg/condition"
+	"github.com/zimwip/goap/pkg/form"
 	"maps"
 	"sort"
 	"sync"
@@ -221,7 +222,10 @@ type HumanTask struct {
 	// TaskInput may create or pick to edit; empty: every type of the change's
 	// namespace (methodology.Action.NodeTypes).
 	NodeTypes []string `json:"nodeTypes,omitempty"`
-	Step      int      `json:"step"`
+	// Form is what the person fills in for a TaskInput, when the action declares one (ADR 0115): the values go to
+	// SubmitForm.
+	Form *form.Form `json:"form,omitempty"`
+	Step int        `json:"step"`
 	// ChildProcessID is the sub-agent a TaskAgent waits for.
 	ChildProcessID string `json:"childProcessId,omitempty"`
 	// WakeOn lists signal names (TaskAgent) that, if emitted by the child and

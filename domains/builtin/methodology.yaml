@@ -1,5 +1,5 @@
 name: methodology
-version: 1.9.0
+version: 1.10.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -82,6 +82,7 @@ nodeTypes:
       - {name: instructions, label: Instructions, description: "What a person does in a human action", type: string, widget: textarea, section: Execution, order: 18}
       - {name: params, label: Parameters, description: "Parameters of the action", type: json, widget: textarea, section: Execution, order: 19}
       - {name: nodeTypes, label: "Node types", description: "Qualified node types a human task may create or pick; empty: every type of the namespace", type: json, widget: textarea, section: Execution, order: 20}
+      - {name: form, label: Form, description: "What a person fills in to carry out a human action (ADR 0115): title, submit, artifact, fields with their widget and constraints", type: json, widget: textarea, section: Execution, order: 20}
       - {name: language, label: Language, description: "Language of a script action (javascript or go)", type: string, section: Execution, order: 21}
       - {name: code, label: Code, description: "Code of a script action", type: string, widget: textarea, section: Execution, order: 22}
       - {name: specializes, label: Specializes, description: "Action this one specializes: action or methodology/action", type: string, section: Specialization, order: 23}

@@ -2,6 +2,7 @@ package methodology
 
 import (
 	"fmt"
+	"github.com/zimwip/goap/pkg/form"
 	"maps"
 	"slices"
 	"sort"
@@ -437,6 +438,7 @@ func (s *compileState) checkImplementation(path string, a Action) {
 			s.add(path+".code", "script action requires code")
 		}
 	}
+	s.checkForm(path, a)
 	switch {
 	case a.Kind == KindLLM && a.Prompt == "":
 		s.add(path+".prompt", "llm action requires a prompt")
@@ -450,6 +452,46 @@ func (s *compileState) checkImplementation(path string, a Action) {
 		s.add(path+".builtin", "builtin action requires a builtin")
 	case a.Kind == KindBuiltin && s.m.Builtins != nil && a.Builtin != builtins.ProcessStep && !s.m.Builtins.HasBuiltin(a.Builtin):
 		s.add(path+".builtin", "unknown builtin %q", a.Builtin)
+	}
+}
+
+// checkForm checks the form of a human action and the code run on its values (ADR 0115): the form itself
+// (form.CheckForm), the node and link types its constraints name.
+func (s *compileState) checkForm(path string, a Action) {
+	if a.Kind != KindHuman {
+		if a.Form != nil {
+			s.add(path+".form", "a form belongs to a human action")
+		}
+		return
+	}
+	if strings.TrimSpace(a.Code) != "" {
+		if a.Form == nil {
+			s.add(path+".code", "the code of a human action runs on the values of its form: declare a form")
+		}
+		if a.Language != LangJavaScript && a.Language != LangGo {
+			s.add(path+".language", "script language must be javascript or go")
+		}
+	}
+	if a.Form == nil {
+		return
+	}
+	for _, is := range form.CheckForm(*a.Form) {
+		s.add(path+".form."+is.Path, "%s", is.Message)
+	}
+	for j, f := range a.Form.Fields {
+		for _, c := range []struct {
+			name string
+			link bool
+		}{{"types", false}, {"toTypes", false}, {"linkTypes", true}} {
+			list, _ := f.Constraints[c.name].([]any)
+			for _, t := range list {
+				if ref, ok := t.(string); ok {
+					if msg := s.m.checkTypeRef(ref, c.link); msg != "" {
+						s.add(fmt.Sprintf("%s.form.fields[%d].constraints.%s", path, j, c.name), "%s", msg)
+					}
+				}
+			}
+		}
 	}
 }
 

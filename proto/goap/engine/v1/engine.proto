@@ -181,6 +181,9 @@ message HumanTask {
   MergeTask merge = 14;
   // kind "rebase": the apply stopped on the conflicts the rebase of the change left (ResolveRebase)
   RebaseTask rebase = 15;
+  // kind "input": the form the person fills in, when the action declares one (ADR 0115, pkg/form.Form as JSON); its
+  // values go to SubmitHumanInput.form
+  google.protobuf.Struct form = 16;
 }
 
 // The conflicts a rebase left on a change before it lands (ADR 0101).
@@ -492,6 +495,8 @@ message SubmitHumanInputRequest {
   string process_id = 1;
   // items in the engine input format (see pkg/engine.ItemInput)
   repeated google.protobuf.Struct items = 2;
+  // the values of the form of the task by field name (ADR 0115), checked against it; set instead of items
+  google.protobuf.Struct form = 3;
 }
 
 message SubmitHumanInputResponse {

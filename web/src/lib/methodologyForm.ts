@@ -237,6 +237,8 @@ export interface ActionForm extends Identified {
   where: string;
   /** subjects a scoped llm or tool action runs for at once (0: the engine's bound) */
   parallel: number;
+  /** human: the form the person fills in, as JSON (ADR 0115); the code (language, code) runs on its values */
+  form: string;
 }
 
 export interface TriggerForm {
@@ -528,6 +530,7 @@ export const emptyAction = (): ActionForm => ({
   scope: '',
   where: '',
   parallel: 0,
+  form: '',
 });
 export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
 export const emptyAgent = (): AgentForm => ({
@@ -696,6 +699,7 @@ function actionToForm(a: Action, uid: string): ActionForm {
     scope: a.scope ?? '',
     where: a.where ?? '',
     parallel: a.parallel ?? 0,
+    form: a.form ? JSON.stringify(a.form, null, 2) : '',
   };
 }
 
@@ -1217,6 +1221,20 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
         put(o, 'tool', a.tool.trim());
       } else if (a.kind === 'human') {
         put(o, 'instructions', a.instructions.trim());
+        if (a.form.trim()) {
+          try {
+            const f: unknown = JSON.parse(a.form);
+            if (f === null || typeof f !== 'object' || Array.isArray(f)) throw new Error('object expected');
+            o.form = f as NonNullable<Action['form']>;
+          } catch (e) {
+            issues.push({ path: `actions[${i}].form`, message: `Invalid form JSON: ${e instanceof Error ? e.message : String(e)}` });
+          }
+        }
+        // the code of a human action runs on the values of its form (ADR 0115)
+        if (a.code.trim()) {
+          put(o, 'language', a.language);
+          put(o, 'code', a.code);
+        }
       } else if (a.kind === 'builtin') {
         put(o, 'builtin', a.builtin.trim());
       }

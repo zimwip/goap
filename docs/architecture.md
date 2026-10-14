@@ -373,7 +373,7 @@ Executor types:
 |---|---|---|
 | `llm` | Prompt (Go template) + blackboard context → Model Gateway, structured JSON output | ChangeItems |
 | `tool` | Call to a tool (`<mcp>/<tool>`) of the MCP hub, through the organization binding (§3.9) | Artifact `{tool, result}` |
-| `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput` | Submitted items |
+| `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput`. An action declaring a `form` (ADR 0115, `pkg/form`: fields, widgets of an extensible registry, constraints) shows it and takes its values (`SubmitHumanInput.form`, `Engine.SubmitForm`), checked by the engine, then turned into items by the action's `code` (`ctx.var("form")`) or recorded as an artifact with the links of its link fields | Submitted items, or the items of the form |
 | `builtin` | Registered Go function, checked by name when the methodology is compiled ([ADR 0062](adr/0062-builtins-registry.md)): `graph.propagate` (impact propagation), `graph.apply` (change application), `decision.investigate`, `process.step`; the self-observation ones (`observe.analyze`, `observe.propose`, `methodology.draft`) are registered by the composition roots | ChangeItems / new baseline |
 
 LLM/human outputs use a simplified input format (`engine.ItemInput`): nodes are

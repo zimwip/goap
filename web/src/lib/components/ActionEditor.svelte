@@ -4,6 +4,7 @@
   import { TEMPLATES } from '../dsl';
   import CondRows from './CondRows.svelte';
   import CodeEditor from './CodeEditor.svelte';
+  import HumanFormEditor from './HumanFormEditor.svelte';
   import { modelChoices, refreshModelChoices } from '../stores/modelChoices.svelte';
   import ModelAliasField from './ModelAliasField.svelte';
   import { mcpsOfScope } from '../stores/tools.svelte';
@@ -386,6 +387,7 @@
       data-path="{p}.instructions"
     ></textarea>
   </div>
+  <HumanFormEditor bind:action {id} {p} {bad} {readonly} />
 {:else if action.kind === 'builtin'}
   <div class="grid2">
     <div class="field">

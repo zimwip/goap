@@ -29,6 +29,10 @@ writes designate change impacts declared within the same execution.
 | `ctx.nodes(type)` (`""` = all) | `Nodes(type)` | `Node[]` |
 | `ctx.links(key, direction, type)` (`"out"`/`"in"`, `""` = all) | `Links(…)` | `Link[]` |
 
+The code of a **human action with a form** ([ADR 0115](adr/0115-forms-of-human-actions.md)) runs when a person submits
+it, with the checked values of the form in `ctx.var("form")` (by field name: a `node` field's key, a `link` field's
+`[{from, type, to}]`...); what it returns is the submission.
+
 `Item` (artifact, decision): `{id, kind, type, status, data, producedBy}` — `Node`: `{id, version, key, type, props}` —
 `Link`: `{id, type, from, to}` (`from`/`to`: `{id, version, key, type}`).
 

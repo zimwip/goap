@@ -208,14 +208,19 @@ func subjectRef(scope string, entry map[string]any) string {
 
 // actionVars are the variables an action sees: the process's, plus `item` and `subject` for a scoped run.
 func actionVars(ac ActionContext) map[string]any {
-	if !ac.Action.IsScoped() {
+	if !ac.Action.IsScoped() && ac.Form == nil {
 		return ac.Process.Vars
 	}
 	out := maps.Clone(ac.Process.Vars)
 	if out == nil {
 		out = map[string]any{}
 	}
-	out["item"], out["subject"] = ac.Blackboard.Vars["item"], ac.Blackboard.Vars["subject"]
+	if ac.Action.IsScoped() {
+		out["item"], out["subject"] = ac.Blackboard.Vars["item"], ac.Blackboard.Vars["subject"]
+	}
+	if ac.Form != nil {
+		out["form"] = ac.Form
+	}
 	return out
 }
 

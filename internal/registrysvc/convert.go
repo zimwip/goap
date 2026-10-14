@@ -23,7 +23,8 @@ func ToPB(r Record) *registryv1.Methodology {
 		pa := &registryv1.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost,
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
 			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On), Emits: a.Emits, Scope: a.Scope, Where: a.Where, Parallel: int32(a.Parallel)}
+			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On), Emits: a.Emits, Scope: a.Scope, Where: a.Where, Parallel: int32(a.Parallel),
+			Form: pbconv.FormToPB(a.Form)}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
 			if e.Link != nil {
@@ -207,7 +208,8 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		ma := methodology.Action{Name: a.Name, Description: a.Description, Kind: a.Kind, Pre: nilIfEmpty(a.Pre), Effects: nilIfEmpty(a.Effects),
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
 			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
-			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On), Emits: nilIfNone(a.Emits), Scope: a.Scope, Where: a.Where, Parallel: int(a.Parallel)}
+			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On), Emits: nilIfNone(a.Emits), Scope: a.Scope, Where: a.Where, Parallel: int(a.Parallel),
+			Form: pbconv.FormFromPB(a.Form)}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
 			if e.Produce != nil {

@@ -576,6 +576,20 @@ func firstUserTurn(p *Process) string {
 // Submit provides the items of a pending human task and resumes the process
 // (call Run afterwards).
 func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Process, error) {
+	return e.submit(ctx, id, items, nil)
+}
+
+// SubmitForm provides the values of the form of a pending human task (ADR 0115): they are checked against the form,
+// then turned into items by the code of the action, else recorded as an artifact with the links they ask; the process
+// resumes as with Submit.
+func (e *Engine) SubmitForm(ctx context.Context, id string, values map[string]any) (*Process, error) {
+	if values == nil {
+		values = map[string]any{}
+	}
+	return e.submit(ctx, id, nil, values)
+}
+
+func (e *Engine) submit(ctx context.Context, id string, items []ItemInput, values map[string]any) (*Process, error) {
 	defer e.lock(id)()
 	p, err := e.Store.Get(ctx, id)
 	if err != nil {
@@ -596,7 +610,8 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 		return nil, err
 	}
 	// a human action only some roles may run is performed by a person holding one (ADR 0043)
-	if a, ok := m.Action(p.Pending.Action); ok {
+	action, known := m.Action(p.Pending.Action)
+	if a, ok := action, known; ok {
 		if roles := e.runRoles(m, p, a); len(roles) > 0 {
 			if ok, err := e.mayRun(ctx, p, authz.From(ctx), "action", a.Name, roles); err != nil {
 				return nil, err
@@ -614,9 +629,26 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 	// the submission is the run of the step: what it adds carries its record, and a step of a process is done once a
 	// person has submitted it (its step.ended record, ADR 0034, 0109)
 	step.Execution = rec
-	ids, nodes, points, err := e.addItems(ctx, p, items, p.Pending.Action, rec, true, firstNonEmpty(authz.From(ctx).Subject, p.Pending.Action))
+	var ops []dsl.NodeOp
+	if values != nil {
+		if !known || action.Form == nil {
+			return nil, fmt.Errorf("action %s declares no form: %w", p.Pending.Action, ErrInvalidState)
+		}
+		if items, ops, err = e.formItems(ctx, p, m, action, step, values); err != nil {
+			return nil, err
+		}
+	}
+	by := firstNonEmpty(authz.From(ctx).Subject, p.Pending.Action)
+	ids, nodes, points, err := e.addItems(ctx, p, items, p.Pending.Action, rec, true, by)
 	if err != nil {
 		return nil, err
+	}
+	if len(ops) > 0 {
+		more, err := e.applyNodeOps(ctx, p, ops, p.Pending.Action, rec)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, more...)
 	}
 	step.Items, step.Nodes, step.Decisions = ids, nodes, points
 	if err := e.finishStep(ctx, p, m, step); err != nil {
@@ -965,7 +997,8 @@ func (e *Engine) settleAction(p *Process, m *methodology.Compiled, action method
 	e.forgetChildren(p, action.Name)
 	if res.Wait {
 		p.Status = StatusWaiting
-		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, NodeTypes: action.NodeTypes, Step: i, Context: sc}
+		p.Pending = &HumanTask{Kind: TaskInput, Action: action.Name, Description: action.Description, Instructions: action.Instructions, NodeTypes: action.NodeTypes,
+			Form: action.Form, Step: i, Context: sc}
 		return nil
 	}
 	ctx = withVerify(ctx, action)

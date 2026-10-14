@@ -19,6 +19,9 @@ export const engine = {
       processId,
       items,
     }),
+  /** the values of the form of a pending human task (ADR 0115), checked by the engine against the form */
+  submitHumanForm: (processId: string, form: Record<string, unknown>) =>
+    rpc<{ processId: string; form: Record<string, unknown> }, { process?: Process }>(ENGINE, 'SubmitHumanInput', { processId, form }),
   approveAction: (processId: string, approve: boolean, comment: string) =>
     rpc<{ processId: string; approve: boolean; comment: string }, { process?: Process }>(ENGINE, 'ApproveAction', {
       processId,

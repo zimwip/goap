@@ -34,6 +34,9 @@ type ActionContext struct {
 	Host *Host
 	// Step is the step of a process the action carries out (nil outside processes).
 	Step *StepContext
+	// Form are the checked values of the form of a human action whose code runs on them (ADR 0115), given to the code
+	// as the variable "form".
+	Form map[string]any
 }
 
 // ActionResult is what an executor produced.

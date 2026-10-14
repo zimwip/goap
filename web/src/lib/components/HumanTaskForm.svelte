@@ -28,6 +28,8 @@
   } from '../lifecycle';
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
   import { openNode } from '../nodeEditors';
+  import FormRenderer from '../forms/FormRenderer.svelte';
+  import type { FormValues, NodeOption, NodeSource } from '../forms/types';
 
   let { process, onsubmitted }: { process: Process; onsubmitted: (p: Process) => void } = $props();
 
@@ -35,11 +37,14 @@
   const action = $derived(task?.action ?? '');
   // 'nodes': the default for any human task that is not clearly a selection or a
   // review — creating or editing nodes goes through the node editor, never raw JSON.
-  const mode = $derived<'select' | 'review' | 'nodes'>(
-    /select/i.test(action) ? 'select' : /review|revue|valid|approv/i.test(action) ? 'review' : 'nodes',
+  // 'form': the action declares its form (ADR 0115); the guesses on its name stay for the actions that declare none
+  const mode = $derived<'form' | 'select' | 'review' | 'nodes'>(
+    task?.form ? 'form' : /select/i.test(action) ? 'select' : /review|revue|valid|approv/i.test(action) ? 'review' : 'nodes',
   );
 
   let nodes = $state<GraphNode[]>([]);
+  /** every node of the reference baseline, whatever its namespace: a form's constraints say which it offers */
+  let baselineNodes = $state<GraphNode[]>([]);
   let changeImpacts = $state<ChangeImpact[]>([]);
   let loadError = $state('');
   let submitting = $state(false);
@@ -79,6 +84,7 @@
     // change can only impact the nodes of its own domain, whatever else
     // the baseline holds.
     nodes = namespace ? allNodes.filter((n) => n.namespace === namespace) : allNodes;
+    baselineNodes = allNodes;
     attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
     posts = await loadPosts(changeImpacts, false, { changeId: id });
     const initNodes: Record<string, boolean> = {};
@@ -196,6 +202,41 @@
     return [];
   });
 
+  // --- declared form (ADR 0115): the nodes its widgets may offer are the reference baseline and what the change writes
+  const formSource = $derived.by((): NodeSource => {
+    const byKey = new Map<string, NodeOption>();
+    for (const n of baselineNodes) {
+      if (n.deleted || !n.key) continue;
+      byKey.set(n.key, { key: n.key, type: n.type ?? '', title: nodeTitle(n), state: n.state, namespace: n.namespace });
+    }
+    for (const cn of changeImpacts) {
+      if (!cn.key || cn.superseded || cn.review === 'rejected') continue;
+      const known = byKey.get(cn.key);
+      byKey.set(cn.key, { ...(known ?? { key: cn.key, type: cn.type ?? '', namespace }), inChange: true });
+    }
+    const cat = typeCatalog.cat;
+    return {
+      nodes: [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key)),
+      isA: (t, a) => t === a || cat.typesOf(t).includes(a),
+      linkTypesFrom: (t) => cat.linksFrom(t).map((l) => l.ref ?? '').filter(Boolean),
+      linkLabel: (t) => cat.links.find((l) => l.ref === t)?.label ?? '',
+    };
+  });
+
+  async function sendForm(values: FormValues) {
+    if (!process.id) return;
+    submitting = true;
+    error = '';
+    try {
+      const res = await engine.submitHumanForm(process.id, values);
+      if (res.process) onsubmitted(res.process);
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      submitting = false;
+    }
+  }
+
   function openRaw() {
     raw = JSON.stringify(built, null, 2);
     showRaw = true;
@@ -243,7 +284,9 @@
 
   {#if loadError}<div class="alert">{loadError}</div>{/if}
 
-  {#if mode === 'select'}
+  {#if mode === 'form' && task?.form}
+    <FormRenderer form={task.form} source={formSource} busy={submitting} serverError={error} onsubmit={sendForm} />
+  {:else if mode === 'select'}
     <form onsubmit={submitStructured}>
       <div class="row" style="margin-bottom: 0.5rem">
         <strong class="grow">Impacted elements ({selectedKeys.length})</strong>
@@ -349,7 +392,7 @@
     </div>
   {/if}
 
-  {#if error}<div class="alert" style="margin: 0.75rem 0 0">{error}</div>{/if}
+  {#if error && mode !== 'form'}<div class="alert" style="margin: 0.75rem 0 0">{error}</div>{/if}
 </section>
 
 <style>

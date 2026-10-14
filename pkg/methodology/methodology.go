@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/events"
+	"github.com/zimwip/goap/pkg/form"
 	"maps"
 	"slices"
 	"sort"
@@ -248,7 +249,10 @@ type Action struct {
 	// human task may create or pick to edit; empty: every type of the change's
 	// namespace.
 	NodeTypes []string `yaml:"nodeTypes,omitempty" json:"nodeTypes,omitempty"`
-	// script: code run in the sandbox with the DSL (docs/dsl.md)
+	// Form is what a person fills in to carry out a human action (ADR 0115); its values are checked by the engine and
+	// handed to Code when the action has some (ctx.var("form")), else recorded as an artifact with the links they ask.
+	Form *form.Form `yaml:"form,omitempty" json:"form,omitempty"`
+	// script: code run in the sandbox with the DSL (docs/dsl.md); a human action with a form runs it on its values
 	Language string `yaml:"language,omitempty" json:"language,omitempty"`
 	Code     string `yaml:"code,omitempty" json:"code,omitempty"`
 	// Utility is a CEL expression returning a number, used by the utility

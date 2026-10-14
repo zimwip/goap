@@ -292,7 +292,16 @@ func (h *Handler) SubmitHumanInput(ctx context.Context, r *connect.Request[engin
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
 		return nil, toConnect(err)
 	}
-	p, err := h.Engine.Submit(ctx, r.Msg.ProcessId, items)
+	var p *engine.Process
+	var err error
+	if r.Msg.Form != nil {
+		if len(items) > 0 {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("send the values of the form or items, not both"))
+		}
+		p, err = h.Engine.SubmitForm(ctx, r.Msg.ProcessId, r.Msg.Form.AsMap())
+	} else {
+		p, err = h.Engine.Submit(ctx, r.Msg.ProcessId, items)
+	}
 	if err != nil {
 		return nil, toConnect(err)
 	}
@@ -704,7 +713,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 	if t := p.Pending; t != nil {
 		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description,
 			Instructions: t.Instructions, NodeTypes: t.NodeTypes, Step: int32(t.Step), ChildProcessId: t.ChildProcessID, FlowId: t.FlowID,
-			Context: stepContextToPB(t.Context), Conditions: t.Conditions}
+			Context: stepContextToPB(t.Context), Conditions: t.Conditions, Form: pbconv.FormToPB(t.Form)}
 		for _, i := range t.Issues {
 			out.Pending.Issues = append(out.Pending.Issues, &enginev1.BoardIssue{Item: string(i.Item), Culprit: string(i.Culprit), Code: i.Code, Message: i.Message, Severity: i.Severity})
 		}

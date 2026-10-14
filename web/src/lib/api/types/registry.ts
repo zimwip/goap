@@ -1,6 +1,7 @@
 // Registry types (proto3 JSON). Fields are optional because default values are omitted on serialization.
 
 import type { Struct } from './common';
+import type { FormDef } from '../../forms/types';
 
 // --- registry ---------------------------------------------------------------
 
@@ -275,6 +276,8 @@ export type PlannerKind = 'goap' | 'utility' | 'hybrid' | 'llm' | 'llm-scoring';
 
 export interface Action {
   name?: string;
+  /** human actions: what the person fills in (ADR 0115) */
+  form?: FormDef;
   description?: string;
   kind?: ActionKind | string;
   pre?: Record<string, boolean>;

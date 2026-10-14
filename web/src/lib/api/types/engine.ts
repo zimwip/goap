@@ -3,6 +3,7 @@
 import type { Int64, JsonValue, Struct } from './common';
 import type { ChangeImpact, DecisionPolicy, FlowOrigin, GraphNode, ItemKind, NodeRef, OptionSpec } from './graph';
 import type { DocumentReference, PlannerKind, Responsibilities, TriggerType } from './registry';
+import type { FormDef } from '../../forms/types';
 
 // --- engine -----------------------------------------------------------------
 
@@ -172,6 +173,8 @@ export interface HumanTask {
   instructions?: string;
   /** kind "input": qualified node types (<namespace>@<NodeType>) the task may create or pick to edit (empty: every type of the change's namespace) */
   nodeTypes?: string[];
+  /** kind "input": the form the person fills in, when the action declares one (ADR 0115); its values go to submitHumanForm */
+  form?: FormDef;
   step?: number;
   /** the step of a process the task belongs to: what to do and how (ADR 0034, ADR 0035 §2) */
   context?: StepContext;

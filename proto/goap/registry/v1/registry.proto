@@ -334,6 +334,9 @@ message Action {
   string where = 27;
   // the subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after the other)
   int32 parallel = 28;
+  // human actions: what the person fills in (ADR 0115, pkg/form.Form as JSON: title, description, submit, artifact,
+  // fields [{name, widget, label, help, placeholder, section, required, default, constraints}])
+  google.protobuf.Struct form = 29;
 }
 
 // The verification an action declares (ADR 0075): the kind of verifier its effect needs.
