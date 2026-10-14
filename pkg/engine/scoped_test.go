@@ -2,10 +2,15 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"regexp"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -167,5 +172,120 @@ func TestStepNarrowsTheSubjectsOfAScopedAction(t *testing.T) {
 	}
 	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != StatusCompleted {
 		t.Fatalf("analysis: %v %s %s", err, p.Status, p.Error)
+	}
+}
+
+// parallelYAML qualifies every impact with a model, several impacts at once.
+const parallelYAML = `
+name: parallel
+version: 1.0.0
+namespace: alm
+conditions:
+  - {name: impacted, expr: 'changeImpacts.exists(i, i.intent == "modified")'}
+  - {name: qualified, scope: impact, expr: 'artifacts.exists(a, a.type == "qualified" && a.data.impact == self.key)'}
+  - {name: all_qualified, all: qualified}
+actions:
+  - name: qualify
+    kind: llm
+    scope: impact
+    parallel: %d
+    description: Qualify the impact
+    pre: {impacted: true}
+    effects: {qualified: true}
+    prompt: 'Qualify impact {{ .Subject.key }}.'
+processes:
+  - name: analysis
+    steps:
+      - {name: qualification, action: qualify}
+`
+
+// TestScopedActionRunsSubjectsInParallel checks that the model calls of a scoped action for its subjects are in flight
+// at once (the model answers only once every subject called it), and one after the other with parallel: 1.
+func TestScopedActionRunsSubjectsInParallel(t *testing.T) {
+	keys := []string{"REQ-1", "CMP-1", "TST-1"}
+	for _, parallel := range []int{0, 1} {
+		t.Run(fmt.Sprint("parallel=", parallel), func(t *testing.T) {
+			ctx := context.Background()
+			e, g, base := setup(t)
+			m, err := methodology.Parse([]byte(fmt.Sprintf(parallelYAML, parallel)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := m.Compile()
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.Methodologies.(StaticMethodologies)["parallel"] = c
+			var mu sync.Mutex
+			inFlight, most := 0, 0
+			// all reports whether every subject called the model while the others were still waiting for their answer
+			all := func() bool {
+				mu.Lock()
+				defer mu.Unlock()
+				return most == len(keys)
+			}
+			subject := regexp.MustCompile(`Qualify impact (\S+)\.`)
+			e.Executors[methodology.KindLLM] = LLMExecutor{Client: llm.ClientFunc(func(_ context.Context, req llm.Request) (llm.Response, error) {
+				mu.Lock()
+				inFlight++
+				most = max(most, inFlight)
+				mu.Unlock()
+				// hold the answer until every subject called, or give up (the runs are then one after the other)
+				for deadline := time.Now().Add(2 * time.Second); parallel != 1 && !all() && time.Now().Before(deadline); {
+					time.Sleep(5 * time.Millisecond)
+				}
+				mu.Lock()
+				inFlight--
+				mu.Unlock()
+				var key string
+				for _, msg := range req.Messages {
+					if m := subject.FindStringSubmatch(msg.Content); m != nil {
+						key = m[1]
+					}
+				}
+				out := `{"items":[{"kind":"artifact","type":"qualified","data":{"impact":"` + key + `"}}]}`
+				return llm.Response{Text: out, Provider: "test", Model: req.Model}, nil
+			})}
+			ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "parallel", Namespace: "alm", ProjectID: testProject, BaselineID: base})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var impacts []domain.ChangeImpact
+			for _, key := range keys {
+				n, err := g.NodeByKey(ctx, "alm", key)
+				if err != nil {
+					t.Fatal(err)
+				}
+				ref := n.Ref()
+				impacts = append(impacts, domain.ChangeImpact{Intent: domain.IntentModified, Pre: &ref, Rationale: "in scope"})
+			}
+			if _, err := g.ProposeImpact(ctx, ch.ID, impacts); err != nil {
+				t.Fatal(err)
+			}
+			p, err := e.Start(ctx, StartRequest{Methodology: "parallel", Goal: "analysis", ChangeID: ch.ID, ProjectID: testProject})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p, err = e.Run(ctx, p.ID); err != nil || p.Status != StatusCompleted {
+				t.Fatalf("analysis: %v %s %s", err, p.Status, p.Error)
+			}
+			want := len(keys)
+			if parallel == 1 {
+				want = 1
+			}
+			if most != want {
+				t.Fatalf("%d model calls in flight at most, want %d", most, want)
+			}
+			seen := map[string]bool{}
+			for _, s := range p.Steps {
+				if s.Subject == "" || seen[s.Subject] || !s.EffectsMet {
+					t.Fatalf("one successful run per subject: %+v", p.Steps)
+				}
+				seen[s.Subject] = true
+			}
+			if len(seen) != len(keys) {
+				t.Fatalf("runs for %v, want %v", seen, keys)
+			}
+		})
 	}
 }

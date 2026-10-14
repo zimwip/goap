@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/zimwip/goap/internal/devseed"
@@ -39,6 +40,7 @@ func between(s, from, to string) string {
 
 // sdlcModelOf is sdlcModel recording the impacts it qualified.
 func sdlcModelOf(t *testing.T, record *[]string) llm.Client {
+	var mu sync.Mutex // the impacts are qualified in parallel
 	return llm.ClientFunc(func(_ context.Context, req llm.Request) (llm.Response, error) {
 		p := req.Messages[0].Content
 		var out string
@@ -61,7 +63,9 @@ func sdlcModelOf(t *testing.T, record *[]string) llm.Client {
 				ops = `,{"kind":"changeImpact","changeImpact":{"op":"review","node":"` + key + `","accept":false,"comment":"not impacted: settlement is untouched"}},
 				{"kind":"changeImpact","changeImpact":{"op":"remove","node":"` + key + `"}}`
 			}
+			mu.Lock()
 			*record = append(*record, key)
+			mu.Unlock()
 			out = `{"items":[{"kind":"assessment","data":{"key":"impact:` + key + `","score":4,"verdict":"` + verdict + `","findings":[],"rated":"` + fp + `"}}` + ops + `]}`
 		case strings.Contains(p, "Revise the impacted requirements"):
 			// REQ-1 starts proposed: a transition moves it to draft, then it is written, the way the

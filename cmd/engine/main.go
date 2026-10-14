@@ -105,16 +105,17 @@ func main() {
 			methodology.KindBuiltin: builtins,
 			methodology.KindTool:    engine.ToolExecutor{},
 		},
-		Intent:    intent.Resolver{Ranker: ranker},
-		Store:     engine.NewMemoryStore(), // PostgreSQL store: milestone M1
-		Events:    publisher,
-		Scope:     engine.AuthzScope{Authz: authorizer, Hub: mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...)},
-		LLM:       models,
-		Sandboxes: sandboxes,
-		Tracer:    telemetry.NewEngineTracer(),
-		Log:       log,
-		MaxSteps:  platform.EnvInt("GOAP_MAX_STEPS", 50),
-		Types:     func() def.TypeSet { return types.Get() },
+		Intent:      intent.Resolver{Ranker: ranker},
+		Store:       engine.NewMemoryStore(), // PostgreSQL store: milestone M1
+		Events:      publisher,
+		Scope:       engine.AuthzScope{Authz: authorizer, Hub: mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...)},
+		LLM:         models,
+		Sandboxes:   sandboxes,
+		Tracer:      telemetry.NewEngineTracer(),
+		Log:         log,
+		MaxSteps:    platform.EnvInt("GOAP_MAX_STEPS", 50),
+		MaxParallel: platform.EnvInt("GOAP_MAX_PARALLEL", 4),
+		Types:       func() def.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	selfimprove.Register(builtins, e, telemetry.SelfImprovementFromEnv(registry))

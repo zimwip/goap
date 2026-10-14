@@ -1769,8 +1769,10 @@ type Action struct {
 	// the events of the methodology it raises when it reaches its effects (ADR 0110)
 	Emits []string `protobuf:"bytes,25,rep,name=emits,proto3" json:"emits,omitempty"`
 	// runs once per pending subject of this scope (ADR 0109), within where
-	Scope         string `protobuf:"bytes,26,opt,name=scope,proto3" json:"scope,omitempty"`
-	Where         string `protobuf:"bytes,27,opt,name=where,proto3" json:"where,omitempty"`
+	Scope string `protobuf:"bytes,26,opt,name=scope,proto3" json:"scope,omitempty"`
+	Where string `protobuf:"bytes,27,opt,name=where,proto3" json:"where,omitempty"`
+	// the subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after the other)
+	Parallel      int32 `protobuf:"varint,28,opt,name=parallel,proto3" json:"parallel,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1992,6 +1994,13 @@ func (x *Action) GetWhere() string {
 		return x.Where
 	}
 	return ""
+}
+
+func (x *Action) GetParallel() int32 {
+	if x != nil {
+		return x.Parallel
+	}
+	return 0
 }
 
 // The verification an action declares (ADR 0075): the kind of verifier its effect needs.
@@ -8010,7 +8019,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\bfor_each\x18\x01 \x01(\tR\aforEach\x12\x14\n" +
 	"\x05where\x18\x02 \x01(\tR\x05where\x127\n" +
 	"\aproduce\x18\x03 \x01(\v2\x1d.goap.registry.v1.ProduceSpecR\aproduce\x12.\n" +
-	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xd0\a\n" +
+	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xec\a\n" +
 	"\x06Action\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -8041,7 +8050,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x02on\x18\x18 \x03(\v2\x1e.goap.registry.v1.SubscriptionR\x02on\x12\x14\n" +
 	"\x05emits\x18\x19 \x03(\tR\x05emits\x12\x14\n" +
 	"\x05scope\x18\x1a \x01(\tR\x05scope\x12\x14\n" +
-	"\x05where\x18\x1b \x01(\tR\x05where\x1a6\n" +
+	"\x05where\x18\x1b \x01(\tR\x05where\x12\x1a\n" +
+	"\bparallel\x18\x1c \x01(\x05R\bparallel\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +

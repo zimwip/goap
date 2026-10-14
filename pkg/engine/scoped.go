@@ -1,8 +1,13 @@
 package engine
 
 import (
+	"context"
 	"fmt"
 	"maps"
+	"sync"
+
+	"github.com/google/uuid"
+	"github.com/zimwip/goap/pkg/domain"
 
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -19,21 +24,133 @@ func (e *Engine) maxFailures() int {
 	return e.MaxFailures
 }
 
-// pendingSubject returns the first subject the scoped action is pending for at the last observation, leaving out
-// those it failed on too often in this process.
-func (e *Engine) pendingSubject(p *Process, a methodology.Action) (string, bool) {
+// pendingSubjects returns up to n subjects the scoped action is pending for at the last observation, in the order of
+// its scope, leaving out those it failed on too often in this process.
+func (e *Engine) pendingSubjects(p *Process, a methodology.Action, n int) []string {
 	failures := map[string]int{}
 	for _, s := range p.Steps {
 		if s.Action == a.Name && s.Subject != "" && !s.EffectsMet && !s.Progress && !s.EndedAt.IsZero() {
 			failures[s.Subject]++
 		}
 	}
+	var out []string
 	for _, sub := range p.Subjects[a.Scope] {
+		if len(out) == n {
+			break
+		}
 		if sub.Values[a.SubjectCondition()] && failures[sub.ID] < e.maxFailures() {
-			return sub.ID, true
+			out = append(out, sub.ID)
 		}
 	}
-	return "", false
+	return out
+}
+
+// parallelism is the number of subjects a scoped action runs for at once: the engine's MaxParallel (default 4),
+// fewer when the action asks for it (`parallel`); one for an action that is not an llm or tool action (a person
+// takes one task at a time, a script or builtin may run sub-agents of the process).
+func (e *Engine) parallelism(a methodology.Action) int {
+	if a.Kind != methodology.KindLLM && a.Kind != methodology.KindTool {
+		return 1
+	}
+	n := e.MaxParallel
+	if n <= 0 {
+		n = 4
+	}
+	if a.Parallel > 0 && a.Parallel < n {
+		n = a.Parallel
+	}
+	return n
+}
+
+// bindSubject gives the blackboard of a run of a scoped action its subject (`vars.item`, `vars.subject`) and records
+// the subject on the step.
+func bindSubject(bb domain.Blackboard, a methodology.Action, id string, step *Step) domain.Blackboard {
+	step.Subject = id
+	bb.Vars = maps.Clone(bb.Vars)
+	if bb.Vars == nil {
+		bb.Vars = map[string]any{}
+	}
+	entry := condition.SubjectEntry(bb, a.Scope, id)
+	bb.Vars["item"], bb.Vars["subject"] = entry, id
+	step.SubjectRef = subjectRef(a.Scope, entry)
+	return bb
+}
+
+// runScoped runs a scoped action for several pending subjects at once (ADR 0109 §3.5): one step per subject, their
+// executors called concurrently (the model calls, the slow part), then what each returned settled on the process one
+// after the other, in the order of the subjects, so that each observation sees the work of the steps before it. A
+// subject whose implementation asks for another permission than the first one's waits for a later cycle; the first
+// one's gate applies to all (same action, same initiator).
+func (e *Engine) runScoped(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action,
+	calls []LLMCall, ids []string) error {
+	type job struct {
+		i       int
+		bb      domain.Blackboard
+		impl    methodology.Action
+		specErr error
+		r       ran
+		err     error
+	}
+	var jobs []job
+	var permission string
+	for n, id := range ids {
+		var planning []LLMCall
+		if n == 0 {
+			planning = calls // the planning that chose the action belongs to its first run
+		}
+		step := newStep(p, bb, action, planning, e.clock())
+		sbb := bindSubject(bb, action, id, &step)
+		impl, spec, specErr := e.specialize(ctx, p, m, action, sbb)
+		perm := action.Permission
+		if specErr == nil && spec != "" {
+			perm = impl.Permission
+			step.Specialization = spec
+		}
+		if n == 0 {
+			if waiting, err := e.gateAction(ctx, p, m, action, step, perm); err != nil || waiting {
+				return err
+			}
+			permission = perm
+		} else if perm != permission {
+			break
+		}
+		step.Execution = uuid.NewString()
+		p.Steps = append(p.Steps, step)
+		jobs = append(jobs, job{i: len(p.Steps) - 1, bb: sbb, impl: impl, specErr: specErr})
+	}
+	var wg sync.WaitGroup
+	for k := range jobs {
+		if jobs[k].specErr != nil {
+			continue
+		}
+		wg.Add(1)
+		go func(j *job) {
+			defer wg.Done()
+			j.r, j.err = e.runAction(ctx, p, m, j.bb, j.impl, j.i)
+		}(&jobs[k])
+	}
+	wg.Wait()
+	var first error
+	for _, j := range jobs {
+		step := &p.Steps[j.i]
+		var err error
+		switch {
+		case j.specErr != nil:
+			step.Error, step.EndedAt = j.specErr.Error(), e.clock()
+			err = e.recordFailure(p, action.Name)
+			j.impl = action
+		case j.err != nil:
+			err = j.err
+		default:
+			err = e.settleAction(p, m, j.impl, j.i, j.r)
+		}
+		e.journal(ctx, p, actionRecord(p, j.i, j.impl.Kind, action.Step, step.Execution))
+		p.Steps[j.i].dropExchanges()
+		if err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }
 
 // disable takes an action out of the plans of the process.

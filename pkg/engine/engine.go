@@ -52,6 +52,9 @@ type Engine struct {
 	// MaxSteps bounds the number of actions of a process (default 50); the runs of a scoped action for its subjects
 	// count once per action, each subject being given up after a few failures (ADR 0109 §3.5).
 	MaxSteps int
+	// MaxParallel bounds the subjects a scoped action runs for at once (default 4; an action's `parallel` may ask
+	// for fewer, ADR 0109 §3.5).
+	MaxParallel int
 	// MaxFailures disables an action after that many executions without the
 	// promised effects (default 2).
 	MaxFailures int
@@ -813,11 +816,32 @@ func (e *Engine) specialize(ctx context.Context, p *Process, m *methodology.Comp
 }
 
 func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
+	r, err := e.runAction(ctx, p, m, bb, action, i)
+	if err != nil {
+		return err
+	}
+	return e.settleAction(p, m, action, i, r)
+}
+
+// ran is what the executor of an action returned, to be settled on the process (settleAction).
+type ran struct {
+	ctx  context.Context
+	end  func(*Step, error)
+	host *Host
+	sc   *StepContext
+	res  ActionResult
+	err  error
+}
+
+// runAction runs the executor of the action of step i. It writes nothing on the process but the span of its own
+// step, so that the runs of a scoped action for several subjects go at once (runScoped); settleAction then records
+// what it did, one step after the other.
+func (e *Engine) runAction(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) (ran, error) {
 	exec, ok := e.Executors[action.Kind]
 	if !ok {
-		return fmt.Errorf("no executor for action kind %q", action.Kind)
+		return ran{}, fmt.Errorf("no executor for action kind %q", action.Kind)
 	}
-	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan)
+	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan, "subject", p.Steps[i].Subject)
 	ctx, end := e.tracer().StartAction(ctx, p, action.Name, action.Kind)
 	p.Steps[i].SpanID = e.spanID(ctx)
 	var agentMCPs []string
@@ -828,6 +852,13 @@ func (e *Engine) executeStep(ctx context.Context, p *Process, m *methodology.Com
 	host.step, host.base = i, len(p.Steps[i].LLMCalls)
 	sc := stepContext(m, p, action)
 	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host, Step: sc})
+	return ran{ctx: ctx, end: end, host: host, sc: sc, res: res, err: err}, nil
+}
+
+// settleAction records on the process what the run of the action of step i did: its outputs, the items and node
+// operations it returned, and whether it reached its effects.
+func (e *Engine) settleAction(p *Process, m *methodology.Compiled, action methodology.Action, i int, r ran) error {
+	ctx, end, host, sc, res, err := r.ctx, r.end, r.host, r.sc, r.res, r.err
 	step := &p.Steps[i]
 	host.record(step)
 	step.Output, step.Sandbox = res.Output, res.Sandbox

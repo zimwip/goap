@@ -269,6 +269,9 @@ type Action struct {
 	// pending" (PendingCondition), its effects the aggregates of its scoped effects.
 	Scope string `yaml:"scope,omitempty" json:"scope,omitempty"`
 	Where string `yaml:"where,omitempty" json:"where,omitempty"`
+	// Parallel bounds the subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after
+	// the other).
+	Parallel int `yaml:"parallel,omitempty" json:"parallel,omitempty"`
 	// ScopedPre / ScopedEffects are the scoped conditions of a compiled scoped action, checked on its subject; Lifted
 	// are the aggregates its effects were lifted to (compiled only).
 	ScopedPre     map[string]bool `yaml:"-" json:"-"`

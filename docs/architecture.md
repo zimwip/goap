@@ -321,7 +321,8 @@ of its scope (`self`), its values carried by the entries of the scope (`changeIm
 for another condition of the same subject). An aggregate (`all:` / `any:` / `none:` of a scoped condition, `where`,
 `empty`: the value of `all` on no subject, default false) brings them to the level of the change, the only level the
 planner and the goals see. A **scoped action** (`scope`, `where`) runs once per pending subject (its scoped pre holds,
-its scoped effects do not), one subject per step with `vars.item` / `vars.subject`; the planner sees it lifted (pre
+its scoped effects do not), one step per subject with `vars.item` / `vars.subject`, several subjects at once for an llm or tool action
+(`Engine.MaxParallel`, default 4, fewer with the action's `parallel`); the planner sees it lifted (pre
 `pending:<action>`, effects the `all:` aggregates of its scoped effects over its subjects). A step running one may
 narrow its subjects (`where` on the step, with its `done`): one action, one pass per part (the layers of the `sdlc`
 impact analysis).

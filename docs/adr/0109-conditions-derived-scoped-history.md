@@ -305,7 +305,14 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
   left the action is disabled for the run. The step limit of a process counts the runs of a scoped action once.
 - The history (`journal.Fold`) keeps the runs of a scoped step per subject (a run for another subject does not
   replace it) and the staleness of such a run is about its subject only.
-- The runs are sequential, one subject per step: the parallel lanes of `foreach` are not used.
+- The runs for several subjects go at once (`Engine.runScoped`): an llm or tool action runs for up to
+  `Engine.MaxParallel` pending subjects (default 4, `GOAP_MAX_PARALLEL`; fewer with the action's `parallel`, 1 one
+  after the other; a human, script or builtin action one at a time). One step per subject; the executors are called
+  concurrently (`runAction`: it writes nothing on the process but its own step's span), then each run is settled in
+  the order of the subjects (`settleAction`: outputs, items, node operations, observation and effects), so each
+  observation sees the work settled before it and the history keeps one run per subject. A subject whose
+  specialization asks for another permission than the first one's waits for a later cycle; the first one's gate
+  applies to all. No sub-agent per subject: the parallel lanes of `foreach` are not used.
 - `sdlc` 0.7.0 is the first user: the impact analysis method in four passes (requirements, functions, applications,
   components), each one `identify_<layer>` (llm), `propagate_<layer>` (`graph.propagate` with a `layer`) and the one
   scoped action `qualify_impact` (one LLM call per suspected impact: an assessment `impact:<key>`, verdict `confirmed`

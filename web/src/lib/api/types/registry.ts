@@ -316,6 +316,8 @@ export interface Action {
   /** runs once per pending subject of this scope (ADR 0109), within `where` */
   scope?: string;
   where?: string;
+  /** subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after the other) */
+  parallel?: number;
 }
 
 /** An event an activity reacts to (ADR 0036 §3, 0106, 0110): a standard event or one the methodology declares. */

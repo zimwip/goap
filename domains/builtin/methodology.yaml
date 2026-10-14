@@ -70,6 +70,7 @@ nodeTypes:
       - {name: emits, label: Emits, description: "Events of the methodology the action raises when it reaches its effects (ADR 0110)", type: json, widget: textarea, section: Reactions, order: 7}
       - {name: scope, label: Scope, description: "Runs once per pending subject of this scope (impact, item, risk, action, step; ADR 0109): pre and effects name conditions of the scope", type: string, section: Planning, order: 12}
       - {name: where, label: Where, description: "Subjects of the scope the action runs for (CEL, self the subject)", type: string, widget: textarea, section: Planning, order: 13}
+      - {name: parallel, label: Parallel, description: "Subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after the other)", type: number, section: Planning, order: 14}
       - {name: permission, label: Permission, description: "Permission required from the initiator to run the action automatically", type: string, section: Access, order: 12}
       - {name: model, label: Model, description: "Model alias of an llm action", type: string, section: Execution, order: 13}
       - {name: prompt, label: Prompt, description: "Prompt of an llm action", type: string, widget: textarea, section: Execution, order: 14}

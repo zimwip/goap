@@ -332,6 +332,8 @@ message Action {
   // runs once per pending subject of this scope (ADR 0109), within where
   string scope = 26;
   string where = 27;
+  // the subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after the other)
+  int32 parallel = 28;
 }
 
 // The verification an action declares (ADR 0075): the kind of verifier its effect needs.
