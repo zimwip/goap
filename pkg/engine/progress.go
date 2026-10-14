@@ -117,7 +117,14 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 		}
 	}
 	count(out.Steps)
-	describeNeeds(m, p.World, out.Steps)
+	var bb *domain.Blackboard
+	if p.ChangeID != "" {
+		if b, err := e.blackboard(ctx, p.ChangeID, p.Flow); err == nil {
+			b.Supertypes = e.supertypesOf(m)
+			bb = &b
+		}
+	}
+	describeNeeds(m, p.World, bb, out.Steps)
 	return out, nil
 }
 

@@ -718,7 +718,8 @@ against the change as it is with what the live runs do laid over them, and what 
 (`StepProgress.Needs`: the condition, the value, what it means, the actions producing it and, in `Requires`, the
 conditions it cannot hold without that do not hold yet: `condition.Set.Implied` reads from the expressions that
 `description_accepted` cannot hold without `description_rated`; `Compiled.Prerequisites` / `Producers`, also taken in
-by `NeededBy`).
+by `NeededBy`; and `Facts`: the terms of the CEL expression evaluated on the change, an exists part by part, the first
+missing one with the actions establishing it, `condition.Set.Facts` / `Missing` / `Establishes`).
 
 A process can now run, and even finish, without ever being attached to a Change — binding stays
 eager by default for existing methodologies; an agent can declare its own binding action to defer

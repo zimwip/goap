@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blockers, needDetail, needText, needsOf, ordered, runsText } from './changeState';
+import { blockers, factLines, needDetail, needText, needsOf, ordered, runsText } from './changeState';
 
 describe('change state', () => {
   it('reads a need by its meaning', () => {
@@ -11,6 +11,13 @@ describe('change state', () => {
       requires: [{ condition: 'description_rated', want: true, description: 'the description has been rated', producedBy: ['rate_description'] }] };
     expect(needDetail(n)).toBe('the description is accepted, first: the description has been rated (by rate_description)');
     expect(needDetail({ condition: 'a', want: true })).toBe('a');
+  });
+  it('says which term of the condition is missing', () => {
+    const n = { condition: 'description_accepted', want: true, description: 'the description is accepted',
+      facts: [{ text: 'assessments.exists(a, ...)', over: 'assessments', holds: false, parts: [
+        { text: 'a.key == "description"', holds: true }, { text: 'a.current', holds: true }, { text: 'a.score >= 3', holds: false, missing: true }] }] };
+    expect(needDetail(n)).toBe('the description is accepted, missing: assessments: a.score >= 3');
+    expect(factLines(n).map((f) => `${f.depth}${f.holds ? '+' : '-'}${f.text}`)).toEqual(['0-in assessments', '1+a.key == "description"', '1+a.current', '1-a.score >= 3']);
   });
   it('falls back on the missing names', () => {
     expect(needsOf({ missing: ['a', '!b'] })).toEqual([

@@ -129,6 +129,17 @@ prerequisite.
   `Need.produced_by` / `requires`): a step waiting for an accepted description says "first: the description has
   been rated (by rate_description)" (`needDetail`, `web/src/lib/changeState.ts`).
 
+**The facts of a condition.** A condition is a CEL expression over the variables of the context, so what it really
+asks of the change is known from it, and so is what fails. `condition.Set.Facts(name, bb)` (`pkg/condition/facts.go`)
+reads it as its `&&` terms, each evaluated on the blackboard; a term `R.exists(v, P1 && ... && Pn)` is read part by
+part, part i holding when an element of R meets P1 to Pi. `condition.Missing` is the first part (or term) that does not
+hold, and `Set.Establishes(effect, fact)` says whether an effect condition asks for the same facts (an exists over the
+same list with every part up to it). So, for `description_accepted`: before any rating, `a.key == "description"` is
+missing and `rate_description` establishes it; once rated 2, `a.score >= 3` is missing and no action guarantees it.
+`Need.Facts` (`Fact {text, holds, error, over, parts, missing, producedBy}`, proto `Fact`), filled from the blackboard
+by `ChangeState` and `Progress`; the web shows each term with whether it holds and names the missing one
+(`factLines`, `missingFact`, `needDetail`).
+
 ## Consequences
 
 - An observer or any agent declared persistent works as one colleague on its scope: it remembers what it said

@@ -457,7 +457,15 @@ func (h *Handler) GetChangeState(ctx context.Context, r *connect.Request[enginev
 func needsToPB(needs []engine.Need) []*enginev1.Need {
 	var out []*enginev1.Need
 	for _, n := range needs {
-		out = append(out, &enginev1.Need{Condition: n.Condition, Want: n.Want, Description: n.Description, ProducedBy: n.ProducedBy, Requires: needsToPB(n.Requires)})
+		out = append(out, &enginev1.Need{Condition: n.Condition, Want: n.Want, Description: n.Description, ProducedBy: n.ProducedBy, Requires: needsToPB(n.Requires), Facts: factsToPB(n.Facts)})
+	}
+	return out
+}
+
+func factsToPB(facts []engine.Fact) []*enginev1.Fact {
+	var out []*enginev1.Fact
+	for _, f := range facts {
+		out = append(out, &enginev1.Fact{Text: f.Text, Holds: f.Holds, Error: f.Error, Over: f.Over, Parts: factsToPB(f.Parts), Missing: f.Missing, ProducedBy: f.ProducedBy})
 	}
 	return out
 }

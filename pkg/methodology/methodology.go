@@ -507,13 +507,18 @@ func (c *Compiled) Prerequisites(name string) []string {
 // Producers are the actions (declared ones by name, then the steps by path) that make a condition hold: one of their
 // effects is the condition, or implies it.
 func (c *Compiled) Producers(name string) []string {
+	return c.ProducersWhere(func(effect string) bool { return effect == name || slices.Contains(c.Prerequisites(effect), name) })
+}
+
+// ProducersWhere are the actions (sorted names) one of whose effects, made true, satisfies establishes.
+func (c *Compiled) ProducersWhere(establishes func(effect string) bool) []string {
 	var out []string
 	for _, a := range c.allActions() {
 		if a.IsSpecialization() || slices.Contains(out, a.Name) {
 			continue
 		}
 		for k, v := range a.Effects {
-			if v && (k == name || slices.Contains(c.Prerequisites(k), name)) {
+			if v && establishes(k) {
 				out = append(out, a.Name)
 				break
 			}

@@ -270,6 +270,20 @@ export interface Need {
   producedBy?: string[];
   /** The conditions it cannot hold without that do not hold yet: what to reach first (ADR 0112 §5). */
   requires?: Need[];
+  /** The terms of its expression with whether each holds now (ADR 0112 §5). */
+  facts?: Fact[];
+}
+
+/** One term of the expression of a condition: `over` is the list an exists term ranges over, `parts` its predicate
+ * part by part; `missing` marks the first term that does not hold, with the actions establishing it. */
+export interface Fact {
+  text?: string;
+  holds?: boolean;
+  error?: string;
+  over?: string;
+  parts?: Fact[];
+  missing?: boolean;
+  producedBy?: string[];
 }
 
 /** Where one process of the methodology of a change stands now, whatever the number of runs (ADR 0112). */

@@ -27,6 +27,22 @@ type Need struct {
 	// Requires are the conditions it cannot hold without (ADR 0112 §5) that do not hold yet: what is to be reached
 	// first, each with the actions producing it.
 	Requires []Need `json:"requires,omitempty"`
+	// Facts are the terms of its expression with whether each holds now (ADR 0112 §5): what it really asks of the
+	// change. The first that does not hold carries the actions establishing it.
+	Facts []Fact `json:"facts,omitempty"`
+}
+
+// Fact is one term of the expression of a condition (condition.Fact) with whether it holds now.
+type Fact struct {
+	Text  string `json:"text"`
+	Holds bool   `json:"holds"`
+	Error string `json:"error,omitempty"`
+	// Over is the list an exists term ranges over, Parts its predicate part by part.
+	Over  string `json:"over,omitempty"`
+	Parts []Fact `json:"parts,omitempty"`
+	// Missing marks the first term that does not hold; ProducedBy the actions establishing it.
+	Missing    bool     `json:"missing,omitempty"`
+	ProducedBy []string `json:"producedBy,omitempty"`
 }
 
 // ProcessState is where one process of the methodology of a change stands now.
@@ -101,13 +117,13 @@ func (e *Engine) ChangeState(ctx context.Context, changeID domain.ChangeID) (*Ch
 		if nested[proc.Name] {
 			continue // shown in the step that nests it
 		}
-		out.Processes = append(out.Processes, e.processState(ctx, m, proc, world, runs, reactive[proc.Name]))
+		out.Processes = append(out.Processes, e.processState(ctx, m, proc, &bb, world, runs, reactive[proc.Name]))
 	}
 	return out, nil
 }
 
 // processState lays the live runs of a process over its steps judged against the change.
-func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc methodology.Process, world map[string]bool, runs []*Process, reactive bool) ProcessState {
+func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc methodology.Process, bb *domain.Blackboard, world map[string]bool, runs []*Process, reactive bool) ProcessState {
 	ps := ProcessState{Process: proc.Name, Description: proc.Description, Reactive: reactive, Steps: []StepProgress{}}
 	// the runs of the process (its agent; a nested process or a method has its own)
 	var mine []*Process
@@ -152,7 +168,7 @@ func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc
 	} else {
 		ps.State = aggregate(ps.Steps)
 	}
-	describeNeeds(m, world, ps.Steps)
+	describeNeeds(m, world, bb, ps.Steps)
 	return ps
 }
 
@@ -203,9 +219,9 @@ func countSteps(steps []StepProgress) (done, total int) {
 
 // describeNeeds fills the needs of the steps from what they miss, with what each condition means, the actions
 // producing it and, for one wanted true, the conditions it cannot hold without that do not hold yet.
-func describeNeeds(m *methodology.Compiled, world map[string]bool, steps []StepProgress) {
+func describeNeeds(m *methodology.Compiled, world map[string]bool, bb *domain.Blackboard, steps []StepProgress) {
 	for i := range steps {
-		describeNeeds(m, world, steps[i].Steps)
+		describeNeeds(m, world, bb, steps[i].Steps)
 		steps[i].Needs = nil
 		for _, c := range steps[i].Missing {
 			name, neg := strings.CutPrefix(c, "!")
@@ -217,10 +233,39 @@ func describeNeeds(m *methodology.Compiled, world map[string]bool, steps []StepP
 						n.Requires = append(n.Requires, Need{Condition: p, Want: true, Description: conditionMeaning(m, p), ProducedBy: m.Producers(p)})
 					}
 				}
+				if bb != nil {
+					n.Facts = factsOf(m, name, *bb)
+				}
 			}
 			steps[i].Needs = append(steps[i].Needs, n)
 		}
 	}
+}
+
+// factsOf reads a condition into its terms against the blackboard, the first missing one with its producers.
+func factsOf(m *methodology.Compiled, name string, bb domain.Blackboard) []Fact {
+	if m.Conditions == nil {
+		return nil
+	}
+	cf, ok := m.Conditions.Facts(name, bb)
+	if !ok {
+		return nil
+	}
+	miss, missing := condition.Missing(cf)
+	var conv func([]condition.Fact) []Fact
+	conv = func(fs []condition.Fact) []Fact {
+		out := make([]Fact, 0, len(fs))
+		for _, f := range fs {
+			v := Fact{Text: f.Text, Holds: f.Holds, Error: f.Error, Over: f.Over, Parts: conv(f.Parts)}
+			if missing && !f.Holds && f.Text == miss.Text && len(f.Parts) == 0 {
+				v.Missing, missing = true, false
+				v.ProducedBy = m.ProducersWhere(func(effect string) bool { return m.Conditions.Establishes(effect, miss) })
+			}
+			out = append(out, v)
+		}
+		return out
+	}
+	return conv(cf)
 }
 
 // conditionMeaning says what a condition of the methodology means: its description, or what a generated one stands

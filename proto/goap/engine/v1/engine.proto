@@ -619,6 +619,21 @@ message Need {
   repeated string produced_by = 4;
   // the conditions it cannot hold without that do not hold yet (ADR 0112 §5)
   repeated Need requires = 5;
+  // the terms of its expression with whether each holds now (ADR 0112 §5)
+  repeated Fact facts = 6;
+}
+
+// One term of the expression of a condition.
+message Fact {
+  string text = 1;
+  bool holds = 2;
+  string error = 3;
+  // the list an exists term ranges over, and its predicate part by part
+  string over = 4;
+  repeated Fact parts = 5;
+  // the first term that does not hold, and the actions establishing it
+  bool missing = 6;
+  repeated string produced_by = 7;
 }
 
 message ExplainConditionRequest {

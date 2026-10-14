@@ -4551,7 +4551,9 @@ type Need struct {
 	// the actions making it hold (an effect that is it, or implies it)
 	ProducedBy []string `protobuf:"bytes,4,rep,name=produced_by,json=producedBy,proto3" json:"produced_by,omitempty"`
 	// the conditions it cannot hold without that do not hold yet (ADR 0112 §5)
-	Requires      []*Need `protobuf:"bytes,5,rep,name=requires,proto3" json:"requires,omitempty"`
+	Requires []*Need `protobuf:"bytes,5,rep,name=requires,proto3" json:"requires,omitempty"`
+	// the terms of its expression with whether each holds now (ADR 0112 §5)
+	Facts         []*Fact `protobuf:"bytes,6,rep,name=facts,proto3" json:"facts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4621,6 +4623,108 @@ func (x *Need) GetRequires() []*Need {
 	return nil
 }
 
+func (x *Need) GetFacts() []*Fact {
+	if x != nil {
+		return x.Facts
+	}
+	return nil
+}
+
+// One term of the expression of a condition.
+type Fact struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Text  string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Holds bool                   `protobuf:"varint,2,opt,name=holds,proto3" json:"holds,omitempty"`
+	Error string                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	// the list an exists term ranges over, and its predicate part by part
+	Over  string  `protobuf:"bytes,4,opt,name=over,proto3" json:"over,omitempty"`
+	Parts []*Fact `protobuf:"bytes,5,rep,name=parts,proto3" json:"parts,omitempty"`
+	// the first term that does not hold, and the actions establishing it
+	Missing       bool     `protobuf:"varint,6,opt,name=missing,proto3" json:"missing,omitempty"`
+	ProducedBy    []string `protobuf:"bytes,7,rep,name=produced_by,json=producedBy,proto3" json:"produced_by,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Fact) Reset() {
+	*x = Fact{}
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Fact) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Fact) ProtoMessage() {}
+
+func (x *Fact) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Fact.ProtoReflect.Descriptor instead.
+func (*Fact) Descriptor() ([]byte, []int) {
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *Fact) GetText() string {
+	if x != nil {
+		return x.Text
+	}
+	return ""
+}
+
+func (x *Fact) GetHolds() bool {
+	if x != nil {
+		return x.Holds
+	}
+	return false
+}
+
+func (x *Fact) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+func (x *Fact) GetOver() string {
+	if x != nil {
+		return x.Over
+	}
+	return ""
+}
+
+func (x *Fact) GetParts() []*Fact {
+	if x != nil {
+		return x.Parts
+	}
+	return nil
+}
+
+func (x *Fact) GetMissing() bool {
+	if x != nil {
+		return x.Missing
+	}
+	return false
+}
+
+func (x *Fact) GetProducedBy() []string {
+	if x != nil {
+		return x.ProducedBy
+	}
+	return nil
+}
+
 type ExplainConditionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProcessId     string                 `protobuf:"bytes,1,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
@@ -4631,7 +4735,7 @@ type ExplainConditionRequest struct {
 
 func (x *ExplainConditionRequest) Reset() {
 	*x = ExplainConditionRequest{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[63]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4643,7 +4747,7 @@ func (x *ExplainConditionRequest) String() string {
 func (*ExplainConditionRequest) ProtoMessage() {}
 
 func (x *ExplainConditionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[63]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4656,7 +4760,7 @@ func (x *ExplainConditionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainConditionRequest.ProtoReflect.Descriptor instead.
 func (*ExplainConditionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{63}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ExplainConditionRequest) GetProcessId() string {
@@ -4691,7 +4795,7 @@ type ExplainConditionResponse struct {
 
 func (x *ExplainConditionResponse) Reset() {
 	*x = ExplainConditionResponse{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[64]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4703,7 +4807,7 @@ func (x *ExplainConditionResponse) String() string {
 func (*ExplainConditionResponse) ProtoMessage() {}
 
 func (x *ExplainConditionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[64]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4716,7 +4820,7 @@ func (x *ExplainConditionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExplainConditionResponse.ProtoReflect.Descriptor instead.
 func (*ExplainConditionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{64}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ExplainConditionResponse) GetCondition() string {
@@ -4775,7 +4879,7 @@ type ConditionTerm struct {
 
 func (x *ConditionTerm) Reset() {
 	*x = ConditionTerm{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[65]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4787,7 +4891,7 @@ func (x *ConditionTerm) String() string {
 func (*ConditionTerm) ProtoMessage() {}
 
 func (x *ConditionTerm) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[65]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4800,7 +4904,7 @@ func (x *ConditionTerm) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConditionTerm.ProtoReflect.Descriptor instead.
 func (*ConditionTerm) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{65}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *ConditionTerm) GetText() string {
@@ -4857,7 +4961,7 @@ type ProcessProgress struct {
 
 func (x *ProcessProgress) Reset() {
 	*x = ProcessProgress{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[66]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4869,7 +4973,7 @@ func (x *ProcessProgress) String() string {
 func (*ProcessProgress) ProtoMessage() {}
 
 func (x *ProcessProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[66]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4882,7 +4986,7 @@ func (x *ProcessProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessProgress.ProtoReflect.Descriptor instead.
 func (*ProcessProgress) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{66}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ProcessProgress) GetProcessId() string {
@@ -4984,7 +5088,7 @@ type StepProgress struct {
 
 func (x *StepProgress) Reset() {
 	*x = StepProgress{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[67]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4996,7 +5100,7 @@ func (x *StepProgress) String() string {
 func (*StepProgress) ProtoMessage() {}
 
 func (x *StepProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[67]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5009,7 +5113,7 @@ func (x *StepProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StepProgress.ProtoReflect.Descriptor instead.
 func (*StepProgress) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{67}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *StepProgress) GetPath() string {
@@ -5158,7 +5262,7 @@ type Lane struct {
 
 func (x *Lane) Reset() {
 	*x = Lane{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[68]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5170,7 +5274,7 @@ func (x *Lane) String() string {
 func (*Lane) ProtoMessage() {}
 
 func (x *Lane) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[68]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5183,7 +5287,7 @@ func (x *Lane) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Lane.ProtoReflect.Descriptor instead.
 func (*Lane) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{68}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *Lane) GetItem() string {
@@ -5228,7 +5332,7 @@ type ListProcessesRequest struct {
 
 func (x *ListProcessesRequest) Reset() {
 	*x = ListProcessesRequest{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[69]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5240,7 +5344,7 @@ func (x *ListProcessesRequest) String() string {
 func (*ListProcessesRequest) ProtoMessage() {}
 
 func (x *ListProcessesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[69]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5253,7 +5357,7 @@ func (x *ListProcessesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProcessesRequest.ProtoReflect.Descriptor instead.
 func (*ListProcessesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{69}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *ListProcessesRequest) GetMine() bool {
@@ -5286,7 +5390,7 @@ type ListProcessesResponse struct {
 
 func (x *ListProcessesResponse) Reset() {
 	*x = ListProcessesResponse{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[70]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5298,7 +5402,7 @@ func (x *ListProcessesResponse) String() string {
 func (*ListProcessesResponse) ProtoMessage() {}
 
 func (x *ListProcessesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[70]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5311,7 +5415,7 @@ func (x *ListProcessesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListProcessesResponse.ProtoReflect.Descriptor instead.
 func (*ListProcessesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{70}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *ListProcessesResponse) GetProcesses() []*Process {
@@ -5330,7 +5434,7 @@ type WatchEventsRequest struct {
 
 func (x *WatchEventsRequest) Reset() {
 	*x = WatchEventsRequest{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[71]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5342,7 +5446,7 @@ func (x *WatchEventsRequest) String() string {
 func (*WatchEventsRequest) ProtoMessage() {}
 
 func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[71]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5355,7 +5459,7 @@ func (x *WatchEventsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchEventsRequest.ProtoReflect.Descriptor instead.
 func (*WatchEventsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{71}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *WatchEventsRequest) GetProcessId() string {
@@ -5378,7 +5482,7 @@ type WatchEventsResponse struct {
 
 func (x *WatchEventsResponse) Reset() {
 	*x = WatchEventsResponse{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[72]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5390,7 +5494,7 @@ func (x *WatchEventsResponse) String() string {
 func (*WatchEventsResponse) ProtoMessage() {}
 
 func (x *WatchEventsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[72]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5403,7 +5507,7 @@ func (x *WatchEventsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchEventsResponse.ProtoReflect.Descriptor instead.
 func (*WatchEventsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{72}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *WatchEventsResponse) GetType() string {
@@ -5447,7 +5551,7 @@ type RelaunchStepRequest struct {
 
 func (x *RelaunchStepRequest) Reset() {
 	*x = RelaunchStepRequest{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[73]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5459,7 +5563,7 @@ func (x *RelaunchStepRequest) String() string {
 func (*RelaunchStepRequest) ProtoMessage() {}
 
 func (x *RelaunchStepRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[73]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5472,7 +5576,7 @@ func (x *RelaunchStepRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelaunchStepRequest.ProtoReflect.Descriptor instead.
 func (*RelaunchStepRequest) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{73}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *RelaunchStepRequest) GetProcessId() string {
@@ -5513,7 +5617,7 @@ type RelaunchStepResponse struct {
 
 func (x *RelaunchStepResponse) Reset() {
 	*x = RelaunchStepResponse{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[74]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5525,7 +5629,7 @@ func (x *RelaunchStepResponse) String() string {
 func (*RelaunchStepResponse) ProtoMessage() {}
 
 func (x *RelaunchStepResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[74]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5538,7 +5642,7 @@ func (x *RelaunchStepResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelaunchStepResponse.ProtoReflect.Descriptor instead.
 func (*RelaunchStepResponse) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{74}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *RelaunchStepResponse) GetProcess() *Process {
@@ -5559,7 +5663,7 @@ type DecideFlowRequest struct {
 
 func (x *DecideFlowRequest) Reset() {
 	*x = DecideFlowRequest{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[75]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5571,7 +5675,7 @@ func (x *DecideFlowRequest) String() string {
 func (*DecideFlowRequest) ProtoMessage() {}
 
 func (x *DecideFlowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[75]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5584,7 +5688,7 @@ func (x *DecideFlowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecideFlowRequest.ProtoReflect.Descriptor instead.
 func (*DecideFlowRequest) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{75}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *DecideFlowRequest) GetProcessId() string {
@@ -5617,7 +5721,7 @@ type DecideFlowResponse struct {
 
 func (x *DecideFlowResponse) Reset() {
 	*x = DecideFlowResponse{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[76]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5629,7 +5733,7 @@ func (x *DecideFlowResponse) String() string {
 func (*DecideFlowResponse) ProtoMessage() {}
 
 func (x *DecideFlowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[76]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5642,7 +5746,7 @@ func (x *DecideFlowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecideFlowResponse.ProtoReflect.Descriptor instead.
 func (*DecideFlowResponse) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{76}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *DecideFlowResponse) GetProcess() *Process {
@@ -5664,7 +5768,7 @@ type ResolveBoardRequest struct {
 
 func (x *ResolveBoardRequest) Reset() {
 	*x = ResolveBoardRequest{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[77]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5676,7 +5780,7 @@ func (x *ResolveBoardRequest) String() string {
 func (*ResolveBoardRequest) ProtoMessage() {}
 
 func (x *ResolveBoardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[77]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5689,7 +5793,7 @@ func (x *ResolveBoardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveBoardRequest.ProtoReflect.Descriptor instead.
 func (*ResolveBoardRequest) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{77}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *ResolveBoardRequest) GetProcessId() string {
@@ -5724,7 +5828,7 @@ type ResolveBoardResponse struct {
 
 func (x *ResolveBoardResponse) Reset() {
 	*x = ResolveBoardResponse{}
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[78]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5736,7 +5840,7 @@ func (x *ResolveBoardResponse) String() string {
 func (*ResolveBoardResponse) ProtoMessage() {}
 
 func (x *ResolveBoardResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_engine_v1_engine_proto_msgTypes[78]
+	mi := &file_goap_engine_v1_engine_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5749,7 +5853,7 @@ func (x *ResolveBoardResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveBoardResponse.ProtoReflect.Descriptor instead.
 func (*ResolveBoardResponse) Descriptor() ([]byte, []int) {
-	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{78}
+	return file_goap_engine_v1_engine_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *ResolveBoardResponse) GetProcess() *Process {
@@ -6182,14 +6286,24 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x05steps\x18\t \x03(\v2\x1c.goap.engine.v1.StepProgressR\x05steps\x12\x12\n" +
 	"\x04done\x18\n" +
 	" \x01(\x05R\x04done\x12\x14\n" +
-	"\x05total\x18\v \x01(\x05R\x05total\"\xad\x01\n" +
+	"\x05total\x18\v \x01(\x05R\x05total\"\xd9\x01\n" +
 	"\x04Need\x12\x1c\n" +
 	"\tcondition\x18\x01 \x01(\tR\tcondition\x12\x12\n" +
 	"\x04want\x18\x02 \x01(\bR\x04want\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1f\n" +
 	"\vproduced_by\x18\x04 \x03(\tR\n" +
 	"producedBy\x120\n" +
-	"\brequires\x18\x05 \x03(\v2\x14.goap.engine.v1.NeedR\brequires\"V\n" +
+	"\brequires\x18\x05 \x03(\v2\x14.goap.engine.v1.NeedR\brequires\x12*\n" +
+	"\x05facts\x18\x06 \x03(\v2\x14.goap.engine.v1.FactR\x05facts\"\xc1\x01\n" +
+	"\x04Fact\x12\x12\n" +
+	"\x04text\x18\x01 \x01(\tR\x04text\x12\x14\n" +
+	"\x05holds\x18\x02 \x01(\bR\x05holds\x12\x14\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\x12\x12\n" +
+	"\x04over\x18\x04 \x01(\tR\x04over\x12*\n" +
+	"\x05parts\x18\x05 \x03(\v2\x14.goap.engine.v1.FactR\x05parts\x12\x18\n" +
+	"\amissing\x18\x06 \x01(\bR\amissing\x12\x1f\n" +
+	"\vproduced_by\x18\a \x03(\tR\n" +
+	"producedBy\"V\n" +
 	"\x17ExplainConditionRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1c\n" +
@@ -6332,7 +6446,7 @@ func file_goap_engine_v1_engine_proto_rawDescGZIP() []byte {
 	return file_goap_engine_v1_engine_proto_rawDescData
 }
 
-var file_goap_engine_v1_engine_proto_msgTypes = make([]protoimpl.MessageInfo, 85)
+var file_goap_engine_v1_engine_proto_msgTypes = make([]protoimpl.MessageInfo, 86)
 var file_goap_engine_v1_engine_proto_goTypes = []any{
 	(*TriggerState)(nil),               // 0: goap.engine.v1.TriggerState
 	(*ListTriggersRequest)(nil),        // 1: goap.engine.v1.ListTriggersRequest
@@ -6397,38 +6511,39 @@ var file_goap_engine_v1_engine_proto_goTypes = []any{
 	(*GetChangeStateResponse)(nil),     // 60: goap.engine.v1.GetChangeStateResponse
 	(*ProcessState)(nil),               // 61: goap.engine.v1.ProcessState
 	(*Need)(nil),                       // 62: goap.engine.v1.Need
-	(*ExplainConditionRequest)(nil),    // 63: goap.engine.v1.ExplainConditionRequest
-	(*ExplainConditionResponse)(nil),   // 64: goap.engine.v1.ExplainConditionResponse
-	(*ConditionTerm)(nil),              // 65: goap.engine.v1.ConditionTerm
-	(*ProcessProgress)(nil),            // 66: goap.engine.v1.ProcessProgress
-	(*StepProgress)(nil),               // 67: goap.engine.v1.StepProgress
-	(*Lane)(nil),                       // 68: goap.engine.v1.Lane
-	(*ListProcessesRequest)(nil),       // 69: goap.engine.v1.ListProcessesRequest
-	(*ListProcessesResponse)(nil),      // 70: goap.engine.v1.ListProcessesResponse
-	(*WatchEventsRequest)(nil),         // 71: goap.engine.v1.WatchEventsRequest
-	(*WatchEventsResponse)(nil),        // 72: goap.engine.v1.WatchEventsResponse
-	(*RelaunchStepRequest)(nil),        // 73: goap.engine.v1.RelaunchStepRequest
-	(*RelaunchStepResponse)(nil),       // 74: goap.engine.v1.RelaunchStepResponse
-	(*DecideFlowRequest)(nil),          // 75: goap.engine.v1.DecideFlowRequest
-	(*DecideFlowResponse)(nil),         // 76: goap.engine.v1.DecideFlowResponse
-	(*ResolveBoardRequest)(nil),        // 77: goap.engine.v1.ResolveBoardRequest
-	(*ResolveBoardResponse)(nil),       // 78: goap.engine.v1.ResolveBoardResponse
-	nil,                                // 79: goap.engine.v1.ResolveMergeRequest.ResolutionsEntry
-	nil,                                // 80: goap.engine.v1.Step.BeforeEntry
-	nil,                                // 81: goap.engine.v1.Step.AfterEntry
-	nil,                                // 82: goap.engine.v1.Process.WorldEntry
-	nil,                                // 83: goap.engine.v1.Process.UnknownEntry
-	nil,                                // 84: goap.engine.v1.ExplainConditionResponse.InputsEntry
-	(*timestamppb.Timestamp)(nil),      // 85: google.protobuf.Timestamp
-	(*structpb.Value)(nil),             // 86: google.protobuf.Value
-	(*structpb.Struct)(nil),            // 87: google.protobuf.Struct
+	(*Fact)(nil),                       // 63: goap.engine.v1.Fact
+	(*ExplainConditionRequest)(nil),    // 64: goap.engine.v1.ExplainConditionRequest
+	(*ExplainConditionResponse)(nil),   // 65: goap.engine.v1.ExplainConditionResponse
+	(*ConditionTerm)(nil),              // 66: goap.engine.v1.ConditionTerm
+	(*ProcessProgress)(nil),            // 67: goap.engine.v1.ProcessProgress
+	(*StepProgress)(nil),               // 68: goap.engine.v1.StepProgress
+	(*Lane)(nil),                       // 69: goap.engine.v1.Lane
+	(*ListProcessesRequest)(nil),       // 70: goap.engine.v1.ListProcessesRequest
+	(*ListProcessesResponse)(nil),      // 71: goap.engine.v1.ListProcessesResponse
+	(*WatchEventsRequest)(nil),         // 72: goap.engine.v1.WatchEventsRequest
+	(*WatchEventsResponse)(nil),        // 73: goap.engine.v1.WatchEventsResponse
+	(*RelaunchStepRequest)(nil),        // 74: goap.engine.v1.RelaunchStepRequest
+	(*RelaunchStepResponse)(nil),       // 75: goap.engine.v1.RelaunchStepResponse
+	(*DecideFlowRequest)(nil),          // 76: goap.engine.v1.DecideFlowRequest
+	(*DecideFlowResponse)(nil),         // 77: goap.engine.v1.DecideFlowResponse
+	(*ResolveBoardRequest)(nil),        // 78: goap.engine.v1.ResolveBoardRequest
+	(*ResolveBoardResponse)(nil),       // 79: goap.engine.v1.ResolveBoardResponse
+	nil,                                // 80: goap.engine.v1.ResolveMergeRequest.ResolutionsEntry
+	nil,                                // 81: goap.engine.v1.Step.BeforeEntry
+	nil,                                // 82: goap.engine.v1.Step.AfterEntry
+	nil,                                // 83: goap.engine.v1.Process.WorldEntry
+	nil,                                // 84: goap.engine.v1.Process.UnknownEntry
+	nil,                                // 85: goap.engine.v1.ExplainConditionResponse.InputsEntry
+	(*timestamppb.Timestamp)(nil),      // 86: google.protobuf.Timestamp
+	(*structpb.Value)(nil),             // 87: google.protobuf.Value
+	(*structpb.Struct)(nil),            // 88: google.protobuf.Struct
 }
 var file_goap_engine_v1_engine_proto_depIdxs = []int32{
-	85,  // 0: goap.engine.v1.TriggerState.last_fired:type_name -> google.protobuf.Timestamp
-	85,  // 1: goap.engine.v1.TriggerState.next_fire:type_name -> google.protobuf.Timestamp
+	86,  // 0: goap.engine.v1.TriggerState.last_fired:type_name -> google.protobuf.Timestamp
+	86,  // 1: goap.engine.v1.TriggerState.next_fire:type_name -> google.protobuf.Timestamp
 	0,   // 2: goap.engine.v1.ListTriggersResponse.triggers:type_name -> goap.engine.v1.TriggerState
 	29,  // 3: goap.engine.v1.FireTriggerResponse.process:type_name -> goap.engine.v1.Process
-	85,  // 4: goap.engine.v1.LogLine.time:type_name -> google.protobuf.Timestamp
+	86,  // 4: goap.engine.v1.LogLine.time:type_name -> google.protobuf.Timestamp
 	26,  // 5: goap.engine.v1.HumanTask.issues:type_name -> goap.engine.v1.BoardIssue
 	27,  // 6: goap.engine.v1.HumanTask.proposal:type_name -> goap.engine.v1.RelaunchProposal
 	23,  // 7: goap.engine.v1.HumanTask.context:type_name -> goap.engine.v1.StepContext
@@ -6438,19 +6553,19 @@ var file_goap_engine_v1_engine_proto_depIdxs = []int32{
 	29,  // 11: goap.engine.v1.ResolveRebaseResponse.process:type_name -> goap.engine.v1.Process
 	18,  // 12: goap.engine.v1.MergeTask.conflicts:type_name -> goap.engine.v1.MergeConflict
 	19,  // 13: goap.engine.v1.MergeConflict.properties:type_name -> goap.engine.v1.MergeProperty
-	86,  // 14: goap.engine.v1.MergeProperty.base:type_name -> google.protobuf.Value
-	86,  // 15: goap.engine.v1.MergeProperty.ours:type_name -> google.protobuf.Value
-	86,  // 16: goap.engine.v1.MergeProperty.theirs:type_name -> google.protobuf.Value
-	86,  // 17: goap.engine.v1.MergeProperty.proposed:type_name -> google.protobuf.Value
-	87,  // 18: goap.engine.v1.MergeResolution.props:type_name -> google.protobuf.Struct
-	79,  // 19: goap.engine.v1.ResolveMergeRequest.resolutions:type_name -> goap.engine.v1.ResolveMergeRequest.ResolutionsEntry
+	87,  // 14: goap.engine.v1.MergeProperty.base:type_name -> google.protobuf.Value
+	87,  // 15: goap.engine.v1.MergeProperty.ours:type_name -> google.protobuf.Value
+	87,  // 16: goap.engine.v1.MergeProperty.theirs:type_name -> google.protobuf.Value
+	87,  // 17: goap.engine.v1.MergeProperty.proposed:type_name -> google.protobuf.Value
+	88,  // 18: goap.engine.v1.MergeResolution.props:type_name -> google.protobuf.Struct
+	80,  // 19: goap.engine.v1.ResolveMergeRequest.resolutions:type_name -> goap.engine.v1.ResolveMergeRequest.ResolutionsEntry
 	29,  // 20: goap.engine.v1.ResolveMergeResponse.process:type_name -> goap.engine.v1.Process
 	25,  // 21: goap.engine.v1.StepContext.references:type_name -> goap.engine.v1.DocumentReference
 	24,  // 22: goap.engine.v1.StepContext.roles:type_name -> goap.engine.v1.Responsibilities
-	80,  // 23: goap.engine.v1.Step.before:type_name -> goap.engine.v1.Step.BeforeEntry
-	81,  // 24: goap.engine.v1.Step.after:type_name -> goap.engine.v1.Step.AfterEntry
-	85,  // 25: goap.engine.v1.Step.started_at:type_name -> google.protobuf.Timestamp
-	85,  // 26: goap.engine.v1.Step.ended_at:type_name -> google.protobuf.Timestamp
+	81,  // 23: goap.engine.v1.Step.before:type_name -> goap.engine.v1.Step.BeforeEntry
+	82,  // 24: goap.engine.v1.Step.after:type_name -> goap.engine.v1.Step.AfterEntry
+	86,  // 25: goap.engine.v1.Step.started_at:type_name -> google.protobuf.Timestamp
+	86,  // 26: goap.engine.v1.Step.ended_at:type_name -> google.protobuf.Timestamp
 	5,   // 27: goap.engine.v1.Step.usage:type_name -> goap.engine.v1.Usage
 	6,   // 28: goap.engine.v1.Step.llm_calls:type_name -> goap.engine.v1.LlmCall
 	7,   // 29: goap.engine.v1.Step.tool_calls:type_name -> goap.engine.v1.ToolCall
@@ -6458,102 +6573,104 @@ var file_goap_engine_v1_engine_proto_depIdxs = []int32{
 	9,   // 31: goap.engine.v1.Process.turns:type_name -> goap.engine.v1.Turn
 	10,  // 32: goap.engine.v1.Process.candidates:type_name -> goap.engine.v1.Candidate
 	12,  // 33: goap.engine.v1.Process.pending:type_name -> goap.engine.v1.HumanTask
-	82,  // 34: goap.engine.v1.Process.world:type_name -> goap.engine.v1.Process.WorldEntry
-	83,  // 35: goap.engine.v1.Process.unknown:type_name -> goap.engine.v1.Process.UnknownEntry
+	83,  // 34: goap.engine.v1.Process.world:type_name -> goap.engine.v1.Process.WorldEntry
+	84,  // 35: goap.engine.v1.Process.unknown:type_name -> goap.engine.v1.Process.UnknownEntry
 	28,  // 36: goap.engine.v1.Process.steps:type_name -> goap.engine.v1.Step
-	85,  // 37: goap.engine.v1.Process.created_at:type_name -> google.protobuf.Timestamp
-	85,  // 38: goap.engine.v1.Process.updated_at:type_name -> google.protobuf.Timestamp
+	86,  // 37: goap.engine.v1.Process.created_at:type_name -> google.protobuf.Timestamp
+	86,  // 38: goap.engine.v1.Process.updated_at:type_name -> google.protobuf.Timestamp
 	11,  // 39: goap.engine.v1.Process.initiator:type_name -> goap.engine.v1.Principal
 	5,   // 40: goap.engine.v1.Process.usage:type_name -> goap.engine.v1.Usage
-	87,  // 41: goap.engine.v1.StartProcessRequest.vars:type_name -> google.protobuf.Struct
+	88,  // 41: goap.engine.v1.StartProcessRequest.vars:type_name -> google.protobuf.Struct
 	32,  // 42: goap.engine.v1.StartingPoint.launch:type_name -> goap.engine.v1.StartLaunch
 	33,  // 43: goap.engine.v1.ListStartingPointsResponse.points:type_name -> goap.engine.v1.StartingPoint
 	34,  // 44: goap.engine.v1.ListStartingPointsResponse.blocked:type_name -> goap.engine.v1.BlockedStep
 	37,  // 45: goap.engine.v1.CheckAgentsResponse.agents:type_name -> goap.engine.v1.AgentCheck
 	29,  // 46: goap.engine.v1.StartProcessResponse.process:type_name -> goap.engine.v1.Process
 	29,  // 47: goap.engine.v1.AnswerIntentResponse.process:type_name -> goap.engine.v1.Process
-	87,  // 48: goap.engine.v1.SubmitHumanInputRequest.items:type_name -> google.protobuf.Struct
+	88,  // 48: goap.engine.v1.SubmitHumanInputRequest.items:type_name -> google.protobuf.Struct
 	29,  // 49: goap.engine.v1.SubmitHumanInputResponse.process:type_name -> goap.engine.v1.Process
 	29,  // 50: goap.engine.v1.ApproveActionResponse.process:type_name -> goap.engine.v1.Process
 	29,  // 51: goap.engine.v1.CancelProcessResponse.process:type_name -> goap.engine.v1.Process
 	29,  // 52: goap.engine.v1.UnblockProcessResponse.process:type_name -> goap.engine.v1.Process
 	29,  // 53: goap.engine.v1.AttachChangeResponse.process:type_name -> goap.engine.v1.Process
-	85,  // 54: goap.engine.v1.ProcessLogEntry.at:type_name -> google.protobuf.Timestamp
+	86,  // 54: goap.engine.v1.ProcessLogEntry.at:type_name -> google.protobuf.Timestamp
 	52,  // 55: goap.engine.v1.GetProcessLogResponse.entries:type_name -> goap.engine.v1.ProcessLogEntry
 	29,  // 56: goap.engine.v1.GetProcessResponse.process:type_name -> goap.engine.v1.Process
-	66,  // 57: goap.engine.v1.GetProcessProgressResponse.progress:type_name -> goap.engine.v1.ProcessProgress
+	67,  // 57: goap.engine.v1.GetProcessProgressResponse.progress:type_name -> goap.engine.v1.ProcessProgress
 	61,  // 58: goap.engine.v1.GetChangeStateResponse.processes:type_name -> goap.engine.v1.ProcessState
-	67,  // 59: goap.engine.v1.ProcessState.steps:type_name -> goap.engine.v1.StepProgress
+	68,  // 59: goap.engine.v1.ProcessState.steps:type_name -> goap.engine.v1.StepProgress
 	62,  // 60: goap.engine.v1.Need.requires:type_name -> goap.engine.v1.Need
-	65,  // 61: goap.engine.v1.ExplainConditionResponse.root:type_name -> goap.engine.v1.ConditionTerm
-	84,  // 62: goap.engine.v1.ExplainConditionResponse.inputs:type_name -> goap.engine.v1.ExplainConditionResponse.InputsEntry
-	65,  // 63: goap.engine.v1.ConditionTerm.terms:type_name -> goap.engine.v1.ConditionTerm
-	67,  // 64: goap.engine.v1.ProcessProgress.steps:type_name -> goap.engine.v1.StepProgress
-	25,  // 65: goap.engine.v1.StepProgress.references:type_name -> goap.engine.v1.DocumentReference
-	67,  // 66: goap.engine.v1.StepProgress.steps:type_name -> goap.engine.v1.StepProgress
-	24,  // 67: goap.engine.v1.StepProgress.roles:type_name -> goap.engine.v1.Responsibilities
-	68,  // 68: goap.engine.v1.StepProgress.lanes:type_name -> goap.engine.v1.Lane
-	62,  // 69: goap.engine.v1.StepProgress.needs:type_name -> goap.engine.v1.Need
-	29,  // 70: goap.engine.v1.ListProcessesResponse.processes:type_name -> goap.engine.v1.Process
-	85,  // 71: goap.engine.v1.WatchEventsResponse.time:type_name -> google.protobuf.Timestamp
-	29,  // 72: goap.engine.v1.WatchEventsResponse.process:type_name -> goap.engine.v1.Process
-	8,   // 73: goap.engine.v1.WatchEventsResponse.log:type_name -> goap.engine.v1.LogLine
-	29,  // 74: goap.engine.v1.RelaunchStepResponse.process:type_name -> goap.engine.v1.Process
-	29,  // 75: goap.engine.v1.DecideFlowResponse.process:type_name -> goap.engine.v1.Process
-	29,  // 76: goap.engine.v1.ResolveBoardResponse.process:type_name -> goap.engine.v1.Process
-	29,  // 77: goap.engine.v1.ResolveBoardResponse.relaunched:type_name -> goap.engine.v1.Process
-	20,  // 78: goap.engine.v1.ResolveMergeRequest.ResolutionsEntry.value:type_name -> goap.engine.v1.MergeResolution
-	30,  // 79: goap.engine.v1.EngineService.StartProcess:input_type -> goap.engine.v1.StartProcessRequest
-	40,  // 80: goap.engine.v1.EngineService.AnswerIntent:input_type -> goap.engine.v1.AnswerIntentRequest
-	42,  // 81: goap.engine.v1.EngineService.SubmitHumanInput:input_type -> goap.engine.v1.SubmitHumanInputRequest
-	44,  // 82: goap.engine.v1.EngineService.ApproveAction:input_type -> goap.engine.v1.ApproveActionRequest
-	46,  // 83: goap.engine.v1.EngineService.UnblockProcess:input_type -> goap.engine.v1.UnblockProcessRequest
-	47,  // 84: goap.engine.v1.EngineService.CancelProcess:input_type -> goap.engine.v1.CancelProcessRequest
-	73,  // 85: goap.engine.v1.EngineService.RelaunchStep:input_type -> goap.engine.v1.RelaunchStepRequest
-	75,  // 86: goap.engine.v1.EngineService.DecideFlow:input_type -> goap.engine.v1.DecideFlowRequest
-	77,  // 87: goap.engine.v1.EngineService.ResolveBoard:input_type -> goap.engine.v1.ResolveBoardRequest
-	21,  // 88: goap.engine.v1.EngineService.ResolveMerge:input_type -> goap.engine.v1.ResolveMergeRequest
-	15,  // 89: goap.engine.v1.EngineService.ResolveRebase:input_type -> goap.engine.v1.ResolveRebaseRequest
-	55,  // 90: goap.engine.v1.EngineService.GetProcess:input_type -> goap.engine.v1.GetProcessRequest
-	57,  // 91: goap.engine.v1.EngineService.GetProcessProgress:input_type -> goap.engine.v1.GetProcessProgressRequest
-	59,  // 92: goap.engine.v1.EngineService.GetChangeState:input_type -> goap.engine.v1.GetChangeStateRequest
-	63,  // 93: goap.engine.v1.EngineService.ExplainCondition:input_type -> goap.engine.v1.ExplainConditionRequest
-	69,  // 94: goap.engine.v1.EngineService.ListProcesses:input_type -> goap.engine.v1.ListProcessesRequest
-	36,  // 95: goap.engine.v1.EngineService.CheckAgents:input_type -> goap.engine.v1.CheckAgentsRequest
-	31,  // 96: goap.engine.v1.EngineService.ListStartingPoints:input_type -> goap.engine.v1.ListStartingPointsRequest
-	50,  // 97: goap.engine.v1.EngineService.AttachChange:input_type -> goap.engine.v1.AttachChangeRequest
-	53,  // 98: goap.engine.v1.EngineService.GetProcessLog:input_type -> goap.engine.v1.GetProcessLogRequest
-	71,  // 99: goap.engine.v1.EngineService.WatchEvents:input_type -> goap.engine.v1.WatchEventsRequest
-	1,   // 100: goap.engine.v1.EngineService.ListTriggers:input_type -> goap.engine.v1.ListTriggersRequest
-	3,   // 101: goap.engine.v1.EngineService.FireTrigger:input_type -> goap.engine.v1.FireTriggerRequest
-	39,  // 102: goap.engine.v1.EngineService.StartProcess:output_type -> goap.engine.v1.StartProcessResponse
-	41,  // 103: goap.engine.v1.EngineService.AnswerIntent:output_type -> goap.engine.v1.AnswerIntentResponse
-	43,  // 104: goap.engine.v1.EngineService.SubmitHumanInput:output_type -> goap.engine.v1.SubmitHumanInputResponse
-	45,  // 105: goap.engine.v1.EngineService.ApproveAction:output_type -> goap.engine.v1.ApproveActionResponse
-	49,  // 106: goap.engine.v1.EngineService.UnblockProcess:output_type -> goap.engine.v1.UnblockProcessResponse
-	48,  // 107: goap.engine.v1.EngineService.CancelProcess:output_type -> goap.engine.v1.CancelProcessResponse
-	74,  // 108: goap.engine.v1.EngineService.RelaunchStep:output_type -> goap.engine.v1.RelaunchStepResponse
-	76,  // 109: goap.engine.v1.EngineService.DecideFlow:output_type -> goap.engine.v1.DecideFlowResponse
-	78,  // 110: goap.engine.v1.EngineService.ResolveBoard:output_type -> goap.engine.v1.ResolveBoardResponse
-	22,  // 111: goap.engine.v1.EngineService.ResolveMerge:output_type -> goap.engine.v1.ResolveMergeResponse
-	16,  // 112: goap.engine.v1.EngineService.ResolveRebase:output_type -> goap.engine.v1.ResolveRebaseResponse
-	56,  // 113: goap.engine.v1.EngineService.GetProcess:output_type -> goap.engine.v1.GetProcessResponse
-	58,  // 114: goap.engine.v1.EngineService.GetProcessProgress:output_type -> goap.engine.v1.GetProcessProgressResponse
-	60,  // 115: goap.engine.v1.EngineService.GetChangeState:output_type -> goap.engine.v1.GetChangeStateResponse
-	64,  // 116: goap.engine.v1.EngineService.ExplainCondition:output_type -> goap.engine.v1.ExplainConditionResponse
-	70,  // 117: goap.engine.v1.EngineService.ListProcesses:output_type -> goap.engine.v1.ListProcessesResponse
-	38,  // 118: goap.engine.v1.EngineService.CheckAgents:output_type -> goap.engine.v1.CheckAgentsResponse
-	35,  // 119: goap.engine.v1.EngineService.ListStartingPoints:output_type -> goap.engine.v1.ListStartingPointsResponse
-	51,  // 120: goap.engine.v1.EngineService.AttachChange:output_type -> goap.engine.v1.AttachChangeResponse
-	54,  // 121: goap.engine.v1.EngineService.GetProcessLog:output_type -> goap.engine.v1.GetProcessLogResponse
-	72,  // 122: goap.engine.v1.EngineService.WatchEvents:output_type -> goap.engine.v1.WatchEventsResponse
-	2,   // 123: goap.engine.v1.EngineService.ListTriggers:output_type -> goap.engine.v1.ListTriggersResponse
-	4,   // 124: goap.engine.v1.EngineService.FireTrigger:output_type -> goap.engine.v1.FireTriggerResponse
-	102, // [102:125] is the sub-list for method output_type
-	79,  // [79:102] is the sub-list for method input_type
-	79,  // [79:79] is the sub-list for extension type_name
-	79,  // [79:79] is the sub-list for extension extendee
-	0,   // [0:79] is the sub-list for field type_name
+	63,  // 61: goap.engine.v1.Need.facts:type_name -> goap.engine.v1.Fact
+	63,  // 62: goap.engine.v1.Fact.parts:type_name -> goap.engine.v1.Fact
+	66,  // 63: goap.engine.v1.ExplainConditionResponse.root:type_name -> goap.engine.v1.ConditionTerm
+	85,  // 64: goap.engine.v1.ExplainConditionResponse.inputs:type_name -> goap.engine.v1.ExplainConditionResponse.InputsEntry
+	66,  // 65: goap.engine.v1.ConditionTerm.terms:type_name -> goap.engine.v1.ConditionTerm
+	68,  // 66: goap.engine.v1.ProcessProgress.steps:type_name -> goap.engine.v1.StepProgress
+	25,  // 67: goap.engine.v1.StepProgress.references:type_name -> goap.engine.v1.DocumentReference
+	68,  // 68: goap.engine.v1.StepProgress.steps:type_name -> goap.engine.v1.StepProgress
+	24,  // 69: goap.engine.v1.StepProgress.roles:type_name -> goap.engine.v1.Responsibilities
+	69,  // 70: goap.engine.v1.StepProgress.lanes:type_name -> goap.engine.v1.Lane
+	62,  // 71: goap.engine.v1.StepProgress.needs:type_name -> goap.engine.v1.Need
+	29,  // 72: goap.engine.v1.ListProcessesResponse.processes:type_name -> goap.engine.v1.Process
+	86,  // 73: goap.engine.v1.WatchEventsResponse.time:type_name -> google.protobuf.Timestamp
+	29,  // 74: goap.engine.v1.WatchEventsResponse.process:type_name -> goap.engine.v1.Process
+	8,   // 75: goap.engine.v1.WatchEventsResponse.log:type_name -> goap.engine.v1.LogLine
+	29,  // 76: goap.engine.v1.RelaunchStepResponse.process:type_name -> goap.engine.v1.Process
+	29,  // 77: goap.engine.v1.DecideFlowResponse.process:type_name -> goap.engine.v1.Process
+	29,  // 78: goap.engine.v1.ResolveBoardResponse.process:type_name -> goap.engine.v1.Process
+	29,  // 79: goap.engine.v1.ResolveBoardResponse.relaunched:type_name -> goap.engine.v1.Process
+	20,  // 80: goap.engine.v1.ResolveMergeRequest.ResolutionsEntry.value:type_name -> goap.engine.v1.MergeResolution
+	30,  // 81: goap.engine.v1.EngineService.StartProcess:input_type -> goap.engine.v1.StartProcessRequest
+	40,  // 82: goap.engine.v1.EngineService.AnswerIntent:input_type -> goap.engine.v1.AnswerIntentRequest
+	42,  // 83: goap.engine.v1.EngineService.SubmitHumanInput:input_type -> goap.engine.v1.SubmitHumanInputRequest
+	44,  // 84: goap.engine.v1.EngineService.ApproveAction:input_type -> goap.engine.v1.ApproveActionRequest
+	46,  // 85: goap.engine.v1.EngineService.UnblockProcess:input_type -> goap.engine.v1.UnblockProcessRequest
+	47,  // 86: goap.engine.v1.EngineService.CancelProcess:input_type -> goap.engine.v1.CancelProcessRequest
+	74,  // 87: goap.engine.v1.EngineService.RelaunchStep:input_type -> goap.engine.v1.RelaunchStepRequest
+	76,  // 88: goap.engine.v1.EngineService.DecideFlow:input_type -> goap.engine.v1.DecideFlowRequest
+	78,  // 89: goap.engine.v1.EngineService.ResolveBoard:input_type -> goap.engine.v1.ResolveBoardRequest
+	21,  // 90: goap.engine.v1.EngineService.ResolveMerge:input_type -> goap.engine.v1.ResolveMergeRequest
+	15,  // 91: goap.engine.v1.EngineService.ResolveRebase:input_type -> goap.engine.v1.ResolveRebaseRequest
+	55,  // 92: goap.engine.v1.EngineService.GetProcess:input_type -> goap.engine.v1.GetProcessRequest
+	57,  // 93: goap.engine.v1.EngineService.GetProcessProgress:input_type -> goap.engine.v1.GetProcessProgressRequest
+	59,  // 94: goap.engine.v1.EngineService.GetChangeState:input_type -> goap.engine.v1.GetChangeStateRequest
+	64,  // 95: goap.engine.v1.EngineService.ExplainCondition:input_type -> goap.engine.v1.ExplainConditionRequest
+	70,  // 96: goap.engine.v1.EngineService.ListProcesses:input_type -> goap.engine.v1.ListProcessesRequest
+	36,  // 97: goap.engine.v1.EngineService.CheckAgents:input_type -> goap.engine.v1.CheckAgentsRequest
+	31,  // 98: goap.engine.v1.EngineService.ListStartingPoints:input_type -> goap.engine.v1.ListStartingPointsRequest
+	50,  // 99: goap.engine.v1.EngineService.AttachChange:input_type -> goap.engine.v1.AttachChangeRequest
+	53,  // 100: goap.engine.v1.EngineService.GetProcessLog:input_type -> goap.engine.v1.GetProcessLogRequest
+	72,  // 101: goap.engine.v1.EngineService.WatchEvents:input_type -> goap.engine.v1.WatchEventsRequest
+	1,   // 102: goap.engine.v1.EngineService.ListTriggers:input_type -> goap.engine.v1.ListTriggersRequest
+	3,   // 103: goap.engine.v1.EngineService.FireTrigger:input_type -> goap.engine.v1.FireTriggerRequest
+	39,  // 104: goap.engine.v1.EngineService.StartProcess:output_type -> goap.engine.v1.StartProcessResponse
+	41,  // 105: goap.engine.v1.EngineService.AnswerIntent:output_type -> goap.engine.v1.AnswerIntentResponse
+	43,  // 106: goap.engine.v1.EngineService.SubmitHumanInput:output_type -> goap.engine.v1.SubmitHumanInputResponse
+	45,  // 107: goap.engine.v1.EngineService.ApproveAction:output_type -> goap.engine.v1.ApproveActionResponse
+	49,  // 108: goap.engine.v1.EngineService.UnblockProcess:output_type -> goap.engine.v1.UnblockProcessResponse
+	48,  // 109: goap.engine.v1.EngineService.CancelProcess:output_type -> goap.engine.v1.CancelProcessResponse
+	75,  // 110: goap.engine.v1.EngineService.RelaunchStep:output_type -> goap.engine.v1.RelaunchStepResponse
+	77,  // 111: goap.engine.v1.EngineService.DecideFlow:output_type -> goap.engine.v1.DecideFlowResponse
+	79,  // 112: goap.engine.v1.EngineService.ResolveBoard:output_type -> goap.engine.v1.ResolveBoardResponse
+	22,  // 113: goap.engine.v1.EngineService.ResolveMerge:output_type -> goap.engine.v1.ResolveMergeResponse
+	16,  // 114: goap.engine.v1.EngineService.ResolveRebase:output_type -> goap.engine.v1.ResolveRebaseResponse
+	56,  // 115: goap.engine.v1.EngineService.GetProcess:output_type -> goap.engine.v1.GetProcessResponse
+	58,  // 116: goap.engine.v1.EngineService.GetProcessProgress:output_type -> goap.engine.v1.GetProcessProgressResponse
+	60,  // 117: goap.engine.v1.EngineService.GetChangeState:output_type -> goap.engine.v1.GetChangeStateResponse
+	65,  // 118: goap.engine.v1.EngineService.ExplainCondition:output_type -> goap.engine.v1.ExplainConditionResponse
+	71,  // 119: goap.engine.v1.EngineService.ListProcesses:output_type -> goap.engine.v1.ListProcessesResponse
+	38,  // 120: goap.engine.v1.EngineService.CheckAgents:output_type -> goap.engine.v1.CheckAgentsResponse
+	35,  // 121: goap.engine.v1.EngineService.ListStartingPoints:output_type -> goap.engine.v1.ListStartingPointsResponse
+	51,  // 122: goap.engine.v1.EngineService.AttachChange:output_type -> goap.engine.v1.AttachChangeResponse
+	54,  // 123: goap.engine.v1.EngineService.GetProcessLog:output_type -> goap.engine.v1.GetProcessLogResponse
+	73,  // 124: goap.engine.v1.EngineService.WatchEvents:output_type -> goap.engine.v1.WatchEventsResponse
+	2,   // 125: goap.engine.v1.EngineService.ListTriggers:output_type -> goap.engine.v1.ListTriggersResponse
+	4,   // 126: goap.engine.v1.EngineService.FireTrigger:output_type -> goap.engine.v1.FireTriggerResponse
+	104, // [104:127] is the sub-list for method output_type
+	81,  // [81:104] is the sub-list for method input_type
+	81,  // [81:81] is the sub-list for extension type_name
+	81,  // [81:81] is the sub-list for extension extendee
+	0,   // [0:81] is the sub-list for field type_name
 }
 
 func init() { file_goap_engine_v1_engine_proto_init() }
@@ -6567,7 +6684,7 @@ func file_goap_engine_v1_engine_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_engine_v1_engine_proto_rawDesc), len(file_goap_engine_v1_engine_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   85,
+			NumMessages:   86,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

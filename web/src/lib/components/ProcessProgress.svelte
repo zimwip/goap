@@ -5,7 +5,7 @@
   import ProcessProgress from './ProcessProgress.svelte';
   import { engine, type ProcessProgress as Progress, type StepProgress } from '../api';
   import { processes } from '../stores/live.svelte';
-  import { needDetail, needText, needsOf } from '../changeState';
+  import { factLines, needDetail, needText, needsOf } from '../changeState';
 
   let {
     processId = '',
@@ -73,7 +73,16 @@
     {:else if (s.state === 'todo' || s.state === 'blocked') && needsOf(s).length}
       <ul class="note needs" aria-label="Missing conditions">
         {#each needsOf(s) as n (n.condition)}
-          <li><span>{needDetail(n)}</span> <code title={n.want === false ? 'must be false' : 'must hold'}>{n.want === false ? '!' : ''}{n.condition}</code></li>
+          <li>
+            <span>{needDetail(n)}</span> <code title={n.want === false ? 'must be false' : 'must hold'}>{n.want === false ? '!' : ''}{n.condition}</code>
+            {#if factLines(n).length}
+              <ul class="facts" aria-label="What the condition asks">
+                {#each factLines(n) as f, i (i)}
+                  <li class:missing={f.missing} style:padding-left="{f.depth}em"><span aria-label={f.holds ? 'holds' : 'does not hold'}>{f.holds ? '✓' : '✗'}</span> <code>{f.text}</code></li>
+                {/each}
+              </ul>
+            {/if}
+          </li>
         {/each}
       </ul>
     {/if}
@@ -179,6 +188,15 @@
   .needs code {
     font-size: 0.85em;
     opacity: 0.75;
+  }
+  .facts {
+    list-style: none;
+    padding-left: 0.5em;
+    margin: 2px 0;
+  }
+  .facts .missing code {
+    opacity: 1;
+    font-weight: 600;
   }
   .nested {
     margin: 4px 0 4px 18px;
