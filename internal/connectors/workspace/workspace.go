@@ -279,6 +279,8 @@ func intArg(args map[string]any, name string, def int) int {
 		return int(v)
 	case int:
 		return v
+	case int64: // a script's number, in process
+		return int(v)
 	}
 	return def
 }

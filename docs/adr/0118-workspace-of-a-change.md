@@ -1,7 +1,7 @@
 # ADR 0118 — The workspace of a change: the tool box of a coding agent
 
-**Status**: accepted; phases 1 and 2 implemented (the `workspace` MCP, the local connector, the call context of a
-connector; the loop budget of an llm action), the phases 3 and 4 of "Plan" not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP, connectors, adapters), ADR 0028
+**Status**: accepted; phases 1 to 3 implemented (the `workspace` MCP, the local connector, the call context of a
+connector; the loop budget of an llm action; the build method of `sdlc`), phase 4 of "Plan" not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP, connectors, adapters), ADR 0028
 (built-in MCPs, call context), ADR 0061 (adapter secrets), ADR 0109 (conditions derived from the context),
 ADR 0112 (persistent agents)
 
@@ -114,12 +114,44 @@ of `methodology@Action`, the *Tool loop budget* fields of the action editor) bou
 - **Failures** of a tool count in a row in an action with a loop: a success forgets the earlier ones, so a failed
   `edit` early in a long session does not ban the tool for the rest of it.
 
+### 6. The build of `sdlc` from the sources
+
+`sdlc` 0.8.0 builds a component from its sources when it names its repository (`alm@Component.repository`, any git
+address, validator `repository-url`; `buildCommand` overrides the command of its technology; `alm` 1.5.0). The step
+`software_delivery/build` names the capability `build`, two methods answer it:
+
+- `workspace_build` (priority 20, when a component in scope has a repository): `prepare_workspace` (script) opens the
+  workspace of the change with the sources of those components (`workspace/open`, one directory per component key,
+  on the branch of the change) and records a `workspace` artifact; then, per component (scoped actions, `where:
+  self.conditions.from_sources`): `implement_component` (llm, `mcps: [workspace, goap-graph]`, `parallel: 2`, loop
+  `maxRounds: 200`, `maxTokens: 3000000`, `timeout: 2h`) changes and commits the sources and answers a
+  `code_change` artifact; `build_component` (script) runs the build command (`workspace/bash`) and records a
+  `build_report` at the revision (the number of code changes of the component); `publish_build` (script) pushes the
+  branch (`workspace/push`) and records the `alm@BuildArtifact` (`built_from`, coordinates `<remote>#<commit>`) and
+  the `build` artifact; the recorded `build` then does the components without a repository.
+- `recorded_build`: the recorded `build` alone, as before.
+
+The report decides, never the agent: `implemented` holds once a code change exists and no failed report stands at
+the current revision, `build_checked` once a report stands there whatever its outcome (so the build action meets its
+effect even when the build fails: `Engine.MaxFailures` is 1), `built` once it is a success. A failed build makes
+`implemented` false again: the plan sends the component back to the agent, whose prompt carries the reports of the
+component (command, exit, the tail of the output). After three code changes `implemented` holds as it is: the build
+fails again, nothing can publish it, and the run waits for a person to take over (`Engine.Unblock`). The agent is not
+persistent: its continuity is the workspace itself (the sources and their history) and the reports.
+
+Planning a chain of scoped actions needed one rule of the compiler (`chainScoped`): when what a scoped action makes
+true on its subject is what another of the same scope needs, the first is planned to leave a subject pending for the
+second (`pending:<second>` among its effects, lifted: never checked once it ran). Without it no plan reached past
+the first action of a flat agent (`delivery`). `publish_build` needs `build_checked` and `built`: the first chains it
+after the build, the second holds it to a success. Tested end to end on a local git repository
+(`pkg/engine/sdlc_workspace_test.go`).
+
 ## Plan
 1. ✅ The `workspace` MCP, the local connector, `change_id` / `process_id` on `InvokeRequest`, `goap-dev`.
 2. ✅ A loop budget on the `llm` action (§5), the compaction of a long conversation, tool results cut keeping their
    tail.
-3. The `build` method of `sdlc` (prepare / implement / build / fix / publish / review) on the components a change
-   impacts (`alm@Component.repository`), its conditions derived, a persistent coding agent per change.
+3. ✅ The `build` method of `sdlc` (prepare / implement / build / fix / publish) on the components a change
+   impacts (`alm@Component.repository`), its conditions derived (§6).
 4. A container connector (`workspace-docker`, then Kubernetes) on the provisioners of `internal/sandbox`: one
    container per change, an image per technology, limits, the network closed but to the hosts the unit lists.
 

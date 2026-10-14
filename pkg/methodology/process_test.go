@@ -343,8 +343,8 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 	if _, ok := edges["software_delivery/framing -> software_delivery/application"]; ok {
 		t.Error("implied edge kept")
 	}
-	// the methods of the capabilities of the process: the impact analysis, then the two of the design
-	if len(g.Methods) != 3 || g.Methods[0].AgentGoal != "impact_analysis" || g.Methods[1].AgentGoal != "solution_design" {
+	// the methods of the capabilities of the process: the impact analysis, the two of the design, the two of the build
+	if len(g.Methods) != 5 || g.Methods[0].AgentGoal != "impact_analysis" || g.Methods[1].AgentGoal != "solution_design" {
 		t.Fatalf("methods of the capabilities: %+v", g.Methods)
 	}
 	var architect *GraphAgent

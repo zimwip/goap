@@ -433,7 +433,7 @@ func TestSDLCProcess(t *testing.T) {
 	}
 	want := []string{"software_delivery/framing", "software_delivery/analysis/impacts",
 		// the traceability sub-step is skipped: its criteria hold (the new requirement satisfies a need)
-		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/analysis/specification/test_plan", "software_delivery/design", "software_delivery/build", "software_delivery/release"}
+		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/design", "software_delivery/analysis/specification/test_plan", "software_delivery/build", "software_delivery/release"}
 	if !slices.Equal(steps, want) {
 		t.Fatalf("steps %v", steps)
 	}
@@ -463,10 +463,22 @@ func TestSDLCProcess(t *testing.T) {
 	if pr.Total != 9 || pr.Done != 7 {
 		t.Fatalf("progress %d/%d", pr.Done, pr.Total)
 	}
+	// the build step names a capability: no component has a repository, so the recorded_build method was chosen
+	// (ADR 0118), and the specializations of its build action apply
 	var builds []string
 	for _, s := range p.Steps {
-		if s.Action == "software_delivery/build" {
-			builds = append(builds, s.Specialization) // the specializations of the action a step runs apply
+		if s.Action != "software_delivery/build" || len(s.Children) == 0 {
+			continue
+		}
+		if s.Specialization != "recorded_build" {
+			t.Fatalf("build method: %q", s.Specialization)
+		}
+		builder, err := e.Store.Get(ctx, s.Children[0])
+		if err != nil || builder.Status != engine.StatusCompleted {
+			t.Fatalf("build step: %+v %v", builder, err)
+		}
+		for _, bs := range builder.Steps {
+			builds = append(builds, bs.Specialization)
 		}
 	}
 	if !slices.Equal(builds, []string{"build_java", "build_c", "build_generic"}) {

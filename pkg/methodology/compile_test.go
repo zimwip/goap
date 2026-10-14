@@ -58,3 +58,37 @@ func TestLoopIsChecked(t *testing.T) {
 		t.Fatal("bounds")
 	}
 }
+
+// Two scoped actions of the same scope chain in a plan (ADR 0118): the first plans to leave a subject pending for
+// the second, without checking it once it ran.
+func TestScopedActionsChain(t *testing.T) {
+	m, err := Parse([]byte(`
+name: chain
+version: 1.0.0
+namespace: alm
+conditions:
+  - {name: written, scope: impact, expr: 'artifacts.exists(a, a.type == "w" && a.data.impact == self.key)'}
+  - {name: checked, scope: impact, expr: 'artifacts.exists(a, a.type == "c" && a.data.impact == self.key)'}
+  - {name: all_written, all: written}
+  - {name: all_checked, all: checked}
+actions:
+  - {name: write, kind: human, scope: impact, effects: {written: true}}
+  - {name: check, kind: human, scope: impact, pre: {written: true}, effects: {checked: true}}
+goals:
+  - {name: done, pre: {all_checked: true}}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	w, _ := c.Action("write")
+	if !w.Effects["pending:check"] || !w.Lifted["pending:check"] || !w.Effects["all_written"] {
+		t.Fatalf("write %+v", w.Effects)
+	}
+	if ch, _ := c.Action("check"); ch.Effects["pending:write"] {
+		t.Fatalf("check %+v", ch.Effects)
+	}
+}

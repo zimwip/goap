@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.7.6
+version: 0.8.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -148,6 +148,52 @@ conditions:
     expr: >
       changeImpacts.filter(n, "alm@Component" in n.types).all(n,
         artifacts.exists(a, a.type == "build" && a.data.component == n.key))
+  # --- build from the sources, in the workspace of the change (ADR 0118): a component whose repository is known is
+  # implemented by an agent in its sources, built and tested there, then published (its branch pushed, a build
+  # artifact); a failed build sends it back to the agent, three attempts at most. The build checks, the agent does not
+  # say it builds.
+  - name: from_sources
+    scope: impact
+    description: A component whose sources are in a repository, built in the workspace of the change
+    expr: '"alm@Component" in self.types && has(self.props.repository) && self.props.repository != ""'
+  - name: workspace_ready
+    description: The workspace of the change holds the sources of the components built from their sources
+    expr: artifacts.exists(a, a.type == "workspace")
+  - name: implemented
+    scope: impact
+    description: >
+      The agent changed the sources of the component (a code change), and no build failed since; after three
+      attempts the component stays implemented as it is, for a person to take over
+    expr: >
+      artifacts.exists(k, k.type == "code_change" && k.data.component == self.key) &&
+      (artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size() >= 3 ||
+       !artifacts.exists(b, b.type == "build_report" && b.data.component == self.key && b.data.ok != true &&
+         b.data.revision == artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size()))
+  - name: build_checked
+    scope: impact
+    description: The latest code change of the component was built and tested in the workspace (whatever the outcome)
+    expr: >
+      artifacts.exists(b, b.type == "build_report" && b.data.component == self.key &&
+        b.data.revision == artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size())
+  - name: built
+    scope: impact
+    description: The latest code change of the component builds and passes its tests
+    expr: >
+      artifacts.exists(b, b.type == "build_report" && b.data.component == self.key && b.data.ok == true &&
+        b.data.revision == artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size())
+  - name: published
+    scope: impact
+    description: The component has its build artifact (its branch pushed)
+    expr: artifacts.exists(a, a.type == "build" && a.data.component == self.key)
+  - name: sources_published
+    description: Every component built from its sources is published (true when there is none)
+    all: published
+    where: self.conditions.from_sources
+    empty: true
+  - {name: sources_implemented, all: implemented, where: self.conditions.from_sources, empty: true,
+     description: "Every component built from its sources is implemented"}
+  - {name: sources_build_checked, all: build_checked, where: self.conditions.from_sources, empty: true,
+     description: "Every component built from its sources was built after its latest code change"}
   # --- delivery
   - name: release_planned
     description: The releases of the affected applications are built (artifacts, version, environment chain)
@@ -634,7 +680,8 @@ actions:
       Build the impacted or created components. Abstract action: each
       execution builds the components of one technology (specialization), until
       all of them have their artifact.
-    pre: {impact_analysis_validated: true, design_checked: true}
+    # the components built from their sources first (ADR 0118): this build records the others
+    pre: {impact_analysis_validated: true, design_checked: true, sources_published: true}
     effects: {build_complete: true}
     cost: 2
     incremental: true
@@ -648,6 +695,7 @@ actions:
     description: "Java build: Maven, JDK 21, dependency check and coverage"
     when: >
       changeImpacts.exists(n, "alm@Component" in n.types && has(n.props.technology) && n.props.technology == "java"
+        && !(has(n.props.repository) && n.props.repository != "")
         && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
     code: &build |
       const RULES = {
@@ -673,6 +721,8 @@ actions:
         for (const n of ctx.changeImpacts()) {
           if (n.type !== "alm@Component" || built.has(n.key)) continue;
           const props = (n.post && n.post.props) || (n.pre && n.pre.props) || {};
+          // a component with a repository is built from its sources, in the workspace (publish_build)
+          if (props.repository) continue;
           out.push({ key: n.key, props: props, existing: n.intent === "modified" });
         }
         return out;
@@ -712,6 +762,7 @@ actions:
     description: "C build: gcc / make, blocking warnings, static analysis"
     when: >
       changeImpacts.exists(n, "alm@Component" in n.types && has(n.props.technology) && n.props.technology == "c"
+        && !(has(n.props.repository) && n.props.repository != "")
         && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
     code: *build
 
@@ -724,6 +775,7 @@ actions:
     description: "Shell build: shellcheck, bats tests, archive"
     when: >
       changeImpacts.exists(n, "alm@Component" in n.types && has(n.props.technology) && n.props.technology == "shell"
+        && !(has(n.props.repository) && n.props.repository != "")
         && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
     code: *build
 
@@ -734,6 +786,123 @@ actions:
     params: {technology: other}
     description: "Generic build (other technologies): archive and checksum"
     code: *build
+
+  # ======================= build from the sources, in the workspace of the change (ADR 0118)
+  - name: prepare_workspace
+    kind: script
+    language: javascript
+    description: Open the workspace of the change with the sources of the components built from their sources, each on the branch of the change
+    pre: {impact_analysis_validated: true, design_checked: true}
+    effects: {workspace_ready: true}
+    mcps: [workspace]
+    code: |
+      function run(ctx) {
+        const sources = [];
+        for (const n of ctx.changeImpacts()) {
+          if (n.type !== "alm@Component") continue;
+          const props = (n.post && n.post.props) || (n.pre && n.pre.props) || {};
+          if (props.repository) sources.push({ repo: props.repository, path: n.key });
+        }
+        const ws = ctx.callTool("workspace/open", { sources: sources });
+        ctx.addArtifact("workspace", { directory: ws.directory, sources: ws.sources });
+        return sources.length + " source(s) in the workspace";
+      }
+
+  - name: implement_component
+    kind: llm
+    scope: impact
+    where: self.conditions.from_sources
+    description: Implement in the sources of a component what the change asks of it, built and tested; again after a failed build
+    pre: {workspace_ready: true}
+    effects: {implemented: true}
+    cost: 1
+    model: default
+    mcps: [workspace, goap-graph]
+    parallel: 2
+    loop: {maxRounds: 200, maxTokens: 3000000, timeout: 2h, maxToolResultBytes: 60000}
+    prompt: |
+      You are a developer. You implement ONE component of a change in its sources, in the workspace of the change.
+      Change: "{{ .Change.Title }}"
+      Intent: "{{ .Change.Intent }}"
+      Component to implement: {{ .Subject.key }} ({{ .Subject.type }}), {{ json .Subject.props }}
+      Its sources are in the directory {{ .Subject.key }} of the workspace, on the branch of the change.
+      The brief lists the requirements, functions and design of the change: read the nodes you need with goap-graph
+      (the functions the component implements, the requirements they realize, the test cases verifying them).
+      {{ range .Artifacts }}{{ if and (eq .Type "build_report") (eq (index .Data "component") $.Subject.key) }}A build of this component {{ if index .Data "ok" }}succeeded{{ else }}FAILED{{ end }} (`{{ index .Data "command" }}`, after code change {{ index .Data "revision" }}):
+      {{ index .Data "output" }}
+      {{ end }}{{ end }}
+      Work with the workspace tools: read and search the code, edit it, run the build and the tests with bash (cwd
+      {{ .Subject.key }}) until they pass, then commit your work there (git add -A && git commit -m "<what and why>").
+      Change only what the change needs. Finish with:
+      {"items":[{"kind":"artifact","type":"code_change","data":{"component":"{{ .Subject.key }}","summary":"<what you changed and why>","files":["<paths>"],"tests":"<what you ran, the result>"}}]}
+
+  - name: build_component
+    kind: script
+    language: javascript
+    scope: impact
+    where: self.conditions.from_sources
+    description: Build and test a component in the workspace (its build command, else the one of its technology) and record the report
+    pre: {implemented: true}
+    effects: {build_checked: true}
+    mcps: [workspace]
+    code: |
+      const COMMANDS = { java: "mvn -B -q verify", go: "go build ./... && go test ./...", c: "make && make test",
+                         shell: "shellcheck $(git ls-files '*.sh')", node: "npm ci && npm test", python: "python -m pytest -q" };
+      function run(ctx) {
+        const c = ctx.var("item");
+        const props = c.props || {};
+        const command = props.buildCommand || COMMANDS[props.technology] || "git diff --quiet HEAD";
+        const revision = ctx.items("artifact").filter(a => a.type === "code_change" && a.data.component === c.key).length;
+        const r = ctx.callTool("workspace/bash", { command: command, cwd: c.key, timeout: 600 });
+        const out = String(r.stdout || "") + String(r.stderr || "");
+        const ok = r.exitCode === 0 && !r.timedOut;
+        ctx.addArtifact("build_report", { component: c.key, ok: ok, exitCode: r.exitCode, command: command, revision: revision,
+          output: out.length > 4000 ? "..." + out.slice(out.length - 4000) : out });
+        return c.key + (ok ? " builds" : " does not build");
+      }
+
+  - name: publish_build
+    kind: script
+    language: javascript
+    scope: impact
+    where: self.conditions.from_sources
+    description: Push the branch of the change of a component that builds and record its build artifact
+    # build_checked chains it after the build in a plan (the outcome is not known before); built holds it to a success
+    pre: {build_checked: true, built: true}
+    effects: {published: true}
+    mcps: [workspace]
+    code: |
+      function bump(v) {
+        const p = String(v || "0.0.0").split(".");
+        while (p.length < 3) p.push("0");
+        p[2] = String((parseInt(p[2], 10) || 0) + 1);
+        return p.join(".");
+      }
+      function run(ctx) {
+        const c = ctx.var("item");
+        const props = c.props || {};
+        const reports = ctx.items("artifact").filter(a => a.type === "build_report" && a.data.component === c.key && a.data.ok);
+        const report = reports[reports.length - 1].data;
+        const pushed = ctx.callTool("workspace/push", { path: c.key });
+        const v = bump(props.version);
+        const key = "ART-" + c.key + "-" + v;
+        const art = ctx.impactNodeCreate("alm@BuildArtifact", key, "build artifact of " + c.key + ", branch " + pushed.branch);
+        ctx.writeNode(art, { props: { name: String(props.title || c.key), format: "source", version: v, technology: props.technology || "",
+          coordinates: pushed.remote + "#" + pushed.head, toolchain: report.command,
+          checks: { command: report.command, exitCode: report.exitCode, commit: pushed.head } }, links: [{ type: "alm@built_from", to: c.key }] });
+        if (c.intent === "modified") {
+          // the applications composed of the component deploy the new artifact
+          const declared = new Set(ctx.changeImpacts().map(n => n.key));
+          for (const l of ctx.links(c.key, "in", "alm@composed_of")) {
+            const app = l.from.key;
+            if (!declared.has(app)) { ctx.impactNode(app, "deploys the new artifact " + key); declared.add(app); }
+            ctx.writeNode(app, { links: [{ type: "alm@deploys", to: key }] });
+          }
+        }
+        ctx.addArtifact("build", { component: c.key, technology: props.technology || "", version: v, artifact: key,
+          toolchain: report.command, checks: [report.command], branch: pushed.branch, commit: pushed.head });
+        return c.key + " published at " + pushed.head;
+      }
 
   # ======================= releases and environments
   - name: plan_release
@@ -1002,7 +1171,8 @@ agents:
     examples: ["build the components", "build"]
     planner: goap
     actions: [identify_requirements, select_scope, propagate_requirements, identify_functions, propagate_functions, identify_applications, propagate_applications, identify_components, propagate_components, qualify_impact, validate_impact_analysis, specify_requirements, write_requirements,
-              trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design, build]
+              trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design, build,
+              prepare_workspace, implement_component, build_component, publish_build]
     goals: [build_components]
   - name: release_manager
     description: Release manager — releases, release note, review, step-by-step deployment
@@ -1127,6 +1297,31 @@ methods:
       - {name: note, description: "Write the design note by hand", action: write_design}
       - {name: check, description: "Check the consistency of the design", action: check_design}
 
+  # The build (ADR 0118): from the sources when components in scope name their repository, in the workspace of the
+  # change; the components with no repository get their build recorded according to their technology.
+  - name: workspace_build
+    for: build
+    description: Implement, build and test the components in their sources, in the workspace of the change, then publish them
+    when: 'changeImpacts.exists(n, "alm@Component" in n.types && has(n.props.repository) && n.props.repository != "")'
+    priority: 20
+    guidance: >
+      Each component with a repository is cloned in the workspace of the change on the branch of the change,
+      implemented by an agent from the requirements and the design, built and tested by its build command (the
+      report, not the agent, says it builds), sent back to the agent when the build fails (three attempts, then a
+      person takes over), then pushed and recorded as a build artifact. The other components get their build recorded
+      by technology.
+    roles: {responsible: developer, accountable: tech_lead}
+    planner: goap
+    actions: [prepare_workspace, implement_component, build_component, publish_build, build]
+    done: {sources_published: true, build_complete: true}
+  - name: recorded_build
+    for: build
+    description: Record the build of each component according to its technology (no sources to build from)
+    roles: {responsible: developer, accountable: tech_lead}
+    planner: goap
+    actions: [build]
+    done: {build_complete: true}
+
 # The route of a change, described as steps and sub-steps with the precision the methodology has for each (ADR 0034):
 # a step is made of sub-steps, of the action that does it (not broken down further), of alternatives the planner
 # chooses among, of the methods that specialize it (variants, one chosen by context), of a process it nests, or only of
@@ -1177,9 +1372,10 @@ processes:
         pre: {impact_analysis_validated: true, requirements_specified: true, requirements_traced: true}
         method: design
       - name: build
-        description: Build every component in scope, according to its technology (once the design is checked)
+        description: Build every component in scope, from its sources in the workspace of the change when its repository is known, else according to its technology (once the design is checked)
         roles: {responsible: developer, accountable: tech_lead}
-        action: build
+        pre: {impact_analysis_validated: true, design_checked: true}
+        method: build
       - name: release
         description: Plan, note, review and roll out the releases, once what the release train needs holds and the risks are under control
         roles: {responsible: release_manager, accountable: service_owner, informed: [product_owner]}

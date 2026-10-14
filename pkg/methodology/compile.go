@@ -115,6 +115,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.compileConditions()
 	s.injectLibraries()
 	s.compileActions()
+	s.chainScoped()
 	s.checkSpecializations()
 	s.checkReferences()
 	s.compileGoals()
@@ -401,6 +402,33 @@ func (s *compileState) compileActions() {
 		}
 		a = s.compileScope(path, a)
 		s.actions[a.Name] = a
+	}
+}
+
+// chainScoped lets the planner chain two scoped actions of the same scope (ADR 0118): when what one makes true on its
+// subject is what the other needs on its own, running the first is planned to leave a subject pending for the second
+// (its pending condition among the effects of the first, for the plan only: lifted, never checked once it ran).
+// Without it a plan could not reach past the first, since no action makes the second's pending condition true.
+func (s *compileState) chainScoped() {
+	for _, name := range slices.Sorted(maps.Keys(s.actions)) {
+		a := s.actions[name]
+		if !a.IsScoped() || a.Lifted == nil {
+			continue
+		}
+		for _, other := range slices.Sorted(maps.Keys(s.actions)) {
+			b := s.actions[other]
+			if other == name || !b.IsScoped() || b.Scope != a.Scope || b.Lifted == nil {
+				continue
+			}
+			for k, v := range a.ScopedEffects {
+				if want, ok := b.ScopedPre[k]; ok && want == v {
+					a.Effects[b.PendingCondition()] = true
+					a.Lifted[b.PendingCondition()] = true
+					break
+				}
+			}
+		}
+		s.actions[name] = a
 	}
 }
 

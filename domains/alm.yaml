@@ -1,5 +1,5 @@
 name: alm
-version: 1.4.0
+version: 1.5.0
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -50,7 +50,8 @@ nodeTypes:
       - {name: title, label: Name, description: Name of the component, type: string, section: Identity, order: 1, asName: true, validators: [title-max-200]}
       - {name: technology, label: Technology, description: Main technology the component is built with (java, go, c, shell…), type: string, section: Build, order: 2}
       - {name: version, label: Version, description: Current version, dotted (1.4.2), type: string, section: Build, order: 3, validators: [dotted-version]}
-      - {name: repository, label: Repository, description: URL of the source repository, type: string, section: Build, order: 4, validators: [url-format]}
+      - {name: repository, label: Repository, description: URL of the source repository, type: string, section: Build, order: 4, validators: [repository-url]}
+      - {name: buildCommand, label: Build command, description: "Shell command building and testing the component in its sources (default: the one of its technology; ADR 0118)", type: string, section: Build, order: 5}
     search: [{property: title, text: true}, {property: technology, facet: true}, {property: version, facet: true}]
   - name: BuildArtifact
     description: Artifact produced by the build of a component
@@ -266,6 +267,7 @@ algorithmInstances:
   - {name: stamp-approved-at, algorithm: stamp-date, values: {property: approvedAt}}
   - {name: description-max-2000, description: A long text is at most 2000 characters, algorithm: max-length, values: {max: 2000}}
   - {name: url-format, description: The value is an http(s) address, algorithm: regex-match, values: {pattern: '^https?://\S+$', message: "must be an http(s) URL"}}
+  - {name: repository-url, description: "The value is the address of a git repository (https, ssh, git, file or user@host:path)", algorithm: regex-match, values: {pattern: '^((https?|ssh|git|file)://\S+|[\w.-]+@[\w.-]+:\S+)$', message: "must be the address of a git repository"}}
 linkTypes:
   - name: satisfies
     description: "A requirement satisfies a need"

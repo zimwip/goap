@@ -1142,6 +1142,9 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   isolated; `goap-dev` gives it to the default organisation with `GOAP_DEV_WORKSPACE_ROOT`. An llm action coding in
   it states the budget of its tool loop (`loop: {maxRounds, maxTokens, timeout, maxToolResultBytes, compactBytes}`):
   once spent it is asked for its final answer instead of failing, and its conversation is compacted as it grows.
+  `sdlc` 0.8.0 builds the components naming a repository from their sources (method `workspace_build`: workspace
+  opened, each component implemented by an agent, built by its command, sent back on a failed build, pushed and
+  recorded); two scoped actions of one scope chain in a plan (`chainScoped`).
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
