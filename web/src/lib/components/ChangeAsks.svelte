@@ -13,6 +13,7 @@
   let {
     changeId,
     closed = false,
+    always = false,
     reviews = [],
     onreview,
     ondecisions,
@@ -21,6 +22,8 @@
   }: {
     changeId: string;
     closed?: boolean;
+    /** shown even when nothing is asked (the side column of the change) */
+    always?: boolean;
     /** keys of the impacts awaiting their review */
     reviews?: string[];
     onreview?: () => void;
@@ -80,7 +83,7 @@
   }
 </script>
 
-{#if groups.mine.length || groups.others.length || (!closed && reviews.length) || error}
+{#if always || groups.mine.length || groups.others.length || (!closed && reviews.length) || error}
   <section class="card asks" aria-label="What the change waits for">
     {#if groups.mine.length || (!closed && reviews.length)}
       <h3>Waiting for you <span class="count">{groups.mine.length + (closed ? 0 : reviews.length)}</span></h3>
@@ -134,6 +137,10 @@
           </li>
         {/each}
       </ul>
+    {/if}
+    {#if !groups.mine.length && !groups.others.length && (closed || !reviews.length) && !error}
+      <h3>Waiting for people</h3>
+      <p class="hint">Nothing waits for anyone: what a run or a decision needs from a person shows here.</p>
     {/if}
     {#if error}<p class="hint">What the change waits for is unavailable: {error}</p>{/if}
   </section>

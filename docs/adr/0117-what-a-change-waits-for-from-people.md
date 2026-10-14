@@ -52,7 +52,7 @@ on the run (`submit` for an input, a merge, a rebase or a clarification, `decide
 
 ### 3. The change tab opens on what is asked
 
-`ChangeAsks.svelte`, at the top of the overview under the description:
+`ChangeAsks.svelte`, in a column on the right of the change tab, beside every pane (the change and what it waits for are seen together; the column folds to a strip carrying the count of the asks for the person, and goes above the panes when the tab is narrow):
 
 - **Waiting for you**: each ask the person may answer, with its kind, its title, its step, whom it is addressed to and
   for how long the change waits, answered in place: the panel of the run's task (`PendingTask.svelte`, the switch
@@ -62,7 +62,7 @@ on the run (`submit` for an input, a merge, a rebase or a clarification, `decide
   alert at the bottom of the overview).
 - **Waiting for others**: one line per ask, with the role or the person it waits for.
 
-The overview tab's badge counts the asks for the person (`N for you`). The run stays one click away from each ask. The
+The run stays one click away from each ask. The
 pure helpers are `web/src/lib/changeAsks.ts` (grouping, addressee, labels, waiting time).
 
 ## Consequences

@@ -106,6 +106,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
   // how many asks of the change the person may answer (ADR 0117): the badge of the overview
   let asksForMe = $state(0);
+  // the column of the asks folded to a strip (per tab, not remembered)
+  let asksFolded = $state(false);
   $effect(() => {
     tab.params.pane = pane;
   });
@@ -564,7 +566,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const commits = $derived(commitButtons(commitInfo, closed));
   const committedOnBranch = $derived(!!commitInfo?.commits);
   const panes = $derived<Pane[]>([
-    { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : asksForMe ? `${asksForMe} for you` : undefined },
+    { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
     { id: 'impacts', label: 'Impacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
     { id: 'reviews', label: 'Reviews', tint: scopeTint, title: scopeTabTitle(options, scope), badge: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
     { id: 'artifacts', label: 'Artifacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: artifacts.length || undefined },
@@ -1116,6 +1118,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       onopennode={(s, d) => openNode({ id: d.node ?? '', key: d.key ?? '' }, { pin: true, change: ch.id ?? '', flow: s })}
     />
   {/if}
+  <div class="asks-frame">
+  <div class="with-asks" class:folded={asksFolded}>
+  <div class="main">
   <EditorPanes {panes} bind:active={pane} label="Change sections">
     {#snippet children(active)}
       {#if active === 'overview'}
@@ -1173,15 +1178,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             />
           </AssessmentBubble>
         {/if}
-        <ChangeAsks
-          changeId={selected}
-          {closed}
-          reviews={awaiting.map((n) => n.key ?? '')}
-          onreview={() => (pane = 'reviews')}
-          ondecisions={() => (pane = 'decisions')}
-          onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
-          oncount={(n) => (asksForMe = n)}
-        />
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
@@ -1450,10 +1446,68 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       {/if}
     {/snippet}
   </EditorPanes>
+  </div>
+  <!-- what the change waits for from people, beside every pane (ADR 0117) -->
+  <aside class="asks-side" aria-label="What the change waits for">
+    <button type="button" class="link small fold" title={asksFolded ? 'Show what the change waits for' : 'Hide'} onclick={() => (asksFolded = !asksFolded)}>
+      {asksFolded ? `◀ ${asksForMe || ''}` : '▶'}
+    </button>
+    {#if !asksFolded}
+      <ChangeAsks
+        changeId={selected}
+        {closed}
+        always
+        reviews={awaiting.map((n) => n.key ?? '')}
+        onreview={() => (pane = 'reviews')}
+        ondecisions={() => (pane = 'decisions')}
+        onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
+        oncount={(n) => (asksForMe = n)}
+      />
+    {/if}
+  </aside>
+  </div>
+  </div>
 {/if}
 </div>
 
 <style>
+  /* the change and what it waits for side by side; stacked when the tab is narrow */
+  .with-asks {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+    gap: 1rem;
+    align-items: start;
+  }
+  .asks-frame {
+    container-type: inline-size;
+  }
+  .with-asks.folded {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .with-asks > .main {
+    min-width: 0;
+  }
+  .asks-side {
+    position: sticky;
+    top: 0;
+    max-height: calc(100vh - 6rem);
+    overflow-y: auto;
+  }
+  .asks-side .fold {
+    display: block;
+    margin-left: auto;
+  }
+  @container (max-width: 900px) {
+    .with-asks,
+    .with-asks.folded {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .asks-side {
+      position: static;
+      max-height: none;
+      order: -1;
+    }
+  }
   .filter {
     display: flex;
     gap: 0.4rem;
