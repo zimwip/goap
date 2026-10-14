@@ -431,14 +431,20 @@ func (c *Compiled) Goal(name string) (Goal, bool) {
 // which steps work towards a goal (ADR 0097).
 func (c *Compiled) NeededBy(goal map[string]bool) map[string]bool {
 	need := map[string]bool{}
-	for k := range goal {
+	add := func(k string) bool {
+		if need[k] {
+			return false
+		}
 		need[k] = true
+		for _, p := range c.Prerequisites(k) { // a condition needs what it cannot hold without (ADR 0112 §5)
+			need[p] = true
+		}
+		return true
 	}
-	all := make([]Action, 0, len(c.actions)+len(c.processes.actions))
-	for _, a := range c.actions {
-		all = append(all, a)
+	for k := range goal {
+		add(k)
 	}
-	all = append(all, c.processes.actions...)
+	all := c.allActions()
 	for changed := true; changed; {
 		changed = false
 		for _, a := range all {
@@ -446,8 +452,8 @@ func (c *Compiled) NeededBy(goal map[string]bool) map[string]bool {
 				continue
 			}
 			hit := false
-			for k := range a.Effects {
-				if need[k] {
+			for k, v := range a.Effects {
+				if v && c.establishes(k, need) {
 					hit = true
 					break
 				}
@@ -456,14 +462,65 @@ func (c *Compiled) NeededBy(goal map[string]bool) map[string]bool {
 				continue
 			}
 			for k := range a.Pre {
-				if !need[k] {
-					need[k] = true
+				if add(k) {
 					changed = true
 				}
 			}
 		}
 	}
 	return need
+}
+
+// allActions are the declared actions and the ones generated for the steps.
+func (c *Compiled) allActions() []Action {
+	all := make([]Action, 0, len(c.actions)+len(c.processes.actions))
+	for _, a := range c.actions {
+		all = append(all, a)
+	}
+	return append(all, c.processes.actions...)
+}
+
+// establishes reports whether making an effect hold makes one of the needed conditions hold: the condition itself,
+// or one it cannot hold without.
+func (c *Compiled) establishes(effect string, need map[string]bool) bool {
+	if need[effect] {
+		return true
+	}
+	for _, p := range c.Prerequisites(effect) {
+		if need[p] {
+			return true
+		}
+	}
+	return false
+}
+
+// Prerequisites are the conditions a condition cannot hold without (ADR 0112 §5): read from their expressions
+// (condition.Set.Implied), so `description_accepted` needs `description_rated`. Reaching them is a prerequisite of the
+// condition, whatever action does it.
+func (c *Compiled) Prerequisites(name string) []string {
+	if c.Conditions == nil {
+		return nil
+	}
+	return c.Conditions.Implied(name)
+}
+
+// Producers are the actions (declared ones by name, then the steps by path) that make a condition hold: one of their
+// effects is the condition, or implies it.
+func (c *Compiled) Producers(name string) []string {
+	var out []string
+	for _, a := range c.allActions() {
+		if a.IsSpecialization() || slices.Contains(out, a.Name) {
+			continue
+		}
+		for k, v := range a.Effects {
+			if v && (k == name || slices.Contains(c.Prerequisites(k), name)) {
+				out = append(out, a.Name)
+				break
+			}
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // MainGoal is the goal the changes of the methodology start with (ADR 0096): the declared Goal, else the first declared

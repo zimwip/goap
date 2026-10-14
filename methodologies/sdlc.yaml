@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.7.2
+version: 0.7.3
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -201,14 +201,15 @@ actions:
       outcome, its scope (the applications, requirements or data it touches) and why it is needed.
       Title: "{{ .Change.Title }}"
       Description: "{{ .Change.Intent }}"
-      The brief shows your previous ASSESSMENT of it, if any, and the THREAD of the requester's remarks: when they
-      answered you, take their answer into account and refine your rating rather than start over.
+      Rate the description as it is now. The brief shows the latest ASSESSMENT of it, if any, and the THREAD of the
+      topic "description": the earlier ratings and the requester's remarks. When they answered a rating, take their
+      answer into account and go on from the discussion rather than start over.
       Finish with exactly one item:
       {"kind":"assessment","data":{"key":"description","score":<0 to 5>,"verdict":"clear|unclear|insufficient",
        "findings":[{"text":"<what is missing or ambiguous>","severity":"major|minor"}],
        "suggestion":"<a rewritten description, same language as the original, only if it can be improved>",
-       "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>",
-       "rated":"<the fp of the SUBJECT description line of the brief>"}}
+       "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>"}}
+      (what you rated is recorded for you: the description as it is in this prompt.)
       A score of 3 or more means the change can be worked on as described.
 
   - name: rate_description_by_hand
@@ -1025,9 +1026,9 @@ methods:
     actions: [rate_description, rate_description_by_hand]
     done: {description_reviewed: true}
     roles: {responsible: business_analyst, accountable: product_owner}
-    # one rater per change, from the first description to the last (ADR 0112): every new rating is done by the same
-    # instance, which gets its earlier exchanges back and refines rather than starts over
-    persistent: {scope: change}
+    # not persistent (ADR 0112 §4): a rating depends only on the description as it is, so every edit gets an
+    # independent run; what joins them is the discussion of the topic `description` (the earlier ratings and the
+    # requester's remarks), which the brief gives every run
   # The impact analysis (ADR 0109): four passes, one layer each, so that nothing is done all at once and each layer
   # starts from what the layer above settled. Each pass names what its layer directly carries of the change,
   # propagates the impacts of the layers above down to its own along the ALM links, then qualifies the impacts the

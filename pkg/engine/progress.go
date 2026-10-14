@@ -117,7 +117,7 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 		}
 	}
 	count(out.Steps)
-	describeNeeds(m, out.Steps)
+	describeNeeds(m, p.World, out.Steps)
 	return out, nil
 }
 

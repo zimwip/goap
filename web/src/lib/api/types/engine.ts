@@ -266,6 +266,10 @@ export interface Need {
   condition?: string;
   want?: boolean;
   description?: string;
+  /** The actions making it hold (an effect that is it, or implies it). */
+  producedBy?: string[];
+  /** The conditions it cannot hold without that do not hold yet: what to reach first (ADR 0112 §5). */
+  requires?: Need[];
 }
 
 /** Where one process of the methodology of a change stands now, whatever the number of runs (ADR 0112). */

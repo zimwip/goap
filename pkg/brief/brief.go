@@ -173,7 +173,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 		}
 	}
 
-	// the ratings and the threads discussing them (ADR 0110): the rater reads what was said since it last rated
+	// the ratings and the discussions of their topics (ADR 0110, 0112 §4): the rater reads what was said before it
 	for _, a := range assess.Assessments(bb) {
 		state := "current"
 		if !a.Current {
@@ -219,14 +219,29 @@ func Of(bb domain.Blackboard, step *Step) string {
 	return b.String()
 }
 
-// threadKeys are the subjects someone commented on, in the order of their first comment.
+// threadKeys are the topics of a discussion (ADR 0112 §4): the subjects someone commented on or rated more than once,
+// in the order of their first message. The discussion of a topic is what joins the runs that rate it, each of them
+// independent: the next rater reads what the earlier ones said and what the persons answered.
 func threadKeys(c domain.Change) []string {
 	var out []string
+	ratings := map[string]int{}
 	for _, it := range c.Items {
-		if it.Kind != assess.KindComment || !c.Active(it.ID) {
+		if !c.Active(it.ID) || it.Status == domain.ItemRejected {
 			continue
 		}
-		if k, _ := it.Data["about"].(string); k != "" && !slices.Contains(out, k) {
+		var k string
+		switch it.Kind {
+		case assess.KindComment:
+			k, _ = it.Data["about"].(string)
+		case assess.KindAssessment:
+			k, _ = it.Data["key"].(string)
+			if ratings[k]++; ratings[k] < 2 {
+				continue
+			}
+		default:
+			continue
+		}
+		if k != "" && !slices.Contains(out, k) {
 			out = append(out, k)
 		}
 	}

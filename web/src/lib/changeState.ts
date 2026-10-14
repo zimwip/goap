@@ -10,6 +10,13 @@ export function needText(n: Need): string {
   return n.want === false ? `not: ${what}` : what;
 }
 
+/** A need with what is to be reached first: the conditions it cannot hold without, and the actions producing them
+ * ("the description, as it reads now, is rated acceptable, first: the description has been rated (by rate)"). */
+export function needDetail(n: Need): string {
+  const first = (n.requires ?? []).map((r) => (r.producedBy?.length ? `${needText(r)} (by ${r.producedBy.join(', ')})` : needText(r)));
+  return first.length ? `${needText(n)}, first: ${first.join('; ')}` : needText(n);
+}
+
 /** The needs of a step: the engine's, else the names it misses. */
 export function needsOf(s: StepProgress): Need[] {
   if (s.needs?.length) return s.needs;

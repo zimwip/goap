@@ -6,7 +6,7 @@
   import { engine, type ChangeStateResponse, type ProcessState } from '../api';
   import { processes } from '../stores/live.svelte';
   import { stamp, keyOf } from '../flux/signals.svelte';
-  import { blockers, needText, needsOf, ordered, runsText } from '../changeState';
+  import { blockers, needDetail, needsOf, ordered, runsText } from '../changeState';
   import ProcessProgress from './ProcessProgress.svelte';
 
   let { changeId, onopen }: { changeId: string; onopen?: (id: string) => void } = $props();
@@ -74,7 +74,7 @@
             <span class="hint">Waiting for:</span>
             <ul>
               {#each stuck as s (s.path)}
-                <li><strong>{s.name}</strong> needs {needsOf(s).map(needText).join('; ')}</li>
+                <li><strong>{s.name}</strong> needs {needsOf(s).map(needDetail).join('; ')}</li>
               {/each}
             </ul>
           </div>

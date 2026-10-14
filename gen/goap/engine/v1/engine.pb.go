@@ -4544,10 +4544,14 @@ func (x *ProcessState) GetTotal() int32 {
 
 // A condition a step waits for, the value it needs and what it means.
 type Need struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Condition     string                 `protobuf:"bytes,1,opt,name=condition,proto3" json:"condition,omitempty"`
-	Want          bool                   `protobuf:"varint,2,opt,name=want,proto3" json:"want,omitempty"`
-	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Condition   string                 `protobuf:"bytes,1,opt,name=condition,proto3" json:"condition,omitempty"`
+	Want        bool                   `protobuf:"varint,2,opt,name=want,proto3" json:"want,omitempty"`
+	Description string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// the actions making it hold (an effect that is it, or implies it)
+	ProducedBy []string `protobuf:"bytes,4,rep,name=produced_by,json=producedBy,proto3" json:"produced_by,omitempty"`
+	// the conditions it cannot hold without that do not hold yet (ADR 0112 §5)
+	Requires      []*Need `protobuf:"bytes,5,rep,name=requires,proto3" json:"requires,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4601,6 +4605,20 @@ func (x *Need) GetDescription() string {
 		return x.Description
 	}
 	return ""
+}
+
+func (x *Need) GetProducedBy() []string {
+	if x != nil {
+		return x.ProducedBy
+	}
+	return nil
+}
+
+func (x *Need) GetRequires() []*Need {
+	if x != nil {
+		return x.Requires
+	}
+	return nil
 }
 
 type ExplainConditionRequest struct {
@@ -6164,11 +6182,14 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\x05steps\x18\t \x03(\v2\x1c.goap.engine.v1.StepProgressR\x05steps\x12\x12\n" +
 	"\x04done\x18\n" +
 	" \x01(\x05R\x04done\x12\x14\n" +
-	"\x05total\x18\v \x01(\x05R\x05total\"Z\n" +
+	"\x05total\x18\v \x01(\x05R\x05total\"\xad\x01\n" +
 	"\x04Need\x12\x1c\n" +
 	"\tcondition\x18\x01 \x01(\tR\tcondition\x12\x12\n" +
 	"\x04want\x18\x02 \x01(\bR\x04want\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\"V\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1f\n" +
+	"\vproduced_by\x18\x04 \x03(\tR\n" +
+	"producedBy\x120\n" +
+	"\brequires\x18\x05 \x03(\v2\x14.goap.engine.v1.NeedR\brequires\"V\n" +
 	"\x17ExplainConditionRequest\x12\x1d\n" +
 	"\n" +
 	"process_id\x18\x01 \x01(\tR\tprocessId\x12\x1c\n" +
@@ -6463,75 +6484,76 @@ var file_goap_engine_v1_engine_proto_depIdxs = []int32{
 	66,  // 57: goap.engine.v1.GetProcessProgressResponse.progress:type_name -> goap.engine.v1.ProcessProgress
 	61,  // 58: goap.engine.v1.GetChangeStateResponse.processes:type_name -> goap.engine.v1.ProcessState
 	67,  // 59: goap.engine.v1.ProcessState.steps:type_name -> goap.engine.v1.StepProgress
-	65,  // 60: goap.engine.v1.ExplainConditionResponse.root:type_name -> goap.engine.v1.ConditionTerm
-	84,  // 61: goap.engine.v1.ExplainConditionResponse.inputs:type_name -> goap.engine.v1.ExplainConditionResponse.InputsEntry
-	65,  // 62: goap.engine.v1.ConditionTerm.terms:type_name -> goap.engine.v1.ConditionTerm
-	67,  // 63: goap.engine.v1.ProcessProgress.steps:type_name -> goap.engine.v1.StepProgress
-	25,  // 64: goap.engine.v1.StepProgress.references:type_name -> goap.engine.v1.DocumentReference
-	67,  // 65: goap.engine.v1.StepProgress.steps:type_name -> goap.engine.v1.StepProgress
-	24,  // 66: goap.engine.v1.StepProgress.roles:type_name -> goap.engine.v1.Responsibilities
-	68,  // 67: goap.engine.v1.StepProgress.lanes:type_name -> goap.engine.v1.Lane
-	62,  // 68: goap.engine.v1.StepProgress.needs:type_name -> goap.engine.v1.Need
-	29,  // 69: goap.engine.v1.ListProcessesResponse.processes:type_name -> goap.engine.v1.Process
-	85,  // 70: goap.engine.v1.WatchEventsResponse.time:type_name -> google.protobuf.Timestamp
-	29,  // 71: goap.engine.v1.WatchEventsResponse.process:type_name -> goap.engine.v1.Process
-	8,   // 72: goap.engine.v1.WatchEventsResponse.log:type_name -> goap.engine.v1.LogLine
-	29,  // 73: goap.engine.v1.RelaunchStepResponse.process:type_name -> goap.engine.v1.Process
-	29,  // 74: goap.engine.v1.DecideFlowResponse.process:type_name -> goap.engine.v1.Process
-	29,  // 75: goap.engine.v1.ResolveBoardResponse.process:type_name -> goap.engine.v1.Process
-	29,  // 76: goap.engine.v1.ResolveBoardResponse.relaunched:type_name -> goap.engine.v1.Process
-	20,  // 77: goap.engine.v1.ResolveMergeRequest.ResolutionsEntry.value:type_name -> goap.engine.v1.MergeResolution
-	30,  // 78: goap.engine.v1.EngineService.StartProcess:input_type -> goap.engine.v1.StartProcessRequest
-	40,  // 79: goap.engine.v1.EngineService.AnswerIntent:input_type -> goap.engine.v1.AnswerIntentRequest
-	42,  // 80: goap.engine.v1.EngineService.SubmitHumanInput:input_type -> goap.engine.v1.SubmitHumanInputRequest
-	44,  // 81: goap.engine.v1.EngineService.ApproveAction:input_type -> goap.engine.v1.ApproveActionRequest
-	46,  // 82: goap.engine.v1.EngineService.UnblockProcess:input_type -> goap.engine.v1.UnblockProcessRequest
-	47,  // 83: goap.engine.v1.EngineService.CancelProcess:input_type -> goap.engine.v1.CancelProcessRequest
-	73,  // 84: goap.engine.v1.EngineService.RelaunchStep:input_type -> goap.engine.v1.RelaunchStepRequest
-	75,  // 85: goap.engine.v1.EngineService.DecideFlow:input_type -> goap.engine.v1.DecideFlowRequest
-	77,  // 86: goap.engine.v1.EngineService.ResolveBoard:input_type -> goap.engine.v1.ResolveBoardRequest
-	21,  // 87: goap.engine.v1.EngineService.ResolveMerge:input_type -> goap.engine.v1.ResolveMergeRequest
-	15,  // 88: goap.engine.v1.EngineService.ResolveRebase:input_type -> goap.engine.v1.ResolveRebaseRequest
-	55,  // 89: goap.engine.v1.EngineService.GetProcess:input_type -> goap.engine.v1.GetProcessRequest
-	57,  // 90: goap.engine.v1.EngineService.GetProcessProgress:input_type -> goap.engine.v1.GetProcessProgressRequest
-	59,  // 91: goap.engine.v1.EngineService.GetChangeState:input_type -> goap.engine.v1.GetChangeStateRequest
-	63,  // 92: goap.engine.v1.EngineService.ExplainCondition:input_type -> goap.engine.v1.ExplainConditionRequest
-	69,  // 93: goap.engine.v1.EngineService.ListProcesses:input_type -> goap.engine.v1.ListProcessesRequest
-	36,  // 94: goap.engine.v1.EngineService.CheckAgents:input_type -> goap.engine.v1.CheckAgentsRequest
-	31,  // 95: goap.engine.v1.EngineService.ListStartingPoints:input_type -> goap.engine.v1.ListStartingPointsRequest
-	50,  // 96: goap.engine.v1.EngineService.AttachChange:input_type -> goap.engine.v1.AttachChangeRequest
-	53,  // 97: goap.engine.v1.EngineService.GetProcessLog:input_type -> goap.engine.v1.GetProcessLogRequest
-	71,  // 98: goap.engine.v1.EngineService.WatchEvents:input_type -> goap.engine.v1.WatchEventsRequest
-	1,   // 99: goap.engine.v1.EngineService.ListTriggers:input_type -> goap.engine.v1.ListTriggersRequest
-	3,   // 100: goap.engine.v1.EngineService.FireTrigger:input_type -> goap.engine.v1.FireTriggerRequest
-	39,  // 101: goap.engine.v1.EngineService.StartProcess:output_type -> goap.engine.v1.StartProcessResponse
-	41,  // 102: goap.engine.v1.EngineService.AnswerIntent:output_type -> goap.engine.v1.AnswerIntentResponse
-	43,  // 103: goap.engine.v1.EngineService.SubmitHumanInput:output_type -> goap.engine.v1.SubmitHumanInputResponse
-	45,  // 104: goap.engine.v1.EngineService.ApproveAction:output_type -> goap.engine.v1.ApproveActionResponse
-	49,  // 105: goap.engine.v1.EngineService.UnblockProcess:output_type -> goap.engine.v1.UnblockProcessResponse
-	48,  // 106: goap.engine.v1.EngineService.CancelProcess:output_type -> goap.engine.v1.CancelProcessResponse
-	74,  // 107: goap.engine.v1.EngineService.RelaunchStep:output_type -> goap.engine.v1.RelaunchStepResponse
-	76,  // 108: goap.engine.v1.EngineService.DecideFlow:output_type -> goap.engine.v1.DecideFlowResponse
-	78,  // 109: goap.engine.v1.EngineService.ResolveBoard:output_type -> goap.engine.v1.ResolveBoardResponse
-	22,  // 110: goap.engine.v1.EngineService.ResolveMerge:output_type -> goap.engine.v1.ResolveMergeResponse
-	16,  // 111: goap.engine.v1.EngineService.ResolveRebase:output_type -> goap.engine.v1.ResolveRebaseResponse
-	56,  // 112: goap.engine.v1.EngineService.GetProcess:output_type -> goap.engine.v1.GetProcessResponse
-	58,  // 113: goap.engine.v1.EngineService.GetProcessProgress:output_type -> goap.engine.v1.GetProcessProgressResponse
-	60,  // 114: goap.engine.v1.EngineService.GetChangeState:output_type -> goap.engine.v1.GetChangeStateResponse
-	64,  // 115: goap.engine.v1.EngineService.ExplainCondition:output_type -> goap.engine.v1.ExplainConditionResponse
-	70,  // 116: goap.engine.v1.EngineService.ListProcesses:output_type -> goap.engine.v1.ListProcessesResponse
-	38,  // 117: goap.engine.v1.EngineService.CheckAgents:output_type -> goap.engine.v1.CheckAgentsResponse
-	35,  // 118: goap.engine.v1.EngineService.ListStartingPoints:output_type -> goap.engine.v1.ListStartingPointsResponse
-	51,  // 119: goap.engine.v1.EngineService.AttachChange:output_type -> goap.engine.v1.AttachChangeResponse
-	54,  // 120: goap.engine.v1.EngineService.GetProcessLog:output_type -> goap.engine.v1.GetProcessLogResponse
-	72,  // 121: goap.engine.v1.EngineService.WatchEvents:output_type -> goap.engine.v1.WatchEventsResponse
-	2,   // 122: goap.engine.v1.EngineService.ListTriggers:output_type -> goap.engine.v1.ListTriggersResponse
-	4,   // 123: goap.engine.v1.EngineService.FireTrigger:output_type -> goap.engine.v1.FireTriggerResponse
-	101, // [101:124] is the sub-list for method output_type
-	78,  // [78:101] is the sub-list for method input_type
-	78,  // [78:78] is the sub-list for extension type_name
-	78,  // [78:78] is the sub-list for extension extendee
-	0,   // [0:78] is the sub-list for field type_name
+	62,  // 60: goap.engine.v1.Need.requires:type_name -> goap.engine.v1.Need
+	65,  // 61: goap.engine.v1.ExplainConditionResponse.root:type_name -> goap.engine.v1.ConditionTerm
+	84,  // 62: goap.engine.v1.ExplainConditionResponse.inputs:type_name -> goap.engine.v1.ExplainConditionResponse.InputsEntry
+	65,  // 63: goap.engine.v1.ConditionTerm.terms:type_name -> goap.engine.v1.ConditionTerm
+	67,  // 64: goap.engine.v1.ProcessProgress.steps:type_name -> goap.engine.v1.StepProgress
+	25,  // 65: goap.engine.v1.StepProgress.references:type_name -> goap.engine.v1.DocumentReference
+	67,  // 66: goap.engine.v1.StepProgress.steps:type_name -> goap.engine.v1.StepProgress
+	24,  // 67: goap.engine.v1.StepProgress.roles:type_name -> goap.engine.v1.Responsibilities
+	68,  // 68: goap.engine.v1.StepProgress.lanes:type_name -> goap.engine.v1.Lane
+	62,  // 69: goap.engine.v1.StepProgress.needs:type_name -> goap.engine.v1.Need
+	29,  // 70: goap.engine.v1.ListProcessesResponse.processes:type_name -> goap.engine.v1.Process
+	85,  // 71: goap.engine.v1.WatchEventsResponse.time:type_name -> google.protobuf.Timestamp
+	29,  // 72: goap.engine.v1.WatchEventsResponse.process:type_name -> goap.engine.v1.Process
+	8,   // 73: goap.engine.v1.WatchEventsResponse.log:type_name -> goap.engine.v1.LogLine
+	29,  // 74: goap.engine.v1.RelaunchStepResponse.process:type_name -> goap.engine.v1.Process
+	29,  // 75: goap.engine.v1.DecideFlowResponse.process:type_name -> goap.engine.v1.Process
+	29,  // 76: goap.engine.v1.ResolveBoardResponse.process:type_name -> goap.engine.v1.Process
+	29,  // 77: goap.engine.v1.ResolveBoardResponse.relaunched:type_name -> goap.engine.v1.Process
+	20,  // 78: goap.engine.v1.ResolveMergeRequest.ResolutionsEntry.value:type_name -> goap.engine.v1.MergeResolution
+	30,  // 79: goap.engine.v1.EngineService.StartProcess:input_type -> goap.engine.v1.StartProcessRequest
+	40,  // 80: goap.engine.v1.EngineService.AnswerIntent:input_type -> goap.engine.v1.AnswerIntentRequest
+	42,  // 81: goap.engine.v1.EngineService.SubmitHumanInput:input_type -> goap.engine.v1.SubmitHumanInputRequest
+	44,  // 82: goap.engine.v1.EngineService.ApproveAction:input_type -> goap.engine.v1.ApproveActionRequest
+	46,  // 83: goap.engine.v1.EngineService.UnblockProcess:input_type -> goap.engine.v1.UnblockProcessRequest
+	47,  // 84: goap.engine.v1.EngineService.CancelProcess:input_type -> goap.engine.v1.CancelProcessRequest
+	73,  // 85: goap.engine.v1.EngineService.RelaunchStep:input_type -> goap.engine.v1.RelaunchStepRequest
+	75,  // 86: goap.engine.v1.EngineService.DecideFlow:input_type -> goap.engine.v1.DecideFlowRequest
+	77,  // 87: goap.engine.v1.EngineService.ResolveBoard:input_type -> goap.engine.v1.ResolveBoardRequest
+	21,  // 88: goap.engine.v1.EngineService.ResolveMerge:input_type -> goap.engine.v1.ResolveMergeRequest
+	15,  // 89: goap.engine.v1.EngineService.ResolveRebase:input_type -> goap.engine.v1.ResolveRebaseRequest
+	55,  // 90: goap.engine.v1.EngineService.GetProcess:input_type -> goap.engine.v1.GetProcessRequest
+	57,  // 91: goap.engine.v1.EngineService.GetProcessProgress:input_type -> goap.engine.v1.GetProcessProgressRequest
+	59,  // 92: goap.engine.v1.EngineService.GetChangeState:input_type -> goap.engine.v1.GetChangeStateRequest
+	63,  // 93: goap.engine.v1.EngineService.ExplainCondition:input_type -> goap.engine.v1.ExplainConditionRequest
+	69,  // 94: goap.engine.v1.EngineService.ListProcesses:input_type -> goap.engine.v1.ListProcessesRequest
+	36,  // 95: goap.engine.v1.EngineService.CheckAgents:input_type -> goap.engine.v1.CheckAgentsRequest
+	31,  // 96: goap.engine.v1.EngineService.ListStartingPoints:input_type -> goap.engine.v1.ListStartingPointsRequest
+	50,  // 97: goap.engine.v1.EngineService.AttachChange:input_type -> goap.engine.v1.AttachChangeRequest
+	53,  // 98: goap.engine.v1.EngineService.GetProcessLog:input_type -> goap.engine.v1.GetProcessLogRequest
+	71,  // 99: goap.engine.v1.EngineService.WatchEvents:input_type -> goap.engine.v1.WatchEventsRequest
+	1,   // 100: goap.engine.v1.EngineService.ListTriggers:input_type -> goap.engine.v1.ListTriggersRequest
+	3,   // 101: goap.engine.v1.EngineService.FireTrigger:input_type -> goap.engine.v1.FireTriggerRequest
+	39,  // 102: goap.engine.v1.EngineService.StartProcess:output_type -> goap.engine.v1.StartProcessResponse
+	41,  // 103: goap.engine.v1.EngineService.AnswerIntent:output_type -> goap.engine.v1.AnswerIntentResponse
+	43,  // 104: goap.engine.v1.EngineService.SubmitHumanInput:output_type -> goap.engine.v1.SubmitHumanInputResponse
+	45,  // 105: goap.engine.v1.EngineService.ApproveAction:output_type -> goap.engine.v1.ApproveActionResponse
+	49,  // 106: goap.engine.v1.EngineService.UnblockProcess:output_type -> goap.engine.v1.UnblockProcessResponse
+	48,  // 107: goap.engine.v1.EngineService.CancelProcess:output_type -> goap.engine.v1.CancelProcessResponse
+	74,  // 108: goap.engine.v1.EngineService.RelaunchStep:output_type -> goap.engine.v1.RelaunchStepResponse
+	76,  // 109: goap.engine.v1.EngineService.DecideFlow:output_type -> goap.engine.v1.DecideFlowResponse
+	78,  // 110: goap.engine.v1.EngineService.ResolveBoard:output_type -> goap.engine.v1.ResolveBoardResponse
+	22,  // 111: goap.engine.v1.EngineService.ResolveMerge:output_type -> goap.engine.v1.ResolveMergeResponse
+	16,  // 112: goap.engine.v1.EngineService.ResolveRebase:output_type -> goap.engine.v1.ResolveRebaseResponse
+	56,  // 113: goap.engine.v1.EngineService.GetProcess:output_type -> goap.engine.v1.GetProcessResponse
+	58,  // 114: goap.engine.v1.EngineService.GetProcessProgress:output_type -> goap.engine.v1.GetProcessProgressResponse
+	60,  // 115: goap.engine.v1.EngineService.GetChangeState:output_type -> goap.engine.v1.GetChangeStateResponse
+	64,  // 116: goap.engine.v1.EngineService.ExplainCondition:output_type -> goap.engine.v1.ExplainConditionResponse
+	70,  // 117: goap.engine.v1.EngineService.ListProcesses:output_type -> goap.engine.v1.ListProcessesResponse
+	38,  // 118: goap.engine.v1.EngineService.CheckAgents:output_type -> goap.engine.v1.CheckAgentsResponse
+	35,  // 119: goap.engine.v1.EngineService.ListStartingPoints:output_type -> goap.engine.v1.ListStartingPointsResponse
+	51,  // 120: goap.engine.v1.EngineService.AttachChange:output_type -> goap.engine.v1.AttachChangeResponse
+	54,  // 121: goap.engine.v1.EngineService.GetProcessLog:output_type -> goap.engine.v1.GetProcessLogResponse
+	72,  // 122: goap.engine.v1.EngineService.WatchEvents:output_type -> goap.engine.v1.WatchEventsResponse
+	2,   // 123: goap.engine.v1.EngineService.ListTriggers:output_type -> goap.engine.v1.ListTriggersResponse
+	4,   // 124: goap.engine.v1.EngineService.FireTrigger:output_type -> goap.engine.v1.FireTriggerResponse
+	102, // [102:125] is the sub-list for method output_type
+	79,  // [79:102] is the sub-list for method input_type
+	79,  // [79:79] is the sub-list for extension type_name
+	79,  // [79:79] is the sub-list for extension extendee
+	0,   // [0:79] is the sub-list for field type_name
 }
 
 func init() { file_goap_engine_v1_engine_proto_init() }

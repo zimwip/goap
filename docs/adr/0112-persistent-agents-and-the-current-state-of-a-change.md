@@ -63,7 +63,7 @@ compiler (`checkPersistence`: the scope, the `until` conditions known, the memor
 *Persistence* card of the agent and method tabs (`PersistenceEditor.svelte`, `PersistenceForm` in
 `methodologyForm.ts`). Engine proto `Process.instance` / `closed` / `runs` / `memory_turns`.
 
-Shipped: `sdlc` 0.7.2, `description_rating` is persistent per change; `methodology-improvement` 1.5.0, the observer
+Shipped: `methodology-improvement` 1.5.0, the observer
 is persistent per observed methodology until `drafted`. Its conditions are about the run observed now
 (`vars.event.process.id`, or `vars.process` for a run fired by hand: the `cost_report` and the `improvement_plan`,
 which now carries `process`), the review and the draft about the whole cycle, so a new run handed to the instance is
@@ -93,9 +93,45 @@ means: the description the methodology gives its condition, else the library's (
 now given for every library condition), else what a generated one stands for (`state:`, `step:`, `method:`). Filled by
 `Progress` and `ChangeState`; the web reads them through `needText` / `needsOf` (falling back on the names).
 
+### 4. A rating is an independent run; the discussion of a topic joins the runs
+
+`sdlc` 0.7.2 made `description_rating` persistent per change. It froze the rating: given its earlier exchanges back,
+the rater copied the fingerprint of the first description into its next ratings (`rated`), which were then never
+`current`, so `description_reviewed` never held, the action failed and the screen kept the first rating. A rating
+depends only on the subject as it is: it needs no memory, and memory made it wrong. So:
+
+- `sdlc` 0.7.3: `description_rating` is no longer persistent; every edit gets an independent run.
+- **What was rated is the engine's, not the model's**: the assessments a model answers are stamped with the
+  fingerprint of their subject as the action read it (`stampRated`, `pkg/engine/executors.go`), whatever the model
+  wrote; the prompt no longer asks for it.
+- **The continuity is the discussion of a topic**, not a process: the subject of a rating (`description`,
+  `impact:<key>`, ...) has a thread made of its ratings and the persons' comments, however many unrelated runs wrote
+  them. The brief gives it to every run (`THREAD <topic>`, `pkg/brief`), now as soon as a topic was rated twice or
+  commented, so the next rater goes on from what was said.
+
+Persistence stays for work that is one piece over several runs (the improvement cycle, until its draft).
+
+### 5. Derived conditions: what a condition cannot hold without
+
+A derived condition may be a refinement of another: `description_accepted` (a current rating scoring 3 or more) cannot
+hold without `description_rated` (a current rating), which the rating action produces through `description_reviewed`.
+Reaching the second is a prerequisite of the first, whatever action states it. `condition.Set.Implied` reads it from
+the expressions (`pkg/condition/implies.go`, `Implies`): an expression is a conjunction of atoms, and B implies A when
+every atom of A is implied by one of B (the same term, or `R.exists(v, P)` implied by `R.exists(w, Q)` over the same
+range when Q has every conjunct of P, the variables renamed; `==`, `&&`, `||` read as commutative). It is structural
+and conservative: what it finds holds, what it misses is not shown. Two equivalent conditions are not each other's
+prerequisite.
+
+- `Compiled.Prerequisites(c)` and `Compiled.Producers(c)` (the actions with an effect that is c or implies it).
+- `NeededBy` (starting points, ADR 0097) takes them in: a needed condition needs its prerequisites, and an action
+  whose effect implies a needed condition works towards it.
+- `Need.ProducedBy` and `Need.Requires` (the prerequisites not holding yet, each with its producers; proto
+  `Need.produced_by` / `requires`): a step waiting for an accepted description says "first: the description has
+  been rated (by rate_description)" (`needDetail`, `web/src/lib/changeState.ts`).
+
 ## Consequences
 
-- A rater, an observer or any agent declared persistent works as one colleague on its scope: it remembers what it said
+- An observer or any agent declared persistent works as one colleague on its scope: it remembers what it said
   and goes on, and its runs are one process with a history instead of a pile of runs.
 - The change tab says where the change is, not how many times something ran; the steps that wait say for what.
 - Not done: the memory is not summarized (it is cut to the last exchanges); the web does not show the memory of an

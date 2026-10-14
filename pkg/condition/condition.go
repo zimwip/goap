@@ -9,6 +9,7 @@ package condition
 import (
 	"fmt"
 	"sort"
+	"sync"
 
 	"cel.dev/cel-go/cel"
 	"cel.dev/cel-go/ext"
@@ -44,6 +45,9 @@ type Set struct {
 	// aggregates the aggregates, each with the index of its scoped condition in scoped.
 	scoped     []scopedCond
 	aggregates []aggregate
+	// implies maps a condition to the ones it implies (Implied), computed once.
+	implyOnce sync.Once
+	implies   map[string][]string
 }
 
 type compiled struct {

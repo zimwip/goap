@@ -22,6 +22,11 @@ type Need struct {
 	Condition   string `json:"condition"`
 	Want        bool   `json:"want"`
 	Description string `json:"description,omitempty"`
+	// ProducedBy are the actions that make it hold (an effect that is it, or implies it).
+	ProducedBy []string `json:"producedBy,omitempty"`
+	// Requires are the conditions it cannot hold without (ADR 0112 §5) that do not hold yet: what is to be reached
+	// first, each with the actions producing it.
+	Requires []Need `json:"requires,omitempty"`
 }
 
 // ProcessState is where one process of the methodology of a change stands now.
@@ -147,7 +152,7 @@ func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc
 	} else {
 		ps.State = aggregate(ps.Steps)
 	}
-	describeNeeds(m, ps.Steps)
+	describeNeeds(m, world, ps.Steps)
 	return ps
 }
 
@@ -196,14 +201,24 @@ func countSteps(steps []StepProgress) (done, total int) {
 	return done, total
 }
 
-// describeNeeds fills the needs of the steps from what they miss, with what each condition means.
-func describeNeeds(m *methodology.Compiled, steps []StepProgress) {
+// describeNeeds fills the needs of the steps from what they miss, with what each condition means, the actions
+// producing it and, for one wanted true, the conditions it cannot hold without that do not hold yet.
+func describeNeeds(m *methodology.Compiled, world map[string]bool, steps []StepProgress) {
 	for i := range steps {
-		describeNeeds(m, steps[i].Steps)
+		describeNeeds(m, world, steps[i].Steps)
 		steps[i].Needs = nil
 		for _, c := range steps[i].Missing {
 			name, neg := strings.CutPrefix(c, "!")
-			steps[i].Needs = append(steps[i].Needs, Need{Condition: name, Want: !neg, Description: conditionMeaning(m, name)})
+			n := Need{Condition: name, Want: !neg, Description: conditionMeaning(m, name)}
+			if n.Want {
+				n.ProducedBy = m.Producers(name)
+				for _, p := range m.Prerequisites(name) {
+					if !world[p] {
+						n.Requires = append(n.Requires, Need{Condition: p, Want: true, Description: conditionMeaning(m, p), ProducedBy: m.Producers(p)})
+					}
+				}
+			}
+			steps[i].Needs = append(steps[i].Needs, n)
 		}
 	}
 }

@@ -5,7 +5,7 @@
   import ProcessProgress from './ProcessProgress.svelte';
   import { engine, type ProcessProgress as Progress, type StepProgress } from '../api';
   import { processes } from '../stores/live.svelte';
-  import { needText, needsOf } from '../changeState';
+  import { needDetail, needText, needsOf } from '../changeState';
 
   let {
     processId = '',
@@ -73,7 +73,7 @@
     {:else if (s.state === 'todo' || s.state === 'blocked') && needsOf(s).length}
       <ul class="note needs" aria-label="Missing conditions">
         {#each needsOf(s) as n (n.condition)}
-          <li><span>{needText(n)}</span> <code title={n.want === false ? 'must be false' : 'must hold'}>{n.want === false ? '!' : ''}{n.condition}</code></li>
+          <li><span>{needDetail(n)}</span> <code title={n.want === false ? 'must be false' : 'must hold'}>{n.want === false ? '!' : ''}{n.condition}</code></li>
         {/each}
       </ul>
     {/if}

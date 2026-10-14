@@ -615,6 +615,10 @@ message Need {
   string condition = 1;
   bool want = 2;
   string description = 3;
+  // the actions making it hold (an effect that is it, or implies it)
+  repeated string produced_by = 4;
+  // the conditions it cannot hold without that do not hold yet (ADR 0112 §5)
+  repeated Need requires = 5;
 }
 
 message ExplainConditionRequest {

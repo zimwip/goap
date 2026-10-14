@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/assess"
@@ -41,13 +42,27 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// before any rating, the accepted description needs a rating first, which the rating action produces (ADR 0112 §5)
+	st, err := e.ChangeState(ctx, ch.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range st.Processes {
+		if p.Process != "delivery" {
+			continue
+		}
+		n := p.Steps[0].Needs
+		if len(n) != 1 || len(n[0].Requires) != 1 || n[0].Requires[0].Condition != "description_rated" || !slices.Contains(n[0].Requires[0].ProducedBy, "rate") || len(n[0].ProducedBy) != 0 {
+			t.Fatalf("an accepted description requires a rated one: %+v", n)
+		}
+	}
 	rate(2, "change.created", nil)
 	intent := "write the release note"
 	if _, err := e.Graph.UpdateChange(ctx, ch.ID, graph.ChangePatch{Intent: &intent}); err != nil {
 		t.Fatal(err)
 	}
 	rate(2, "change.edited", map[string]domain.HeaderValue{"intent": {From: "write a note", To: intent}})
-	st, err := e.ChangeState(ctx, ch.ID)
+	st, err = e.ChangeState(ctx, ch.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +78,7 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 		t.Fatalf("review: reactive, run twice, done once: %+v", review)
 	}
 	note := delivery.Steps[0]
-	if delivery.Runs != 0 || note.State != StepTodo || len(note.Needs) != 1 || note.Needs[0].Condition != "description_accepted" || !note.Needs[0].Want || note.Needs[0].Description == "" {
+	if delivery.Runs != 0 || note.State != StepTodo || len(note.Needs) != 1 || note.Needs[0].Condition != "description_accepted" || !note.Needs[0].Want || note.Needs[0].Description == "" || len(note.Needs[0].Requires) != 0 {
 		t.Fatalf("delivery waits for an accepted description, and says so: %+v", note)
 	}
 }
