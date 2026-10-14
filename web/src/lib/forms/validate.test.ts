@@ -119,3 +119,17 @@ describe('new node, decision and file fields', () => {
     expect(is['doc']).toEqual(['a.pdf is not one of .csv']);
   });
 });
+
+describe('the form of a node type', () => {
+  it('turns the values into properties and links from the node', async () => {
+    const { nodeWrite, SELF_KEY } = await import('./nodeForm');
+    const form: FormDef = {
+      fields: [
+        { name: 'title', widget: 'text', required: true },
+        { name: 'intro', widget: 'markdown', constraints: { text: 'x' } },
+        { name: 'satisfies', widget: 'link', constraints: { fromKey: SELF_KEY, linkTypes: ['alm@satisfies'] } },
+      ],
+    };
+    expect(nodeWrite(form, { title: 'T', satisfies: [{ to: 'NEED-1' }] })).toEqual({ props: { title: 'T' }, links: [{ type: 'alm@satisfies', to: 'NEED-1' }] });
+  });
+});

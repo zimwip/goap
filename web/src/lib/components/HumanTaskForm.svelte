@@ -12,6 +12,7 @@
     type ItemInput,
     type LifecycleTransition,
     type NodeRef,
+    type LinkWrite,
     type Process,
   } from '../api';
   import ChangeLifecycle from './ChangeLifecycle.svelte';
@@ -120,7 +121,7 @@
   ]);
 
   /** Writes a node of this change through its change impact (mirrors ChangeTab's own `write`). */
-  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string }, rationale: string): Promise<boolean> {
+  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string; addLinks?: LinkWrite[] }, rationale: string): Promise<boolean> {
     if (!changeId) return false;
     moving = label;
     error = '';
@@ -145,9 +146,9 @@
     return write(`${row.node.id}:edit`, { pre: { id: row.node.id, version: row.node.version } }, { props: patch }, `edit ${row.node.key}`);
   }
 
-  function createNode(key: string, type: string, state: string): Promise<boolean> {
+  function createNode(key: string, type: string, state: string, init?: { props: Record<string, unknown>; links: LinkWrite[] }): Promise<boolean> {
     const born = lifecycleOf(type) && state && state !== lifecycleOf(type)?.initial ? state : undefined;
-    return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
+    return write('create', { key, type }, { props: init?.props ?? {}, state: born, addLinks: init?.links }, `create ${key}`);
   }
 
   /** Takes a node out of the change, at any time (ADR 0102): its draft is dropped (a node the change creates goes away),

@@ -148,8 +148,20 @@ link field. The renderer shows one card per entry (`GroupWidget.svelte`, rows by
 the conditions of a field (*Shown when*, *Required when*, `ConditionsEditor.svelte`) and the sub-fields of a group in
 the properties panel; a rename or a removal follows into the conditions naming the field.
 
+### 7. The form of a node type
+
+A node type may declare `form` (`def.NodeType.Form`, inherited through `extends`, the nearest wins: `typecat.Type.Form`;
+proto `registry.v1.NodeType.form` and `TypeInfo.form`, both a `Struct`): what a person fills in to create a node of the
+type. Its fields are **attributes** of the type (own or inherited; the value is the property), **link** fields
+starting from the node itself (`fromKey: $self`, `form.SelfKey`) and explanations; the domain validation refuses any
+other field (`Schema.checkForms`: not an attribute, a link from elsewhere, a new node or decision field). It describes a
+screen only: the graph checks the node it writes as it checks any write. The creation row of the nodes of a change
+(`ChangeLifecycle.svelte`, the change tab and the human tasks) shows the form of the chosen type under the key and the
+type, and creates the node with its properties and links in one go (`nodeWrite`, `web/src/lib/forms/nodeForm.ts`);
+the domain editor builds it with the same designer (*Creation form* of the node type tab). `alm` 1.6.0 gives
+`Requirement` one (title, description, priority, the needs it satisfies).
+
 ## Not done
 
 - Patterns stored as data (shared by the methodologies of an organisation) rather than shipped with the web.
-- Standard pages using `FormRenderer` with a form declared by a node type (an `form:` on a node type of a domain, for
-  its creation dialog), and the assistant filling a form (a screen tool per declared form, ADR 0092).
+- The assistant filling a form (a screen tool per declared form, ADR 0092).

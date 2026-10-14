@@ -8,6 +8,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/form"
 	"github.com/zimwip/goap/pkg/guard"
 )
 
@@ -123,7 +124,59 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 	}
 	s.checkStructures(prefix, add)
 	s.checkRequires(prefix, add)
+	s.checkForms(prefix, add)
 	return nodeTypes, linkTypes
+}
+
+// checkForms validates the creation forms of the node types (ADR 0115 §7): a form the registry of widgets accepts, whose
+// fields are attributes of the type (own or of an ancestor of the domain; unchecked past a type of another domain),
+// links from the node itself (`fromKey: $self`) or explanations.
+func (s Schema) checkForms(prefix string, add func(path, format string, args ...any)) {
+	byName := map[string]NodeType{}
+	for _, n := range s.NodeTypes {
+		byName[n.Name] = n
+	}
+	for i, n := range s.NodeTypes {
+		if n.Form == nil {
+			continue
+		}
+		path := fmt.Sprintf(prefix+"nodeTypes[%d].form", i)
+		for _, is := range form.CheckForm(*n.Form) {
+			add(path+"."+is.Path, "%s", is.Message)
+		}
+		attrs, known := map[string]bool{}, true
+		for cur, seen := n, map[string]bool{}; ; {
+			for _, a := range cur.Attributes {
+				attrs[a.Name] = true
+			}
+			seen[cur.Name] = true
+			if cur.Extends == "" {
+				break
+			}
+			next, ok := byName[cur.Extends]
+			if !ok || seen[next.Name] {
+				known = !foreign(cur.Extends) && ok
+				break
+			}
+			cur = next
+		}
+		for j, f := range n.Form.Fields {
+			at := fmt.Sprintf("%s.fields[%d]", path, j)
+			switch f.Widget {
+			case form.WidgetMarkdown:
+			case form.WidgetLink:
+				if k, _ := f.Constraints["fromKey"].(string); k != form.SelfKey {
+					add(at+".constraints.fromKey", "a link field of a creation form starts from the node: fromKey %s", form.SelfKey)
+				}
+			case form.WidgetNewNode, form.WidgetDecision:
+				add(at+".widget", "a creation form sets the node: no %s field", f.Widget)
+			default:
+				if known && !attrs[f.Name] && !n.AdditionalProperties {
+					add(at+".name", "%s is not an attribute of %s", f.Name, n.Name)
+				}
+			}
+		}
+	}
 }
 
 // checkStructures validates the structure tags (ADR 0054): a kind, once per schema, a root key, the property flagging the default member, and a parent

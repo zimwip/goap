@@ -83,6 +83,8 @@ message NodeType {
   bool admin_only = 13;
   // nodes of the type may carry properties that are no attribute of it (strict attributes, ADR 0079); inherited
   bool additional_properties = 14;
+  // what a person fills in to create a node of the type (pkg/form.Form, ADR 0115 §7); inherited
+  google.protobuf.Struct form = 15;
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
@@ -935,6 +937,8 @@ message TypeInfo {
   repeated string node_validators = 9;
   // the nodes may carry properties that are no attribute of the type (own or inherited)
   bool additional_properties = 10;
+  // the creation form of the nodes (own or the nearest ancestor's, pkg/form.Form, ADR 0115 §7)
+  google.protobuf.Struct form = 11;
 }
 
 // LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.

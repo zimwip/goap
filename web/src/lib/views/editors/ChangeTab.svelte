@@ -18,6 +18,7 @@
     type GraphNode,
     type LifecycleTransition,
     type NodeRef,
+    type LinkWrite,
     type Resolution,
     type UiTool,
     type StartingPoint,
@@ -577,7 +578,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   ]);
 
   /** Writes a node in this change through its change impact (the server checks the state). */
-  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string }, rationale: string): Promise<boolean> {
+  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string; addLinks?: LinkWrite[] }, rationale: string): Promise<boolean> {
     if (!change?.id) return false;
     moving = label;
     error = '';
@@ -640,9 +641,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   }
 
   /** Creates a node: identity and type only. */
-  async function createNode(key: string, type: string, state: string): Promise<boolean> {
+  async function createNode(key: string, type: string, state: string, init?: { props: Record<string, unknown>; links: LinkWrite[] }): Promise<boolean> {
     const born = lifecycleOf(type) && state && state !== lifecycleOf(type)?.initial ? state : undefined;
-    return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
+    return write('create', { key, type }, { props: init?.props ?? {}, state: born, addLinks: init?.links }, `create ${key}`);
   }
 
   /** Takes a node out of the change, at any time (ADR 0102): its draft is dropped (a node the change creates goes away),

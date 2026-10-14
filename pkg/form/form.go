@@ -87,6 +87,10 @@ func (is Issues) Error() string {
 	return strings.Join(parts, "; ")
 }
 
+// SelfKey names, as the fixed source of a link field (fromKey), the node a form creates or edits: the form of a node
+// type (ADR 0115 §7).
+const SelfKey = "$self"
+
 // NameRE is the shape of a field name.
 var NameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
