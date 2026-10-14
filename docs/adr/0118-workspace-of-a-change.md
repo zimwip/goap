@@ -1,7 +1,7 @@
 # ADR 0118 — The workspace of a change: the tool box of a coding agent
 
-**Status**: accepted; phase 1 implemented (the `workspace` MCP, the local connector, the call context of a connector),
-the phases 2 to 4 of "Plan" not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP, connectors, adapters), ADR 0028
+**Status**: accepted; phases 1 and 2 implemented (the `workspace` MCP, the local connector, the call context of a
+connector; the loop budget of an llm action), the phases 3 and 4 of "Plan" not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP, connectors, adapters), ADR 0028
 (built-in MCPs, call context), ADR 0061 (adapter secrets), ADR 0109 (conditions derived from the context),
 ADR 0112 (persistent agents)
 
@@ -78,18 +78,46 @@ per change, `<root>/<change id>`. Its adapter definition `workspace-local` (pass
 The loop of a coding agent is the tool loop of the `LLMExecutor` (native tools, ADR 0098): an `llm` action declaring
 `mcps: [workspace, goap-graph]` reads the brief and the impacts, codes, runs the build. It is one task that does not
 split ("implement this component"), so rule 6 holds: the agent of the methodology plans (prepare, implement, build,
-fix, publish, review), the actions execute. What the `llm` action lacks is a budget fit for code (`MaxToolRounds` 6,
-20 KB of tool result): phase 2.
+fix, publish, review), the actions execute. What the `llm` action lacked is a budget fit for code (6 tool rounds,
+20 KB of tool result): its `loop` (§5).
 
 The build itself is checked, not believed: a `tool` action runs the declared build on `workspace/bash` and records a
 `build_report`, and the condition that the build holds is derived from it (ADR 0109). The code goes to git, on the
 branch of the change; the graph keeps its trace (`code_change`, `build_report` artifacts, a `BuildArtifact` impact),
 reviewed and merged like any change.
 
+### 5. The loop budget of an llm action
+`Action.Loop` (`loop:` on an llm action, `pkg/methodology/loop.go`; proto `registry.v1.ActionLoop`, attribute `loop`
+of `methodology@Action`, the *Tool loop budget* fields of the action editor) bounds its tool loop:
+
+```yaml
+- name: implement_component
+  kind: llm
+  mcps: [workspace, goap-graph]
+  loop: {maxRounds: 200, maxTokens: 2000000, timeout: 2h, maxToolResultBytes: 60000, compactBytes: 400000}
+```
+
+- `maxRounds` (default `DefaultToolRounds` 6, at most 500), `maxToolResultBytes` (default 20 000, at most 200 000),
+  `maxTokens` (input and output of every call of the loop; none by default), `timeout` (a Go duration, at most 4 h),
+  `compactBytes` (default 400 000, at most 4 MiB). The compiler refuses a loop on another kind, a value out of its
+  bounds and a timeout that is no duration.
+- **Spent budget**: an action with a loop is not failed when its rounds, its tokens or nine tenths of its time are
+  spent: the tools it asked for are not run, and it is asked once, with no tool, for its final answer (what is done,
+  what is left); an `llm.budget` event records it. Past the timeout itself the call is cancelled and the action
+  fails. An action without a loop keeps its behaviour (6 rounds, then a failure).
+- **Compaction**: once the conversation is larger than `compactBytes`, the older tool results (and long texts) are
+  elided, the task and the latest 8 messages kept whole, the calls and their results kept paired
+  (`engine.compact`). Elision, not a summary: no model call, and the model calls a tool again when it needs the
+  content.
+- **Tool results** cut past their bound keep their head and their tail (the end of a build log says why it
+  failed), for every llm action.
+- **Failures** of a tool count in a row in an action with a loop: a success forgets the earlier ones, so a failed
+  `edit` early in a long session does not ban the tool for the rest of it.
+
 ## Plan
 1. ✅ The `workspace` MCP, the local connector, `change_id` / `process_id` on `InvokeRequest`, `goap-dev`.
-2. A loop budget on the `llm` action (`loop: {maxRounds, maxToolResultBytes, maxTokens, timeout}`, bounded by the
-   platform), the compaction of a long conversation, tool results cut keeping their tail.
+2. ✅ A loop budget on the `llm` action (§5), the compaction of a long conversation, tool results cut keeping their
+   tail.
 3. The `build` method of `sdlc` (prepare / implement / build / fix / publish / review) on the components a change
    impacts (`alm@Component.repository`), its conditions derived, a persistent coding agent per change.
 4. A container connector (`workspace-docker`, then Kubernetes) on the provisioners of `internal/sandbox`: one

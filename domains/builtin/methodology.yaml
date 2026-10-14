@@ -77,6 +77,7 @@ nodeTypes:
       - {name: permission, label: Permission, description: "Permission required from the initiator to run the action automatically", type: string, section: Access, order: 12}
       - {name: model, label: Model, description: "Model alias of an llm action", type: string, section: Execution, order: 13}
       - {name: prompt, label: Prompt, description: "Prompt of an llm action", type: string, widget: textarea, section: Execution, order: 14}
+      - {name: loop, label: Loop, description: "Budget of the tool loop of an llm action (ADR 0118): maxRounds, maxToolResultBytes, maxTokens, timeout, compactBytes", type: json, widget: textarea, section: Execution, order: 14}
       - {name: tool, label: Tool, description: "mcp/tool of a tool action", type: string, section: Execution, order: 15}
       - {name: mcps, label: MCPs, description: "MCPs an llm or script action uses", type: json, widget: textarea, section: Execution, order: 16}
       - {name: builtin, label: Builtin, description: "Name of the builtin action", type: string, section: Execution, order: 17}

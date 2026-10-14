@@ -321,6 +321,18 @@ export interface Action {
   where?: string;
   /** subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after the other) */
   parallel?: number;
+  /** llm actions: the budget of the tool loop (ADR 0118) */
+  loop?: ActionLoop;
+}
+
+/** The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default. */
+export interface ActionLoop {
+  maxRounds?: number;
+  maxToolResultBytes?: number;
+  maxTokens?: number;
+  /** a Go duration (45m, 2h) */
+  timeout?: string;
+  compactBytes?: number;
 }
 
 /** An event an activity reacts to (ADR 0036 §3, 0106, 0110): a standard event or one the methodology declares. */

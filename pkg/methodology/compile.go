@@ -442,6 +442,9 @@ func (s *compileState) checkImplementation(path string, a Action) {
 		}
 	}
 	s.checkForm(path, a)
+	for _, msg := range a.Loop.issues(a.Kind) {
+		s.add(path+".loop", "%s", msg)
+	}
 	switch {
 	case a.Kind == KindLLM && a.Prompt == "":
 		s.add(path+".prompt", "llm action requires a prompt")
