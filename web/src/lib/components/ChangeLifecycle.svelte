@@ -13,6 +13,7 @@
   import AssessmentBubble from './AssessmentBubble.svelte';
   import { impactSubject } from '../descriptionReview';
   import type { Change } from '../api';
+  import ImpactDiffDialog from './ImpactDiffDialog.svelte';
 
   let {
     rows,
@@ -90,6 +91,9 @@
   // while one awaits its review.
   const awaiting = $derived(impacts ? rows.filter((r) => r.impact && !r.impact.superseded && r.impact.post?.id && (r.impact.review === 'proposed' || !r.impact.review)) : []);
   const openable = (r: LifecycleRow) => !r.created || !!r.impact?.post?.id;
+  // the row whose Diff dialog is open: what the change modifies of its node (read-only, closed changes too)
+  let diffing = $state<LifecycleRow | undefined>();
+  const diffable = (r: LifecycleRow) => impacts && !!change?.id && !!r.impact?.post?.id;
 
   async function remove(r: LifecycleRow) {
     const what = r.created
@@ -319,6 +323,9 @@
               </td>
             {/if}
             <td class="actions">
+              {#if diffable(r)}
+                <button type="button" class="small ghost" title="What the change modifies of the node, against the version it started from" onclick={() => (diffing = r)}>Diff</button>
+              {/if}
               {#if disabled}
                 <span class="hint">change closed</span>
               {:else}
@@ -454,6 +461,10 @@
     </div>
   {/if}
 </section>
+
+{#if diffing?.impact && change?.id}
+  <ImpactDiffDialog changeId={change.id} impact={diffing.impact} nodeKey={diffing.node.key ?? ''} nodeType={diffing.node.type ?? ''} flow={scope} onclose={() => (diffing = undefined)} />
+{/if}
 
 <style>
   .invalid {
