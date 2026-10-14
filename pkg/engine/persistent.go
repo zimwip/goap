@@ -166,7 +166,7 @@ func (e *Engine) handOver(ctx context.Context, p *Process) error {
 	if len(p.Inbox) == 0 {
 		return nil
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return err
 	}

@@ -64,7 +64,7 @@ func (e *Engine) ChangeState(ctx context.Context, changeID domain.ChangeID) (*Ch
 	if out.Methodology == "" {
 		return out, nil
 	}
-	m, err := e.Methodologies.Methodology(ctx, out.Methodology)
+	m, err := e.Methodologies.Methodology(ctx, bb.Change.MethodologyRef()) // the version the change follows (ADR 0113)
 	if err != nil {
 		return nil, err
 	}
