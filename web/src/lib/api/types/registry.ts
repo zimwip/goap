@@ -327,6 +327,8 @@ export interface Subscription {
   filter?: string;
   /** self (default), integrated, integrator, dependency */
   from?: string;
+  /** an event arriving while the run is at work interrupts it and runs it again (ADR 0110) */
+  supersede?: boolean;
 }
 
 /** An event a methodology declares, in addition to the standard ones (ADR 0110): raised by a signal item of its name. */

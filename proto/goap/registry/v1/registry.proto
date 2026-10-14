@@ -484,6 +484,8 @@ message Subscription {
   string event = 1;
   string filter = 2;
   string from = 3;
+  // An event arriving while the reactive run is at work interrupts it and runs it again (ADR 0110).
+  bool supersede = 4;
 }
 
 // A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY").

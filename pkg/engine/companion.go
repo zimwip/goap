@@ -86,7 +86,8 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 		e.react(ctx, own, ev, act, changeID, methodology.FromSelf, nil)
 	}
 	for _, m := range ms {
-		if !slices.Contains(m.AppliesTo, of) || !subscribed(m, ev, act, methodology.FromSelf) {
+		ok, supersede := match(m.Subscriptions(), ev, act, methodology.FromSelf)
+		if !slices.Contains(m.AppliesTo, of) || !ok {
 			continue
 		}
 		if ev.Type == events.ChangeItemAdded && !slices.ContainsFunc(ev.Items, func(it domain.ChangeItem) bool { return !ownItem(m, it) }) {
@@ -95,7 +96,7 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 		event := maps.Clone(act)
 		event["id"], event["at"] = uuid.NewString(), e.clock().UnixMilli()
 		for _, proc := range m.Processes {
-			if err := e.accompany(ctx, m, proc.Name, changeID, event); err != nil {
+			if err := e.accompany(ctx, m, proc.Name, changeID, event, supersede); err != nil {
 				e.log().Warn("companion", "methodology", m.Name, "process", proc.Name, "change", changeID, "err", err)
 			}
 		}
@@ -143,13 +144,14 @@ func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any,
 			continue
 		}
 		e.react(ctx, m, ev, act, t.ID, from[i], map[string]any{"relation": from[i]})
-		if !subscribed(m, ev, act, from[i]) {
+		ok, supersede := match(m.Subscriptions(), ev, act, from[i])
+		if !ok {
 			continue
 		}
 		event := maps.Clone(act)
 		event["id"], event["at"], event["relation"] = uuid.NewString(), e.clock().UnixMilli(), from[i]
 		for _, proc := range m.Processes {
-			if err := e.accompany(ctx, m, proc.Name, t.ID, event); err != nil {
+			if err := e.accompany(ctx, m, proc.Name, t.ID, event, supersede); err != nil {
 				e.log().Warn("relay", "methodology", m.Name, "process", proc.Name, "change", t.ID, "err", err)
 			}
 		}
@@ -160,7 +162,8 @@ func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any,
 // side of the change: each as its own companion run on that change, kept and run again in place per event.
 func (e *Engine) react(ctx context.Context, m *methodology.Compiled, ev TriggerEvent, act map[string]any, changeID domain.ChangeID, from string, extra map[string]any) {
 	for _, r := range m.Reactions() {
-		if !matches(r.On, ev, act, from) {
+		ok, supersede := match(r.On, ev, act, from)
+		if !ok {
 			continue
 		}
 		raised := ev.Type == events.ChangeItemAdded || (len(ev.Items) > 0 && !methodology.StandardEvent(ev.Type))
@@ -172,30 +175,25 @@ func (e *Engine) react(ctx context.Context, m *methodology.Compiled, ev TriggerE
 		event["id"], event["at"] = uuid.NewString(), e.clock().UnixMilli()
 		key := CompanionPrefix + m.Name + "/" + r.Activity
 		intent := fmt.Sprintf("%s %s on %s", r.Kind, r.Activity, ev.Type)
-		if err := e.companionRun(ctx, m, key, r.Agent, r.Goal, intent, changeID, event); err != nil {
+		if err := e.companionRun(ctx, m, key, r.Agent, r.Goal, intent, changeID, event, supersede); err != nil {
 			e.log().Warn("reaction", "methodology", m.Name, "activity", r.Activity, "change", changeID, "err", err)
 		}
 	}
 }
 
-// subscribed reports whether a methodology reacts to the event coming from the given side of the change it runs on
-// (methodology.FromSelf: its own change, a transverse methodology).
-func subscribed(m *methodology.Compiled, ev TriggerEvent, act map[string]any, from string) bool {
-	return matches(m.Subscriptions(), ev, act, from)
-}
-
-// matches reports whether one of the subscriptions takes the event coming from the given side.
-func matches(subs []methodology.Subscription, ev TriggerEvent, act map[string]any, from string) bool {
+// match reports whether one of the subscriptions takes the event coming from the given side, and whether one that
+// takes it supersedes the work in flight (Subscription.Supersede).
+func match(subs []methodology.Subscription, ev TriggerEvent, act map[string]any, from string) (ok, supersede bool) {
 	for _, sub := range subs {
 		if sub.Event != ev.Type || sub.Origin() != from {
 			continue
 		}
 		f, err := condition.CompileEventFilter(sub.Filter)
 		if err == nil && f.Match(act) {
-			return true
+			ok, supersede = true, supersede || sub.Supersede
 		}
 	}
-	return false
+	return ok, supersede
 }
 
 // ownItem reports whether an item was produced by an action of the methodology m.
@@ -206,13 +204,14 @@ func ownItem(m *methodology.Compiled, it domain.ChangeItem) bool {
 
 // accompany runs the companion of a process on a change for an event: it starts it, runs it again when it has ended,
 // or puts the event in its inbox when it is at work.
-func (e *Engine) accompany(ctx context.Context, m *methodology.Compiled, process string, changeID domain.ChangeID, event map[string]any) error {
-	return e.companionRun(ctx, m, CompanionPrefix+m.Name+"/"+process, process, process, process+" alongside the change", changeID, event)
+func (e *Engine) accompany(ctx context.Context, m *methodology.Compiled, process string, changeID domain.ChangeID, event map[string]any, supersede bool) error {
+	return e.companionRun(ctx, m, CompanionPrefix+m.Name+"/"+process, process, process, process+" alongside the change", changeID, event, supersede)
 }
 
 // companionRun runs the companion of key on a change for an event, towards goal with agent: it starts it, runs it
-// again when it has ended, or puts the event in its inbox when it is at work (ADR 0036 §3, ADR 0110).
-func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key, agent, goal, intent string, changeID domain.ChangeID, event map[string]any) error {
+// again when it has ended, or puts the event in its inbox when it is at work (ADR 0036 §3, ADR 0110); an event of a
+// subscription that supersedes interrupts the work and runs it again (restartFor).
+func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key, agent, goal, intent string, changeID domain.ChangeID, event map[string]any, supersede bool) error {
 	companions.Lock()
 	defer companions.Unlock()
 	all, err := e.Store.List(ctx)
@@ -228,6 +227,16 @@ func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key,
 		}
 		if p.Status == StatusCompleted || p.Status == StatusStuck || p.Status == StatusFailed || p.WaitsForConditions() {
 			return e.rerun(ctx, p.ID, event)
+		}
+		if supersede {
+			// waiting for the run to let go must not hold the companions, nor the publisher of the event
+			id := p.ID
+			e.background(func() {
+				if err := e.restartFor(context.WithoutCancel(ctx), id, event); err != nil {
+					e.log().Warn("supersede", "process", id, "err", err)
+				}
+			})
+			return nil
 		}
 		return e.enqueue(ctx, p.ID, event) // at work, or waiting for someone: after this run
 	}
@@ -276,6 +285,68 @@ func (e *Engine) nextInInbox(ctx context.Context, id string) error {
 	}
 	return e.rerun(ctx, id, nil)
 }
+
+// restartFor interrupts a companion at work and runs it again for the event, on the change as it is now (ADR 0110):
+// its sub-processes (the agent of the step it carries out, a task waiting for a person) are cancelled, its run in
+// flight is interrupted (its model and tool calls end with their context) and let go without failing, then it starts
+// again with what it waited for, what it tried and its inbox dropped: the new run sees every earlier event's change.
+func (e *Engine) restartFor(ctx context.Context, id string, event map[string]any) error {
+	defer e.lock(supersedeLock + id)() // one at a time per run: the last one runs on the latest change
+	e.cancelling.Store(id, supersededBy)
+	stored := true
+	defer func() {
+		if stored {
+			e.cancelling.Delete(id)
+		}
+	}()
+	all, err := e.Store.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, c := range all {
+		if c.ParentID == id && !c.Status.Terminal() {
+			if _, err := e.cancel(ctx, c.ID, supersededBy, "superseded by a newer event of the change"); err != nil {
+				return fmt.Errorf("sub-process %s: %w", c.ID, err)
+			}
+		}
+	}
+	if h, ok := e.running.Load(id); ok {
+		h.(*runHandle).cancel()
+	}
+	unlock := e.lock(id) // the run lets go
+	p, err := e.Store.Get(ctx, id)
+	if err != nil {
+		unlock()
+		return err
+	}
+	if p.Status.Terminal() && p.Status != StatusCompleted && p.Status != StatusFailed {
+		unlock()
+		return nil // cancelled meanwhile: a person stopped it
+	}
+	vars := maps.Clone(p.Vars)
+	if vars == nil {
+		vars = map[string]any{}
+	}
+	vars["event"] = event
+	p.Vars, p.Inbox, p.Children = vars, nil, nil
+	p.Status, p.Error, p.Plan, p.Pending = StatusRunning, "", nil, nil
+	p.Disabled = map[string]bool{}
+	p.Runs++
+	e.queue(ctx, p, "superseded", map[string]any{"change": string(p.ChangeID), "event": event["type"]})
+	err = e.save(ctx, p, "step")
+	e.cancelling.Delete(id) // before the new run can look
+	stored = false
+	unlock()
+	if err == nil {
+		e.schedule(id)
+	}
+	return err
+}
+
+const (
+	supersededBy  = "a newer event of the change"
+	supersedeLock = "supersede:"
+)
 
 // retryBlocked tries again the processes of a change that wait for conditions established outside them, or are stuck
 // (companions aside, their events run them again, and the one the event comes from).

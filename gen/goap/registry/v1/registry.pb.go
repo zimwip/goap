@@ -2893,10 +2893,12 @@ func (x *Guardian) GetTransitions() map[string]string {
 // An event a methodology reacts to, with a CEL filter over event ({type, change, process, step, items}); from: self
 // (default, the change it runs on), integrated (the changes it integrates), integrator (the change integrating it).
 type Subscription struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Event         string                 `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
-	Filter        string                 `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
-	From          string                 `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	Event  string                 `protobuf:"bytes,1,opt,name=event,proto3" json:"event,omitempty"`
+	Filter string                 `protobuf:"bytes,2,opt,name=filter,proto3" json:"filter,omitempty"`
+	From   string                 `protobuf:"bytes,3,opt,name=from,proto3" json:"from,omitempty"`
+	// An event arriving while the reactive run is at work interrupts it and runs it again (ADR 0110).
+	Supersede     bool `protobuf:"varint,4,opt,name=supersede,proto3" json:"supersede,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2950,6 +2952,13 @@ func (x *Subscription) GetFrom() string {
 		return x.From
 	}
 	return ""
+}
+
+func (x *Subscription) GetSupersede() bool {
+	if x != nil {
+		return x.Supersede
+	}
+	return false
 }
 
 // A role a methodology needs; the organisation assigns it to users per unit ("developer@TEAM-PAY").
@@ -8249,11 +8258,12 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vtransitions\x18\x02 \x03(\v2+.goap.registry.v1.Guardian.TransitionsEntryR\vtransitions\x1a>\n" +
 	"\x10TransitionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"P\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"n\n" +
 	"\fSubscription\x12\x14\n" +
 	"\x05event\x18\x01 \x01(\tR\x05event\x12\x16\n" +
 	"\x06filter\x18\x02 \x01(\tR\x06filter\x12\x12\n" +
-	"\x04from\x18\x03 \x01(\tR\x04from\"\\\n" +
+	"\x04from\x18\x03 \x01(\tR\x04from\x12\x1c\n" +
+	"\tsupersede\x18\x04 \x01(\bR\tsupersede\"\\\n" +
 	"\x04Role\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1e\n" +

@@ -689,7 +689,10 @@ as a companion run kept per change and activity (`companion:<methodology>/<activ
 a process or a method with its agent towards its goal, a step with the agent of its process (or method) towards the
 step path, an action alone with the agent `on.<action>` towards its effects (`methodology.Compiled.Reactions`,
 `Engine.react`). The event says when to look, the conditions whether there is work: a run woken while the exit of its
-activity holds ends at once. Items produced by a reaction's own actions do not wake it. The graph publishes
+activity holds ends at once. Items produced by a reaction's own actions do not wake it. An event of a subscription
+flagged `supersede: true` arriving while the run is at work interrupts it (its model and tool calls, its sub-processes)
+and runs it again on the change as it is now, instead of waiting in its inbox (`Engine.restartFor`; `sdlc` rates an
+edited description so). The graph publishes
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
 `sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the change tab shows the rating

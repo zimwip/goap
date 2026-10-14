@@ -101,7 +101,7 @@ func eventsFromPB(evs []*registryv1.EventDef) []methodology.Event {
 func subsToPB(subs []methodology.Subscription) []*registryv1.Subscription {
 	var out []*registryv1.Subscription
 	for _, s := range subs {
-		out = append(out, &registryv1.Subscription{Event: s.Event, Filter: s.Filter, From: s.From})
+		out = append(out, &registryv1.Subscription{Event: s.Event, Filter: s.Filter, From: s.From, Supersede: s.Supersede})
 	}
 	return out
 }
@@ -109,7 +109,7 @@ func subsToPB(subs []methodology.Subscription) []*registryv1.Subscription {
 func subsFromPB(subs []*registryv1.Subscription) []methodology.Subscription {
 	var out []methodology.Subscription
 	for _, s := range subs {
-		out = append(out, methodology.Subscription{Event: s.Event, Filter: s.Filter, From: s.From})
+		out = append(out, methodology.Subscription{Event: s.Event, Filter: s.Filter, From: s.From, Supersede: s.Supersede})
 	}
 	return out
 }

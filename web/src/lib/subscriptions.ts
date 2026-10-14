@@ -8,6 +8,8 @@ export interface SubscriptionForm {
   filter: string;
   /** "" (self), integrated, integrator, dependency */
   from: string;
+  /** an event arriving while the run is at work interrupts it and runs it again */
+  supersede: boolean;
 }
 
 export interface EventForm {
@@ -46,7 +48,7 @@ export const RESERVED_EVENT_FAMILIES = ['change.', 'process.', 'step.', 'methodo
 export const isStandardEvent = (name: string): boolean => (TRIGGER_EVENTS as readonly string[]).includes(name);
 
 export function subsToForm(list: Subscription[] | undefined): SubscriptionForm[] {
-  return (list ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '', from: x.from === 'self' ? '' : (x.from ?? '') }));
+  return (list ?? []).map((x) => ({ event: x.event ?? '', filter: x.filter ?? '', from: x.from === 'self' ? '' : (x.from ?? ''), supersede: !!x.supersede }));
 }
 
 export function subsFromForm(list: SubscriptionForm[]): Subscription[] {
@@ -56,6 +58,7 @@ export function subsFromForm(list: SubscriptionForm[]): Subscription[] {
       const o: Subscription = { event: x.event.trim() };
       if (x.filter.trim()) o.filter = x.filter.trim();
       if (x.from.trim()) o.from = x.from.trim();
+      if (x.supersede) o.supersede = true;
       return o;
     });
 }

@@ -75,6 +75,18 @@ processes:
 The run is a standard `Process` (trigger `companion:<methodology>/<activity path>`): its journal, model calls, prompts
 and history are those of any run.
 
+**An event that supersedes the work in flight** (`supersede: true` on a subscription, proto `Subscription.supersede`).
+An event arriving while the run is at work waits in its inbox by default: the run ends, then runs again for it. That is
+wrong when the event makes the work in flight pointless: the person edits the description, the rating starts, the
+person edits it again before the answer, and the answer would be about a text that is gone. An event of a subscription
+flagged `supersede` interrupts the run instead (`Engine.restartFor`, `pkg/engine/companion.go`, in the background so the
+publisher of the event never waits): its sub-processes (the agent of the step it carries out, a task waiting for a
+person) are cancelled, its run in flight is interrupted (its model and tool calls end with their context, as for
+`Cancel`) and lets go without failing, then the run starts again for the event, with what it waited for, what it tried
+(`Disabled`) and its inbox dropped: it reads the change as it is now, which carries every earlier event. A run a person
+cancelled stays cancelled. `sdlc` 0.7.4 flags its `change.edited` subscription of `description_review`; a comment in the
+thread still waits for the rating in flight. The flag is honoured by the `on:` of a transverse methodology as well.
+
 ### 3. The rating is an assessment item of the change
 
 A built-in use case, `pkg/assess` (registered like `pkg/risk`: `assess.Register()`), with an item kind `assessment`:

@@ -50,12 +50,13 @@
       {#each SUBSCRIPTION_ORIGINS as o (o)}<option value={o}>{o ? `from ${o}` : 'from self'}</option>{/each}
     </select>
     <input type="text" class="mono" aria-label="Filter" placeholder={'CEL over event, e.g. "intent" in event.fields'} bind:value={sub.filter} data-path="{prefix}on[{i}].filter" />
+    <label class="supersede" title="An event arriving while the run is at work interrupts it and runs it again on the change as it is now"><input type="checkbox" bind:checked={sub.supersede} disabled={draft.readonly} data-path="{prefix}on[{i}].supersede" /> restarts</label>
     {#if !draft.readonly}<button type="button" class="small icon" aria-label="Remove the event" onclick={() => subs.splice(i, 1)}>✕</button>{/if}
   </div>
   {#if why && !draft.readonly}<p class="unknown">{why}</p>{/if}
   <IssueHints {draft} path="{prefix}on[{i}]" />
 {/each}
-{#if !draft.readonly}<button type="button" class="small" onclick={() => subs.push({ event: newEvent, filter: '', from: newFrom })}>+ Event</button>{/if}
+{#if !draft.readonly}<button type="button" class="small" onclick={() => subs.push({ event: newEvent, filter: '', from: newFrom, supersede: false })}>+ Event</button>{/if}
 
 <style>
   .on-row {
@@ -63,7 +64,11 @@
     gap: 6px;
     margin-bottom: 4px;
     align-items: center;
-    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 2.5fr) auto;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 2.5fr) auto auto;
+  }
+  .supersede {
+    font-size: 0.8rem;
+    white-space: nowrap;
   }
   .unknown {
     color: var(--danger);

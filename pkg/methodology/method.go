@@ -366,6 +366,10 @@ type Subscription struct {
 	Event  string `yaml:"event" json:"event"`
 	Filter string `yaml:"filter,omitempty" json:"filter,omitempty"`
 	From   string `yaml:"from,omitempty" json:"from,omitempty"`
+	// Supersede makes an event of the subscription arriving while the reactive run is at work (in flight, or waiting
+	// for its sub-agent or a person) interrupt it and run it again on the change as it is now (ADR 0110): what it was
+	// doing is about a state that is gone. Unset, the event waits in the inbox of the run.
+	Supersede bool `yaml:"supersede,omitempty" json:"supersede,omitempty"`
 }
 
 // Origin is where the events of the subscription come from (FromSelf when unset).
