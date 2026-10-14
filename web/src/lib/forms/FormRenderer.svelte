@@ -7,6 +7,7 @@
   import { registerBuiltinWidgets } from './builtins';
   import { formIssues, initialValues, isRequired, sections, submittedValues, visibleState } from './validate';
   import FieldRow from './FieldRow.svelte';
+  import { offerForm } from './assist';
 
   registerBuiltinWidgets();
 
@@ -17,6 +18,7 @@
     serverError = '',
     onsubmit,
     actions,
+    assist,
   }: {
     form: FormDef;
     source?: NodeSource;
@@ -26,6 +28,8 @@
     onsubmit: (values: FormValues) => void;
     /** more buttons next to the submit one */
     actions?: import('svelte').Snippet;
+    /** offers the form to the assistant under this id and label (fill_form, submit_form) */
+    assist?: { id: string; label: string };
   } = $props();
 
   const uid = Math.random().toString(36).slice(2, 8);
@@ -44,10 +48,35 @@
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
+    send();
+  }
+
+  /** sends the values when they hold; else the issues, which the form now shows */
+  function send(): string | undefined {
     tried = true;
-    if (blocked) return;
+    if (busy) return 'The form is being sent.';
+    if (blocked)
+      return `The form has issues: ${Object.entries(issues)
+        .map(([k, l]) => `${k}: ${l.join(', ')}`)
+        .join('; ')}`;
     onsubmit(submittedValues(form, values));
   }
+
+  $effect(() => {
+    const a = assist;
+    if (!a) return;
+    return untrack(() =>
+      offerForm({
+        id: a.id,
+        label: a.label,
+        form: () => form,
+        issues: () => issues,
+        values: () => values,
+        fill: (v) => (values = { ...values, ...v }),
+        submit: send,
+      }),
+    );
+  });
 </script>
 
 <form class="decl-form" onsubmit={submit} novalidate>

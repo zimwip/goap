@@ -130,6 +130,18 @@ export const TOOLS = {
     level: 'effect',
     args: { properties: { methodology: str('the methodology name') }, required: ['methodology'] },
   },
+  fill_form: {
+    description: 'Fill fields of a declared form on screen (a human task, a creation form); the person reviews and submits it.',
+    guidance: 'form: an id of a form entity; values: a JSON object by field name, shaped as the props of the form entity say.',
+    level: 'effect',
+    args: { properties: { form: str('the form id'), values: str('the values, a JSON object by field name') }, required: ['form', 'values'] },
+  },
+  submit_form: {
+    description: 'Submit a declared form on screen with the values it holds (fill it first).',
+    guidance: 'form: an id of a form entity whose props say it is complete (issues none).',
+    level: 'write',
+    args: { properties: { form: str('the form id') }, required: ['form'] },
+  },
   create: {
     description: 'Create the change described by the form on screen.',
     guidance: 'Needs a title, a project and its methodology; fill the form first.',

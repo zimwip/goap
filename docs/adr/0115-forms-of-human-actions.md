@@ -161,7 +161,16 @@ type, and creates the node with its properties and links in one go (`nodeWrite`,
 the domain editor builds it with the same designer (*Creation form* of the node type tab). `alm` 1.6.0 gives
 `Requirement` one (title, description, priority, the needs it satisfies).
 
+### 8. The assistant fills a form
+
+A renderer given `assist: {id, label}` offers its form to the assistant while it is mounted (`offerForm`,
+`web/src/lib/forms/assist.ts`; the human task as `task:<process>`, the creation form as `create:<type>`): a screen
+entity of type `form` whose props say what each value looks like (`fieldShape`: `decision*: one of go|stop`, `links:
+list of {to: node key}`...), which fields are filled and the issues left, and two screen tools of the catalog:
+`fill_form` (an effect: the values, a JSON object by field name, are merged into the form, unknown fields refused;
+the person reviews them) and `submit_form` (a write: a proposal the person accepts, then the renderer submits as its
+button does, or answers with the issues). A file is never filled by the assistant.
+
 ## Not done
 
 - Patterns stored as data (shared by the methodologies of an organisation) rather than shipped with the web.
-- The assistant filling a form (a screen tool per declared form, ADR 0092).

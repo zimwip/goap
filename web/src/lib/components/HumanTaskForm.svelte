@@ -305,7 +305,8 @@
   {#if loadError}<div class="alert">{loadError}</div>{/if}
 
   {#if mode === 'form' && task?.form}
-    <FormRenderer form={task.form} source={formSource} busy={submitting} serverError={error} onsubmit={sendForm} />
+    <FormRenderer form={task.form} source={formSource} busy={submitting} serverError={error} onsubmit={sendForm}
+      assist={{ id: `task:${process.id}`, label: task.form.title || task.action || 'human task' }} />
   {:else if mode === 'select'}
     <form onsubmit={submitStructured}>
       <div class="row" style="margin-bottom: 0.5rem">

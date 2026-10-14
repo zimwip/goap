@@ -482,7 +482,8 @@
     {#if typeForm}
       <div class="typeform">
         {#key newNodeType}
-          <FormRenderer form={typeForm} source={formSource} busy={creating || busy !== ''} serverError={createError} onsubmit={(v) => void create(v)} />
+          <FormRenderer form={typeForm} source={formSource} busy={creating || busy !== ''} serverError={createError} onsubmit={(v) => void create(v)}
+            assist={{ id: `create:${newNodeType}`, label: `${typeForm.title || 'New node'} (${newNodeType}); the key and type are chosen above the form` }} />
         {/key}
       </div>
     {:else}
