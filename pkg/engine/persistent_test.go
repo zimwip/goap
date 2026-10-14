@@ -188,3 +188,55 @@ func TestPersistenceScope(t *testing.T) {
 		}
 	}
 }
+
+// A persistent rater given its earlier exchanges back copies the fingerprint of its first rating in the next ones: the
+// engine stamps what was rated with the text the action read, so every new rating counts.
+func TestPersistentRaterRatesTheCurrentText(t *testing.T) {
+	ctx := context.Background()
+	e := stagedEngine(t)
+	m, err := methodology.Parse([]byte(persistentRatedYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Methodologies.(StaticMethodologies)["rated"] = c
+	ch, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Note", Intent: "write a note", Methodology: "rated", Namespace: "alm", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale, n := "", 0
+	e.Executors[methodology.KindLLM] = LLMExecutor{Client: llm.ClientFunc(func(context.Context, llm.Request) (llm.Response, error) {
+		if stale == "" {
+			bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+			stale = assess.FingerprintOf(bb, assess.SubjectDescription)
+		}
+		n++
+		return llm.Response{Text: `{"items":[{"kind":"assessment","data":{"key":"description","score":` + string(rune('0'+n+1)) + `,"verdict":"clear","rated":"` + stale + `"}}]}`}, nil
+	})}
+	bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+	e.Accompany(ctx, TriggerEvent{Type: "change.created", Change: &bb.Change})
+	e.Drain()
+	for _, text := range []string{"write the release note of 1.2", "write the release note of 1.2, for the users"} {
+		from := bb.Change.Intent
+		if _, err := e.Graph.UpdateChange(ctx, ch.ID, graph.ChangePatch{Intent: &text}); err != nil {
+			t.Fatal(err)
+		}
+		bb, _ = e.Graph.Blackboard(ctx, ch.ID)
+		e.Accompany(ctx, TriggerEvent{Type: "change.edited", Change: &bb.Change, Fields: map[string]domain.HeaderValue{"intent": {From: from, To: text}}})
+		e.Drain()
+	}
+	bb, _ = e.Graph.Blackboard(ctx, ch.ID)
+	a, ok := assess.Of(bb, assess.SubjectDescription)
+	if !ok || !a.Current || a.Score != 4 || a.Versions != 3 || n != 3 {
+		t.Fatalf("the third rating is about the current description: %+v (%d calls)", a, n)
+	}
+	all, _ := e.Store.List(ctx)
+	for _, p := range all {
+		if p.ChangeID == ch.ID && p.Agent == "rating" && (p.Status != StatusCompleted || p.Disabled["rate"]) {
+			t.Fatalf("the rater completed with its model: %s disabled %v", p.Status, p.Disabled)
+		}
+	}
+}

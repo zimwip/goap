@@ -375,6 +375,21 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	return e.runLoop(ctx, ac, prompt, system, tools)
 }
 
+// stampRated sets what the assessments of a model rated (ADR 0110, 0112): the fingerprint of the subject as the
+// action read it. The model is not trusted to copy it: a persistent rater given its earlier exchanges back copies the
+// fingerprint of an earlier text, and its new rating would never count.
+func stampRated(bb domain.Blackboard, items []ItemInput) {
+	for i := range items {
+		if items[i].Kind != string(assess.KindAssessment) || items[i].Data == nil {
+			continue
+		}
+		key, _ := items[i].Data["key"].(string)
+		if fp := assess.FingerprintOf(bb, key); fp != "" {
+			items[i].Data["rated"] = fp
+		}
+	}
+}
+
 // runLoop is the conversation of one LLM action: tool rounds, repairs, then the items.
 func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, system string, tools []mcp.ToolInfo) (ActionResult, error) {
 	model := ac.Action.Model
@@ -424,6 +439,7 @@ func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, syst
 					ac.Host.e.event(ctx, "llm.answer", map[string]any{"goap.llm.tool_rounds": round, "goap.llm.repairs": repairs,
 						"goap.tool_calls": calls, "goap.items": len(out.Items)})
 				}
+				stampRated(ac.Blackboard, out.Items)
 				return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items, %d tool calls", resp.Provider, resp.Model, len(out.Items), calls),
 					Turn: &Turn{Prompt: prompt, Answer: resp.Text}}, nil
 			}
