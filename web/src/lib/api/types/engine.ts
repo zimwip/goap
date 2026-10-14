@@ -324,6 +324,29 @@ export interface AssessmentState {
   errors?: string[];
 }
 
+/** One thing a change waits for from a person (ADR 0117). */
+export interface ChangeAsk {
+  /** stable while the ask stands */
+  id?: string;
+  /** a pending task kind (input, approval, condition, unblock, flow, board, merge, rebase), clarification, question or decision */
+  kind?: string;
+  title?: string;
+  detail?: string;
+  /** the run waiting (none for a decision point), its agent, the step of the process and the action waiting */
+  processId?: string;
+  agent?: string;
+  step?: string;
+  action?: string;
+  /** the roles it is addressed to (any of them answers); owner: the person it is addressed to when no role is */
+  roles?: string[];
+  owner?: string;
+  since?: string;
+  /** the caller may answer it */
+  mayAnswer?: boolean;
+  point?: string;
+  question?: string;
+}
+
 export interface ChangeStateResponse {
   changeId?: string;
   methodology?: string;

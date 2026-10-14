@@ -6,14 +6,8 @@
   import StatusBadge from '../../components/StatusBadge.svelte';
   import WorldState from '../../components/WorldState.svelte';
   import StepsTimeline from '../../components/StepsTimeline.svelte';
-  import HumanTaskForm from '../../components/HumanTaskForm.svelte';
   import ProcessProgress from '../../components/ProcessProgress.svelte';
-  import ApprovalPanel from '../../components/ApprovalPanel.svelte';
-  import UnblockPanel from '../../components/UnblockPanel.svelte';
-  import FlowDecisionPanel from '../../components/FlowDecisionPanel.svelte';
-  import BoardIssuesPanel from '../../components/BoardIssuesPanel.svelte';
-  import MergeTaskPanel from '../../components/MergeTaskPanel.svelte';
-import RebaseTaskPanel from '../../components/RebaseTaskPanel.svelte';
+  import PendingTask from '../../components/PendingTask.svelte';
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
@@ -426,49 +420,7 @@ import RebaseTaskPanel from '../../components/RebaseTaskPanel.svelte';
     {/if}
 
     {#if (process.status === 'waiting' || process.status === 'stuck') && process.pending}
-      {#key `${process.id}:${process.pending.step}:${process.pending.action}:${process.pending.kind}`}
-        {#if process.pending.kind === 'approval'}
-          <ApprovalPanel {process} ondecided={set} />
-        {:else if process.pending.kind === 'flow'}
-          <FlowDecisionPanel {process} step={restartedStepNumber(process, processes)} ondecided={set} />
-        {:else if process.pending.kind === 'board'}
-          <BoardIssuesPanel {process} {flows} ondecided={set} onopen={(pid) => openRun(pid)} />
-        {:else if process.pending.kind === 'merge'}
-          <MergeTaskPanel {process} ondecided={set} />
-        {:else if process.pending.kind === 'rebase'}
-          <RebaseTaskPanel {process} ondecided={set} />
-        {:else if process.pending.kind === 'relaunched'}
-          {@const awaited = [...processes.values()].find((q) => q.flow === process.pending?.flowId)}
-          <section class="card waiting-agent">
-            <h3>Waiting for the decision on the relaunched flow</h3>
-            <p>
-              This run restarts when the flow relaunched to fix its blackboard is adopted or discarded
-              {#if awaited?.id}: <button type="button" class="link mono" onclick={() => openRun(awaited?.id ?? '')}>{awaited.agent || shortId(awaited.id)}</button>{/if}.
-            </p>
-            {#if process.pending.description}<p class="hint">{process.pending.description}</p>{/if}
-          </section>
-        {:else if process.pending.kind === 'condition' || process.pending.kind === 'unblock'}
-          <UnblockPanel {process} ondecided={set} />
-        {:else if process.pending.kind === 'agent'}
-          <section class="card waiting-agent">
-            <h3>Waiting for a sub-agent</h3>
-            <p>
-              Action <code>{process.pending.action}</code> is waiting for the sub-agent
-              {#if process.pending.childProcessId}
-                <button type="button" class="link mono" onclick={() => openRun(process.pending?.childProcessId ?? '', true)}>
-                  {processes.get(process.pending.childProcessId)?.agent || shortId(process.pending.childProcessId)}
-                </button>
-                {#if processes.get(process.pending.childProcessId)}
-                  <StatusBadge status={processes.get(process.pending.childProcessId)?.status} />
-                {/if}
-              {/if} to finish. It will be replayed once that completes.
-            </p>
-            {#if process.pending.description}<p class="hint">{process.pending.description}</p>{/if}
-          </section>
-        {:else}
-          <HumanTaskForm {process} onsubmitted={set} />
-        {/if}
-      {/key}
+      <PendingTask {process} {flows} ondecided={set} onopen={openRun} />
     {/if}
 
     <section class="card">
@@ -586,9 +538,6 @@ import RebaseTaskPanel from '../../components/RebaseTaskPanel.svelte';
     color: var(--danger);
     background: var(--danger-soft);
     border-color: transparent;
-  }
-  .waiting-agent {
-    border-left: 3px solid var(--warn);
   }
   .plog {
     list-style: none;

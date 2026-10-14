@@ -737,6 +737,17 @@ conditions it cannot hold without that do not hold yet: `condition.Set.Implied` 
 `description_accepted` cannot hold without `description_rated`; `Compiled.Prerequisites` / `Producers`, also taken in
 by `NeededBy`; and `Facts`: the terms of the CEL expression evaluated on the change, an exists part by part, the first
 missing one with the actions establishing it, `condition.Set.Facts` / `Missing` / `Establishes`).
+ **What the change waits for from people**
+([ADR 0117](adr/0117-what-a-change-waits-for-from-people.md)): `Engine.ChangeAsks` (RPC `GetChangeAsks`) gathers the
+pending tasks of the runs of a change that wait on a person (input, approval, condition, unblock, flow, board, merge,
+rebase, the intent question of a clarifying run) and the decision points only a person settles (open questions,
+escalated or reserved points, rulings to ratify), each with whom it is addressed to (the roles that may run the action
+and the responsible role of the step for an input, the roles and the accountable role for an approval, the accountable
+role for a stuck run, else the person the run works for) and `mayAnswer`, computed with the checks of the calls that
+answer it (`Engine.maySubmit`, `mayApprove`, `mayUnblock`, plus the run permission the handler asks). The change tab
+opens on them (`ChangeAsks.svelte`: *Waiting for you*, answered in place with the panel of the run's task,
+`PendingTask.svelte`, shared with the run tab; *Waiting for others*, with whom; the impacts awaiting their review join
+the list; the overview badge counts the asks for the person).
 
 A process can now run, and even finish, without ever being attached to a Change — binding stays
 eager by default for existing methodologies; an agent can declare its own binding action to defer

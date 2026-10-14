@@ -598,29 +598,14 @@ func (e *Engine) submit(ctx context.Context, id string, items []ItemInput, value
 	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskInput {
 		return nil, fmt.Errorf("process %s has no pending human task: %w", id, ErrInvalidState)
 	}
-	// the task of a step is performed by the step's responsible role, in the unit holding the change (ADR 0035 §2)
-	if ok, err := e.stepAllowed(ctx, p, authz.From(ctx), p.Pending.Context, "perform"); err != nil {
-		return nil, err
-	} else if !ok {
-		return nil, fmt.Errorf("%q does not hold the role %s for step %s: %w", authz.From(ctx).Subject, p.Pending.Context.Roles.Responsible,
-			p.Pending.Context.Path, authz.ErrForbidden)
-	}
 	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return nil, err
 	}
-	// a human action only some roles may run is performed by a person holding one (ADR 0043)
-	action, known := m.Action(p.Pending.Action)
-	if a, ok := action, known; ok {
-		if roles := e.runRoles(m, p, a); len(roles) > 0 {
-			if ok, err := e.mayRun(ctx, p, authz.From(ctx), "action", a.Name, roles); err != nil {
-				return nil, err
-			} else if !ok {
-				return nil, fmt.Errorf("%q holds none of the roles %s on the project for %s: %w", authz.From(ctx).Subject,
-					strings.Join(roles, ", "), a.Name, authz.ErrForbidden)
-			}
-		}
+	if err := e.maySubmit(ctx, p, m, authz.From(ctx)); err != nil {
+		return nil, err
 	}
+	action, known := m.Action(p.Pending.Action)
 	i := p.Pending.Step
 	waitedOn := p.Pending.Action
 	step := &p.Steps[i]
@@ -1179,21 +1164,33 @@ func (e *Engine) checkAgentRoles(ctx context.Context, p *Process) error {
 // ErrInvalidState is returned when an operation does not match the process state.
 var ErrInvalidState = errors.New("invalid process state")
 
-// Approve decides a pending approval with the permissions of the principal of
-// ctx. On approval the action runs immediately (call Run afterwards to
-// continue); on rejection the action is disabled for this process and the
-// planner looks for another way.
-func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment string) (*Process, error) {
-	defer e.lock(id)()
-	p, err := e.Store.Get(ctx, id)
-	if err != nil {
-		return nil, err
+// maySubmit checks that who may perform the pending human task of p: the task of a step is performed by the step's
+// responsible role, in the unit holding the change (ADR 0035 §2), and a human action only some roles may run by a
+// person holding one (ADR 0043).
+func (e *Engine) maySubmit(ctx context.Context, p *Process, m *methodology.Compiled, who authz.Principal) error {
+	if ok, err := e.stepAllowed(ctx, p, who, p.Pending.Context, "perform"); err != nil {
+		return err
+	} else if !ok {
+		return fmt.Errorf("%q does not hold the role %s for step %s: %w", who.Subject, p.Pending.Context.Roles.Responsible,
+			p.Pending.Context.Path, authz.ErrForbidden)
 	}
-	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskApproval {
-		return nil, fmt.Errorf("process %s has no pending approval: %w", id, ErrInvalidState)
+	if a, ok := m.Action(p.Pending.Action); ok {
+		if roles := e.runRoles(m, p, a); len(roles) > 0 {
+			if ok, err := e.mayRun(ctx, p, who, "action", a.Name, roles); err != nil {
+				return err
+			} else if !ok {
+				return fmt.Errorf("%q holds none of the roles %s on the project for %s: %w", who.Subject,
+					strings.Join(roles, ", "), a.Name, authz.ErrForbidden)
+			}
+		}
 	}
-	approver := authz.From(ctx)
+	return nil
+}
+
+// mayApprove reports whether approver may decide the pending approval of p.
+func (e *Engine) mayApprove(ctx context.Context, p *Process, approver authz.Principal) (bool, error) {
 	var ok bool
+	var err error
 	if p.Pending.Permission == PermissionRunAction {
 		// an action only some roles may run (ADR 0043): one of them approves it, holding the permission the
 		// action requires as well
@@ -1210,13 +1207,32 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 		ok, err = e.allowed(ctx, p, approver, p.Pending.Permission)
 	}
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 	if !ok && p.Pending.Context != nil && p.Pending.Context.Roles != nil && p.Pending.Context.Roles.Accountable != "" {
 		// the accountable role of the step answers for it: it may approve its gates (ADR 0035 §2)
-		if ok, err = e.stepAllowed(ctx, p, approver, p.Pending.Context, "approve"); err != nil {
-			return nil, err
-		}
+		return e.stepAllowed(ctx, p, approver, p.Pending.Context, "approve")
+	}
+	return ok, nil
+}
+
+// Approve decides a pending approval with the permissions of the principal of
+// ctx. On approval the action runs immediately (call Run afterwards to
+// continue); on rejection the action is disabled for this process and the
+// planner looks for another way.
+func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment string) (*Process, error) {
+	defer e.lock(id)()
+	p, err := e.Store.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if p.Status != StatusWaiting || p.Pending == nil || p.Pending.Kind != TaskApproval {
+		return nil, fmt.Errorf("process %s has no pending approval: %w", id, ErrInvalidState)
+	}
+	approver := authz.From(ctx)
+	ok, err := e.mayApprove(ctx, p, approver)
+	if err != nil {
+		return nil, err
 	}
 	if !ok {
 		return nil, fmt.Errorf("%q lacks %s: %w", approver.Subject, p.Pending.Permission, authz.ErrForbidden)

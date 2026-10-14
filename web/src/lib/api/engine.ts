@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty } from './types/common';
-import type { AssessmentState, AttachChangeRequest, ChangeStateResponse, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, Resolution, StartProcessRequest, StartingPointsResponse, TriggerState } from './types/engine';
+import type { AssessmentState, AttachChangeRequest, ChangeAsk, ChangeStateResponse, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, Resolution, StartProcessRequest, StartingPointsResponse, TriggerState } from './types/engine';
 
 const ENGINE = 'goap.engine.v1.EngineService';
 
@@ -77,6 +77,9 @@ export const engine = {
   /** Where each process of the methodology of a change stands now, whatever the number of runs (ADR 0112). */
   getChangeState: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, ChangeStateResponse>(ENGINE, 'GetChangeState', { changeId }, signal),
+  /** What a change waits for from people, with whom each ask is addressed to and whether the caller may answer it (ADR 0117). */
+  getChangeAsks: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, { asks?: ChangeAsk[] }>(ENGINE, 'GetChangeAsks', { changeId }, signal),
   /** How the assessment of each subject of a change reads now: the states its methodology declares, else the defaults (ADR 0116). */
   getAssessmentStates: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { states?: AssessmentState[] }>(ENGINE, 'GetAssessmentStates', { changeId }, signal),

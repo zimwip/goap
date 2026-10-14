@@ -463,6 +463,50 @@ func (h *Handler) GetChangeState(ctx context.Context, r *connect.Request[enginev
 	return connect.NewResponse(out), nil
 }
 
+// GetChangeAsks serves what a change waits for from people (ADR 0117): read like the change itself (a personal change
+// is its subject's only). Whether the caller may answer an ask of a run also asks the permission the call answering it
+// checks on the run (submit, decide_flow, relaunch).
+func (h *Handler) GetChangeAsks(ctx context.Context, r *connect.Request[enginev1.GetChangeAsksRequest]) (*connect.Response[enginev1.GetChangeAsksResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	asks, err := h.Engine.ChangeAsks(ctx, ch.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetChangeAsksResponse{}
+	for _, a := range asks {
+		if a.MayAnswer && a.ProcessID != "" {
+			if act := answerPermission(a.Kind); act != "" {
+				a.MayAnswer = h.loadAuthorized(ctx, a.ProcessID, act) == nil
+			}
+		}
+		out.Asks = append(out.Asks, &enginev1.ChangeAsk{Id: a.ID, Kind: a.Kind, Title: a.Title, Detail: a.Detail, ProcessId: a.ProcessID,
+			Agent: a.Agent, Step: a.Step, Action: a.Action, Roles: a.Roles, Owner: a.Owner, Since: pbconv.Time(a.Since),
+			MayAnswer: a.MayAnswer, Point: a.Point, Question: a.Question})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// answerPermission is the permission on the run the call answering an ask of that kind checks ("" for none: the
+// engine's own rules, already applied).
+func answerPermission(kind string) string {
+	switch kind {
+	case engine.TaskInput, engine.TaskMerge, engine.TaskRebase, engine.AskClarification:
+		return "submit"
+	case engine.TaskFlow:
+		return "decide_flow"
+	case engine.TaskBoard:
+		return "relaunch"
+	}
+	return ""
+}
+
 // GetAssessmentStates serves how the assessment of each subject of a change reads now (ADR 0116): read like the
 // change itself (a personal change is its subject's only).
 func (h *Handler) GetAssessmentStates(ctx context.Context, r *connect.Request[enginev1.GetAssessmentStatesRequest]) (*connect.Response[enginev1.GetAssessmentStatesResponse], error) {

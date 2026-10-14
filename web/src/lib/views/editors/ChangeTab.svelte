@@ -55,6 +55,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
   import ChangeState from '../../components/ChangeState.svelte';
+  import ChangeAsks from '../../components/ChangeAsks.svelte';
   import PossibleSteps from '../../components/PossibleSteps.svelte';
   import { confirmText, pointById, showStartingPoints, startable, startableIds, startRequest } from '../../startingPoints';
   import FlowGraph from '../../components/FlowGraph.svelte';
@@ -103,6 +104,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   /** the Compare & decide dialog, opened from the scope bar */
   let compareOpen = $state(false);
   let pane = $state(untrack(() => tab.params.pane) || 'overview');
+  // how many asks of the change the person may answer (ADR 0117): the badge of the overview
+  let asksForMe = $state(0);
   $effect(() => {
     tab.params.pane = pane;
   });
@@ -561,7 +564,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const commits = $derived(commitButtons(commitInfo, closed));
   const committedOnBranch = $derived(!!commitInfo?.commits);
   const panes = $derived<Pane[]>([
-    { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : undefined },
+    { id: 'overview', label: 'Overview', badge: stuckNotLandable ? '!' : asksForMe ? `${asksForMe} for you` : undefined },
     { id: 'impacts', label: 'Impacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: awaiting.length ? `${awaiting.length} to review` : view?.nodes?.length || undefined },
     { id: 'reviews', label: 'Reviews', tint: scopeTint, title: scopeTabTitle(options, scope), badge: foldReviews(change?.items ?? []).filter((r) => r.status === 'open' && (r.flow ?? '') === (scope === MAIN_SCOPE ? '' : scope)).length || undefined },
     { id: 'artifacts', label: 'Artifacts', tint: scopeTint, title: scopeTabTitle(options, scope), badge: artifacts.length || undefined },
@@ -1170,6 +1173,15 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             />
           </AssessmentBubble>
         {/if}
+        <ChangeAsks
+          changeId={selected}
+          {closed}
+          reviews={awaiting.map((n) => n.key ?? '')}
+          onreview={() => (pane = 'reviews')}
+          ondecisions={() => (pane = 'decisions')}
+          onopen={(id, pin) => openTab({ kind: 'run', params: { id } }, { pin })}
+          oncount={(n) => (asksForMe = n)}
+        />
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
           {#if ch.namespace}<dt>Namespace</dt><dd>{ch.namespace}</dd>{/if}
@@ -1290,12 +1302,6 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           <p class="hint" style="margin: 0.5rem 0 0">
             Committed on {ch.branch}: the change stays open, edit and commit again, then merge it into {mergeTarget}.
           </p>
-        {/if}
-        {#if awaiting.length}
-          <div class="alert" role="status" style="margin: 0.75rem 0 0">
-            {awaiting.length} change impact{awaiting.length > 1 ? 's' : ''} await{awaiting.length > 1 ? '' : 's'} their review ({awaiting.map((n) => n.key).join(', ')}).
-            <button type="button" class="link" onclick={() => (pane = 'reviews')}>Review them</button>
-          </div>
         {/if}
       </section>
       {:else if active === 'decisions'}
