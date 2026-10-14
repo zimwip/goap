@@ -71,7 +71,7 @@ describe('form designer', () => {
     expect(is['0']).toEqual(['the name is a letter, then letters, digits or _']);
     expect(is['1']).toEqual(['options is required']);
     expect(is['2']).toEqual(['another field is named b', 'text has no constraint options']);
-    expect(is['3']).toEqual(['b is not a node search field']);
+    expect(is['3']).toEqual(['b is not a node search or new node field']);
   });
 
   it('adds a pattern, renaming its fields when taken', () => {

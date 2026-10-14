@@ -2,7 +2,7 @@
   // The properties of the field selected in the designer: identity, behaviour, then the constraints its widget declares,
   // with pickers from the type catalogue for node types, link types and states.
   import type { FieldDef, FormDef } from '../types';
-  import { changeWidget, constraintsOf, designIssues, insertField, labelOf, moveField, newField, palette, removeField, setConstraint, updateField } from '../design';
+  import { NOT_NESTED, changeWidget, constraintsOf, designIssues, insertField, labelOf, moveField, newField, palette, removeField, setConstraint, updateField } from '../design';
   import { strings } from '../validate';
   import { typeCatalog } from '../../stores/types.svelte';
   import StringList from './StringList.svelte';
@@ -60,16 +60,22 @@
         return statesOf(strings(c['toTypes']));
       case 'namespace':
         return Object.keys(cat.domains).sort();
+      case 'properties': {
+        const types = strings(c['types']);
+        return [...new Set((types.length ? types : nodeTypes).flatMap((t) => cat.properties(t)))].sort();
+      }
+      case 'accept':
+        return ['text/*', 'image/*', 'application/pdf', 'application/json', '.csv', '.md', '.txt', '.xlsx', '.docx'];
     }
     return [];
   }
 
   const set = (patch: Partial<FieldDef>) => onchange({ ...field, ...patch });
   const setC = (name: string, v: unknown) => onchange(setConstraint(field, name, v));
-  const others = (widget?: string) => (form.fields ?? []).filter((f) => f !== field && f.name && (!widget || f.widget === widget));
+  const others = (widgets?: string[]) => (form.fields ?? []).filter((f) => f !== field && f.name && (!widgets?.length || widgets.includes(f.widget)));
   /** the fields before this one: what its conditions may test */
   const earlier = $derived((form.fields ?? []).slice(0, Math.max(0, (form.fields ?? []).indexOf(field))));
-  const widgets = $derived(palette().filter((w) => !nested || (w.name !== 'group' && w.name !== 'link')));
+  const widgets = $derived(palette().filter((w) => !nested || !NOT_NESTED.includes(w.name)));
 
   // the sub-fields of a group, edited as a small form of their own
   let sub = $state<number | undefined>(undefined);
@@ -171,7 +177,7 @@
         if (w) { setSub(insertField(subForm, newField(subForm, w))); sub = (subForm.fields ?? []).length; }
       }}>
         <option value="">+ sub-field…</option>
-        {#each palette().filter((w) => w.name !== 'group' && w.name !== 'link') as w (w.name)}<option value={w.name}>{labelOf(w.name)}</option>{/each}
+        {#each palette().filter((w) => !NOT_NESTED.includes(w.name)) as w (w.name)}<option value={w.name}>{labelOf(w.name)}</option>{/each}
       </select>
     {/if}
   {/if}
@@ -194,7 +200,7 @@
           {:else if c.type === 'field'}
             <select id={id(c.name)} value={typeof v === 'string' ? v : ''} {disabled} onchange={(e) => setC(c.name, e.currentTarget.value || undefined)}>
               <option value="">none</option>
-              {#each others(c.widget) as f (f.name)}<option value={f.name}>{f.label || f.name} ({f.name})</option>{/each}
+              {#each others(c.widgets) as f (f.name)}<option value={f.name}>{f.label || f.name} ({f.name})</option>{/each}
             </select>
           {:else if field.widget === 'markdown' && c.name === 'text'}
             <textarea id={id(c.name)} rows="4" value={typeof v === 'string' ? v : ''} {disabled} oninput={(e) => setC(c.name, e.currentTarget.value)}></textarea>

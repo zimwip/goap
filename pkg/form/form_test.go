@@ -212,3 +212,61 @@ func TestGroupField(t *testing.T) {
 		}
 	}
 }
+
+func TestNewNodeDecisionFile(t *testing.T) {
+	f := Form{Fields: []Field{
+		{Name: "req", Widget: WidgetNewNode, Required: true, Constraints: map[string]any{"types": []any{"alm@Requirement"}, "properties": []any{"title"}}},
+		{Name: "realizedBy", Widget: WidgetLink, Constraints: map[string]any{"from": "req", "linkTypes": []any{"alm@realized_by"}}},
+		{Name: "choice", Widget: WidgetDecision, Constraints: map[string]any{"justify": true}},
+		{Name: "spec", Widget: WidgetFile, Constraints: map[string]any{"accept": []any{".csv", "text/*"}, "maxBytes": 8}},
+	}}
+	if is := CheckForm(f); len(is) > 0 {
+		t.Fatalf("valid form: %v", is)
+	}
+	e := env()
+	e.Decision = func(id string) (Decision, bool) {
+		return map[string]Decision{"D1": {ID: "D1", Question: "which?", Options: []string{"a", "b"}}, "D2": {ID: "D2", Question: "done", Decided: true}}[id], id == "D1" || id == "D2"
+	}
+	good := map[string]any{
+		"req":        map[string]any{"key": "REQ-9", "type": "alm@Requirement", "props": map[string]any{"title": "New"}},
+		"realizedBy": []any{map[string]any{"type": "alm@realized_by", "to": "APP-1"}},
+		"choice":     map[string]any{"point": "D1", "option": "a", "justification": "cheaper"},
+		"spec":       map[string]any{"name": "x.csv", "type": "text/csv", "content": "YSxiCg=="},
+	}
+	clean, is := Validate(f, good, e)
+	if len(is) > 0 {
+		t.Fatal(is)
+	}
+	if nn := NewNodes(f, clean); len(nn) != 1 || nn[0].Key != "REQ-9" || nn[0].Props["title"] != "New" {
+		t.Fatalf("new nodes: %v", nn)
+	}
+	if l := Links(f, clean); len(l) != 1 || l[0].From != "REQ-9" {
+		t.Fatalf("a link from the new node: %v", l)
+	}
+	if r := Rulings(f, clean); len(r) != 1 || r[0].Option != "a" {
+		t.Fatalf("rulings: %v", r)
+	}
+	bad := map[string]any{
+		"req":    map[string]any{"key": "REQ-1", "type": "alm@Component", "props": map[string]any{"owner": "x"}},
+		"choice": map[string]any{"point": "D2", "option": "a"},
+		"spec":   map[string]any{"name": "x.pdf", "type": "application/pdf", "content": "YWJjZGVmZ2hpams="},
+	}
+	_, is = Validate(f, bad, e)
+	got := is.Error()
+	for _, want := range []string{
+		"req: alm@Component is not one of alm@Requirement", "req: REQ-1 already exists", "req: owner is not a property asked",
+		"choice: needs a justification", "spec: x.pdf is larger than 8 bytes",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	_, is = Validate(f, map[string]any{"req": good["req"], "choice": map[string]any{"point": "D2", "option": "a", "justification": "j"},
+		"spec": map[string]any{"name": "x.pdf", "type": "application/pdf", "content": "YQ=="}}, e)
+	got = is.Error()
+	for _, want := range []string{`choice: the decision point "done" is already decided`, "spec: x.pdf is not one of .csv, text/*"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+}

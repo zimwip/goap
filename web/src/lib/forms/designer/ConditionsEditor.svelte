@@ -14,8 +14,8 @@
     onchange,
   }: { id: string; label: string; fields: FieldDef[]; value?: Condition[]; disabled?: boolean; onchange: (v: Condition[] | undefined) => void } = $props();
 
-  // a condition tests a value: no explanation, links or group
-  const testable = $derived(fields.filter((f) => f.name && !['markdown', 'link', 'group'].includes(f.widget)));
+  // a condition tests a plain value: no explanation, links, group, new node, decision or file
+  const testable = $derived(fields.filter((f) => f.name && !['markdown', 'link', 'group', 'newNode', 'decision', 'file'].includes(f.widget)));
   const OPS: [ConditionOp, string][] = [
     ['equals', 'is'],
     ['in', 'is one of'],

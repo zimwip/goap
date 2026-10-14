@@ -9,6 +9,9 @@ import NodeWidget from './widgets/NodeWidget.svelte';
 import LinkWidget from './widgets/LinkWidget.svelte';
 import MarkdownWidget from './widgets/MarkdownWidget.svelte';
 import GroupWidget from './widgets/GroupWidget.svelte';
+import NewNodeWidget from './widgets/NewNodeWidget.svelte';
+import DecisionWidget from './widgets/DecisionWidget.svelte';
+import FileWidget from './widgets/FileWidget.svelte';
 
 let done = false;
 
@@ -22,6 +25,9 @@ export function registerBuiltinWidgets(): void {
   registerWidget({ name: 'multiselect', component: MultiselectWidget });
   registerWidget({ name: 'node', component: NodeWidget });
   registerWidget({ name: 'link', component: LinkWidget });
+  registerWidget({ name: 'newNode', component: NewNodeWidget });
+  registerWidget({ name: 'decision', component: DecisionWidget });
+  registerWidget({ name: 'file', component: FileWidget });
   registerWidget({ name: 'group', component: GroupWidget });
   registerWidget({ name: 'markdown', component: MarkdownWidget, display: true });
 }

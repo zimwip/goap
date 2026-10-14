@@ -5,7 +5,7 @@ import { WIDGET_CATALOG } from './widgetCatalog.gen';
 import type { Condition, ConstraintSpec, FieldDef, FormDef, WidgetSpec } from './types';
 
 /** The widgets the palette offers, in the order a person reaches for them. */
-const ORDER = ['text', 'textarea', 'number', 'boolean', 'date', 'select', 'multiselect', 'node', 'link', 'group', 'markdown'];
+const ORDER = ['text', 'textarea', 'number', 'boolean', 'date', 'select', 'multiselect', 'node', 'link', 'newNode', 'decision', 'file', 'group', 'markdown'];
 
 export const LABELS: Record<string, string> = {
   text: 'Text',
@@ -17,6 +17,9 @@ export const LABELS: Record<string, string> = {
   multiselect: 'Choices',
   node: 'Node search',
   link: 'Links',
+  newNode: 'New node',
+  decision: 'Decision',
+  file: 'File',
   group: 'Repeated group',
   markdown: 'Explanation',
 };
@@ -50,7 +53,7 @@ export function newField(form: FormDef, widget: string, catalog: WidgetSpec[] = 
     else if (k.type === 'string') c[k.name] = widget === 'markdown' ? 'Explain what to do.' : '';
   }
   if (widget === 'link') {
-    const source = (form.fields ?? []).find((x) => x.widget === 'node');
+    const source = (form.fields ?? []).find((x) => x.widget === 'node' || x.widget === 'newNode');
     if (source) c['from'] = source.name;
   }
   if (Object.keys(c).length) f.constraints = c;
@@ -117,6 +120,9 @@ function withConditions(f: FieldDef, edit: (cs: Condition[]) => Condition[]): Fi
   return out;
 }
 
+/** The widgets a group cannot hold. */
+export const NOT_NESTED = ['group', 'link', 'newNode', 'decision'];
+
 /** The operator of a condition, as the designer shows it. */
 export type ConditionOp = 'equals' | 'in' | 'set' | 'unset';
 
@@ -146,7 +152,7 @@ export function conditionIssues(fields: FieldDef[], i: number): string[] {
       if (n !== 1) out.push(`${what}: a condition tests exactly one of equals, in or set`);
       const at = fields.findIndex((x) => x.name === c.field);
       if (at < 0 || at >= i) out.push(`${what}: no field ${c.field || '(none)'} before this one`);
-      else if (['markdown', 'link', 'group'].includes(fields[at].widget)) out.push(`${what}: ${c.field} has no value to test`);
+      else if (['markdown', 'link', 'group', 'newNode', 'decision', 'file'].includes(fields[at].widget)) out.push(`${what}: ${c.field} has no value to test`);
     }
   }
   return out;
@@ -197,7 +203,7 @@ function fieldsDesignIssues(fields: FieldDef[], catalog: WidgetSpec[], nested: b
       push(k, `unknown widget ${f.widget}`);
       return;
     }
-    if (nested && (f.widget === 'group' || f.widget === 'link')) push(k, `a group holds no ${labelOf(f.widget).toLowerCase()} field`);
+    if (nested && NOT_NESTED.includes(f.widget)) push(k, `a group holds no ${labelOf(f.widget).toLowerCase()} field`);
     if (f.widget === 'group') {
       if (!f.fields?.length) push(k, 'a group needs at least one sub-field');
       for (const [j, msgs] of Object.entries(fieldsDesignIssues(f.fields ?? [], catalog, true)))
@@ -209,7 +215,7 @@ function fieldsDesignIssues(fields: FieldDef[], catalog: WidgetSpec[], nested: b
       if (c.type === 'field' && typeof v === 'string' && v) {
         const other = fields.find((x) => x.name === v && x !== f);
         if (!other) push(k, `no field ${v}`);
-        else if (c.widget && other.widget !== c.widget) push(k, `${v} is not a ${labelOf(c.widget).toLowerCase()} field`);
+        else if (c.widgets?.length && !c.widgets.includes(other.widget)) push(k, `${v} is not a ${c.widgets.map((w) => labelOf(w).toLowerCase()).join(' or ')} field`);
       }
     }
     for (const key of Object.keys(f.constraints ?? {})) if (!spec.constraints?.some((c) => c.name === key)) push(k, `${spec.name} has no constraint ${key}`);
@@ -258,6 +264,18 @@ export const PATTERNS: Pattern[] = [
         { name: 'node', widget: 'node', label: 'Node', required: true },
         { name: 'links', widget: 'link', label: 'Links', constraints: { from: 'node' } },
         { name: 'why', widget: 'textarea', label: 'Why', required: true },
+      ],
+    },
+  },
+  {
+    name: 'create-and-link',
+    label: 'Create and link',
+    description: 'Create a node in the change and link it to existing nodes.',
+    form: {
+      submit: 'Create',
+      fields: [
+        { name: 'node', widget: 'newNode', label: 'New node', required: true },
+        { name: 'links', widget: 'link', label: 'Links', constraints: { from: 'node' } },
       ],
     },
   },

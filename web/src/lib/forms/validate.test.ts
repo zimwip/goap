@@ -90,3 +90,32 @@ describe('conditional fields and groups', () => {
     });
   });
 });
+
+describe('new node, decision and file fields', () => {
+  const f: FormDef = {
+    fields: [
+      { name: 'req', widget: 'newNode', constraints: { types: ['alm@Requirement'], properties: ['title'] } },
+      { name: 'links', widget: 'link', constraints: { from: 'req', linkTypes: ['alm@verifies'] } },
+      { name: 'choice', widget: 'decision', constraints: { justify: true } },
+      { name: 'doc', widget: 'file', constraints: { accept: ['.csv'], maxBytes: 4 } },
+    ],
+  };
+  const withPoints: NodeSource = { ...source, decisions: [{ id: 'D1', question: 'ship?', options: [{ id: 'go', label: 'Go' }] }, { id: 'D2', question: 'old', options: [], decided: true }] };
+
+  it('accepts a created node as the source of links', () => {
+    const v = { req: { key: 'REQ-9', type: 'alm@Requirement', props: { title: 'x' } }, links: [{ to: 'CMP-1' }], choice: { point: 'D1', option: 'go', justification: 'ok' } };
+    expect(formIssues(f, v, withPoints)).toEqual({});
+    expect(submittedValues(f, v)['links']).toEqual([{ from: 'REQ-9', type: 'alm@verifies', to: 'CMP-1' }]);
+  });
+
+  it('refuses what the engine refuses', () => {
+    const is = formIssues(
+      f,
+      { req: { key: 'REQ-1', type: 'alm@Component', props: { owner: 'x' } }, choice: { point: 'D2', option: 'go', justification: 'j' }, doc: { name: 'a.pdf', size: 2, content: 'YQ==' } },
+      withPoints,
+    );
+    expect(is['req']).toEqual(['alm@Component is not one of alm@Requirement', 'REQ-1 already exists', 'owner is not a property asked']);
+    expect(is['choice']).toEqual(['the decision point "old" is already decided']);
+    expect(is['doc']).toEqual(['a.pdf is not one of .csv']);
+  });
+});

@@ -57,7 +57,11 @@ name panics), with the built-in widgets:
 | `select` | string | `options` (required) |
 | `multiselect` | list of strings | `options` (required), `min`, `max` |
 | `node` | node key, or a list with `multiple` | `types`, `states`, `namespace`, `inChange`, `multiple`, `min`, `max` |
-| `link` | `[{from, type, to}]` | `from` (a `node` field, or a fixed key `fromKey`), `linkTypes`, `toTypes`, `toStates`, `min`, `max` |
+| `link` | `[{from, type, to}]` | `from` (a `node` or `newNode` field, or a fixed key `fromKey`), `linkTypes`, `toTypes`, `toStates`, `min`, `max` |
+| `newNode` | `{type, key, props}`, or a list with `multiple` | `types`, `properties` (the attributes asked; none: the name of the type), `multiple`, `min`, `max` |
+| `decision` | `{point, option, justification}` | `justify` (the justification is required) |
+| `file` | `{name, type, size, content}` (base64), or a list with `multiple` | `accept` (media types `text/*` or extensions `.csv`), `maxBytes` (at most `form.MaxFileBytes`, 512 KiB), `multiple`, `min`, `max` |
+| `group` | list of objects (§6) | `min`, `max` |
 | `markdown` | none (shows `constraints.text`) | `text` |
 
 **Constraints limit the choices**: a `node` field offers only the nodes of those types (a subtype qualifies), states
@@ -77,16 +81,19 @@ without options, a `link` whose `from` names no `node` field.
 `SubmitHumanInput` takes `form` (a `Struct`, the values by field name) next to `items`. `Engine.SubmitForm`
 validates them against the form of the pending task (`form.Validate`: required, value kind, constraints; node keys
 resolved against the reference baseline of the change and its impacts through `form.Env`, with their types, the
-supertypes of the type catalogue and their states), refuses with `ErrInvalid` and the list of the field issues
+supertypes of the type catalogue and their states; a new node's key must be free; a decision point must exist,
+be pending, and the option be one of its options; `Env.Decision` reads the decision points of the change), refuses with `ErrInvalid` and the list of the field issues
 otherwise, then turns them into items:
 
 - **with code** (`language` + `code` on the human action, the DSL of script actions, docs/dsl.md): the code runs in
   the sandbox of the process with the values as `ctx.var("form")` and returns items and change impact operations,
   exactly as a script action does; it decides what the values mean;
-- **without code**: one artifact of type `form.artifact` (default: the action name) with the values as data, and
-  for every `link` field the change impact operations adding the links (the source declared as modified when the
-  change does not hold it yet, then written with the links): a form without code still changes the graph through its
-  links.
+- **without code**: one artifact of type `form.artifact` (default: the action name) with the values as data; for
+  every `newNode` field the nodes declared created and written with their properties (`form.NewNodes`,
+  `createOps`); for every `decision` field a `decisionPoint` item ruling the point (`form.Rulings`, a person's
+  ruling); for every `link` field the change impact operations adding the links (the source declared as modified when
+  the change does not hold it yet, then written with the links; a link may start from a node the form creates, the
+  fields after a `newNode` field see its nodes): a form without code still changes the graph.
 
 Either way the items are added as the submission of the step (the record of its run, ADR 0109), as `Submit` does:
 the roles of the step and of the action are checked first.
@@ -114,7 +121,7 @@ form when the task has one and keeps the former heuristics otherwise. The render
 The methodology editor builds the form of a human action with a designer (`web/src/lib/forms/designer/`, model in
 `web/src/lib/forms/design.ts`, pure and tested): a palette of the widgets of the server's registry (copied to
 `widgetCatalog.gen.ts` by `pkg/form`'s `TestWebCatalogIsCurrent`, `GOAP_UPDATE_WEB=1 go test ./pkg/form/` rewrites it)
-and of **patterns** (ready-made sets of fields: pick and link, qualify a node, decide, checklist), dragged onto the
+and of **patterns** (ready-made sets of fields: pick and link, create and link, qualify a node, decide, checklist), dragged onto the
 canvas or clicked; the fields are reordered by dragging (or the arrows) and edited in a properties panel (identity,
 required, default, then the constraints the widget declares, with suggestions from the type catalogue: node types,
 link types allowed from the source field's types, lifecycle states, namespaces). A rename follows into the link fields
@@ -146,4 +153,3 @@ the properties panel; a rename or a removal follows into the conditions naming t
 - Patterns stored as data (shared by the methodologies of an organisation) rather than shipped with the web.
 - Standard pages using `FormRenderer` with a form declared by a node type (an `form:` on a node type of a domain, for
   its creation dialog), and the assistant filling a form (a screen tool per declared form, ADR 0092).
-- Widgets beyond the built-in set (a node creation widget with its attributes, a decision point, a file).

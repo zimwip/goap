@@ -89,7 +89,7 @@ func checkConditions(fields []Field, j int, key string, cs []Condition, at strin
 		}
 		if k < 0 {
 			out = append(out, Issue{Path: p + ".field", Message: fmt.Sprintf("no field %q before this one", c.Field)})
-		} else if w, ok := Lookup(fields[k].Widget); ok && (w.Value == ValueNone || w.Value == ValueLinks || w.Value == ValueObjects) {
+		} else if w, ok := Lookup(fields[k].Widget); ok && (w.Value == ValueNone || w.Value == ValueLinks || w.Value == ValueObjects || w.Value == ValueObject) {
 			out = append(out, Issue{Path: p + ".field", Message: fmt.Sprintf("field %q is a %s: a condition tests a value", c.Field, w.Name)})
 		}
 	}

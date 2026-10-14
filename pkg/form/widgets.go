@@ -1,8 +1,11 @@
 package form
 
 import (
+	"encoding/base64"
 	"fmt"
+	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -23,6 +26,8 @@ const (
 	ValueNode ValueKind = "node"
 	// ValueLinks is a list of links {from, type, to}.
 	ValueLinks ValueKind = "links"
+	// ValueObject is an object, or a list of objects when the field allows several.
+	ValueObject ValueKind = "object"
 	// ValueObjects is a list of objects, the values of the sub-fields of a group.
 	ValueObjects ValueKind = "objects"
 	// ValueNone: a display widget, it produces no value.
@@ -72,8 +77,8 @@ type Constraint struct {
 	Type        ConstraintType `json:"type"`
 	Description string         `json:"description,omitempty"`
 	Required    bool           `json:"required,omitempty"`
-	// Widget is the widget the field named by a ConstraintField must have (empty: any).
-	Widget string `json:"widget,omitempty"`
+	// Widgets are the widgets the field named by a ConstraintField may have (none: any).
+	Widgets []string `json:"widgets,omitempty"`
 }
 
 // Node is what a form needs to know of a node a field names.
@@ -92,6 +97,37 @@ type Env struct {
 	Node func(key string) (Node, bool)
 	// IsA reports whether a type is the other one or one of its subtypes (nil: equality).
 	IsA func(typ, super string) bool
+	// Decision finds a decision point of the change by id (nil: the points are not checked).
+	Decision func(id string) (Decision, bool)
+}
+
+// Decision is what a form needs to know of a decision point of the change.
+type Decision struct {
+	ID       string
+	Question string
+	// Options are the options the point is about (ids; none: any option).
+	Options []string
+	// Decided: the point is settled, nobody rules it any more.
+	Decided bool
+}
+
+// with adds the nodes a form creates to the nodes the environment knows.
+func (e Env) with(created []NewNode) Env {
+	if e.Node == nil || len(created) == 0 {
+		return e
+	}
+	known := e.Node
+	byKey := map[string]Node{}
+	for _, n := range created {
+		byKey[n.Key] = Node{Key: n.Key, Type: n.Type, InChange: true}
+	}
+	e.Node = func(k string) (Node, bool) {
+		if n, ok := byKey[k]; ok {
+			return n, true
+		}
+		return known(k)
+	}
+	return e
 }
 
 func (e Env) isA(typ, super string) bool {
@@ -160,6 +196,20 @@ func kindIssue(k ValueKind, f Field, v any) string {
 			}
 		} else if _, ok := v.(string); !ok {
 			return "expects a node key"
+		}
+	case ValueObject:
+		if multiple(f) {
+			list, ok := v.([]any)
+			if !ok {
+				return "expects a list of objects"
+			}
+			for _, e := range list {
+				if _, ok := e.(map[string]any); !ok {
+					return "expects a list of objects"
+				}
+			}
+		} else if _, ok := v.(map[string]any); !ok {
+			return "expects an object"
 		}
 	case ValueObjects:
 		list, ok := v.([]any)
@@ -249,7 +299,13 @@ const (
 	WidgetLink        = "link"
 	WidgetMarkdown    = "markdown"
 	WidgetGroup       = "group"
+	WidgetNewNode     = "newNode"
+	WidgetDecision    = "decision"
+	WidgetFile        = "file"
 )
+
+// MaxFileBytes is the largest file a file field accepts: the file travels in the values and stays in the artifact.
+const MaxFileBytes = 512 << 10
 
 func init() {
 	textConstraints := []Constraint{
@@ -286,7 +342,7 @@ func init() {
 		{Name: "max", Type: ConstraintNumber, Description: "most nodes (multiple)"},
 	}, Check: checkNode})
 	Register(Widget{Name: WidgetLink, Description: "links to create from a node to nodes found by a search", Value: ValueLinks, Constraints: []Constraint{
-		{Name: "from", Type: ConstraintField, Widget: WidgetNode, Description: "the node field whose node is the source"},
+		{Name: "from", Type: ConstraintField, Widgets: []string{WidgetNode, WidgetNewNode}, Description: "the node field (or new node field) whose node is the source"},
 		{Name: "fromKey", Type: ConstraintString, Description: "a fixed source node"},
 		{Name: "linkTypes", Type: ConstraintStrings, Description: "qualified link types offered"},
 		{Name: "toTypes", Type: ConstraintStrings, Description: "qualified node types of the targets (a subtype qualifies)"},
@@ -301,6 +357,23 @@ func init() {
 		}, Check: func(f Field, v any, _ Env, _ map[string]any) []string {
 			return checkCount(f, len(v.([]any)), "entries")
 		}})
+	Register(Widget{Name: WidgetNewNode, Description: "a node the change creates: its type, key and properties", Value: ValueObject, Constraints: []Constraint{
+		{Name: "types", Type: ConstraintStrings, Description: "qualified node types the person may create (a subtype qualifies)"},
+		{Name: "properties", Type: ConstraintStrings, Description: "the attributes asked (none: the name of the type)"},
+		{Name: "multiple", Type: ConstraintBoolean, Description: "several nodes"},
+		{Name: "min", Type: ConstraintNumber, Description: "fewest nodes (multiple)"},
+		{Name: "max", Type: ConstraintNumber, Description: "most nodes (multiple)"},
+	}, Check: checkNewNodes})
+	Register(Widget{Name: WidgetDecision, Description: "rules a decision point of the change: an option and why", Value: ValueObject, Constraints: []Constraint{
+		{Name: "justify", Type: ConstraintBoolean, Description: "the justification is required"},
+	}, Check: checkDecision})
+	Register(Widget{Name: WidgetFile, Description: "a file the person attaches, kept in the values", Value: ValueObject, Constraints: []Constraint{
+		{Name: "accept", Type: ConstraintStrings, Description: "media types (text/*, application/pdf) or extensions (.csv) accepted"},
+		{Name: "maxBytes", Type: ConstraintNumber, Description: fmt.Sprintf("largest file, in bytes (at most %d)", MaxFileBytes)},
+		{Name: "multiple", Type: ConstraintBoolean, Description: "several files"},
+		{Name: "min", Type: ConstraintNumber, Description: "fewest files (multiple)"},
+		{Name: "max", Type: ConstraintNumber, Description: "most files (multiple)"},
+	}, Check: checkFiles})
 	Register(Widget{Name: WidgetMarkdown, Description: "a text shown to the person", Value: ValueNone, Constraints: []Constraint{
 		{Name: "text", Type: ConstraintString, Required: true, Description: "the Markdown text"},
 	}})
@@ -510,12 +583,7 @@ func checkLinks(f Field, v any, env Env, values map[string]any) []string {
 	if k, _ := f.Constraints["fromKey"].(string); k != "" {
 		sources = []string{k}
 	} else if ref, _ := f.Constraints["from"].(string); ref != "" {
-		switch x := normalize(values[ref]).(type) {
-		case string:
-			sources = []string{x}
-		case []any:
-			sources = stringsOf(x)
-		}
+		sources = keysOf(values[ref])
 	}
 	var out []string
 	seen := map[string]bool{}
@@ -551,4 +619,148 @@ func checkLinks(f Field, v any, env Env, values map[string]any) []string {
 		}
 	}
 	return append(out, checkCount(f, len(list), "links")...)
+}
+
+// keyRE is the shape of the key of a node a form creates.
+var keyRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:-]*$`)
+
+func checkNewNodes(f Field, v any, env Env, _ map[string]any) []string {
+	entries := objectsOf(v)
+	types, asked := stringsOf(f.Constraints["types"]), stringsOf(f.Constraints["properties"])
+	var out []string
+	seen := map[string]bool{}
+	for i, m := range entries {
+		at := ""
+		if multiple(f) {
+			at = fmt.Sprintf("node %d: ", i+1)
+		}
+		key, _ := m["key"].(string)
+		typ, _ := m["type"].(string)
+		switch {
+		case typ == "":
+			out = append(out, at+"needs a type")
+		case len(types) > 0 && !slices.ContainsFunc(types, func(t string) bool { return env.isA(typ, t) }):
+			out = append(out, fmt.Sprintf("%s%s is not one of %s", at, typ, strings.Join(types, ", ")))
+		}
+		switch {
+		case key == "":
+			out = append(out, at+"needs a key")
+		case !keyRE.MatchString(key):
+			out = append(out, fmt.Sprintf("%sinvalid key %q (letters, digits, _ . : -)", at, key))
+		case seen[key]:
+			out = append(out, fmt.Sprintf("%s%s is given twice", at, key))
+		default:
+			if env.Node != nil {
+				if _, exists := env.Node(key); exists {
+					out = append(out, fmt.Sprintf("%s%s already exists", at, key))
+				}
+			}
+		}
+		seen[key] = true
+		if p, ok := m["props"]; ok {
+			props, ok := p.(map[string]any)
+			if !ok {
+				out = append(out, at+"props is an object of properties")
+			}
+			for _, k := range sortedKeys(props) {
+				if len(asked) > 0 && !contains(asked, k) {
+					out = append(out, fmt.Sprintf("%s%s is not a property asked", at, k))
+				}
+			}
+		}
+		for _, k := range sortedKeys(m) {
+			if k != "key" && k != "type" && k != "props" {
+				out = append(out, fmt.Sprintf("%sunknown entry %q", at, k))
+			}
+		}
+	}
+	if multiple(f) {
+		out = append(out, checkCount(f, len(entries), "nodes")...)
+	}
+	return out
+}
+
+func checkDecision(f Field, v any, env Env, _ map[string]any) []string {
+	m := v.(map[string]any)
+	point, _ := m["point"].(string)
+	option, _ := m["option"].(string)
+	why, _ := m["justification"].(string)
+	var out []string
+	if point == "" {
+		out = append(out, "needs the decision point")
+	}
+	if option == "" {
+		out = append(out, "needs an option")
+	}
+	if b, _ := f.Constraints["justify"].(bool); b && strings.TrimSpace(why) == "" {
+		out = append(out, "needs a justification")
+	}
+	if len(out) > 0 || env.Decision == nil {
+		return out
+	}
+	d, ok := env.Decision(point)
+	switch {
+	case !ok:
+		out = append(out, fmt.Sprintf("unknown decision point %q", point))
+	case d.Decided:
+		out = append(out, fmt.Sprintf("the decision point %q is already decided", d.Question))
+	case len(d.Options) > 0 && !contains(d.Options, option):
+		out = append(out, fmt.Sprintf("%q is not an option of %q", option, d.Question))
+	}
+	return out
+}
+
+func checkFiles(f Field, v any, _ Env, _ map[string]any) []string {
+	entries := objectsOf(v)
+	limit := float64(MaxFileBytes)
+	if m, ok := bound(f, "maxBytes"); ok && m < limit {
+		limit = m
+	}
+	accept := stringsOf(f.Constraints["accept"])
+	var out []string
+	for i, m := range entries {
+		at := ""
+		if multiple(f) {
+			at = fmt.Sprintf("file %d: ", i+1)
+		}
+		name, _ := m["name"].(string)
+		typ, _ := m["type"].(string)
+		content, _ := m["content"].(string)
+		raw, err := base64.StdEncoding.DecodeString(content)
+		switch {
+		case name == "":
+			out = append(out, at+"needs a name")
+		case err != nil:
+			out = append(out, at+"content is not base64")
+		case float64(len(raw)) > limit:
+			out = append(out, fmt.Sprintf("%s%s is larger than %g bytes", at, name, limit))
+		case len(accept) > 0 && !accepts(accept, name, typ):
+			out = append(out, fmt.Sprintf("%s%s is not one of %s", at, name, strings.Join(accept, ", ")))
+		}
+	}
+	if multiple(f) {
+		out = append(out, checkCount(f, len(entries), "files")...)
+	}
+	return out
+}
+
+// accepts reports whether a file matches one of the accepted media types (text/*) or extensions (.csv).
+func accepts(accept []string, name, typ string) bool {
+	ext := strings.ToLower(path.Ext(name))
+	for _, a := range accept {
+		a = strings.ToLower(strings.TrimSpace(a))
+		switch {
+		case strings.HasPrefix(a, "."):
+			if ext == a {
+				return true
+			}
+		case strings.HasSuffix(a, "/*"):
+			if strings.HasPrefix(strings.ToLower(typ), strings.TrimSuffix(a, "*")) {
+				return true
+			}
+		case a == strings.ToLower(typ):
+			return true
+		}
+	}
+	return false
 }

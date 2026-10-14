@@ -29,7 +29,7 @@
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
   import { openNode } from '../nodeEditors';
   import FormRenderer from '../forms/FormRenderer.svelte';
-  import type { FormValues, NodeOption, NodeSource } from '../forms/types';
+  import type { DecisionOption, FieldDef, FormValues, NodeOption, NodeSource } from '../forms/types';
 
   let { process, onsubmitted }: { process: Process; onsubmitted: (p: Process) => void } = $props();
 
@@ -87,6 +87,7 @@
     baselineNodes = allNodes;
     attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
     posts = await loadPosts(changeImpacts, false, { changeId: id });
+    decisions = hasDecision(task?.form?.fields) ? await loadDecisions(id, signal) : undefined;
     const initNodes: Record<string, boolean> = {};
     for (const n of changeImpacts) if (isPending(n) && n.id) initNodes[n.id] = true;
     nodeDecisions = initNodes;
@@ -203,6 +204,23 @@
   });
 
   // --- declared form (ADR 0115): the nodes its widgets may offer are the reference baseline and what the change writes
+  let decisions = $state<DecisionOption[] | undefined>(undefined);
+  const hasDecision = (fields: FieldDef[] | undefined): boolean => !!fields?.some((f) => f.widget === 'decision' || hasDecision(f.fields));
+
+  /** the decision points of the change, their options named by the options of the change */
+  async function loadDecisions(id: string, signal?: AbortSignal): Promise<DecisionOption[]> {
+    const bb = await graph.getBlackboard(id, '', signal);
+    const label = (o: string) => {
+      const f = (bb.options ?? []).find((x) => x.id === o);
+      return f?.option?.name || o;
+    };
+    return (bb.decisionPoints ?? []).map((d) => ({
+      id: d.id ?? '',
+      question: d.question ?? '',
+      options: (d.options ?? []).map((o) => ({ id: o, label: label(o) })),
+      decided: d.status === 'decided',
+    }));
+  }
   const formSource = $derived.by((): NodeSource => {
     const byKey = new Map<string, NodeOption>();
     for (const n of baselineNodes) {
@@ -220,6 +238,7 @@
       isA: (t, a) => t === a || cat.typesOf(t).includes(a),
       linkTypesFrom: (t) => cat.linksFrom(t).map((l) => l.ref ?? '').filter(Boolean),
       linkLabel: (t) => cat.links.find((l) => l.ref === t)?.label ?? '',
+      decisions,
     };
   });
 

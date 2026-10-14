@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/form"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -163,4 +164,52 @@ func TestFormCompileIssues(t *testing.T) {
 			t.Errorf("missing %q in %v", want, err)
 		}
 	}
+}
+
+func TestSubmitFormCreatesAndRules(t *testing.T) {
+	ctx := context.Background()
+	e, g, p := startForm(t, "")
+	m, _ := e.methodologyOf(ctx, p)
+	a, _ := m.Action("link_requirement")
+	a.Form.Fields = []form.Field{
+		{Name: "req", Widget: form.WidgetNewNode, Required: true, Constraints: map[string]any{"types": []any{"alm@Requirement"}}},
+		{Name: "tests", Widget: form.WidgetLink, Constraints: map[string]any{"from": "req", "linkTypes": []any{"alm@verifies"}}},
+		{Name: "choice", Widget: form.WidgetDecision},
+	}
+	d, err := g.OpenDecision(ctx, p.ChangeID, graph.OpenDecisionRequest{Question: "ship?", Options: []string{}, By: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err = e.SubmitForm(ctx, p.ID, map[string]any{
+		"req":    map[string]any{"key": "REQ-NEW", "type": "alm@Requirement", "props": map[string]any{"title": "A new need"}},
+		"tests":  []any{map[string]any{"to": "TST-1"}},
+		"choice": map[string]any{"point": d.ID, "option": "go", "justification": "ready"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, _ := g.Change(ctx, p.ChangeID)
+	var created *domain.ChangeImpact
+	for i, n := range c.Nodes {
+		if n.Key == "REQ-NEW" {
+			created = &c.Nodes[i]
+		}
+	}
+	if created == nil || created.Intent != domain.IntentCreated || created.Post == nil {
+		t.Fatalf("REQ-NEW is created by the change: %+v", c.Nodes)
+	}
+	v, err := g.ChangeNodeView(ctx, p.ChangeID, "", *created.Post)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.Node.Properties["title"] != "A new need" || len(v.Out) != 1 || v.Out[0].Type != "alm@verifies" {
+		t.Fatalf("created with its properties and link: %+v %+v", v.Node.Properties, v.Out)
+	}
+	bb, _ := g.BlackboardIn(ctx, p.ChangeID, "")
+	for _, pt := range domain.DecisionPointsOf(bb) {
+		if pt.ID == d.ID && pt.Ruling != nil && pt.Ruling.Option == "go" {
+			return
+		}
+	}
+	t.Fatalf("the point is ruled: %+v", domain.DecisionPointsOf(bb))
 }

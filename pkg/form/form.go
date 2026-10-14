@@ -114,7 +114,7 @@ func checkFields(fields []Field, path string, nested bool) Issues {
 			out = append(out, Issue{Path: at + ".widget", Message: fmt.Sprintf("unknown widget %q (known: %s)", fd.Widget, strings.Join(Names(), ", "))})
 			continue
 		}
-		if nested && (w.Value == ValueObjects || w.Value == ValueLinks) {
+		if nested && (w.Value == ValueObjects || w.Value == ValueLinks || w.Name == WidgetNewNode || w.Name == WidgetDecision) {
 			out = append(out, Issue{Path: at + ".widget", Message: fmt.Sprintf("a group holds no %s field", w.Name)})
 		}
 		if w.Value == ValueObjects {
@@ -140,8 +140,8 @@ func checkFields(fields []Field, path string, nested bool) Issues {
 				other, ok := fieldOf(fields, ref)
 				if !ok || ref == fd.Name {
 					out = append(out, Issue{Path: at + ".constraints." + k, Message: fmt.Sprintf("no other field %q", ref)})
-				} else if c.Widget != "" && other.Widget != c.Widget {
-					out = append(out, Issue{Path: at + ".constraints." + k, Message: fmt.Sprintf("field %q is a %s, not a %s", ref, other.Widget, c.Widget)})
+				} else if len(c.Widgets) > 0 && !contains(c.Widgets, other.Widget) {
+					out = append(out, Issue{Path: at + ".constraints." + k, Message: fmt.Sprintf("field %q is a %s, not a %s", ref, other.Widget, strings.Join(c.Widgets, " or "))})
 				}
 			}
 		}
@@ -157,7 +157,7 @@ func checkFields(fields []Field, path string, nested bool) Issues {
 				out = append(out, Issue{Path: at, Message: msg})
 			}
 		}
-		if fd.Default != nil && w.Value != ValueNone && w.Value != ValueLinks && w.Value != ValueObjects {
+		if fd.Default != nil && w.Value != ValueNone && w.Value != ValueLinks && w.Value != ValueObjects && w.Value != ValueObject {
 			if is := w.check(fd, fd.Default, Env{}, nil); len(is) > 0 {
 				out = append(out, Issue{Path: at + ".default", Message: is[0]})
 			}
@@ -224,6 +224,10 @@ func validateFields(f Form, fields []Field, values map[string]any, env Env) (map
 			out = append(out, Issue{Field: fd.Name, Message: msg})
 		}
 		clean[fd.Name] = v
+		if fd.Widget == WidgetNewNode {
+			// the links of the fields after it may start from or go to the nodes it creates
+			env = env.with(newNodesOf(fd, v))
+		}
 	}
 	return clean, out
 }
@@ -264,6 +268,8 @@ func empty(v any) bool {
 		return len(x) == 0
 	case []map[string]any:
 		return len(x) == 0
+	case map[string]any:
+		return len(x) == 0
 	}
 	return false
 }
@@ -299,6 +305,103 @@ func normalize(v any) any {
 		return out
 	}
 	return v
+}
+
+// keysOf reads the node keys of the value of a node or new node field: a key, keys, a new node {key}, new nodes.
+func keysOf(v any) []string {
+	switch x := normalize(v).(type) {
+	case string:
+		if x != "" {
+			return []string{x}
+		}
+	case map[string]any:
+		if k, _ := x["key"].(string); k != "" {
+			return []string{k}
+		}
+	case []any:
+		var out []string
+		for _, e := range x {
+			out = append(out, keysOf(e)...)
+		}
+		return out
+	}
+	return nil
+}
+
+// NewNode is a node a new node field asks the change to create.
+type NewNode struct {
+	Field string         `json:"field"`
+	Key   string         `json:"key"`
+	Type  string         `json:"type"`
+	Props map[string]any `json:"props,omitempty"`
+}
+
+// NewNodes lists the nodes the new node fields of validated values create, in the order of the fields.
+func NewNodes(f Form, values map[string]any) []NewNode {
+	var out []NewNode
+	for _, fd := range f.Fields {
+		if fd.Widget == WidgetNewNode {
+			out = append(out, newNodesOf(fd, values[fd.Name])...)
+		}
+	}
+	return out
+}
+
+func newNodesOf(fd Field, v any) []NewNode {
+	var out []NewNode
+	for _, m := range objectsOf(v) {
+		key, _ := m["key"].(string)
+		typ, _ := m["type"].(string)
+		props, _ := m["props"].(map[string]any)
+		if key != "" && typ != "" {
+			out = append(out, NewNode{Field: fd.Name, Key: key, Type: typ, Props: props})
+		}
+	}
+	return out
+}
+
+// Ruling is the ruling of a decision point a decision field asks for.
+type Ruling struct {
+	Field         string `json:"field"`
+	Point         string `json:"point"`
+	Option        string `json:"option"`
+	Justification string `json:"justification,omitempty"`
+}
+
+// Rulings lists the rulings of the decision fields of validated values, in the order of the fields.
+func Rulings(f Form, values map[string]any) []Ruling {
+	var out []Ruling
+	for _, fd := range f.Fields {
+		if fd.Widget != WidgetDecision {
+			continue
+		}
+		for _, m := range objectsOf(values[fd.Name]) {
+			p, _ := m["point"].(string)
+			o, _ := m["option"].(string)
+			j, _ := m["justification"].(string)
+			if p != "" && o != "" {
+				out = append(out, Ruling{Field: fd.Name, Point: p, Option: o, Justification: j})
+			}
+		}
+	}
+	return out
+}
+
+// objectsOf reads an object, or a list of objects.
+func objectsOf(v any) []map[string]any {
+	switch x := v.(type) {
+	case map[string]any:
+		return []map[string]any{x}
+	case []any:
+		var out []map[string]any
+		for _, e := range x {
+			if m, ok := e.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // Link is a link a link field asks for.
@@ -372,18 +475,10 @@ func linkSource(f Form, fd Field, values map[string]any) string {
 	if ref == "" {
 		return ""
 	}
-	switch x := values[ref].(type) {
-	case string:
-		return x
-	case []any:
-		if len(x) == 1 {
-			s, _ := x[0].(string)
-			return s
-		}
-	case []string:
-		if len(x) == 1 {
-			return x[0]
-		}
+	if keys := keysOf(values[ref]); len(keys) == 1 {
+		return keys[0]
+	} else if len(keys) > 1 {
+		return ""
 	}
 	if fdRef, ok := f.Field(ref); ok {
 		if s, ok := fdRef.Default.(string); ok {
