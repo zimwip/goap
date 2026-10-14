@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty } from './types/common';
-import type { AttachChangeRequest, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, Resolution, StartProcessRequest, StartingPointsResponse, TriggerState } from './types/engine';
+import type { AttachChangeRequest, ChangeStateResponse, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, Resolution, StartProcessRequest, StartingPointsResponse, TriggerState } from './types/engine';
 
 const ENGINE = 'goap.engine.v1.EngineService';
 
@@ -71,6 +71,9 @@ export const engine = {
     rpc<{ id: string }, { process?: Process }>(ENGINE, 'GetProcess', { id }, signal),
   getProcessProgress: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { progress?: ProcessProgress }>(ENGINE, 'GetProcessProgress', { id }, signal),
+  /** Where each process of the methodology of a change stands now, whatever the number of runs (ADR 0112). */
+  getChangeState: (changeId: string, signal?: AbortSignal) =>
+    rpc<{ changeId: string }, ChangeStateResponse>(ENGINE, 'GetChangeState', { changeId }, signal),
   /** The steps of the methodology of a change that are possible now towards its goal (ADR 0097). */
   listStartingPoints: (changeId: string, signal?: AbortSignal, methodology = '') =>
     rpc<{ changeId: string; methodology?: string }, StartingPointsResponse>(ENGINE, 'ListStartingPoints', { changeId, ...(methodology ? { methodology } : {}) }, signal),

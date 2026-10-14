@@ -623,6 +623,7 @@ func (s *compileState) compileAgents() {
 				s.add(fmt.Sprintf("%s.goals[%d]", path, j), "unknown goal %q", g)
 			}
 		}
+		checkPersistence(s.add, path, ag.Persistent, s.known)
 		names := map[string]bool{}
 		for j, tr := range ag.Triggers {
 			tp := fmt.Sprintf("%s.triggers[%d]", path, j)

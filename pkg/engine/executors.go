@@ -63,6 +63,8 @@ type ActionResult struct {
 	Rebase *RebaseTask
 	// Method is the method a step chose to carry it out (ADR 0035 §1), recorded as the step's specialization.
 	Method string
+	// Turn is the exchange of an llm action with the model, remembered by a persistent instance (ADR 0112).
+	Turn *Turn
 }
 
 // Executor runs one kind of action.
@@ -358,6 +360,9 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	}
 	prompt += guidanceSection(ac.Blackboard)
 	system := llmSystem + ac.Step.section() + briefSection(ac)
+	if memoryMessages(ac.Process) != nil {
+		system += memoryNote
+	}
 	var tools []mcp.ToolInfo
 	if ac.Host != nil && len(ac.Host.mcps) > 0 {
 		if tools, err = ac.Host.Tools(ctx); err != nil {
@@ -376,7 +381,8 @@ func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, syst
 	if model == "" {
 		model = "default"
 	}
-	msgs := []llm.Message{{Role: "user", Content: prompt}}
+	// a persistent instance goes on from its earlier exchanges (ADR 0112)
+	msgs := append(memoryMessages(ac.Process), llm.Message{Role: "user", Content: prompt})
 	var err error
 	calls, repairs, round := 0, 0, 0
 	failures := map[string]int{}
@@ -418,7 +424,8 @@ func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, syst
 					ac.Host.e.event(ctx, "llm.answer", map[string]any{"goap.llm.tool_rounds": round, "goap.llm.repairs": repairs,
 						"goap.tool_calls": calls, "goap.items": len(out.Items)})
 				}
-				return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items, %d tool calls", resp.Provider, resp.Model, len(out.Items), calls)}, nil
+				return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items, %d tool calls", resp.Provider, resp.Model, len(out.Items), calls),
+					Turn: &Turn{Prompt: prompt, Answer: resp.Text}}, nil
 			}
 		}
 		if round >= MaxToolRounds {

@@ -53,7 +53,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import { viewBaseline } from '../../stores/baselineTool.svelte';
   import { namespaceOf } from '../../namespace';
   import { processes } from '../../stores/live.svelte';
-  import ProcessProgress from '../../components/ProcessProgress.svelte';
+  import ChangeState from '../../components/ChangeState.svelte';
   import PossibleSteps from '../../components/PossibleSteps.svelte';
   import { confirmText, pointById, showStartingPoints, startable, startableIds, startRequest } from '../../startingPoints';
   import FlowGraph from '../../components/FlowGraph.svelte';
@@ -1148,17 +1148,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           {#if related.length}
             <dt>Executions</dt>
             <dd class="runs">
-              {#each related as p (p.id)}
-                <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p.id ?? '' } })}>{p.agent || shortId(p.id)}</button>
-                <StatusBadge status={p.status} />
-              {/each}
+              <!-- the state is shown once below (ADR 0112); every run stays reachable here -->
+              <details>
+                <summary>{related.length} run{related.length === 1 ? '' : 's'}{related.filter((p) => p.status === 'running' || p.status === 'waiting').length ? `, ${related.filter((p) => p.status === 'running' || p.status === 'waiting').length} at work` : ''}</summary>
+                {#each related as p (p.id)}
+                  <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: p.id ?? '' } })}>{p.agent || shortId(p.id)}</button>
+                  <StatusBadge status={p.status} />
+                  {#if p.runs}<span class="hint">×{(p.runs ?? 0) + 1}</span>{/if}
+                {/each}
+              </details>
             </dd>
           {/if}
         </dl>
         <ChangeDependencies change={ch} onchange={() => load(selected)} />
-        {#each related.filter((p) => !p.parentId) as p (p.id)}
-          <ProcessProgress processId={p.id ?? ''} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
-        {/each}
+        <ChangeState changeId={selected} onopen={(id) => openTab({ kind: 'run', params: { id } })} />
         {#if showSteps}
           <PossibleSteps
             points={startPoints}

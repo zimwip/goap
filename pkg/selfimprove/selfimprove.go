@@ -196,7 +196,7 @@ func observePropose(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 		notes = []string{}
 	}
 	items := []engine.ItemInput{{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
-		"methodology": r.Methodology, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}}}
+		"methodology": r.Methodology, "process": r.Process, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}}}
 	return engine.ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
 }
 

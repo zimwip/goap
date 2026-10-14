@@ -72,6 +72,9 @@ const (
 	// EngineServiceGetProcessProgressProcedure is the fully-qualified name of the EngineService's
 	// GetProcessProgress RPC.
 	EngineServiceGetProcessProgressProcedure = "/goap.engine.v1.EngineService/GetProcessProgress"
+	// EngineServiceGetChangeStateProcedure is the fully-qualified name of the EngineService's
+	// GetChangeState RPC.
+	EngineServiceGetChangeStateProcedure = "/goap.engine.v1.EngineService/GetChangeState"
 	// EngineServiceExplainConditionProcedure is the fully-qualified name of the EngineService's
 	// ExplainCondition RPC.
 	EngineServiceExplainConditionProcedure = "/goap.engine.v1.EngineService/ExplainCondition"
@@ -129,6 +132,8 @@ type EngineServiceClient interface {
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	// Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
 	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
+	// Where each process of the methodology of a change stands now, whatever the number of runs it took (ADR 0112).
+	GetChangeState(context.Context, *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -245,6 +250,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("GetProcessProgress")),
 			connect.WithClientOptions(opts...),
 		),
+		getChangeState: connect.NewClient[v1.GetChangeStateRequest, v1.GetChangeStateResponse](
+			httpClient,
+			baseURL+EngineServiceGetChangeStateProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("GetChangeState")),
+			connect.WithClientOptions(opts...),
+		),
 		explainCondition: connect.NewClient[v1.ExplainConditionRequest, v1.ExplainConditionResponse](
 			httpClient,
 			baseURL+EngineServiceExplainConditionProcedure,
@@ -317,6 +328,7 @@ type engineServiceClient struct {
 	resolveRebase      *connect.Client[v1.ResolveRebaseRequest, v1.ResolveRebaseResponse]
 	getProcess         *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
 	getProcessProgress *connect.Client[v1.GetProcessProgressRequest, v1.GetProcessProgressResponse]
+	getChangeState     *connect.Client[v1.GetChangeStateRequest, v1.GetChangeStateResponse]
 	explainCondition   *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
 	listProcesses      *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
 	checkAgents        *connect.Client[v1.CheckAgentsRequest, v1.CheckAgentsResponse]
@@ -393,6 +405,11 @@ func (c *engineServiceClient) GetProcessProgress(ctx context.Context, req *conne
 	return c.getProcessProgress.CallUnary(ctx, req)
 }
 
+// GetChangeState calls goap.engine.v1.EngineService.GetChangeState.
+func (c *engineServiceClient) GetChangeState(ctx context.Context, req *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error) {
+	return c.getChangeState.CallUnary(ctx, req)
+}
+
 // ExplainCondition calls goap.engine.v1.EngineService.ExplainCondition.
 func (c *engineServiceClient) ExplainCondition(ctx context.Context, req *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error) {
 	return c.explainCondition.CallUnary(ctx, req)
@@ -466,6 +483,8 @@ type EngineServiceHandler interface {
 	GetProcess(context.Context, *connect.Request[v1.GetProcessRequest]) (*connect.Response[v1.GetProcessResponse], error)
 	// Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
 	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
+	// Where each process of the methodology of a change stands now, whatever the number of runs it took (ADR 0112).
+	GetChangeState(context.Context, *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -578,6 +597,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("GetProcessProgress")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceGetChangeStateHandler := connect.NewUnaryHandler(
+		EngineServiceGetChangeStateProcedure,
+		svc.GetChangeState,
+		connect.WithSchema(engineServiceMethods.ByName("GetChangeState")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceExplainConditionHandler := connect.NewUnaryHandler(
 		EngineServiceExplainConditionProcedure,
 		svc.ExplainCondition,
@@ -660,6 +685,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceGetProcessHandler.ServeHTTP(w, r)
 		case EngineServiceGetProcessProgressProcedure:
 			engineServiceGetProcessProgressHandler.ServeHTTP(w, r)
+		case EngineServiceGetChangeStateProcedure:
+			engineServiceGetChangeStateHandler.ServeHTTP(w, r)
 		case EngineServiceExplainConditionProcedure:
 			engineServiceExplainConditionHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
@@ -737,6 +764,10 @@ func (UnimplementedEngineServiceHandler) GetProcess(context.Context, *connect.Re
 
 func (UnimplementedEngineServiceHandler) GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetProcessProgress is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) GetChangeState(context.Context, *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetChangeState is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error) {

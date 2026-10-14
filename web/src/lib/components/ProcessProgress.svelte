@@ -5,30 +5,39 @@
   import ProcessProgress from './ProcessProgress.svelte';
   import { engine, type ProcessProgress as Progress, type StepProgress } from '../api';
   import { processes } from '../stores/live.svelte';
+  import { needText, needsOf } from '../changeState';
 
   let {
-    processId,
+    processId = '',
+    given,
     onopen,
     nested = false,
+    bare = false,
   }: {
-    processId: string;
+    processId?: string;
+    /** a progress already computed (the current state of a change, ADR 0112): nothing is fetched */
+    given?: Progress;
     /** opens a run (a sub-agent of a step) */
     onopen?: (id: string) => void;
     nested?: boolean;
+    /** only the steps, no card, no header (the caller draws them) */
+    bare?: boolean;
   } = $props();
 
-  let progress = $state<Progress | undefined>();
+  let fetched = $state<Progress | undefined>();
+  const progress = $derived(given ?? fetched);
   // refreshed whenever the run changes (live stream)
   const live = $derived(processes.get(processId));
   const version = $derived(`${live?.status ?? ''}:${live?.updatedAt ?? ''}:${live?.steps?.length ?? 0}`);
 
   $effect(() => {
     void version;
+    if (given || !processId) return;
     const ctl = new AbortController();
     engine
       .getProcessProgress(processId, ctl.signal)
-      .then((r) => (progress = r.progress))
-      .catch(() => (progress = undefined));
+      .then((r) => (fetched = r.progress))
+      .catch(() => (fetched = undefined));
     return () => ctl.abort();
   });
 
@@ -46,7 +55,7 @@
   function waitingText(s: StepProgress): string {
     if (s.waiting === 'approval') return `an approval${s.permission ? ` (${s.permission})` : ''}`;
     if (s.waiting === 'input') return 'a person to do it';
-    if (s.waiting === 'condition') return `${(s.missing ?? []).join(', ')}, established outside this process`;
+    if (s.waiting === 'condition') return `${needsOf(s).map(needText).join('; ')}, established outside this process`;
     return s.waiting ?? '';
   }
 </script>
@@ -61,8 +70,12 @@
     </div>
     {#if s.state === 'waiting'}
       <div class="note">Waiting for {waitingText(s)}{s.roles?.responsible && s.waiting === 'input' ? ` (${s.roles.responsible})` : ''}{s.roles?.accountable && s.waiting === 'approval' ? ` — or the ${s.roles.accountable}` : ''}.</div>
-    {:else if (s.state === 'todo' || s.state === 'blocked') && s.missing?.length}
-      <div class="note">Needs: {#each s.missing as m, i (m)}{i ? ', ' : ''}<code>{m}</code>{/each}</div>
+    {:else if (s.state === 'todo' || s.state === 'blocked') && needsOf(s).length}
+      <ul class="note needs" aria-label="Missing conditions">
+        {#each needsOf(s) as n (n.condition)}
+          <li><span>{needText(n)}</span> <code title={n.want === false ? 'must be false' : 'must hold'}>{n.want === false ? '!' : ''}{n.condition}</code></li>
+        {/each}
+      </ul>
     {/if}
     {#if s.lanes?.length}
       <ul class="lanes">
@@ -88,7 +101,11 @@
   </li>
 {/snippet}
 
-{#if progress}
+{#if progress && bare}
+  <ul class="tree root">
+    {#each progress.steps ?? [] as s (s.path)}{@render step(s)}{/each}
+  </ul>
+{:else if progress}
   <section class="progress" class:card={!nested} aria-label="Process progress">
     <div class="head">
       <h3 class="grow">
@@ -154,6 +171,14 @@
     margin-left: 6.5em;
     font-size: 0.9em;
     color: var(--muted);
+  }
+  .needs {
+    list-style: '· ';
+    padding-left: 1em;
+  }
+  .needs code {
+    font-size: 0.85em;
+    opacity: 0.75;
   }
   .nested {
     margin: 4px 0 4px 18px;

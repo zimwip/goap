@@ -23,6 +23,8 @@ import (
 type Definition struct {
 	Name string
 	Expr string
+	// Description says what the condition means (the libraries' own; a methodology describes its conditions itself).
+	Description string
 	// Scope is the kind of subject the condition is about (ScopeImpact, ...); empty or ScopeChange: the change.
 	Scope string
 	// Where (CEL, `self` the subject) narrows the subjects of a scoped condition or of an aggregate; a subject outside

@@ -6,6 +6,7 @@
   import ItemMissing from './ItemMissing.svelte';
   import PickList from './PickList.svelte';
   import TriggersEditor from './TriggersEditor.svelte';
+  import PersistenceEditor from './PersistenceEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { PLANNERS, LLM_PLANNERS } from '../../methodologyForm';
   import { tools, refreshTools, mcpsOfScope } from '../../stores/tools.svelte';
@@ -171,6 +172,7 @@
           readonly={d.readonly}
         />
       </div>
+      <PersistenceEditor bind:value={item.persistent} path={p} options={d.conditionOptions} bad={d.bad} readonly={d.readonly} />
     </fieldset>
   {:else}
     <ItemMissing draft={d} what="Agent" />

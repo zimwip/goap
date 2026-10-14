@@ -390,6 +390,18 @@ export interface Agent {
   roles?: string[];
   /** LLM alias the llm / llm-scoring planners call each planning cycle (required for them) */
   model?: string;
+  /** one instance per scope, run again for every new execution there with its conversation (ADR 0112) */
+  persistent?: Persistence;
+}
+
+/** The persistence of an agent or a method (ADR 0112). */
+export interface Persistence {
+  /** "change" (default) or a path into the event that starts the run ("event.process.methodology") */
+  scope?: string;
+  /** conditions that close the instance once a run of it completes with them */
+  until?: Record<string, boolean>;
+  /** exchanges of its llm actions given back to the model (0: the default) */
+  memory?: number;
 }
 
 export interface Goal {
@@ -482,6 +494,8 @@ export interface MethodologyMethod {
   mcps?: string[];
   /** the events that make it reactive (ADR 0110) */
   on?: Subscription[];
+  /** the same instance of its agent carries the method out at every run of its step (ADR 0112) */
+  persistent?: Persistence;
 }
 
 /** A process as a graph: its steps, the edges its conditions draw, the methods of its capabilities (ADR 0036 §4). */

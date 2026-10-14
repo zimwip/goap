@@ -62,6 +62,8 @@ type StepProgress struct {
 	State string                        `json:"state"`
 	// Missing are the entry conditions that do not hold ("name" when expected true, "!name" when expected false).
 	Missing []string `json:"missing,omitempty"`
+	// Needs are the same conditions with the value they need and what each means (ADR 0112 §5).
+	Needs []Need `json:"needs,omitempty"`
 	// Runs counts the executions of the step's actions; ChildProcessIDs are the sub-agents it started.
 	Runs            int      `json:"runs,omitempty"`
 	ChildProcessIDs []string `json:"childProcessIds,omitempty"`
@@ -115,6 +117,7 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 		}
 	}
 	count(out.Steps)
+	describeNeeds(m, out.Steps)
 	return out, nil
 }
 

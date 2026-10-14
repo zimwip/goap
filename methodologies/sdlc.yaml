@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.7.1
+version: 0.7.2
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -1025,6 +1025,9 @@ methods:
     actions: [rate_description, rate_description_by_hand]
     done: {description_reviewed: true}
     roles: {responsible: business_analyst, accountable: product_owner}
+    # one rater per change, from the first description to the last (ADR 0112): every new rating is done by the same
+    # instance, which gets its earlier exchanges back and refines rather than starts over
+    persistent: {scope: change}
   # The impact analysis (ADR 0109): four passes, one layer each, so that nothing is done all at once and each layer
   # starts from what the layer above settled. Each pass names what its layer directly carries of the change,
   # propagates the impacts of the layers above down to its own along the ALM links, then qualifies the impacts the

@@ -704,6 +704,16 @@ signals of a `change.item_added` into those events (`engine.DeclaredEvents`). Th
 (`SubscriptionsEditor.svelte`, `web/src/lib/subscriptions.ts`: standard and declared events, unknown ones flagged).
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
 are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
+**Persistent agents** ([ADR 0112](adr/0112-persistent-agents-and-the-current-state-of-a-change.md)): an agent or a
+method declaring `persistent: {scope, until, memory}` has one instance per scope (the change, or a path into the
+event: `event.process.methodology`), a process (`Process.Instance`) that every new execution of the agent there runs
+again in place (`Engine.Start` → `resumeInstance`; an inbox while it works), until a run completes with its `until`
+conditions (`Closed`; leftover events start the next instance, `handOver`). Its llm actions get back its last
+exchanges with the model (`Process.Memory`). `sdlc`'s `description_rating` is persistent per change, the observer of
+`methodology-improvement` per observed methodology until `drafted`. The change tab shows the **current state** of the
+change (`Engine.ChangeState`, RPC `GetChangeState`, `ChangeState.svelte`): each process once, its steps judged
+against the change as it is with what the live runs do laid over them, and what each step that cannot start needs
+(`StepProgress.Needs`: the condition, the value, what it means).
 
 A process can now run, and even finish, without ever being attached to a Change — binding stays
 eager by default for existing methodologies; an agent can declare its own binding action to defer

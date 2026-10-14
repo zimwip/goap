@@ -257,6 +257,41 @@ export interface StepProgress {
   chosen?: string;
   /** the roles in force for the step */
   roles?: Responsibilities;
+  /** the missing conditions with the value they need and what each means (ADR 0112) */
+  needs?: Need[];
+}
+
+/** A condition a step waits for (ADR 0112): its name, the value it needs and what it means. */
+export interface Need {
+  condition?: string;
+  want?: boolean;
+  description?: string;
+}
+
+/** Where one process of the methodology of a change stands now, whatever the number of runs (ADR 0112). */
+export interface ProcessState {
+  process?: string;
+  description?: string;
+  state?: StepState | string;
+  /** it (or one of its steps) runs again on events of the change */
+  reactive?: boolean;
+  /** executions of the process on the change */
+  runs?: number;
+  /** the run at work now, else the latest */
+  current?: string;
+  status?: string;
+  error?: string;
+  steps?: StepProgress[];
+  done?: number;
+  total?: number;
+}
+
+export interface ChangeStateResponse {
+  changeId?: string;
+  methodology?: string;
+  goal?: string;
+  goalReached?: boolean;
+  processes?: ProcessState[];
 }
 
 export interface Step {
@@ -314,6 +349,11 @@ export interface Process {
   trigger?: string;
   /** process whose event fired the trigger */
   cause?: string;
+  /** the persistent agent instance it is (ADR 0112), closed once its cycle is over; runs after the first; exchanges kept */
+  instance?: string;
+  closed?: boolean;
+  runs?: number;
+  memoryTurns?: number;
   /** flow branch the process works on (relaunched step); empty: the main flow */
   flow?: string;
   /** process replaced when the flow is adopted, and the step that was restarted */

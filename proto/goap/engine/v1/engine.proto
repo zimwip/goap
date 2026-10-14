@@ -34,6 +34,8 @@ service EngineService {
   rpc GetProcess(GetProcessRequest) returns (GetProcessResponse);
   // Where a run stands in the steps of the process its agent runs (ADR 0035 §3).
   rpc GetProcessProgress(GetProcessProgressRequest) returns (GetProcessProgressResponse);
+  // Where each process of the methodology of a change stands now, whatever the number of runs it took (ADR 0112).
+  rpc GetChangeState(GetChangeStateRequest) returns (GetChangeStateResponse);
   // How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
   // of the blackboard variables it reads, against the change of the run.
   rpc ExplainCondition(ExplainConditionRequest) returns (ExplainConditionResponse);
@@ -354,6 +356,13 @@ message Process {
   int32 from_step = 29;
   // process whose event fired the trigger
   string cause = 30;
+  // the persistent agent instance the process is ("<methodology>/<agent>@<scope>", ADR 0112), closed once a run
+  // completed with its until conditions; runs counts its executions after the first, memory_turns the exchanges
+  // with the model it keeps
+  string instance = 31;
+  bool closed = 32;
+  int32 runs = 33;
+  int32 memory_turns = 34;
 }
 
 message StartProcessRequest {
@@ -569,6 +578,45 @@ message GetProcessProgressResponse {
   ProcessProgress progress = 1;
 }
 
+message GetChangeStateRequest {
+  string change_id = 1;
+}
+
+message GetChangeStateResponse {
+  string change_id = 1;
+  string methodology = 2;
+  string goal = 3;
+  bool goal_reached = 4;
+  repeated ProcessState processes = 5;
+}
+
+// Where one process of the methodology of a change stands now: its steps judged against the change, with what the
+// live runs are doing laid over them.
+message ProcessState {
+  string process = 1;
+  string description = 2;
+  // done | active | waiting | blocked | ready | todo
+  string state = 3;
+  // it (or one of its steps) runs again on events of the change
+  bool reactive = 4;
+  // executions of the process on the change
+  int32 runs = 5;
+  // the run at work now, else the latest, with its status and error
+  string current = 6;
+  string status = 7;
+  string error = 8;
+  repeated StepProgress steps = 9;
+  int32 done = 10;
+  int32 total = 11;
+}
+
+// A condition a step waits for, the value it needs and what it means.
+message Need {
+  string condition = 1;
+  bool want = 2;
+  string description = 3;
+}
+
 message ExplainConditionRequest {
   string process_id = 1;
   string condition = 2;
@@ -637,6 +685,8 @@ message StepProgress {
   Responsibilities roles = 17;
   // the parallel streams of a step with foreach, one per element or group (ADR 0050)
   repeated Lane lanes = 18;
+  // the missing conditions, with the value they need and what each means (ADR 0112)
+  repeated Need needs = 19;
 }
 
 // A stream of a step with foreach: its element, the method chosen for it, and its agent instance.

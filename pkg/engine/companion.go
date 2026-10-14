@@ -53,6 +53,12 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	case events.StepCompleted, events.ProcessCompleted, events.ChangeItemAdded:
 		e.retryBlocked(ctx, changeID, from)
 	}
+	if ev.Process != nil && ev.Process.IsInstance() && !companion && ev.Type == events.ProcessCompleted {
+		// a persistent instance takes the next execution of its inbox, or hands it to the next instance (ADR 0112)
+		if err := e.nextInInbox(ctx, ev.Process.ID); err != nil {
+			e.log().Warn("instance inbox", "process", ev.Process.ID, "err", err)
+		}
+	}
 	if companion {
 		// a companion's own events do not wake companions; when it completes, it takes the next event of its inbox
 		if ev.Type == events.ProcessCompleted {
@@ -263,6 +269,9 @@ func (e *Engine) nextInInbox(ctx context.Context, id string) error {
 	if err != nil || len(p.Inbox) == 0 {
 		return err
 	}
+	if p.Closed {
+		return e.handOver(ctx, p)
+	}
 	return e.rerun(ctx, id, nil)
 }
 
@@ -308,6 +317,7 @@ func (e *Engine) rerun(ctx context.Context, id string, event map[string]any) err
 	}
 	p.Status, p.Error, p.Plan, p.Pending = StatusRunning, "", nil, nil
 	p.Disabled = map[string]bool{} // what failed before may work on the change as it is now
+	p.Runs++
 	e.queue(ctx, p, "change moved", map[string]any{"change": string(p.ChangeID), "event": event["type"]})
 	err = e.save(ctx, p, "step")
 	unlock()

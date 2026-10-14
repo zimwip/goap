@@ -47,6 +47,7 @@ nodeTypes:
       - {name: examples, label: Examples, description: "Phrasings of the intents the agent answers", type: json, widget: textarea, section: Identity, order: 3}
       - {name: mcps, label: MCPs, description: "MCPs whose tools its llm and script actions may use", type: json, widget: textarea, section: Planning, order: 8}
       - {name: role, label: Role, description: "Role the agent acts as (the one responsible for the method it was generated for)", type: string, section: Access, order: 8}
+      - {name: persistent, label: Persistent, description: "One instance per scope, run again for every new execution there with its conversation (ADR 0112): scope (change, or a path into the event), until (conditions closing it), memory (exchanges kept)", type: json, widget: textarea, section: Planning, order: 9}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # Action is an Activity too (architecture plan "Activity concept"): the smallest one, not broken down further.
@@ -166,6 +167,7 @@ nodeTypes:
       - {name: model, label: Model, description: "Model alias of the generated agent", type: string, section: Execution, order: 12}
       - {name: mcps, label: MCPs, description: "MCPs the generated agent may use", type: json, widget: textarea, section: Execution, order: 13}
       - {name: steps, label: Steps, description: "Steps of the method", type: json, widget: textarea, section: Execution, order: 14}
+      - {name: persistent, label: Persistent, description: "The same instance of the agent applying the method carries it out at every run of its step, with its conversation (ADR 0112): scope, until, memory", type: json, widget: textarea, section: Execution, order: 15}
   - name: Process
     description: "Process of a methodology version: its steps and sub-steps"
     extends: Activity

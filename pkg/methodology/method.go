@@ -53,6 +53,9 @@ type Method struct {
 	MCPs    []string `yaml:"mcps,omitempty" json:"mcps,omitempty"`
 	// On makes the method reactive (ADR 0110): it runs again on a change of its methodology for each matching event.
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
+	// Persistent makes the agent applying the method persistent (ADR 0112): the same instance carries the method out
+	// at every run of its step on the scope, with its conversation.
+	Persistent *Persistence `yaml:"persistent,omitempty" json:"persistent,omitempty"`
 }
 
 // ActorAgent is the agent generated for the method (ADR 0050): the agent instance that applies it, of its name.
@@ -136,8 +139,9 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 		default:
 			add(path+".planner", "planner must be goap, utility, hybrid, llm or llm-scoring")
 		}
+		checkPersistence(add, path, me.Persistent, known)
 		agent := Agent{Name: me.Name, Description: me.Description, Planner: me.Planner, Model: me.Model, MCPs: me.MCPs,
-			Actions: slices.Clone(me.Actions), Goals: []string{me.Name}, process: me.Name}
+			Actions: slices.Clone(me.Actions), Goals: []string{me.Name}, Persistent: me.Persistent, process: me.Name}
 		if agent.Planner == "" {
 			agent.Planner = PlannerGOAP
 		}

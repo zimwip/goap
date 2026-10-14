@@ -107,6 +107,14 @@ type Process struct {
 	Step *StepContext `json:"step,omitempty"`
 	// Inbox holds the events a companion run received while it was at work, handled one after the other (ADR 0036 §3).
 	Inbox []map[string]any `json:"inbox,omitempty"`
+	// Instance is the key of the persistent agent instance the process is ("<methodology>/<agent>@<scope>", ADR 0112):
+	// every new execution of that agent on that scope runs it again in place. Closed: a run completed with the
+	// conditions that close it (the next execution starts a new instance). Runs counts the executions after the
+	// first; Memory keeps the last exchanges of its llm actions with the model.
+	Instance string `json:"instance,omitempty"`
+	Closed   bool   `json:"closed,omitempty"`
+	Runs     int    `json:"runs,omitempty"`
+	Memory   []Turn `json:"memory,omitempty"`
 	// Disabled lists actions excluded from planning after repeatedly failing
 	// to deliver their effects.
 	Disabled  map[string]bool `json:"disabled,omitempty"`

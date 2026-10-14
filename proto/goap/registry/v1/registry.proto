@@ -363,6 +363,19 @@ message Agent {
   repeated string mcps = 8;
   // LLM alias (required when planner is llm or llm-scoring)
   string model = 9;
+  // one instance per scope, run again for every new execution there with its conversation (ADR 0112)
+  Persistence persistent = 10;
+}
+
+// The persistence of an agent (ADR 0112): what one instance is for, what closes it, how much of its conversation it
+// keeps.
+message Persistence {
+  // "change" (default) or a path into the event that starts the run ("event.process.methodology")
+  string scope = 1;
+  // conditions that close the instance once a run of it completes with them
+  map<string, bool> until = 2;
+  // exchanges of its llm actions given back to the model (0: the default)
+  int32 memory = 3;
 }
 
 // A trigger starts the agent automatically.
@@ -515,6 +528,8 @@ message Method {
   repeated string mcps = 18;
   // the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
   repeated Subscription on = 19;
+  // the same instance of its agent carries the method out at every run of its step on the scope (ADR 0112)
+  Persistence persistent = 20;
 }
 
 // A process: the steps that reach an objective, run by an agent of its name towards a goal of its name (ADR 0034).

@@ -431,6 +431,37 @@ func (h *Handler) GetProcessProgress(ctx context.Context, r *connect.Request[eng
 		Steps: stepProgressToPB(pr.Steps), Done: int32(pr.Done), Total: int32(pr.Total)}}), nil
 }
 
+// GetChangeState serves where each process of the methodology of a change stands now (ADR 0112): read like the
+// change itself (a personal change is its subject's only).
+func (h *Handler) GetChangeState(ctx context.Context, r *connect.Request[enginev1.GetChangeStateRequest]) (*connect.Response[enginev1.GetChangeStateResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	st, err := h.Engine.ChangeState(ctx, ch.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetChangeStateResponse{ChangeId: string(st.ChangeID), Methodology: st.Methodology, Goal: st.Goal, GoalReached: st.GoalReached}
+	for _, p := range st.Processes {
+		out.Processes = append(out.Processes, &enginev1.ProcessState{Process: p.Process, Description: p.Description, State: p.State, Reactive: p.Reactive,
+			Runs: int32(p.Runs), Current: p.Current, Status: string(p.Status), Error: p.Error, Steps: stepProgressToPB(p.Steps), Done: int32(p.Done), Total: int32(p.Total)})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func needsToPB(needs []engine.Need) []*enginev1.Need {
+	var out []*enginev1.Need
+	for _, n := range needs {
+		out = append(out, &enginev1.Need{Condition: n.Condition, Want: n.Want, Description: n.Description})
+	}
+	return out
+}
+
 // ExplainCondition serves how a condition of a run's world state got its value (formula, parts, inputs).
 func (h *Handler) ExplainCondition(ctx context.Context, r *connect.Request[enginev1.ExplainConditionRequest]) (*connect.Response[enginev1.ExplainConditionResponse], error) {
 	ctx = h.principal(ctx, r.Header())
@@ -466,7 +497,7 @@ func stepProgressToPB(steps []engine.StepProgress) []*enginev1.StepProgress {
 	for _, s := range steps {
 		out = append(out, &enginev1.StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method, Target: s.Target,
 			State: s.State, Missing: s.Missing, Runs: int32(s.Runs), ChildProcessIds: s.ChildProcessIDs, Waiting: s.Waiting, Permission: s.Permission,
-			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps), Chosen: s.Chosen, Roles: respToPB(s.Roles), Lanes: lanesToPB(s.Lanes)})
+			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps), Chosen: s.Chosen, Roles: respToPB(s.Roles), Lanes: lanesToPB(s.Lanes), Needs: needsToPB(s.Needs)})
 	}
 	return out
 }
@@ -654,6 +685,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles},
 		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
 		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Cause: p.Cause, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
+		Instance: p.Instance, Closed: p.Closed, Runs: int32(p.Runs), MemoryTurns: int32(len(p.Memory)),
 	}
 	for _, t := range p.Intent.Turns {
 		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})

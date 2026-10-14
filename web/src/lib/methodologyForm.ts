@@ -6,11 +6,45 @@
 // between this model and the proto message.
 
 import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
-import type { Action, Agent, Attribute, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
   value: boolean;
+}
+
+/**
+ * The persistence of an agent or a method (ADR 0112): one instance per scope, run again for every new execution there
+ * with its conversation. Off: not persistent.
+ */
+export interface PersistenceForm {
+  on: boolean;
+  /** "change" (default) or a path into the event that starts the run (event.process.methodology) */
+  scope: string;
+  /** conditions that close the instance once a run of it completes with them */
+  until: CondRow[];
+  /** exchanges with the model given back (0: the default) */
+  memory: number;
+}
+
+export const emptyPersistence = (): PersistenceForm => ({ on: false, scope: '', until: [], memory: 0 });
+
+export function persistenceToForm(p: Persistence | undefined): PersistenceForm {
+  if (!p) return emptyPersistence();
+  return { on: true, scope: p.scope ?? '', until: Object.entries(p.until ?? {}).map(([cond, value]) => ({ cond, value: !!value })), memory: p.memory ?? 0 };
+}
+
+export function persistenceFromForm(f: PersistenceForm): Persistence | undefined {
+  if (!f.on) return undefined;
+  const o: Persistence = {};
+  const scope = f.scope.trim();
+  if (scope && scope !== 'change') o.scope = scope;
+  const until: Record<string, boolean> = {};
+  for (const r of f.until) if (r.cond.trim()) until[r.cond.trim()] = r.value;
+  if (Object.keys(until).length) o.until = until;
+  if (f.memory > 0) o.memory = Math.trunc(f.memory);
+  // an empty object still says "persistent", with the defaults: the server keeps it as such
+  return o;
 }
 
 export interface LifecycleStateForm {
@@ -226,6 +260,8 @@ export interface AgentForm extends Identified {
   /** roles allowed to run the agent (ADR 0043), comma separated; empty: any member of the project */
   roles: string;
   triggers: TriggerForm[];
+  /** one instance per scope (ADR 0112) */
+  persistent: PersistenceForm;
 }
 
 export interface GoalForm extends Identified {
@@ -358,6 +394,8 @@ export interface MethodForm extends Identified {
   mcps: string;
   /** the events that make it reactive (ADR 0110) */
   on: SubscriptionForm[];
+  /** the same instance of its agent carries it out at every run of its step (ADR 0112) */
+  persistent: PersistenceForm;
 }
 
 export interface MethodologyForm {
@@ -482,6 +520,7 @@ export const emptyAgent = (): AgentForm => ({
   mcps: '',
   roles: '',
   triggers: [],
+  persistent: emptyPersistence(),
 });
 export const emptyStep = (name = ''): StepForm => ({
   key: newUid(),
@@ -524,6 +563,7 @@ export const emptyMethod = (): MethodForm => ({
   model: '',
   mcps: '',
   on: [],
+  persistent: emptyPersistence(),
 });
 export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')], on: [] });
 export const emptyTrigger = (): TriggerForm => ({
@@ -645,6 +685,7 @@ function agentToForm(a: Agent, uid: string): AgentForm {
     mcps: (a.mcps ?? []).join(', '),
     roles: (a.roles ?? []).join(', '),
     triggers: (a.triggers ?? []).map(triggerToForm),
+    persistent: persistenceToForm(a.persistent),
   };
 }
 
@@ -923,6 +964,7 @@ export function toForm(m: Methodology): MethodologyForm {
       model: x.model ?? '',
       mcps: (x.mcps ?? []).join(', '),
       on: subsToForm(x.on),
+      persistent: persistenceToForm(x.persistent),
     })),
     roles: (m.roles ?? []).map((r) => ({ name: r.name ?? '', description: r.description ?? '', operations: (r.operations ?? []).join(', ') })),
     appliesTo: (m.appliesTo ?? []).join(', '),
@@ -1209,6 +1251,8 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'mcps', mcpList(a.mcps));
       put(o, 'roles', mcpList(a.roles));
       put(o, 'triggers', a.triggers.map(triggerFromForm));
+      const pe = persistenceFromForm(a.persistent);
+      if (pe) o.persistent = pe;
       return o;
     }),
   );
@@ -1262,6 +1306,8 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'model', x.model.trim());
       put(o, 'mcps', csv(x.mcps));
       put(o, 'on', subsFromForm(x.on));
+      const pe = persistenceFromForm(x.persistent);
+      if (pe) o.persistent = pe;
       return o;
     }),
   );

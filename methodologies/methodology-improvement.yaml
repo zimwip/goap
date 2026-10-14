@@ -1,5 +1,5 @@
 name: methodology-improvement
-version: 1.4.0
+version: 1.5.0
 namespace: methodology
 goal: improve_methodology
 description: >
@@ -17,30 +17,33 @@ roles:
   - {name: methodologist, description: Reviews the improvements proposed to a methodology}
 
 conditions:
+  # the run observed now: the process of the event, or vars.process for a run fired by hand. One observer instance
+  # handles every run of a methodology until the cycle is over (ADR 0112), so the analysis and the proposals are about
+  # the run observed now, the review and the draft about the whole cycle.
   - name: analyzed
     description: The cost of the observed run has been analyzed (journal + traces)
-    expr: artifacts.exists(a, a.type == "cost_report")
+    expr: 'artifacts.exists(a, a.type == "cost_report" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id))'
   - name: has_findings
     description: The analysis found pain points
-    expr: artifacts.exists(a, a.type == "cost_report" && size(a.data.findings) > 0)
+    expr: 'artifacts.exists(a, a.type == "cost_report" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id) && size(a.data.findings) > 0)'
   - name: proposed
-    description: Improvements have been proposed (or the analysis found none)
-    expr: artifacts.exists(a, a.type == "improvement_plan")
+    description: Improvements have been proposed for the observed run (or the analysis found none)
+    expr: 'artifacts.exists(a, a.type == "improvement_plan" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id))'
   - name: reviewed
     description: Every improvement (change impact on an element of the methodology) has received a decision
     expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
   - name: drafted
-    description: The accepted improvements are integrated into a draft of the methodology
+    description: The accepted improvements are integrated into a draft of the methodology (the end of the cycle)
     expr: artifacts.exists(a, a.type == "methodology_draft")
   - name: settled
     description: >
-      The observation is closed: a draft was produced, or there is nothing to
-      improve (no findings, or no proposal) — the goal is then reached as soon
+      The observation of the run is closed: a draft was produced, or there is nothing to
+      improve in it (no findings, or no proposal at all) — the goal is then reached as soon
       as the analysis is done.
     expr: >
       artifacts.exists(a, a.type == "methodology_draft")
-      || artifacts.exists(a, a.type == "cost_report" && size(a.data.findings) == 0)
-      || (artifacts.exists(a, a.type == "improvement_plan") && size(changeImpacts) == 0)
+      || artifacts.exists(a, a.type == "cost_report" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id) && size(a.data.findings) == 0)
+      || (artifacts.exists(a, a.type == "improvement_plan" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id)) && size(changeImpacts) == 0)
 
 actions:
   - name: analyze_run
@@ -133,6 +136,11 @@ agents:
       - why did this process cost so much
       - improve the methodology from its executions
     planner: goap
+    # one improvement cycle per observed methodology (ADR 0112): while it is not over (no draft yet), every run of
+    # that methodology is observed by the same instance, on the same change, whose proposals add up for one review
+    persistent:
+      scope: event.process.methodology
+      until: {drafted: true}
     triggers:
       - name: on_process_end
         description: Observe every completed root process (excluding self-observation)

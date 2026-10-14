@@ -17,6 +17,7 @@
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { emptyStep, walkSteps, PLANNERS, LLM_PLANNERS } from '../../methodologyForm';
   import StepEditor from './StepEditor.svelte';
+  import PersistenceEditor from './PersistenceEditor.svelte';
   import DraftFlow from '../../components/DraftFlow.svelte';
   import { draftOf, draftActions, removeItemAction, syncTabUid, openItem, openStep } from './methodologyTabs';
 
@@ -151,6 +152,8 @@
           </div>
         </div>
       </section>
+
+      <PersistenceEditor bind:value={item.persistent} path={p} options={d.conditionOptions} bad={d.bad} readonly={d.readonly} what="agent applying the method" />
 
       <section class="card" data-path="{p}.steps">
         <h3>Steps <span class="hint">{walkSteps(item.steps).length}</span></h3>

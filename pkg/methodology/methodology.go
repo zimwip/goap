@@ -122,6 +122,9 @@ type Agent struct {
 	// Role is the role the agent acts as (ADR 0050): the one responsible for the method an agent generated for it
 	// applies. It gives the agent its overall objective; the method says how.
 	Role string `yaml:"role,omitempty" json:"role,omitempty"`
+	// Persistent makes the agent persistent (ADR 0112): one instance per scope, run again in place for every new
+	// execution there, keeping its conversation.
+	Persistent *Persistence `yaml:"persistent,omitempty" json:"persistent,omitempty"`
 	// process is set on the agent generated to run a process (ADR 0034).
 	process string
 }

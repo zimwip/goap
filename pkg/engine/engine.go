@@ -173,7 +173,28 @@ func (e *Engine) log() *slog.Logger {
 // either clarifying (a question is pending) or running (call Run). Without
 // methodology, identification ranks the agents of every published methodology.
 func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) {
-	p := &Process{ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
+	key, _, err := e.instanceKey(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	if key != "" {
+		// a persistent agent (ADR 0112): the execution goes to its instance on the scope, if one is open
+		instances.Lock()
+		defer instances.Unlock()
+		p, handled, fresh, err := e.resumeInstance(ctx, key, req)
+		if err != nil || handled {
+			return p, err
+		}
+		if fresh {
+			key = ""
+		}
+	}
+	return e.start(ctx, req, key)
+}
+
+// start creates a process (the instance of key when it is not empty) and resolves its intent.
+func (e *Engine) start(ctx context.Context, req StartRequest, instance string) (*Process, error) {
+	p := &Process{Instance: instance, ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
 		Project: req.ProjectID, Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Cause: req.Cause, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
 	if req.Intent != "" {
@@ -879,6 +900,9 @@ func (e *Engine) settleAction(p *Process, m *methodology.Compiled, action method
 			p.Children = map[string]string{}
 		}
 		maps.Copy(p.Children, host.children)
+	}
+	if err == nil {
+		e.remember(p, m, action.Name, res.Turn)
 	}
 	if len(res.VarsSet) > 0 {
 		nv := maps.Clone(p.Vars)

@@ -92,8 +92,9 @@ func (e *Engine) observeGoal(ctx context.Context, p *Process, m *methodology.Com
 		return bb, goal, true, nil
 	}
 	p.Status = StatusCompleted
+	closeInstance(p, m)
 	e.journal(ctx, p, journal.Record{Kind: journal.KindTick, Step: len(p.Steps), Before: maps.Clone(p.World),
-		Data: map[string]any{"goalSatisfied": true}})
+		Data: map[string]any{"goalSatisfied": true, "closed": p.Closed}})
 	return bb, goal, true, nil
 }
 
