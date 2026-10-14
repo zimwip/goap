@@ -161,6 +161,12 @@
           {/if}
         </div>
       {/if}
+      {#if step.method === 'action' || step.method === 'actions'}
+        <div class="field">
+          <label for="{step.key}-where">Subjects <span class="opt">(CEL over <code>self</code>: narrows the subjects a scoped action runs for here; empty: all its pending ones)</span></label>
+          <input id="{step.key}-where" type="text" class="mono" bind:value={step.where} class:bad={d.bad(`${path}.where`)} data-path="{path}.where" placeholder="self.conditions.in_requirements" />
+        </div>
+      {/if}
 
       <details class="more" open={!!step.guidance || !!step.checklist.trim() || !!step.roles.responsible || !!step.roles.accountable}>
         <summary>Roles, guidance, checklist, deliverables</summary>

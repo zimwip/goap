@@ -173,6 +173,16 @@ export interface ConditionForm extends Identified {
   name: string;
   description: string;
   expr: string;
+  /** kind of subject of a scoped condition (ADR 0109): '' (the change), impact, item, risk, action, step */
+  scope: string;
+  /** the subjects of a scoped condition or an aggregate (CEL, `self` the subject) */
+  where: string;
+  /** aggregate: the scoped condition every / some / no subject satisfies */
+  all: string;
+  any: string;
+  none: string;
+  /** value of an `all` aggregate over no subject */
+  empty: boolean;
 }
 
 export interface ExpectsForm {
@@ -199,7 +209,7 @@ export interface ActionForm extends Identified {
   tool: string;
   builtin: string;
   instructions: string;
-  /** params (builtin) as JSON */
+  /** params (a builtin's, or those a specialization passes) as JSON */
   params: string;
   hasExpects: boolean;
   expects: ExpectsForm;
@@ -222,6 +232,11 @@ export interface ActionForm extends Identified {
   on: SubscriptionForm[];
   /** the events of the methodology it raises when it reaches its effects, comma separated (ADR 0110) */
   emits: string;
+  /** scoped action (ADR 0109): runs once per pending subject of this scope (impact, item...), within `where` */
+  scope: string;
+  where: string;
+  /** subjects a scoped llm or tool action runs for at once (0: the engine's bound) */
+  parallel: number;
 }
 
 export interface TriggerForm {
@@ -319,6 +334,8 @@ export interface StepForm {
   steps: StepForm[];
   /** the events that make it reactive (ADR 0110) */
   on: SubscriptionForm[];
+  /** CEL over `self`: the subjects of the scoped action the step runs it for (ADR 0109) */
+  where: string;
 }
 
 export interface ReferenceForm {
@@ -471,7 +488,7 @@ export function newUid(): string {
   return `new-${uidSeq}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-export const emptyCondition = (): ConditionForm => ({ uid: newUid(), name: '', description: '', expr: '' });
+export const emptyCondition = (): ConditionForm => ({ uid: newUid(), name: '', description: '', expr: '', scope: '', where: '', all: '', any: '', none: '', empty: false });
 export const emptyExpects = (): ExpectsForm => ({
   forEach: 'impacts',
   where: '',
@@ -508,6 +525,9 @@ export const emptyAction = (): ActionForm => ({
   mcps: '',
   on: [],
   emits: '',
+  scope: '',
+  where: '',
+  parallel: 0,
 });
 export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
 export const emptyAgent = (): AgentForm => ({
@@ -536,6 +556,7 @@ export const emptyStep = (name = ''): StepForm => ({
   capability: '',
   foreach: '',
   groupBy: '',
+  where: '',
   pre: [],
   done: [],
   references: [],
@@ -672,6 +693,9 @@ function actionToForm(a: Action, uid: string): ActionForm {
     mcps: (a.mcps ?? []).join(', '),
     on: subsToForm(a.on),
     emits: (a.emits ?? []).join(', '),
+    scope: a.scope ?? '',
+    where: a.where ?? '',
+    parallel: a.parallel ?? 0,
   };
 }
 
@@ -930,6 +954,12 @@ export function toForm(m: Methodology): MethodologyForm {
       name: c.name ?? '',
       description: c.description ?? '',
       expr: c.expr ?? '',
+      scope: c.scope ?? '',
+      where: c.where ?? '',
+      all: c.all ?? '',
+      any: c.any ?? '',
+      none: c.none ?? '',
+      empty: !!c.empty,
     })),
     actions: (m.actions ?? []).map((a, i) => actionToForm(a, au[i])),
     goals: (m.goals ?? []).map((g, i) => ({
@@ -1006,6 +1036,7 @@ function stepToForm(s: ProcessStep): StepForm {
     capability: s.method ?? '',
     foreach: s.foreach ?? '',
     groupBy: s.groupBy ?? '',
+    where: s.where ?? '',
     pre: rows(s.pre),
     done: rows(s.done),
     references: refsToForm(s.references),
@@ -1068,6 +1099,7 @@ export function stepFromForm(s: StepForm): ProcessStep {
   put(o, 'deliverables', csv(s.deliverables));
   put(o, 'roles', respFromForm(s.roles));
   put(o, 'on', subsFromForm(s.on));
+  if (s.method === 'action' || s.method === 'actions') put(o, 'where', s.where.trim());
   switch (s.method) {
     case 'manual':
       put(o, 'instructions', s.instructions.trim());
@@ -1140,6 +1172,12 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'name', c.name.trim());
       put(o, 'description', c.description.trim());
       put(o, 'expr', c.expr.trim());
+      put(o, 'scope', c.scope.trim());
+      put(o, 'where', c.where.trim());
+      put(o, 'all', c.all.trim());
+      put(o, 'any', c.any.trim());
+      put(o, 'none', c.none.trim());
+      if (c.empty) o.empty = true;
       return o;
     }),
   );
@@ -1181,6 +1219,8 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
         put(o, 'instructions', a.instructions.trim());
       } else if (a.kind === 'builtin') {
         put(o, 'builtin', a.builtin.trim());
+      }
+      {
         if (a.params.trim()) {
           try {
             const p: unknown = JSON.parse(a.params);
@@ -1211,6 +1251,11 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       }
       put(o, 'on', subsFromForm(a.on));
       put(o, 'emits', csv(a.emits));
+      put(o, 'scope', a.scope.trim());
+      if (a.scope.trim()) {
+        put(o, 'where', a.where.trim());
+        if (a.parallel > 0) o.parallel = a.parallel;
+      }
       return o;
     }),
   );

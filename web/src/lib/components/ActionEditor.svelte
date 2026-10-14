@@ -114,6 +114,25 @@
         Incremental
       </label>
     </div>
+    <div class="field">
+      <label for="{id}-scope" title="A scoped action runs once per pending subject of its scope (self), its effects lifted to all its subjects (ADR 0109)">Scope</label>
+      <select id="{id}-scope" bind:value={action.scope} class:bad={bad(`${p}.scope`)} data-path="{p}.scope">
+        <option value="">the change</option>
+        {#each ['impact', 'item', 'risk', 'action', 'step'] as sc (sc)}<option value={sc}>each {sc}</option>{/each}
+      </select>
+    </div>
+    {#if action.scope}
+      <div class="field">
+        <label for="{id}-where">Subjects <span class="opt">(CEL over self)</span></label>
+        <input id="{id}-where" type="text" class="mono" bind:value={action.where} class:bad={bad(`${p}.where`)} data-path="{p}.where" placeholder="self.conditions.suspected" />
+      </div>
+      {#if action.kind === 'llm' || action.kind === 'tool'}
+        <div class="field">
+          <label for="{id}-parallel" title="Subjects run at once; 0: the engine's bound">At once</label>
+          <input id="{id}-parallel" type="number" min="0" step="1" bind:value={action.parallel} class:bad={bad(`${p}.parallel`)} data-path="{p}.parallel" />
+        </div>
+      {/if}
+    {/if}
   {/if}
   <div class="field">
     <label for="{id}-perm">Permission <span class="opt">(optional)</span></label>
@@ -219,6 +238,12 @@
         path="{p}.when"
       />
     </div>
+    {#if action.kind !== 'builtin'}
+      <div class="field">
+        <label for="{id}-sparams">Parameters <span class="opt">(JSON object the specialization passes, e.g. its technology)</span></label>
+        <textarea id="{id}-sparams" class="mono" rows="2" bind:value={action.params} class:bad={bad(`${p}.params`)} data-path="{p}.params" placeholder={'{ "technology": "java" }'}></textarea>
+      </div>
+    {/if}
     <p class="hint">
       A specialization is not planned: it inherits the preconditions, effects, expected results and cost of
       action <code>{action.specializes}</code> and replaces its implementation at run time when its guard is true. If
