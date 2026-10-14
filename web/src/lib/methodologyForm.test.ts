@@ -27,4 +27,13 @@ describe('the methodology form', () => {
     expect(back.actions?.[1].params).toEqual({ technology: 'java' });
     expect(back.processes?.[0].steps?.[0].where).toBe('self.conditions.suspected');
   });
+
+  it('keeps the assessment views and refuses an invalid JSON (ADR 0116)', () => {
+    const assessments = [{ subject: 'description', states: [{ conditions: { description_accepted: true }, tone: 'ok', label: 'accepted' }, { tone: 'warn', open: true }] }];
+    const m: Methodology = { name: 'm', version: '1.0.0', assessments };
+    expect(fromForm(toForm(m)).methodology.assessments).toEqual(assessments);
+    const f = toForm(m);
+    f.assessments = '{"subject": "x"}';
+    expect(fromForm(f).issues.map((i) => i.path)).toContain('assessments');
+  });
 });

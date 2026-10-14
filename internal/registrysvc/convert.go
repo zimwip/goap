@@ -13,7 +13,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Events: eventsToPB(m.Events), Domains: m.Domains, Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Events: eventsToPB(m.Events), Assessments: assessmentsToPB(m.Assessments), Domains: m.Domains, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
@@ -95,6 +95,30 @@ func eventsFromPB(evs []*registryv1.EventDef) []methodology.Event {
 	var out []methodology.Event
 	for _, e := range evs {
 		out = append(out, methodology.Event{Name: e.Name, Description: e.Description})
+	}
+	return out
+}
+
+func assessmentsToPB(vs []methodology.AssessmentView) []*registryv1.AssessmentView {
+	var out []*registryv1.AssessmentView
+	for _, v := range vs {
+		pv := &registryv1.AssessmentView{Subject: v.Subject}
+		for _, s := range v.States {
+			pv.States = append(pv.States, &registryv1.AssessmentState{When: s.When, Conditions: s.Conditions, Tone: s.Tone, Label: s.Label, Open: s.Open})
+		}
+		out = append(out, pv)
+	}
+	return out
+}
+
+func assessmentsFromPB(vs []*registryv1.AssessmentView) []methodology.AssessmentView {
+	var out []methodology.AssessmentView
+	for _, v := range vs {
+		mv := methodology.AssessmentView{Subject: v.Subject}
+		for _, s := range v.States {
+			mv.States = append(mv.States, methodology.AssessmentState{When: s.When, Conditions: nilIfEmpty(s.Conditions), Tone: s.Tone, Label: s.Label, Open: s.Open})
+		}
+		out = append(out, mv)
 	}
 	return out
 }
@@ -199,7 +223,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		return methodology.Methodology{}
 	}
 	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal,
-		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events), Domains: nilIfEmpty(p.Domains)}
+		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events), Assessments: assessmentsFromPB(p.Assessments), Domains: nilIfEmpty(p.Domains)}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
 			Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty})

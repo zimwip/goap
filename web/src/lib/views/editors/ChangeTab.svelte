@@ -21,9 +21,10 @@
     type Resolution,
     type UiTool,
     type StartingPoint,
+    type AssessmentState,
     type StartingPointsResponse,
   } from '../../api';
-  import { tick, untrack } from 'svelte';
+  import { setContext, tick, untrack } from 'svelte';
   import { applicable, followChangeProject, loadApplicable } from '../../stores/project.svelte';
   import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
@@ -66,7 +67,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ChangeRisks from '../../components/ChangeRisks.svelte';
   import AssessmentBubble from '../../components/AssessmentBubble.svelte';
-  import { INTENT, TITLE, itemSubjects } from '../../descriptionReview';
+  import { ASSESSMENT_STATES, INTENT, TITLE, itemSubjects, kindOf, type AssessmentStatesContext } from '../../descriptionReview';
   import ChangeCriticality from '../../components/ChangeCriticality.svelte';
   import ChangeVerification from '../../components/ChangeVerification.svelte';
   import ChangeDerogations from '../../components/ChangeDerogations.svelte';
@@ -364,6 +365,41 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     return () => {
       pointsSoon.cancel();
       readingPoints?.abort();
+    };
+  });
+
+  // how the assessment of each subject reads (ADR 0116): the states the methodology declares, evaluated by the engine,
+  // given to every bubble of the tab; read again when the platform stream says the change moved, at most once per second
+  let assessmentStates = $state<AssessmentState[] | undefined>();
+  setContext<AssessmentStatesContext>(ASSESSMENT_STATES, () => assessmentStates);
+  const assessed = $derived(!!change?.items?.some((i) => kindOf(i) === 'assessment'));
+  let readingStates: AbortController | undefined;
+  const statesSoon = throttled(() => {
+    const id = selected;
+    if (!id) return;
+    readingStates?.abort();
+    const ctrl = (readingStates = new AbortController());
+    engine
+      .getAssessmentStates(id, ctrl.signal)
+      .then((r) => {
+        if (!ctrl.signal.aborted) assessmentStates = r.states ?? [];
+      })
+      .catch(() => {
+        // the bubbles judge by themselves meanwhile
+        if (!ctrl.signal.aborted) assessmentStates = undefined;
+      });
+  }, 1000);
+  $effect(() => {
+    const id = selected;
+    if (!id || !assessed) {
+      assessmentStates = undefined;
+      return;
+    }
+    void stamp(keyOf.change(id));
+    untrack(statesSoon.call);
+    return () => {
+      statesSoon.cancel();
+      readingStates?.abort();
     };
   });
 

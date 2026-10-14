@@ -85,6 +85,9 @@ type Methodology struct {
 	// Guardian is what the methodology requires of the changes it integrates, as an outer guardian of their chain
 	// (ADR 0106).
 	Guardian *Guardian `yaml:"guardian,omitempty" json:"guardian,omitempty"`
+	// Assessments say how the assessments of the subjects of its changes read (ADR 0116): per subject, states bound to
+	// conditions with a tone, a label and whether the bubble opens; the server evaluates them, the web renders them.
+	Assessments []AssessmentView `yaml:"assessments,omitempty" json:"assessments,omitempty"`
 	// Types resolves the qualified type references of the methodology (the type catalogue, set by Resolve). Nil: the
 	// references are only checked for their form.
 	Types def.TypeSet `yaml:"-" json:"-"`
@@ -402,6 +405,8 @@ type Compiled struct {
 	methodGuards *condition.Set
 	// reactions are the activities declaring on (ADR 0110)
 	reactions []Reaction
+	// assessments are the compiled assessment views (ADR 0116); nil: the defaults
+	assessments *condition.AssessmentViews
 }
 
 // Action returns an action by name.

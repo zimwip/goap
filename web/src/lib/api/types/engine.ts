@@ -309,6 +309,21 @@ export interface ProcessState {
   total?: number;
 }
 
+/** How the assessment of one subject of a change reads now (ADR 0116): evaluated by the server. */
+export interface AssessmentState {
+  subject?: string;
+  score?: number;
+  verdict?: string;
+  current?: boolean;
+  answered?: boolean;
+  /** ok | warn | danger | info | neutral */
+  tone?: string;
+  label?: string;
+  /** the bubble opens by itself */
+  open?: boolean;
+  errors?: string[];
+}
+
 export interface ChangeStateResponse {
   changeId?: string;
   methodology?: string;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accepted, applicable, assessmentOf, bubbleKey, commentItem, fingerprint, impactSubject, itemSubjects, pending, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
+import { accepted, applicable, assessmentOf, bubbleKey, bubbleView, commentItem, fingerprint, impactSubject, itemSubjects, pending, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
 import type { ChangeItem, Process } from './api';
 
 const change = { id: 'C1', methodology: 'sdlc', title: 'Pay', intent: 'Pay in 3 installments' };
@@ -113,5 +113,22 @@ describe('descriptionReview', () => {
     expect(applicable('Pay in 3 installments ', 'Pay in 3 installments')).toBe('');
     expect(applicable('   ', 'Pay')).toBe('');
     expect(applicable('Pay')).toBe('Pay');
+  });
+});
+
+describe('bubbleView', () => {
+  const rating = { key: 'description', score: 2, verdict: 'vague', findings: [], suggestion: '', reply: '', rated: '', current: true, answered: true, versions: 1, by: '', item: 'a1' };
+  it('takes the state the methodology declares, evaluated by the server', () => {
+    const v = bubbleView(rating, [{ subject: 'description', score: 2, current: true, tone: 'danger', label: 'to be rewritten', open: true }]);
+    expect(v).toEqual({ tone: 'danger', label: 'to be rewritten', open: true, declared: true });
+  });
+  it('judges by itself while the states load or lag behind the rating', () => {
+    expect(bubbleView(rating, undefined)).toEqual({ tone: 'warn', label: 'to be improved', open: true, declared: false });
+    expect(bubbleView(rating, [{ subject: 'description', score: 4, current: true, tone: 'ok' }]).declared).toBe(false);
+    expect(bubbleView({ ...rating, score: 4 }, [])).toMatchObject({ tone: 'ok', label: 'accepted', open: false });
+    expect(bubbleView(rating, undefined, true)).toMatchObject({ tone: 'ok', label: 'processed', open: false });
+  });
+  it('shows an unknown tone as neutral', () => {
+    expect(bubbleView(rating, [{ subject: 'description', score: 2, current: true, tone: 'purple' }]).tone).toBe('neutral');
   });
 });

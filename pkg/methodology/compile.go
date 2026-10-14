@@ -100,6 +100,8 @@ type compileState struct {
 	meths      compiledMethods
 	procs      compiledProcesses
 	reactions  []Reaction
+	// assessments are the compiled assessment views (ADR 0116)
+	assessments *condition.AssessmentViews
 }
 
 func (s *compileState) add(path, format string, args ...any) {
@@ -123,6 +125,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.checkStepScopes()
 	s.compileReactions()
 	s.checkMainGoal()
+	s.compileAssessments()
 	return s.finish(lenient)
 }
 
@@ -821,5 +824,5 @@ func (s *compileState) finish(lenient bool) (*Compiled, def.Issues) {
 		return nil, def.Issues{{Message: err.Error()}}
 	}
 	return &Compiled{Methodology: m, Conditions: set, actions: s.actions, utilities: uset, agents: s.agents, whens: wset, processes: s.procs,
-		methods: s.meths, methodGuards: mset, reactions: s.reactions}, s.issues
+		methods: s.meths, methodGuards: mset, reactions: s.reactions, assessments: s.assessments}, s.issues
 }

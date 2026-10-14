@@ -705,6 +705,14 @@ compact badge, coloured while pending, whose bubble opens on a click (placed on 
 table); assessments and comments are no longer in the raw items list. A rating is about any subject:
 `description`, `title`, `intent`, `impact:<node key>`, `item:<record key or id>` (`assess.Text` over the blackboard),
 `rated` holding the text or its fingerprint (`assess.Fingerprint`, FNV-1a 32 bits, printed `fp=` by the brief).
+How a bubble reads is declared by the methodology ([ADR 0116](adr/0116-declarative-assessment-states.md)):
+`assessments: [{subject, states: [{when, conditions, tone, label, open}]}]` (`methodology.AssessmentView`, a subject
+key or a glob, the first state that holds wins; `conditions` read a scoped condition on the subject, `when` is CEL
+with `assessment`, `subject {key, kind, id, entry, conditions}` and `conditions`, `condition.AssessmentEnv`), checked
+at compile; `Engine.AssessmentStates` (RPC `GetAssessmentStates`) evaluates them against the change, the defaults
+(`condition.DefaultAssessmentViews`) settling the subjects no declared state does; the change tab gives the states to
+its bubbles (Svelte context `ASSESSMENT_STATES`), which render the tone (ok, warn, danger, info, neutral), the label
+and `open`, and judge by themselves only while the states load (`bubbleView`).
 A methodology declares its own events (`events: [{name, description}]`, names out of the standard families) and
 follows them like the standard ones; an unknown event is refused at compile, one followed from a related methodology
 that does not declare it is a composition warning. A signal item of that name raises it: an action's `emits` (added

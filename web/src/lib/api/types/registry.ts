@@ -335,6 +335,24 @@ export interface Subscription {
 }
 
 /** An event a methodology declares, in addition to the standard ones (ADR 0110): raised by a signal item of its name. */
+/** How the assessments of the subjects a pattern matches read (ADR 0116). */
+export interface AssessmentView {
+  /** a subject key (description, title, intent, impact:<key>, item:<key>) or a glob (impact:*, *) */
+  subject?: string;
+  states?: AssessmentViewState[];
+}
+
+/** A state of an assessment: holds when each condition has its value and the CEL when is true. */
+export interface AssessmentViewState {
+  when?: string;
+  conditions?: Record<string, boolean>;
+  /** ok | warn | danger | info | neutral */
+  tone?: string;
+  label?: string;
+  /** the bubble opens by itself while it holds */
+  open?: boolean;
+}
+
 export interface MethodologyEvent {
   name?: string;
   description?: string;
@@ -682,6 +700,8 @@ export interface Methodology {
   integrates?: MethodologyIntegration[];
   /** what it requires of the changes it integrates, as an outer guardian of their chain (ADR 0106) */
   guardian?: MethodologyGuardian;
+  /** how the assessments of the subjects of its changes read (ADR 0116): the first state that holds wins */
+  assessments?: AssessmentView[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;

@@ -336,6 +336,23 @@
               <IssueHints draft={d} path="events[{i}]" />
             {/each}
             {#if !d.readonly}<button type="button" class="small" onclick={() => f.events.push({ name: '', description: '' })}>+ Declared event</button>{/if}
+            <label class="label" for="m-assessments"
+              >Assessments <span class="opt"
+                >(how the assessments of its changes read, as JSON: per subject, states bound to conditions or a CEL when, with a tone (ok, warn, danger, info,
+                neutral), a label and open; the first that holds wins, the defaults settle the rest)</span
+              ></label
+            >
+            <textarea
+              id="m-assessments"
+              class="mono"
+              rows="6"
+              bind:value={f.assessments}
+              class:bad={d.bad('assessments')}
+              data-path="assessments"
+              readonly={d.readonly}
+              placeholder={'[{"subject": "description", "states": [{"conditions": {"description_accepted": true}, "tone": "ok", "label": "accepted"}]}]'}
+            ></textarea>
+            <IssueHints draft={d} path="assessments" />
             <SubscriptionsEditor
               bind:subs={f.on}
               draft={d}

@@ -463,6 +463,29 @@ func (h *Handler) GetChangeState(ctx context.Context, r *connect.Request[enginev
 	return connect.NewResponse(out), nil
 }
 
+// GetAssessmentStates serves how the assessment of each subject of a change reads now (ADR 0116): read like the
+// change itself (a personal change is its subject's only).
+func (h *Handler) GetAssessmentStates(ctx context.Context, r *connect.Request[enginev1.GetAssessmentStatesRequest]) (*connect.Response[enginev1.GetAssessmentStatesResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	states, err := h.Engine.AssessmentStates(ctx, ch.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetAssessmentStatesResponse{}
+	for _, s := range states {
+		out.States = append(out.States, &enginev1.AssessmentState{Subject: s.Subject, Score: int32(s.Score), Verdict: s.Verdict, Current: s.Current,
+			Answered: s.Answered, Tone: s.Tone, Label: s.Label, Open: s.Open, Errors: s.Errors})
+	}
+	return connect.NewResponse(out), nil
+}
+
 func needsToPB(needs []engine.Need) []*enginev1.Need {
 	var out []*enginev1.Need
 	for _, n := range needs {

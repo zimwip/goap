@@ -36,6 +36,9 @@ service EngineService {
   rpc GetProcessProgress(GetProcessProgressRequest) returns (GetProcessProgressResponse);
   // Where each process of the methodology of a change stands now, whatever the number of runs it took (ADR 0112).
   rpc GetChangeState(GetChangeStateRequest) returns (GetChangeStateResponse);
+  // How the assessment of each subject of a change reads now: the states its methodology declares, else the
+  // defaults, evaluated against the change (ADR 0116).
+  rpc GetAssessmentStates(GetAssessmentStatesRequest) returns (GetAssessmentStatesResponse);
   // How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
   // of the blackboard variables it reads, against the change of the run.
   rpc ExplainCondition(ExplainConditionRequest) returns (ExplainConditionResponse);
@@ -588,6 +591,30 @@ message GetProcessProgressResponse {
 
 message GetChangeStateRequest {
   string change_id = 1;
+}
+
+message GetAssessmentStatesRequest {
+  string change_id = 1;
+}
+
+message GetAssessmentStatesResponse {
+  repeated AssessmentState states = 1;
+}
+
+// AssessmentState is how the assessment of one subject of a change reads (ADR 0116).
+message AssessmentState {
+  string subject = 1;
+  int32 score = 2;
+  string verdict = 3;
+  bool current = 4;
+  bool answered = 5;
+  // ok | warn | danger | info | neutral
+  string tone = 6;
+  string label = 7;
+  // the bubble opens by itself
+  bool open = 8;
+  // the states that could not be evaluated
+  repeated string errors = 9;
 }
 
 message GetChangeStateResponse {

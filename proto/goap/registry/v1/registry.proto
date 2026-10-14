@@ -459,6 +459,26 @@ message Methodology {
   repeated EventDef events = 29;
   // the version of each domain the methodology is written against, by domain name (ADR 0113): pinned at publication
   map<string, string> domains = 30;
+  // how the assessments of the subjects of its changes read: per subject, states bound to conditions (ADR 0116)
+  repeated AssessmentView assessments = 31;
+}
+
+// AssessmentView is how the assessments of the subjects a pattern matches read (ADR 0116): the first state that holds wins.
+message AssessmentView {
+  // a subject key (description, title, intent, impact:<key>, item:<key>) or a glob (impact:*, *)
+  string subject = 1;
+  repeated AssessmentState states = 2;
+}
+
+// AssessmentState holds when each condition has its value and the CEL expression when is true.
+message AssessmentState {
+  string when = 1;
+  map<string, bool> conditions = 2;
+  // ok | warn | danger | info | neutral
+  string tone = 3;
+  string label = 4;
+  // the bubble opens by itself while the state holds
+  bool open = 5;
 }
 
 // EventDef is an event a methodology declares (ADR 0110), raised by a signal item of its name.

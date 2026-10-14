@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.7.5
+version: 0.7.6
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -22,6 +22,23 @@ imports: [risks, dependencies, assessments]
 # the events of the methodology (ADR 0110), raised by the actions that emit them
 events:
   - {name: impact.analysed, description: "A person validated the impact analysis of the change (its four passes done)"}
+
+# how the assessments of a change read (ADR 0116): the first state that holds wins, the defaults settle the rest
+assessments:
+  # the description: accepted is the gate of the analysis (description_accepted), not a score the web judges
+  - subject: description
+    states:
+      - {when: "!assessment.current", tone: warn, label: "changed since its rating", open: true}
+      - {when: "!assessment.answered", tone: info, label: "your remark awaits an answer", open: true}
+      - {conditions: {description_accepted: true}, tone: ok, label: accepted}
+      - {when: "assessment.score <= 1", tone: danger, label: "to be rewritten", open: true}
+      - {tone: warn, label: "to be improved", open: true}
+  # an impact qualified by the analysis: refuted ones are on their way out, the others wait for their review
+  - subject: "impact:*"
+    states:
+      - {when: "subject.entry != null && subject.entry.review in ['accepted', 'rejected']", tone: ok, label: processed}
+      - {when: "assessment.verdict == 'refuted'", tone: neutral, label: "refuted, to be withdrawn"}
+      - {tone: warn, label: "to be reviewed", open: true}
 
 conditions:
   # A change impact is a node the change acts on (ADR 0024): declared as impacted (modified) or created,

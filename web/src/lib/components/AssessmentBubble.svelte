@@ -8,9 +8,22 @@
   // Once processed, or hidden by the person until the rating or its thread moves, it folds into the badge. A compact
   // bubble (rows of a table) never opens by itself: its badge is coloured while pending, the bubble opens on a click.
   // The bubble is positioned on the viewport, so a scrolling table does not clip it.
-  import type { Snippet } from 'svelte';
+  import { getContext, type Snippet } from 'svelte';
   import { graph, errorMessage, type Change } from '../api';
-  import { DESCRIPTION, MAX_SCORE, applicable, assessmentOf, bubbleKey, commentItem, pending, raterRun, reviewState, threadOf, type Subject } from '../descriptionReview';
+  import {
+    ASSESSMENT_STATES,
+    DESCRIPTION,
+    MAX_SCORE,
+    applicable,
+    assessmentOf,
+    bubbleKey,
+    bubbleView,
+    commentItem,
+    raterRun,
+    threadOf,
+    type AssessmentStatesContext,
+    type Subject,
+  } from '../descriptionReview';
   import { processes } from '../stores/live.svelte';
   import { openTab } from '../shell/tabs.svelte';
 
@@ -46,15 +59,16 @@
 
   const rating = $derived(assessmentOf(change, subject));
   const thread = $derived(threadOf(change.items, subject));
-  const st = $derived(reviewState(rating));
-  const due = $derived(processed !== undefined ? !processed && !!rating : st !== 'accepted' && st !== 'none');
+  // the states the change view loaded from the server: what the methodology declares (ADR 0116)
+  const states = getContext<AssessmentStatesContext | undefined>(ASSESSMENT_STATES);
   const run = $derived(rating ? raterRun(processes.values(), change, rating.item) : undefined);
   const working = $derived(run?.status === 'running');
+  const view = $derived(bubbleView(rating, states?.(), processed, working));
   const key = $derived(bubbleKey(rating, thread));
   // open: asked by the person; hidden: the key of what the person closed while it was pending
   let open = $state(false);
   let hidden = $state('');
-  const shown = $derived(open || (!compact && pending(st, working, processed) && hidden !== key));
+  const shown = $derived(open || (!compact && view.open && hidden !== key));
 
   // the bubble floats under the badge, on the viewport (a table or a pane scrolling under it does not clip it)
   let badge = $state<HTMLElement>();
@@ -104,14 +118,7 @@
   let busy = $state(false);
   let error = $state('');
 
-  const LABELS: Record<typeof st, string> = {
-    none: 'not rated yet',
-    stale: 'changed since its rating',
-    awaiting: 'your remark awaits an answer',
-    accepted: 'accepted',
-    refused: 'to be improved',
-  };
-  const stateLabel = $derived(processed === undefined || !rating ? LABELS[st] : processed ? 'processed' : 'not processed yet');
+  const stateLabel = $derived(view.label);
 
   async function send() {
     const text = answer.trim();
@@ -135,9 +142,7 @@
   {#if rating || thread.length > 0}
     <button
       type="button"
-      class="bubble"
-      class:due
-      class:done={!!rating && !due}
+      class="bubble {rating ? `tone tone-${view.tone}` : ''}"
       bind:this={badge}
       aria-expanded={shown}
       title="Assessment of {label}: {rating?.verdict || stateLabel}"
@@ -153,9 +158,7 @@
     </button>
     {#if shown}
       <div
-        class="panel"
-        class:due
-        class:done={!!rating && !due}
+        class="panel {rating ? `tone tone-${view.tone}` : ''}"
         style="top: {pos.top}px; left: {pos.left}px; --tail: {pos.tail}px"
         role="dialog"
         aria-label="Assessment of {label}"
@@ -266,13 +269,30 @@
     padding: 0 0.45rem;
     font-size: 0.78rem;
   }
-  .bubble.done {
-    border-color: var(--ok);
-    background: var(--ok-soft);
+  /* the tone of the state, declared by the methodology or judged here (ADR 0116) */
+  .tone-ok {
+    --tone: var(--ok);
+    --tone-soft: var(--ok-soft);
   }
-  .bubble.due {
-    border-color: var(--warn);
-    background: var(--warn-soft);
+  .tone-warn {
+    --tone: var(--warn);
+    --tone-soft: var(--warn-soft);
+  }
+  .tone-danger {
+    --tone: var(--danger);
+    --tone-soft: var(--danger-soft);
+  }
+  .tone-info {
+    --tone: var(--info);
+    --tone-soft: var(--info-soft);
+  }
+  .tone-neutral {
+    --tone: var(--muted);
+    --tone-soft: var(--neutral-soft);
+  }
+  .bubble.tone {
+    border-color: var(--tone);
+    background: var(--tone-soft);
   }
   /* the bubble floats under its badge (placed on the viewport by place()), its tail pointing at the badge */
   .panel {
@@ -291,11 +311,8 @@
     border-radius: 0.6rem;
     box-shadow: var(--shadow-pop);
   }
-  .panel.due {
-    border-color: var(--warn);
-  }
-  .panel.done {
-    border-color: var(--ok);
+  .panel.tone {
+    border-color: var(--tone);
   }
   .panel::before {
     content: '';

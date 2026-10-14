@@ -6,7 +6,7 @@
 // between this model and the proto message.
 
 import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
-import type { Action, Agent, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -442,6 +442,8 @@ export interface MethodologyForm {
   on: SubscriptionForm[];
   /** the events it declares, in addition to the standard ones (ADR 0110) */
   events: EventForm[];
+  /** how the assessments of its changes read (ADR 0116), as JSON: a list of {subject, states} */
+  assessments: string;
   /** the lifecycle of its domain the changes follow (ADR 0058); "" : none */
   lifecycle: string;
   /** default criticality of its changes (ADR 0075 §3), kept as is */
@@ -625,6 +627,7 @@ export function emptyForm(): MethodologyForm {
     imports: '',
     on: [],
     events: [],
+    assessments: '',
     lifecycle: '',
     criticality: '',
     integrates: [],
@@ -1010,6 +1013,7 @@ export function toForm(m: Methodology): MethodologyForm {
     imports: (m.imports ?? []).join(', '),
     on: subsToForm(m.on),
     events: (m.events ?? []).map((e) => ({ name: e.name ?? '', description: e.description ?? '' })),
+    assessments: m.assessments?.length ? JSON.stringify(m.assessments, null, 2) : '',
     lifecycle: m.lifecycle ?? '',
     criticality: m.criticality ?? '',
     integrates: (m.integrates ?? []).map((x) => ({ methodologies: (x.methodologies ?? []).join(', '), exclusive: !!x.exclusive, attach: x.attach === 'decision' ? '' : (x.attach ?? '') })),
@@ -1394,6 +1398,15 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       }),
   );
   issues.push(...activityEventIssues(f));
+  if (f.assessments.trim()) {
+    try {
+      const v: unknown = JSON.parse(f.assessments);
+      if (!Array.isArray(v)) throw new Error('a list of {subject, states} expected');
+      m.assessments = v as AssessmentView[];
+    } catch (e) {
+      issues.push({ path: 'assessments', message: `Invalid assessments JSON: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
   put(m, 'lifecycle', f.lifecycle.trim());
   put(m, 'criticality', f.criticality.trim());
   put(

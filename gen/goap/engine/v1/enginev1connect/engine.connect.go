@@ -75,6 +75,9 @@ const (
 	// EngineServiceGetChangeStateProcedure is the fully-qualified name of the EngineService's
 	// GetChangeState RPC.
 	EngineServiceGetChangeStateProcedure = "/goap.engine.v1.EngineService/GetChangeState"
+	// EngineServiceGetAssessmentStatesProcedure is the fully-qualified name of the EngineService's
+	// GetAssessmentStates RPC.
+	EngineServiceGetAssessmentStatesProcedure = "/goap.engine.v1.EngineService/GetAssessmentStates"
 	// EngineServiceExplainConditionProcedure is the fully-qualified name of the EngineService's
 	// ExplainCondition RPC.
 	EngineServiceExplainConditionProcedure = "/goap.engine.v1.EngineService/ExplainCondition"
@@ -134,6 +137,9 @@ type EngineServiceClient interface {
 	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
 	// Where each process of the methodology of a change stands now, whatever the number of runs it took (ADR 0112).
 	GetChangeState(context.Context, *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error)
+	// How the assessment of each subject of a change reads now: the states its methodology declares, else the
+	// defaults, evaluated against the change (ADR 0116).
+	GetAssessmentStates(context.Context, *connect.Request[v1.GetAssessmentStatesRequest]) (*connect.Response[v1.GetAssessmentStatesResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -256,6 +262,12 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(engineServiceMethods.ByName("GetChangeState")),
 			connect.WithClientOptions(opts...),
 		),
+		getAssessmentStates: connect.NewClient[v1.GetAssessmentStatesRequest, v1.GetAssessmentStatesResponse](
+			httpClient,
+			baseURL+EngineServiceGetAssessmentStatesProcedure,
+			connect.WithSchema(engineServiceMethods.ByName("GetAssessmentStates")),
+			connect.WithClientOptions(opts...),
+		),
 		explainCondition: connect.NewClient[v1.ExplainConditionRequest, v1.ExplainConditionResponse](
 			httpClient,
 			baseURL+EngineServiceExplainConditionProcedure,
@@ -315,29 +327,30 @@ func NewEngineServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // engineServiceClient implements EngineServiceClient.
 type engineServiceClient struct {
-	startProcess       *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
-	answerIntent       *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
-	submitHumanInput   *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
-	approveAction      *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
-	unblockProcess     *connect.Client[v1.UnblockProcessRequest, v1.UnblockProcessResponse]
-	cancelProcess      *connect.Client[v1.CancelProcessRequest, v1.CancelProcessResponse]
-	relaunchStep       *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
-	decideFlow         *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
-	resolveBoard       *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
-	resolveMerge       *connect.Client[v1.ResolveMergeRequest, v1.ResolveMergeResponse]
-	resolveRebase      *connect.Client[v1.ResolveRebaseRequest, v1.ResolveRebaseResponse]
-	getProcess         *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
-	getProcessProgress *connect.Client[v1.GetProcessProgressRequest, v1.GetProcessProgressResponse]
-	getChangeState     *connect.Client[v1.GetChangeStateRequest, v1.GetChangeStateResponse]
-	explainCondition   *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
-	listProcesses      *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
-	checkAgents        *connect.Client[v1.CheckAgentsRequest, v1.CheckAgentsResponse]
-	listStartingPoints *connect.Client[v1.ListStartingPointsRequest, v1.ListStartingPointsResponse]
-	attachChange       *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
-	getProcessLog      *connect.Client[v1.GetProcessLogRequest, v1.GetProcessLogResponse]
-	watchEvents        *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
-	listTriggers       *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
-	fireTrigger        *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
+	startProcess        *connect.Client[v1.StartProcessRequest, v1.StartProcessResponse]
+	answerIntent        *connect.Client[v1.AnswerIntentRequest, v1.AnswerIntentResponse]
+	submitHumanInput    *connect.Client[v1.SubmitHumanInputRequest, v1.SubmitHumanInputResponse]
+	approveAction       *connect.Client[v1.ApproveActionRequest, v1.ApproveActionResponse]
+	unblockProcess      *connect.Client[v1.UnblockProcessRequest, v1.UnblockProcessResponse]
+	cancelProcess       *connect.Client[v1.CancelProcessRequest, v1.CancelProcessResponse]
+	relaunchStep        *connect.Client[v1.RelaunchStepRequest, v1.RelaunchStepResponse]
+	decideFlow          *connect.Client[v1.DecideFlowRequest, v1.DecideFlowResponse]
+	resolveBoard        *connect.Client[v1.ResolveBoardRequest, v1.ResolveBoardResponse]
+	resolveMerge        *connect.Client[v1.ResolveMergeRequest, v1.ResolveMergeResponse]
+	resolveRebase       *connect.Client[v1.ResolveRebaseRequest, v1.ResolveRebaseResponse]
+	getProcess          *connect.Client[v1.GetProcessRequest, v1.GetProcessResponse]
+	getProcessProgress  *connect.Client[v1.GetProcessProgressRequest, v1.GetProcessProgressResponse]
+	getChangeState      *connect.Client[v1.GetChangeStateRequest, v1.GetChangeStateResponse]
+	getAssessmentStates *connect.Client[v1.GetAssessmentStatesRequest, v1.GetAssessmentStatesResponse]
+	explainCondition    *connect.Client[v1.ExplainConditionRequest, v1.ExplainConditionResponse]
+	listProcesses       *connect.Client[v1.ListProcessesRequest, v1.ListProcessesResponse]
+	checkAgents         *connect.Client[v1.CheckAgentsRequest, v1.CheckAgentsResponse]
+	listStartingPoints  *connect.Client[v1.ListStartingPointsRequest, v1.ListStartingPointsResponse]
+	attachChange        *connect.Client[v1.AttachChangeRequest, v1.AttachChangeResponse]
+	getProcessLog       *connect.Client[v1.GetProcessLogRequest, v1.GetProcessLogResponse]
+	watchEvents         *connect.Client[v1.WatchEventsRequest, v1.WatchEventsResponse]
+	listTriggers        *connect.Client[v1.ListTriggersRequest, v1.ListTriggersResponse]
+	fireTrigger         *connect.Client[v1.FireTriggerRequest, v1.FireTriggerResponse]
 }
 
 // StartProcess calls goap.engine.v1.EngineService.StartProcess.
@@ -408,6 +421,11 @@ func (c *engineServiceClient) GetProcessProgress(ctx context.Context, req *conne
 // GetChangeState calls goap.engine.v1.EngineService.GetChangeState.
 func (c *engineServiceClient) GetChangeState(ctx context.Context, req *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error) {
 	return c.getChangeState.CallUnary(ctx, req)
+}
+
+// GetAssessmentStates calls goap.engine.v1.EngineService.GetAssessmentStates.
+func (c *engineServiceClient) GetAssessmentStates(ctx context.Context, req *connect.Request[v1.GetAssessmentStatesRequest]) (*connect.Response[v1.GetAssessmentStatesResponse], error) {
+	return c.getAssessmentStates.CallUnary(ctx, req)
 }
 
 // ExplainCondition calls goap.engine.v1.EngineService.ExplainCondition.
@@ -485,6 +503,9 @@ type EngineServiceHandler interface {
 	GetProcessProgress(context.Context, *connect.Request[v1.GetProcessProgressRequest]) (*connect.Response[v1.GetProcessProgressResponse], error)
 	// Where each process of the methodology of a change stands now, whatever the number of runs it took (ADR 0112).
 	GetChangeState(context.Context, *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error)
+	// How the assessment of each subject of a change reads now: the states its methodology declares, else the
+	// defaults, evaluated against the change (ADR 0116).
+	GetAssessmentStates(context.Context, *connect.Request[v1.GetAssessmentStatesRequest]) (*connect.Response[v1.GetAssessmentStatesResponse], error)
 	// How a condition of the run's world state got its value: its CEL formula, the value of each part of it and
 	// of the blackboard variables it reads, against the change of the run.
 	ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error)
@@ -603,6 +624,12 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(engineServiceMethods.ByName("GetChangeState")),
 		connect.WithHandlerOptions(opts...),
 	)
+	engineServiceGetAssessmentStatesHandler := connect.NewUnaryHandler(
+		EngineServiceGetAssessmentStatesProcedure,
+		svc.GetAssessmentStates,
+		connect.WithSchema(engineServiceMethods.ByName("GetAssessmentStates")),
+		connect.WithHandlerOptions(opts...),
+	)
 	engineServiceExplainConditionHandler := connect.NewUnaryHandler(
 		EngineServiceExplainConditionProcedure,
 		svc.ExplainCondition,
@@ -687,6 +714,8 @@ func NewEngineServiceHandler(svc EngineServiceHandler, opts ...connect.HandlerOp
 			engineServiceGetProcessProgressHandler.ServeHTTP(w, r)
 		case EngineServiceGetChangeStateProcedure:
 			engineServiceGetChangeStateHandler.ServeHTTP(w, r)
+		case EngineServiceGetAssessmentStatesProcedure:
+			engineServiceGetAssessmentStatesHandler.ServeHTTP(w, r)
 		case EngineServiceExplainConditionProcedure:
 			engineServiceExplainConditionHandler.ServeHTTP(w, r)
 		case EngineServiceListProcessesProcedure:
@@ -768,6 +797,10 @@ func (UnimplementedEngineServiceHandler) GetProcessProgress(context.Context, *co
 
 func (UnimplementedEngineServiceHandler) GetChangeState(context.Context, *connect.Request[v1.GetChangeStateRequest]) (*connect.Response[v1.GetChangeStateResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetChangeState is not implemented"))
+}
+
+func (UnimplementedEngineServiceHandler) GetAssessmentStates(context.Context, *connect.Request[v1.GetAssessmentStatesRequest]) (*connect.Response[v1.GetAssessmentStatesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.engine.v1.EngineService.GetAssessmentStates is not implemented"))
 }
 
 func (UnimplementedEngineServiceHandler) ExplainCondition(context.Context, *connect.Request[v1.ExplainConditionRequest]) (*connect.Response[v1.ExplainConditionResponse], error) {
