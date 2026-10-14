@@ -241,6 +241,8 @@ export interface TriggerForm {
   /** comma-separated roles */
   roles: string;
   enabled: boolean;
+  /** an event cancels the runs still at work on the change (event_change) */
+  supersede: boolean;
 }
 
 export interface AgentForm extends Identified {
@@ -578,6 +580,7 @@ export const emptyTrigger = (): TriggerForm => ({
   target: 'new_change',
   roles: '',
   enabled: true,
+  supersede: false,
 });
 
 export function emptyForm(): MethodologyForm {
@@ -702,6 +705,7 @@ function triggerToForm(t: Trigger): TriggerForm {
     target: t.target || 'new_change',
     roles: (t.roles ?? []).join(', '),
     enabled: !!t.enabled,
+    supersede: !!t.supersede,
   };
 }
 
@@ -718,6 +722,7 @@ function triggerFromForm(t: TriggerForm): Trigger {
   put(o, 'goal', t.goal);
   put(o, 'intent', t.intent.trim());
   put(o, 'target', t.target === 'new_change' ? undefined : t.target);
+  if (t.supersede && t.target === 'event_change') o.supersede = true;
   put(
     o,
     'roles',

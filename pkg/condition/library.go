@@ -76,10 +76,12 @@ var libraries = map[string][]Definition{
 		{Name: "dependencies_pending", Expr: `dependencies.exists(d, !d.satisfied)`, Description: "a change this change depends on has not merged yet"},
 	},
 	LibraryAssessments: {
-		// current: the rating is about the description as it reads now; answered: no comment came after it
-		{Name: "description_rated", Expr: `assessments.exists(a, a.key == "description" && a.current)`, Description: "the description, as it reads now, has been rated"},
-		{Name: "description_reviewed", Expr: `assessments.exists(a, a.key == "description" && a.current && a.answered)`, Description: "the description is rated and the last remark on it is answered"},
-		{Name: "description_accepted", Expr: fmt.Sprintf(`assessments.exists(a, a.key == "description" && a.current && a.score >= %d)`, AcceptableScore), Description: "the description, as it reads now, is rated acceptable (score 3 or more)"},
+		// two steps (ADR 0110): the rating exists, then it is good enough. A rating stands for the description as it
+		// reads now (current) and for the discussion of it (answered: no remark came after it); an edit or a remark
+		// asks for a new one. The effect of a rating action is description_rated, never the score: the score is the
+		// rater's verdict, and description_accepted (the gate a methodology waits for) asks for it on top of the rating.
+		{Name: "description_rated", Expr: `assessments.exists(a, a.key == "description" && a.current && a.answered)`, Description: "the description, as it reads now, has a rating answering its last remark"},
+		{Name: "description_accepted", Expr: fmt.Sprintf(`assessments.exists(a, a.key == "description" && a.current && a.answered && a.score >= %d)`, AcceptableScore), Description: fmt.Sprintf("the description is rated, with a score of %d or more", AcceptableScore)},
 	},
 	LibraryDerogations: {
 		// a change cannot land on a derogation that ran out; the debt is the count of the open ones

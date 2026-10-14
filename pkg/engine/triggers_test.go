@@ -2,8 +2,14 @@ package engine
 
 import (
 	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/llm"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 func TestEventTriggerStartsReviewerOnSameChange(t *testing.T) {
@@ -127,5 +133,97 @@ func TestLeaderGatesScheduleFiring(t *testing.T) {
 	// manual Fire is unaffected by Leader and must still work.
 	if _, err := tm.Fire(ctx, "test-design", "test-designer", "nightly"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// noteTriggerYAML runs a writer on the change of the event each time the change is edited; a newer edit cancels the
+// run still at work (supersede, ADR 0110).
+const noteTriggerYAML = `
+name: noted
+version: 1.0.0
+namespace: alm
+conditions:
+  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
+actions:
+  - {name: note, kind: llm, model: default, prompt: Write the note, effects: {noted: true}}
+goals:
+  - {name: noted, pre: {noted: true}}
+agents:
+  - name: writer
+    planner: goap
+    goals: [noted]
+    triggers:
+      - {name: on_edit, type: event, event: change.edited, target: event_change, goal: noted, enabled: true, supersede: true}
+`
+
+func TestSupersedingTriggerCancelsTheRunAtWork(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	e := stagedEngine(t)
+	m, err := methodology.Parse([]byte(noteTriggerYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Methodologies.(StaticMethodologies)["noted"] = c
+	tm := &TriggerManager{Engine: e}
+	if err := tm.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	ch, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Note", Intent: "write a note", Methodology: "noted", Namespace: "alm", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := make(chan struct{}, 1)
+	var mu sync.Mutex
+	calls := 0
+	e.Executors[methodology.KindLLM] = LLMExecutor{Client: llm.ClientFunc(func(ctx context.Context, r llm.Request) (llm.Response, error) {
+		mu.Lock()
+		calls++
+		first := calls == 1
+		mu.Unlock()
+		if first {
+			started <- struct{}{}
+			select {
+			case <-ctx.Done():
+				return llm.Response{}, ctx.Err()
+			case <-time.After(5 * time.Second):
+				return llm.Response{}, errors.New("never interrupted")
+			}
+		}
+		return llm.Response{Text: `{"items":[{"kind":"artifact","type":"note","data":{"text":"done"}}]}`}, nil
+	})}
+	edited := func() {
+		bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+		tm.Handle(ctx, TriggerEvent{Type: "change.edited", Change: &bb.Change})
+	}
+	edited()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the first run did not start")
+	}
+	edited()
+	e.Drain()
+	var cancelled, completed int
+	all, _ := e.Store.List(ctx)
+	for _, p := range all {
+		if p.ChangeID != ch.ID || p.Trigger == "" {
+			continue
+		}
+		switch p.Status {
+		case StatusCancelled:
+			cancelled++
+		case StatusCompleted:
+			completed++
+		default:
+			t.Fatalf("run %s is %s", p.ID, p.Status)
+		}
+	}
+	if cancelled != 1 || completed != 1 || calls != 2 {
+		t.Fatalf("cancelled %d, completed %d, %d model calls: the first run is cancelled, the second one writes", cancelled, completed, calls)
 	}
 }

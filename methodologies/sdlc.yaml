@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.7.4
+version: 0.7.5
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -14,7 +14,9 @@ namespace: alm
 goal: deliver
 
 # risks_under_control, the release train gate, is a condition of the `risks` library
-# description_accepted, the gate of the framing, is a condition of the `assessments` library (ADR 0110)
+# the rating in two steps, conditions of the `assessments` library (ADR 0110): the rating actions establish
+# description_rated (a rating of the description as it reads now exists); description_accepted, the gate of the
+# analysis, asks on top of it for a score of 3 or more (condition.AcceptableScore), which no action establishes
 imports: [risks, dependencies, assessments]
 
 # the events of the methodology (ADR 0110), raised by the actions that emit them
@@ -193,7 +195,7 @@ actions:
     description: >
       Rate how well the title and the description of the change say what is wanted (outcome, scope, reason),
       propose a better wording, and answer the requester's remarks in the thread of the rating.
-    effects: {description_reviewed: true}
+    effects: {description_rated: true}
     cost: 1
     model: default
     prompt: |
@@ -217,7 +219,7 @@ actions:
     description: >
       Fallback when no model rates the description (no model, or the rating action failed): a person rates it the
       same way, in the bubble of the change.
-    effects: {description_reviewed: true}
+    effects: {description_rated: true}
     cost: 6
     roles: [business_analyst, product_owner]
     instructions: >
@@ -1024,7 +1026,7 @@ methods:
     description: Rate the description of the change, by a model first, by a person when no model can
     planner: goap
     actions: [rate_description, rate_description_by_hand]
-    done: {description_reviewed: true}
+    done: {description_rated: true}
     roles: {responsible: business_analyst, accountable: product_owner}
     # not persistent (ADR 0112 §4): a rating depends only on the description as it is, so every edit gets an
     # independent run; what joins them is the discussion of the topic `description` (the earlier ratings and the

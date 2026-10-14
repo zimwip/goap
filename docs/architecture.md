@@ -311,7 +311,7 @@ declare, except those of the libraries it imports (`imports: [decisions, risks, 
 `open_questions`, `no_open_questions`, `decision_ready` (a point can be ruled now), `decision_pending`,
 `no_decision_pending`, `ratification_pending`, `decision_escalated`, `options_open`, `options_evaluated`,
 `option_selected`. `risks`: `open_risks`, `unmitigated_risks` (a live risk of score ≥ `condition.HighRisk`, 9, without
-an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verification`: `unverified_effects`, `all_verified`, `reserves_open`. `derogations`: `no_expired_derogation`, `derogation_debt` (`condition.DerogationDebtLimit`, 3 open). `dependencies`: `dependencies_met`, `dependencies_pending` (ADR 0108). `assessments`: `description_rated`, `description_reviewed` (rated and answered), `description_accepted` (score ≥ `condition.AcceptableScore`, 3) (ADR 0110). A condition the methodology declares under the
+an action), `risks_under_control`, `open_actions`, `no_open_actions`. `verification`: `unverified_effects`, `all_verified`, `reserves_open`. `derogations`: `no_expired_derogation`, `derogation_debt` (`condition.DerogationDebtLimit`, 3 open). `dependencies`: `dependencies_met`, `dependencies_pending` (ADR 0108). `assessments`: `description_rated` (a current rating answering the last remark, the effect of a rating), `description_accepted` (rated, score ≥ `condition.AcceptableScore`, 3) (ADR 0110). A condition the methodology declares under the
 same name replaces the library one. The variables of the decision and risk concepts (`options`, `decisionPoints`,
 `questions`, `risks`, `actions`) are always in the environment, and computed only when an expression reads them.
 
@@ -692,7 +692,8 @@ step path, an action alone with the agent `on.<action>` towards its effects (`me
 activity holds ends at once. Items produced by a reaction's own actions do not wake it. An event of a subscription
 flagged `supersede: true` arriving while the run is at work interrupts it (its model and tool calls, its sub-processes)
 and runs it again on the change as it is now, instead of waiting in its inbox (`Engine.restartFor`; `sdlc` rates an
-edited description so). The graph publishes
+edited description so); an event trigger on the change of the event takes the same flag and cancels its runs still at
+work on that change before it starts the new one (`Engine.supersedeRuns`). The graph publishes
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
 `sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the change tab shows the rating

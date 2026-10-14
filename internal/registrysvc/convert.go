@@ -43,7 +43,7 @@ func ToPB(r Record) *registryv1.Methodology {
 		pa := &registryv1.Agent{Name: a.Name, Description: a.Description, Examples: a.Examples, Planner: a.Planner, Actions: a.Actions, Goals: a.Goals, Mcps: a.MCPs, Model: a.Model, Persistent: persistToPB(a.Persistent)}
 		for _, t := range a.Triggers {
 			pa.Triggers = append(pa.Triggers, &registryv1.Trigger{Name: t.Name, Description: t.Description, Type: t.Type, Event: t.Event, Filter: t.Filter,
-				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: t.Roles, Enabled: t.Enabled})
+				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: t.Roles, Enabled: t.Enabled, Supersede: t.Supersede})
 		}
 		out.Agents = append(out.Agents, pa)
 	}
@@ -231,7 +231,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 			Actions: nilIfNone(a.Actions), Goals: nilIfNone(a.Goals), MCPs: nilIfNone(a.Mcps), Persistent: persistFromPB(a.Persistent)}
 		for _, t := range a.Triggers {
 			ma.Triggers = append(ma.Triggers, methodology.Trigger{Name: t.Name, Description: t.Description, Type: t.Type, Event: t.Event, Filter: t.Filter,
-				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: nilIfNone(t.Roles), Enabled: t.Enabled})
+				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: nilIfNone(t.Roles), Enabled: t.Enabled, Supersede: t.Supersede})
 		}
 		m.Agents = append(m.Agents, ma)
 	}

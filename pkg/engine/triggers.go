@@ -349,7 +349,8 @@ func (t *TriggerManager) fireKey(ctx context.Context, key string, ev *TriggerEve
 			t.mu.Unlock()
 			return nil, errSkipped
 		}
-		if !state.LastFired.IsZero() && t.clock().Sub(state.LastFired) < minInterval {
+		// a superseding trigger is not rate limited: the latest event is the one that counts
+		if !def.Supersede && !state.LastFired.IsZero() && t.clock().Sub(state.LastFired) < minInterval {
 			t.mu.Unlock()
 			t.log().Warn("trigger rate limited", "trigger", key)
 			return nil, errSkipped
@@ -412,6 +413,9 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 			return nil, err
 		}
 		req.BaselineID = b
+	}
+	if def.Supersede && req.ChangeID != "" {
+		t.Engine.supersedeRuns(ctx, req.ChangeID, key, who.Subject)
 	}
 	p, err := t.Engine.Start(ctx, req)
 	if err != nil {

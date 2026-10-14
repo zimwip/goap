@@ -373,6 +373,8 @@ export interface Trigger {
   target?: 'new_change' | 'event_change' | string;
   roles?: string[];
   enabled?: boolean;
+  /** event_change: an event firing the trigger cancels its runs still at work on the change */
+  supersede?: boolean;
 }
 
 /** Agent (Embabel terminology): a planner and its eligible actions. */

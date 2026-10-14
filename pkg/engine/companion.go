@@ -343,6 +343,22 @@ func (e *Engine) restartFor(ctx context.Context, id string, event map[string]any
 	return err
 }
 
+// supersedeRuns cancels the runs of a trigger still at work on a change, before the trigger starts a new one for a
+// newer event (methodology.Trigger.Supersede): what they do is about a state of the change that is gone.
+func (e *Engine) supersedeRuns(ctx context.Context, changeID domain.ChangeID, trigger, by string) {
+	all, err := e.Store.List(ctx)
+	if err != nil {
+		return
+	}
+	for _, p := range all {
+		if p.ChangeID == changeID && p.Trigger == trigger && p.ParentID == "" && !p.Status.Terminal() {
+			if _, err := e.cancel(ctx, p.ID, by, "superseded by a newer event of the change"); err != nil {
+				e.log().Warn("supersede", "process", p.ID, "err", err)
+			}
+		}
+	}
+}
+
 const (
 	supersededBy  = "a newer event of the change"
 	supersedeLock = "supersede:"

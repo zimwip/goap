@@ -2272,8 +2272,10 @@ type Trigger struct {
 	// event_change: work on the change of the event
 	Target string `protobuf:"bytes,9,opt,name=target,proto3" json:"target,omitempty"`
 	// roles of the service identity running the process (ABAC)
-	Roles         []string `protobuf:"bytes,10,rep,name=roles,proto3" json:"roles,omitempty"`
-	Enabled       bool     `protobuf:"varint,11,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	Roles   []string `protobuf:"bytes,10,rep,name=roles,proto3" json:"roles,omitempty"`
+	Enabled bool     `protobuf:"varint,11,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// event_change: an event firing the trigger cancels its runs still at work on the change (ADR 0110)
+	Supersede     bool `protobuf:"varint,12,opt,name=supersede,proto3" json:"supersede,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2381,6 +2383,13 @@ func (x *Trigger) GetRoles() []string {
 func (x *Trigger) GetEnabled() bool {
 	if x != nil {
 		return x.Enabled
+	}
+	return false
+}
+
+func (x *Trigger) GetSupersede() bool {
+	if x != nil {
+		return x.Supersede
 	}
 	return false
 }
@@ -8184,7 +8193,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"UntilEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\x91\x02\n" +
+	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\"\xaf\x02\n" +
 	"\aTrigger\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -8197,7 +8206,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x06target\x18\t \x01(\tR\x06target\x12\x14\n" +
 	"\x05roles\x18\n" +
 	" \x03(\tR\x05roles\x12\x18\n" +
-	"\aenabled\x18\v \x01(\bR\aenabled\"\xd9\x01\n" +
+	"\aenabled\x18\v \x01(\bR\aenabled\x12\x1c\n" +
+	"\tsupersede\x18\f \x01(\bR\tsupersede\"\xd9\x01\n" +
 	"\x04Goal\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +

@@ -20,7 +20,7 @@ version: 1.0.0
 namespace: alm
 imports: [assessments]
 actions:
-  - {name: rate, kind: human, description: Rate the description, effects: {description_reviewed: true}}
+  - {name: rate, kind: human, description: Rate the description, effects: {description_rated: true}}
   - {name: write, kind: human, description: Write the note, pre: {description_accepted: true}, effects: {noted: true}}
 conditions:
   - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
@@ -302,10 +302,10 @@ namespace: alm
 imports: [assessments]
 roles: [{name: analyst}]
 actions:
-  - {name: rate, kind: llm, model: default, prompt: Rate the description, effects: {description_reviewed: true}, cost: 1}
-  - {name: rate_by_hand, kind: human, effects: {description_reviewed: true}, cost: 6}
+  - {name: rate, kind: llm, model: default, prompt: Rate the description, effects: {description_rated: true}, cost: 1}
+  - {name: rate_by_hand, kind: human, effects: {description_rated: true}, cost: 6}
 methods:
-  - {name: rating, for: rating, planner: goap, actions: [rate, rate_by_hand], done: {description_reviewed: true}, roles: {responsible: analyst}}
+  - {name: rating, for: rating, planner: goap, actions: [rate, rate_by_hand], done: {description_rated: true}, roles: {responsible: analyst}}
 processes:
   - name: review
     steps:

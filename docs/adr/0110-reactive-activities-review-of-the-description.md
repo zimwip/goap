@@ -87,6 +87,12 @@ person) are cancelled, its run in flight is interrupted (its model and tool call
 cancelled stays cancelled. `sdlc` 0.7.4 flags its `change.edited` subscription of `description_review`; a comment in the
 thread still waits for the rating in flight. The flag is honoured by the `on:` of a transverse methodology as well.
 
+The mechanism is the engine's, for every run an event starts, not the reviewer's. An event **trigger** working on the
+change of the event (`target: event_change`) takes the same flag (`methodology.Trigger.Supersede`, proto
+`Trigger.supersede`, a checkbox of the triggers editor): an event firing it cancels its runs still at work on that change
+(`Engine.supersedeRuns`, the same `cancel` as a person's, with "superseded by a newer event of the change") before it
+starts the new one, and the rate limit of the trigger does not apply to it (the latest event is the one that counts).
+
 ### 3. The rating is an assessment item of the change
 
 A built-in use case, `pkg/assess` (registered like `pkg/risk`: `assess.Register()`), with an item kind `assessment`:
@@ -103,10 +109,16 @@ and from the change as it is now. The CEL variable `assessments` gives the lates
 derived flags: `current` (the subject still reads as rated: for `description`, the title, a blank line and the
 intent) and `answered` (no `comment` about the subject came after the rating). A library `assessments` (ADR 0064):
 
-- `description_rated`: a current rating of the description;
-- `description_reviewed`: rated and answered, the exit of the rating step: an edit or a remark makes it false again,
-  so the event that woke the step finds work to do;
-- `description_accepted`: a current rating with `score >= condition.AcceptableScore` (3).
+- `description_rated`: a rating of the description as it reads now, answering its last remark (current and answered):
+  the **effect** of the rating actions and the exit of the rating step; an edit or a remark makes it false again, so
+  the event that woke the step finds work to do;
+- `description_accepted`: rated, with `score >= condition.AcceptableScore` (3): the **gate** a methodology waits for.
+
+The rating is in two steps: the rating actions establish that a rating exists, never the score, which is the rater's
+verdict; the gate asks for the score on top of it (so it implies `description_rated`, its prerequisite, ADR 0112 §5). A
+low score leaves the action's effect met and the gate closed, until the requester edits the description. (Before
+0.7.5, `description_reviewed` was the effect and `description_rated` the bare current rating; they are one condition
+now.) A methodology wanting another threshold declares its own `description_accepted`, which wins over the library.
 
 Editing the description makes every one of them false by itself (the rated text no longer matches), nothing to
 invalidate. A methodology gates on them where it wants (a step's `pre`, a lifecycle guard, the guardian of the merge).
@@ -188,7 +200,7 @@ events, the badly named declarations and the unknown emits with the compiler's p
 An activity is always carried out by an agent, autonomous or human. The rating of the description is therefore a
 **method** planned by GOAP (`description_rating` in `sdlc`, the step `description_review/rate` naming its capability),
 whose pool holds an llm action (`rate_description`, cost 1) and a human one (`rate_description_by_hand`, cost 6,
-roles `business_analyst` / `product_owner`), both reaching `description_reviewed`. The planner takes the llm action
+roles `business_analyst` / `product_owner`), both reaching `description_rated`. The planner takes the llm action
 first; when it cannot run or keeps failing (disabled after `Engine.MaxFailures`), it plans the human one, a task for a
 person, who rates the same way (an `assessment` item). The fallback exists without being preferred: its cost says so.
 A reaction owns the actions of the methods its capability steps run (`ownActions`), so their ratings do not wake it

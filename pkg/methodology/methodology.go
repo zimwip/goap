@@ -162,6 +162,9 @@ type Trigger struct {
 	Intent   string `yaml:"intent,omitempty" json:"intent,omitempty"`
 	// Target: new_change (default) or event_change (the change of the event).
 	Target string `yaml:"target,omitempty" json:"target,omitempty"`
+	// Supersede (event triggers on the event's change): an event firing the trigger cancels its runs still at work on
+	// that change before it starts the new one, which works on the change as it is now (ADR 0110).
+	Supersede bool `yaml:"supersede,omitempty" json:"supersede,omitempty"`
 	// Roles of the service identity running the process.
 	Roles   []string `yaml:"roles,omitempty" json:"roles,omitempty"`
 	Enabled bool     `yaml:"enabled" json:"enabled"`

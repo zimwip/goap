@@ -55,7 +55,7 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 		if len(n) != 1 || len(n[0].Requires) != 1 || n[0].Requires[0].Condition != "description_rated" || !slices.Contains(n[0].Requires[0].ProducedBy, "rate") || len(n[0].ProducedBy) != 0 {
 			t.Fatalf("an accepted description requires a rated one: %+v", n)
 		}
-		if f := n[0].Facts; len(f) != 1 || len(f[0].Parts) != 3 || !f[0].Parts[0].Missing || !slices.Contains(f[0].Parts[0].ProducedBy, "rate") {
+		if f := n[0].Facts; len(f) != 1 || len(f[0].Parts) != 4 || !f[0].Parts[0].Missing || !slices.Contains(f[0].Parts[0].ProducedBy, "rate") {
 			t.Fatalf("the facts say a rating of the description is missing, which rate establishes: %+v", f)
 		}
 	}
@@ -84,7 +84,7 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 	if delivery.Runs != 0 || note.State != StepTodo || len(note.Needs) != 1 || note.Needs[0].Condition != "description_accepted" || !note.Needs[0].Want || note.Needs[0].Description == "" || len(note.Needs[0].Requires) != 0 {
 		t.Fatalf("delivery waits for an accepted description, and says so: %+v", note)
 	}
-	if f := note.Needs[0].Facts[0].Parts; !f[0].Holds || !f[1].Holds || !f[2].Missing || f[2].Text != "a.score >= 3" || len(f[2].ProducedBy) != 0 {
+	if f := note.Needs[0].Facts[0].Parts; !f[0].Holds || !f[1].Holds || !f[2].Holds || !f[3].Missing || f[3].Text != "a.score >= 3" || len(f[3].ProducedBy) != 0 {
 		t.Fatalf("rated and current, the score is what is missing, and no action guarantees it: %+v", f)
 	}
 }

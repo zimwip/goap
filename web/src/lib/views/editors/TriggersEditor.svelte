@@ -154,6 +154,11 @@
           <select id="{p}-target" bind:value={t.target} class:bad={bad(`${p}.target`)} data-path="{p}.target">
             {#each TRIGGER_TARGETS as x (x)}<option value={x}>{TARGET_LABELS[x]}</option>{/each}
           </select>
+          {#if t.target === 'event_change'}
+            <label class="opt" title="An event firing the trigger cancels its runs still at work on the change, then starts the new one">
+              <input type="checkbox" bind:checked={t.supersede} data-path="{p}.supersede" /> a newer event restarts the run
+            </label>
+          {/if}
         </div>
         <div class="field">
           <label for="{p}-roles">Roles <span class="opt">(comma-separated)</span></label>
