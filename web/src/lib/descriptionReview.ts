@@ -196,3 +196,10 @@ export function pending(st: ReturnType<typeof reviewState>, working = false, pro
 /** bubbleKey identifies what the bubble shows: hiding it lasts until the rating, its thread or the text changes. */
 export const bubbleKey = (a: Assessment | undefined, thread: Message[]): string =>
   `${a?.item ?? ''}|${a?.current ? 1 : 0}|${thread.length}`;
+
+/** applicable is the wording the person may apply to the subject, the suggestion as rated or as they edited it:
+ *  trimmed, '' when it is empty or says what the subject already says. */
+export function applicable(text: string, value?: string): string {
+  const t = text.trim();
+  return t && t !== (value ?? '').trim() ? t : '';
+}

@@ -4,13 +4,13 @@
   // field it rates is rendered inside (`children`) and its badge sits next to it; a bubble floats by the badge while
   // the assessment waits to be processed (`pending`: not accepted yet, or `processed` as the caller judges it, e.g. an
   // impact decided by its review), showing the latest rating, its findings, the wording it suggests (Apply, when the
-  // caller can apply it) and the thread; an answer is a comment item of the change, which wakes the run of the rater.
+  // caller can apply it, as suggested or after the person edited it: Edit) and the thread; an answer is a comment item of the change, which wakes the run of the rater.
   // Once processed, or hidden by the person until the rating or its thread moves, it folds into the badge. A compact
   // bubble (rows of a table) never opens by itself: its badge is coloured while pending, the bubble opens on a click.
   // The bubble is positioned on the viewport, so a scrolling table does not clip it.
   import type { Snippet } from 'svelte';
   import { graph, errorMessage, type Change } from '../api';
-  import { DESCRIPTION, MAX_SCORE, assessmentOf, bubbleKey, commentItem, pending, raterRun, reviewState, threadOf, type Subject } from '../descriptionReview';
+  import { DESCRIPTION, MAX_SCORE, applicable, assessmentOf, bubbleKey, commentItem, pending, raterRun, reviewState, threadOf, type Subject } from '../descriptionReview';
   import { processes } from '../stores/live.svelte';
   import { openTab } from '../shell/tabs.svelte';
 
@@ -83,6 +83,23 @@
     hidden = key;
   }
   const toggle = () => (shown ? close() : (open = true));
+  // the suggestion being edited before it is applied: the item of the rating it was opened from (a new rating drops
+  // the edit) and the wording as the person changes it
+  let editOf = $state('');
+  let draft = $state('');
+  const editing = $derived(!!rating && editOf === rating.item);
+  const edit = () => {
+    if (!rating) return;
+    draft = rating.suggestion;
+    editOf = rating.item;
+  };
+  const cancelEdit = () => (editOf = '');
+  function apply(text: string) {
+    const t = applicable(text, value);
+    if (!t) return;
+    onapply?.(t);
+    editOf = '';
+  }
   let answer = $state('');
   let busy = $state(false);
   let error = $state('');
@@ -168,9 +185,28 @@
           {#if rating.suggestion}
             <div class="suggestion">
               <span class="hint">Suggested wording</span>
-              <blockquote>{rating.suggestion}</blockquote>
-              {#if !closed && onapply && rating.suggestion.trim() !== (value ?? '').trim()}
-                <button type="button" class="small" onclick={() => onapply?.(rating.suggestion)}>Apply</button>
+              {#if editing}
+                <textarea
+                  class="draft"
+                  rows="4"
+                  aria-label="Wording to apply"
+                  bind:value={draft}
+                  onkeydown={(e) => e.key === 'Escape' && (e.stopPropagation(), cancelEdit())}
+                ></textarea>
+                <div class="row">
+                  <button type="button" class="primary small" disabled={!applicable(draft, value)} onclick={() => apply(draft)}>Apply</button>
+                  <button type="button" class="small" onclick={cancelEdit}>Cancel</button>
+                </div>
+              {:else}
+                <blockquote>{rating.suggestion}</blockquote>
+                {#if !closed && onapply}
+                  <div class="row">
+                    {#if applicable(rating.suggestion, value)}
+                      <button type="button" class="small" onclick={() => apply(rating.suggestion)}>Apply</button>
+                    {/if}
+                    <button type="button" class="small" title="Change the wording before applying it" onclick={edit}>Edit</button>
+                  </div>
+                {/if}
               {/if}
             </div>
           {/if}
@@ -297,6 +333,15 @@
     font-size: 0.75rem;
     text-transform: uppercase;
     opacity: 0.8;
+  }
+  .suggestion .row {
+    display: flex;
+    gap: 0.4rem;
+  }
+  .suggestion .draft {
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0.2rem 0 0.4rem;
   }
   .suggestion blockquote {
     margin: 0.2rem 0 0.4rem;

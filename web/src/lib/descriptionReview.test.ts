@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accepted, assessmentOf, bubbleKey, commentItem, fingerprint, impactSubject, itemSubjects, pending, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
+import { accepted, applicable, assessmentOf, bubbleKey, commentItem, fingerprint, impactSubject, itemSubjects, pending, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
 import type { ChangeItem, Process } from './api';
 
 const change = { id: 'C1', methodology: 'sdlc', title: 'Pay', intent: 'Pay in 3 installments' };
@@ -106,5 +106,12 @@ describe('descriptionReview', () => {
     const items: ChangeItem[] = [{ id: 'W1', kind: 'artifact', type: 'assessment', data: { key: 'description', score: 2, rated: subjectText(change) } }];
     expect(assessmentOf({ ...change, items })?.item).toBe('W1');
     expect(state(assessmentOf({ ...change, items }))).toBe('refused');
+  });
+
+  it('applies the suggestion as rated or as edited, never an empty or unchanged wording', () => {
+    expect(applicable('  Pay in 3 installments online ', 'Pay in 3 installments')).toBe('Pay in 3 installments online');
+    expect(applicable('Pay in 3 installments ', 'Pay in 3 installments')).toBe('');
+    expect(applicable('   ', 'Pay')).toBe('');
+    expect(applicable('Pay')).toBe('Pay');
   });
 });
