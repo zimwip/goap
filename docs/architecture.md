@@ -691,7 +691,7 @@ step path, an action alone with the agent `on.<action>` towards its effects (`me
 `Engine.react`). The event says when to look, the conditions whether there is work: a run woken while the exit of its
 activity holds ends at once. Items produced by a reaction's own actions do not wake it. The graph publishes
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
-`sdlc`'s `description_review` process rates the description of every change (items `assessment`, `pkg/assess`) and
+`sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the change tab shows the rating
 as a comment bubble (`DescriptionReview.svelte`, `web/src/lib/descriptionReview.ts`). A rating is about any subject:
 `description`, `title`, `intent`, `impact:<node key>`, `item:<record key or id>` (`assess.Text` over the blackboard),

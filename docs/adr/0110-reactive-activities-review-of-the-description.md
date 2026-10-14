@@ -171,7 +171,18 @@ ticks what the action emits, the triggers of an agent list the declared events t
 events, the badly named declarations and the unknown emits with the compiler's paths
 (`activityEventIssues`, `web/src/lib/subscriptions.ts`).
 
-### 9. As implemented
+### 9. Every activity is carried out by an agent: the rating is a planned method
+
+An activity is always carried out by an agent, autonomous or human. The rating of the description is therefore a
+**method** planned by GOAP (`description_rating` in `sdlc`, the step `description_review/rate` naming its capability),
+whose pool holds an llm action (`rate_description`, cost 1) and a human one (`rate_description_by_hand`, cost 6,
+roles `business_analyst` / `product_owner`), both reaching `description_reviewed`. The planner takes the llm action
+first; when it cannot run or keeps failing (disabled after `Engine.MaxFailures`), it plans the human one, a task for a
+person, who rates the same way (an `assessment` item). The fallback exists without being preferred: its cost says so.
+A reaction owns the actions of the methods its capability steps run (`ownActions`), so their ratings do not wake it
+again; the bubble finds the run from the step that wrote the rating, up to the companion run (`raterRun`).
+
+### 10. As implemented
 
 - `pkg/events.ChangeEdited`, `domain.ChangeEvent.Fields`, `domain.EditedFields`; published by
   `graphsvc.Handler.UpdateChange` and `engine.EventingGraph.UpdateChange`; `TriggerEvent.Fields`, `event.fields`.
@@ -183,7 +194,7 @@ events, the badly named declarations and the unknown emits with the compiler's p
   related changes); `companionRun` shared with the transverse processes.
 - `pkg/assess`, CEL `assessments` (conditions and lifecycle guards), library `assessments`, `pkg/brief` (`ASSESSMENT`,
   `THREAD`, the intent up to 1500 runes).
-- `methodologies/sdlc.yaml` 0.6.0: process `description_review`, step `rate` (action `rate_description`, llm),
+- `methodologies/sdlc.yaml` 0.7.1: process `description_review`, step `rate` (method `description_rating`, goap: `rate_description` llm first, `rate_description_by_hand` human fallback),
   reactive on `change.created`, `change.edited` (title or intent) and comments on the description; the analysis step
   of `software_delivery` waits for `description_accepted` (the run waits for a condition it does not establish, and is
   tried again when the change moves).

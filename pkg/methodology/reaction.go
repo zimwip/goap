@@ -135,7 +135,7 @@ func (s *compileState) checkSubscription(path string, sub Subscription) {
 }
 
 // ownActions are the actions a reaction runs: the actions generated for its steps (and the declared ones they
-// implement), the pool of a method, the action itself.
+// implement, the pools of the methods providing their capabilities), the pool of a method, the action itself.
 func (s *compileState) ownActions(r Reaction) map[string]bool {
 	own := map[string]bool{r.Activity: true}
 	if r.Kind == ReactAction {
@@ -146,6 +146,16 @@ func (s *compileState) ownActions(r Reaction) map[string]bool {
 			own[a.Name] = true
 			if a.Implements != "" {
 				own[a.Implements] = true
+			}
+			// a step naming a capability runs the methods providing it: their actions are the reaction's too
+			if capability, _ := a.Params["capability"].(string); capability != "" {
+				for _, me := range s.m.Methods {
+					if me.For == capability {
+						for _, x := range me.Actions {
+							own[x] = true
+						}
+					}
+				}
 			}
 		}
 	}

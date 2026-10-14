@@ -28,6 +28,8 @@ export interface Assessment {
   versions: number;
   /** the action that rated it */
   by: string;
+  /** the item of the rating */
+  item: string;
 }
 
 export interface Message {
@@ -102,6 +104,7 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
     answered: commented < at,
     versions,
     by: last.producedBy ?? '',
+    item: last.id ?? '',
   };
 }
 
@@ -128,13 +131,17 @@ export function reviewState(a: Assessment | undefined): 'none' | 'stale' | 'awai
   return a.score >= ACCEPTABLE_SCORE ? 'accepted' : 'refused';
 }
 
-/** raterRun is the run of the reaction that rated the description: the companion run of its activity on the change
- *  ("companion:<methodology>/<activity>", the activity being the step path the rating action is generated for). */
-export function raterRun(processes: Iterable<Process>, change: { id?: string; methodology?: string }, by: string): Process | undefined {
-  if (!change.id || !by) return undefined;
-  const want = `companion:${change.methodology ?? ''}/${by}`;
+/** raterRun is the run of the reaction that rated the description: the run whose step wrote the rating item (the
+ *  agent of the method, a model or a person, ADR 0110), up to the companion run of the reaction it runs under. */
+export function raterRun(processes: Iterable<Process>, change: { id?: string }, item: string): Process | undefined {
+  if (!change.id || !item) return undefined;
+  const byId = new Map<string, Process>();
   let found: Process | undefined;
-  for (const p of processes) if (p.changeId === change.id && p.trigger === want) found = p;
+  for (const p of processes) {
+    if (p.id) byId.set(p.id, p);
+    if (p.changeId === change.id && p.steps?.some((s) => s.items?.includes(item))) found = p;
+  }
+  for (let hops = 0; found?.parentId && byId.has(found.parentId) && hops < 16; hops++) found = byId.get(found.parentId);
   return found;
 }
 

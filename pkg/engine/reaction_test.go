@@ -2,11 +2,13 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/assess"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -288,5 +290,78 @@ func TestDeclaredEventsAreEmittedAndFollowed(t *testing.T) {
 		if issues := m.Validate(); !issues.HasErrors() {
 			t.Errorf("%s: refused expected", name)
 		}
+	}
+}
+
+// ratedYAML rates the description the way sdlc does (ADR 0110): a goap method whose llm action comes first and whose
+// human action is the fallback, every activity carried out by an agent.
+const ratedYAML = `
+name: rated
+version: 1.0.0
+namespace: alm
+imports: [assessments]
+roles: [{name: analyst}]
+actions:
+  - {name: rate, kind: llm, model: default, prompt: Rate the description, effects: {description_reviewed: true}, cost: 1}
+  - {name: rate_by_hand, kind: human, effects: {description_reviewed: true}, cost: 6}
+methods:
+  - {name: rating, for: rating, planner: goap, actions: [rate, rate_by_hand], done: {description_reviewed: true}, roles: {responsible: analyst}}
+processes:
+  - name: review
+    steps:
+      - {name: rate, method: rating, on: [{event: change.created}, {event: change.edited}]}
+`
+
+func TestDescriptionRatingFallsBackToAPerson(t *testing.T) {
+	ctx := context.Background()
+	for name, answer := range map[string]string{
+		"model":  `{"items":[{"kind":"assessment","data":{"key":"description","score":4,"verdict":"clear","rated":"FP"}}]}`,
+		"person": `{"items":[]}`, // the model rates nothing: its action fails, is disabled, the person rates
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := stagedEngine(t)
+			m, err := methodology.Parse([]byte(ratedYAML))
+			if err != nil {
+				t.Fatal(err)
+			}
+			c, err := m.Compile()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if rs := c.Reactions(); len(rs) != 1 || !rs[0].Owns("rate") || !rs[0].Owns("rate_by_hand") {
+				t.Fatalf("the reaction owns the actions of the method it runs: %+v", rs)
+			}
+			e.Methodologies.(StaticMethodologies)["rated"] = c
+			ch, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Note", Intent: "write the release note of 1.2", Methodology: "rated", Namespace: "alm", ProjectID: testProject})
+			if err != nil {
+				t.Fatal(err)
+			}
+			e.Executors[methodology.KindLLM] = LLMExecutor{Client: llm.ClientFunc(func(_ context.Context, r llm.Request) (llm.Response, error) {
+				bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+				return llm.Response{Text: strings.Replace(answer, "FP", assess.FingerprintOf(bb, assess.SubjectDescription), 1)}, nil
+			})}
+			bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+			e.Accompany(ctx, TriggerEvent{Type: "change.created", Change: &bb.Change})
+			e.Drain()
+			var waiting *Process
+			all, _ := e.Store.List(ctx)
+			for _, p := range all {
+				if p.ChangeID == ch.ID && p.Status == StatusWaiting && p.ParentID != "" {
+					waiting = p // the agent of the method, a sub-agent of the reaction's run
+				}
+			}
+			bb, _ = e.Graph.Blackboard(ctx, ch.ID)
+			a, rated := assess.Of(bb, assess.SubjectDescription)
+			switch name {
+			case "model":
+				if !rated || !a.Current || a.By != "rate" || waiting != nil {
+					t.Fatalf("the model rates first: %+v, waiting %+v", a, waiting)
+				}
+			case "person":
+				if rated || waiting == nil || waiting.Pending == nil || waiting.Pending.Action != "rate_by_hand" || !waiting.Disabled["rate"] {
+					t.Fatalf("the person rates when the model cannot: %+v", waiting)
+				}
+			}
+		})
 	}
 }

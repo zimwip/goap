@@ -43,11 +43,13 @@ describe('descriptionReview', () => {
   });
 
   it('finds the run of the rater and writes a comment', () => {
+    // the agent of the method wrote the rating, under the companion run of the reaction
     const runs = [
       { id: 'P1', changeId: 'C1', trigger: 'companion:sdlc/description_review/rate' },
+      { id: 'P3', changeId: 'C1', parentId: 'P1', steps: [{ items: ['I1'] }] },
       { id: 'P2', changeId: 'C1', trigger: 'companion:risk/risk_watch' },
     ] as Process[];
-    expect(raterRun(runs, change, 'description_review/rate')?.id).toBe('P1');
+    expect(raterRun(runs, change, 'I1')?.id).toBe('P1');
     expect(raterRun(runs, change, '')).toBeUndefined();
     expect(commentItem('  hello ')).toEqual({ kind: 'comment', type: 'comment', data: { about: 'description', text: 'hello' } });
   });

@@ -14,7 +14,7 @@
   const rating = $derived(assessmentOf(change));
   const thread = $derived(threadOf(change.items));
   const st = $derived(reviewState(rating));
-  const run = $derived(rating ? raterRun(processes.values(), change, rating.by) : undefined);
+  const run = $derived(rating ? raterRun(processes.values(), change, rating.item) : undefined);
   const working = $derived(run?.status === 'running');
   let open = $state(false);
   let answer = $state('');

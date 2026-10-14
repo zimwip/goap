@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.7.0
+version: 0.7.1
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -210,6 +210,20 @@ actions:
        "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>",
        "rated":"<the fp of the SUBJECT description line of the brief>"}}
       A score of 3 or more means the change can be worked on as described.
+
+  - name: rate_description_by_hand
+    kind: human
+    description: >
+      Fallback when no model rates the description (no model, or the rating action failed): a person rates it the
+      same way, in the bubble of the change.
+    effects: {description_reviewed: true}
+    cost: 6
+    roles: [business_analyst, product_owner]
+    instructions: >
+      Rate how well the title and the description say what is wanted (outcome, scope, reason) and answer the
+      requester's last remark. Add one item of kind assessment: {key: "description", score: 0 to 5,
+      verdict: clear|unclear|insufficient, findings, suggestion, reply, rated: the fp of the description (shown by the
+      change)}. A score of 3 or more lets the change be worked on as described.
 
   # ======================= impact analysis (four passes: requirements, functions, applications, components)
   - name: identify_requirements
@@ -1001,6 +1015,16 @@ roles:
 # and has access to them, and to the tools their actions declare. A step names the capability (`method: design`); the
 # applicable method with the highest priority is chosen at execution, and its guidance and references reach its agent.
 methods:
+  # The rating of the description (ADR 0110): every activity is carried out by an agent, autonomous or human. The
+  # method is planned (goap): the llm action is the cheapest and comes first, the human one is the fallback the planner
+  # takes when the llm action cannot run or keeps failing.
+  - name: description_rating
+    for: description_rating
+    description: Rate the description of the change, by a model first, by a person when no model can
+    planner: goap
+    actions: [rate_description, rate_description_by_hand]
+    done: {description_reviewed: true}
+    roles: {responsible: business_analyst, accountable: product_owner}
   # The impact analysis (ADR 0109): four passes, one layer each, so that nothing is done all at once and each layer
   # starts from what the layer above settled. Each pass names what its layer directly carries of the change,
   # propagates the impacts of the layers above down to its own along the ALM links, then qualifies the impacts the
@@ -1153,7 +1177,7 @@ processes:
     steps:
       - name: rate
         description: Rate the title and the description, propose a better wording, answer the requester's remarks
-        action: rate_description
+        method: description_rating
         on:
           - {event: change.created}
           - {event: change.edited, filter: '"intent" in event.fields || "title" in event.fields'}
