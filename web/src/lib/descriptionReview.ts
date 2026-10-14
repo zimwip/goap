@@ -147,3 +147,14 @@ export function raterRun(processes: Iterable<Process>, change: { id?: string }, 
 
 /** commentItem is the item a person writes to answer the rater. */
 export const commentItem = (text: string, key = DESCRIPTION): ChangeItem => ({ kind: 'comment', type: 'comment', data: { about: key, text: text.trim() } });
+
+/** pending says whether the rating still waits to be processed: the bubble floats open by the description until the
+ *  rating is accepted (a low score, a remark not answered yet, a description changed since its rating), or while the
+ *  rater works on a description it has not rated yet. */
+export function pending(st: ReturnType<typeof reviewState>, working = false): boolean {
+  return st === 'none' ? working : st !== 'accepted';
+}
+
+/** bubbleKey identifies what the bubble shows: hiding it lasts until the rating, its thread or the text changes. */
+export const bubbleKey = (a: Assessment | undefined, thread: Message[]): string =>
+  `${a?.item ?? ''}|${a?.current ? 1 : 0}|${thread.length}`;

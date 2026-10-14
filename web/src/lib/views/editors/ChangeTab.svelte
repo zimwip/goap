@@ -1111,9 +1111,10 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
               <button type="button" class="small" onclick={() => (defining = false)}>Cancel</button>
             </div>
           </form>
-        {:else if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
-        {#if !defining}
-          <DescriptionReview change={ch} {closed} onchange={() => load(selected)} onapply={(intent) => define({ intent }, 'Description updated: it is rated again.')} />
+        {:else}
+          <DescriptionReview change={ch} {closed} onchange={() => load(selected)} onapply={(intent) => define({ intent }, 'Description updated: it is rated again.')}>
+            {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
+          </DescriptionReview>
         {/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>

@@ -693,7 +693,9 @@ activity holds ends at once. Items produced by a reaction's own actions do not w
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
 `sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the change tab shows the rating
-as a comment bubble (`DescriptionReview.svelte`, `web/src/lib/descriptionReview.ts`). A rating is about any subject:
+as a comment bubble floating by the intent while the rating is pending (not accepted yet; `pending`, hidden by the person
+until the rating or its thread moves), folded into its badge once accepted (`DescriptionReview.svelte`,
+`web/src/lib/descriptionReview.ts`). A rating is about any subject:
 `description`, `title`, `intent`, `impact:<node key>`, `item:<record key or id>` (`assess.Text` over the blackboard),
 `rated` holding the text or its fingerprint (`assess.Fingerprint`, FNV-1a 32 bits, printed `fp=` by the brief).
 A methodology declares its own events (`events: [{name, description}]`, names out of the standard families) and

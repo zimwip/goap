@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accepted, assessmentOf, commentItem, fingerprint, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
+import { accepted, assessmentOf, bubbleKey, commentItem, fingerprint, pending, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
 import type { ChangeItem, Process } from './api';
 
 const change = { id: 'C1', methodology: 'sdlc', title: 'Pay', intent: 'Pay in 3 installments' };
@@ -52,5 +52,24 @@ describe('descriptionReview', () => {
     expect(raterRun(runs, change, 'I1')?.id).toBe('P1');
     expect(raterRun(runs, change, '')).toBeUndefined();
     expect(commentItem('  hello ')).toEqual({ kind: 'comment', type: 'comment', data: { about: 'description', text: 'hello' } });
+  });
+
+  it('keeps the bubble open until the rating is accepted', () => {
+    expect(pending('none')).toBe(false);
+    expect(pending('none', true)).toBe(true);
+    expect(pending('refused')).toBe(true);
+    expect(pending('awaiting')).toBe(true);
+    expect(pending('stale')).toBe(true);
+    expect(pending('accepted')).toBe(false);
+  });
+
+  it('shows a hidden bubble again once the rating or its thread moves', () => {
+    const items = [rating('R1', 2, subjectText(change))];
+    const a = assessmentOf({ ...change, items });
+    const k = bubbleKey(a, threadOf(items));
+    expect(bubbleKey(assessmentOf({ ...change, items }), threadOf(items))).toBe(k);
+    const more = [...items, comment('C1', 'why?')];
+    expect(bubbleKey(assessmentOf({ ...change, items: more }), threadOf(more))).not.toBe(k);
+    expect(bubbleKey(assessmentOf({ ...change, intent: 'other', items }), threadOf(items))).not.toBe(k);
   });
 });
