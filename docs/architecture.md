@@ -1528,7 +1528,12 @@ the breadcrumb to come back) changes the system of interest. A step not resolved
 is flagged `incomplete` in the level above (gap `inner`), which is then broken too: the process cannot run through it until it is reworked.
 The process tab shows it as a **Flow** (`ProcessFlowView`, the only graph view, xyflow + dagre, as in the gems project): a node per step with its entry conditions
 and exit criteria as ports, links between the criterion and the condition it meets, a "Prerequisites" node for what nothing establishes;
-clicking a condition traces it (the links carrying it are drawn on, the rest is dimmed), right-clicking a step opens it.
+clicking a condition traces it (the links carrying it are drawn on, the rest is dimmed). Right-clicking opens a context menu of
+introspection (`web/src/lib/flowInspect.ts`, pure, rendered by `FlowInspector.svelte` in a panel inside the canvas so it works in full
+screen): on a condition (a port or a link) its CEL, where it comes from at the level, the steps that set and need it and the actions
+of the agents; on a step how it runs, its RACI, its entry and exit with their CEL (each, and joined as one expression), its foreach,
+the methods providing its capability with their `when`, its actions in the plan, its gaps and rules broken, plus open, zoom and show
+alone; on a boundary block the CEL of its conditions; on the background the level (agent, goal, inputs, outputs, order, gaps).
 A method composing its own steps has the same view and graph (`GetProcessGraph` accepts its name) and the same level check, apart from the
 process: a step naming a capability is a boundary node that only lists the methods specializing it (each opens its own graph), because
 a specialization adds variability and cuts the traceability.

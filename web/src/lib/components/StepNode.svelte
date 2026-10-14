@@ -34,6 +34,8 @@
     /** in the plan the process's agent reaches */
     planned?: boolean;
     ontrace?: (condition: string) => void;
+    /** right-click on a condition: its context menu (introspection) */
+    onportmenu?: (condition: string, event: MouseEvent) => void;
     /** a step naming a capability: the methods that specialize it, each with a graph of its own */
     variants?: string[];
     onvariant?: (method: string) => void;
@@ -51,6 +53,12 @@
     update(id);
   });
   const label = (c: string, v: boolean) => (v ? c : `¬ ${c}`);
+  function portMenu(e: MouseEvent, c: string) {
+    if (!data.onportmenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    data.onportmenu(c, e);
+  }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -112,7 +120,7 @@
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <div class="port in {data.flowPorts[c] ? `p-${data.flowPorts[c]}` : ''}"
           class:p-missing={data.missing?.includes(c) || data.kind === 'unreached'}
-          class:p-bad={data.bad?.includes(c)} title="{label(c, v)} (click to trace)" onclick={(e) => (e.stopPropagation(), data.ontrace?.(c))}>
+          class:p-bad={data.bad?.includes(c)} title="{label(c, v)} (click to trace, right-click to inspect)" onclick={(e) => (e.stopPropagation(), data.ontrace?.(c))} oncontextmenu={(e) => portMenu(e, c)}>
           <Handle type="target" position={Position.Left} id={`i:${c}`} isConnectable={false} />
           <span>{label(c, v)}</span>
         </div>
@@ -121,7 +129,7 @@
     <div class="col-out">
       {#each data.outputs as [c, v] (c)}
         <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-        <div class="port out {data.flowPorts[c] ? `p-${data.flowPorts[c]}` : ''}" class:p-bad={data.bad?.includes(c)} title="{label(c, v)}{data.hints?.[c] ? `: ${data.hints[c]}` : ''} (click to trace)" onclick={(e) => (e.stopPropagation(), data.ontrace?.(c))}>
+        <div class="port out {data.flowPorts[c] ? `p-${data.flowPorts[c]}` : ''}" class:p-bad={data.bad?.includes(c)} title="{label(c, v)}{data.hints?.[c] ? `: ${data.hints[c]}` : ''} (click to trace, right-click to inspect)" onclick={(e) => (e.stopPropagation(), data.ontrace?.(c))} oncontextmenu={(e) => portMenu(e, c)}>
           <span>{label(c, v)}</span>
           <Handle type="source" position={Position.Right} id={`o:${c}`} isConnectable={false} />
         </div>

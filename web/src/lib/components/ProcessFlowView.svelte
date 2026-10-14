@@ -8,11 +8,15 @@
   // block, the inputs of the parent come from an "Inputs" block, what cannot be resolved ends in the orange blocks.
   // A step naming a capability is a boundary: the methods specializing it add variability and cut the traceability, so
   // they are only listed on it and drawn in a graph of their own. Click a condition to trace it: the links that carry
-  // it are drawn on, the rest is dimmed. Right-click a step to open it.
+  // it are drawn on, the rest is dimmed. Right-click a step, a condition, a block or the background for its context
+  // menu: open or zoom, and introspection (flowInspect.ts), shown in a panel inside the canvas (so in full screen too).
   import { SvelteFlow, Background, Controls, MiniMap, MarkerType, type Node, type Edge, type NodeTypes } from '@xyflow/svelte';
   import '@xyflow/svelte/dist/style.css';
   import StepNode, { type StepNodeData } from './StepNode.svelte';
   import { layered, nodeHeight, NODE_W } from '../flowLayout';
+  import FlowInspector from './FlowInspector.svelte';
+  import Icon, { type IconName } from '../shell/Icon.svelte';
+  import { exprOf, inspectBoundary, inspectCondition, inspectLevel, inspectStep, type FlowFacts, type Inspection } from '../flowInspect';
   import type { Issue, LevelCheck, PlanPreview, ProcessGraph } from '../api';
 
   let {
@@ -178,6 +182,7 @@
         groupBy: n.groupBy,
         onzoom: () => (path = p),
         ontrace: trace,
+        onportmenu: conditionMenu,
         variants: n.method === 'method' ? (graph.methods ?? []).filter((m) => m.for === n.capability).map((m) => m.name ?? '') : undefined,
         onvariant: onmethod,
       };
@@ -191,7 +196,7 @@
         type: 'step',
         position: { x: 0, y: 0 },
         selectable: false,
-        data: { name, method: '', inputs: io.inputsKV ?? allOut(io.inputs ?? []), outputs: allOut(io.outputs ?? []), hints: io.hints, bad: io.bad, colour, kind, flowRole: c && !all.includes(c) ? 'dim' : roleOf(fp), flowPorts: fp, ontrace: trace } satisfies StepNodeData,
+        data: { name, method: '', inputs: io.inputsKV ?? allOut(io.inputs ?? []), outputs: allOut(io.outputs ?? []), hints: io.hints, bad: io.bad, colour, kind, flowRole: c && !all.includes(c) ? 'dim' : roleOf(fp), flowPorts: fp, ontrace: trace, onportmenu: conditionMenu } satisfies StepNodeData,
       });
     };
     if (given.length || parentNoop.size) boundary(INPUTS, l?.kind === 'step' ? `Inputs of ${(l.path ?? '').split('/').pop()}` : 'Inputs', 'inputs', 'var(--accent)', { outputs: [...new Set([...given, ...[...parentNoop].filter((k) => k in inputs)])].sort(), bad: [...parentNoop] });
@@ -271,9 +276,111 @@
     moved = new Map();
     build();
   }
+
+  // the context menu (local, not the shell's: it must show in full screen) and the inspections it opens, kept as what
+  // was asked so they follow the draft as it is edited; Back walks the inspections opened from one another
+  type MenuItem = { label: string; icon?: IconName; disabled?: boolean; sep?: boolean; run: () => void };
+  type Ask = { kind: 'condition'; name: string } | { kind: 'step'; path: string; only?: 'conditions' } | { kind: 'boundary'; id: string } | { kind: 'level' };
+  let menu = $state<{ x: number; y: number; title: string; items: MenuItem[] } | null>(null);
+  let menuEl = $state<HTMLElement>();
+  let asked = $state<Ask[]>([]);
+  const facts = $derived<FlowFacts>({ graph, levels, conditions, plan, issues: mine });
+  const inspection = $derived.by((): Inspection | undefined => {
+    const a = asked[asked.length - 1];
+    if (!a) return undefined;
+    if (a.kind === 'condition') return inspectCondition(facts, a.name, level);
+    if (a.kind === 'step') return inspectStep(facts, a.path, a.only);
+    if (a.kind === 'level') return level ? inspectLevel(facts, level) : undefined;
+    const n = nodes.find((x) => x.id === a.id);
+    if (!n) return undefined;
+    const d = n.data as StepNodeData;
+    return inspectBoundary(facts, d.name, [...d.inputs, ...d.outputs], level);
+  });
+  const inspect = (a: Ask) => (asked = [...asked, a]);
+
+  function openMenu(e: MouseEvent, title: string, items: MenuItem[]) {
+    e.preventDefault();
+    e.stopPropagation();
+    menu = { x: e.clientX, y: e.clientY, title, items };
+  }
+  function run(it: MenuItem) {
+    if (it.disabled) return;
+    menu = null;
+    it.run();
+  }
+  const copy = (text: string) => void navigator.clipboard?.writeText(text).catch(() => undefined);
+
+  function conditionMenu(c: string, e: MouseEvent) {
+    const expr = exprOf(facts, c);
+    openMenu(e, c, [
+      { label: 'Inspect the condition', icon: 'info', run: () => inspect({ kind: 'condition', name: c }) },
+      { label: traced === c ? 'Stop tracing it' : 'Trace it in the flow', icon: 'trace', run: () => trace(c) },
+      { label: 'Copy the name', icon: 'copy', sep: true, run: () => copy(c) },
+      { label: expr ? 'Copy the CEL' : 'Copy the CEL (none: set by a step)', icon: 'code', disabled: !expr, run: () => copy(expr ?? '') },
+    ]);
+  }
+
+  function stepMenu(e: MouseEvent, id: string, d: StepNodeData) {
+    if (d.method === 'variant') {
+      openMenu(e, d.name, [{ label: 'Open the method', icon: 'external', disabled: !onmethod, run: () => onmethod?.(d.name) }]);
+      return;
+    }
+    const items: MenuItem[] = [
+      { label: 'Inspect the step', icon: 'info', run: () => inspect({ kind: 'step', path: id }) },
+      { label: 'Conditions as CEL', icon: 'code', run: () => inspect({ kind: 'step', path: id, only: 'conditions' }) },
+      { label: 'Open the step', icon: 'external', sep: true, disabled: !onstep, run: () => onstep?.(id) },
+    ];
+    if (d.composite) items.push({ label: 'Zoom into its sub-steps', icon: 'chevronRight', run: () => ((solo = ''), (path = id)) });
+    if (solo === id) items.push({ label: 'Show its level', icon: 'graph', run: () => (solo = '') });
+    else items.push({ label: 'Show it alone', icon: 'target', run: () => (solo = id) });
+    for (const m of d.variants ?? []) items.push({ label: `Open method ${m}`, icon: 'external', disabled: !onmethod, run: () => onmethod?.(m) });
+    items.push({ label: 'Copy the path', icon: 'copy', sep: true, run: () => copy(id) });
+    openMenu(e, d.name, items);
+  }
+
+  function boundaryMenu(e: MouseEvent, id: string, d: StepNodeData) {
+    const names = [...d.inputs, ...d.outputs].map(([k]) => k);
+    openMenu(e, d.name, [
+      { label: 'Conditions as CEL', icon: 'code', run: () => inspect({ kind: 'boundary', id }) },
+      { label: 'Copy the names', icon: 'copy', run: () => copy(names.join('\n')) },
+    ]);
+  }
+
+  function paneMenu(e: MouseEvent) {
+    const items: MenuItem[] = [
+      { label: 'Inspect this level', icon: 'info', disabled: !level, run: () => inspect({ kind: 'level' }) },
+      { label: 'Auto layout', icon: 'graph', sep: true, run: relayout },
+    ];
+    if (traced) items.push({ label: `Stop tracing ${traced}`, icon: 'clear', run: () => (traced = '') });
+    if (solo) items.push({ label: 'Show the whole level', icon: 'graph', run: () => (solo = '') });
+    if (asked.length) items.push({ label: 'Close the inspection', icon: 'x', run: () => (asked = []) });
+    openMenu(e, (level?.path ?? rootPath).split('/').pop() || 'Flow', items);
+  }
+
+  $effect(() => {
+    if (!menu) return;
+    const down = (e: MouseEvent) => {
+      if (menuEl && !menuEl.contains(e.target as globalThis.Node)) menu = null;
+    };
+    document.addEventListener('mousedown', down, true);
+    return () => document.removeEventListener('mousedown', down, true);
+  });
+  // keep the menu inside the viewport
+  $effect(() => {
+    if (!menu || !menuEl) return;
+    const r = menuEl.getBoundingClientRect();
+    const x = Math.min(menu.x, Math.max(4, window.innerWidth - r.width - 4));
+    const y = Math.min(menu.y, Math.max(4, window.innerHeight - r.height - 4));
+    if (x !== menu.x || y !== menu.y) menu = { ...menu, x, y };
+  });
+  function onkey(e: KeyboardEvent) {
+    if (e.key !== 'Escape') return;
+    if (menu) menu = null;
+    else if (asked.length && !document.fullscreenElement) asked = [];
+  }
 </script>
 
-<svelte:document onfullscreenchange={() => (full = document.fullscreenElement === box)} />
+<svelte:document onfullscreenchange={() => (full = document.fullscreenElement === box)} onkeydown={onkey} />
 
 <div class="canvas" class:full bind:this={box}>
   <SvelteFlow
@@ -287,14 +394,17 @@
     deleteKey={null}
     minZoom={0.2}
     onedgeclick={({ edge }) => trace(String((edge.data as { c?: string } | undefined)?.c ?? ''))}
+    onedgecontextmenu={({ edge, event }) => {
+      const c = String((edge.data as { c?: string } | undefined)?.c ?? '');
+      if (c) conditionMenu(c, event);
+    }}
+    onpanecontextmenu={({ event }) => paneMenu(event)}
     onpaneclick={() => (traced = '')}
     onnodedragstop={({ targetNode }) => targetNode && moved.set(targetNode.id, { ...targetNode.position })}
     onnodecontextmenu={({ node, event }) => {
-      event.preventDefault();
-      if (BOUNDARY.includes(node.id)) return;
       const d = node.data as StepNodeData;
-      if (d.method === 'variant') onmethod?.(d.name);
-      else onstep?.(node.id);
+      if (BOUNDARY.includes(node.id)) boundaryMenu(event, node.id, d);
+      else stepMenu(event, node.id, d);
     }}
     proOptions={{ hideAttribution: true }}
   >
@@ -336,6 +446,28 @@
     </svg>
   </button>
   </div>
+  {#if inspection}
+    <FlowInspector
+      {inspection}
+      canBack={asked.length > 1}
+      onback={() => (asked = asked.slice(0, -1))}
+      onclose={() => (asked = [])}
+      onstep={(p) => inspect({ kind: 'step', path: p })}
+      oncondition={(c) => inspect({ kind: 'condition', name: c })}
+    />
+  {/if}
+  {#if menu}
+    <div class="ctx" role="menu" bind:this={menuEl} style:left="{menu.x}px" style:top="{menu.y}px">
+      <div class="ctx-title mono">{menu.title}</div>
+      {#each menu.items as it (it.label)}
+        {#if it.sep}<hr />{/if}
+        <button type="button" role="menuitem" disabled={it.disabled} onclick={() => run(it)}>
+          {#if it.icon}<Icon name={it.icon} size={13} />{/if}
+          <span>{it.label}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
   {#if mine.length || elsewhere.length}
     <aside class="rules" class:open={rulesOpen} aria-label="Rules broken">
       <button type="button" class="head" onclick={() => (rulesOpen = !rulesOpen)} aria-expanded={rulesOpen}>
@@ -376,13 +508,64 @@
         <b class="mono">{traced}</b> <i class="l up"></i>carries it
         <button type="button" class="ghost small" onclick={() => (traced = '')}>clear</button>
       {:else}
-        click a condition to trace it · right-click a step to open it · double-click to zoom into sub-steps · see the legend (top right)
+        click a condition to trace it · right-click a step, a condition or the background to inspect it · double-click to zoom into sub-steps · see the legend (top right)
       {/if}
     </span>
   </div>
 </div>
 
 <style>
+  .ctx {
+    position: fixed;
+    z-index: 90;
+    min-width: 180px;
+    padding: 4px;
+    display: grid;
+    gap: 1px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-pop);
+    font-size: 13px;
+  }
+  .ctx-title {
+    padding: 2px 8px 4px;
+    font-size: 11px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2px;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ctx hr {
+    width: 100%;
+    margin: 2px 0;
+    border: 0;
+    border-top: 1px solid var(--border);
+  }
+  .ctx button {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    width: 100%;
+    padding: 0.3rem 0.5rem;
+    border: none;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+    border-radius: calc(var(--radius) - 2px);
+    min-height: 0;
+  }
+  .ctx button:hover:not(:disabled) {
+    background: var(--hover);
+  }
+  .ctx button:disabled {
+    color: var(--muted);
+    cursor: default;
+  }
   .rules {
     position: absolute;
     left: 10px;
