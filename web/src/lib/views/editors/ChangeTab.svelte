@@ -65,7 +65,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import CompareDialog from '../../components/CompareDialog.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ChangeRisks from '../../components/ChangeRisks.svelte';
-  import DescriptionReview from '../../components/DescriptionReview.svelte';
+  import AssessmentBubble from '../../components/AssessmentBubble.svelte';
+  import { INTENT, TITLE, itemSubjects } from '../../descriptionReview';
   import ChangeCriticality from '../../components/ChangeCriticality.svelte';
   import ChangeVerification from '../../components/ChangeVerification.svelte';
   import ChangeDerogations from '../../components/ChangeDerogations.svelte';
@@ -1083,6 +1084,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         <div class="editor-head">
           <Icon name="diff" size={18} />
           <h2>{ch.title || 'Untitled'}</h2>
+          <AssessmentBubble change={ch} subject={TITLE} label="the title" compact {closed} onchange={() => load(selected)} />
           <StatusBadge status={ch.status} />
           <ChangeCriticality change={ch} {closed} onchange={() => load(selected)} />
           <span class="grow"></span>
@@ -1112,9 +1114,25 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             </div>
           </form>
         {:else}
-          <DescriptionReview change={ch} {closed} onchange={() => load(selected)} onapply={(intent) => define({ intent }, 'Description updated: it is rated again.')}>
+          <AssessmentBubble
+            change={ch}
+            {closed}
+            value={ch.intent}
+            onchange={() => load(selected)}
+            onapply={(intent) => define({ intent }, 'Description updated: it is rated again.')}
+          >
             {#if ch.intent}<p class="intent">"{ch.intent}"</p>{/if}
-          </DescriptionReview>
+            <AssessmentBubble
+              change={ch}
+              subject={INTENT}
+              label="the intent"
+              compact
+              {closed}
+              value={ch.intent}
+              onchange={() => load(selected)}
+              onapply={(intent) => define({ intent }, 'Intent updated: it is rated again.')}
+            />
+          </AssessmentBubble>
         {/if}
         <dl class="meta">
           <dt>ID</dt><dd><code>{ch.id}</code></dd>
@@ -1273,6 +1291,9 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       </div>
       <ChangeLifecycle
         impacts
+        change={ch}
+        {closed}
+        onchanged={() => load(selected)}
         selected={selectedImpact}
         scope={scope || MAIN_SCOPE}
         rows={shownRows}
@@ -1303,6 +1324,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <h4>
               {#if i.type === 'guidance'}<span class="badge-guidance">guidance</span>{:else}{i.type || 'artifact'}{/if}
               <span class="hint">· {@render producer(i)}</span>
+              <AssessmentBubble change={ch} subject={itemSubjects(i)} label="the {i.type || 'artifact'}" compact {closed} onchange={() => load(selected)} />
               {#if i.status === ITEM_SUPERSEDED || i.status === 'candidate' || i.status === 'stale' || i.status === 'rejected'}<StatusBadge status={i.status} />{/if}
             </h4>
             {#if i.type === 'guidance' && typeof i.data?.text === 'string'}

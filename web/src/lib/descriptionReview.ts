@@ -1,9 +1,22 @@
-// The review of the description of a change (ADR 0110): an action of the methodology rates the title and the intent
-// with items of kind assessment (each the whole record of its key, the latest in effect is the rating), and the
-// person answers in the thread of the rating with items of kind comment. Mirrors the server's pkg/assess.
+// The assessments of a change (ADR 0110): an action of the methodology rates a subject (the description, the title,
+// the intent, an impact, an item) with items of kind assessment (each the whole record of its key, the latest in
+// effect is the rating), and the person answers in the thread of the rating with items of kind comment. Mirrors the
+// server's pkg/assess.
 import type { ChangeItem, Process } from './api';
 
 export const DESCRIPTION = 'description';
+export const TITLE = 'title';
+export const INTENT = 'intent';
+/** the subject of the impact of a node, by the key of the node */
+export const impactSubject = (nodeKey: string) => `impact:${nodeKey}`;
+/** the subjects of an item: by the key of its record, then by its id (a rater may name either) */
+export const itemSubjects = (it: { id?: string; data?: unknown }): string[] => {
+  const k = str((it.data as Record<string, unknown> | undefined)?.key);
+  return [...(k ? [`item:${k}`] : []), ...(it.id ? [`item:${it.id}`] : [])];
+};
+/** Subject is a subject key, or the keys naming one subject (the first is the one a comment is about). */
+export type Subject = string | string[];
+const keysOf = (s: Subject) => (Array.isArray(s) ? s : [s]);
 export const MAX_SCORE = 5;
 /** from this score the description is accepted (condition.AcceptableScore) */
 export const ACCEPTABLE_SCORE = 3;
@@ -60,6 +73,15 @@ export function fingerprint(text: string): string {
   return h.toString(16).padStart(8, '0');
 }
 
+/** textOf is the text of a subject the web can rebuild as the server does (assess.Text): the description, the title and
+ *  the intent; undefined for an impact or an item, whose canonical text needs the graph. */
+function textOf(change: { title?: string; intent?: string }, key: string): string | undefined {
+  if (key === DESCRIPTION) return subjectText(change);
+  if (key === TITLE) return (change.title ?? '').trim();
+  if (key === INTENT) return (change.intent ?? '').trim();
+  return undefined;
+}
+
 /** rates says whether a rating made on `rated` (the text or its fingerprint) is about `text`. */
 export function rates(rated: string, text: string): boolean {
   const r = rated.trim();
@@ -72,15 +94,17 @@ function inEffect(items: ChangeItem[]): ChangeItem[] {
 }
 
 /** assessmentOf is the latest rating of a subject of the change, undefined when none. */
-export function assessmentOf(change: { title?: string; intent?: string; items?: ChangeItem[] }, key = DESCRIPTION): Assessment | undefined {
+export function assessmentOf(change: { title?: string; intent?: string; items?: ChangeItem[] }, subject: Subject = DESCRIPTION): Assessment | undefined {
+  const keys = keysOf(subject);
+  const key = keys[0] ?? '';
   let last: ChangeItem | undefined;
   let at = -1;
   let commented = -1;
   let versions = 0;
   inEffect(change.items ?? []).forEach((it, i) => {
     const d = dataOf(it);
-    if (it.kind === 'comment' && str(d.about) === key) commented = i;
-    if (it.kind === 'assessment' && str(d.key) === key) {
+    if (it.kind === 'comment' && keys.includes(str(d.about))) commented = i;
+    if (it.kind === 'assessment' && keys.includes(str(d.key))) {
       last = it;
       at = i;
       versions++;
@@ -92,6 +116,7 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
     typeof f === 'string' ? { text: f, severity: '' } : { text: str((f as Record<string, unknown>)?.text), severity: str((f as Record<string, unknown>)?.severity) },
   );
   const rated = str(d.rated);
+  const text = textOf(change, str(d.key));
   return {
     key,
     score: num(d.score),
@@ -100,7 +125,7 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
     suggestion: str(d.suggestion),
     reply: str(d.reply),
     rated,
-    current: key === DESCRIPTION ? rates(rated, subjectText(change)) : true,
+    current: text === undefined || rates(rated, text),
     answered: commented < at,
     versions,
     by: last.producedBy ?? '',
@@ -109,12 +134,13 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
 }
 
 /** threadOf lists the messages about a subject, oldest first: the comments and the ratings (their reply). */
-export function threadOf(items: ChangeItem[] | undefined, key = DESCRIPTION): Message[] {
+export function threadOf(items: ChangeItem[] | undefined, subject: Subject = DESCRIPTION): Message[] {
+  const keys = keysOf(subject);
   const out: Message[] = [];
   for (const it of inEffect(items ?? [])) {
     const d = dataOf(it);
-    if (it.kind === 'comment' && str(d.about) === key) out.push({ kind: 'comment', id: it.id ?? '', text: str(d.text), at: it.createdAt });
-    else if (it.kind === 'assessment' && str(d.key) === key)
+    if (it.kind === 'comment' && keys.includes(str(d.about))) out.push({ kind: 'comment', id: it.id ?? '', text: str(d.text), at: it.createdAt });
+    else if (it.kind === 'assessment' && keys.includes(str(d.key)))
       out.push({ kind: 'assessment', id: it.id ?? '', text: str(d.reply) || str(d.verdict), score: num(d.score), at: it.createdAt });
   }
   return out;
@@ -146,12 +172,17 @@ export function raterRun(processes: Iterable<Process>, change: { id?: string }, 
 }
 
 /** commentItem is the item a person writes to answer the rater. */
-export const commentItem = (text: string, key = DESCRIPTION): ChangeItem => ({ kind: 'comment', type: 'comment', data: { about: key, text: text.trim() } });
+export const commentItem = (text: string, subject: Subject = DESCRIPTION): ChangeItem => ({
+  kind: 'comment',
+  type: 'comment',
+  data: { about: keysOf(subject)[0] ?? DESCRIPTION, text: text.trim() },
+});
 
 /** pending says whether the rating still waits to be processed: the bubble floats open by the description until the
  *  rating is accepted (a low score, a remark not answered yet, a description changed since its rating), or while the
  *  rater works on a description it has not rated yet. */
-export function pending(st: ReturnType<typeof reviewState>, working = false): boolean {
+export function pending(st: ReturnType<typeof reviewState>, working = false, processed?: boolean): boolean {
+  if (processed !== undefined) return !processed && (st !== 'none' || working);
   return st === 'none' ? working : st !== 'accepted';
 }
 

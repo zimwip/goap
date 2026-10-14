@@ -10,6 +10,9 @@
   import StatusBadge from './StatusBadge.svelte';
   import { confirmDialog } from '../shell/confirmState.svelte';
   import { assistTarget } from '../assist/registry.svelte';
+  import AssessmentBubble from './AssessmentBubble.svelte';
+  import { impactSubject } from '../descriptionReview';
+  import type { Change } from '../api';
 
   let {
     rows,
@@ -31,6 +34,9 @@
     scope = '',
     selected = '',
     onopenreviews,
+    change,
+    closed = false,
+    onchanged,
   }: {
     rows: LifecycleRow[];
     /** nodes the change could take on */
@@ -65,7 +71,16 @@
     selected?: string;
     /** opens the Reviews tab, where the impacts are reviewed */
     onopenreviews?: () => void;
+    /** with impacts: the change, whose assessments of the impacts (`impact:<key>`, ADR 0110) are shown by their node */
+    change?: Change;
+    /** the change can no longer be answered */
+    closed?: boolean;
+    /** an answer to an assessment was added */
+    onchanged?: () => void;
   } = $props();
+
+  // an assessment of an impact is processed once the impact is decided by its review
+  const decided = (r: LifecycleRow) => r.impact?.review === 'accepted' || r.impact?.review === 'rejected';
 
   const onOption = $derived(impacts && !!scope && scope !== 'main');
   // a draft reference has no version (ADR 0079): the node gets one when the change lands
@@ -268,6 +283,9 @@
             <td>
               {#if !openable(r)}<code>{r.node.key}</code>{:else}<button type="button" class="link mono" title="Open the node in its editor, as this change has it" onclick={() => onopennode(r)}>{r.node.key}</button>{/if}
               <span class="hint">{r.node.type}{r.created ? '' : ` v${r.node.version ?? 0}`}</span>
+              {#if impacts && change && r.node.key}
+                <AssessmentBubble {change} subject={impactSubject(r.node.key)} label="the impact on {r.node.key}" compact processed={decided(r)} {closed} onchange={onchanged} />
+              {/if}
               {#if r.created}<span class="tag ok" title="Created by this change; stored when it is applied">new</span>{/if}
               {#if r.draft && !r.created}<span class="tag ok" title="The change holds a draft of the node: it gets its next version when the change lands (ADR 0079)">draft</span>{/if}
               {#if onOption && r.impact}

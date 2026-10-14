@@ -696,10 +696,13 @@ edited description so); an event trigger on the change of the event takes the sa
 work on that change before it starts the new one (`Engine.supersedeRuns`). The graph publishes
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
 `sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
-answers the requester's `comment` items; the analysis waits for `description_accepted`; the change tab shows the rating
-as a comment bubble floating by the intent while the rating is pending (not accepted yet; `pending`, hidden by the person
-until the rating or its thread moves), folded into its badge once accepted (`DescriptionReview.svelte`,
-`web/src/lib/descriptionReview.ts`). A rating is about any subject:
+answers the requester's `comment` items; the analysis waits for `description_accepted`; the web shows every assessment
+by its subject as a comment bubble (`AssessmentBubble.svelte`, `web/src/lib/descriptionReview.ts`): the description wraps
+the intent and floats open while its rating is pending (not accepted yet; `pending`, hidden by the person until the
+rating or its thread moves), folded into its badge once accepted; the title, the intent, the impacts (rows of the
+impact table, processed once the impact is decided by its review), the risks, the actions and the artifacts carry a
+compact badge, coloured while pending, whose bubble opens on a click (placed on the viewport, never clipped by a
+table); assessments and comments are no longer in the raw items list. A rating is about any subject:
 `description`, `title`, `intent`, `impact:<node key>`, `item:<record key or id>` (`assess.Text` over the blackboard),
 `rated` holding the text or its fingerprint (`assess.Fingerprint`, FNV-1a 32 bits, printed `fp=` by the brief).
 A methodology declares its own events (`events: [{name, description}]`, names out of the standard families) and

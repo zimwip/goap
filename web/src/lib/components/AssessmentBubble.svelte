@@ -1,34 +1,82 @@
 <script lang="ts">
-  // The rating of the description of a change and its thread (ADR 0110): a reactive step of the methodology rates the
-  // title and the intent each time they change or the person answers it here. The field it rates is rendered inside
-  // (`children`) and a bubble floats by it while the rating waits to be processed (`pending`: not accepted yet),
-  // showing the latest rating, its findings and the wording it suggests (Apply edits the description, which the step
-  // rates again), and the thread; an answer is a comment item of the change, which wakes the same run of the rater.
-  // Once accepted, or hidden by the person until the rating or its thread moves, it folds into the badge.
+  // The assessment of a subject of a change and its thread (ADR 0110): an action of the methodology rates the
+  // description (title and intent), the title, the intent, an impact or an item, and the person answers it here. The
+  // field it rates is rendered inside (`children`) and its badge sits next to it; a bubble floats by the badge while
+  // the assessment waits to be processed (`pending`: not accepted yet, or `processed` as the caller judges it, e.g. an
+  // impact decided by its review), showing the latest rating, its findings, the wording it suggests (Apply, when the
+  // caller can apply it) and the thread; an answer is a comment item of the change, which wakes the run of the rater.
+  // Once processed, or hidden by the person until the rating or its thread moves, it folds into the badge. A compact
+  // bubble (rows of a table) never opens by itself: its badge is coloured while pending, the bubble opens on a click.
+  // The bubble is positioned on the viewport, so a scrolling table does not clip it.
   import type { Snippet } from 'svelte';
   import { graph, errorMessage, type Change } from '../api';
-  import { MAX_SCORE, assessmentOf, bubbleKey, commentItem, pending, raterRun, reviewState, threadOf } from '../descriptionReview';
+  import { DESCRIPTION, MAX_SCORE, assessmentOf, bubbleKey, commentItem, pending, raterRun, reviewState, threadOf, type Subject } from '../descriptionReview';
   import { processes } from '../stores/live.svelte';
   import { openTab } from '../shell/tabs.svelte';
 
   let {
     change,
+    subject = DESCRIPTION,
+    label = 'the description',
+    compact = false,
+    processed,
     closed = false,
     onchange,
     onapply,
+    value,
     children,
-  }: { change: Change; closed?: boolean; onchange?: () => void; onapply?: (intent: string) => void; children?: Snippet } = $props();
+  }: {
+    change: Change;
+    /** the subject key, or the keys naming it (an item by its record key and its id) */
+    subject?: Subject;
+    /** what the subject is, in words */
+    label?: string;
+    /** a row of a table: the bubble opens on a click only */
+    compact?: boolean;
+    /** whether the assessment is processed, when the caller knows better than its score (an impact decided) */
+    processed?: boolean;
+    closed?: boolean;
+    onchange?: () => void;
+    /** applies the suggested wording to the subject; no Apply button without it */
+    onapply?: (text: string) => void;
+    /** the text of the subject now: no Apply when the suggestion says the same */
+    value?: string;
+    children?: Snippet;
+  } = $props();
 
-  const rating = $derived(assessmentOf(change));
-  const thread = $derived(threadOf(change.items));
+  const rating = $derived(assessmentOf(change, subject));
+  const thread = $derived(threadOf(change.items, subject));
   const st = $derived(reviewState(rating));
+  const due = $derived(processed !== undefined ? !processed && !!rating : st !== 'accepted' && st !== 'none');
   const run = $derived(rating ? raterRun(processes.values(), change, rating.item) : undefined);
   const working = $derived(run?.status === 'running');
   const key = $derived(bubbleKey(rating, thread));
   // open: asked by the person; hidden: the key of what the person closed while it was pending
   let open = $state(false);
   let hidden = $state('');
-  const shown = $derived(open || (pending(st, working) && hidden !== key));
+  const shown = $derived(open || (!compact && pending(st, working, processed) && hidden !== key));
+
+  // the bubble floats under the badge, on the viewport (a table or a pane scrolling under it does not clip it)
+  let badge = $state<HTMLElement>();
+  let pos = $state({ top: 0, left: 0, tail: 24 });
+  const WIDTH = 544;
+  function place() {
+    if (!badge) return;
+    const r = badge.getBoundingClientRect();
+    const width = Math.min(WIDTH, window.innerWidth - 32);
+    const left = Math.max(16, Math.min(r.right - width, window.innerWidth - width - 16));
+    pos = { top: r.bottom + 8, left, tail: Math.max(12, Math.min(width - 24, r.left + r.width / 2 - left - 6)) };
+  }
+  $effect(() => {
+    if (!shown) return;
+    place();
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('resize', place);
+    return () => {
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('resize', place);
+    };
+  });
 
   function close() {
     open = false;
@@ -39,13 +87,14 @@
   let busy = $state(false);
   let error = $state('');
 
-  const LABEL: Record<typeof st, string> = {
+  const LABELS: Record<typeof st, string> = {
     none: 'not rated yet',
-    stale: 'the description changed since its rating',
+    stale: 'changed since its rating',
     awaiting: 'your remark awaits an answer',
     accepted: 'accepted',
     refused: 'to be improved',
   };
+  const stateLabel = $derived(processed === undefined || !rating ? LABELS[st] : processed ? 'processed' : 'not processed yet');
 
   async function send() {
     const text = answer.trim();
@@ -53,7 +102,7 @@
     busy = true;
     error = '';
     try {
-      await graph.addItems(change.id, [commentItem(text)]);
+      await graph.addItems(change.id, [commentItem(text, subject)]);
       answer = '';
       onchange?.();
     } catch (e) {
@@ -64,25 +113,35 @@
   }
 </script>
 
-<div class="anchor">
-  <div class="field">{@render children?.()}</div>
+<div class="anchor" class:compact>
+  {#if children}<div class="field">{@render children()}</div>{/if}
   {#if rating || thread.length > 0}
     <button
       type="button"
-      class="bubble {st}"
+      class="bubble"
+      class:due
+      class:done={!!rating && !due}
+      bind:this={badge}
       aria-expanded={shown}
-      title="Rating of the description: {LABEL[st]}"
+      title="Assessment of {label}: {rating?.verdict || stateLabel}"
       onclick={toggle}
     >
       <span aria-hidden="true">💬</span>
       {#if rating}<strong>{rating.score}/{MAX_SCORE}</strong>{/if}
-      <span>{LABEL[st]}{working ? ' · rating…' : ''}</span>
+      {#if compact}
+        {#if rating?.verdict}<span>{rating.verdict}</span>{/if}{#if working}<span>…</span>{/if}
+      {:else}
+        <span>{stateLabel}{working ? ' · rating…' : ''}</span>
+      {/if}
     </button>
     {#if shown}
       <div
-        class="panel {st}"
+        class="panel"
+        class:due
+        class:done={!!rating && !due}
+        style="top: {pos.top}px; left: {pos.left}px; --tail: {pos.tail}px"
         role="dialog"
-        aria-label="Rating of the description"
+        aria-label="Assessment of {label}"
         tabindex="-1"
         onkeydown={(e) => e.key === 'Escape' && (e.stopPropagation(), close())}
       >
@@ -91,9 +150,10 @@
             <strong>{rating.score}/{MAX_SCORE}</strong>
             {#if rating.verdict}<span class="verdict">{rating.verdict}</span>{/if}
           {:else}
-            <strong>Rating</strong>
+            <strong>Assessment</strong>
           {/if}
-          <span class="state">{LABEL[st]}{working ? ' · rating…' : ''}</span>
+          <span class="state">of {label}</span>
+          <span class="state">{stateLabel}{working ? ' · rating…' : ''}</span>
           <span class="spacer"></span>
           {#if run}<button type="button" class="link small" onclick={() => openTab({ kind: 'run', params: { id: run.id ?? '' } })}>Open the run</button>{/if}
           <button type="button" class="link small close" aria-label="Hide the rating" title="Hide until the rating changes" onclick={close}>✕</button>
@@ -107,9 +167,9 @@
           {/if}
           {#if rating.suggestion}
             <div class="suggestion">
-              <span class="hint">Suggested description</span>
+              <span class="hint">Suggested wording</span>
               <blockquote>{rating.suggestion}</blockquote>
-              {#if !closed && onapply && rating.suggestion.trim() !== (change.intent ?? '').trim()}
+              {#if !closed && onapply && rating.suggestion.trim() !== (value ?? '').trim()}
                 <button type="button" class="small" onclick={() => onapply?.(rating.suggestion)}>Apply</button>
               {/if}
             </div>
@@ -161,23 +221,31 @@
     color: var(--text);
     cursor: pointer;
   }
-  .bubble.accepted {
+  .anchor.compact {
+    display: inline-flex;
+    vertical-align: middle;
+  }
+  .compact .bubble {
+    margin-top: 0;
+    padding: 0 0.45rem;
+    font-size: 0.78rem;
+  }
+  .bubble.done {
     border-color: var(--ok);
     background: var(--ok-soft);
   }
-  .bubble.refused,
-  .bubble.stale,
-  .bubble.awaiting {
+  .bubble.due {
     border-color: var(--warn);
     background: var(--warn-soft);
   }
-  /* the bubble floats under its badge, over what follows the field, its tail pointing at the badge */
+  /* the bubble floats under its badge (placed on the viewport by place()), its tail pointing at the badge */
   .panel {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    z-index: 30;
-    width: min(34rem, 100%);
+    position: fixed;
+    z-index: 60;
+    width: min(34rem, calc(100vw - 2rem));
+    text-align: left;
+    font-weight: normal;
+    white-space: normal;
     max-height: 60vh;
     overflow: auto;
     padding: 0.6rem 0.8rem;
@@ -187,19 +255,17 @@
     border-radius: 0.6rem;
     box-shadow: var(--shadow-pop);
   }
-  .panel.refused,
-  .panel.stale,
-  .panel.awaiting {
+  .panel.due {
     border-color: var(--warn);
   }
-  .panel.accepted {
+  .panel.done {
     border-color: var(--ok);
   }
   .panel::before {
     content: '';
     position: absolute;
     top: -7px;
-    right: 2.2rem;
+    left: var(--tail, 24px);
     width: 12px;
     height: 12px;
     background: var(--surface);

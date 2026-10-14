@@ -2,9 +2,11 @@
 // they concern, and the item kinds that have no pane of their own (debug view).
 import type { ChangeItem } from './api';
 
-/** Item kinds with a dedicated pane or tab (Reviews, Risks & actions, Verification, Derogations, Decisions, Changes, Audit). */
+/** Item kinds with a dedicated pane or tab (Reviews, Risks & actions, Verification, Derogations, Decisions, Changes, Audit),
+ *  and the assessments and their comments, shown in a bubble by the subject they are about (ADR 0110). */
 export const DEDICATED_KINDS: readonly string[] = [
   'artifact', 'decision', 'review', 'risk', 'action', 'verification', 'derogation', 'decision_point', 'transition', 'flow',
+  'assessment', 'comment',
 ];
 
 export const artifactsOf = (items: ChangeItem[]): ChangeItem[] => items.filter((i) => i.kind === 'artifact');

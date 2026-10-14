@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { accepted, assessmentOf, bubbleKey, commentItem, fingerprint, pending, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
+import { accepted, assessmentOf, bubbleKey, commentItem, fingerprint, impactSubject, itemSubjects, pending, raterRun, reviewState as state, subjectText, threadOf } from './descriptionReview';
 import type { ChangeItem, Process } from './api';
 
 const change = { id: 'C1', methodology: 'sdlc', title: 'Pay', intent: 'Pay in 3 installments' };
@@ -71,5 +71,34 @@ describe('descriptionReview', () => {
     const more = [...items, comment('C1', 'why?')];
     expect(bubbleKey(assessmentOf({ ...change, items: more }), threadOf(more))).not.toBe(k);
     expect(bubbleKey(assessmentOf({ ...change, intent: 'other', items }), threadOf(items))).not.toBe(k);
+  });
+
+  it('follows the decision of the caller when it knows the assessment is processed', () => {
+    expect(pending('refused', false, false)).toBe(true);
+    expect(pending('refused', false, true)).toBe(false);
+    expect(pending('accepted', false, false)).toBe(true);
+    expect(pending('none', false, false)).toBe(false);
+    expect(pending('none', true, false)).toBe(true);
+  });
+
+  it('rates any subject: the title and the intent by their text, impacts and items by their key or id', () => {
+    const rate = (id: string, key: string, rated: string): ChangeItem => ({ id, kind: 'assessment', data: { key, score: 4, rated, verdict: 'confirmed' } });
+    const items = [
+      rate('A1', 'title', 'Pay'),
+      rate('A2', 'intent', 'old intent'),
+      rate('A3', impactSubject('REQ-1'), 'fp'),
+      rate('A4', 'item:A9', 'x'),
+      { id: 'C9', kind: 'comment', data: { about: 'item:RSK-1', text: 'why?' } } as ChangeItem,
+    ];
+    const c = { ...change, items };
+    expect(assessmentOf(c, 'title')?.current).toBe(true);
+    expect(assessmentOf(c, 'intent')?.current).toBe(false);
+    expect(assessmentOf(c, impactSubject('REQ-1'))?.current).toBe(true);
+    expect(assessmentOf(c, 'description')).toBeUndefined();
+    const subjects = itemSubjects({ id: 'A9', data: { key: 'RSK-1' } });
+    expect(subjects).toEqual(['item:RSK-1', 'item:A9']);
+    expect(assessmentOf(c, subjects)?.item).toBe('A4');
+    expect(threadOf(items, subjects).map((m) => m.id)).toEqual(['A4', 'C9']);
+    expect(commentItem(' ok ', subjects).data).toEqual({ about: 'item:RSK-1', text: 'ok' });
   });
 });

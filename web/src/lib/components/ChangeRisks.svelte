@@ -3,6 +3,7 @@
   // actions that mitigate it) with its heat map, and the actions that follow from risks and decisions. Every edit is a
   // new version of the record, kept in the change log with who made it.
   import { graph, errorMessage, type Change, type Struct } from '../api';
+  import AssessmentBubble from './AssessmentBubble.svelte';
   import { riskRegister, actionList, liveRisk, unmitigated, nextKey, RISK_STATUSES, ACTION_STATUSES, HIGH_RISK } from '../risks';
 
   let { change, closed = false, onchange }: { change: Change; closed?: boolean; onchange?: () => void } = $props();
@@ -79,7 +80,7 @@
           <tbody>
             {#each risks as r (r.key)}
               <tr class:dim={!liveRisk(r)} class:warn={unmitigated(r, actions)}>
-                <td class="mono">{r.key}</td>
+                <td class="mono">{r.key} <AssessmentBubble {change} subject={`item:${r.key}`} label="the risk {r.key}" compact {closed} {onchange} /></td>
                 <td>{r.title}{#if r.description}<div class="hint">{r.description}</div>{/if}</td>
                 <td class="mono"><span class="score {heat(r.score)}">{r.score}</span> {r.probability}×{r.impact}</td>
                 <td>
@@ -120,7 +121,7 @@
       <tbody>
         {#each actions as a (a.key)}
           <tr class:dim={a.status !== 'open'}>
-            <td class="mono">{a.key}</td>
+            <td class="mono">{a.key} <AssessmentBubble {change} subject={`item:${a.key}`} label="the action {a.key}" compact {closed} {onchange} /></td>
             <td>{a.title}{#if a.result}<div class="hint">{a.result}</div>{/if}</td>
             <td class="mono">{a.for || '—'}</td>
             <td>{a.owner || '—'}</td>
