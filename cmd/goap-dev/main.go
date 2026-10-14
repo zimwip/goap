@@ -34,6 +34,8 @@ type config struct {
 	ModelsConfig     string // GOAP_MODELS_CONFIG
 	DevFSRoot        string // GOAP_DEV_FS_ROOT
 	WorkspaceRoot    string // GOAP_DEV_WORKSPACE_ROOT
+	WorkspaceImage   string // GOAP_DEV_WORKSPACE_IMAGE: the commands of the workspaces in containers of this image
+	DockerHost       string // GOAP_DOCKER_HOST
 	ConnectorToken   string // GOAP_CONNECTOR_TOKEN (generated when empty)
 	Dev              authz.Principal
 }
@@ -48,6 +50,8 @@ func loadConfig() config {
 		ModelsConfig:     platform.Env("GOAP_MODELS_CONFIG", ""),
 		DevFSRoot:        platform.Env("GOAP_DEV_FS_ROOT", ""),
 		WorkspaceRoot:    platform.Env("GOAP_DEV_WORKSPACE_ROOT", ""),
+		WorkspaceImage:   platform.Env("GOAP_DEV_WORKSPACE_IMAGE", ""),
+		DockerHost:       platform.Env("GOAP_DOCKER_HOST", "unix:///var/run/docker.sock"),
 		ConnectorToken:   platform.Env("GOAP_CONNECTOR_TOKEN", ""),
 		Dev: authz.Principal{
 			Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),

@@ -99,7 +99,7 @@ func LocalFS(ctx context.Context, g *graph.Graph, root string) error {
 // Workspace gives the default organisation the workspaces of its changes under the directory root (the local
 // workspace adapter, ADR 0118), unless it already holds an instance of the workspace MCP. The MCP and its adapter
 // definition are seeded by graphsvc.SeedBuiltins.
-func Workspace(ctx context.Context, g *graph.Graph, root string) error {
+func Workspace(ctx context.Context, g *graph.Graph, root, image string) error {
 	unit := g.Structure(domain.StructureOrganisation).Root
 	if _, err := g.NodeByKey(ctx, "organisation", adapter.Key(unit, mcpbuiltin.Workspace)); err == nil {
 		return nil
@@ -109,6 +109,9 @@ func Workspace(ctx context.Context, g *graph.Graph, root string) error {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return err
+	}
+	if image != "" {
+		return graphsvc.SeedAdapter(ctx, g, mcpbuiltin.WorkspaceDockerAdapter(unit, abs, image))
 	}
 	return graphsvc.SeedAdapter(ctx, g, mcpbuiltin.WorkspaceAdapter(unit, abs))
 }

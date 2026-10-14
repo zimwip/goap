@@ -1,7 +1,8 @@
 # ADR 0118 — The workspace of a change: the tool box of a coding agent
 
-**Status**: accepted; phases 1 to 3 implemented (the `workspace` MCP, the local connector, the call context of a
-connector; the loop budget of an llm action; the build method of `sdlc`), phase 4 of "Plan" not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP, connectors, adapters), ADR 0028
+**Status**: accepted; phases 1 to 4 implemented (the `workspace` MCP, the local connector, the call context of a
+connector; the loop budget of an llm action; the build method of `sdlc`; the docker connector), Kubernetes and the
+filtered egress not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP, connectors, adapters), ADR 0028
 (built-in MCPs, call context), ADR 0061 (adapter secrets), ADR 0109 (conditions derived from the context),
 ADR 0112 (persistent agents)
 
@@ -146,14 +147,33 @@ the first action of a flat agent (`delivery`). `publish_build` needs `build_chec
 after the build, the second holds it to a success. Tested end to end on a local git repository
 (`pkg/engine/sdlc_workspace_test.go`).
 
+### 7. The docker connector: the commands in a container per workspace
+
+`workspace-docker` (`workspace.NewDocker(host)`, same package and same tools as the local one; `cmd/connector-workspace`
+with `GOAP_WORKSPACE_DOCKER` set to the Docker Engine API, `goap-dev` always, at `GOAP_DOCKER_HOST`) keeps the
+workspace of a change in a directory of its host as the local connector does, and runs its commands in a container
+of its own (`goap-ws-<change>`, created at the first command): the image the unit configures (`image`, required: the
+toolchains, git and a shell), the directory mounted at `/workspace`, no network by default (`network`: a network
+the administrator gives, whose egress is filtered for the hosts the unit allows), every capability dropped, no
+privilege escalation, a read-only root file system with a `/tmp` tmpfs and `HOME` in the workspace, an init, limits
+(`memoryMB` 2048, `cpus` 2, `pids` 1024), the connector's uid and gid unless `user` says otherwise (the files the
+commands write stay the connector's). A command is an exec (its outputs demultiplexed, its exit code read after);
+a timeout or `bash_kill` kills it and its children through the pid it recorded; `close` removes the container.
+The host environment never enters the container (no `passEnv`), the files are read, written and searched by the
+connector on the host (`os.Root`), and git with the token runs on the host too: the token never reaches a command.
+The provisioners of `internal/sandbox` are not reused: they start a runner per script action, not a long-lived
+container driven by execs. Not done: one image per technology (one image per unit adapter for now), Kubernetes,
+the egress filter itself. Tests: `internal/connectors/workspace/docker_test.go`, over a fake Docker API running the
+execs on the host.
+
 ## Plan
 1. ✅ The `workspace` MCP, the local connector, `change_id` / `process_id` on `InvokeRequest`, `goap-dev`.
 2. ✅ A loop budget on the `llm` action (§5), the compaction of a long conversation, tool results cut keeping their
    tail.
 3. ✅ The `build` method of `sdlc` (prepare / implement / build / fix / publish) on the components a change
    impacts (`alm@Component.repository`), its conditions derived (§6).
-4. A container connector (`workspace-docker`, then Kubernetes) on the provisioners of `internal/sandbox`: one
-   container per change, an image per technology, limits, the network closed but to the hosts the unit lists.
+4. ✅ A container connector (`workspace-docker`, §7): one container per change, limits, no network by default.
+   Then: Kubernetes, an image per technology, the egress filtered for the hosts the unit lists.
 
 ## Consequences
 - A methodology names the MCP `workspace`, never where it runs: the organisation decides between a directory and a

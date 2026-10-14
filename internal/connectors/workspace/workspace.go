@@ -39,11 +39,17 @@ const DefaultBranchPrefix = "goap/"
 // ErrNoChange is returned for a call that runs for no change: a workspace is the one of a change.
 var ErrNoChange = errors.New("the workspace tools work for a change: this call runs for none")
 
-// Connector implements connectorkit.Connector on the local machine. Use New: it keeps the background commands.
+// DockerID is the identifier of the connector running the commands of a workspace in a container (ADR 0118 §7).
+const DockerID = "workspace-docker"
+
+// Connector implements connectorkit.Connector: on the local machine (New) or with the commands in a container per
+// workspace (NewDocker). Use a constructor: it keeps the background commands.
 type Connector struct {
 	// Roots, when not empty, restricts the "root" a unit may configure to these directories or their sub-directories.
 	Roots []string
 	jobs  *jobs
+	// docker runs the commands in containers; nil: on the host
+	docker *dockerRunner
 }
 
 var _ connectorkit.Connector = Connector{}
@@ -51,6 +57,21 @@ var _ connectorkit.Connector = Connector{}
 // New returns a connector restricted to roots (none: any root).
 func New(roots ...string) Connector {
 	return Connector{Roots: roots, jobs: &jobs{byWorkspace: map[string]map[string]*job{}}}
+}
+
+// NewDocker returns the connector running the commands of each workspace in a container of its own, through the
+// Docker Engine API at host ("unix:///var/run/docker.sock", "tcp://proxy:2375"), restricted to roots like New.
+func NewDocker(host string, roots ...string) Connector {
+	c := New(roots...)
+	c.docker = &dockerRunner{api: &dockerAPI{host: host}}
+	return c
+}
+
+func (c Connector) runner() runner {
+	if c.docker != nil {
+		return c.docker
+	}
+	return localRunner{}
 }
 
 func schema(v map[string]any) *structpb.Struct {
@@ -96,22 +117,34 @@ const (
 )
 
 // Info implements connectorkit.Connector.
-func (Connector) Info() *connectorv1.ConnectorInfo {
+func (c Connector) Info() *connectorv1.ConnectorInfo {
 	p := str("path in the workspace (relative; a leading / is the workspace itself)")
 	op := func(name, desc string, input map[string]any) *connectorv1.Operation {
 		return &connectorv1.Operation{Name: name, Description: desc, InputSchema: schema(input)}
 	}
+	id, desc, required := ID, "Workspaces of the changes in directories of the local machine (commands not isolated).", []any{"root"}
+	props := map[string]any{
+		"root":         str("directory holding one workspace per change"),
+		"env":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "variables set for the commands (NAME=value)"},
+		"gitName":      str("author of the commits made in the workspace"),
+		"gitEmail":     str("e-mail of that author"),
+		"branchPrefix": str("prefix of the branch of a change in its sources (default goap/)"),
+	}
+	if c.docker != nil {
+		id, desc, required = DockerID, "Workspaces of the changes in directories of the connector's host, their commands in a container per workspace.", []any{"root", "image"}
+		props["image"] = str("image of the containers (the toolchains the changes build with, git, a shell)")
+		props["network"] = str("network of the containers (default none: no network)")
+		props["user"] = str("user of the commands, uid:gid (default the connector's)")
+		props["memoryMB"] = num("memory limit of a container, in MiB (default 2048)")
+		props["cpus"] = map[string]any{"type": "number", "description": "CPUs of a container (default 2)"}
+		props["pids"] = num("process limit of a container (default 1024)")
+	} else {
+		props["passEnv"] = map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "variables of the host environment given to the commands"}
+	}
 	return &connectorv1.ConnectorInfo{
-		Id: ID, Version: "1", Description: "Workspaces of the changes in directories of the local machine (commands not isolated).",
-		ConfigSchema: schema(map[string]any{"type": "object", "required": []any{"root"}, "properties": map[string]any{
-			"root":         str("directory holding one workspace per change"),
-			"passEnv":      map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "variables of the host environment given to the commands"},
-			"env":          map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "variables set for the commands (NAME=value)"},
-			"gitName":      str("author of the commits made in the workspace"),
-			"gitEmail":     str("e-mail of that author"),
-			"branchPrefix": str("prefix of the branch of a change in its sources (default goap/)"),
-		}}),
-		SecretNames: []string{SecretGitToken},
+		Id: id, Version: "1", Description: desc,
+		ConfigSchema: schema(map[string]any{"type": "object", "required": required, "properties": props}),
+		SecretNames:  []string{SecretGitToken},
 		Operations: []*connectorv1.Operation{
 			op(OpOpen, "Open the workspace of the change: clone sources on the branch of the change", obj(map[string]any{
 				"sources": map[string]any{"type": "array", "description": "repositories to clone", "items": obj(map[string]any{
@@ -184,6 +217,9 @@ func (c Connector) lifecycle(ctx context.Context, op string, s space, args map[s
 	exists := statErr == nil
 	if op == OpClose {
 		stopped := c.jobs.stopAll(s.dir)
+		if err := c.runner().remove(ctx, s); err != nil {
+			return nil, err
+		}
 		if !boolArg(args, "keep") && exists {
 			if err := os.RemoveAll(s.dir); err != nil {
 				return nil, err
@@ -195,6 +231,9 @@ func (c Connector) lifecycle(ctx context.Context, op string, s space, args map[s
 	if exists {
 		out["sources"] = sources(ctx, s)
 		out["commands"] = c.jobs.list(s.dir)
+		if st := c.runner().status(ctx, s); st != nil {
+			out["container"] = st
+		}
 	}
 	return out, nil
 }

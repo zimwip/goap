@@ -54,6 +54,9 @@ func TestWorkspace(t *testing.T) {
 			t.Fatalf("adapter %s: %v", a.Name, err)
 		}
 	}
+	if err := WorkspaceDockerAdapter("ORG-DEFAULT", "/tmp/ws", "goap/builder:1").Validate(d); err != nil {
+		t.Fatal(err)
+	}
 	if err := WorkspaceAdapter("ORG-DEFAULT", "/tmp/ws").Validate(d); err != nil {
 		t.Fatal(err)
 	}

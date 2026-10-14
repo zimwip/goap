@@ -1,6 +1,8 @@
 package mcpbuiltin
 
 import (
+	"slices"
+
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/mcp"
@@ -58,24 +60,45 @@ func WorkspaceDef() mcp.Def {
 	}}
 }
 
+// WorkspaceDocker is the adapter definition of the workspace MCP on the docker connector (the commands of each
+// workspace in a container of its own) and the id of that connector.
+const WorkspaceDocker = "workspace-docker"
+
 // WorkspaceAdapterDefs are the adapter definitions of the workspace MCP: each tool is the operation of the same name
 // of the connector.
 func WorkspaceAdapterDefs() []adapter.Def {
-	return []adapter.Def{{Name: WorkspaceLocal, MCP: Workspace, Connector: WorkspaceLocal, Language: algo.JavaScript,
-		Description: "The workspace MCP on the local machine: one directory per change under root; the commands are not isolated (development, trusted hosts)",
-		Params: []algo.Param{
-			{Name: "root", Type: algo.ParamString, Required: true, Description: "Directory holding one workspace per change"},
-			{Name: "passEnv", Type: algo.ParamStrings, Description: "Variables of the host environment given to the commands"},
-			{Name: "env", Type: algo.ParamStrings, Description: "Variables set for the commands (NAME=value)"},
-			{Name: "gitName", Type: algo.ParamString, Description: "Author of the commits made in the workspace"},
-			{Name: "gitEmail", Type: algo.ParamString, Description: "E-mail of that author"},
-			{Name: "branchPrefix", Type: algo.ParamString, Description: "Prefix of the branch of a change in its sources (default goap/)"},
-			{Name: "git_token", Type: adapter.ParamSecret, Description: "Token the sources are cloned and pushed with (never given to the commands)"},
-		},
-		Code: "return ctx.call(ctx.tool(), ctx.args());\n"}}
+	common := []algo.Param{
+		{Name: "root", Type: algo.ParamString, Required: true, Description: "Directory holding one workspace per change"},
+		{Name: "env", Type: algo.ParamStrings, Description: "Variables set for the commands (NAME=value)"},
+		{Name: "gitName", Type: algo.ParamString, Description: "Author of the commits made in the workspace"},
+		{Name: "gitEmail", Type: algo.ParamString, Description: "E-mail of that author"},
+		{Name: "branchPrefix", Type: algo.ParamString, Description: "Prefix of the branch of a change in its sources (default goap/)"},
+		{Name: "git_token", Type: adapter.ParamSecret, Description: "Token the sources are cloned and pushed with (never given to the commands)"},
+	}
+	const code = "return ctx.call(ctx.tool(), ctx.args());\n"
+	return []adapter.Def{
+		{Name: WorkspaceLocal, MCP: Workspace, Connector: WorkspaceLocal, Language: algo.JavaScript, Code: code,
+			Description: "The workspace MCP on the local machine: one directory per change under root; the commands are not isolated (development, trusted hosts)",
+			Params:      append(slices.Clone(common), algo.Param{Name: "passEnv", Type: algo.ParamStrings, Description: "Variables of the host environment given to the commands"})},
+		{Name: WorkspaceDocker, MCP: Workspace, Connector: WorkspaceDocker, Language: algo.JavaScript, Code: code,
+			Description: "The workspace MCP with the commands of each workspace in a container of its own (no network by default, limits, read-only image); the files and git stay on the connector's host",
+			Params: append(slices.Clone(common),
+				algo.Param{Name: "image", Type: algo.ParamString, Required: true, Description: "Image of the containers: the toolchains the changes build with, git and a shell"},
+				algo.Param{Name: "network", Type: algo.ParamString, Description: "Network of the containers (default none: no network; a network whose egress is filtered for the hosts the unit allows)"},
+				algo.Param{Name: "user", Type: algo.ParamString, Description: "User of the commands, uid:gid (default the connector's)"},
+				algo.Param{Name: "memoryMB", Type: algo.ParamNumber, Description: "Memory limit of a container, in MiB (default 2048)"},
+				algo.Param{Name: "cpus", Type: algo.ParamNumber, Description: "CPUs of a container (default 2)"},
+				algo.Param{Name: "pids", Type: algo.ParamNumber, Description: "Process limit of a container (default 1024)"})},
+	}
 }
 
 // WorkspaceAdapter is the instance of the local workspace adapter a unit holds, its workspaces under root.
 func WorkspaceAdapter(unit, root string) adapter.Instance {
 	return adapter.Instance{Unit: unit, MCP: Workspace, Adapter: WorkspaceLocal, Params: map[string]any{"root": root}}
+}
+
+// WorkspaceDockerAdapter is the instance of the docker workspace adapter a unit holds: its workspaces under root,
+// their commands in containers of image.
+func WorkspaceDockerAdapter(unit, root, image string) adapter.Instance {
+	return adapter.Instance{Unit: unit, MCP: Workspace, Adapter: WorkspaceDocker, Params: map[string]any{"root": root, "image": image}}
 }

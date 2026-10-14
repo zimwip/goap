@@ -63,7 +63,8 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	// MCP hub in-process; the local file system and workspace connectors (ADR 0118) and the built-in connectors (ADR 0028,
 	// added once the engine exists) run inside too, other connectors register over HTTP like in
 	// the distributed platform
-	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}, workspace.ID: workspace.New()}
+	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}, workspace.ID: workspace.New(),
+		workspace.DockerID: workspace.NewDocker(e.cfg.DockerHost)}
 	// connectors register with a shared token (a service without one cannot register): generated like the JWT
 	// secret when none is configured, and shown so that a connector started by hand can use it
 	connectorToken := e.cfg.ConnectorToken

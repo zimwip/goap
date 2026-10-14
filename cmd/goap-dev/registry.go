@@ -80,7 +80,8 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	}
 	// the one platform bootstrap (graphsvc.Boot, ADR 0071) with the development data of this composition: the ALM demo,
 	// the document-repository MCP and, with GOAP_DEV_FS_ROOT, a directory as the default organisation's repository;
-	// with GOAP_DEV_WORKSPACE_ROOT, the workspaces of the changes (ADR 0118).
+	// with GOAP_DEV_WORKSPACE_ROOT, the workspaces of the changes (ADR 0118), their commands in containers of
+	// GOAP_DEV_WORKSPACE_IMAGE when it is set.
 	// The gateway configuration is seeded before the methodologies below: publishing a methodology stubs any alias it
 	// references that the platform namespace doesn't have yet (registrysvc.ensureAliasStubs), and that stub would
 	// otherwise collide with the alias Boot seeds.
@@ -102,7 +103,7 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 				}
 			}
 			if root := e.cfg.WorkspaceRoot; root != "" {
-				return devseed.Workspace(ctx, g, root)
+				return devseed.Workspace(ctx, g, root, e.cfg.WorkspaceImage)
 			}
 			return nil
 		}}); err != nil {

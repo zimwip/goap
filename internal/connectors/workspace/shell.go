@@ -87,19 +87,13 @@ func shell(command string) []string {
 	return []string{"/bin/sh", "-c", command}
 }
 
-func command(ctx context.Context, s space, line, cwd string) (*exec.Cmd, error) {
+// workdir is the directory of the workspace a command runs in, on the host.
+func workdir(s space, cwd string) (string, error) {
 	dir := s.local(cwd)
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("cwd %s is not a directory of the workspace", rel(cwd))
+		return "", fmt.Errorf("cwd %s is not a directory of the workspace", rel(cwd))
 	}
-	argv := shell(line)
-	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
-	cmd.Dir, cmd.Env = dir, environment(s)
-	cmd.Stdin = nil
-	ownGroup(cmd)
-	cmd.Cancel = func() error { return killGroup(cmd) }
-	cmd.WaitDelay = 2 * time.Second
-	return cmd, nil
+	return dir, nil
 }
 
 func (c Connector) bash(ctx context.Context, s space, args map[string]any) (map[string]any, error) {
@@ -108,7 +102,7 @@ func (c Connector) bash(ctx context.Context, s space, args map[string]any) (map[
 		return nil, errors.New("bash needs a command")
 	}
 	if boolArg(args, "background") {
-		return c.jobs.start(s, line, stringArg(args, "cwd"))
+		return c.jobs.start(c.runner(), s, line, stringArg(args, "cwd"))
 	}
 	timeout := time.Duration(intArg(args, "timeout", 0)) * time.Second
 	if timeout <= 0 {
@@ -117,26 +111,22 @@ func (c Connector) bash(ctx context.Context, s space, args map[string]any) (map[
 	timeout = min(timeout, MaxTimeout)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	cmd, err := command(ctx, s, line, stringArg(args, "cwd"))
+	var stdout, stderr bytes.Buffer
+	start := time.Now()
+	p, err := c.runner().start(ctx, s, line, stringArg(args, "cwd"), &stdout, &stderr)
 	if err != nil {
 		return nil, err
 	}
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	start := time.Now()
-	err = cmd.Run()
+	code, err := p.wait()
 	out := map[string]any{"stdout": capOutput(stdout.Bytes()), "stderr": capOutput(stderr.Bytes()),
 		"durationMs": float64(time.Since(start).Milliseconds())}
-	var exit *exec.ExitError
 	switch {
 	case errors.Is(ctx.Err(), context.DeadlineExceeded):
 		out["timedOut"], out["exitCode"] = true, float64(-1)
-	case errors.As(err, &exit):
-		out["exitCode"] = float64(exit.ExitCode())
 	case err != nil:
 		return nil, err
 	default:
-		out["exitCode"] = float64(0)
+		out["exitCode"] = float64(code)
 	}
 	return out, nil
 }
@@ -168,7 +158,6 @@ type jobs struct {
 type job struct {
 	id, command string
 	started     time.Time
-	cmd         *exec.Cmd
 	cancel      context.CancelFunc
 	out         ring
 	read        int64 // bytes of the output already given back
@@ -207,7 +196,7 @@ func (r *ring) since(offset int64) (string, int64, int64) {
 	return string(r.buf[offset-first:]), lost, r.written
 }
 
-func (j *jobs) start(s space, line, cwd string) (map[string]any, error) {
+func (j *jobs) start(r runner, s space, line, cwd string) (map[string]any, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	running := 0
@@ -220,15 +209,10 @@ func (j *jobs) start(s space, line, cwd string) (map[string]any, error) {
 		return nil, fmt.Errorf("%d commands already run in the background of this workspace: stop one first", running)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), JobTimeout)
-	cmd, err := command(ctx, s, line, cwd)
-	if err != nil {
-		cancel()
-		return nil, err
-	}
 	j.seq++
-	jb := &job{id: "job-" + strconv.Itoa(j.seq), command: line, started: time.Now(), cmd: cmd, cancel: cancel}
-	cmd.Stdout, cmd.Stderr = &jb.out, &jb.out
-	if err := cmd.Start(); err != nil {
+	jb := &job{id: "job-" + strconv.Itoa(j.seq), command: line, started: time.Now(), cancel: cancel}
+	p, err := r.start(ctx, s, line, cwd, &jb.out, &jb.out)
+	if err != nil {
 		cancel()
 		return nil, err
 	}
@@ -237,14 +221,11 @@ func (j *jobs) start(s space, line, cwd string) (map[string]any, error) {
 	}
 	j.byWorkspace[s.dir][jb.id] = jb
 	go func() {
-		err := cmd.Wait()
+		code, err := p.wait()
 		j.mu.Lock()
 		defer j.mu.Unlock()
-		jb.done, jb.exitCode = true, 0
-		var exit *exec.ExitError
-		if errors.As(err, &exit) {
-			jb.exitCode = exit.ExitCode()
-		} else if err != nil {
+		jb.done, jb.exitCode = true, code
+		if err != nil {
 			jb.exitCode = -1
 		}
 		jb.timedOut = errors.Is(ctx.Err(), context.DeadlineExceeded)

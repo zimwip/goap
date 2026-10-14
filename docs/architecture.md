@@ -1145,6 +1145,8 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   `sdlc` 0.8.0 builds the components naming a repository from their sources (method `workspace_build`: workspace
   opened, each component implemented by an agent, built by its command, sent back on a failed build, pushed and
   recorded); two scoped actions of one scope chain in a plan (`chainScoped`).
+  The connector `workspace-docker` (`workspace.NewDocker`) keeps the files and git on its host and runs the commands
+  of each workspace in a container of its own (the unit's `image`, no network by default, hardened, limits).
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
