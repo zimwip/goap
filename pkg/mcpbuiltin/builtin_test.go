@@ -39,3 +39,22 @@ func TestOnlyTheSchedulerIsForAgents(t *testing.T) {
 		}
 	}
 }
+
+// The workspace MCP is defined with its adapter, but is not one of the built-ins every unit holds (ADR 0118).
+func TestWorkspace(t *testing.T) {
+	d := WorkspaceDef()
+	if err := d.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if Is(Workspace) {
+		t.Fatal("the workspace MCP is held by no unit by default")
+	}
+	for _, a := range WorkspaceAdapterDefs() {
+		if err := a.Validate(); err != nil || a.MCP != Workspace {
+			t.Fatalf("adapter %s: %v", a.Name, err)
+		}
+	}
+	if err := WorkspaceAdapter("ORG-DEFAULT", "/tmp/ws").Validate(d); err != nil {
+		t.Fatal(err)
+	}
+}

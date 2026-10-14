@@ -1133,6 +1133,13 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   process) lets `goap-change` work on the change of the calling process by default. Pass-through adapter
   definitions and instances on `ORG-DEFAULT` give them to every unit (`graphsvc.SeedBuiltins`, which keeps the
   definitions in sync with the code at every start).
+- **Workspace of a change** ([ADR 0118](adr/0118-workspace-of-a-change.md)): the MCP `workspace` (`open`, `status`,
+  `close`, `read`, `write`, `edit`, `ls`, `glob`, `grep`, `bash`, `bash_output`, `bash_kill`, `diff`, `push`) is the
+  tool box of a coding agent, one workspace per change found from the call context (`InvokeRequest.change_id` /
+  `process_id`, put back in the context by `connectorkit`). Defined on every platform, held by no unit by default;
+  the local connector `workspace-local` (`internal/connectors/workspace`, `cmd/connector-workspace`) keeps a
+  directory per change, files confined by `os.Root`, commands in a cleaned environment with a timeout but not
+  isolated; `goap-dev` gives it to the default organisation with `GOAP_DEV_WORKSPACE_ROOT`.
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a

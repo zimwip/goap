@@ -33,6 +33,7 @@ type config struct {
 	MethodologiesDir string // GOAP_METHODOLOGIES_DIR
 	ModelsConfig     string // GOAP_MODELS_CONFIG
 	DevFSRoot        string // GOAP_DEV_FS_ROOT
+	WorkspaceRoot    string // GOAP_DEV_WORKSPACE_ROOT
 	ConnectorToken   string // GOAP_CONNECTOR_TOKEN (generated when empty)
 	Dev              authz.Principal
 }
@@ -46,6 +47,7 @@ func loadConfig() config {
 		MethodologiesDir: platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies"),
 		ModelsConfig:     platform.Env("GOAP_MODELS_CONFIG", ""),
 		DevFSRoot:        platform.Env("GOAP_DEV_FS_ROOT", ""),
+		WorkspaceRoot:    platform.Env("GOAP_DEV_WORKSPACE_ROOT", ""),
 		ConnectorToken:   platform.Env("GOAP_CONNECTOR_TOKEN", ""),
 		Dev: authz.Principal{
 			Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),

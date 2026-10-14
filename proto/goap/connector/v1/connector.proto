@@ -49,6 +49,10 @@ message InvokeRequest {
   // resolved secrets, by name; never logged
   map<string, string> secrets = 4;
   string org_id = 5;
+  // what the call runs for (ADR 0028, 0118): the change and the process of the calling action, when there is one;
+  // a connector keeping state per change (a workspace) reads them, others ignore them
+  string change_id = 6;
+  string process_id = 7;
 }
 
 message InvokeResponse {

@@ -3,6 +3,7 @@ package devseed
 import (
 	"context"
 	"errors"
+	"path/filepath"
 
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/adapter"
@@ -10,6 +11,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
 // documentRepository is the generic MCP to manipulate documents.
@@ -92,4 +94,21 @@ func LocalFS(ctx context.Context, g *graph.Graph, root string) error {
 		return err
 	}
 	return graphsvc.SeedAdapter(ctx, g, LocalFSAdapter(unit, root))
+}
+
+// Workspace gives the default organisation the workspaces of its changes under the directory root (the local
+// workspace adapter, ADR 0118), unless it already holds an instance of the workspace MCP. The MCP and its adapter
+// definition are seeded by graphsvc.SeedBuiltins.
+func Workspace(ctx context.Context, g *graph.Graph, root string) error {
+	unit := g.Structure(domain.StructureOrganisation).Root
+	if _, err := g.NodeByKey(ctx, "organisation", adapter.Key(unit, mcpbuiltin.Workspace)); err == nil {
+		return nil
+	} else if !errors.Is(err, graph.ErrNotFound) {
+		return err
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	return graphsvc.SeedAdapter(ctx, g, mcpbuiltin.WorkspaceAdapter(unit, abs))
 }
