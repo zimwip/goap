@@ -48,7 +48,7 @@
   .field {
     margin-bottom: 0.7rem;
   }
-  .field :global(input:not([type='checkbox'])),
+  .field :global(input:not([type='checkbox']):not([type='radio']):not([type='file'])),
   .field :global(textarea),
   .field :global(select) {
     width: 100%;
@@ -66,9 +66,9 @@
     font-size: 0.8rem;
     margin: 0.2rem 0 0;
   }
-  .invalid :global(input),
-  .invalid :global(textarea),
-  .invalid :global(select) {
+  .invalid > :global(input),
+  .invalid > :global(textarea),
+  .invalid > :global(select) {
     border-color: var(--danger);
   }
   .display {

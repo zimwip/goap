@@ -1,6 +1,6 @@
 # ADR 0115 — Forms of human actions: a declared form, its code, an extensible widget registry
 
-**Status**: accepted, implemented except the items of "Not done" (see "Not done") · **Date**: 2026-10 · Extends ADR 0034 (manual steps),
+**Status**: accepted, implemented · **Date**: 2026-10 · Extends ADR 0034 (manual steps),
 ADR 0018 / DSL (script code), ADR 0076 / 0079 (change impacts, drafts), ADR 0092 (screens of the web)
 
 ## Context
@@ -171,6 +171,11 @@ list of {to: node key}`...), which fields are filled and the issues left, and tw
 the person reviews them) and `submit_form` (a write: a proposal the person accepts, then the renderer submits as its
 button does, or answers with the issues). A file is never filled by the assistant.
 
-## Not done
+### 9. Patterns are shared as platform data
 
-- Patterns stored as data (shared by the methodologies of an organisation) rather than shipped with the web.
+The designer's patterns are the shipped ones (`PATTERNS`, `web/src/lib/forms/design.ts`) and the shared ones: a
+`platform@FormPattern` node (`FP:<name>`, lifecycle `config`; attributes `name`, `label`, `description`, `form` the
+fields as JSON; `platform` 2.7.0) is a pattern of every methodology and node type form of the platform. *Save as
+pattern…* in the designer writes the fields selected (or all of them) as one, *×* retires it, each through a change
+applied on main (`savePattern` / `retirePattern`, `web/src/lib/forms/patterns.svelte.ts`); a shared pattern shadows
+a shipped one of the same name.

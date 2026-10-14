@@ -27,7 +27,7 @@ describe('declared forms offered to the assistant', () => {
       id: 'task:1',
       label: 'Decide',
       form: () => form,
-      issues: () => (values.decision ? {} : { decision: ['required'] }),
+      issues: (): Record<string, string[]> => (values.decision ? {} : { decision: ['required'] }),
       values: () => values,
       fill: (v) => (values = { ...values, ...v }),
       submit: () => (values.decision ? void sent.push(values) : 'The form has issues'),

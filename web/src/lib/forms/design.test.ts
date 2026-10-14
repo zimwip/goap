@@ -121,3 +121,15 @@ describe('conditions and groups in the designer', () => {
     expect(changeWidget({ name: 'g', widget: 'group', fields: [{ name: 'x', widget: 'text' }] }, 'text').fields).toBeUndefined();
   });
 });
+
+describe('shared patterns', () => {
+  it('reads a FormPattern node and lets a shared pattern shadow a shipped one', async () => {
+    const { allPatterns, patternOfNode } = await import('./patterns.svelte');
+    const p = patternOfNode({ key: 'FP:decide', type: 'platform@FormPattern', props: { name: 'decide', label: 'Decide (house)', form: { fields: [{ name: 'd', widget: 'text' }] } } });
+    expect(p).toMatchObject({ key: 'FP:decide', name: 'decide', label: 'Decide (house)' });
+    expect(patternOfNode({ key: 'FP:x', props: { name: 'x' } })).toBeUndefined();
+    const all = allPatterns([p!]);
+    expect(all.filter((x) => x.name === 'decide')).toEqual([p]);
+    expect(all.length).toBe(PATTERNS.length);
+  });
+});

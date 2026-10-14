@@ -212,7 +212,7 @@
           node (<code>fromKey: $self</code>) and explanations. None: the creation dialogs ask the key and type only{#if x.extends}, or show the form of
           the parent type{/if}.
         </p>
-        <FormDesigner id="nt-form-{x.uid}" bind:value={f.nodeTypes[index].form} disabled={d.readonly} />
+        <FormDesigner id="nt-form-{x.uid}" bind:value={f.nodeTypes[index].form} disabled={d.readonly} artifact={false} />
       </section>
 
   {/if}
