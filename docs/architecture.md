@@ -698,8 +698,8 @@ work on that change before it starts the new one (`Engine.supersedeRuns`). The g
 `sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the web shows every assessment
 by its subject as a comment bubble (`AssessmentBubble.svelte`, `web/src/lib/descriptionReview.ts`): the description wraps
-the intent and floats open while its rating is pending (not accepted yet; `pending`, hidden by the person until the
-rating or its thread moves), folded into its badge once accepted; the title, the intent, the impacts (rows of the
+the intent, its badge coloured by the state of the rating and the bubble opened by a click (by itself only for a
+state the methodology declares `open`); the title, the intent, the impacts (rows of the
 impact table, processed once the impact is decided by its review), the risks, the actions and the artifacts carry a
 compact badge, coloured while pending, whose bubble opens on a click (placed on the viewport, never clipped by a
 table); assessments and comments are no longer in the raw items list. A rating is about any subject:

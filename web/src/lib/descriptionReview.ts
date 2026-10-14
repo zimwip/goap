@@ -227,8 +227,9 @@ const LABELS: Record<ReturnType<typeof reviewState>, string> = {
 
 /** bubbleView is the state of the bubble: the one the server evaluated from what the methodology declares (ADR 0116)
  *  for the rating shown, else the local judgement (a score of ACCEPTABLE_SCORE or more, or `processed` as the caller
- *  judges it), used while the states load or when they lag behind the rating. */
-export function bubbleView(rating: Assessment | undefined, states: AssessmentState[] | undefined, processed?: boolean, working = false): BubbleView {
+ *  judges it), used while the states load or when they lag behind the rating. The bubble opens on a click; by itself
+ *  only when the methodology declares a state `open`. */
+export function bubbleView(rating: Assessment | undefined, states: AssessmentState[] | undefined, processed?: boolean): BubbleView {
   const s = rating ? states?.find((x) => x.subject === rating.key) : undefined;
   if (rating && s && (s.score ?? 0) === rating.score && !!s.current === rating.current) {
     const tone = (TONES as readonly string[]).includes(s.tone ?? '') ? (s.tone as Tone) : 'neutral';
@@ -237,7 +238,7 @@ export function bubbleView(rating: Assessment | undefined, states: AssessmentSta
   const st = reviewState(rating);
   const due = processed !== undefined ? !processed && !!rating : st !== 'accepted' && st !== 'none';
   const label = processed === undefined || !rating ? LABELS[st] : processed ? 'processed' : 'not processed yet';
-  return { tone: due ? 'warn' : rating ? 'ok' : 'neutral', label, open: pending(st, working, processed), declared: false };
+  return { tone: due ? 'warn' : rating ? 'ok' : 'neutral', label, open: false, declared: false };
 }
 
 /** The context key under which a change view gives its bubbles the evaluated states: a getter of the list. */

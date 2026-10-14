@@ -123,7 +123,7 @@ describe('bubbleView', () => {
     expect(v).toEqual({ tone: 'danger', label: 'to be rewritten', open: true, declared: true });
   });
   it('judges by itself while the states load or lag behind the rating', () => {
-    expect(bubbleView(rating, undefined)).toEqual({ tone: 'warn', label: 'to be improved', open: true, declared: false });
+    expect(bubbleView(rating, undefined)).toEqual({ tone: 'warn', label: 'to be improved', open: false, declared: false });
     expect(bubbleView(rating, [{ subject: 'description', score: 4, current: true, tone: 'ok' }]).declared).toBe(false);
     expect(bubbleView({ ...rating, score: 4 }, [])).toMatchObject({ tone: 'ok', label: 'accepted', open: false });
     expect(bubbleView(rating, undefined, true)).toMatchObject({ tone: 'ok', label: 'processed', open: false });

@@ -42,10 +42,10 @@ func TestDefaultAssessmentStates(t *testing.T) {
 	if s := stateOf(t, states, "impact:REQ-1"); s.Tone != ToneOK || s.Label != "processed" {
 		t.Fatalf("decided impact %+v", s)
 	}
-	if s := stateOf(t, states, "impact:REQ-2"); s.Tone != ToneWarn || !s.Open {
+	if s := stateOf(t, states, "impact:REQ-2"); s.Tone != ToneWarn || s.Open {
 		t.Fatalf("impact waiting for its review %+v", s)
 	}
-	if s := stateOf(t, none.States(assessedBoard(2), Result{}), "description"); s.Tone != ToneWarn || s.Label != "to be improved" || !s.Open {
+	if s := stateOf(t, none.States(assessedBoard(2), Result{}), "description"); s.Tone != ToneWarn || s.Label != "to be improved" || s.Open {
 		t.Fatalf("low score %+v", s)
 	}
 	bb := assessedBoard(4)
