@@ -2,7 +2,7 @@
 // console, the Token usage pane). Initial load = the latest rows, then a cursor follow (`ListUsage(afterSeq)`, no
 // event exists for it); the polling runs only while a view is attached and the page visible.
 import { untrack } from 'svelte';
-import { errorMessage, int, models, type LLMCall } from '../api';
+import { errorMessage, int, models, type LLMCall, type UsageFilter } from '../api';
 import { can, me } from './session.svelte';
 
 export const POLL_MS = 2000;
@@ -33,9 +33,10 @@ let cleared = 0;
 /** one token per scope: an answer that comes back for an older one is dropped */
 let epoch = 0;
 
-/** The subject the feed asks for: the caller's own calls, or (administrators) the whole platform. */
-export function usageSubject(): string {
-  return usage.platform && can.administer ? '' : me();
+/** What the feed asks for: the calls attributed to the caller (their own and those made on their behalf, ADR 0114), or
+ * (administrators) the whole platform. */
+export function usageScope(): UsageFilter {
+  return usage.platform && can.administer ? {} : { endUser: me() };
 }
 
 const seqOf = (c: LLMCall): number => int(c.seq);
@@ -75,7 +76,7 @@ async function poll(): Promise<void> {
   inflight = ctrl;
   usage.loading = cursor === 0;
   try {
-    const res = await models.listUsage({ subject: usageSubject(), afterSeq: cursor ? String(cursor) : undefined, limit: PAGE }, ctrl.signal);
+    const res = await models.listUsage({ ...usageScope(), afterSeq: cursor ? String(cursor) : undefined, limit: PAGE }, ctrl.signal);
     if (mine !== epoch || ctrl.signal.aborted) return;
     append(res.calls ?? []);
     cursor = Math.max(cursor, int(res.nextSeq), ...(res.calls ?? []).map(seqOf));

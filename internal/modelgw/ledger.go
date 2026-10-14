@@ -34,6 +34,9 @@ type Call struct {
 	DurationMs int64
 	// Subject, Project and Org are the principal's, never declared by the caller.
 	Subject, Project, Org string
+	// EndUser is the person the call is attributed to (ADR 0114): the subject when a person called, else the person the
+	// platform service acted for (authz.Principal.EndUser, carried from one consequence to the next); "" for none.
+	EndUser string
 	// Alias is the name requested, "" for a literal provider/model.
 	Alias, Provider, Model, Kind string
 	InputTokens, OutputTokens    int64
@@ -91,9 +94,11 @@ func inChangeLog(m llm.CallMeta) bool { return m.Source == llm.SourceEngine && m
 type UsageFilter struct {
 	From, To                               time.Time
 	Subject, Project, Model, Alias, Source string
-	ProcessID, ChangeID, ConversationID    string
-	AfterSeq                               int64
-	Limit                                  int
+	// EndUser selects the calls attributed to a person (ADR 0114): their own and the ones made on their behalf.
+	EndUser                             string
+	ProcessID, ChangeID, ConversationID string
+	AfterSeq                            int64
+	Limit                               int
 }
 
 // Limits of a listing.
@@ -116,7 +121,7 @@ func (f UsageFilter) limit() int {
 func (f UsageFilter) match(c Call) bool {
 	eq := func(want, got string) bool { return want == "" || want == got }
 	return (f.From.IsZero() || !c.At.Before(f.From)) && (f.To.IsZero() || c.At.Before(f.To)) &&
-		eq(f.Subject, c.Subject) && eq(f.Project, c.Project) && eq(f.Alias, c.Alias) && eq(f.Source, c.Source) &&
+		eq(f.Subject, c.Subject) && eq(f.EndUser, c.EndUser) && eq(f.Project, c.Project) && eq(f.Alias, c.Alias) && eq(f.Source, c.Source) &&
 		eq(f.ProcessID, c.ProcessID) && eq(f.ChangeID, c.ChangeID) && eq(f.ConversationID, c.ConversationID) &&
 		(f.Model == "" || f.Model == c.Model || f.Model == c.Provider+"/"+c.Model)
 }
@@ -127,6 +132,7 @@ const (
 	GroupAlias   = "alias"
 	GroupSource  = "source"
 	GroupSubject = "subject"
+	GroupEndUser = "end_user"
 	GroupProcess = "process"
 	GroupAction  = "action"
 	GroupAgent   = "agent"
@@ -148,7 +154,7 @@ type SummaryRow struct {
 }
 
 func validGroup(g string) bool {
-	return slices.Contains([]string{GroupModel, GroupAlias, GroupSource, GroupSubject, GroupProcess, GroupAction, GroupAgent, GroupDay, GroupHour}, g)
+	return slices.Contains([]string{GroupModel, GroupAlias, GroupSource, GroupSubject, GroupEndUser, GroupProcess, GroupAction, GroupAgent, GroupDay, GroupHour}, g)
 }
 
 func bucketKey(group string, n int64) string {
@@ -168,6 +174,8 @@ func groupKey(c Call, group string) string {
 		return c.Source
 	case GroupSubject:
 		return c.Subject
+	case GroupEndUser:
+		return c.EndUser
 	case GroupProcess:
 		return c.ProcessID
 	case GroupAction:
@@ -246,7 +254,7 @@ func (s *Service) begin(ctx context.Context, kind, requested string) *pending {
 		alias = "" // a literal provider/model
 	}
 	now := s.now()
-	p0 := &pending{s: s, start: now, call: Call{At: now.UTC(), Subject: p.Subject, Project: p.Project, Org: p.Org, Alias: alias, Kind: kind,
+	p0 := &pending{s: s, start: now, call: Call{At: now.UTC(), Subject: p.Subject, EndUser: p.EndUser(), Project: p.Project, Org: p.Org, Alias: alias, Kind: kind,
 		Source: m.Source, ConversationID: m.ConversationID, ProcessID: m.ProcessID, ChangeID: m.ChangeID, Step: m.Step, Action: m.Action, Agent: m.Agent, CallIndex: m.Call}}
 	if s.CallPrompts && !inChangeLog(m) {
 		p0.x = &Exchange{}
@@ -323,8 +331,9 @@ func (p *pending) finish(ctx context.Context, provider, model string, in, out in
 
 // ---- reading ----------------------------------------------------------------
 
-// scope applies who may read what: a caller reads its own calls (the filter's subject is forced to it, naming another
-// is refused); an administrator any. A caller without identity reads nothing.
+// scope applies who may read what: a caller reads the calls attributed to it (ADR 0114: its own and the ones made on
+// its behalf; the filter's end user is forced to it, naming another is refused, and the subject narrows them, to its
+// own calls or to the service that acted for it); an administrator any. A caller without identity reads nothing.
 func scope(ctx context.Context, f UsageFilter, admin bool) (UsageFilter, error) {
 	p := authz.From(ctx)
 	if admin {
@@ -333,10 +342,18 @@ func scope(ctx context.Context, f UsageFilter, admin bool) (UsageFilter, error) 
 	if p.Anonymous() {
 		return f, fmt.Errorf("%w: the ledger is read by an identified caller", ErrForbidden)
 	}
-	if f.Subject != "" && f.Subject != p.Subject {
-		return f, fmt.Errorf("%w: only the calls of %s are readable by it", ErrForbidden, p.Subject)
+	me := p.EndUser()
+	if me == "" { // a platform service acting for nobody: its own calls
+		if f.Subject != "" && f.Subject != p.Subject {
+			return f, fmt.Errorf("%w: only the calls of %s are readable by it", ErrForbidden, p.Subject)
+		}
+		f.Subject, f.EndUser = p.Subject, ""
+		return f, nil
 	}
-	f.Subject = p.Subject
+	if (f.EndUser != "" && f.EndUser != me) || (f.Subject != "" && f.Subject != me && !strings.HasPrefix(f.Subject, authz.SystemPrefix)) {
+		return f, fmt.Errorf("%w: only the calls attributed to %s are readable by it", ErrForbidden, me)
+	}
+	f.EndUser = me
 	return f, nil
 }
 
@@ -370,7 +387,7 @@ func (s *Service) CallExchange(ctx context.Context, seq int64, admin bool) (Call
 	if err != nil {
 		return Call{}, Exchange{}, err
 	}
-	if !admin && c.Subject != p.Subject {
+	if !admin && c.Subject != p.Subject && (c.EndUser == "" || c.EndUser != p.EndUser()) { // its own, or made on its behalf
 		return Call{}, Exchange{}, fmt.Errorf("%w: call %d", ErrNotFound, seq)
 	}
 	x, err := s.Store.Exchange(ctx, seq)
@@ -386,7 +403,7 @@ func (s *Service) CallExchange(ctx context.Context, seq int64, admin bool) (Call
 // Summary groups the calls of the filter (AfterSeq and Limit are ignored).
 func (s *Service) Summary(ctx context.Context, f UsageFilter, group string, admin bool) ([]SummaryRow, error) {
 	if !validGroup(group) {
-		return nil, fmt.Errorf("%w: group_by %q (model, alias, source, subject, process, action, agent, day or hour)", ErrInvalid, group)
+		return nil, fmt.Errorf("%w: group_by %q (model, alias, source, subject, end_user, process, action, agent, day or hour)", ErrInvalid, group)
 	}
 	f, err := scope(ctx, f, admin)
 	if err != nil {

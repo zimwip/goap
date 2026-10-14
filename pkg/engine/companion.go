@@ -247,7 +247,7 @@ func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key,
 	if bb.Change.Status == domain.ChangeApplied || bb.Change.Status == domain.ChangeAbandoned {
 		return nil
 	}
-	who := authz.System(key)
+	who := authz.System(key).For(eventUser(event)) // a consequence of what the end user did (ADR 0114)
 	who.Org = "system"
 	p, err := e.Start(authz.With(ctx, who), StartRequest{Methodology: m.Name, Agent: agent, Goal: goal, ChangeID: changeID,
 		OwnerOrg: bb.Change.OwnerOrg, Trigger: key, Title: bb.Change.Title, Vars: map[string]any{"event": event},
@@ -259,6 +259,12 @@ func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key,
 		e.schedule(p.ID)
 	}
 	return nil
+}
+
+// eventUser is the end user of an event as a companion run gets it (TriggerEvent.activation, ADR 0114).
+func eventUser(event map[string]any) string {
+	u, _ := event["endUser"].(string)
+	return u
 }
 
 // enqueue keeps an event for a companion at work.
@@ -329,6 +335,7 @@ func (e *Engine) restartFor(ctx context.Context, id string, event map[string]any
 	}
 	vars["event"] = event
 	p.Vars, p.Inbox, p.Children = vars, nil, nil
+	p.Initiator = p.Initiator.For(eventUser(event)) // the run again is a consequence of the newer event's end user
 	p.Status, p.Error, p.Plan, p.Pending = StatusRunning, "", nil, nil
 	p.Disabled = map[string]bool{}
 	p.Runs++
@@ -403,6 +410,7 @@ func (e *Engine) rerun(ctx context.Context, id string, event map[string]any) err
 		}
 		vars["event"] = event
 		p.Vars = vars
+		p.Initiator = p.Initiator.For(eventUser(event)) // this run is a consequence of the event's end user
 	}
 	p.Status, p.Error, p.Plan, p.Pending = StatusRunning, "", nil, nil
 	p.Disabled = map[string]bool{} // what failed before may work on the change as it is now

@@ -146,6 +146,9 @@ message Principal {
   string subject = 1;
   string org = 2;
   repeated string roles = 3;
+  // the person a platform service acts for (a trigger, a companion run): the end user the run's work is attributed
+  // to (ADR 0114); empty for a person
+  string on_behalf_of = 4;
 }
 
 message HumanTask {

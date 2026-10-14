@@ -20,6 +20,11 @@ type Principal struct {
 	// of its own (Change.ProjectID, StartProcessRequest.project_id, ...) defaults to it.
 	Project string   `json:"project,omitempty"`
 	Roles   []string `json:"roles,omitempty"`
+	// OnBehalfOf is the person a platform service acts for (System): the end user whose action led, from one
+	// consequence to the next (an event, a trigger, a run, a sub-agent), to what the service does. It attributes the
+	// work (the LLM call ledger, ADR 0114) and never grants anything: authorization reads the Subject. Ignored on a
+	// person, who acts for themselves.
+	OnBehalfOf string `json:"onBehalfOf,omitempty"`
 }
 
 // Anonymous reports whether the principal is unauthenticated.
@@ -37,6 +42,24 @@ func System(name string, roles ...string) Principal {
 
 // System reports whether the principal is a platform service rather than a person.
 func (p Principal) System() bool { return strings.HasPrefix(p.Subject, SystemPrefix) }
+
+// EndUser is the person the principal's work is attributed to (ADR 0114): a person themselves, a platform service the
+// person it acts for (OnBehalfOf, "" when it acts for nobody).
+func (p Principal) EndUser() string {
+	if p.System() {
+		return p.OnBehalfOf
+	}
+	return p.Subject
+}
+
+// For returns the principal acting for the end user user (ADR 0114): a platform service takes it as OnBehalfOf (kept
+// when user is ""); a person is unchanged, acting for themselves.
+func (p Principal) For(user string) Principal {
+	if user != "" && p.System() {
+		p.OnBehalfOf = user
+	}
+	return p
+}
 
 // Resource is the object of an access request (r.obj.Type, r.obj.ID,
 // r.obj.Org, r.obj.Owner, r.obj.Name).

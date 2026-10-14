@@ -19,6 +19,9 @@ const (
 	HeaderOrg     = "X-Goap-Org"
 	HeaderRoles   = "X-Goap-Roles"
 	HeaderProject = "X-Goap-Project"
+	// HeaderOnBehalfOf is the end user a platform service acts for (authz.Principal.OnBehalfOf, ADR 0114); read only
+	// for a system subject.
+	HeaderOnBehalfOf = "X-Goap-On-Behalf-Of"
 )
 
 // FromHeaders reads the principal of a request.
@@ -26,6 +29,9 @@ func FromHeaders(h http.Header) authz.Principal {
 	p := authz.Principal{Subject: h.Get(HeaderSubject), Org: h.Get(HeaderOrg), Project: h.Get(HeaderProject)}
 	if roles := h.Get(HeaderRoles); roles != "" {
 		p.Roles = strings.Split(roles, ",")
+	}
+	if p.System() {
+		p.OnBehalfOf = h.Get(HeaderOnBehalfOf)
 	}
 	return p
 }
@@ -36,6 +42,11 @@ func SetHeaders(p authz.Principal, h http.Header) {
 	h.Set(HeaderOrg, p.Org)
 	h.Set(HeaderProject, p.Project)
 	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
+	if p.System() && p.OnBehalfOf != "" {
+		h.Set(HeaderOnBehalfOf, p.OnBehalfOf)
+	} else {
+		h.Del(HeaderOnBehalfOf)
+	}
 }
 
 // Forward is the client option of a platform client that acts for its caller: the requests carry the principal of

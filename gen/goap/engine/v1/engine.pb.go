@@ -775,10 +775,13 @@ func (x *Candidate) GetMethodology() string {
 }
 
 type Principal struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Subject       string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
-	Org           string                 `protobuf:"bytes,2,opt,name=org,proto3" json:"org,omitempty"`
-	Roles         []string               `protobuf:"bytes,3,rep,name=roles,proto3" json:"roles,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Subject string                 `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	Org     string                 `protobuf:"bytes,2,opt,name=org,proto3" json:"org,omitempty"`
+	Roles   []string               `protobuf:"bytes,3,rep,name=roles,proto3" json:"roles,omitempty"`
+	// the person a platform service acts for (a trigger, a companion run): the end user the run's work is attributed
+	// to (ADR 0114); empty for a person
+	OnBehalfOf    string `protobuf:"bytes,4,opt,name=on_behalf_of,json=onBehalfOf,proto3" json:"on_behalf_of,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -832,6 +835,13 @@ func (x *Principal) GetRoles() []string {
 		return x.Roles
 	}
 	return nil
+}
+
+func (x *Principal) GetOnBehalfOf() string {
+	if x != nil {
+		return x.OnBehalfOf
+	}
+	return ""
 }
 
 type HumanTask struct {
@@ -5938,11 +5948,13 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"confidence\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x14\n" +
 	"\x05agent\x18\x04 \x01(\tR\x05agent\x12 \n" +
-	"\vmethodology\x18\x05 \x01(\tR\vmethodology\"M\n" +
+	"\vmethodology\x18\x05 \x01(\tR\vmethodology\"o\n" +
 	"\tPrincipal\x12\x18\n" +
 	"\asubject\x18\x01 \x01(\tR\asubject\x12\x10\n" +
 	"\x03org\x18\x02 \x01(\tR\x03org\x12\x14\n" +
-	"\x05roles\x18\x03 \x03(\tR\x05roles\"\xc1\x04\n" +
+	"\x05roles\x18\x03 \x03(\tR\x05roles\x12 \n" +
+	"\fon_behalf_of\x18\x04 \x01(\tR\n" +
+	"onBehalfOf\"\xc1\x04\n" +
 	"\tHumanTask\x12\x16\n" +
 	"\x06action\x18\x01 \x01(\tR\x06action\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\"\n" +

@@ -3018,8 +3018,11 @@ type LLMCall struct {
 	BehaviorTokens int64    `protobuf:"varint,24,opt,name=behavior_tokens,json=behaviorTokens,proto3" json:"behavior_tokens,omitempty"`
 	// behavior_tokens is the byte estimate, not a measured cost
 	BehaviorTokensEstimated bool `protobuf:"varint,25,opt,name=behavior_tokens_estimated,json=behaviorTokensEstimated,proto3" json:"behavior_tokens_estimated,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// the person the call is attributed to (ADR 0114): the subject when a person called, else the person the platform
+	// service acted for, from one consequence to the next (a trigger, a companion run, a sub-agent); "" for none
+	EndUser       string `protobuf:"bytes,26,opt,name=end_user,json=endUser,proto3" json:"end_user,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LLMCall) Reset() {
@@ -3227,6 +3230,13 @@ func (x *LLMCall) GetBehaviorTokensEstimated() bool {
 	return false
 }
 
+func (x *LLMCall) GetEndUser() string {
+	if x != nil {
+		return x.EndUser
+	}
+	return ""
+}
+
 type GetCallExchangeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Seq           int64                  `protobuf:"varint,1,opt,name=seq,proto3" json:"seq,omitempty"`
@@ -3427,7 +3437,10 @@ type UsageFilter struct {
 	// only the calls after this seq (the cursor of a feed)
 	AfterSeq int64 `protobuf:"varint,11,opt,name=after_seq,json=afterSeq,proto3" json:"after_seq,omitempty"`
 	// 0: 500; at most 5000
-	Limit         int32 `protobuf:"varint,12,opt,name=limit,proto3" json:"limit,omitempty"`
+	Limit int32 `protobuf:"varint,12,opt,name=limit,proto3" json:"limit,omitempty"`
+	// the calls attributed to this person (ADR 0114): their own and the ones made on their behalf. A caller who does
+	// not administer the platform reads only theirs (this field is forced to them).
+	EndUser       string `protobuf:"bytes,13,opt,name=end_user,json=endUser,proto3" json:"end_user,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3546,6 +3559,13 @@ func (x *UsageFilter) GetLimit() int32 {
 	return 0
 }
 
+func (x *UsageFilter) GetEndUser() string {
+	if x != nil {
+		return x.EndUser
+	}
+	return ""
+}
+
 type ListUsageRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Filter        *UsageFilter           `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
@@ -3657,7 +3677,7 @@ type UsageSummaryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// after_seq and limit are ignored
 	Filter *UsageFilter `protobuf:"bytes,1,opt,name=filter,proto3" json:"filter,omitempty"`
-	// model | alias | source | subject | process | action | agent | day | hour
+	// model | alias | source | subject | end_user | process | action | agent | day | hour
 	GroupBy       string `protobuf:"bytes,2,opt,name=group_by,json=groupBy,proto3" json:"group_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4061,7 +4081,7 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x0fSuggestResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12<\n" +
 	"\tproposals\x18\x02 \x03(\v2\x1e.goap.model.v1.SuggestProposalR\tproposals\x12*\n" +
-	"\x05usage\x18\x03 \x01(\v2\x14.goap.model.v1.UsageR\x05usage\"\xe1\x05\n" +
+	"\x05usage\x18\x03 \x01(\v2\x14.goap.model.v1.UsageR\x05usage\"\xfc\x05\n" +
 	"\aLLMCall\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\x12*\n" +
 	"\x02at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x1f\n" +
@@ -4090,7 +4110,8 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\fhas_exchange\x18\x16 \x01(\bR\vhasExchange\x12\x1c\n" +
 	"\tbehaviors\x18\x17 \x03(\tR\tbehaviors\x12'\n" +
 	"\x0fbehavior_tokens\x18\x18 \x01(\x03R\x0ebehaviorTokens\x12:\n" +
-	"\x19behavior_tokens_estimated\x18\x19 \x01(\bR\x17behaviorTokensEstimated\"*\n" +
+	"\x19behavior_tokens_estimated\x18\x19 \x01(\bR\x17behaviorTokensEstimated\x12\x19\n" +
+	"\bend_user\x18\x1a \x01(\tR\aendUser\"*\n" +
 	"\x16GetCallExchangeRequest\x12\x10\n" +
 	"\x03seq\x18\x01 \x01(\x03R\x03seq\"?\n" +
 	"\x0fExchangeMessage\x12\x12\n" +
@@ -4102,7 +4123,7 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\bmessages\x18\x03 \x03(\v2\x1e.goap.model.v1.ExchangeMessageR\bmessages\x12\x1a\n" +
 	"\bresponse\x18\x04 \x01(\tR\bresponse\x12\x1c\n" +
 	"\ttruncated\x18\x05 \x01(\bR\ttruncated\x12\x14\n" +
-	"\x05error\x18\x06 \x01(\tR\x05error\"\xf9\x02\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error\"\x94\x03\n" +
 	"\vUsageFilter\x12.\n" +
 	"\x04from\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04from\x12*\n" +
 	"\x02to\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x02to\x12\x18\n" +
@@ -4117,7 +4138,8 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x0fconversation_id\x18\n" +
 	" \x01(\tR\x0econversationId\x12\x1b\n" +
 	"\tafter_seq\x18\v \x01(\x03R\bafterSeq\x12\x14\n" +
-	"\x05limit\x18\f \x01(\x05R\x05limit\"F\n" +
+	"\x05limit\x18\f \x01(\x05R\x05limit\x12\x19\n" +
+	"\bend_user\x18\r \x01(\tR\aendUser\"F\n" +
 	"\x10ListUsageRequest\x122\n" +
 	"\x06filter\x18\x01 \x01(\v2\x1a.goap.model.v1.UsageFilterR\x06filter\"w\n" +
 	"\x11ListUsageResponse\x12,\n" +

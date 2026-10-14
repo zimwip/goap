@@ -1,17 +1,19 @@
 <script lang="ts">
   // Header indicator of the person's LLM consumption today (local day), read from the gateway's ledger (ADR 0089):
-  // one `UsageSummary` of their own calls since midnight, refreshed every minute while the page is visible and when
-  // the usage feed sees new calls. A click opens the Token usage dashboard on "Today".
+  // one `UsageSummary` since midnight of the calls attributed to them, their own and those made on their behalf (ADR
+  // 0114), grouped by who acted, refreshed every minute while the page is visible and when the usage feed sees new
+  // calls. A click opens the Token usage dashboard on "Today".
   import Icon from './Icon.svelte';
   import { openUsage, usageState } from './usageState.svelte';
   import { models, errorMessage } from '../api';
   import { me } from '../stores/session.svelte';
   import { usage } from '../stores/usage.svelte';
-  import { compactTokens, periodStart, totalsOf, type Totals } from '../tokenStats';
+  import { compactTokens, directSplit, periodStart, type Totals } from '../tokenStats';
 
   const REFRESH_MS = 60_000;
 
   let totals = $state<Totals | null>(null);
+  let indirect = $state<Totals | null>(null);
   let error = $state('');
   let epoch = 0;
 
@@ -20,9 +22,11 @@
     const mine = ++epoch;
     const from = periodStart('today', Date.now());
     try {
-      const res = await models.usageSummary({ subject: me(), from: new Date(from).toISOString() }, 'source');
+      const res = await models.usageSummary({ endUser: me(), from: new Date(from).toISOString() }, 'subject');
       if (mine !== epoch) return;
-      totals = totalsOf(res.rows);
+      const split = directSplit(res.rows, me());
+      totals = split.all;
+      indirect = split.indirect;
       error = '';
     } catch (e) {
       if (mine === epoch) error = errorMessage(e);
@@ -53,7 +57,7 @@
     error
       ? `Today's LLM usage is unavailable: ${error}`
       : totals
-        ? `Your LLM usage today: ${n(totals.total)} tokens (${n(totals.input)} in, ${n(totals.output)} out) over ${n(totals.calls)} call${totals.calls === 1 ? '' : 's'}${totals.errors ? `, ${n(totals.errors)} failed` : ''}. Click for the details.`
+        ? `Your LLM usage today: ${n(totals.total)} tokens (${n(totals.input)} in, ${n(totals.output)} out) over ${n(totals.calls)} call${totals.calls === 1 ? '' : 's'}${totals.errors ? `, ${n(totals.errors)} failed` : ''}${indirect?.calls ? `, of which ${n(indirect.total)} tokens made on your behalf by what your actions set off` : ''}. Click for the details.`
         : "Loading today's LLM usage",
   );
 </script>

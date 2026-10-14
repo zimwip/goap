@@ -13,10 +13,11 @@
 
   const STATUSES: (ProcessStatus | '')[] = ['', 'clarifying', 'running', 'waiting', 'completed', 'stuck', 'failed', 'superseded'];
 
-  // The caller's own processes, from the store the platform's event stream keeps (no polling, no refetch per event).
+  // The caller's own processes and those run on their behalf (ADR 0114), from the store the platform's event stream
+  // keeps (no polling, no refetch per event).
   const items = $derived(
     [...processes.values()]
-      .filter((p) => p.initiator?.subject === session.principal?.subject && (!status || p.status === status))
+      .filter((p) => (p.initiator?.subject === session.principal?.subject || p.initiator?.onBehalfOf === session.principal?.subject) && (!status || p.status === status))
       .sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? '')),
   );
   const loading = $derived(live.processesLoading);

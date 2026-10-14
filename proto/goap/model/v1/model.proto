@@ -450,6 +450,9 @@ message LLMCall {
   int64 behavior_tokens = 24;
   // behavior_tokens is the byte estimate, not a measured cost
   bool behavior_tokens_estimated = 25;
+  // the person the call is attributed to (ADR 0114): the subject when a person called, else the person the platform
+  // service acted for, from one consequence to the next (a trigger, a companion run, a sub-agent); "" for none
+  string end_user = 26;
 }
 
 message GetCallExchangeRequest {
@@ -490,6 +493,9 @@ message UsageFilter {
   int64 after_seq = 11;
   // 0: 500; at most 5000
   int32 limit = 12;
+  // the calls attributed to this person (ADR 0114): their own and the ones made on their behalf. A caller who does
+  // not administer the platform reads only theirs (this field is forced to them).
+  string end_user = 13;
 }
 
 message ListUsageRequest {
@@ -508,7 +514,7 @@ message ListUsageResponse {
 message UsageSummaryRequest {
   // after_seq and limit are ignored
   UsageFilter filter = 1;
-  // model | alias | source | subject | process | action | agent | day | hour
+  // model | alias | source | subject | end_user | process | action | agent | day | hour
   string group_by = 2;
 }
 

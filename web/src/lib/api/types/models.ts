@@ -110,7 +110,10 @@ export interface LLMCall {
   /** RFC 3339 */
   at?: string;
   durationMs?: Int64;
+  /** who called: a person, or a platform service (`system:…`) */
   subject?: string;
+  /** the person the call is attributed to (ADR 0114): the subject when a person called, else the person the service acted for, from one consequence to the next; empty for none */
+  endUser?: string;
   project?: string;
   org?: string;
   /** the name requested, empty for a literal provider/model */
@@ -150,12 +153,14 @@ export interface CallExchange {
   error?: string;
 }
 
-/** Every field narrows; empty matches everything. A caller who is not an administrator sees its own calls only. */
+/** Every field narrows; empty matches everything. A caller who is not an administrator sees only the calls attributed to it (its own and those made on its behalf, ADR 0114). */
 export interface UsageFilter {
   /** RFC 3339 */
   from?: string;
   to?: string;
   subject?: string;
+  /** the calls attributed to this person: their own and those made on their behalf (forced to the caller unless administrator) */
+  endUser?: string;
   project?: string;
   /** the model id, or provider/model */
   model?: string;
@@ -177,7 +182,7 @@ export interface ListUsageResponse {
   hasMore?: boolean;
 }
 
-export type UsageGroup = 'model' | 'alias' | 'source' | 'subject' | 'process' | 'action' | 'agent' | 'day' | 'hour';
+export type UsageGroup = 'model' | 'alias' | 'source' | 'subject' | 'end_user' | 'process' | 'action' | 'agent' | 'day' | 'hour';
 
 export interface UsageSummaryRow {
   /** day: YYYY-MM-DD, hour: YYYY-MM-DDTHH (UTC), empty for calls with none */

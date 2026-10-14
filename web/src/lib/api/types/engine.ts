@@ -61,6 +61,8 @@ export interface Principal {
   /** the caller's active project (ADR 0039), from their token */
   project?: string;
   roles?: string[];
+  /** the person a platform service (a trigger, a companion run) acts for: the end user its work is attributed to (ADR 0114) */
+  onBehalfOf?: string;
 }
 /** One structure of the organisation (ADR 0054): the hierarchy of the units or of the projects. */
 export interface Structure {

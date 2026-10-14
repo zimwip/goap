@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bucketsOf, bucketTime, callOf, compactTokens, periodStart, USAGE_PERIODS, exchangeRequestOf, hasExchange, inChangeLog, keyLabel, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf } from './tokenStats';
+import { actorLabel, bucketsOf, bucketTime, callOf, compactTokens, directSplit, periodStart, viaOf, USAGE_PERIODS, exchangeRequestOf, hasExchange, inChangeLog, keyLabel, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf } from './tokenStats';
 
 describe('source labels', () => {
   it('names every source and falls back to Other', () => {
@@ -113,5 +113,37 @@ describe('usage periods', () => {
 
   it('writes token counts compactly', () => {
     expect([0, 950, 12_345, 4_100_000].map(compactTokens)).toEqual(['0', '950', '12.3k', '4.1M']);
+  });
+});
+
+describe('consumption on behalf of the end user (ADR 0114)', () => {
+  it('names who acted', () => {
+    expect(actorLabel('system:trigger:noted/writer/on_edit')).toBe('trigger noted/writer/on_edit');
+    expect(actorLabel('system:companion:sdlc/description_review')).toBe('companion sdlc/description_review');
+    expect(actorLabel('system:indexer')).toBe('indexer');
+    expect(actorLabel('alice', 'alice')).toBe('you, directly');
+    expect(actorLabel('bob', 'alice')).toBe('bob');
+    expect(actorLabel('')).toBe('—');
+    expect(keyLabel('subject', 'alice', 'alice')).toBe('you, directly');
+  });
+
+  it('tells a call made on the end user\'s behalf', () => {
+    expect(viaOf({ subject: 'system:trigger:nightly', endUser: 'alice' })).toBe('trigger nightly');
+    expect(viaOf({ subject: 'alice', endUser: 'alice' })).toBe('');
+    expect(viaOf({ subject: 'system:indexer' })).toBe('');
+  });
+
+  it('splits direct and indirect consumption', () => {
+    const s = directSplit(
+      [
+        { key: 'alice', calls: '2', inputTokens: '10', outputTokens: '5' },
+        { key: 'system:trigger:nightly', calls: '1', inputTokens: '100', outputTokens: '20' },
+      ],
+      'alice',
+    );
+    expect(s.all.total).toBe(135);
+    expect(s.direct.total).toBe(15);
+    expect(s.indirect.total).toBe(120);
+    expect(s.indirect.calls).toBe(1);
   });
 });

@@ -317,6 +317,10 @@ import RebaseTaskPanel from '../../components/RebaseTaskPanel.svelte';
               {process.initiator.subject}{#if process.initiator.roles?.length}
                 <span class="hint"> ({process.initiator.roles.join(', ')})</span>{/if}
             </dd>
+            {#if process.initiator.onBehalfOf}
+              <dt>On behalf of</dt>
+              <dd title="The person whose action set this run off: its LLM calls count in their consumption">{process.initiator.onBehalfOf}</dd>
+            {/if}
           {/if}
           {#if process.changeId}
             <dt>Change</dt>

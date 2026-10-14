@@ -1055,7 +1055,8 @@ Executions without a change appear in a "No change" group. The waiting / clarify
 Counters are also **kept in the process** (tokens, LLM and tool calls per step and overall: the engine's own totals
 and budgets) with a link to the Jaeger trace (`traceId`). The per-call view of the tokens of the whole platform is the
 **ledger of the model gateway** (`llm_call`, ADR 0089): the engine, the assistant, the helper and the indexer are all in it.
-The web's Tokens console and Token usage pane read only that ledger (`ListUsage` followed by cursor, `UsageSummary`;
+The web's Tokens console, Token usage pane and the header's consumption of the day read only that ledger, for the calls
+attributed to the person (their own and those made on their behalf, ADR 0114; `ListUsage` followed by cursor, `UsageSummary`;
 `stores/usage.svelte.ts`, `tokenStats.ts`): the prompt link is offered for every row whose exchange can be read: an engine call of a change
 reads it in the change log (`model.call`, ADR 0059), every other call from the gateway (`GetCallExchange`, table
 `llm_call_exchange`, `LLMCall.has_exchange`; `GOAP_LLM_CALL_PROMPTS`, default on; own calls and administrators only; purged
@@ -1711,8 +1712,13 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   (`llm.CallMeta`: `source`, conversation, process, change, step, call index, action, agent; in the context in process,
   as `CallMeta` on the RPC). No prompt is stored: the exchange of an engine call stays the `model.call` entry of the change
   log (ADR 0059), found by `(change_id, process_id, step, call)`. Read with `ListUsage` (filter, `after_seq` cursor) and
-  `UsageSummary` (grouped by model / alias / source / subject / process / action / agent / day / hour); a caller reads its
-  own calls, an administrator any; retention `GOAP_LLM_CALL_RETENTION_DAYS` (default 90, purge at start and daily).
+  `UsageSummary` (grouped by model / alias / source / subject / end_user / process / action / agent / day / hour); a caller
+  reads the calls attributed to it, an administrator any; retention `GOAP_LLM_CALL_RETENTION_DAYS` (default 90, purge at
+  start and daily). Every row names its **end user** ([ADR 0114](adr/0114-end-user-attribution-through-consequences.md),
+  `llm_call.end_user`): the subject when a person called, else the person the platform service acted for
+  (`authz.Principal.OnBehalfOf`, carried from one consequence to the next: the change event a person raised
+  (`ChangeEvent.EndUser`), the trigger or companion run it set off, that run's sub-agents and calls), so a person's
+  consumption includes what their actions set off.
   `TestEveryModelCallGoesThroughTheLedger` keeps the paths to a model through `Service`.
 - **Global behaviours** (ADR 0093): `platform@LlmBehavior` nodes (`LLB:<name>`, `adminOnly`, lifecycle `config`; `llmcfg.Behavior`) hold an
   instruction the gateway adds to the system text of every completion matching their scope (aliases, models, sources, kinds;

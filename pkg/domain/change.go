@@ -145,6 +145,9 @@ type ChangeEvent struct {
 	Items    []ChangeItem `json:"items,omitempty"`
 	// Fields are the fields of the header a change.edited event changed (ADR 0110).
 	Fields map[string]HeaderValue `json:"fields,omitempty"`
+	// EndUser is the person whose action raised the event, directly or from one consequence to the next
+	// (authz.Principal.EndUser of the writer, ADR 0114): what the event sets off is attributed to them.
+	EndUser string `json:"endUser,omitempty"`
 }
 
 // EditedFields returns the fields of the header a person reads that differ between two versions of a change: title,

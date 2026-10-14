@@ -272,6 +272,7 @@ func setPrincipal(c *echo.Context, cfg Config, p authz.Principal) {
 	h.Set(HeaderOrg, p.Org)
 	h.Set(HeaderProject, p.Project)
 	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
+	h.Del(identity.HeaderOnBehalfOf) // a caller never says whom it acts for: only platform services do (ADR 0114)
 }
 
 // parseToken validates a "Bearer <token>" Authorization header value and returns its claims.

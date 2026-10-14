@@ -1,6 +1,6 @@
 <script lang="ts">
   // "Tokens" console: one LLM call per line, read from the gateway's ledger (ADR 0089): whoever asked (engine,
-  // assistant, helper, indexer…), with totals.
+  // assistant, helper, indexer…), with totals; the calls made on the person's behalf say via what (ADR 0114).
   import Icon from '../../shell/Icon.svelte';
   import { processes } from '../../stores/live.svelte';
   import { usage, attachUsage, clearUsage, setUsagePlatform } from '../../stores/usage.svelte';
@@ -10,7 +10,7 @@
   import { formatDuration, formatTime, int, shortId, type LLMCall } from '../../api';
   import { rowClick } from '../../actions';
   import { openModelExchange } from '../../shell/modelExchangeState.svelte';
-  import { exchangeRequestOf, hasExchange, sourceLabel, stepOf } from '../../tokenStats';
+  import { exchangeRequestOf, hasExchange, sourceLabel, stepOf, viaOf } from '../../tokenStats';
 
   let source = $state('');
   let processId = $state('');
@@ -48,7 +48,7 @@
   );
 
   const n = (v: number) => v.toLocaleString('en-US');
-  const cols = $derived(platform ? 11 : 10);
+  const cols = $derived(platform ? 12 : 11);
 
   $effect(() => {
     void rows.length;
@@ -119,7 +119,7 @@
     <table class="console-table">
       <thead>
         <tr>
-          <th>Time</th><th>Source</th>{#if platform}<th>Subject</th>{/if}<th>Process</th><th>Agent</th><th>Action</th><th>Model</th>
+          <th>Time</th><th>Source</th>{#if platform}<th>Subject</th><th>End user</th>{:else}<th>Via</th>{/if}<th>Process</th><th>Agent</th><th>Action</th><th>Model</th>
           <th class="num">Input</th><th class="num">Output</th><th class="num">Duration</th><th>Error</th>
         </tr>
       </thead>
@@ -128,7 +128,7 @@
           <tr class:clickable={hasExchange(r)} data-row data-seq={r.seq} title={hasExchange(r) ? 'Click to show the prompt and the answer' : 'No prompt stored for this call'}>
             <td>{@render when(r)}</td>
             <td title={r.kind}>{sourceLabel(r.source)}</td>
-            {#if platform}<td>{r.subject ?? ''}</td>{/if}
+            {#if platform}<td>{r.subject ?? ''}</td><td>{r.endUser ?? ''}</td>{:else}<td title={viaOf(r) ? 'Made on your behalf, set off by what you did' : ''}>{viaOf(r)}</td>{/if}
             <td title={r.processId}>
               {#if r.processId}
                 <button type="button" class="link" onclick={() => openTab({ kind: 'run', params: { id: r.processId ?? '' } })}>{name(r.processId)}</button>

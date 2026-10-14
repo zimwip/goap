@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/zimwip/goap/pkg/events"
 
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 )
@@ -26,7 +27,7 @@ func (g EventingGraph) emit(ctx context.Context, typ string, id domain.ChangeID,
 	}
 	c := bb.Change
 	c.Items = nil
-	g.OnEvent(ctx, domain.ChangeEvent{Type: typ, Change: c, Baseline: b, Items: items})
+	g.OnEvent(ctx, domain.ChangeEvent{Type: typ, Change: c, Baseline: b, Items: items, EndUser: authz.From(ctx).EndUser()})
 }
 
 // CreateChange implements GraphPort.
@@ -57,7 +58,7 @@ func (g EventingGraph) DetachChange(ctx context.Context, id domain.ChangeID) (do
 	if err == nil && g.OnEvent != nil {
 		ev := c
 		ev.Items, ev.Nodes, ev.ParentID = nil, nil, before.ParentID
-		g.OnEvent(ctx, domain.ChangeEvent{Type: events.ChangeDetached, Change: ev})
+		g.OnEvent(ctx, domain.ChangeEvent{Type: events.ChangeDetached, Change: ev, EndUser: authz.From(ctx).EndUser()})
 	}
 	return c, err
 }
@@ -72,7 +73,7 @@ func (g EventingGraph) UpdateChange(ctx context.Context, id domain.ChangeID, p g
 	if fields := domain.EditedFields(before, c); err == nil && fields != nil && g.OnEvent != nil {
 		ev := c
 		ev.Items, ev.Nodes = nil, nil
-		g.OnEvent(ctx, domain.ChangeEvent{Type: events.ChangeEdited, Change: ev, Fields: fields})
+		g.OnEvent(ctx, domain.ChangeEvent{Type: events.ChangeEdited, Change: ev, Fields: fields, EndUser: authz.From(ctx).EndUser()})
 	}
 	return c, err
 }
@@ -117,7 +118,7 @@ func (g EventingGraph) IntegrateChange(ctx context.Context, id domain.ChangeID, 
 // TriggerEventOf converts a change event.
 func TriggerEventOf(ev domain.ChangeEvent) TriggerEvent {
 	c := ev.Change
-	return TriggerEvent{Type: ev.Type, Change: &c, Items: ev.Items, Fields: ev.Fields}
+	return TriggerEvent{Type: ev.Type, Change: &c, Items: ev.Items, Fields: ev.Fields, EndUser: ev.EndUser}
 }
 
 // WatchProcesses feeds process events of the broker to the trigger manager

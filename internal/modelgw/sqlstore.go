@@ -62,7 +62,7 @@ func (s SQLStore) AddUsage(ctx context.Context, model, period string, tokens int
 	return err
 }
 
-const callColumns = `seq, at_ms, duration_ms, subject, project, org, alias, provider, model, kind, input_tokens, output_tokens, error,
+const callColumns = `seq, at_ms, duration_ms, subject, end_user, project, org, alias, provider, model, kind, input_tokens, output_tokens, error,
 	source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens, behavior_tokens_estimated,
 	CASE WHEN EXISTS (SELECT 1 FROM llm_call_exchange x WHERE x.seq = llm_call.seq) THEN 1 ELSE 0 END`
 
@@ -72,7 +72,7 @@ func scanCall(sc interface{ Scan(...any) error }) (Call, error) {
 	var ms int64
 	var has int
 	var behaviors string
-	if err := sc.Scan(&c.Seq, &ms, &c.DurationMs, &c.Subject, &c.Project, &c.Org, &c.Alias, &c.Provider, &c.Model, &c.Kind, &c.InputTokens,
+	if err := sc.Scan(&c.Seq, &ms, &c.DurationMs, &c.Subject, &c.EndUser, &c.Project, &c.Org, &c.Alias, &c.Provider, &c.Model, &c.Kind, &c.InputTokens,
 		&c.OutputTokens, &c.Error, &c.Source, &c.ConversationID, &c.ProcessID, &c.ChangeID, &c.Step, &c.Action, &c.Agent, &c.CallIndex, &behaviors, &c.BehaviorTokens, &c.BehaviorTokensEstimated, &has); err != nil {
 		return c, err
 	}
@@ -116,10 +116,10 @@ func (s SQLStore) AppendCall(ctx context.Context, c Call, x *Exchange) (int64, e
 	}
 	defer tx.Rollback()
 	var seq int64
-	err = tx.QueryRowContext(ctx, s.q(`INSERT INTO llm_call (at_ms, duration_ms, subject, project, org, alias, provider, model, kind,
+	err = tx.QueryRowContext(ctx, s.q(`INSERT INTO llm_call (at_ms, duration_ms, subject, end_user, project, org, alias, provider, model, kind,
 		input_tokens, output_tokens, error, source, conversation_id, process_id, change_id, step, action, agent, call_index, behaviors, behavior_tokens, behavior_tokens_estimated)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`),
-		c.At.UnixMilli(), c.DurationMs, c.Subject, c.Project, c.Org, c.Alias, c.Provider, c.Model, c.Kind, c.InputTokens, c.OutputTokens,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING seq`),
+		c.At.UnixMilli(), c.DurationMs, c.Subject, c.EndUser, c.Project, c.Org, c.Alias, c.Provider, c.Model, c.Kind, c.InputTokens, c.OutputTokens,
 		c.Error, c.Source, c.ConversationID, c.ProcessID, c.ChangeID, c.Step, c.Action, c.Agent, c.CallIndex, strings.Join(c.Behaviors, ","), c.BehaviorTokens, c.BehaviorTokensEstimated).Scan(&seq)
 	if err != nil {
 		return 0, err
@@ -158,7 +158,7 @@ func (f UsageFilter) where() (string, []any) {
 	if !f.To.IsZero() {
 		add("at_ms < ?", f.To.UnixMilli())
 	}
-	for _, e := range []struct{ col, val string }{{"subject", f.Subject}, {"project", f.Project}, {"alias", f.Alias}, {"source", f.Source},
+	for _, e := range []struct{ col, val string }{{"subject", f.Subject}, {"end_user", f.EndUser}, {"project", f.Project}, {"alias", f.Alias}, {"source", f.Source},
 		{"process_id", f.ProcessID}, {"change_id", f.ChangeID}, {"conversation_id", f.ConversationID}} {
 		if e.val != "" {
 			add(e.col+" = ?", e.val)
@@ -208,7 +208,7 @@ func (s SQLStore) Calls(ctx context.Context, f UsageFilter) ([]Call, bool, error
 
 // groupColumns are the SQL expressions of the groupings; a time grouping is the bucket number, formatted by bucketKey.
 var groupColumns = map[string]string{
-	GroupModel: "model", GroupAlias: "alias", GroupSource: "source", GroupSubject: "subject", GroupProcess: "process_id",
+	GroupModel: "model", GroupAlias: "alias", GroupSource: "source", GroupSubject: "subject", GroupEndUser: "end_user", GroupProcess: "process_id",
 	GroupAction: "action", GroupAgent: "agent", GroupDay: fmt.Sprintf("at_ms / %d", dayMs), GroupHour: fmt.Sprintf("at_ms / %d", hourMs),
 }
 

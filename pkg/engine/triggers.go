@@ -34,10 +34,25 @@ type TriggerEvent struct {
 	Step *StepEvent `json:"step,omitempty"`
 	// Fields are the fields of the header a change.edited event changed (ADR 0110).
 	Fields map[string]domain.HeaderValue `json:"fields,omitempty"`
+	// EndUser is the person whose action raised a change event (domain.ChangeEvent.EndUser, ADR 0114).
+	EndUser string `json:"endUser,omitempty"`
+}
+
+// endUser is the person the runs an event sets off act for (ADR 0114): the one who raised a change event, else the end
+// user of the process the event comes from.
+func (ev TriggerEvent) endUser() string {
+	if ev.EndUser != "" {
+		return ev.EndUser
+	}
+	if ev.Process != nil {
+		return ev.Process.Initiator.EndUser()
+	}
+	return ""
 }
 
 func (ev TriggerEvent) activation() map[string]any {
-	out := map[string]any{"type": ev.Type, "change": map[string]any{}, "process": map[string]any{}, "methodology": map[string]any{}, "step": map[string]any{}, "fields": map[string]any{}}
+	out := map[string]any{"type": ev.Type, "change": map[string]any{}, "process": map[string]any{}, "methodology": map[string]any{}, "step": map[string]any{}, "fields": map[string]any{},
+		"endUser": ev.endUser()}
 	if len(ev.Fields) > 0 {
 		fields := make(map[string]any, len(ev.Fields))
 		for k, v := range ev.Fields {
@@ -278,7 +293,7 @@ func DeclaredEvents(ev TriggerEvent) []TriggerEvent {
 		i, ok := at[it.Type]
 		if !ok {
 			i, at[it.Type] = len(out), len(out)
-			out = append(out, TriggerEvent{Type: it.Type, Change: ev.Change, Process: ev.Process})
+			out = append(out, TriggerEvent{Type: it.Type, Change: ev.Change, Process: ev.Process, EndUser: ev.EndUser})
 		}
 		out[i].Items = append(out[i].Items, it)
 	}
@@ -377,6 +392,9 @@ func (t *TriggerManager) fireKey(ctx context.Context, key string, ev *TriggerEve
 func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, def methodology.Trigger, ev *TriggerEvent) (*Process, error) {
 	who := authz.System("trigger:"+key, def.Roles...)
 	who.Org = "system"
+	if ev != nil {
+		who = who.For(ev.endUser()) // its run is a consequence of what the end user did (ADR 0114)
+	}
 	if ev != nil && ev.Process != nil && ev.Process.Initiator.Org != "" {
 		who.Org = ev.Process.Initiator.Org
 	}

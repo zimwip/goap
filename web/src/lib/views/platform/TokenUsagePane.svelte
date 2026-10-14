@@ -2,9 +2,11 @@
   import { untrack } from 'svelte';
   // "Token usage" section of the settings modal, built on the gateway's ledger of LLM calls (ADR 0089): the caller's
   // own consumption (overall, over time, by model / alias / source / agent / action, the runs that consume the most,
-  // the most expensive calls); assistant, helper and indexer calls are in it too. Platform administrators can switch
-  // to the consumption of the whole platform (by subject too), with the quotas.
-  import { can } from '../../stores/session.svelte';
+  // the most expensive calls); assistant, helper and indexer calls are in it too, and so are the calls platform
+  // services made on the caller's behalf (ADR 0114: triggers, companion runs and their sub-agents, set off by what the
+  // caller did), split by who acted. Platform administrators can switch to the consumption of the whole platform (by
+  // subject and by end user too), with the quotas.
+  import { can, me } from '../../stores/session.svelte';
   import Icon from '../../shell/Icon.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -13,8 +15,8 @@
   import { models, errorMessage, formatDate, int, shortId, type CatalogModel, type LLMCall, type UsageFilter, type UsageGroup, type UsageSummaryRow } from '../../api';
   import { processes as known } from '../../stores/live.svelte';
   import { prefs } from '../../stores/preferences.svelte';
-  import { usage, attachUsage, setUsagePlatform, usageSubject } from '../../stores/usage.svelte';
-  import { bucketsOf, compactTokens, periodStart, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf, USAGE_PERIODS, type Dim, type Slice } from '../../tokenStats';
+  import { usage, attachUsage, setUsagePlatform, usageScope } from '../../stores/usage.svelte';
+  import { bucketsOf, compactTokens, directSplit, periodStart, runsOf, slicesOf, sourceLabel, stepOf, topCalls, totalsOf, USAGE_PERIODS, viaOf, type Dim, type Slice } from '../../tokenStats';
   import { behaviorsLine } from '../../behaviors';
 
   interface Loaded {
@@ -53,8 +55,8 @@
     const to = Date.now();
     const from = periodStart(range, to);
     const hourly = !!from && to - from <= 2 * 86_400_000;
-    const filter: UsageFilter = { subject: usageSubject(), from: from ? new Date(from).toISOString() : undefined };
-    const dims: [Dim, UsageGroup][] = [['model', 'model'], ['alias', 'alias'], ['source', 'source'], ['agent', 'agent'], ['action', 'action'], ['process', 'process'], ['subject', 'subject']];
+    const filter: UsageFilter = { ...usageScope(), from: from ? new Date(from).toISOString() : undefined };
+    const dims: [Dim, UsageGroup][] = [['model', 'model'], ['alias', 'alias'], ['source', 'source'], ['agent', 'agent'], ['action', 'action'], ['process', 'process'], ['subject', 'subject'], ['end_user', 'end_user']];
     try {
       const [sums, series, list] = await Promise.all([
         Promise.all(dims.map(([, g]) => models.usageSummary(filter, g))),
@@ -91,6 +93,8 @@
   });
 
   const totals = $derived(totalsOf(data?.by.model));
+  // the caller's own calls and those made on their behalf (ADR 0114)
+  const split = $derived(directSplit(data?.by.subject, me()));
   const buckets = $derived(data ? bucketsOf(data.series, data.hourly, data.from, data.to) : []);
   const BREAKDOWNS = $derived<[Dim, string][]>([
     ['model', 'By model'],
@@ -98,9 +102,14 @@
     ['source', 'By source'],
     ['agent', 'By agent'],
     ['action', 'By action'],
-    ...(platform ? ([['subject', 'By subject']] as [Dim, string][]) : []),
+    ...(platform
+      ? ([
+          ['subject', 'By subject'],
+          ['end_user', 'By end user'],
+        ] as [Dim, string][])
+      : ([['subject', 'Who acted']] as [Dim, string][])),
   ]);
-  const slices = $derived((d: Dim): Slice[] => slicesOf(d, data?.by[d]));
+  const slices = $derived((d: Dim): Slice[] => slicesOf(d, data?.by[d], platform ? undefined : me()));
   const runInfo = $derived(runsOf(data?.by.process));
   const runs = $derived([...runInfo.runs].sort((a, b) => b[sort] - a[sort]).slice(0, 15));
   const top = $derived(topCalls(data?.calls ?? []));
@@ -145,7 +154,7 @@
         <option value="platform">Whole platform</option>
       </select>
     {:else}
-      <span class="hint">Your own consumption.</span>
+      <span class="hint">Your consumption: your own calls and those made on your behalf.</span>
     {/if}
     <span class="grow"></span>
     <button type="button" class="small refresh" disabled={loading} onclick={() => void load()}><Icon name="refresh" size={13} />Refresh</button>
@@ -197,6 +206,11 @@
       <div class="kpi"><span class="v">{n(runInfo.runs.length)}</span><span class="l">runs</span></div>
       <div class="kpi"><span class="v">{compact(runInfo.avg)}</span><span class="l">avg / run</span></div>
       <div class="kpi"><span class="v">{n(totals.calls)}</span><span class="l">LLM calls{totals.errors ? ` · ${totals.errors} in error` : ''}</span></div>
+      {#if !platform}
+        <div class="kpi" title="Calls made by platform services on your behalf: triggers, companion runs and their sub-agents, set off by what you did">
+          <span class="v">{compact(split.indirect.total)}</span><span class="l">on your behalf ({pct(split.indirect.total, totals.total)}%)</span>
+        </div>
+      {/if}
     </div>
 
     <section class="card">
@@ -289,11 +303,12 @@
       </div>
       <div class="scroll">
         <table>
-          <thead><tr><th>Source</th><th>Run</th><th>Action</th><th>Model</th><th>Behaviours</th><th class="num">Input</th><th class="num">Output</th><th class="num">Total</th></tr></thead>
+          <thead><tr><th>Source</th><th>{platform ? 'Subject' : 'Via'}</th><th>Run</th><th>Action</th><th>Model</th><th>Behaviours</th><th class="num">Input</th><th class="num">Output</th><th class="num">Total</th></tr></thead>
           <tbody>
             {#each top as c (c.seq)}
               <tr>
                 <td>{sourceLabel(c.source)}</td>
+                <td class="hint" title={c.endUser && c.endUser !== c.subject ? `on behalf of ${c.endUser}` : ''}>{platform ? (c.subject ?? '') : viaOf(c)}</td>
                 <td>{#if c.processId}<button type="button" class="link" onclick={() => open(c.processId ?? '')}>{title(c.processId)}</button>{/if}</td>
                 <td>{c.action ?? ''}{c.processId ? ` #${stepOf(c) + 1}` : ''}</td>
                 <td><code>{c.model ?? ''}</code></td>
@@ -307,7 +322,11 @@
         </table>
       </div>
     </section>
-    <p class="hint">{platform ? 'From the ledger of LLM calls of the whole platform.' : 'From the ledger of your LLM calls: runs, assistant, helper.'}</p>
+    <p class="hint">
+      {platform
+        ? 'From the ledger of LLM calls of the whole platform.'
+        : 'From the ledger of your LLM calls: runs, assistant, helper, and the calls made on your behalf by what your actions set off.'}
+    </p>
   {/if}
 </div>
 

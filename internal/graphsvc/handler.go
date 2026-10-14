@@ -57,6 +57,10 @@ func res[T any](m *T, err error) (*connect.Response[T], error) {
 }
 
 func (h *Handler) publish(ctx context.Context, subject string, v any) {
+	if ev, ok := v.(domain.ChangeEvent); ok && ev.EndUser == "" {
+		ev.EndUser = authz.From(ctx).EndUser() // what the event sets off is attributed to its end user (ADR 0114)
+		v = ev
+	}
 	if h.Events != nil {
 		_ = h.Events.Publish(ctx, subject, v)
 	}

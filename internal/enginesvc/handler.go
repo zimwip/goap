@@ -553,7 +553,7 @@ func (h *Handler) ListProcesses(ctx context.Context, r *connect.Request[enginev1
 	var ps []*engine.Process
 	for _, p := range all {
 		switch {
-		case r.Msg.Mine && p.Initiator.Subject != me.Subject,
+		case r.Msg.Mine && p.Initiator.Subject != me.Subject && p.Initiator.EndUser() != me.Subject, // or run on their behalf (ADR 0114)
 			len(statuses) > 0 && !statuses[string(p.Status)],
 			r.Msg.RootsOnly && p.ParentID != "":
 			continue
@@ -690,7 +690,7 @@ func ProcessToPB(p *engine.Process) *enginev1.Process {
 		Id: p.ID, Methodology: p.Methodology, ChangeId: string(p.ChangeID), Status: string(p.Status), Goal: p.Goal,
 		Question: p.Question, Plan: p.Plan, World: p.World, Unknown: p.Unknown, Error: p.Error,
 		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
-		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles},
+		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles, OnBehalfOf: p.Initiator.OnBehalfOf},
 		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
 		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Cause: p.Cause, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
 		Instance: p.Instance, Closed: p.Closed, Runs: int32(p.Runs), MemoryTurns: int32(len(p.Memory)),

@@ -58,7 +58,8 @@ type Process struct {
 	// record (ADR 0011) and clears it.
 	Queued *Queued `json:"queued,omitempty"`
 	// Initiator is the principal who started the process; automatic actions
-	// run with its permissions.
+	// run with its permissions. A platform service (a trigger, a companion) carries the end user it acts for
+	// (OnBehalfOf, ADR 0114): the person the run's work, its model calls first, is attributed to.
 	Initiator authz.Principal `json:"initiator"`
 	// Agent of the methodology run by the process and its planner.
 	Agent   string `json:"agent,omitempty"`

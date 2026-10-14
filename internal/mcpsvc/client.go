@@ -38,6 +38,9 @@ func forward[T any](ctx context.Context, msg *T) *connect.Request[T] {
 				r.Header().Set(identity.HeaderRoles, r.Header().Get(identity.HeaderRoles)+","+role)
 			}
 		}
+		if p.System() && p.OnBehalfOf != "" {
+			r.Header().Set(identity.HeaderOnBehalfOf, p.OnBehalfOf) // the end user the work is attributed to (ADR 0114)
+		}
 	}
 	return r
 }

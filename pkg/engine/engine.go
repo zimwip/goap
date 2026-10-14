@@ -199,6 +199,15 @@ func (e *Engine) start(ctx context.Context, req StartRequest, instance string) (
 	p := &Process{Instance: instance, ID: uuid.NewString(), Methodology: req.Methodology, Agent: req.Agent, ChangeID: req.ChangeID, BaselineID: req.BaselineID, Namespace: req.Namespace, OwnBranch: req.OwnBranch, Org: req.OwnerOrg,
 		Project: req.ProjectID, Title: req.Title, ParentID: req.ParentID, Trigger: req.Trigger, Cause: req.Cause, Flow: req.Flow, Initiator: authz.From(ctx), Vars: maps.Clone(req.Vars), Step: req.Step, Disabled: map[string]bool{},
 		CreatedAt: e.clock(), UpdatedAt: e.clock()}
+	if p.Initiator.System() && p.Initiator.OnBehalfOf == "" {
+		// a platform service starting a sub-agent or a consequence of a run acts for that run's end user (ADR 0114)
+		for _, from := range []string{req.ParentID, req.Cause} {
+			if q, err := e.Store.Get(ctx, from); from != "" && err == nil {
+				p.Initiator = p.Initiator.For(q.Initiator.EndUser())
+				break
+			}
+		}
+	}
 	if req.Intent != "" {
 		if err := e.appendIntentTurns(ctx, p, intent.Turn{Role: "user", Text: req.Intent}); err != nil {
 			return nil, err

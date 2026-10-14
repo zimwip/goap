@@ -49,7 +49,7 @@ export function callOf(c: Pick<LLMCall, 'processId' | 'call'>): number {
   return c.processId ? (c.call ?? 0) : -1;
 }
 
-export type Dim = 'model' | 'alias' | 'source' | 'agent' | 'action' | 'subject' | 'process';
+export type Dim = 'model' | 'alias' | 'source' | 'agent' | 'action' | 'subject' | 'end_user' | 'process';
 
 export interface Slice {
   key: string;
@@ -61,22 +61,46 @@ export interface Slice {
   total: number;
 }
 
-/** The label of a group value: sources read as names, an empty value as a dash. */
-export function keyLabel(dim: Dim, key: string): string {
+const SYSTEM = 'system:';
+
+/**
+ * Who acted, as a person reads it (ADR 0114): a platform service by what it is (`system:trigger:nightly` reads
+ * "trigger nightly", `system:companion:sdlc/review` "companion sdlc/review"), `me` as "you, directly".
+ */
+export function actorLabel(subject: string | undefined, me?: string): string {
+  const s = subject ?? '';
+  if (me && s === me) return 'you, directly';
+  if (!s.startsWith(SYSTEM)) return s || '—';
+  const rest = s.slice(SYSTEM.length);
+  const i = rest.indexOf(':');
+  return i < 0 ? rest : `${rest.slice(0, i)} ${rest.slice(i + 1)}`;
+}
+
+/**
+ * The service a call was made through on behalf of its end user (ADR 0114): the label of its subject when someone
+ * else than the end user called, "" for a call the end user made themselves (or one attributed to nobody).
+ */
+export function viaOf(c: Pick<LLMCall, 'subject' | 'endUser'>): string {
+  return c.endUser && c.subject !== c.endUser ? actorLabel(c.subject) : '';
+}
+
+/** The label of a group value: sources read as names, who acted as `actorLabel` (`me`: the caller), an empty value as a dash. */
+export function keyLabel(dim: Dim, key: string, me?: string): string {
   if (dim === 'source') return sourceLabel(key);
+  if (dim === 'subject') return actorLabel(key, me);
   return key || '—';
 }
 
-export function sliceOf(dim: Dim, r: UsageSummaryRow): Slice {
+export function sliceOf(dim: Dim, r: UsageSummaryRow, me?: string): Slice {
   const input = int(r.inputTokens);
   const output = int(r.outputTokens);
   const key = r.key ?? '';
-  return { key, label: keyLabel(dim, key), input, output, calls: int(r.calls), errors: int(r.errors), total: input + output };
+  return { key, label: keyLabel(dim, key, me), input, output, calls: int(r.calls), errors: int(r.errors), total: input + output };
 }
 
 /** Rows to slices, the biggest first. */
-export function slicesOf(dim: Dim, rows: UsageSummaryRow[] | undefined): Slice[] {
-  return (rows ?? []).map((r) => sliceOf(dim, r)).sort((a, b) => b.total - a.total);
+export function slicesOf(dim: Dim, rows: UsageSummaryRow[] | undefined, me?: string): Slice[] {
+  return (rows ?? []).map((r) => sliceOf(dim, r, me)).sort((a, b) => b.total - a.total);
 }
 
 export interface Totals {
@@ -149,6 +173,20 @@ export function bucketsOf(rows: UsageSummaryRow[] | undefined, hourly: boolean, 
 export interface RunSlice extends Slice {
   /** total relative to the average run */
   ratio: number;
+}
+
+/**
+ * A person's consumption split by who acted (ADR 0114), from a summary of the calls attributed to them grouped by
+ * subject: `direct` the calls they made, `indirect` those platform services made on their behalf (triggers, companion
+ * runs, their sub-agents), all of them in `all`.
+ */
+export function directSplit(bySubject: UsageSummaryRow[] | undefined, me: string): { all: Totals; direct: Totals; indirect: Totals } {
+  const rows = bySubject ?? [];
+  return {
+    all: totalsOf(rows),
+    direct: totalsOf(rows.filter((r) => (r.key ?? '') === me)),
+    indirect: totalsOf(rows.filter((r) => (r.key ?? '') !== me)),
+  };
 }
 
 /** The runs that consume the most: the per-process summary without the calls of no process. */

@@ -44,10 +44,10 @@ describe('usage feed', () => {
     api.listUsage.mockResolvedValueOnce(page(1, 3)).mockResolvedValueOnce(page(4, 5)).mockResolvedValue(page(5, 5));
     const detach = attachUsage();
     await tick(0);
-    expect(api.listUsage).toHaveBeenNthCalledWith(1, { subject: 'alice', afterSeq: undefined, limit: PAGE }, expect.anything());
+    expect(api.listUsage).toHaveBeenNthCalledWith(1, { endUser: 'alice', afterSeq: undefined, limit: PAGE }, expect.anything());
     expect(usage.rows.map((r) => r.seq)).toEqual(['1', '2', '3']);
     await tick();
-    expect(api.listUsage).toHaveBeenNthCalledWith(2, { subject: 'alice', afterSeq: '3', limit: PAGE }, expect.anything());
+    expect(api.listUsage).toHaveBeenNthCalledWith(2, { endUser: 'alice', afterSeq: '3', limit: PAGE }, expect.anything());
     expect(usage.rows.map((r) => r.seq)).toEqual(['1', '2', '3', '4', '5']);
     detach();
   });
@@ -95,7 +95,7 @@ describe('usage feed', () => {
     api.listUsage.mockResolvedValue(page(2, 2));
     const again = attachUsage();
     await tick(0);
-    expect(api.listUsage).toHaveBeenLastCalledWith({ subject: 'alice', afterSeq: '1', limit: PAGE }, expect.anything());
+    expect(api.listUsage).toHaveBeenLastCalledWith({ endUser: 'alice', afterSeq: '1', limit: PAGE }, expect.anything());
     expect(usage.rows.map((r) => r.seq)).toEqual(['1', '2']);
     again();
   });
@@ -121,7 +121,7 @@ describe('usage feed', () => {
     await tick(0);
     setUsagePlatform(true);
     await tick(0);
-    expect(api.listUsage).toHaveBeenLastCalledWith({ subject: '', afterSeq: undefined, limit: PAGE }, expect.anything());
+    expect(api.listUsage).toHaveBeenLastCalledWith({ afterSeq: undefined, limit: PAGE }, expect.anything());
     expect(usage.rows).toHaveLength(1);
     detach();
   });

@@ -417,7 +417,7 @@ func filterFromPB(f *modelv1.UsageFilter) UsageFilter {
 	if f == nil {
 		return UsageFilter{}
 	}
-	out := UsageFilter{Subject: f.Subject, Project: f.Project, Model: f.Model, Alias: f.Alias, Source: f.Source, ProcessID: f.ProcessId,
+	out := UsageFilter{Subject: f.Subject, EndUser: f.EndUser, Project: f.Project, Model: f.Model, Alias: f.Alias, Source: f.Source, ProcessID: f.ProcessId,
 		ChangeID: f.ChangeId, ConversationID: f.ConversationId, AfterSeq: f.AfterSeq, Limit: int(f.Limit)}
 	if f.From != nil {
 		out.From = f.From.AsTime()
@@ -429,13 +429,14 @@ func filterFromPB(f *modelv1.UsageFilter) UsageFilter {
 }
 
 func callToPB(c Call) *modelv1.LLMCall {
-	return &modelv1.LLMCall{Seq: c.Seq, At: timestamppb.New(c.At), DurationMs: c.DurationMs, Subject: c.Subject, Project: c.Project, Org: c.Org,
+	return &modelv1.LLMCall{Seq: c.Seq, At: timestamppb.New(c.At), DurationMs: c.DurationMs, Subject: c.Subject, EndUser: c.EndUser, Project: c.Project, Org: c.Org,
 		Alias: c.Alias, Provider: c.Provider, Model: c.Model, Kind: c.Kind, InputTokens: c.InputTokens, OutputTokens: c.OutputTokens, Error: c.Error,
 		Source: c.Source, ConversationId: c.ConversationID, ProcessId: c.ProcessID, ChangeId: c.ChangeID, Step: int32(c.Step), Action: c.Action,
 		Agent: c.Agent, Call: int32(c.CallIndex), HasExchange: c.HasExchange, Behaviors: c.Behaviors, BehaviorTokens: c.BehaviorTokens, BehaviorTokensEstimated: c.BehaviorTokensEstimated}
 }
 
-// ListUsage reads the ledger: the caller's own calls, any subject's for an administrator.
+// ListUsage reads the ledger: the calls attributed to the caller (its own and those made on its behalf, ADR 0114), any
+// subject's for an administrator.
 func (h *Handler) ListUsage(ctx context.Context, r *connect.Request[modelv1.ListUsageRequest]) (*connect.Response[modelv1.ListUsageResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	calls, next, more, err := h.Service.ListCalls(ctx, filterFromPB(r.Msg.Filter), h.isAdmin(ctx))
