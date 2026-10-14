@@ -2,6 +2,7 @@
 // change once its change impacts are counted, and the transitions it can take.
 import { graph, isDraft, type ChangeImpact, type GraphNode, type Lifecycle, type LifecycleTransition, type LinkWrite, type NodeRef } from './api';
 import type { TypeCatalog } from './stores/types.svelte';
+import { unmodified } from './changeCommit';
 
 /** Lifecycle of a node type, from the type catalogue (extends chain included). */
 export function lifecycleResolver(cat: TypeCatalog): (type: string | undefined) => Lifecycle | undefined {
@@ -87,7 +88,7 @@ const alreadyCheckedOut = (e: unknown) => /already checked out/i.test(e instance
  * reviewed: 'change impact X awaits its review'). */
 export const awaitingReview = (cns: ChangeImpact[], scoped = false): ChangeImpact[] =>
   // a draft left as it was checked out modifies nothing: it is not committed, so it holds nothing (ADR 0102)
-  cns.filter((c) => live(c, scoped) && !!c.id && (c.review === 'proposed' || !c.review) && !!c.post?.id && c.validation?.modified !== false);
+  cns.filter((c) => live(c, scoped) && !!c.id && (c.review === 'proposed' || !c.review) && !!c.post?.id && !unmodified(c));
 
 /** Writes a node of the change (ADR 0076, 0079): created, or checked out when the flow holds no draft of it, its
  * properties and links edited in place on the DRAFT; a state is a transition (on the draft: a node with none is checked

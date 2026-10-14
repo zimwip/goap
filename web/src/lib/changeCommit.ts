@@ -4,8 +4,12 @@
 // (graph.getCommitState): this module only words its answer and says why an impact cannot be accepted.
 import { isDraft, type ChangeImpact, type CommitState } from './api';
 
+/** The server's validation says the draft of the impact modifies nothing (ADR 0102). The JSON of a validation omits
+ * `modified` when it is false, so a validation without it is one of an unmodified draft; no validation: unknown. */
+export const unmodified = (c: ChangeImpact): boolean => !!c.validation && c.validation.modified !== true;
+
 /** The impact holds a draft that modifies its node (the server's validation says so; unknown: taken as one). */
-export const modifies = (c: ChangeImpact): boolean => isDraft(c.post) && c.validation?.modified !== false;
+export const modifies = (c: ChangeImpact): boolean => isDraft(c.post) && !unmodified(c);
 
 /** Why an impact cannot be accepted (it modifies nothing: a candidate, a draft left as it was checked out); undefined when
  * it may be. */

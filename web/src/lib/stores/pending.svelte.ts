@@ -9,6 +9,7 @@
 import { graph, errorMessage, isDraft, type GraphNode, type NodeRef, type Struct } from '../api';
 import { MAIN_BRANCH } from '../namespace';
 import { me, userKey } from './session.svelte';
+import { unmodified } from '../changeCommit';
 
 /** One node touched by the user, not applied yet. */
 export interface Staged {
@@ -230,7 +231,7 @@ export function savePending(): Promise<boolean> {
       for (const [ns, c] of Object.entries(pending.byNs)) {
         // only a modification is accepted (ADR 0102): an edit put back as it was is given up like one never written
         const checked = (await graph.getChange(c.changeId)).change?.nodes ?? [];
-        const unchanged = new Set(checked.filter((n) => n.validation?.modified === false).map((n) => n.id));
+        const unchanged = new Set(checked.filter(unmodified).map((n) => n.id));
         let kept = 0;
         for (const s of Object.values(c.nodes)) {
           if (!s.written || unchanged.has(s.impactId)) {

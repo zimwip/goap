@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { commitButtons, modifies, notAcceptableWhy } from './changeCommit';
+import { commitButtons, modifies, notAcceptableWhy, unmodified } from './changeCommit';
 import type { ChangeImpact } from './api';
 
 const draft = { id: 'n1', version: 0 };
@@ -25,5 +25,11 @@ describe('changeCommit', () => {
     expect(commitButtons({ commits: true, canMerge: true }, false)).toMatchObject({ canCommit: false, canMerge: true });
     expect(commitButtons({}, false).mergeWhy).toMatch(/Nothing committed/);
     expect(commitButtons({ canCommit: true, canMerge: true }, true)).toMatchObject({ canCommit: false, canMerge: false });
+  });
+  it('reads an unmodified draft as the server sends it (false is omitted from the JSON)', () => {
+    const wire: ChangeImpact = { id: 'i3', key: 'LLA-1', post: { id: 'n3', version: 0 }, review: 'proposed', validation: { valid: true } };
+    expect(unmodified(wire)).toBe(true);
+    expect(modifies(wire)).toBe(false);
+    expect(unmodified({ id: 'i4', post: { id: 'n4', version: 0 } })).toBe(false);
   });
 });
