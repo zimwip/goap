@@ -84,6 +84,7 @@ const llmSystem = `You are an agent of an enterprise methodology platform. You w
 Answer ONLY with a JSON object {"items":[...]} where each item is one of:
 {"kind":"artifact","type":"...","data":{...}}
 {"kind":"decision","decision":{"item":"@<item id>","accept":true,"comment":"why"}}
+An item of another kind the instructions name (assessment, comment, risk, action...) keeps that kind: {"kind":"<that kind>","data":{...}}, never an artifact of that type.
 The nodes the change acts on are change impacts: items of kind "changeImpact", applied in order:
 {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
 {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
@@ -390,6 +391,19 @@ func stampRated(bb domain.Blackboard, items []ItemInput) {
 	}
 }
 
+// kindsOfUseCases are the item kinds a model is told to write that it may still wrap as an artifact of that type.
+var kindsOfUseCases = map[string]bool{string(assess.KindAssessment): true, string(assess.KindComment): true}
+
+// unwrapKinds gives back their kind to the items a model wrote as an artifact whose type is that kind
+// ({"kind":"artifact","type":"assessment"}): the conditions, the brief and the web read the kind (ADR 0110).
+func unwrapKinds(items []ItemInput) {
+	for i := range items {
+		if items[i].Kind == string(domain.KindArtifact) && kindsOfUseCases[items[i].Type] {
+			items[i].Kind, items[i].Type = items[i].Type, ""
+		}
+	}
+}
+
 // runLoop is the conversation of one LLM action: tool rounds, repairs, then the items.
 func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, system string, tools []mcp.ToolInfo) (ActionResult, error) {
 	model := ac.Action.Model
@@ -439,6 +453,7 @@ func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, syst
 					ac.Host.e.event(ctx, "llm.answer", map[string]any{"goap.llm.tool_rounds": round, "goap.llm.repairs": repairs,
 						"goap.tool_calls": calls, "goap.items": len(out.Items)})
 				}
+				unwrapKinds(out.Items)
 				stampRated(ac.Blackboard, out.Items)
 				return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items, %d tool calls", resp.Provider, resp.Model, len(out.Items), calls),
 					Turn: &Turn{Prompt: prompt, Answer: resp.Text}}, nil

@@ -101,4 +101,10 @@ describe('descriptionReview', () => {
     expect(threadOf(items, subjects).map((m) => m.id)).toEqual(['A4', 'C9']);
     expect(commentItem(' ok ', subjects).data).toEqual({ about: 'item:RSK-1', text: 'ok' });
   });
+
+  it('reads an assessment a model wrapped as an artifact of that type', () => {
+    const items: ChangeItem[] = [{ id: 'W1', kind: 'artifact', type: 'assessment', data: { key: 'description', score: 2, rated: subjectText(change) } }];
+    expect(assessmentOf({ ...change, items })?.item).toBe('W1');
+    expect(state(assessmentOf({ ...change, items }))).toBe('refused');
+  });
 });

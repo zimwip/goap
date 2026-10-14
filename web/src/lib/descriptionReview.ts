@@ -53,6 +53,13 @@ export interface Message {
   at?: string;
 }
 
+/** kindOf is the kind of an item, an assessment or a comment a model wrapped as an artifact of that type counting as
+ *  one (the engine unwraps them since, ADR 0110; older changes keep them). */
+export function kindOf(it: ChangeItem): string {
+  const k = it.kind ?? '';
+  return k === 'artifact' && (it.type === 'assessment' || it.type === 'comment') ? it.type : k;
+}
+
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v) || 0);
 const dataOf = (it: ChangeItem) => (it.data ?? {}) as Record<string, unknown>;
@@ -103,8 +110,8 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
   let versions = 0;
   inEffect(change.items ?? []).forEach((it, i) => {
     const d = dataOf(it);
-    if (it.kind === 'comment' && keys.includes(str(d.about))) commented = i;
-    if (it.kind === 'assessment' && keys.includes(str(d.key))) {
+    if (kindOf(it) === 'comment' && keys.includes(str(d.about))) commented = i;
+    if (kindOf(it) === 'assessment' && keys.includes(str(d.key))) {
       last = it;
       at = i;
       versions++;
@@ -139,8 +146,8 @@ export function threadOf(items: ChangeItem[] | undefined, subject: Subject = DES
   const out: Message[] = [];
   for (const it of inEffect(items ?? [])) {
     const d = dataOf(it);
-    if (it.kind === 'comment' && keys.includes(str(d.about))) out.push({ kind: 'comment', id: it.id ?? '', text: str(d.text), at: it.createdAt });
-    else if (it.kind === 'assessment' && keys.includes(str(d.key)))
+    if (kindOf(it) === 'comment' && keys.includes(str(d.about))) out.push({ kind: 'comment', id: it.id ?? '', text: str(d.text), at: it.createdAt });
+    else if (kindOf(it) === 'assessment' && keys.includes(str(d.key)))
       out.push({ kind: 'assessment', id: it.id ?? '', text: str(d.reply) || str(d.verdict), score: num(d.score), at: it.createdAt });
   }
   return out;
