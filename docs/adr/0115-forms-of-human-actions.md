@@ -1,6 +1,6 @@
 # ADR 0115 — Forms of human actions: a declared form, its code, an extensible widget registry
 
-**Status**: accepted, first part implemented (see "Not done") · **Date**: 2026-10 · Extends ADR 0034 (manual steps),
+**Status**: accepted, implemented except the items of "Not done" (see "Not done") · **Date**: 2026-10 · Extends ADR 0034 (manual steps),
 ADR 0018 / DSL (script code), ADR 0076 / 0079 (change impacts, drafts), ADR 0092 (screens of the web)
 
 ## Context
@@ -109,12 +109,23 @@ form when the task has one and keeps the former heuristics otherwise. The render
 - A form without code changes the graph only through links and an artifact; anything else (creating a node,
   setting a property, opening a decision point) is the code's job, with the DSL every script already has.
 
+### 5. The form designer
+
+The methodology editor builds the form of a human action with a designer (`web/src/lib/forms/designer/`, model in
+`web/src/lib/forms/design.ts`, pure and tested): a palette of the widgets of the server's registry (copied to
+`widgetCatalog.gen.ts` by `pkg/form`'s `TestWebCatalogIsCurrent`, `GOAP_UPDATE_WEB=1 go test ./pkg/form/` rewrites it)
+and of **patterns** (ready-made sets of fields: pick and link, qualify a node, decide, checklist), dragged onto the
+canvas or clicked; the fields are reordered by dragging (or the arrows) and edited in a properties panel (identity,
+required, default, then the constraints the widget declares, with suggestions from the type catalogue: node types,
+link types allowed from the source field's types, lifecycle states, namespaces). A rename follows into the link fields
+naming the field, a removed source leaves them without one, a change of widget drops the constraints the new one does
+not accept. The designer reports what the server would refuse (`designIssues`), shows the form as a person sees it
+(Preview) and as the methodology stores it (JSON). The code run on the values is edited below it.
+
 ## Not done
 
-- The form editor of the methodology (drag and drop of widgets from a palette, field properties, constraints with
-  pickers from the type catalogue, a live preview with `FormRenderer`) and **patterns** (ready-made forms: "pick and
-  link", "review the impacts", "qualify an impact") to start from.
 - Conditional fields (`visible` / `requiredWhen` in CEL over the other values) and repeated groups.
+- Patterns stored as data (shared by the methodologies of an organisation) rather than shipped with the web.
 - Standard pages using `FormRenderer` with a form declared by a node type (an `form:` on a node type of a domain, for
   its creation dialog), and the assistant filling a form (a screen tool per declared form, ADR 0092).
 - Widgets beyond the built-in set (a node creation widget with its attributes, a decision point, a file).

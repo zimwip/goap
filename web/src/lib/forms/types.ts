@@ -56,3 +56,21 @@ export interface NodeSource {
 }
 
 export const emptySource: NodeSource = { nodes: [] };
+
+/** A constraint a widget accepts (pkg/form.Constraint). */
+export interface ConstraintSpec {
+  name: string;
+  type: 'string' | 'number' | 'boolean' | 'strings' | 'field' | string;
+  description?: string;
+  required?: boolean;
+  /** a field constraint: the widget the named field must have */
+  widget?: string;
+}
+
+/** A widget of the server's registry (pkg/form.Widget): its value and constraints. */
+export interface WidgetSpec {
+  name: string;
+  description?: string;
+  value: 'string' | 'number' | 'boolean' | 'list' | 'node' | 'links' | 'none' | 'any' | string;
+  constraints?: ConstraintSpec[];
+}
