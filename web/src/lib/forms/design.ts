@@ -2,10 +2,10 @@
 // field where it is dropped, move, remove, rename keeping the references, patch). Pure: the designer component holds
 // no logic of its own.
 import { WIDGET_CATALOG } from './widgetCatalog.gen';
-import type { ConstraintSpec, FieldDef, FormDef, WidgetSpec } from './types';
+import type { Condition, ConstraintSpec, FieldDef, FormDef, WidgetSpec } from './types';
 
 /** The widgets the palette offers, in the order a person reaches for them. */
-const ORDER = ['text', 'textarea', 'number', 'boolean', 'date', 'select', 'multiselect', 'node', 'link', 'markdown'];
+const ORDER = ['text', 'textarea', 'number', 'boolean', 'date', 'select', 'multiselect', 'node', 'link', 'group', 'markdown'];
 
 export const LABELS: Record<string, string> = {
   text: 'Text',
@@ -17,6 +17,7 @@ export const LABELS: Record<string, string> = {
   multiselect: 'Choices',
   node: 'Node search',
   link: 'Links',
+  group: 'Repeated group',
   markdown: 'Explanation',
 };
 
@@ -54,6 +55,7 @@ export function newField(form: FormDef, widget: string, catalog: WidgetSpec[] = 
   }
   if (Object.keys(c).length) f.constraints = c;
   if (widget === 'markdown') delete f.label;
+  if (widget === 'group') f.fields = [{ name: 'item', widget: 'text', label: 'Item', required: true }];
   return f;
 }
 
@@ -83,8 +85,8 @@ export function removeField(form: FormDef, index: number): FormDef {
   const fields = fieldsOf(form)
     .filter((_, i) => i !== index)
     .map((f) => {
-      if (f.constraints?.['from'] !== gone.name) return f;
-      return setConstraint(f, 'from', undefined);
+      const g = withConditions(f, (cs) => cs.filter((c) => c.field !== gone.name));
+      return g.constraints?.['from'] === gone.name ? setConstraint(g, 'from', undefined) : g;
     });
   return { ...form, fields };
 }
@@ -96,11 +98,58 @@ export function updateField(form: FormDef, index: number, patch: Partial<FieldDe
   const next = { ...old, ...patch };
   const renamed = patch.name !== undefined && patch.name !== old.name ? old.name : undefined;
   const fields = fieldsOf(form).map((f, i) => {
-    if (i === index) return next;
-    if (renamed && f.constraints?.['from'] === renamed) return { ...f, constraints: { ...f.constraints, from: next.name } };
-    return f;
+    if (i === index || !renamed) return i === index ? next : f;
+    const g = withConditions(f, (cs) => cs.map((c) => (c.field === renamed ? { ...c, field: next.name } : c)));
+    return g.constraints?.['from'] === renamed ? { ...g, constraints: { ...g.constraints, from: next.name } } : g;
   });
   return { ...form, fields };
+}
+
+/** The field with its conditions (shown when, required when) rewritten; an emptied list goes. */
+function withConditions(f: FieldDef, edit: (cs: Condition[]) => Condition[]): FieldDef {
+  const out = { ...f };
+  for (const k of ['visibleWhen', 'requiredWhen'] as const) {
+    if (!f[k]) continue;
+    const cs = edit(f[k]);
+    if (cs.length) out[k] = cs;
+    else delete out[k];
+  }
+  return out;
+}
+
+/** The operator of a condition, as the designer shows it. */
+export type ConditionOp = 'equals' | 'in' | 'set' | 'unset';
+
+export const opOf = (c: Condition): ConditionOp => (c.set !== undefined ? (c.set ? 'set' : 'unset') : c.in !== undefined ? 'in' : 'equals');
+
+/** A condition on a field with another operator, keeping what it can of the value. */
+export function withOp(c: Condition, op: ConditionOp): Condition {
+  const first = c.equals !== undefined ? c.equals : c.in?.[0];
+  switch (op) {
+    case 'set':
+    case 'unset':
+      return { field: c.field, set: op === 'set' };
+    case 'in':
+      return { field: c.field, in: first !== undefined ? [first] : [] };
+    default:
+      return { field: c.field, equals: first ?? '' };
+  }
+}
+
+/** The problems of the conditions of the i-th field of a list. */
+export function conditionIssues(fields: FieldDef[], i: number): string[] {
+  const out: string[] = [];
+  const f = fields[i];
+  for (const [k, what] of [['visibleWhen', 'shown when'], ['requiredWhen', 'required when']] as const) {
+    for (const c of f[k] ?? []) {
+      const n = [c.equals !== undefined, c.in !== undefined, c.set !== undefined].filter(Boolean).length;
+      if (n !== 1) out.push(`${what}: a condition tests exactly one of equals, in or set`);
+      const at = fields.findIndex((x) => x.name === c.field);
+      if (at < 0 || at >= i) out.push(`${what}: no field ${c.field || '(none)'} before this one`);
+      else if (['markdown', 'link', 'group'].includes(fields[at].widget)) out.push(`${what}: ${c.field} has no value to test`);
+    }
+  }
+  return out;
 }
 
 /** The constraints of a field with one set (undefined, '' or [] removes it). */
@@ -122,30 +171,43 @@ export function changeWidget(field: FieldDef, widget: string, catalog: WidgetSpe
   if (Object.keys(c).length) out.constraints = c;
   else delete out.constraints;
   delete out.default;
+  if (widget === 'group') out.fields ??= newField({}, 'group', catalog).fields;
+  else delete out.fields;
   return out;
 }
 
 /** The problems of a form definition the server would refuse (pkg/form.CheckForm), by field index ('form' for the
  * form). */
 export function designIssues(form: FormDef, catalog: WidgetSpec[] = WIDGET_CATALOG): Record<string, string[]> {
+  return fieldsDesignIssues(fieldsOf(form), catalog, false);
+}
+
+function fieldsDesignIssues(fields: FieldDef[], catalog: WidgetSpec[], nested: boolean): Record<string, string[]> {
   const out: Record<string, string[]> = {};
   const push = (k: string, m: string) => (out[k] ??= []).push(m);
   const seen = new Set<string>();
-  fieldsOf(form).forEach((f, i) => {
+  fields.forEach((f, i) => {
     const k = String(i);
     if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(f.name)) push(k, 'the name is a letter, then letters, digits or _');
     else if (seen.has(f.name)) push(k, `another field is named ${f.name}`);
     seen.add(f.name);
+    for (const m of conditionIssues(fields, i)) push(k, m);
     const spec = specOf(f.widget, catalog);
     if (!spec) {
       push(k, `unknown widget ${f.widget}`);
       return;
     }
+    if (nested && (f.widget === 'group' || f.widget === 'link')) push(k, `a group holds no ${labelOf(f.widget).toLowerCase()} field`);
+    if (f.widget === 'group') {
+      if (!f.fields?.length) push(k, 'a group needs at least one sub-field');
+      for (const [j, msgs] of Object.entries(fieldsDesignIssues(f.fields ?? [], catalog, true)))
+        for (const m of msgs) push(k, `sub-field ${f.fields?.[Number(j)]?.name || Number(j) + 1}: ${m}`);
+    } else if (f.fields?.length) push(k, 'only a group has sub-fields');
     for (const c of spec.constraints ?? []) {
       const v = f.constraints?.[c.name];
       if (c.required && (v === undefined || v === '' || (Array.isArray(v) && !v.length))) push(k, `${c.name} is required`);
       if (c.type === 'field' && typeof v === 'string' && v) {
-        const other = fieldsOf(form).find((x) => x.name === v && x !== f);
+        const other = fields.find((x) => x.name === v && x !== f);
         if (!other) push(k, `no field ${v}`);
         else if (c.widget && other.widget !== c.widget) push(k, `${v} is not a ${labelOf(c.widget).toLowerCase()} field`);
       }

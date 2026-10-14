@@ -8,6 +8,7 @@ import MultiselectWidget from './widgets/MultiselectWidget.svelte';
 import NodeWidget from './widgets/NodeWidget.svelte';
 import LinkWidget from './widgets/LinkWidget.svelte';
 import MarkdownWidget from './widgets/MarkdownWidget.svelte';
+import GroupWidget from './widgets/GroupWidget.svelte';
 
 let done = false;
 
@@ -21,5 +22,6 @@ export function registerBuiltinWidgets(): void {
   registerWidget({ name: 'multiselect', component: MultiselectWidget });
   registerWidget({ name: 'node', component: NodeWidget });
   registerWidget({ name: 'link', component: LinkWidget });
+  registerWidget({ name: 'group', component: GroupWidget });
   registerWidget({ name: 'markdown', component: MarkdownWidget, display: true });
 }

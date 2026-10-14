@@ -1,6 +1,6 @@
 // The checks of a form, the same as the engine's (pkg/form.Validate) minus what only the server knows: run before
 // sending, so a person sees the issues by their fields. Pure.
-import type { FieldDef, FormDef, FormValues, LinkValue, NodeOption, NodeSource } from './types';
+import type { Condition, FieldDef, FormDef, FormValues, LinkValue, NodeOption, NodeSource } from './types';
 
 /** Widgets that show something and produce no value. */
 export const DISPLAY_WIDGETS = new Set(['markdown']);
@@ -11,6 +11,40 @@ const bool = (v: unknown): boolean => v === true;
 
 export function isEmpty(v: unknown): boolean {
   return v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
+}
+
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** Whether a condition holds on the value of its field (undefined: blank or hidden). On a list, equals and in hold
+ * when the list holds one of the values. */
+export function holds(c: Condition, v: unknown): boolean {
+  if (c.set !== undefined) return isEmpty(v) !== c.set;
+  if (isEmpty(v)) return false;
+  const want = c.equals !== undefined ? [c.equals] : (c.in ?? []);
+  const got = Array.isArray(v) ? v : [v];
+  return got.some((g) => want.some((w) => same(g, w)));
+}
+
+export const allHold = (cs: Condition[] | undefined, values: FormValues): boolean => (cs ?? []).every((c) => holds(c, values[c.field]));
+
+/** Whether a field is shown given the values of the fields before it. */
+export const isVisible = (f: FieldDef, values: FormValues): boolean => allHold(f.visibleWhen, values);
+
+/** Whether a field must be filled in given the values of the fields before it. */
+export const isRequired = (f: FieldDef, values: FormValues): boolean => !!f.required || (!!f.requiredWhen?.length && allHold(f.requiredWhen, values));
+
+/** The fields shown and the values the conditions read: a field's value (or default) when it is shown, in order. */
+export function visibleState(fields: FieldDef[] | undefined, values: FormValues): { visible: Set<string>; seen: FormValues } {
+  const visible = new Set<string>();
+  const seen: FormValues = {};
+  for (const f of fields ?? []) {
+    if (!isVisible(f, seen)) continue;
+    visible.add(f.name);
+    if (DISPLAY_WIDGETS.has(f.widget)) continue;
+    const v = values[f.name];
+    seen[f.name] = isEmpty(v) ? f.default : v;
+  }
+  return { visible, seen };
 }
 
 /** The values a form starts with: the defaults of its fields. */
@@ -91,7 +125,7 @@ function count(f: FieldDef, n: number, what: string): string[] {
 export function fieldIssues(f: FieldDef, value: unknown, values: FormValues, source: NodeSource): string[] {
   if (DISPLAY_WIDGETS.has(f.widget)) return [];
   const v = isEmpty(value) ? f.default : value;
-  if (isEmpty(v)) return f.required ? ['required'] : [];
+  if (isEmpty(v)) return isRequired(f, values) ? ['required'] : [];
   const c = f.constraints ?? {};
   const out: string[] = [];
   const byKey = new Map(source.nodes.map((n) => [n.key, n]));
@@ -150,6 +184,14 @@ export function fieldIssues(f: FieldDef, value: unknown, values: FormValues, sou
       }
       return bool(c['multiple']) ? [...out, ...count(f, keys.length, 'nodes')] : out;
     }
+    case 'group': {
+      if (!Array.isArray(v)) return ['expects a list of entries'];
+      v.forEach((e, i) => {
+        const is = fieldsIssues(f.fields, (e ?? {}) as FormValues, source);
+        for (const [name, msgs] of Object.entries(is)) for (const m of msgs) out.push(`entry ${i + 1}, ${name}: ${m}`);
+      });
+      return [...out, ...count(f, v.length, 'entries')];
+    }
     case 'link': {
       const links = completeLinks(f, v, values);
       const sources = linkSources(f, values);
@@ -170,24 +212,36 @@ export function fieldIssues(f: FieldDef, value: unknown, values: FormValues, sou
   return out;
 }
 
-/** The issues of every field, by field name. */
-export function formIssues(form: FormDef | undefined, values: FormValues, source: NodeSource): Record<string, string[]> {
+/** The issues of every field shown, by field name. */
+export function fieldsIssues(fields: FieldDef[] | undefined, values: FormValues, source: NodeSource): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  for (const f of form?.fields ?? []) {
-    const is = fieldIssues(f, values[f.name], values, source);
+  const { visible, seen } = visibleState(fields, values);
+  for (const f of fields ?? []) {
+    if (!visible.has(f.name)) continue;
+    const is = fieldIssues(f, values[f.name], seen, source);
     if (is.length) out[f.name] = is;
   }
   return out;
 }
 
-/** The values to send: blanks dropped, links completed with their source and type. */
-export function submittedValues(form: FormDef | undefined, values: FormValues): FormValues {
+/** The issues of every field of a form shown, by field name. */
+export const formIssues = (form: FormDef | undefined, values: FormValues, source: NodeSource): Record<string, string[]> =>
+  fieldsIssues(form?.fields, values, source);
+
+/** The values to send: hidden fields and blanks dropped, links completed with their source and type, the entries of a
+ * group sent the same way. */
+export const submittedValues = (form: FormDef | undefined, values: FormValues): FormValues => submittedOf(form?.fields, values);
+
+function submittedOf(fields: FieldDef[] | undefined, values: FormValues): FormValues {
   const out: FormValues = {};
-  for (const f of form?.fields ?? []) {
-    if (DISPLAY_WIDGETS.has(f.widget)) continue;
+  const { visible } = visibleState(fields, values);
+  for (const f of fields ?? []) {
+    if (DISPLAY_WIDGETS.has(f.widget) || !visible.has(f.name)) continue;
     const v = values[f.name];
     if (isEmpty(v)) continue;
-    out[f.name] = f.widget === 'link' ? completeLinks(f, v, values) : v;
+    if (f.widget === 'link') out[f.name] = completeLinks(f, v, values);
+    else if (f.widget === 'group' && Array.isArray(v)) out[f.name] = v.map((e) => submittedOf(f.fields, (e ?? {}) as FormValues));
+    else out[f.name] = v;
   }
   return out;
 }

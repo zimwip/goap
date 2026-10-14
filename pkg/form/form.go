@@ -36,6 +36,12 @@ type Field struct {
 	Default  any    `yaml:"default,omitempty" json:"default,omitempty"`
 	// Constraints limit the choices of the widget; their keys are the ones it declares.
 	Constraints map[string]any `yaml:"constraints,omitempty" json:"constraints,omitempty"`
+	// VisibleWhen: the field is shown, checked and submitted only while every condition holds (none: always).
+	VisibleWhen []Condition `yaml:"visibleWhen,omitempty" json:"visibleWhen,omitempty"`
+	// RequiredWhen: the field must be filled in while every condition holds (Required: always).
+	RequiredWhen []Condition `yaml:"requiredWhen,omitempty" json:"requiredWhen,omitempty"`
+	// Fields are the sub-fields of a group: each entry of its value is an object of their values.
+	Fields []Field `yaml:"fields,omitempty" json:"fields,omitempty"`
 }
 
 // IsZero reports whether the form declares nothing.
@@ -85,12 +91,15 @@ func (is Issues) Error() string {
 var NameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 // CheckForm reports the problems of a form definition: names, widgets known to the registry, constraints declared by
-// the widget and of their type, the constraints a widget requires, and the references between fields.
-func CheckForm(f Form) Issues {
+// the widget and of their type, the constraints a widget requires, the references between fields, the conditions
+// (on an earlier field) and the sub-fields of a group (no group nor link field inside a group).
+func CheckForm(f Form) Issues { return checkFields(f.Fields, "fields", false) }
+
+func checkFields(fields []Field, path string, nested bool) Issues {
 	var out Issues
 	seen := map[string]bool{}
-	for j, fd := range f.Fields {
-		at := fmt.Sprintf("fields[%d]", j)
+	for j, fd := range fields {
+		at := fmt.Sprintf("%s[%d]", path, j)
 		switch {
 		case !NameRE.MatchString(fd.Name):
 			out = append(out, Issue{Path: at + ".name", Message: fmt.Sprintf("invalid field name %q (a letter, then letters, digits or _)", fd.Name)})
@@ -98,10 +107,23 @@ func CheckForm(f Form) Issues {
 			out = append(out, Issue{Path: at + ".name", Message: fmt.Sprintf("duplicate field %q", fd.Name)})
 		}
 		seen[fd.Name] = true
+		out = append(out, checkConditions(fields, j, "visibleWhen", fd.VisibleWhen, at)...)
+		out = append(out, checkConditions(fields, j, "requiredWhen", fd.RequiredWhen, at)...)
 		w, ok := Lookup(fd.Widget)
 		if !ok {
 			out = append(out, Issue{Path: at + ".widget", Message: fmt.Sprintf("unknown widget %q (known: %s)", fd.Widget, strings.Join(Names(), ", "))})
 			continue
+		}
+		if nested && (w.Value == ValueObjects || w.Value == ValueLinks) {
+			out = append(out, Issue{Path: at + ".widget", Message: fmt.Sprintf("a group holds no %s field", w.Name)})
+		}
+		if w.Value == ValueObjects {
+			if len(fd.Fields) == 0 {
+				out = append(out, Issue{Path: at + ".fields", Message: "a group needs at least one sub-field"})
+			}
+			out = append(out, checkFields(fd.Fields, at+".fields", true)...)
+		} else if len(fd.Fields) > 0 {
+			out = append(out, Issue{Path: at + ".fields", Message: fmt.Sprintf("only a group has sub-fields, not a %s", w.Name)})
 		}
 		for _, k := range sortedKeys(fd.Constraints) {
 			c, ok := w.constraint(k)
@@ -115,7 +137,7 @@ func CheckForm(f Form) Issues {
 			}
 			if c.Type == ConstraintField {
 				ref, _ := fd.Constraints[k].(string)
-				other, ok := f.Field(ref)
+				other, ok := fieldOf(fields, ref)
 				if !ok || ref == fd.Name {
 					out = append(out, Issue{Path: at + ".constraints." + k, Message: fmt.Sprintf("no other field %q", ref)})
 				} else if c.Widget != "" && other.Widget != c.Widget {
@@ -135,7 +157,7 @@ func CheckForm(f Form) Issues {
 				out = append(out, Issue{Path: at, Message: msg})
 			}
 		}
-		if fd.Default != nil && w.Value != ValueNone && w.Value != ValueLinks {
+		if fd.Default != nil && w.Value != ValueNone && w.Value != ValueLinks && w.Value != ValueObjects {
 			if is := w.check(fd, fd.Default, Env{}, nil); len(is) > 0 {
 				out = append(out, Issue{Path: at + ".default", Message: is[0]})
 			}
@@ -144,25 +166,39 @@ func CheckForm(f Form) Issues {
 	return out
 }
 
+func fieldOf(fields []Field, name string) (Field, bool) {
+	for _, x := range fields {
+		if x.Name == name {
+			return x, true
+		}
+	}
+	return Field{}, false
+}
+
 // Validate checks the values a person submitted against the form and returns them cleaned (numbers as float64, lists
-// as []any, the defaults of the fields left out, the links of a link field completed with their source): a value for
-// a field the form does not declare, a missing required value, a value of the wrong kind or one its constraints
-// exclude is an issue. env resolves the node keys (nil Node: unchecked).
+// as []any, the defaults of the fields left out, the links of a link field completed with their source, the entries of
+// a group cleaned the same way): a value for a field the form does not declare, a missing required value, a value of
+// the wrong kind or one its constraints exclude is an issue. A field its conditions hide is left out, whatever was
+// sent for it. env resolves the node keys (nil Node: unchecked).
 func Validate(f Form, values map[string]any, env Env) (map[string]any, Issues) {
+	return validateFields(f, f.Fields, values, env)
+}
+
+func validateFields(f Form, fields []Field, values map[string]any, env Env) (map[string]any, Issues) {
 	var out Issues
 	clean := map[string]any{}
 	for _, k := range sortedKeys(values) {
-		if _, ok := f.Field(k); !ok {
+		if _, ok := fieldOf(fields, k); !ok {
 			out = append(out, Issue{Field: k, Message: "not a field of the form"})
 		}
 	}
-	for _, fd := range f.Fields {
+	for _, fd := range fields {
 		w, ok := Lookup(fd.Widget)
 		if !ok {
 			out = append(out, Issue{Field: fd.Name, Message: fmt.Sprintf("unknown widget %q", fd.Widget)})
 			continue
 		}
-		if w.Value == ValueNone {
+		if w.Value == ValueNone || !fd.Visible(clean) {
 			continue
 		}
 		v, ok := values[fd.Name]
@@ -170,14 +206,19 @@ func Validate(f Form, values map[string]any, env Env) (map[string]any, Issues) {
 			v = fd.Default
 		}
 		if empty(v) {
-			if fd.Required {
+			if fd.RequiredFor(clean) {
 				out = append(out, Issue{Field: fd.Name, Message: "required"})
 			}
 			continue
 		}
 		v = normalize(v)
-		if fd.Widget == WidgetLink {
+		switch w.Value {
+		case ValueLinks:
 			v = completeLinks(f, fd, v, values)
+		case ValueObjects:
+			var is Issues
+			v, is = validateEntries(f, fd, v, env)
+			out = append(out, is...)
 		}
 		for _, msg := range w.check(fd, v, env, values) {
 			out = append(out, Issue{Field: fd.Name, Message: msg})
@@ -185,6 +226,29 @@ func Validate(f Form, values map[string]any, env Env) (map[string]any, Issues) {
 		clean[fd.Name] = v
 	}
 	return clean, out
+}
+
+// validateEntries checks and cleans the entries of a group, each against its sub-fields.
+func validateEntries(f Form, fd Field, v any, env Env) (any, Issues) {
+	list, ok := v.([]any)
+	if !ok {
+		return v, nil
+	}
+	var out Issues
+	entries := make([]any, len(list))
+	for i, e := range list {
+		m, ok := e.(map[string]any)
+		if !ok {
+			entries[i] = e
+			continue
+		}
+		c, is := validateFields(f, fd.Fields, m, env)
+		for _, x := range is {
+			out = append(out, Issue{Field: fd.Name, Message: fmt.Sprintf("entry %d, %s: %s", i+1, x.Field, x.Message)})
+		}
+		entries[i] = c
+	}
+	return entries, out
 }
 
 // empty reports a value the person left blank.

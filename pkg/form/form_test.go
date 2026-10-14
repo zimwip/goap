@@ -130,3 +130,85 @@ func TestRegisterDuplicatePanics(t *testing.T) {
 	}()
 	Register(Widget{Name: WidgetText})
 }
+
+func TestConditionalFields(t *testing.T) {
+	yes := true
+	f := Form{Fields: []Field{
+		{Name: "decision", Widget: WidgetSelect, Required: true, Constraints: map[string]any{"options": []any{"accept", "reject"}}},
+		{Name: "reason", Widget: WidgetTextarea, VisibleWhen: []Condition{{Field: "decision", Equals: "reject"}}, Required: true},
+		{Name: "tags", Widget: WidgetMultiselect, Constraints: map[string]any{"options": []any{"a", "b"}}},
+		{Name: "note", Widget: WidgetText, RequiredWhen: []Condition{{Field: "tags", In: []any{"b"}}}},
+		{Name: "extra", Widget: WidgetText, VisibleWhen: []Condition{{Field: "reason", Set: &yes}}},
+	}}
+	if is := CheckForm(f); len(is) > 0 {
+		t.Fatalf("valid form: %v", is)
+	}
+	clean, is := Validate(f, map[string]any{"decision": "accept", "reason": "ignored", "extra": "gone"}, Env{})
+	if len(is) > 0 || clean["reason"] != nil || clean["extra"] != nil {
+		t.Fatalf("hidden fields: %v %v", clean, is)
+	}
+	_, is = Validate(f, map[string]any{"decision": "reject", "tags": []any{"a", "b"}}, Env{})
+	if got := is.Error(); !strings.Contains(got, "reason: required") || !strings.Contains(got, "note: required") {
+		t.Fatalf("required when: %v", got)
+	}
+	bad := Form{Fields: []Field{
+		{Name: "a", Widget: WidgetText, VisibleWhen: []Condition{{Field: "b", Equals: "x"}}},
+		{Name: "b", Widget: WidgetText, RequiredWhen: []Condition{{Field: "a"}}},
+		{Name: "c", Widget: WidgetMarkdown, Constraints: map[string]any{"text": "t"}},
+		{Name: "d", Widget: WidgetText, VisibleWhen: []Condition{{Field: "c", Set: &yes}}},
+	}}
+	got := CheckForm(bad).Error()
+	for _, want := range []string{
+		`fields[0].visibleWhen[0].field: no field "b" before this one`,
+		`fields[1].requiredWhen[0]: a condition tests exactly one of equals, in or set`,
+		`fields[3].visibleWhen[0].field: field "c" is a markdown`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+}
+
+func TestGroupField(t *testing.T) {
+	f := Form{Fields: []Field{
+		{Name: "risks", Widget: WidgetGroup, Constraints: map[string]any{"max": 2}, Fields: []Field{
+			{Name: "title", Widget: WidgetText, Required: true},
+			{Name: "level", Widget: WidgetSelect, Default: "low", Constraints: map[string]any{"options": []any{"low", "high"}}},
+			{Name: "mitigation", Widget: WidgetText, RequiredWhen: []Condition{{Field: "level", Equals: "high"}}},
+		}},
+	}}
+	if is := CheckForm(f); len(is) > 0 {
+		t.Fatalf("valid form: %v", is)
+	}
+	clean, is := Validate(f, map[string]any{"risks": []any{map[string]any{"title": "outage"}}}, Env{})
+	if len(is) > 0 {
+		t.Fatal(is)
+	}
+	if e := clean["risks"].([]any)[0].(map[string]any); e["level"] != "low" {
+		t.Fatalf("default of a sub-field: %v", e)
+	}
+	_, is = Validate(f, map[string]any{"risks": []any{
+		map[string]any{"title": "a", "level": "high"}, map[string]any{"level": "low", "x": 1}, map[string]any{"title": "c"},
+	}}, Env{})
+	got := is.Error()
+	for _, want := range []string{"entry 1, mitigation: required", "entry 2, title: required", "entry 2, x: not a field", "at most 2 entries"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+	bad := Form{Fields: []Field{
+		{Name: "g", Widget: WidgetGroup},
+		{Name: "h", Widget: WidgetGroup, Fields: []Field{{Name: "l", Widget: WidgetLink, Constraints: map[string]any{"fromKey": "X"}}}},
+		{Name: "t", Widget: WidgetText, Fields: []Field{{Name: "x", Widget: WidgetText}}},
+	}}
+	got = CheckForm(bad).Error()
+	for _, want := range []string{
+		"fields[0].fields: a group needs at least one sub-field",
+		"fields[1].fields[0].widget: a group holds no link field",
+		"fields[2].fields: only a group has sub-fields",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in %s", want, got)
+		}
+	}
+}

@@ -122,9 +122,27 @@ naming the field, a removed source leaves them without one, a change of widget d
 not accept. The designer reports what the server would refuse (`designIssues`), shows the form as a person sees it
 (Preview) and as the methodology stores it (JSON). The code run on the values is edited below it.
 
+### 6. Conditional fields and repeated groups
+
+A field may declare `visibleWhen` and `requiredWhen`, lists of **conditions** that must all hold (`form.Condition`,
+`web/src/lib/forms/types.ts` `Condition`): each names an **earlier** field of the same list (`field`) and tests its
+value with exactly one of `equals`, `in` (one of the values; on a list value, the list holds one of them) or `set`
+(true: filled in, false: blank). A hidden field is not shown, not checked, not required and not submitted, whatever
+was sent for it, and reads as blank to the conditions after it; `requiredWhen` makes a field required while its
+conditions hold. Declarative rather than CEL: the web evaluates them as it renders (`visibleState`, `isRequired`) and
+the engine as it validates (`Field.Visible`, `RequiredFor`), with the same few lines on both sides. `CheckForm`
+refuses a condition on a later or unknown field, on a field without a value (explanation, links, group) or testing
+none or several things.
+
+The widget `group` (value kind `objects`, constraints `min` / `max` entries) repeats its **sub-fields** (`fields` on
+the field): its value is a list of objects, each validated and cleaned like a form of its own (defaults, conditions
+between sibling sub-fields, issues reported as `entry <n>, <sub-field>: <message>`). A group holds neither a group nor a
+link field. The renderer shows one card per entry (`GroupWidget.svelte`, rows by `FieldRow.svelte`), the designer edits
+the conditions of a field (*Shown when*, *Required when*, `ConditionsEditor.svelte`) and the sub-fields of a group in
+the properties panel; a rename or a removal follows into the conditions naming the field.
+
 ## Not done
 
-- Conditional fields (`visible` / `requiredWhen` in CEL over the other values) and repeated groups.
 - Patterns stored as data (shared by the methodologies of an organisation) rather than shipped with the web.
 - Standard pages using `FormRenderer` with a form declared by a node type (an `form:` on a node type of a domain, for
   its creation dialog), and the assistant filling a form (a screen tool per declared form, ADR 0092).

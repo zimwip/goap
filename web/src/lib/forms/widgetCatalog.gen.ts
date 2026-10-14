@@ -25,6 +25,23 @@ export const WIDGET_CATALOG: WidgetSpec[] = [
     ]
   },
   {
+    "name": "group",
+    "description": "entries repeated by the person, each made of the sub-fields",
+    "value": "objects",
+    "constraints": [
+      {
+        "name": "min",
+        "type": "number",
+        "description": "fewest entries"
+      },
+      {
+        "name": "max",
+        "type": "number",
+        "description": "most entries"
+      }
+    ]
+  },
+  {
     "name": "link",
     "description": "links to create from a node to nodes found by a search",
     "value": "links",

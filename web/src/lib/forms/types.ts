@@ -21,6 +21,21 @@ export interface FieldDef {
   required?: boolean;
   default?: unknown;
   constraints?: Record<string, unknown>;
+  /** shown, checked and submitted only while every condition holds */
+  visibleWhen?: Condition[];
+  /** required while every condition holds */
+  requiredWhen?: Condition[];
+  /** the sub-fields of a group: each entry of its value is an object of their values */
+  fields?: FieldDef[];
+}
+
+/** A test on the value of an earlier field (pkg/form.Condition): exactly one of equals, in or set. */
+export interface Condition {
+  field: string;
+  equals?: unknown;
+  in?: unknown[];
+  /** filled in (true) or left blank (false) */
+  set?: boolean;
 }
 
 export type FormValues = Record<string, unknown>;
@@ -71,6 +86,6 @@ export interface ConstraintSpec {
 export interface WidgetSpec {
   name: string;
   description?: string;
-  value: 'string' | 'number' | 'boolean' | 'list' | 'node' | 'links' | 'none' | 'any' | string;
+  value: 'string' | 'number' | 'boolean' | 'list' | 'node' | 'links' | 'objects' | 'none' | 'any' | string;
   constraints?: ConstraintSpec[];
 }

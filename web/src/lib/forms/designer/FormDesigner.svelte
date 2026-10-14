@@ -161,7 +161,7 @@
             <button type="button" class="pick" onclick={() => (selected = selected === i ? undefined : i)}>
               <span class="grip" aria-hidden="true">⋮⋮</span>
               <span class="lbl">{f.widget === 'markdown' ? 'Explanation' : f.label || f.name}{#if f.required}<span class="req"> *</span>{/if}</span>
-              <span class="sub">{labelOf(f.widget)} · <code>{f.name}</code>{#if f.section} · {f.section}{/if}</span>
+              <span class="sub">{labelOf(f.widget)} · <code>{f.name}</code>{#if f.section} · {f.section}{/if}{#if f.visibleWhen?.length} · conditional{/if}{#if f.widget === 'group'} · {(f.fields ?? []).length} sub-fields{/if}</span>
               {#if issues[String(i)]}<span class="err">{issues[String(i)].length} issue{issues[String(i)].length > 1 ? 's' : ''}</span>{/if}
             </button>
             {#if !disabled}

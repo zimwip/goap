@@ -23,6 +23,8 @@ const (
 	ValueNode ValueKind = "node"
 	// ValueLinks is a list of links {from, type, to}.
 	ValueLinks ValueKind = "links"
+	// ValueObjects is a list of objects, the values of the sub-fields of a group.
+	ValueObjects ValueKind = "objects"
 	// ValueNone: a display widget, it produces no value.
 	ValueNone ValueKind = "none"
 	// ValueAny: any JSON value, checked by the widget only.
@@ -159,6 +161,16 @@ func kindIssue(k ValueKind, f Field, v any) string {
 		} else if _, ok := v.(string); !ok {
 			return "expects a node key"
 		}
+	case ValueObjects:
+		list, ok := v.([]any)
+		if !ok {
+			return "expects a list of entries"
+		}
+		for _, e := range list {
+			if _, ok := e.(map[string]any); !ok {
+				return "expects a list of entries {field: value}"
+			}
+		}
 	case ValueLinks:
 		list, ok := v.([]any)
 		if !ok {
@@ -236,6 +248,7 @@ const (
 	WidgetNode        = "node"
 	WidgetLink        = "link"
 	WidgetMarkdown    = "markdown"
+	WidgetGroup       = "group"
 )
 
 func init() {
@@ -281,6 +294,13 @@ func init() {
 		{Name: "min", Type: ConstraintNumber, Description: "fewest links"},
 		{Name: "max", Type: ConstraintNumber, Description: "most links"},
 	}, Define: defineLink, Check: checkLinks})
+	Register(Widget{Name: WidgetGroup, Description: "entries repeated by the person, each made of the sub-fields", Value: ValueObjects,
+		Constraints: []Constraint{
+			{Name: "min", Type: ConstraintNumber, Description: "fewest entries"},
+			{Name: "max", Type: ConstraintNumber, Description: "most entries"},
+		}, Check: func(f Field, v any, _ Env, _ map[string]any) []string {
+			return checkCount(f, len(v.([]any)), "entries")
+		}})
 	Register(Widget{Name: WidgetMarkdown, Description: "a text shown to the person", Value: ValueNone, Constraints: []Constraint{
 		{Name: "text", Type: ConstraintString, Required: true, Description: "the Markdown text"},
 	}})

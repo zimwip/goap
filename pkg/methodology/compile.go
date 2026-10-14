@@ -512,7 +512,12 @@ func (s *compileState) checkForm(path string, a Action) {
 	for _, is := range form.CheckForm(*a.Form) {
 		s.add(path+".form."+is.Path, "%s", is.Message)
 	}
-	for j, f := range a.Form.Fields {
+	s.checkFormTypes(path+".form.fields", a.Form.Fields)
+}
+
+// checkFormTypes checks the node and link types the constraints of form fields name, sub-fields included.
+func (s *compileState) checkFormTypes(path string, fields []form.Field) {
+	for j, f := range fields {
 		for _, c := range []struct {
 			name string
 			link bool
@@ -521,11 +526,12 @@ func (s *compileState) checkForm(path string, a Action) {
 			for _, t := range list {
 				if ref, ok := t.(string); ok {
 					if msg := s.m.checkTypeRef(ref, c.link); msg != "" {
-						s.add(fmt.Sprintf("%s.form.fields[%d].constraints.%s", path, j, c.name), "%s", msg)
+						s.add(fmt.Sprintf("%s[%d].constraints.%s", path, j, c.name), "%s", msg)
 					}
 				}
 			}
 		}
+		s.checkFormTypes(fmt.Sprintf("%s[%d].fields", path, j), f.Fields)
 	}
 }
 

@@ -4,10 +4,9 @@
   import { untrack } from 'svelte';
   import type { FormDef, FormValues, NodeSource } from './types';
   import { emptySource } from './types';
-  import { widgetOf } from './registry';
   import { registerBuiltinWidgets } from './builtins';
-  import { formIssues, initialValues, sections, submittedValues } from './validate';
-  import JsonWidget from './widgets/JsonWidget.svelte';
+  import { formIssues, initialValues, isRequired, sections, submittedValues, visibleState } from './validate';
+  import FieldRow from './FieldRow.svelte';
 
   registerBuiltinWidgets();
 
@@ -35,7 +34,9 @@
   let tried = $state(false);
   const issues = $derived(formIssues(form, values, source));
   const blocked = $derived(Object.keys(issues).length > 0);
-  const groups = $derived(sections(form));
+  const shown = $derived(visibleState(form.fields, values));
+  // the sections with the fields their conditions show
+  const groups = $derived(sections(form).map((g) => ({ ...g, fields: g.fields.filter((f) => shown.visible.has(f.name)) })).filter((g) => g.fields.length > 0));
 
   function set(name: string, v: unknown) {
     values = { ...values, [name]: v };
@@ -56,23 +57,17 @@
     <fieldset>
       {#if g.name}<legend>{g.name}</legend>{/if}
       {#each g.fields as f (f.name)}
-        {@const w = widgetOf(f.widget)}
-        {@const id = `ff-${uid}-${f.name}`}
-        {@const shown = tried || values[f.name] !== undefined ? (issues[f.name] ?? []) : []}
-        {#if w?.display}
-          <div class="display"><w.component {id} field={f} value={undefined} onchange={() => {}} {values} {source} /></div>
-        {:else}
-          <div class="field" class:invalid={shown.length > 0}>
-            <label for={id}>{f.label || f.name}{#if f.required}<span class="req" aria-label="required"> *</span>{/if}</label>
-            {#if w}
-              <w.component {id} field={f} value={values[f.name]} onchange={(v: unknown) => set(f.name, v)} {values} {source} disabled={busy} invalid={shown.length > 0} />
-            {:else}
-              <JsonWidget {id} field={f} value={values[f.name]} onchange={(v: unknown) => set(f.name, v)} {values} {source} disabled={busy} invalid={shown.length > 0} />
-            {/if}
-            {#if f.help}<p class="help">{f.help}</p>{/if}
-            {#each shown as msg (msg)}<p class="issue" role="alert">{msg}</p>{/each}
-          </div>
-        {/if}
+        <FieldRow
+          id={`ff-${uid}-${f.name}`}
+          field={f}
+          value={values[f.name]}
+          onchange={(v: unknown) => set(f.name, v)}
+          values={shown.seen}
+          {source}
+          disabled={busy}
+          required={isRequired(f, shown.seen)}
+          issues={tried || values[f.name] !== undefined ? (issues[f.name] ?? []) : []}
+        />
       {/each}
     </fieldset>
   {/each}
@@ -103,34 +98,5 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     margin-bottom: 0.3rem;
-  }
-  .field {
-    margin-bottom: 0.7rem;
-  }
-  .field :global(input:not([type='checkbox'])),
-  .field :global(textarea),
-  .field :global(select) {
-    width: 100%;
-  }
-  .req {
-    color: var(--danger);
-  }
-  .help {
-    color: var(--muted);
-    font-size: 0.8rem;
-    margin: 0.2rem 0 0;
-  }
-  .issue {
-    color: var(--danger);
-    font-size: 0.8rem;
-    margin: 0.2rem 0 0;
-  }
-  .invalid :global(input),
-  .invalid :global(textarea),
-  .invalid :global(select) {
-    border-color: var(--danger);
-  }
-  .display {
-    margin-bottom: 0.6rem;
   }
 </style>

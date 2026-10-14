@@ -53,3 +53,40 @@ describe('forms', () => {
     expect(formIssues(form, { ...out, level: 'low' }, source)).toEqual({});
   });
 });
+
+describe('conditional fields and groups', () => {
+  const cond: FormDef = {
+    fields: [
+      { name: 'decision', widget: 'select', required: true, constraints: { options: ['accept', 'reject'] } },
+      { name: 'reason', widget: 'textarea', required: true, visibleWhen: [{ field: 'decision', equals: 'reject' }] },
+      { name: 'tags', widget: 'multiselect', constraints: { options: ['a', 'b'] } },
+      { name: 'note', widget: 'text', requiredWhen: [{ field: 'tags', in: ['b'] }] },
+      {
+        name: 'risks',
+        widget: 'group',
+        constraints: { max: 1 },
+        fields: [
+          { name: 'title', widget: 'text', required: true },
+          { name: 'mitigation', widget: 'text', visibleWhen: [{ field: 'title', set: true }], required: true },
+        ],
+      },
+    ],
+  };
+
+  it('hides, requires and drops by the conditions', () => {
+    expect(formIssues(cond, { decision: 'accept', reason: '' }, source)).toEqual({});
+    expect(submittedValues(cond, { decision: 'accept', reason: 'x' })).toEqual({ decision: 'accept' });
+    const is = formIssues(cond, { decision: 'reject', tags: ['b'] }, source);
+    expect(is['reason']).toEqual(['required']);
+    expect(is['note']).toEqual(['required']);
+  });
+
+  it('checks the entries of a group', () => {
+    const is = formIssues(cond, { decision: 'accept', risks: [{ title: 'x' }, {}] }, source);
+    expect(is['risks']).toEqual(['entry 1, mitigation: required', 'entry 2, title: required', 'at most 1 entries']);
+    expect(submittedValues(cond, { decision: 'accept', risks: [{ title: 'x', mitigation: 'y', extra: '' }] })).toEqual({
+      decision: 'accept',
+      risks: [{ title: 'x', mitigation: 'y' }],
+    });
+  });
+});

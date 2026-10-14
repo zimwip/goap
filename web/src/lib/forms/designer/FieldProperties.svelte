@@ -2,10 +2,12 @@
   // The properties of the field selected in the designer: identity, behaviour, then the constraints its widget declares,
   // with pickers from the type catalogue for node types, link types and states.
   import type { FieldDef, FormDef } from '../types';
-  import { changeWidget, constraintsOf, labelOf, palette, setConstraint } from '../design';
+  import { changeWidget, constraintsOf, designIssues, insertField, labelOf, moveField, newField, palette, removeField, setConstraint, updateField } from '../design';
   import { strings } from '../validate';
   import { typeCatalog } from '../../stores/types.svelte';
   import StringList from './StringList.svelte';
+  import ConditionsEditor from './ConditionsEditor.svelte';
+  import Self from './FieldProperties.svelte';
 
   let {
     form,
@@ -13,7 +15,17 @@
     issues = [],
     disabled = false,
     onchange,
-  }: { form: FormDef; field: FieldDef; issues?: string[]; disabled?: boolean; onchange: (f: FieldDef) => void } = $props();
+    nested = false,
+  }: {
+    /** the fields the field is one of (a group's sub-fields for a sub-field) */
+    form: FormDef;
+    field: FieldDef;
+    issues?: string[];
+    disabled?: boolean;
+    onchange: (f: FieldDef) => void;
+    /** a sub-field of a group: no group nor link offered */
+    nested?: boolean;
+  } = $props();
 
   const uid = Math.random().toString(36).slice(2, 8);
   const id = (k: string) => `fp-${uid}-${k}`;
@@ -55,6 +67,15 @@
   const set = (patch: Partial<FieldDef>) => onchange({ ...field, ...patch });
   const setC = (name: string, v: unknown) => onchange(setConstraint(field, name, v));
   const others = (widget?: string) => (form.fields ?? []).filter((f) => f !== field && f.name && (!widget || f.widget === widget));
+  /** the fields before this one: what its conditions may test */
+  const earlier = $derived((form.fields ?? []).slice(0, Math.max(0, (form.fields ?? []).indexOf(field))));
+  const widgets = $derived(palette().filter((w) => !nested || (w.name !== 'group' && w.name !== 'link')));
+
+  // the sub-fields of a group, edited as a small form of their own
+  let sub = $state<number | undefined>(undefined);
+  const subForm = $derived<FormDef>({ fields: field.fields ?? [] });
+  const subIssues = $derived(designIssues(subForm));
+  const setSub = (next: FormDef) => set({ fields: next.fields });
   const scalarDefault = $derived(['text', 'textarea', 'number', 'boolean', 'date', 'select'].includes(field.widget));
 </script>
 
@@ -62,7 +83,7 @@
   <div class="field">
     <label for={id('widget')}>Widget</label>
     <select id={id('widget')} value={field.widget} {disabled} onchange={(e) => onchange(changeWidget(field, e.currentTarget.value))}>
-      {#each palette() as w (w.name)}<option value={w.name}>{labelOf(w.name)} ({w.name})</option>{/each}
+      {#each widgets as w (w.name)}<option value={w.name}>{labelOf(w.name)} ({w.name})</option>{/each}
     </select>
   </div>
   <div class="grid2">
@@ -93,6 +114,10 @@
       </div>
     </div>
     <label class="check"><input type="checkbox" checked={field.required === true} {disabled} onchange={(e) => set({ required: e.currentTarget.checked || undefined })} /> Required</label>
+    <ConditionsEditor id={id('vw')} label="Shown when" fields={earlier} value={field.visibleWhen} {disabled} onchange={(v) => set({ visibleWhen: v })} />
+    {#if !field.required}
+      <ConditionsEditor id={id('rw')} label="Required when" fields={earlier} value={field.requiredWhen} {disabled} onchange={(v) => set({ requiredWhen: v })} />
+    {/if}
     {#if scalarDefault}
       <div class="field">
         <label for={id('default')}>Default</label>
@@ -116,6 +141,38 @@
             }} />
         {/if}
       </div>
+    {/if}
+  {/if}
+
+  {#if field.widget === 'group'}
+    <h5>Sub-fields</h5>
+    {#each subForm.fields ?? [] as f, i (i)}
+      <div class="subrow" class:bad={!!subIssues[String(i)]}>
+        <button type="button" class="pick" class:on={sub === i} onclick={() => (sub = sub === i ? undefined : i)}>
+          {f.label || f.name}{#if f.required}<span class="req"> *</span>{/if} <span class="opt">{labelOf(f.widget)}</span>
+        </button>
+        {#if !disabled}
+          <button type="button" class="small" aria-label="Move up" disabled={i === 0} onclick={() => { setSub(moveField(subForm, i, i - 1)); sub = undefined; }}>↑</button>
+          <button type="button" class="small" aria-label="Remove {f.name}" onclick={() => { setSub(removeField(subForm, i)); sub = undefined; }}>×</button>
+        {/if}
+      </div>
+      {#if sub === i}
+        <div class="nested">
+          {#key i}
+            <Self form={subForm} field={f} nested issues={subIssues[String(i)]} {disabled} onchange={(g) => setSub(updateField(subForm, i, g))} />
+          {/key}
+        </div>
+      {/if}
+    {/each}
+    {#if !disabled}
+      <select aria-label="Add a sub-field" value="" onchange={(e) => {
+        const w = e.currentTarget.value;
+        e.currentTarget.value = '';
+        if (w) { setSub(insertField(subForm, newField(subForm, w))); sub = (subForm.fields ?? []).length; }
+      }}>
+        <option value="">+ sub-field…</option>
+        {#each palette().filter((w) => w.name !== 'group' && w.name !== 'link') as w (w.name)}<option value={w.name}>{labelOf(w.name)}</option>{/each}
+      </select>
     {/if}
   {/if}
 
@@ -194,5 +251,26 @@
   .issue {
     font-size: 0.8rem;
     margin: 0.2rem 0;
+  }
+  .subrow {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 0.25rem;
+  }
+  .subrow .pick {
+    flex: 1;
+    text-align: left;
+    font-weight: 400;
+  }
+  .subrow .pick.on {
+    font-weight: 600;
+  }
+  .subrow.bad .pick {
+    border-color: var(--danger);
+  }
+  .nested {
+    border-left: 2px solid var(--border);
+    padding-left: 0.5rem;
+    margin: 0.3rem 0 0.6rem;
   }
 </style>
