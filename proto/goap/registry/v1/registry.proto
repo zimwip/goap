@@ -452,6 +452,8 @@ message Methodology {
   Guardian guardian = 28;
   // the events of the methodology, in addition to the standard ones (ADR 0110)
   repeated EventDef events = 29;
+  // the version of each domain the methodology is written against, by domain name (ADR 0113): pinned at publication
+  map<string, string> domains = 30;
 }
 
 // EventDef is an event a methodology declares (ADR 0110), raised by a signal item of its name.

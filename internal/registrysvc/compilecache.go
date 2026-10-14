@@ -85,14 +85,15 @@ func contentHash(m methodology.Methodology) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Methodology implements engine.MethodologyPort for in-process use: the latest published version, compiled once for
-// as long as neither it nor the types in force change.
-func (s *Service) Methodology(ctx context.Context, name string) (*methodology.Compiled, error) {
-	r, err := s.Store.Get(ctx, name, "")
+// Methodology implements engine.MethodologyPort for in-process use: the version a reference names (domain.MethodologyRef,
+// ADR 0113), else the latest published one, compiled against the domain versions it pins once for as long as neither
+// it nor those types change.
+func (s *Service) Methodology(ctx context.Context, ref string) (*methodology.Compiled, error) {
+	r, err := s.record(ctx, ref)
 	if err != nil {
-		return nil, engine.ErrUnknownMethodology{Name: name}
+		return nil, engine.ErrUnknownMethodology{Name: ref}
 	}
-	ds, err := s.Domains(ctx)
+	ds, err := s.domainsFor(ctx, &r.Methodology, r.PublishedAt)
 	if err != nil {
 		return nil, err
 	}

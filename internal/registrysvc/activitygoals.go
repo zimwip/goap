@@ -42,15 +42,7 @@ func (s *Service) ActivityGoalsMet(ctx context.Context, activityRef string, bb d
 	if !ok {
 		return false, fmt.Errorf("%s: not an activity key: %w", activityRef, ErrNotFound)
 	}
-	r, err := s.Store.Get(ctx, name, version)
-	if err != nil {
-		return false, err
-	}
-	cat, err := s.Types(ctx)
-	if err != nil {
-		return false, err
-	}
-	c, err := resolve(r.Methodology, cat).Compile()
+	c, err := s.Methodology(ctx, domain.MethodologyRef(name, version))
 	if err != nil {
 		return false, err
 	}

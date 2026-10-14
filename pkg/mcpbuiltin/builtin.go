@@ -102,6 +102,8 @@ func Defs() []mcp.Def {
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
 			{Name: "depend", Description: "Add or remove changes this change depends on: their work must have reached the branch it merges into (main, or the change integrating it) before it merges. Never a cycle, an ancestor or a sub-change.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "add": list("ids of changes it now depends on"), "remove": list("ids of changes it no longer depends on")})},
+			{Name: "upgrade", Description: "Move an open change to another version of its methodology (by default the latest published one): a change otherwise keeps the version it was created with. Its lifecycle and state must exist in that version.",
+				InputSchema: schemaObj(map[string]any{"change": argChange, "version": str("version of the methodology (default: the latest published one)")})},
 			{Name: "dependencies", ReadOnly: true, Description: "Read the dependencies of a change (satisfied or what each waits for), the open changes depending on it, and the order its open sub-changes merge in.",
 				InputSchema: schemaObj(map[string]any{"change": argChange})},
 			{Name: "read", ReadOnly: true, Description: "Read a change: status, items, the nodes it acts on and their review.",

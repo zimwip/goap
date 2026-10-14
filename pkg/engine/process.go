@@ -121,7 +121,9 @@ type Process struct {
 	Error     string          `json:"error,omitempty"`
 	CreatedAt time.Time       `json:"createdAt"`
 	UpdatedAt time.Time       `json:"updatedAt"`
-	// MethodologyVersion is the published version run by the process.
+	// MethodologyVersion is the version of the methodology the process runs (ADR 0113), fixed when it starts: the
+	// version its change follows when it runs the change's methodology, else the latest published one then. A run
+	// keeps it until it ends, whatever is published or upgraded meanwhile. Empty: the latest.
 	MethodologyVersion string `json:"methodologyVersion,omitempty"`
 	// JournalSeq numbers the execution journal records of the process.
 	JournalSeq int `json:"journalSeq,omitempty"`

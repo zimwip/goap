@@ -214,8 +214,8 @@ func (s *Service) methodologiesUsing(ctx context.Context, name string) ([]Record
 	return out, nil
 }
 
-// DomainUsage lists the methodology versions using a domain (its namespace or its types); they follow the version
-// in force.
+// DomainUsage lists the methodology versions using a domain (its namespace or its types); each follows the version
+// it pins (methodology.Methodology.Domains, ADR 0113), a draft the version in force.
 func (s *Service) DomainUsage(ctx context.Context, name, version string) ([]Record, error) {
 	return s.methodologiesUsing(ctx, name)
 }
@@ -253,7 +253,9 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 	return r, err
 }
 
-// checkPublishable refuses a domain with issues, or one that would break a published methodology using it.
+// checkPublishable refuses a domain with issues, or one that would break a published methodology following its
+// latest version. A published methodology keeps the version it pins, or the one in force when it was published (ADR
+// 0113): a new version of the domain does not reach it, a new version of the methodology moves to it.
 func (s *Service) checkPublishable(ctx context.Context, d *def.Domain) error {
 	if issues := s.validateDomain(ctx, d); len(issues) > 0 {
 		return fmt.Errorf("%w: %v", ErrInvalid, issues)
@@ -268,6 +270,14 @@ func (s *Service) checkPublishable(ctx context.Context, d *def.Domain) error {
 	}
 	for _, u := range users {
 		if u.Status != StatusPublished {
+			continue
+		}
+		if _, pinned := u.Methodology.Domains[d.Name]; pinned {
+			continue
+		}
+		if then, err := s.domainsInForceAt(ctx, u.PublishedAt); err != nil {
+			return err
+		} else if then[d.Name] != nil {
 			continue
 		}
 		if issues := resolve(u.Methodology, cat).Validate(); issues.HasErrors() {

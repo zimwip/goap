@@ -57,6 +57,8 @@ service GraphService {
   // The changes a change depends on, the open changes depending on it and the merge order of its sub-changes (ADR 0108).
   rpc SetChangeDependencies(SetChangeDependenciesRequest) returns (SetChangeDependenciesResponse);
   rpc GetChangeDependencies(GetChangeDependenciesRequest) returns (GetChangeDependenciesResponse);
+  // Move an open change to another version of its methodology (ADR 0113).
+  rpc UpgradeChange(UpgradeChangeRequest) returns (UpgradeChangeResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
@@ -326,6 +328,9 @@ message Change {
   repeated GuardianRef guardians = 22;
   // the changes whose work reaches the branch it merges into before it merges (ADR 0108)
   repeated string depends_on = 23;
+  // the version of its methodology the change follows (ADR 0113): the latest published one when it was created, until
+  // it is upgraded; empty: the latest
+  string methodology_version = 24;
 }
 
 // A methodology of the guardian chain of a change, at the version in force when the chain was computed (ADR 0106).
@@ -726,6 +731,9 @@ message CreateChangeRequest {
   string owner_org = 10;
   // key of the ProjectUnit (organisation namespace) this change's nodes belong to (ADR 0039);
   string project_id = 12;
+  // the version of the methodology the change follows (ADR 0113); empty: the parent's for a sub-change of the same
+  // methodology, else the latest published one
+  string methodology_version = 13;
 }
 
 message CreateChangeResponse {
@@ -804,6 +812,17 @@ message SetChangeDependenciesRequest {
 }
 
 message SetChangeDependenciesResponse {
+  Change change = 1;
+}
+
+// UpgradeChange moves an open change to another version of its methodology (ADR 0113): the version named, else the
+// latest published one; the change keeps its lifecycle and state.
+message UpgradeChangeRequest {
+  string change_id = 1;
+  string version = 2;
+}
+
+message UpgradeChangeResponse {
   Change change = 1;
 }
 

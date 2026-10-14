@@ -669,6 +669,8 @@ export interface Methodology {
   events?: MethodologyEvent[];
   /** the lifecycle of its domain the changes follow (ADR 0058); empty: none */
   lifecycle?: string;
+  /** the version of each domain it is written against, by domain name: pinned at publication (ADR 0113) */
+  domains?: Record<string, string>;
   /** the methodologies whose changes its changes integrate as sub-changes (ADR 0106) */
   integrates?: MethodologyIntegration[];
   /** what it requires of the changes it integrates, as an outer guardian of their chain (ADR 0106) */

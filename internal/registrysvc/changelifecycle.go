@@ -14,7 +14,7 @@ import (
 // one it names in the domain of its namespace (else in any domain, a built-in one for instance). A methodology the
 // registry does not know, or one naming none, gives nil: its changes have no state.
 func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Lifecycle, error) {
-	r, err := s.Store.Get(ctx, methodology, "")
+	r, err := s.record(ctx, methodology)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, nil
@@ -25,9 +25,14 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 	if m.Lifecycle == "" {
 		return nil, nil
 	}
-	recs, err := s.DomainVersions(ctx, false)
+	// the lifecycle of the domain versions the methodology version is written against (ADR 0113)
+	ds, err := s.domainsFor(ctx, &m, r.PublishedAt)
 	if err != nil {
 		return nil, err
+	}
+	recs := builtinDomains()
+	for _, d := range ds {
+		recs = append(recs, DomainRecord{Domain: *d, Status: StatusPublished})
 	}
 	found := lifecycleIn(recs, &m)
 	if found == nil {
@@ -54,7 +59,7 @@ func lifecycleIn(recs []DomainRecord, m *methodology.Methodology) *domain.Lifecy
 // start with; "" for a methodology the registry does not know. It reads the definition, a methodology that does not
 // compile still gives its goal.
 func (s *Service) DefaultGoal(ctx context.Context, name string) (string, error) {
-	r, err := s.Store.Get(ctx, name, "")
+	r, err := s.record(ctx, name)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return "", nil
@@ -67,7 +72,7 @@ func (s *Service) DefaultGoal(ctx context.Context, name string) (string, error) 
 // Guard implements pkg/graph.ChangeLifecycles: the guard of a transition of the lifecycle of a change, in the
 // environment of the conditions of its methodology, whose values are the world state the guard reads.
 func (s *Service) Guard(ctx context.Context, bb domain.Blackboard, expr, transition, decision string) (bool, error) {
-	c, err := s.Methodology(ctx, bb.Change.Methodology)
+	c, err := s.Methodology(ctx, bb.Change.MethodologyRef())
 	if err != nil {
 		return false, err
 	}
@@ -77,7 +82,7 @@ func (s *Service) Guard(ctx context.Context, bb domain.Blackboard, expr, transit
 // Gate implements pkg/graph.ChangeLifecycles: the vetos and objectives of a transition (ADR 0075 §3), in the same
 // environment as its guard.
 func (s *Service) Gate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
-	c, err := s.Methodology(ctx, bb.Change.Methodology)
+	c, err := s.Methodology(ctx, bb.Change.MethodologyRef())
 	if err != nil {
 		return domain.GateResult{}, err
 	}
@@ -91,7 +96,7 @@ func (s *Service) OperationRoles(ctx context.Context, methodology, op string) (r
 	if methodology == "" {
 		return nil, false, nil
 	}
-	r, err := s.Store.Get(ctx, methodology, "")
+	r, err := s.record(ctx, methodology)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return nil, false, nil

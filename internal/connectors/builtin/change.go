@@ -38,6 +38,7 @@ var changeOps = []op{
 	{"attach", "Attach a root change to a change whose methodology integrates its own, as its sub-change: {change}", schema(map[string]string{"change": "string", "parent": "string"}, "parent")},
 	{"detach", "Detach a sub-change from the change integrating it, a root change again: {change}", schema(map[string]string{"change": "string"})},
 	{"depend", "Add or remove changes this change depends on: {change, add: [ids], remove: [ids]}", schema(map[string]string{"change": "string", "add": "array", "remove": "array"})},
+	{"upgrade", "Move an open change to another version of its methodology (default: the latest): {change}", schema(map[string]string{"change": "string", "version": "string"})},
 	{"dependencies", "Read the dependencies of a change, its dependents and the merge order of its sub-changes: {change}", schema(map[string]string{"change": "string"})},
 	{"read", "Read a change: {change, nodes, items}", schema(map[string]string{"change": "string"})},
 	{"list", "List changes, the latest first: {changes, truncated}", schema(map[string]string{"namespace": "string", "unit": "string", "status": "string", "limit": "integer"})},
@@ -154,6 +155,12 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			return nil, err
 		}
 		return result(map[string]any{"change": changeSummary(set)})
+	case "upgrade":
+		up, err := c.p.Graph.UpgradeChange(ctx, id, a.str("version"))
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"change": changeSummary(up)})
 	case "dependencies":
 		d, err := c.p.Graph.ChangeDependencies(ctx, id)
 		if err != nil {
@@ -639,7 +646,7 @@ func producer(ctx context.Context) string {
 }
 
 func changeSummary(c domain.Change) map[string]any {
-	return map[string]any{"id": c.ID, "title": c.Title, "intent": c.Intent, "methodology": c.Methodology, "namespace": c.Namespace,
+	return map[string]any{"id": c.ID, "title": c.Title, "intent": c.Intent, "methodology": c.Methodology, "methodologyVersion": c.MethodologyVersion, "namespace": c.Namespace,
 		"unit": c.OwnerOrg, "status": c.Status, "baselineId": c.BaselineID, "branch": c.Branch, "parentId": c.ParentID, "project": c.ProjectID,
 		"guardians": c.Guardians, "dependsOn": c.DependsOn}
 }

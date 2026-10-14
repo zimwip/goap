@@ -48,9 +48,18 @@ const testProject = "PROJ-TEST"
 // mainGoals is the registry's part of ChangeLifecycles the engine tests need: the default goal of a change (ADR 0096).
 type mainGoals struct{ c *methodology.Compiled }
 
+func (m mainGoals) MethodologyVersion(_ context.Context, ref string) (string, error) {
+	if name, version := domain.SplitMethodologyRef(ref); name == m.c.Name {
+		if version != "" {
+			return version, nil
+		}
+		return m.c.Version, nil // the one published version (ADR 0113)
+	}
+	return "", nil
+}
 func (m mainGoals) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
-func (m mainGoals) DefaultGoal(_ context.Context, name string) (string, error) {
-	if name == m.c.Name {
+func (m mainGoals) DefaultGoal(_ context.Context, ref string) (string, error) {
+	if name, _ := domain.SplitMethodologyRef(ref); name == m.c.Name {
 		return m.c.MainGoal(), nil
 	}
 	return "", nil
@@ -373,4 +382,62 @@ func TestApproverCannotApproveOwnChange(t *testing.T) {
 	if _, err := e.Approve(authz.With(context.Background(), other), p.ID, true, ""); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// A run on a change runs the version of the methodology the change follows, not the latest one (ADR 0113).
+func TestRunFollowsTheVersionOfItsChange(t *testing.T) {
+	ctx := context.Background()
+	e, g, base := setup(t)
+	cur := e.Methodologies.(StaticMethodologies)["impact-analysis"]
+	c, err := g.CreateChange(ctx, graph.NewChange{Title: "pinned", Methodology: "impact-analysis", Namespace: "alm", BaselineID: base, ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.MethodologyVersion != cur.Version {
+		t.Fatalf("the change follows the published version: %q", c.MethodologyVersion)
+	}
+	// a later version is published: the change, and the runs on it, stay on theirs
+	def := *cur.Methodology
+	def.Version = cur.Version + ".next"
+	next := *cur
+	next.Methodology = &def
+	versions := versionedPort{cur.Name + "@" + cur.Version: cur, cur.Name: &next}
+	e.Methodologies = versions
+	p, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", ChangeID: c.ID, Goal: "assess_impact", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.MethodologyVersion != cur.Version {
+		t.Fatalf("the run follows the change: %q", p.MethodologyVersion)
+	}
+	fresh, err := e.Start(ctx, StartRequest{Methodology: "impact-analysis", Goal: "assess_impact", BaselineID: base, ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.MethodologyVersion != next.Version {
+		t.Fatalf("a run with no change takes the latest: %q", fresh.MethodologyVersion)
+	}
+}
+
+// versionedPort serves compiled methodologies by reference: "<name>@<version>" or the name for the latest.
+type versionedPort map[string]*methodology.Compiled
+
+func (v versionedPort) Methodology(_ context.Context, ref string) (*methodology.Compiled, error) {
+	if m, ok := v[ref]; ok {
+		return m, nil
+	}
+	if name, version := domain.SplitMethodologyRef(ref); v[name] != nil && v[name].Version == version {
+		return v[name], nil
+	}
+	return nil, ErrUnknownMethodology{Name: ref}
+}
+
+func (v versionedPort) List(context.Context) ([]*methodology.Compiled, error) {
+	var out []*methodology.Compiled
+	for k, m := range v {
+		if !strings.Contains(k, "@") {
+			out = append(out, m)
+		}
+	}
+	return out, nil
 }

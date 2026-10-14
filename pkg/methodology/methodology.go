@@ -28,6 +28,13 @@ type Methodology struct {
 	// Namespace is the target namespace (ADR 0013 §3): the namespace the changes of the methodology act on, hence the
 	// domain of the nodes it creates and modifies (alm; methodology for the self-observation). Required.
 	Namespace string `yaml:"namespace" json:"namespace"`
+	// Domains pins the version of the domains the methodology is written against (ADR 0113), by domain name: its
+	// definition is validated and compiled against those versions, whatever is published since. A draft pins what it
+	// declares and follows the latest published version of the others; publishing pins every published domain in
+	// force it does not pin yet, so a published version keeps the types it was validated against. A new version of the
+	// methodology moves to the latest domains (Service.CreateVersion drops the pins), the built-in domains are never
+	// pinned (they change with the platform).
+	Domains map[string]string `yaml:"domains,omitempty" json:"domains,omitempty"`
 	// Administrative exempts the changes of the methodology from naming a project (ADR 0039): set on
 	// methodologies that manage organisation/project/policy/adapter data (the admin surface itself), not on
 	// methodologies that do the enterprise's actual work, which must run in the context of a project.

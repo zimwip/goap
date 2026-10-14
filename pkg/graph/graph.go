@@ -299,6 +299,10 @@ type NewChange struct {
 	Title       string
 	Intent      string
 	Methodology string
+	// MethodologyVersion is the version of the methodology the change follows (ADR 0113). Empty: a sub-change of its
+	// parent's methodology takes its parent's version, any other change the latest published one
+	// (ChangeLifecycles.MethodologyVersion).
+	MethodologyVersion string
 	// Goal the change works towards (the goal of a methodology or a process of it). Empty: the main goal of the
 	// methodology (ChangeLifecycles.DefaultGoal, ADR 0096), a sub-change's parent goal.
 	Goal string
@@ -337,15 +341,31 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 	// before the transaction, it reads the graph
 	var lifecycle, initial, goal string
 	goal = in.Goal
+	// the version of the methodology the change follows (ADR 0113): a sub-change stays on its parent's, a new change
+	// takes the latest published one; it keeps it while it runs
+	version := in.MethodologyVersion
+	if version == "" && in.Methodology != "" && in.ParentID != "" {
+		if parent, err := g.Change(ctx, in.ParentID); err == nil && parent.Methodology == in.Methodology {
+			version = parent.MethodologyVersion
+		}
+	}
+	if g.Lifecycles != nil && in.Methodology != "" {
+		v, err := g.Lifecycles.MethodologyVersion(ctx, domain.MethodologyRef(in.Methodology, version))
+		if err != nil {
+			return domain.Change{}, err
+		}
+		version = v
+	}
+	ref := domain.MethodologyRef(in.Methodology, version)
 	if g.Lifecycles != nil && in.Methodology != "" {
 		if goal == "" {
-			dg, err := g.Lifecycles.DefaultGoal(ctx, in.Methodology)
+			dg, err := g.Lifecycles.DefaultGoal(ctx, ref)
 			if err != nil {
 				return domain.Change{}, err
 			}
 			goal = dg
 		}
-		lc, err := g.Lifecycles.Lifecycle(ctx, in.Methodology)
+		lc, err := g.Lifecycles.Lifecycle(ctx, ref)
 		if err != nil {
 			return domain.Change{}, err
 		}
@@ -354,7 +374,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		}
 	}
 	// the guardian chain (ADR 0106) is computed once, here, and saved on the change
-	guardians, err := g.guardianChain(ctx, in)
+	guardians, err := g.guardianChain(ctx, in, version)
 	if err != nil {
 		return domain.Change{}, err
 	}
@@ -364,7 +384,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		if err != nil {
 			return domain.Change{}, err
 		}
-		child := domain.Change{Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
+		child := domain.Change{Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, MethodologyVersion: version, Namespace: domain.NamespaceOf(in.Namespace),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID, Data: in.Data}
 		if err := g.SubChangeValidator(ctx, parent, child); err != nil {
 			return domain.Change{}, err
@@ -373,7 +393,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 	var c domain.Change
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		c = domain.Change{
-			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, Namespace: domain.NamespaceOf(in.Namespace),
+			ID: domain.ChangeID(g.newID()), Title: in.Title, Intent: in.Intent, Methodology: in.Methodology, MethodologyVersion: version, Namespace: domain.NamespaceOf(in.Namespace),
 			Status: domain.ChangeDraft, BaselineID: in.BaselineID, Branch: domain.BranchOf(in.Branch), Data: in.Data, CreatedAt: g.now(),
 			ParentID: in.ParentID, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID,
 		}

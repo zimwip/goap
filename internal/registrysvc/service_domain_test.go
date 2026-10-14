@@ -89,7 +89,11 @@ func TestDomainLifecycle(t *testing.T) {
 				t.Fatalf("archive used domain: %v", err)
 			}
 
-			// a new version that drops a type a published methodology uses is refused
+			// the published methodology pins the domain version it was validated against (ADR 0113): a new version that
+			// drops a type it uses is published, the methodology stays on its version
+			if rec, err := s.Get(ctx, "uses", "1"); err != nil || rec.Methodology.Domains["alm"] != "1" {
+				t.Fatalf("pinned at publication: %+v %v", rec.Methodology.Domains, err)
+			}
 			v2, err := s.CreateDomainVersion(ctx, "alm", "1", "2")
 			if err != nil || v2.Status != StatusDraft {
 				t.Fatalf("new version: %+v %v", v2, err)
@@ -99,8 +103,18 @@ func TestDomainLifecycle(t *testing.T) {
 			if _, _, err := s.SaveDomain(ctx, d); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := s.PublishDomain(ctx, "alm", "2"); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "would break") {
-				t.Fatalf("breaking domain version: %v", err)
+			if _, err := s.PublishDomain(ctx, "alm", "2"); err != nil {
+				t.Fatalf("a domain version does not reach the methodologies pinned on another one: %v", err)
+			}
+			if c, err := s.Methodology(ctx, "uses"); err != nil || !c.Types.HasLinkType("alm@verifies") {
+				t.Fatalf("the methodology compiles against its pinned version: %v", err)
+			}
+			// a new version of the methodology moves to the latest domains: there it no longer validates
+			if _, err := s.CreateVersion(ctx, "uses", "1", "2"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.Publish(ctx, "uses", "2"); !errors.Is(err, ErrInvalid) {
+				t.Fatalf("the new version is checked against alm@2: %v", err)
 			}
 			// a compatible one becomes the version in force; the former one can then be archived
 			v3 := almDomain("3")
@@ -117,8 +131,14 @@ func TestDomainLifecycle(t *testing.T) {
 			if err := s.DeleteDomain(ctx, "alm", "1"); err != nil {
 				t.Fatalf("a version no longer in force is archived: %v", err)
 			}
+			if c, err := s.Methodology(ctx, "uses@1"); err != nil || !c.Types.HasLinkType("alm@verifies") || c.Types.HasNodeType("alm@Need") {
+				t.Fatalf("an archived pinned version still serves its methodology: %v", err)
+			}
 
 			// drafts are deletable, lists show the latest published per name
+			if err := s.Delete(ctx, "uses", "2"); err != nil {
+				t.Fatal(err)
+			}
 			if err := s.DeleteDomain(ctx, "alm", "2"); err != nil {
 				t.Fatal(err)
 			}

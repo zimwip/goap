@@ -46,7 +46,7 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 	var rootChain []domain.GuardianRef
 	if root := family[0]; g.Lifecycles != nil && root.Methodology != "" {
 		var err error
-		if rootChain, err = g.Lifecycles.Guardians(ctx, root.Methodology, project); err != nil {
+		if rootChain, err = g.Lifecycles.Guardians(ctx, root.MethodologyRef(), project); err != nil {
 			return domain.Change{}, err
 		}
 	}

@@ -24,8 +24,9 @@ const maxChain = 8
 // project. From the methodology, the methodologies applicable to the project chain (nearest project first, Applicable)
 // are searched for one integrating it; the first found frames it, and the search goes on from that one. Without
 // Applicable, or for a methodology the registry does not know, the chain is the methodology alone.
-func (s *Service) Guardians(ctx context.Context, name, project string) ([]domain.GuardianRef, error) {
-	own, err := s.Store.Get(ctx, name, "")
+func (s *Service) Guardians(ctx context.Context, ref, project string) ([]domain.GuardianRef, error) {
+	name, _ := domain.SplitMethodologyRef(ref)
+	own, err := s.record(ctx, ref)
 	if errors.Is(err, ErrNotFound) {
 		return []domain.GuardianRef{{Methodology: name}}, nil
 	} else if err != nil {
@@ -67,10 +68,10 @@ func (s *Service) Guardians(ctx context.Context, name, project string) ([]domain
 	return chain, nil
 }
 
-// Integrates implements pkg/graph.ChangeLifecycles: whether the latest version of integrator integrates the changes
-// of methodology; false for a methodology the registry does not know.
+// Integrates implements pkg/graph.ChangeLifecycles: whether integrator (at the version its reference names, else the
+// latest) integrates the changes of methodology; false for a methodology the registry does not know.
 func (s *Service) Integrates(ctx context.Context, integrator, methodology string) (bool, error) {
-	r, err := s.Store.Get(ctx, integrator, "")
+	r, err := s.record(ctx, integrator)
 	if errors.Is(err, ErrNotFound) {
 		return false, nil
 	} else if err != nil {
@@ -89,7 +90,7 @@ func (s *Service) CheckGuardians(ctx context.Context, bb domain.Blackboard, tran
 	worldOf := func() map[string]bool {
 		if world == nil {
 			world = map[string]bool{}
-			if cm, err := s.Methodology(ctx, c.Methodology); err == nil && cm != nil {
+			if cm, err := s.Methodology(ctx, c.MethodologyRef()); err == nil && cm != nil {
 				world = cm.Conditions.Evaluate(bb).State
 			}
 		}

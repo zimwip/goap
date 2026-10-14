@@ -21,6 +21,7 @@ type lifecycles struct {
 	goal  string
 }
 
+func (l *lifecycles) MethodologyVersion(context.Context, string) (string, error)   { return "", nil }
 func (l *lifecycles) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return &l.lc, nil }
 func (l *lifecycles) DefaultGoal(context.Context, string) (string, error)          { return l.goal, nil }
 func (l *lifecycles) Gate(_ context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
@@ -46,6 +47,7 @@ func (l *lifecycles) CheckGuardians(context.Context, domain.Blackboard, string, 
 // mergeGate is a guardian that has only its say on the merge of a change (the goal of an activity, ADR 0066).
 type mergeGate func(ctx context.Context, c domain.Change, bb domain.Blackboard) (decided, ok bool, err error)
 
+func (mergeGate) MethodologyVersion(context.Context, string) (string, error)   { return "", nil }
 func (mergeGate) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
 func (mergeGate) DefaultGoal(context.Context, string) (string, error)          { return "", nil }
 func (mergeGate) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {

@@ -24,6 +24,9 @@ type GraphPort interface {
 	// depending on it and the merge order of its sub-changes (ADR 0108).
 	SetChangeDependencies(ctx context.Context, id domain.ChangeID, deps []domain.ChangeID) (domain.Change, error)
 	ChangeDependencies(ctx context.Context, id domain.ChangeID) (graph.ChangeDependencies, error)
+	// UpgradeChange moves an open change to another version of its methodology, the latest when version is "" (ADR
+	// 0113).
+	UpgradeChange(ctx context.Context, id domain.ChangeID, version string) (domain.Change, error)
 	// Change is the change as stored, its items of every flow included (the blackboard is a view of one flow).
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)
@@ -109,7 +112,9 @@ func readGraph(ctx context.Context, g GraphPort, change domain.ChangeID, flow st
 }
 
 // MethodologyPort resolves methodologies (the registry): the latest
-// published version of one, or of every methodology.
+// published version of one, or of every methodology. Methodology takes a name
+// (the latest published version) or a reference at a version
+// (domain.MethodologyRef, ADR 0113: what a change or a process follows).
 type MethodologyPort interface {
 	Methodology(ctx context.Context, name string) (*methodology.Compiled, error)
 	List(ctx context.Context) ([]*methodology.Compiled, error)
@@ -120,14 +125,17 @@ type Publisher interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
-// StaticMethodologies serves compiled methodologies from memory.
+// StaticMethodologies serves compiled methodologies from memory, one version
+// of each, by name.
 type StaticMethodologies map[string]*methodology.Compiled
 
-// Methodology implements MethodologyPort.
-func (s StaticMethodologies) Methodology(_ context.Context, name string) (*methodology.Compiled, error) {
+// Methodology implements MethodologyPort: a reference naming another version
+// than the one held is unknown.
+func (s StaticMethodologies) Methodology(_ context.Context, ref string) (*methodology.Compiled, error) {
+	name, version := domain.SplitMethodologyRef(ref)
 	m, ok := s[name]
-	if !ok {
-		return nil, ErrUnknownMethodology{Name: name}
+	if !ok || version != "" && m.Version != version {
+		return nil, ErrUnknownMethodology{Name: ref}
 	}
 	return m, nil
 }

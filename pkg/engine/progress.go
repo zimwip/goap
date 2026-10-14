@@ -87,7 +87,7 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 	if err != nil {
 		return nil, err
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +275,7 @@ func (e *Engine) ExplainCondition(ctx context.Context, id, name string) (ex cond
 	if err != nil {
 		return ex, false, err
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return ex, false, err
 	}

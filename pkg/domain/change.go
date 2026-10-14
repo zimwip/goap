@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 )
@@ -46,6 +47,10 @@ type Change struct {
 	Title       string   `json:"title"`
 	Intent      string   `json:"intent"`
 	Methodology string   `json:"methodology,omitempty"`
+	// MethodologyVersion is the version of its methodology the change follows (ADR 0113): the latest published one
+	// when it was created (a sub-change of the same methodology takes its parent's), kept while it runs, moved only by
+	// Graph.UpgradeChange. Empty: the latest published one, whatever it is when asked (a graph without a registry).
+	MethodologyVersion string `json:"methodologyVersion,omitempty"`
 	// Namespace the change acts on: only its nodes can be linked to the change.
 	Namespace string `json:"namespace,omitempty"`
 	// ParentID is set on a sub-change: a part of the parent change, split along an
@@ -90,6 +95,26 @@ type Change struct {
 
 	flx  *flowIndex // replay of the flow events, valid for flxN items
 	flxN int
+}
+
+// MethodologyRef is the reference of the methodology of the change at the version it follows (MethodologyRef).
+func (c Change) MethodologyRef() string { return MethodologyRef(c.Methodology, c.MethodologyVersion) }
+
+// MethodologyRef names a methodology at a version, "<name>@<version>" (ADR 0113); the name alone when the version is
+// empty: the latest published one. The readers of a methodology that take a name take a reference too.
+func MethodologyRef(name, version string) string {
+	if version == "" || name == "" {
+		return name
+	}
+	return name + "@" + version
+}
+
+// SplitMethodologyRef splits a reference made by MethodologyRef: the version is empty for a bare name.
+func SplitMethodologyRef(ref string) (name, version string) {
+	if i := strings.LastIndexByte(ref, '@'); i > 0 {
+		return ref[:i], ref[i+1:]
+	}
+	return ref, ""
 }
 
 // GuardianRef is a methodology of the guardian chain of a change (ADR 0106), at the version in force when the chain

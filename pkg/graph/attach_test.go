@@ -13,6 +13,7 @@ import (
 // of sdlc merges only once attached to a release).
 type chainGate struct{ asked []string }
 
+func (*chainGate) MethodologyVersion(context.Context, string) (string, error)   { return "", nil }
 func (*chainGate) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
 func (*chainGate) DefaultGoal(context.Context, string) (string, error)          { return "", nil }
 func (*chainGate) Guard(context.Context, domain.Blackboard, string, string, string) (bool, error) {

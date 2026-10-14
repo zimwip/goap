@@ -13,7 +13,7 @@ import (
 // ToPB converts a stored record.
 func ToPB(r Record) *registryv1.Methodology {
 	m := r.Methodology
-	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Events: eventsToPB(m.Events), Status: string(r.Status),
+	out := &registryv1.Methodology{Name: m.Name, Version: m.Version, Description: m.Description, Namespace: m.Namespace, AppliesTo: m.AppliesTo, Imports: m.Imports, On: subsToPB(m.On), Lifecycle: m.Lifecycle, Criticality: m.Criticality, Goal: m.Goal, Integrates: integrationsToPB(m.Integrates), Guardian: guardianToPB(m.Guardian), Events: eventsToPB(m.Events), Domains: m.Domains, Status: string(r.Status),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy}
 	for _, c := range m.Conditions {
 		out.Conditions = append(out.Conditions, &registryv1.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
@@ -198,7 +198,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 		return methodology.Methodology{}
 	}
 	m := methodology.Methodology{Name: p.Name, Version: p.Version, Description: p.Description, Namespace: p.Namespace, AppliesTo: nilIfNone(p.AppliesTo), Imports: nilIfNone(p.Imports), On: subsFromPB(p.On), Lifecycle: p.Lifecycle, Criticality: p.Criticality, Goal: p.Goal,
-		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events)}
+		Integrates: integrationsFromPB(p.Integrates), Guardian: guardianFromPB(p.Guardian), Events: eventsFromPB(p.Events), Domains: nilIfEmpty(p.Domains)}
 	for _, c := range p.Conditions {
 		m.Conditions = append(m.Conditions, methodology.Condition{Name: c.Name, Description: c.Description, Expr: c.Expr,
 			Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty})

@@ -36,6 +36,7 @@ func (p *Process) IsCompanion() bool { return strings.HasPrefix(p.Trigger, Compa
 func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	var changeID domain.ChangeID
 	var of, from string // the methodology the change is worked with, the process the event comes from
+	var ofRef string    // of at the version the change or the process follows (ADR 0113)
 	companion := false
 	switch {
 	case ev.Process != nil:
@@ -43,8 +44,9 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 			return
 		}
 		changeID, of, from, companion = ev.Process.ChangeID, ev.Process.Methodology, ev.Process.ID, ev.Process.IsCompanion()
+		ofRef = domain.MethodologyRef(of, ev.Process.MethodologyVersion)
 	case ev.Change != nil:
-		changeID, of = ev.Change.ID, ev.Change.Methodology
+		changeID, of, ofRef = ev.Change.ID, ev.Change.Methodology, ev.Change.MethodologyRef()
 	default:
 		return
 	}
@@ -70,7 +72,7 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	}
 	if of == "" {
 		if bb, err := e.Graph.Blackboard(ctx, changeID); err == nil {
-			of = bb.Change.Methodology
+			of, ofRef = bb.Change.Methodology, bb.Change.MethodologyRef()
 		}
 	}
 	ms, err := e.Methodologies.List(ctx)
@@ -80,7 +82,7 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	}
 	act := ev.activation()
 	e.relay(ctx, ev, act, changeID)
-	if own, err := e.Methodologies.Methodology(ctx, of); of != "" && err == nil {
+	if own, err := e.Methodologies.Methodology(ctx, ofRef); of != "" && err == nil {
 		e.react(ctx, own, ev, act, changeID, methodology.FromSelf, nil)
 	}
 	for _, m := range ms {
@@ -136,7 +138,7 @@ func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any,
 		if t.Methodology == "" {
 			continue
 		}
-		m, err := e.Methodologies.Methodology(ctx, t.Methodology)
+		m, err := e.Methodologies.Methodology(ctx, t.MethodologyRef())
 		if err != nil {
 			continue
 		}

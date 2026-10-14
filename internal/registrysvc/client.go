@@ -9,6 +9,7 @@ import (
 
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -70,11 +71,13 @@ func (c *Client) Domains(ctx context.Context) ([]*def.Domain, error) {
 	return out, nil
 }
 
-// Methodology implements engine.MethodologyPort (latest published version).
-func (c *Client) Methodology(ctx context.Context, name string) (*methodology.Compiled, error) {
-	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name}))
+// Methodology implements engine.MethodologyPort: the version a reference names (domain.MethodologyRef, ADR 0113), else
+// the latest published one.
+func (c *Client) Methodology(ctx context.Context, ref string) (*methodology.Compiled, error) {
+	name, version := domain.SplitMethodologyRef(ref)
+	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name, Version: version}))
 	if connect.CodeOf(err) == connect.CodeNotFound {
-		return nil, engine.ErrUnknownMethodology{Name: name}
+		return nil, engine.ErrUnknownMethodology{Name: ref}
 	}
 	if err != nil {
 		return nil, err

@@ -150,6 +150,9 @@ export const graph = {
   /** Replaces the changes a change depends on: no cycle, no ancestor, no sub-change (ADR 0108). */
   setChangeDependencies: (changeId: string, dependsOn: string[]) =>
     rpc<{ changeId: string; dependsOn: string[] }, { change?: Change }>(GRAPH, 'SetChangeDependencies', { changeId, dependsOn }),
+  /** Moves an open change to another version of its methodology, the latest when version is empty (ADR 0113). */
+  upgradeChange: (changeId: string, version = '') =>
+    rpc<{ changeId: string; version: string }, { change?: Change }>(GRAPH, 'UpgradeChange', { changeId, version }),
   /** The dependencies of a change, the open changes depending on it and the merge order of its sub-changes (ADR 0108). */
   getChangeDependencies: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, ChangeDependencies>(GRAPH, 'GetChangeDependencies', { changeId }, signal),

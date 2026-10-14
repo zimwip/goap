@@ -61,7 +61,7 @@ func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 
 func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
 	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
-		Methodology: in.Methodology, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Data: pbconv.Struct(in.Data)}))
+		Methodology: in.Methodology, MethodologyVersion: in.MethodologyVersion, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Data: pbconv.Struct(in.Data)}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}
@@ -102,6 +102,15 @@ func (c *Client) SetChangeDependencies(ctx context.Context, id domain.ChangeID, 
 		ids[i] = string(d)
 	}
 	r, err := c.rpc.SetChangeDependencies(ctx, connect.NewRequest(&graphv1.SetChangeDependenciesRequest{ChangeId: string(id), DependsOn: ids}))
+	if err != nil {
+		return domain.Change{}, rpcerr.FromConnect(err)
+	}
+	return pbconv.ChangeFromPB(r.Msg.Change), nil
+}
+
+// UpgradeChange implements engine.GraphPort (ADR 0113).
+func (c *Client) UpgradeChange(ctx context.Context, id domain.ChangeID, version string) (domain.Change, error) {
+	r, err := c.rpc.UpgradeChange(ctx, connect.NewRequest(&graphv1.UpgradeChangeRequest{ChangeId: string(id), Version: version}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
 	}

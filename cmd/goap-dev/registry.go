@@ -66,8 +66,14 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 		},
 	}}
 	system := authz.With(e.ctx, authz.System("registry", access.RoleAdmin))
-	if _, err := reg.SeedDomains(system, e.cfg.DomainsDir); err != nil {
+	// every start publishes the versions of the files not stored yet (ADR 0113): a new version of a shipped domain or
+	// methodology needs no reset of the database; the changes already open keep the version they follow
+	doms, err := reg.SeedDomains(system, e.cfg.DomainsDir)
+	if err != nil {
 		return nil, wrap("domains", err)
+	}
+	if len(doms) > 0 {
+		e.log.Info("domain versions published", "domains", doms)
 	}
 	if err := types.Reload(e.ctx); err != nil {
 		return nil, wrap("type catalogue", err)
@@ -96,8 +102,12 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 		}}); err != nil {
 		return nil, wrap("boot", err)
 	}
-	if _, err := reg.Seed(system, e.cfg.MethodologiesDir); err != nil {
+	loaded, err := reg.Seed(system, e.cfg.MethodologiesDir)
+	if err != nil {
 		return nil, wrap("methodologies", err)
+	}
+	if len(loaded) > 0 {
+		e.log.Info("methodology versions published", "methodologies", loaded)
 	}
 	return &registryPart{reg: reg, types: types, bus: bus}, nil
 }

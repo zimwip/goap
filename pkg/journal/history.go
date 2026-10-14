@@ -314,21 +314,25 @@ func stringList(v any) []string {
 }
 
 // StepDependencies gives the steps of a methodology each step relies on (methodology.Compiled.StepDependencies), nil
-// when the methodology is not known.
+// when the methodology is not known. The methodology is a name or a reference at a version (domain.MethodologyRef).
 type StepDependencies func(ctx context.Context, methodology string) map[string]map[string]bool
 
 // FoldWith is the fold of the history of a change whose steps rely on one another as deps says (nil: no step relies on
 // another), each methodology asked once per fold: what the graph plugs as the history facet of the blackboard
 // (graph.LogFacet with HistoryTypes) and the engine runs over the log it reads.
 func FoldWith(deps StepDependencies) func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error) {
-	return func(ctx context.Context, _ domain.Change, entries []domain.LogEntry) (any, error) {
+	return func(ctx context.Context, c domain.Change, entries []domain.LogEntry) (any, error) {
 		var relies Relies
 		if deps != nil {
 			known := map[string]map[string]map[string]bool{}
 			relies = func(methodology, later, earlier string) bool {
 				d, ok := known[methodology]
 				if !ok {
-					d = deps(ctx, methodology)
+					ask := methodology
+					if methodology == c.Methodology {
+						ask = c.MethodologyRef() // the version the change follows (ADR 0113)
+					}
+					d = deps(ctx, ask)
 					known[methodology] = d
 				}
 				return d[later][earlier]

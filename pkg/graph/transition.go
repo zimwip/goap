@@ -19,6 +19,13 @@ import (
 // ChangeLifecycles is what the graph needs of the registry to run the lifecycle of a change: the methodologies are
 // not known to the graph.
 type ChangeLifecycles interface {
+	// The methodology every method takes is a name or a reference at a version (domain.MethodologyRef, ADR 0113): a
+	// change reads the version it follows (domain.Change.MethodologyRef), a bare name the latest published one.
+
+	// MethodologyVersion resolves the version a new change of a methodology follows (ADR 0113): the version a reference
+	// names, when the registry holds it published (an archived version still serves the changes that follow it); the
+	// latest published version for a bare name. "" when the registry does not know the methodology.
+	MethodologyVersion(ctx context.Context, methodology string) (string, error)
 	// Lifecycle returns the lifecycle the changes of a methodology follow; nil when it names none.
 	Lifecycle(ctx context.Context, methodology string) (*domain.Lifecycle, error)
 	// DefaultGoal returns the main goal the changes of a methodology start with (ADR 0096); "" when the methodology is
@@ -70,7 +77,7 @@ func (g *Graph) changeLifecycle(ctx context.Context, c domain.Change) (*domain.L
 	if g.Lifecycles == nil {
 		return nil, fmt.Errorf("change %s follows lifecycle %s, which nothing resolves: %w", c.ID, c.Lifecycle, ErrInvalid)
 	}
-	lc, err := g.Lifecycles.Lifecycle(ctx, c.Methodology)
+	lc, err := g.Lifecycles.Lifecycle(ctx, c.MethodologyRef())
 	if err != nil {
 		return nil, err
 	}
@@ -359,18 +366,18 @@ func (g *Graph) checkGuardians(ctx context.Context, bb domain.Blackboard, transi
 
 // guardianChain is the guardian chain of a new change (ADR 0106): a sub-change takes its parent's chain and adds its
 // own methodology; a root change gets the chain the registry computes for its methodology in its project.
-func (g *Graph) guardianChain(ctx context.Context, in NewChange) ([]domain.GuardianRef, error) {
+func (g *Graph) guardianChain(ctx context.Context, in NewChange, version string) ([]domain.GuardianRef, error) {
 	if g.Lifecycles == nil || in.Methodology == "" {
 		return nil, nil
 	}
 	if in.ParentID == "" {
-		return g.Lifecycles.Guardians(ctx, in.Methodology, in.ProjectID)
+		return g.Lifecycles.Guardians(ctx, domain.MethodologyRef(in.Methodology, version), in.ProjectID)
 	}
 	parent, err := g.Change(ctx, in.ParentID)
 	if err != nil {
 		return nil, err
 	}
-	return chainUnder(parent, in.Methodology, nil), nil
+	return chainUnder(parent, in.Methodology, &domain.GuardianRef{Methodology: in.Methodology, Version: version}), nil
 }
 
 // chainUnder is the chain of a change of methodology under a parent: the parent's chain (its own methodology when it

@@ -310,6 +310,8 @@ export interface Change {
   namespace?: string;
   /** branch the change works on (change-<id> when it has its own) */
   branch?: string;
+  /** the version of its methodology the change follows: the latest published when it was created, until upgraded (ADR 0113) */
+  methodologyVersion?: string;
   /** the methodologies framing the change, outermost first, its own last (ADR 0106) */
   guardians?: GuardianRef[];
   /** the changes whose work reaches the branch it merges into before it merges (ADR 0108) */

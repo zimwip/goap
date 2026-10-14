@@ -1390,6 +1390,22 @@ Lifecycle of a version: **draft** (editable, can be invalid: anomalies are retur
 with their path, e.g. `conditions[2].expr`) → **published** (validated, immutable, the only one executable by the
 engine) → **archived**. Modifying a published version means creating a new draft version (`CreateVersion`).
 
+**Versions in use** ([ADR 0113](adr/0113-methodology-and-domain-versions.md)). A change follows a version of its
+methodology (`Change.MethodologyVersion`, column `change.methodology_version`): `CreateChange` takes the latest
+published one (`ChangeLifecycles.MethodologyVersion`), a sub-change of the same methodology its parent's, and the change
+keeps it whatever is published later; `Graph.UpgradeChange` (operation `change.upgrade`, RPC `UpgradeChange`,
+`goap-change/upgrade`) moves an open change to another version, keeping its lifecycle and state. Every reader of the
+methodology of a change takes the reference `<name>@<version>` (`domain.MethodologyRef`, `Change.MethodologyRef()`; a
+bare name is the latest): the registry's lifecycle, goal, guards, gates, guardians, operation roles, the history fold,
+and the engine, whose process runs the version it started with (`Process.MethodologyVersion`, `Engine.methodologyOf`).
+A methodology version pins the domain versions it is written against (`Methodology.Domains`, `domains:` by domain
+name): publishing pins every published domain in force, the registry validates and compiles a version against its
+pins (`domainsFor`; a version published before pins existed follows the domains in force when it was published), a
+new version of a domain does not reach the published methodologies pinned on another one, and `CreateVersion` drops
+the pins so a new draft moves to the latest domains. The graph keeps one type catalogue, the latest published
+domains: its data follows the domain in force. Each start publishes the shipped domain and methodology files whose
+version is not stored yet (`SeedDomains`, `Seed`): a new shipped version needs no reset of the database.
+
 **Domains** ([ADR 0013](adr/0013-domains.md)). The object part of the model (node types, link types, lifecycles,
 algorithms) lives in **domains**, one per namespace (`alm`, `organisation`, `platform`), versioned on their own (same
 draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, administrators).
@@ -1399,8 +1415,9 @@ references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)), which may po
 or links to. Consistency is
 checked at save / publish against the domain versions in force: action `expects`, CEL type literals
 (`"alm@Requirement" in n.types`, `l.type == "alm@verifies"`) and builtin `params.linkTypes` must resolve. A methodology
-can only be published on published domains, and a domain version is refused when it would break a published
-methodology (`GetDomainUsage` lists the dependents).
+can only be published on published domains; a published methodology stays on the domain versions it pins (ADR
+0113), so a domain version is refused only when it would break a published methodology that follows the latest one
+(published before the domain existed; `GetDomainUsage` lists the dependents).
 
 **YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`, `ImportDomain`, ...); the
 files in `domains/` then `methodologies/` are imported and published at registry startup if they don't already exist

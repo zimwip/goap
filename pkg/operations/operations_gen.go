@@ -10,6 +10,7 @@ const (
 	ChangeDetach     = "change.detach"      // Graph.DetachChange, doer
 	ChangeMerge      = "change.merge"       // Graph.IntegrateChange, doer
 	ChangeRebase     = "change.rebase"      // Graph.RebaseChange, doer
+	ChangeUpgrade    = "change.upgrade"     // Graph.UpgradeChange, doer
 	ImpactCancel     = "impact.cancel"      // Graph.ImpactNodeCancel, doer
 	ImpactCheckout   = "impact.checkout"    // Graph.ImpactNodeCheckout, doer
 	ImpactCreate     = "impact.create"      // Graph.ImpactNodeCreate, doer
@@ -33,6 +34,7 @@ var catalog = []Operation{
 	{Code: ChangeDetach, Kind: Doer, Method: "Graph.DetachChange", Doc: "DetachChange gives a sub-change back as a root change (ADR 0106: deferred, rejected by the change integrating it), still open and not merged: its branch is forked again from the head of the branch its root ancestor merges into (what it committed rebased there; ErrConflict when that leaves conflicts), its guardian chain recomputed for its methodology and project."},
 	{Code: ChangeMerge, Kind: Doer, Method: "Graph.IntegrateChange", Doc: "IntegrateChange merges a change into what it was forked from (ADR 0102, merge): a root change that committed on its own branch into the branch it was forked from, a sub-change into its parent."},
 	{Code: ChangeRebase, Kind: Doer, Method: "Graph.RebaseChange", Doc: "RebaseChange brings what a change committed up to date with the head of the branch it was forked from (the branch of its parent change for a sub-change, ADR 0103)."},
+	{Code: ChangeUpgrade, Kind: Doer, Method: "Graph.UpgradeChange", Doc: "UpgradeChange moves an open change to another version of its methodology (ADR 0113): the version named, else the latest published one."},
 	{Code: ImpactCancel, Kind: Doer, Method: "Graph.ImpactNodeCancel", Doc: "ImpactNodeCancel drops the draft of a change impact on the flow: the impact goes back to what the flow saw before (the draft of a parent flow), or to none."},
 	{Code: ImpactCheckout, Kind: Doer, Method: "Graph.ImpactNodeCheckout", Doc: "ImpactNodeCheckout puts a node in edit mode in a change: it gives the node a draft on the flow, a copy of what the flow sees of it (properties, state, owner and outgoing links), whatever its state (ADR 0078)."},
 	{Code: ImpactCreate, Kind: Doer, Method: "Graph.ImpactNodeCreate", Doc: "ImpactNodeCreate creates a node in a change: one `created` event adds the change impact (intent created) and the draft of the node (ADR 0076, 0077, 0079)."},

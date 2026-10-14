@@ -124,7 +124,10 @@ func (s *Service) Save(ctx context.Context, m methodology.Methodology) (Record, 
 
 // validate checks a definition against the types in force (the published domains, ADR 0012).
 func (s *Service) validate(ctx context.Context, m *methodology.Methodology) def.Issues {
-	cat, err := s.Types(ctx)
+	if issues := s.domainPinIssues(ctx, m); len(issues) > 0 {
+		return issues
+	}
+	cat, _, err := s.typesFor(ctx, m)
 	if err != nil {
 		return def.Issues{{Path: "namespace", Message: "the types in force cannot be read: " + err.Error()}}
 	}
@@ -154,6 +157,16 @@ func (s *Service) Publish(ctx context.Context, name, version string) (Record, er
 	if issues := s.validate(ctx, &r.Methodology); issues.HasErrors() {
 		return Record{}, fmt.Errorf("%w: %v", ErrInvalid, issues.Errors())
 	}
+	// the published version keeps the domain versions it was validated against (ADR 0113)
+	before := len(r.Methodology.Domains)
+	if err := s.pinDomains(ctx, &r.Methodology); err != nil {
+		return Record{}, err
+	}
+	if len(r.Methodology.Domains) != before {
+		if err := s.Store.Save(ctx, r); err != nil {
+			return Record{}, err
+		}
+	}
 	if err := s.Store.SetStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
 		return Record{}, err
 	}
@@ -165,7 +178,8 @@ func (s *Service) Publish(ctx context.Context, name, version string) (Record, er
 	return r, err
 }
 
-// CreateVersion copies a version into a new draft.
+// CreateVersion copies a version into a new draft, which follows the latest published domains (its source's pins are
+// dropped, ADR 0113).
 func (s *Service) CreateVersion(ctx context.Context, name, from, to string) (Record, error) {
 	src, err := s.Store.Get(ctx, name, from)
 	if err != nil {
@@ -179,6 +193,8 @@ func (s *Service) CreateVersion(ctx context.Context, name, from, to string) (Rec
 	}
 	m := src.Methodology
 	m.Version = to
+	// a new version moves to the latest domains (ADR 0113): it pins them again when it is published
+	m.Domains = nil
 	r, _, err := s.Save(ctx, m)
 	return r, err
 }
@@ -236,6 +252,9 @@ func (s *Service) importPublished(ctx context.Context, m methodology.Methodology
 			return r, issues, err
 		}
 		return r, issues, fmt.Errorf("%w: cannot publish: %v", ErrInvalid, issues.Errors())
+	}
+	if err := s.pinDomains(ctx, &m); err != nil {
+		return Record{}, nil, err
 	}
 	now := s.clock()
 	r := Record{Methodology: m, Status: StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}

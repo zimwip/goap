@@ -213,9 +213,13 @@ func (e *Engine) start(ctx context.Context, req StartRequest, instance string) (
 		// a run works where its change does (ADR 0091): the roles it checks are held on the project of the change,
 		// which a move may have changed since the caller's token was issued
 		p.Project = bb.Change.ProjectID
+		// and with the version of the methodology its change follows (ADR 0113)
+		if p.Methodology != "" && p.Methodology == bb.Change.Methodology {
+			p.MethodologyVersion = bb.Change.MethodologyVersion
+		}
 	}
 	if req.Goal != "" {
-		m, err := e.Methodologies.Methodology(ctx, req.Methodology)
+		m, err := e.methodologyOf(ctx, p)
 		if err != nil {
 			return nil, err
 		}
@@ -298,6 +302,11 @@ func (e *Engine) logIntentTurns(ctx context.Context, processID string, turns ...
 	return e.Store.AppendProcessLog(ctx, processID, entries...)
 }
 
+// methodologyOf is the methodology a process runs, at the version it started with (ADR 0113).
+func (e *Engine) methodologyOf(ctx context.Context, p *Process) (*methodology.Compiled, error) {
+	return e.Methodologies.Methodology(ctx, domain.MethodologyRef(p.Methodology, p.MethodologyVersion))
+}
+
 // target is an identifiable (methodology, agent, goal) triple.
 type target struct {
 	m     *methodology.Compiled
@@ -310,7 +319,7 @@ func (t target) key() string { return t.m.Name + "/" + t.agent.Name + "/" + t.go
 func (e *Engine) targets(ctx context.Context, p *Process) ([]target, error) {
 	var ms []*methodology.Compiled
 	if p.Methodology != "" {
-		m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+		m, err := e.methodologyOf(ctx, p)
 		if err != nil {
 			return nil, err
 		}
@@ -393,9 +402,8 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 		return fmt.Errorf("unknown agent %q in %s: %w", agentName, m.Name, ErrInvalidState)
 	}
 	p.Methodology, p.Agent, p.Planner, p.Goal = m.Name, ag.Name, ag.Planner, goal
-	// set early (Run refreshes it to the current published version before it
-	// runs) so an eager bindChange's journal.attach record, journaled here
-	// before Run ever executes, still carries it.
+	// the version the process runs from now on (ADR 0113), set early so an eager bindChange's journal.attach record,
+	// journaled here before Run ever executes, carries it
 	p.MethodologyVersion = m.Version
 	p.Question = ""
 	p.Status = StatusRunning
@@ -441,7 +449,7 @@ func (e *Engine) AttachChange(ctx context.Context, processID string, req AttachR
 	if err != nil {
 		return err
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return err
 	}
@@ -572,7 +580,7 @@ func (e *Engine) Submit(ctx context.Context, id string, items []ItemInput) (*Pro
 		return nil, fmt.Errorf("%q does not hold the role %s for step %s: %w", authz.From(ctx).Subject, p.Pending.Context.Roles.Responsible,
 			p.Pending.Context.Path, authz.ErrForbidden)
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -628,7 +636,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	if err != nil {
 		return nil, err
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -639,7 +647,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	}
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
-	p.MethodologyVersion = m.Version
+	p.MethodologyVersion = m.Version // the version it started with (ADR 0113), the latest for a run that named none
 	// process.started is written the first time a process has a change to journal to.
 	// JournalSeq can't gate this any more (a deferred process, ADR 0031 gap 5, may
 	// journal an attach record before it ever reaches here); an eager bind always has
@@ -1107,7 +1115,7 @@ const VarConversation = "conversationId"
 // checkAgentRoles refuses to start an agent its initiator may not run: it declares roles and they hold none of
 // them on the project (ADR 0043).
 func (e *Engine) checkAgentRoles(ctx context.Context, p *Process) error {
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return err
 	}
@@ -1148,7 +1156,7 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 		ok, err = e.mayRun(ctx, p, approver, "action", p.Pending.Action, p.Pending.Roles)
 		if ok && err == nil {
 			var m *methodology.Compiled
-			if m, err = e.Methodologies.Methodology(ctx, p.Methodology); err == nil {
+			if m, err = e.methodologyOf(ctx, p); err == nil {
 				if a, found := m.Action(p.Pending.Action); found && a.Permission != "" {
 					ok, err = e.allowed(ctx, p, approver, a.Permission)
 				}
@@ -1169,7 +1177,7 @@ func (e *Engine) Approve(ctx context.Context, id string, approve bool, comment s
 	if !ok {
 		return nil, fmt.Errorf("%q lacks %s: %w", approver.Subject, p.Pending.Permission, authz.ErrForbidden)
 	}
-	m, err := e.Methodologies.Methodology(ctx, p.Methodology)
+	m, err := e.methodologyOf(ctx, p)
 	if err != nil {
 		return nil, err
 	}

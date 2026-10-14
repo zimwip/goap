@@ -422,7 +422,7 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 	if err := validCriticality(pbconv.Map(r.Msg.Data)); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
+	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology, MethodologyVersion: r.Msg.MethodologyVersion,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID})
 	if err == nil {
 		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
@@ -551,6 +551,17 @@ func (h *Handler) SetChangeDependencies(ctx context.Context, r *connect.Request[
 	}
 	c.Items, c.Nodes = nil, nil
 	return connect.NewResponse(&graphv1.SetChangeDependenciesResponse{Change: pbconv.ChangeToPB(c)}), nil
+}
+
+// UpgradeChange moves an open change to another version of its methodology (ADR 0113).
+func (h *Handler) UpgradeChange(ctx context.Context, r *connect.Request[graphv1.UpgradeChangeRequest]) (*connect.Response[graphv1.UpgradeChangeResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, err := h.Graph.UpgradeChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Version)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items, c.Nodes = nil, nil
+	return connect.NewResponse(&graphv1.UpgradeChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
 // GetChangeDependencies reads the dependencies of a change, its dependents and the merge order of its sub-changes

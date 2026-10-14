@@ -111,7 +111,11 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 		out.Reason = "the change has no methodology"
 		return out, nil
 	}
-	m, err := e.Methodologies.Methodology(ctx, out.Methodology)
+	ref := out.Methodology
+	if ref == ch.Methodology {
+		ref = ch.MethodologyRef() // the version the change follows (ADR 0113)
+	}
+	m, err := e.Methodologies.Methodology(ctx, ref)
 	if err != nil {
 		return nil, err
 	}

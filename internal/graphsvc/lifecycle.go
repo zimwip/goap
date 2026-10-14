@@ -100,7 +100,8 @@ func ItemAuthorizer(a authz.Authorizer, resolve criticality.Resolver) graph.Item
 	}
 }
 
-// OperationRoles resolves the roles of a methodology that allow an operation (registrysvc.Service.OperationRoles).
+// OperationRoles resolves the roles of a methodology (a name or a reference at a version, domain.MethodologyRef)
+// that allow an operation (registrysvc.Service.OperationRoles).
 type OperationRoles func(ctx context.Context, methodology, op string) (roles []string, restricted bool, err error)
 
 // noRole is a role name no one holds: an operation the methodology allows to no role is left to the administrators
@@ -117,7 +118,7 @@ func OperationAuthorizer(a authz.Authorizer, roles OperationRoles) graph.Operati
 		if a == nil || roles == nil || who.System() {
 			return nil
 		}
-		allowed, restricted, err := roles(ctx, c.Methodology, op)
+		allowed, restricted, err := roles(ctx, c.MethodologyRef(), op)
 		if err != nil || !restricted {
 			return err
 		}

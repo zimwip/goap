@@ -72,7 +72,7 @@ func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
 // holds on the blackboard) with the highest priority whose agent the unit holding the change can run (the MCPs the
 // agent declares are bound, design rule 5). A step resumed after its sub-agent keeps the sub-agent it started.
 func (e *Engine) chooseMethod(ctx context.Context, ac ActionContext, capability string, bb domain.Blackboard, resumable bool) (methodology.MethodChoice, error) {
-	m, err := e.Methodologies.Methodology(ctx, ac.Process.Methodology)
+	m, err := e.methodologyOf(ctx, ac.Process)
 	if err != nil {
 		return methodology.MethodChoice{}, err
 	}

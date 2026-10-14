@@ -95,7 +95,13 @@ func TestLifecycle(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if !reflect.DeepEqual(normalize(got.Methodology), normalize(m)) {
+			// publishing pinned the domains in force (ADR 0113)
+			if got.Methodology.Domains["alm"] == "" {
+				t.Fatalf("published without its domain versions: %v", got.Methodology.Domains)
+			}
+			pinned := m
+			pinned.Domains = got.Methodology.Domains
+			if !reflect.DeepEqual(normalize(got.Methodology), normalize(pinned)) {
 				t.Fatalf("round trip mismatch:\n got %+v\nwant %+v", got.Methodology.Actions[2], m.Actions[2])
 			}
 			if _, err := got.Methodology.Compile(); err != nil {

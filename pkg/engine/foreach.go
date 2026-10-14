@@ -91,7 +91,7 @@ func runForeach(ctx context.Context, ac ActionContext, expr string) (ActionResul
 			if err != nil {
 				return ActionResult{}, fmt.Errorf("step %s: %w", step, err)
 			}
-			m, err := e.Methodologies.Methodology(ctx, methodologyName)
+			m, err := e.methodologyOf(ctx, ac.Process)
 			if err != nil {
 				return ActionResult{}, err
 			}

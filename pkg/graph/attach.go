@@ -37,7 +37,7 @@ func (g *Graph) AttachChange(ctx context.Context, id, parent domain.ChangeID) (d
 		return c, err
 	}
 	if g.Lifecycles != nil && c.Methodology != "" {
-		ok, err := g.Lifecycles.Integrates(ctx, p.Methodology, c.Methodology)
+		ok, err := g.Lifecycles.Integrates(ctx, p.MethodologyRef(), c.Methodology)
 		if err != nil {
 			return c, err
 		}
@@ -82,7 +82,7 @@ func (g *Graph) DetachChange(ctx context.Context, id domain.ChangeID) (domain.Ch
 	if err := g.allow(ctx, c.ParentID, operations.ChangeDetach); err != nil {
 		return c, err
 	}
-	chain, err := g.guardianChain(ctx, NewChange{Methodology: c.Methodology, ProjectID: c.ProjectID})
+	chain, err := g.guardianChain(ctx, NewChange{Methodology: c.Methodology, ProjectID: c.ProjectID}, c.MethodologyVersion)
 	if err != nil {
 		return c, err
 	}
@@ -278,6 +278,9 @@ func (g *Graph) headerEntry(ctx context.Context, tx Tx, id domain.ChangeID, fiel
 
 // ownRef is the reference of the change's own methodology in its chain (its version kept), nil when absent.
 func ownRef(c domain.Change) *domain.GuardianRef {
+	if c.MethodologyVersion != "" {
+		return &domain.GuardianRef{Methodology: c.Methodology, Version: c.MethodologyVersion}
+	}
 	for _, g := range c.Guardians {
 		if g.Methodology == c.Methodology {
 			return &g
