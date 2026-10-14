@@ -140,6 +140,16 @@ missing and `rate_description` establishes it; once rated 2, `a.score >= 3` is m
 by `ChangeState` and `Progress`; the web shows each term with whether it holds and names the missing one
 (`factLines`, `missingFact`, `needDetail`).
 
+### 6. An action that missed its effects is not run again on its own
+
+The engine ran an action that had not reached its effects a second time before disabling it (`MaxFailures` 2). For the
+rater it meant a second model call nobody asked for, with the same brief, whenever a rating missed
+`description_reviewed` (before §4, every rating whose fingerprint was copied wrong). The default is now one attempt
+(`Engine.MaxFailures` 1, `maxFailures`): an action that ran and missed its effects is disabled for the run, and the
+planner takes another way (the rating falls to `rate_description_by_hand`), else the run waits or is stuck, and a
+person decides (`Unblock`: retry). A run started again because the change moved clears its disabled actions, as
+before: it works on the change as it is then. A scoped action gives up a subject after one failure the same way.
+
 ## Consequences
 
 - An observer or any agent declared persistent works as one colleague on its scope: it remembers what it said

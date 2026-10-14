@@ -301,7 +301,7 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
   and `SubjectRef` (the impact id or `<kind>:<key>`, also on the action record of the journal and on
   `journal.step.ended`). Its effects are met when its scoped effects hold on the subject (a subject gone, an impact
   withdrawn, has nothing left to do) and its effects of the change hold; the step of a process is done only once the
-  lifted effects hold. A subject failing `maxFailures` times is given up (the others go on); with no pending subject
+  lifted effects hold. A subject failing `maxFailures` times (1 since ADR 0112 §6) is given up (the others go on); with no pending subject
   left the action is disabled for the run. The step limit of a process counts the runs of a scoped action once.
 - The history (`journal.Fold`) keeps the runs of a scoped step per subject (a run for another subject does not
   replace it) and the staleness of such a run is about its subject only.

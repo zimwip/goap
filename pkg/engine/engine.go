@@ -55,8 +55,10 @@ type Engine struct {
 	// MaxParallel bounds the subjects a scoped action runs for at once (default 4; an action's `parallel` may ask
 	// for fewer, ADR 0109 §3.5).
 	MaxParallel int
-	// MaxFailures disables an action after that many executions without the
-	// promised effects (default 2).
+	// MaxFailures disables an action after that many executions without the promised effects (default 1, ADR 0112
+	// §6): an action that ran and missed its effects is not run again on its own; the planner takes another way (a
+	// fallback, another action), else the run waits or is stuck, and a person decides (Unblock: retry). A run
+	// started again when the change moves may try it again on the change as it is then.
 	MaxFailures int
 	// Types returns the type catalogue in force (ADR 0012 §2): the ancestors behind `x.types`. Unset, or nil, the
 	// methodology's own resolved types apply.

@@ -15,11 +15,11 @@ import (
 
 // Scoped actions (ADR 0109 §3.5): an action of a scope runs once per pending subject, one subject per step, the
 // planner seeing it lifted (its pre "some subject is pending", its effects the aggregates of its scoped effects). The
-// engine picks the subject, checks the effects on it, and gives a subject up after repeated failures.
+// engine picks the subject, checks the effects on it, and gives a subject up once it failed (Engine.MaxFailures).
 
 func (e *Engine) maxFailures() int {
 	if e.MaxFailures == 0 {
-		return 2
+		return 1
 	}
 	return e.MaxFailures
 }

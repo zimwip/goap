@@ -712,7 +712,7 @@ conditions (`Closed`; leftover events start the next instance, `handOver`). Its 
 exchanges with the model (`Process.Memory`). The observer of `methodology-improvement` is persistent per observed
 methodology until `drafted`; a rating is not (`sdlc` 0.7.3: every edit gets an independent rating run, what was rated is
 stamped by the engine, `stampRated`, and the continuity is the discussion of the topic, the `THREAD` the brief gives
-every run). The change tab shows the **current state** of the
+every run; an action that missed its effects is not run again on its own, `Engine.MaxFailures` 1, ADR 0112 §6). The change tab shows the **current state** of the
 change (`Engine.ChangeState`, RPC `GetChangeState`, `ChangeState.svelte`): each process once, its steps judged
 against the change as it is with what the live runs do laid over them, and what each step that cannot start needs
 (`StepProgress.Needs`: the condition, the value, what it means, the actions producing it and, in `Requires`, the
