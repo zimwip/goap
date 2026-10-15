@@ -62,6 +62,9 @@ const (
 	// GraphServiceGetStructuresProcedure is the fully-qualified name of the GraphService's
 	// GetStructures RPC.
 	GraphServiceGetStructuresProcedure = "/goap.graph.v1.GraphService/GetStructures"
+	// GraphServiceListItemKindsProcedure is the fully-qualified name of the GraphService's
+	// ListItemKinds RPC.
+	GraphServiceListItemKindsProcedure = "/goap.graph.v1.GraphService/ListItemKinds"
 	// GraphServiceIsAdminOnlyTypeProcedure is the fully-qualified name of the GraphService's
 	// IsAdminOnlyType RPC.
 	GraphServiceIsAdminOnlyTypeProcedure = "/goap.graph.v1.GraphService/IsAdminOnlyType"
@@ -331,6 +334,8 @@ type GraphServiceClient interface {
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
 	GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error)
+	// The kinds of item the graph accepts on a change, described (the "item types" of the web, ADR 0119).
+	ListItemKinds(context.Context, *connect.Request[v1.ListItemKindsRequest]) (*connect.Response[v1.ListItemKindsResponse], error)
 	// Whether a node type is written by platform administrators only (`adminOnly:` on the node type, ADR 0068).
 	IsAdminOnlyType(context.Context, *connect.Request[v1.IsAdminOnlyTypeRequest]) (*connect.Response[v1.IsAdminOnlyTypeResponse], error)
 	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
@@ -566,6 +571,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceGetStructuresProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("GetStructures")),
+			connect.WithClientOptions(opts...),
+		),
+		listItemKinds: connect.NewClient[v1.ListItemKindsRequest, v1.ListItemKindsResponse](
+			httpClient,
+			baseURL+GraphServiceListItemKindsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("ListItemKinds")),
 			connect.WithClientOptions(opts...),
 		),
 		isAdminOnlyType: connect.NewClient[v1.IsAdminOnlyTypeRequest, v1.IsAdminOnlyTypeResponse](
@@ -1106,6 +1117,7 @@ type graphServiceClient struct {
 	getNodeNeighbourhood   *connect.Client[v1.GetNodeNeighbourhoodRequest, v1.GetNodeNeighbourhoodResponse]
 	listNamespaces         *connect.Client[v1.ListNamespacesRequest, v1.ListNamespacesResponse]
 	getStructures          *connect.Client[v1.GetStructuresRequest, v1.GetStructuresResponse]
+	listItemKinds          *connect.Client[v1.ListItemKindsRequest, v1.ListItemKindsResponse]
 	isAdminOnlyType        *connect.Client[v1.IsAdminOnlyTypeRequest, v1.IsAdminOnlyTypeResponse]
 	listChangeEvents       *connect.Client[v1.ListChangeEventsRequest, v1.ListChangeEventsResponse]
 	listChangeLog          *connect.Client[v1.ListChangeLogRequest, v1.ListChangeLogResponse]
@@ -1248,6 +1260,11 @@ func (c *graphServiceClient) ListNamespaces(ctx context.Context, req *connect.Re
 // GetStructures calls goap.graph.v1.GraphService.GetStructures.
 func (c *graphServiceClient) GetStructures(ctx context.Context, req *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error) {
 	return c.getStructures.CallUnary(ctx, req)
+}
+
+// ListItemKinds calls goap.graph.v1.GraphService.ListItemKinds.
+func (c *graphServiceClient) ListItemKinds(ctx context.Context, req *connect.Request[v1.ListItemKindsRequest]) (*connect.Response[v1.ListItemKindsResponse], error) {
+	return c.listItemKinds.CallUnary(ctx, req)
 }
 
 // IsAdminOnlyType calls goap.graph.v1.GraphService.IsAdminOnlyType.
@@ -1703,6 +1720,8 @@ type GraphServiceHandler interface {
 	ListNamespaces(context.Context, *connect.Request[v1.ListNamespacesRequest]) (*connect.Response[v1.ListNamespacesResponse], error)
 	// The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
 	GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error)
+	// The kinds of item the graph accepts on a change, described (the "item types" of the web, ADR 0119).
+	ListItemKinds(context.Context, *connect.Request[v1.ListItemKindsRequest]) (*connect.Response[v1.ListItemKindsResponse], error)
 	// Whether a node type is written by platform administrators only (`adminOnly:` on the node type, ADR 0068).
 	IsAdminOnlyType(context.Context, *connect.Request[v1.IsAdminOnlyTypeRequest]) (*connect.Response[v1.IsAdminOnlyTypeResponse], error)
 	// The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
@@ -1934,6 +1953,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceGetStructuresProcedure,
 		svc.GetStructures,
 		connect.WithSchema(graphServiceMethods.ByName("GetStructures")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceListItemKindsHandler := connect.NewUnaryHandler(
+		GraphServiceListItemKindsProcedure,
+		svc.ListItemKinds,
+		connect.WithSchema(graphServiceMethods.ByName("ListItemKinds")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceIsAdminOnlyTypeHandler := connect.NewUnaryHandler(
@@ -2482,6 +2507,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceListNamespacesHandler.ServeHTTP(w, r)
 		case GraphServiceGetStructuresProcedure:
 			graphServiceGetStructuresHandler.ServeHTTP(w, r)
+		case GraphServiceListItemKindsProcedure:
+			graphServiceListItemKindsHandler.ServeHTTP(w, r)
 		case GraphServiceIsAdminOnlyTypeProcedure:
 			graphServiceIsAdminOnlyTypeHandler.ServeHTTP(w, r)
 		case GraphServiceListChangeEventsProcedure:
@@ -2707,6 +2734,10 @@ func (UnimplementedGraphServiceHandler) ListNamespaces(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) GetStructures(context.Context, *connect.Request[v1.GetStructuresRequest]) (*connect.Response[v1.GetStructuresResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetStructures is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) ListItemKinds(context.Context, *connect.Request[v1.ListItemKindsRequest]) (*connect.Response[v1.ListItemKindsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ListItemKinds is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) IsAdminOnlyType(context.Context, *connect.Request[v1.IsAdminOnlyTypeRequest]) (*connect.Response[v1.IsAdminOnlyTypeResponse], error) {

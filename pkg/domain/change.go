@@ -280,6 +280,8 @@ type registry struct {
 	m  map[ItemKind]func(ChangeItem) error
 	// perms are the permissions a kind of item asks of its writer (RequireItemPermission).
 	perms map[ItemKind]ItemPermission
+	// desc describes the kinds for the catalogue (DescribeItemKind).
+	desc map[ItemKind]ItemKindInfo
 }
 
 func (r *registry) get(k ItemKind) func(ChangeItem) error {

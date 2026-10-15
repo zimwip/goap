@@ -38,6 +38,9 @@ import NodeTypeTab from './editors/NodeTypeTab.svelte';
 import LinkTypeTab from './editors/LinkTypeTab.svelte';
 import LifecycleTab from './editors/LifecycleTab.svelte';
 import EnumTab from './editors/EnumTab.svelte';
+import ItemTypeTab from './editors/ItemTypeTab.svelte';
+import { itemTypeOf } from '../stores/itemTypes.svelte';
+import { itemTypeShownIn, originLabel } from '../itemTypes';
 import AdapterTab from './editors/AdapterTab.svelte';
 import InstanceTab from './editors/InstanceTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
@@ -299,6 +302,32 @@ for (const v of [
     properties: domainPartProps(v.id),
   });
 }
+
+// item types (ADR 0119): read-only, they change with the platform code
+registerView({
+  id: 'itemtype',
+  zone: 'editor',
+  title: 'Item type',
+  icon: 'tag',
+  component: ItemTypeTab,
+  key: (p) => p.kind ?? '',
+  tabTitle: (t) => t.params.kind || 'Item type',
+  tooltip: (t) => `Item type ${t.params.kind ?? ''}`,
+  properties: (t) => {
+    const x = itemTypeOf(t.params.kind ?? '');
+    if (!x) return undefined;
+    return {
+      title: x.kind ?? '',
+      subtitle: 'Item type',
+      rows: [
+        ['Origin', originLabel(x)],
+        ['Description', x.description ?? ''],
+        ['Shown in', itemTypeShownIn(x.kind ?? '')],
+        ['Permission', x.permission ?? ''],
+      ] as [string, string][],
+    };
+  },
+});
 
 const algorithmProps = (kind: 'algorithm' | 'instance') => (t: Tab) => {
   const d = peekDomainDraft(domainGroup(t));

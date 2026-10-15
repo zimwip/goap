@@ -251,6 +251,16 @@ export interface Decision {
 
 export type ItemKind = 'decision' | 'artifact' | 'flow';
 
+/** A kind of item a change may hold, shown as an "item type" (ADR 0119): `origin` is `core` for the kinds the graph
+ * knows itself, else the use case registering it; `permission` / `subjectField` what writing one asks of its writer. */
+export interface ItemKindInfo {
+  kind?: string;
+  origin?: string;
+  description?: string;
+  permission?: string;
+  subjectField?: string;
+}
+
 /** Status of a superseded item (rebase, merge): see its replacement's `supersedes`. */
 export const ITEM_SUPERSEDED = 'superseded';
 

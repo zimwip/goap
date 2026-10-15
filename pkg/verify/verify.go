@@ -49,7 +49,10 @@ const (
 
 // Register makes the verification item kind known to the graph (domain.RegisterItemKind). The services that write or
 // read such items call it at start, and so does a test that builds them; it may be called any number of times.
-func Register() { domain.RegisterItemKind(KindVerification, validate) }
+func Register() {
+	domain.RegisterItemKind(KindVerification, validate)
+	domain.DescribeItemKind(KindVerification, "verify", "A state of verification of a produced effect: produced, verified, accepted (with reserve) or rejected (ADR 0075).")
+}
 
 // ValidState reports whether s is a state of verification.
 func ValidState(s string) bool {

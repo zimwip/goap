@@ -5,6 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"connectrpc.com/connect"
+
+	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
@@ -79,5 +82,25 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 		if tc.denied != errors.Is(err, authz.ErrForbidden) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// The item kinds of the process are listed with their origin and the permission they ask (ADR 0119).
+func TestListItemKinds(t *testing.T) {
+	risk.Register()
+	h := &Handler{}
+	r, err := h.ListItemKinds(context.Background(), connect.NewRequest(&graphv1.ListItemKindsRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]*graphv1.ItemKindInfo{}
+	for _, k := range r.Msg.Kinds {
+		got[k.Kind] = k
+	}
+	if k := got["artifact"]; k == nil || k.Origin != "core" {
+		t.Errorf("artifact: %v", k)
+	}
+	if k := got["derogation"]; k == nil || k.Origin != risk.Origin || k.Permission != risk.PermissionSign || k.SubjectField != "signatory" {
+		t.Errorf("derogation: %v", k)
 	}
 }
