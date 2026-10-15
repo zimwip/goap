@@ -55,7 +55,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		out = append(out, domain.BoardIssue{Item: item, Culprit: culprit, Code: code, Message: msg, Severity: sev})
 	}
 	for _, it := range v.Items {
-		if it.Kind == domain.KindFlow || !v.InEffect(it.ID) {
+		if it.Type == domain.TypeFlow || !v.InEffect(it.ID) {
 			continue
 		}
 		if err := it.Validate(); err != nil {

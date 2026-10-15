@@ -33,14 +33,14 @@ func ExpireDerogations(ctx context.Context, g GraphPort, id domain.ChangeID, now
 	}
 	var facts []domain.ChangeItem
 	for _, it := range bb.Change.Items {
-		if it.Kind == verify.KindVerification && bb.Change.Active(it.ID) {
+		if it.Type == verify.TypeVerification && bb.Change.Active(it.ID) {
 			facts = append(facts, it)
 		}
 	}
 	subjects := verify.Subjects(facts)
 	var closed []string
 	for _, d := range expired {
-		if _, err := g.AddItems(ctx, id, []domain.ChangeItem{{ID: domain.ItemID(uuid.NewString()), Kind: risk.KindDerogation, Type: "derogation",
+		if _, err := g.AddItems(ctx, id, []domain.ChangeItem{{ID: domain.ItemID(uuid.NewString()), Type: risk.TypeDerogation, Target: "derogation",
 			Status: domain.ItemProposed, Data: d.ClosingData("expired"), ProducedBy: "derogation.expire"}}); err != nil {
 			return closed, fmt.Errorf("close derogation %s: %w", d.Key, err)
 		}
@@ -72,7 +72,7 @@ func ExpireDerogations(ctx context.Context, g GraphPort, id domain.ChangeID, now
 				data[verify.KeyModel] = s.Model
 			}
 			// the producer stays the original one: the independence of the next verification does not move
-			it := domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: verify.KindVerification, Type: verify.Produced, Data: data,
+			it := domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Type: verify.TypeVerification, Target: verify.Produced, Data: data,
 				ProducedBy: s.Producer, Execution: s.Execution}
 			if _, err := g.AddItems(ctx, id, []domain.ChangeItem{it}); err != nil {
 				return closed, fmt.Errorf("restart the verification of %s: %w", s.Impact, err)

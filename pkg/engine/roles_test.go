@@ -22,12 +22,12 @@ roles:
   - {name: release_manager}
   - {name: auditor}
 conditions:
-  - {name: built, expr: 'artifacts.exists(a, a.type == "build")'}
-  - {name: released, expr: 'artifacts.exists(a, a.type == "release")'}
+  - {name: built, expr: 'artifacts.exists(a, a.target == "build")'}
+  - {name: released, expr: 'artifacts.exists(a, a.target == "release")'}
 actions:
-  - {name: build, kind: builtin, builtin: test.emit, effects: {built: true}, params: {kind: artifact, type: build}}
-  - {name: release, kind: builtin, builtin: test.emit, roles: [release_manager], pre: {built: true}, effects: {released: true}, params: {kind: artifact, type: release}}
-  - {name: audit, kind: builtin, builtin: test.emit, effects: {built: true}, params: {kind: artifact, type: build}}
+  - {name: build, kind: builtin, builtin: test.emit, effects: {built: true}, params: {type: artifact, target: build}}
+  - {name: release, kind: builtin, builtin: test.emit, roles: [release_manager], pre: {built: true}, effects: {released: true}, params: {type: artifact, target: release}}
+  - {name: audit, kind: builtin, builtin: test.emit, effects: {built: true}, params: {type: artifact, target: build}}
 goals:
   - {name: ship, pre: {released: true}}
   - {name: audited, pre: {built: true}}
@@ -51,8 +51,8 @@ func rolesEngine(t *testing.T) *Engine {
 	// test.emit writes an artifact of the type its params name
 	builtins := e.Executors[methodology.KindBuiltin].(BuiltinExecutor)
 	builtins["test.emit"] = func(_ context.Context, ac ActionContext) (ActionResult, error) {
-		typ, _ := ac.Action.Params["type"].(string)
-		return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: typ}}}, nil
+		typ, _ := ac.Action.Params["target"].(string)
+		return ActionResult{Items: []ItemInput{{Type: "artifact", Target: typ}}}, nil
 	}
 	return e
 }
@@ -62,7 +62,7 @@ func TestRolesUndeclaredByTheMethodologyAreRefused(t *testing.T) {
 name: bad
 version: 1.0.0
 roles: [{name: developer}]
-conditions: [{name: done, expr: 'artifacts.exists(a, a.type == "x")'}]
+conditions: [{name: done, expr: 'artifacts.exists(a, a.target == "x")'}]
 actions: [{name: a, kind: human, roles: [tester], effects: {done: true}}]
 goals: [{name: g, pre: {done: true}}]
 agents: [{name: x, roles: [auditor], actions: [a]}]

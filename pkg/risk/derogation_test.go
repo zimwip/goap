@@ -17,7 +17,7 @@ func derogation(extra map[string]any) domain.ChangeItem {
 			d[k] = v
 		}
 	}
-	return domain.ChangeItem{Kind: KindDerogation, Data: d}
+	return domain.ChangeItem{Type: TypeDerogation, Data: d}
 }
 
 // No reason, rule, target, signatory or expiry, no derogation; an open one cannot expire in the past (ADR 0075 §2).
@@ -45,7 +45,7 @@ func TestDerogationValidation(t *testing.T) {
 	if err := derogation(map[string]any{"expires": time.Now().Add(48 * time.Hour).Format(time.DateOnly)}).Validate(); err != nil {
 		t.Errorf("a date: %v", err)
 	}
-	if p, ok := domain.ItemPermissionOf(KindDerogation); !ok || p.Permission != PermissionSign || p.SubjectField != "signatory" {
+	if p, ok := domain.ItemPermissionOf(TypeDerogation); !ok || p.Permission != PermissionSign || p.SubjectField != "signatory" {
 		t.Errorf("permission: %+v %v", p, ok)
 	}
 }
@@ -53,7 +53,7 @@ func TestDerogationValidation(t *testing.T) {
 func TestDerogationsFoldExpiredAndCovering(t *testing.T) {
 	now := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
 	item := func(id string, data map[string]any) domain.ChangeItem {
-		return domain.ChangeItem{ID: domain.ItemID(id), Kind: KindDerogation, Data: data, ProducedBy: "p"}
+		return domain.ChangeItem{ID: domain.ItemID(id), Type: TypeDerogation, Data: data, ProducedBy: "p"}
 	}
 	base := func(key, target, exp string) map[string]any {
 		return map[string]any{"key": key, "rule": "r", "target": target, "reason": "why", "signatory": "alice", "expires": exp}
@@ -86,7 +86,7 @@ func TestDerogationsFoldExpiredAndCovering(t *testing.T) {
 	}
 	// the closing version a platform writes is valid
 	Register()
-	closing := domain.ChangeItem{Kind: KindDerogation, Data: ex[0].ClosingData("expired")}
+	closing := domain.ChangeItem{Type: TypeDerogation, Data: ex[0].ClosingData("expired")}
 	if err := closing.Validate(); err != nil {
 		t.Fatalf("closing: %v", err)
 	}

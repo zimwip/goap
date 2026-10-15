@@ -24,7 +24,7 @@ cases:
             result: {text: "# Payments API v2\nThe PSP moves to signed webhooks."}
     expect:
       items:
-        - {kind: artifact, type: spec}
+        - {type: artifact, target: spec}
       trajectory: {match: in_order, tools: [document-repository/read]}
       maxToolCalls: 3
       noToolErrors: true
@@ -45,5 +45,5 @@ cases:
         result: {text: unrelated}
     expect:
       items:
-        - {kind: artifact, type: note, data: {text: release frozen until Monday}}
+        - {type: artifact, target: note, data: {text: release frozen until Monday}}
       trajectory: {match: exact, tools: []}

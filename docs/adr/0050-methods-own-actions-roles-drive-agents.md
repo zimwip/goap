@@ -61,7 +61,7 @@ per element, whose `vars.item` is `{key, items}`, for what belongs together (all
 
 The exit criteria of such a step are not the shared goal of the methods (they cannot be, they differ per element):
 the step is done when its streams are, unless it declares `done`. What each stream reaches is written by the method's
-`done`, with conditions that read `vars.item` (`artifacts.exists(a, a.type == "build" && a.data.component ==
+`done`, with conditions that read `vars.item` (`artifacts.exists(a, a.target == "build" && a.data.component ==
 vars.item.key)`), evaluated in the stream, whose variables hold its element.
 
 ### 5. Roles in a step

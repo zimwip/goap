@@ -93,7 +93,7 @@ ctx.log("done " + n.type);
 
 func checkResult(t *testing.T, res dsl.Result, h *recordingHost) {
 	t.Helper()
-	if len(res.Items) != 1 || res.Items[0]["type"] != "summary" || res.Items[0]["data"].(map[string]any)["text"] != "summary" {
+	if len(res.Items) != 1 || res.Items[0]["target"] != "summary" || res.Items[0]["data"].(map[string]any)["text"] != "summary" {
 		t.Fatalf("unexpected items %+v", res.Items)
 	}
 	if len(res.Logs) != 1 || res.Logs[0].Message != "done Requirement" {

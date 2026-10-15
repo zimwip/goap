@@ -194,7 +194,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 		line("THREAD %s %d messages (oldest first)", key, len(msgs))
 		for _, m := range msgs[max(0, len(msgs)-maxThread):] {
 			who := "person"
-			if m.Kind == assess.KindAssessment {
+			if m.Type == assess.TypeAssessment {
 				who = fmt.Sprintf("rater score=%d", m.Score)
 			}
 			line("- %s: %q", who, short(m.Text, 400))
@@ -204,7 +204,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 	// the latest artifacts
 	var arts []domain.ChangeItem
 	for _, it := range c.Items {
-		if it.Kind == domain.KindArtifact && c.Active(it.ID) && !slices.Contains(ArtifactTypesSkipped, it.Type) {
+		if it.Type == domain.TypeArtifact && c.Active(it.ID) && !slices.Contains(ArtifactTypesSkipped, it.Target) {
 			arts = append(arts, it)
 		}
 	}
@@ -212,7 +212,7 @@ func Of(bb domain.Blackboard, step *Step) string {
 		from := max(0, len(arts)-maxArtifacts)
 		line("ARTIFACTS %d (latest: id type summary fp)", len(arts))
 		for _, it := range arts[from:] {
-			line("- %s %s %s fp=%s", shortID(string(it.ID)), cmp.Or(it.Type, "-"), short(summary(it.Data), maxText),
+			line("- %s %s %s fp=%s", shortID(string(it.ID)), cmp.Or(it.Target, "-"), short(summary(it.Data), maxText),
 				assess.FingerprintOf(bb, assess.ItemPrefix+string(it.ID)))
 		}
 	}
@@ -230,10 +230,10 @@ func threadKeys(c domain.Change) []string {
 			continue
 		}
 		var k string
-		switch it.Kind {
-		case assess.KindComment:
+		switch it.Type {
+		case assess.TypeComment:
 			k, _ = it.Data["about"].(string)
-		case assess.KindAssessment:
+		case assess.TypeAssessment:
 			k, _ = it.Data["key"].(string)
 			if ratings[k]++; ratings[k] < 2 {
 				continue
@@ -280,9 +280,9 @@ func Trace(c domain.Change, ref string) (string, error) {
 		byID[it.ID] = it
 	}
 	describe := func(it domain.ChangeItem) string {
-		s := fmt.Sprintf("%s %s", shortID(string(it.ID)), it.Kind)
-		if it.Type != "" {
-			s += "/" + it.Type
+		s := fmt.Sprintf("%s %s", shortID(string(it.ID)), it.Type)
+		if it.Target != "" {
+			s += "/" + it.Target
 		}
 		if k, _ := it.Data["key"].(string); k != "" {
 			s += " " + k

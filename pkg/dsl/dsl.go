@@ -46,8 +46,8 @@ type Link struct {
 // on are the change impacts.
 type Item struct {
 	ID         string         `json:"id"`
-	Kind       string         `json:"kind"`
 	Type       string         `json:"type"`
+	Target     string         `json:"target"`
 	Status     string         `json:"status"`
 	ProducedBy string         `json:"producedBy"`
 	Data       map[string]any `json:"data"`
@@ -263,11 +263,11 @@ func (c *Ctx) WakeOn(names ...string) {
 
 // ---- blackboard (read) ----------------------------------------------------
 
-// Items returns the change items of a kind ("" = all).
-func (c *Ctx) Items(kind string) []Item {
+// Items returns the change items of a type ("" = all).
+func (c *Ctx) Items(typ string) []Item {
 	out := []Item{}
 	for _, it := range c.job.Items {
-		if kind == "" || it.Kind == kind {
+		if typ == "" || it.Type == typ {
 			out = append(out, it)
 		}
 	}
@@ -432,14 +432,14 @@ func (c *Ctx) WithdrawImpact(node string) {
 
 // AddArtifact records free data (report…).
 func (c *Ctx) AddArtifact(artifactType string, data map[string]any) string {
-	return c.emit(map[string]any{"kind": "artifact", "type": artifactType, "data": data})
+	return c.emit(map[string]any{"type": "artifact", "target": artifactType, "data": data})
 }
 
 // Signal emits a named notification other agents or a live parent may react
-// to. target addresses a process id ("" = broadcast, visible to triggers and
+// to. recipient addresses a process id ("" = broadcast, visible to triggers and
 // to readers of the change).
-func (c *Ctx) Signal(name string, data map[string]any, target string) string {
-	return c.emit(map[string]any{"kind": "signal", "type": name, "data": data, "target": target})
+func (c *Ctx) Signal(name string, data map[string]any, recipient string) string {
+	return c.emit(map[string]any{"type": "signal", "target": name, "data": data, "recipient": recipient})
 }
 
 // ---- platform calls ---------------------------------------------------------
@@ -507,10 +507,10 @@ func extractJSON(s string) string {
 func ItemsFromBlackboard(bb domain.Blackboard) []Item {
 	out := make([]Item, 0, len(bb.Change.Items))
 	for _, it := range bb.Change.Items {
-		if !bb.Change.Active(it.ID) || it.Kind == domain.KindFlow {
+		if !bb.Change.Active(it.ID) || it.Type == domain.TypeFlow {
 			continue
 		}
-		out = append(out, Item{ID: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(bb.Change.EffectiveStatus(it.ID)),
+		out = append(out, Item{ID: string(it.ID), Type: string(it.Type), Target: it.Target, Status: string(bb.Change.EffectiveStatus(it.ID)),
 			ProducedBy: it.ProducedBy, Data: it.Data})
 	}
 	return out

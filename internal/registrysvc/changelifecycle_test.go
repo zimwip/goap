@@ -37,7 +37,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 	}
 	m := methodology.Methodology{
 		Name: "delivery", Version: "1", Namespace: "alm", Lifecycle: "maturity",
-		Conditions: []methodology.Condition{{Name: "analysed", Expr: `artifacts.exists(a, a.type == "analysis")`}},
+		Conditions: []methodology.Condition{{Name: "analysed", Expr: `artifacts.exists(a, a.target == "analysis")`}},
 		Processes: []methodology.Process{{Name: "deliver", Steps: []methodology.Step{
 			{Name: "analyse", Pre: map[string]bool{"state:analysing": true}, Done: map[string]bool{"analysed": true}},
 			{Name: "build", Pre: map[string]bool{"state:implementing": true}},
@@ -86,7 +86,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 		t.Fatalf("the expected world state is not reached: %v", err)
 	}
 	// the decision prevails over the world state once actions are taken to fill the gap
-	if _, err := g.AddItems(ctx, ch.ID, []domain.ChangeItem{{Kind: risk.KindAction, Status: domain.ItemAccepted,
+	if _, err := g.AddItems(ctx, ch.ID, []domain.ChangeItem{{Type: risk.TypeAction, Status: domain.ItemAccepted,
 		Data: map[string]any{"key": "ACT-1", "title": "finish the analysis", "for": pt.ID}}}); err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-// Risks and actions of a change (ADR 0036 §1): items of kind risk / action, each a version of the record of its key;
+// Risks and actions of a change (ADR 0036 §1): items of type risk / action, each a version of the record of its key;
 // the register is the last version of each key among the items in effect (the server's domain.Risks / ActionItems).
 import type { ChangeItem } from './api';
 
@@ -40,7 +40,7 @@ function fold(items: ChangeItem[], kind: string): { key: string; data: Record<st
   const order: string[] = [];
   const last = new Map<string, { data: Record<string, unknown>; versions: number; by: string }>();
   for (const it of items) {
-    if (it.kind !== kind || !inEffect(it, superseded)) continue;
+    if (it.type !== kind || !inEffect(it, superseded)) continue;
     const key = String((it.data as Record<string, unknown> | undefined)?.key ?? '').trim();
     if (!key) continue;
     const prev = last.get(key);

@@ -19,7 +19,7 @@ conditions:
     expr: size(decisionPoints) > 0
   - name: fees_known
     description: An analysis of the fees is on the blackboard
-    expr: artifacts.exists(a, a.type == "fees")
+    expr: artifacts.exists(a, a.target == "fees")
 
 actions:
   - name: open_decision

@@ -206,7 +206,7 @@ func (s Service) Submit(ctx context.Context, change domain.ChangeID, key string,
 		b.Verdicts = append(b.Verdicts, domain.ImpactVerdict{Impact: domain.ChangeImpactID(e.Impact), Status: status, Comment: comment})
 	}
 	r.Status, r.SubmittedAt = Submitted, s.now()
-	it := domain.ChangeItem{Kind: KindReview, Flow: flowArg(r.Flow), Data: dataOf(r), ProducedBy: who.Subject}
+	it := domain.ChangeItem{Type: KindReview, Flow: flowArg(r.Flow), Data: dataOf(r), ProducedBy: who.Subject}
 	b.Item = &it
 	if _, err := s.Port.ImpactNodeReviewBatch(ctx, change, b); err != nil {
 		return Review{}, err
@@ -240,7 +240,7 @@ func (s Service) load(ctx context.Context, change domain.ChangeID, key string, w
 
 // write stores a version of the review as an item and returns what the change then folds it to.
 func (s Service) write(ctx context.Context, change domain.ChangeID, r Review, who Actor) (Review, error) {
-	it := domain.ChangeItem{Kind: KindReview, Flow: flowArg(r.Flow), Data: dataOf(r), ProducedBy: who.Subject}
+	it := domain.ChangeItem{Type: KindReview, Flow: flowArg(r.Flow), Data: dataOf(r), ProducedBy: who.Subject}
 	items, err := s.Port.AddItems(ctx, change, []domain.ChangeItem{it})
 	if err != nil {
 		return Review{}, err

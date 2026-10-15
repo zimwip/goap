@@ -21,7 +21,7 @@ writes designate change impacts declared within the same execution.
 |---|---|---|
 | `ctx.intent()` / `ctx.goal()` / `ctx.agent()` / `ctx.action()` | `Intent()`… | `string` |
 | `ctx.param(name)` / `ctx.var(name)` | `Param(name)` / `Var(name)` | JSON value |
-| `ctx.items(kind)` (`""` = all) | `Items(kind)` | `Item[]` |
+| `ctx.items(type)` (`""` = all) | `Items(type)` | `Item[]` |
 | `ctx.changeImpacts()` | `ChangeImpacts()` | `ChangeImpact[]` |
 | `ctx.options()` | `Options()` | `Option[]` |
 | `ctx.decisionPoints()` | `DecisionPoints()` | `DecisionPoint[]` |
@@ -33,7 +33,7 @@ The code of a **human action with a form** ([ADR 0115](adr/0115-forms-of-human-a
 it, with the checked values of the form in `ctx.var("form")` (by field name: a `node` field's key, a `link` field's
 `[{from, type, to}]`...); what it returns is the submission.
 
-`Item` (artifact, decision): `{id, kind, type, status, data, producedBy}` — `Node`: `{id, version, key, type, props}` —
+`Item` (artifact, decision): `{id, type, target, status, data, producedBy}` (`type` the item type, `target` what the item is about within it: the type of an artifact, the name of a signal) — `Node`: `{id, version, key, type, props}` —
 `Link`: `{id, type, from, to}` (`from`/`to`: `{id, version, key, type}`).
 
 `ChangeImpact`: `{id, key, type, intent, rationale, review, planned, drafted, pre, post, landed, links}` — the node the change reads, modifies

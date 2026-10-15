@@ -99,7 +99,7 @@ func TestBadPayload(t *testing.T) {
 func TestDerogationMapping(t *testing.T) {
 	b := &builder{nodes: map[string]map[string]any{}}
 	n := map[string]any{}
-	b.derogation(n, domain.ChangeItem{Kind: "derogation", Data: map[string]any{"key": "DRG-1", "rule": "tests pass", "target": "REQ-1",
+	b.derogation(n, domain.ChangeItem{Type: "derogation", Data: map[string]any{"key": "DRG-1", "rule": "tests pass", "target": "REQ-1",
 		"expires": "2030-01-01T00:00:00Z", "status": "open", "signatory": "alice"}})
 	if n["goap:rule"] != "tests pass" || n["goap:target"] != "REQ-1" || n["goap:expires"] != "2030-01-01T00:00:00Z" || n["label"] != "derogation DRG-1" {
 		t.Fatalf("derogation: %v", n)
@@ -114,7 +114,7 @@ func TestDerogationMapping(t *testing.T) {
 func TestReviewObjectMapping(t *testing.T) {
 	c := domain.Change{ID: "c1", Title: "t", CreatedAt: time.Unix(0, 0)}
 	sub := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	it := domain.ChangeItem{ID: "it1", Kind: review.KindReview, Status: domain.ItemProposed, ProducedBy: "alice", CreatedAt: sub, Data: map[string]any{
+	it := domain.ChangeItem{ID: "it1", Type: review.KindReview, Status: domain.ItemProposed, ProducedBy: "alice", CreatedAt: sub, Data: map[string]any{
 		"key": "REV-1", "status": review.Submitted, "comment": "all good", "by": "alice", "submittedAt": sub.Format(time.RFC3339Nano),
 		"entries": []any{map[string]any{"impact": "i1", "outcome": "accept"}}}}
 	fe, err := domain.FactEntry("c1", it)

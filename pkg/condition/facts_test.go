@@ -18,7 +18,7 @@ func TestFactsOfACondition(t *testing.T) {
 	}
 	c := domain.Change{ID: "C1", Title: "Note", Intent: "write a note"}
 	bb := domain.Blackboard{Change: c}
-	c.Items = []domain.ChangeItem{{ID: "i1", Kind: assess.KindAssessment, Status: domain.ItemAccepted,
+	c.Items = []domain.ChangeItem{{ID: "i1", Type: assess.TypeAssessment, Status: domain.ItemAccepted,
 		Data: map[string]any{"key": "description", "score": 2, "rated": assess.FingerprintOf(bb, assess.SubjectDescription)}}}
 	bb.Change = c
 

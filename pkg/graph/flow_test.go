@@ -10,7 +10,7 @@ import (
 
 // upd is a fact of the blackboard (an artifact) that stands for what a step produced.
 func upd(id string, _ domain.Node, title string, derived ...domain.ItemID) domain.ChangeItem {
-	return domain.ChangeItem{ID: domain.ItemID(id), Kind: domain.KindArtifact, Type: "result", DerivedFrom: derived, Data: map[string]any{"title": title}}
+	return domain.ChangeItem{ID: domain.ItemID(id), Type: domain.TypeArtifact, Target: "result", DerivedFrom: derived, Data: map[string]any{"title": title}}
 }
 
 func statusOf(t *testing.T, g *Graph, c domain.ChangeID, item string) domain.ItemStatus {
@@ -239,18 +239,18 @@ func testFlowGuidance(t *testing.T, repo Repo) {
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{upd("p1", f.req, "old")}); err != nil {
 		t.Fatal(err)
 	}
-	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, Items: []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "guidance", ProducedBy: "alice",
+	fl, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Seeds: []domain.ItemID{"p1"}, Items: []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "guidance", ProducedBy: "alice",
 		Data: map[string]any{"text": "keep PSP v1 compatibility"}}}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Items: []domain.ChangeItem{{Kind: domain.KindFlow}}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.OpenFlow(ctx, c.ID, OpenFlowRequest{Items: []domain.ChangeItem{{Type: domain.TypeFlow}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a flow item at the opening of a flow: %v", err)
 	}
 	has := func(flow string) bool {
 		bb, _ := g.BlackboardIn(ctx, c.ID, flow)
 		for _, it := range bb.Change.Items {
-			if it.Type == "guidance" && it.Data["text"] == "keep PSP v1 compatibility" && it.ProducedBy == "alice" {
+			if it.Target == "guidance" && it.Data["text"] == "keep PSP v1 compatibility" && it.ProducedBy == "alice" {
 				return true
 			}
 		}

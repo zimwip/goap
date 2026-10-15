@@ -23,7 +23,7 @@ actions:
   - {name: rate, kind: human, description: Rate the description, effects: {description_rated: true}}
   - {name: write, kind: human, description: Write the note, pre: {description_accepted: true}, effects: {noted: true}}
 conditions:
-  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note")'}
 processes:
   - name: delivery
     steps:
@@ -35,7 +35,7 @@ processes:
         on:
           - {event: change.created}
           - {event: change.edited, filter: '"intent" in event.fields || "title" in event.fields'}
-          - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "comment" && i.data.about == "description")'}
+          - {event: change.item_added, filter: 'event.items.exists(i, i.type == "comment" && i.data.about == "description")'}
 `
 
 func TestReactiveStepReviewsTheDescription(t *testing.T) {
@@ -80,7 +80,7 @@ func TestReactiveStepReviewsTheDescription(t *testing.T) {
 		bb, _ := e.Graph.Blackboard(ctx, ch.ID)
 		text, _ := assess.Text(bb, assess.SubjectDescription)
 		p := rater()
-		if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: string(assess.KindAssessment), Data: map[string]any{"key": "description",
+		if _, err := e.Submit(ctx, p.ID, []ItemInput{{Type: string(assess.TypeAssessment), Data: map[string]any{"key": "description",
 			"score": score, "verdict": "unclear", "rated": text, "reply": reply}}}); err != nil {
 			t.Fatal(err)
 		}
@@ -105,7 +105,7 @@ func TestReactiveStepReviewsTheDescription(t *testing.T) {
 	run := rater().ID
 
 	// the person answers in the thread: the same run is woken and rates again
-	items, err := e.Graph.AddItems(ctx, ch.ID, []domain.ChangeItem{{Kind: assess.KindComment, Status: domain.ItemProposed, ProducedBy: "alice",
+	items, err := e.Graph.AddItems(ctx, ch.ID, []domain.ChangeItem{{Type: assess.TypeComment, Status: domain.ItemProposed, ProducedBy: "alice",
 		Data: map[string]any{"about": "description", "text": "it is the release note"}}})
 	if err != nil {
 		t.Fatal(err)
@@ -141,7 +141,7 @@ name: nudging
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: nudged, expr: 'artifacts.exists(a, a.type == "nudge")'}
+  - {name: nudged, expr: 'artifacts.exists(a, a.target == "nudge")'}
 actions:
   - {name: nudge, kind: human, effects: {nudged: true}, on: [{event: change.edited}]}
 processes:
@@ -212,8 +212,8 @@ namespace: alm
 events:
   - {name: spec.ready, description: The spec is written}
 conditions:
-  - {name: written, expr: 'artifacts.exists(a, a.type == "spec")'}
-  - {name: notified, expr: 'artifacts.exists(a, a.type == "notice")'}
+  - {name: written, expr: 'artifacts.exists(a, a.target == "spec")'}
+  - {name: notified, expr: 'artifacts.exists(a, a.target == "notice")'}
 actions:
   - {name: write, kind: human, effects: {written: true}, emits: [spec.ready]}
   - {name: notify, kind: human, effects: {notified: true}, on: [{event: spec.ready}]}
@@ -242,7 +242,7 @@ func TestDeclaredEventsAreEmittedAndFollowed(t *testing.T) {
 	if p, _ = e.Run(ctx, p.ID); p.Status != StatusWaiting {
 		t.Fatalf("the spec step waits: %s %s", p.Status, p.Error)
 	}
-	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "spec", Data: map[string]any{"text": "the spec"}}}); err != nil {
+	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Type: "artifact", Target: "spec", Data: map[string]any{"text": "the spec"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ = e.Run(ctx, p.ID); p.Status != StatusCompleted {
@@ -254,11 +254,11 @@ func TestDeclaredEventsAreEmittedAndFollowed(t *testing.T) {
 	}
 	var signals []domain.ChangeItem
 	for _, it := range bb.Change.Items {
-		if it.Kind == domain.KindSignal {
+		if it.Type == domain.TypeSignal {
 			signals = append(signals, it)
 		}
 	}
-	if len(signals) != 1 || signals[0].Type != "spec.ready" || signals[0].Data["step"] != "delivery/spec" {
+	if len(signals) != 1 || signals[0].Target != "spec.ready" || signals[0].Data["step"] != "delivery/spec" {
 		t.Fatalf("the action raises its event: %+v", signals)
 	}
 
@@ -275,7 +275,7 @@ func TestDeclaredEventsAreEmittedAndFollowed(t *testing.T) {
 	}
 
 	// a signal of a standard name raises nothing more, an undeclared event is refused at compile
-	if own := DeclaredEvents(TriggerEvent{Type: "change.item_added", Items: []domain.ChangeItem{{Kind: domain.KindSignal, Type: "change.applied"}}}); len(own) != 0 {
+	if own := DeclaredEvents(TriggerEvent{Type: "change.item_added", Items: []domain.ChangeItem{{Type: domain.TypeSignal, Target: "change.applied"}}}); len(own) != 0 {
 		t.Fatalf("a standard name is not a declared event: %+v", own)
 	}
 	for name, src := range map[string]string{
@@ -315,7 +315,7 @@ processes:
 func TestDescriptionRatingFallsBackToAPerson(t *testing.T) {
 	ctx := context.Background()
 	for name, answer := range map[string]string{
-		"model":  `{"items":[{"kind":"assessment","data":{"key":"description","score":4,"verdict":"clear","rated":"FP"}}]}`,
+		"model":  `{"items":[{"type":"assessment","data":{"key":"description","score":4,"verdict":"clear","rated":"FP"}}]}`,
 		"person": `{"items":[]}`, // the model rates nothing: its action fails, is disabled, the person rates
 	} {
 		t.Run(name, func(t *testing.T) {

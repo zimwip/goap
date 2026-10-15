@@ -12,7 +12,7 @@ func TestDecisionPointReplay(t *testing.T) {
 	t0 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	c := Change{}
 	add := func(id string, e DecisionEvent) {
-		c.Items = append(c.Items, ChangeItem{ID: ItemID(id), Kind: KindDecisionPoint, DecisionEvent: &e, CreatedAt: t0.Add(time.Duration(len(c.Items)) * time.Minute)})
+		c.Items = append(c.Items, ChangeItem{ID: ItemID(id), Type: TypeDecisionPoint, DecisionEvent: &e, CreatedAt: t0.Add(time.Duration(len(c.Items)) * time.Minute)})
 	}
 	point := func() DecisionPoint {
 		t.Helper()
@@ -87,7 +87,7 @@ func TestDecisionPointReplayAsksThePolicy(t *testing.T) {
 	t0 := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 	c := Change{}
 	add := func(id string, e DecisionEvent) {
-		c.Items = append(c.Items, ChangeItem{ID: ItemID(id), Kind: KindDecisionPoint, DecisionEvent: &e, CreatedAt: t0.Add(time.Duration(len(c.Items)) * time.Minute)})
+		c.Items = append(c.Items, ChangeItem{ID: ItemID(id), Type: TypeDecisionPoint, DecisionEvent: &e, CreatedAt: t0.Add(time.Duration(len(c.Items)) * time.Minute)})
 	}
 	point := func(id string) DecisionPoint {
 		t.Helper()

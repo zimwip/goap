@@ -39,7 +39,7 @@ func TestItemPolicy(t *testing.T) {
 		return domain.Change{Data: map[string]any{domain.DataCriticality: string(l)}}
 	}
 	produced := func(oracle string) domain.ChangeItem {
-		return domain.ChangeItem{Kind: verify.KindVerification, Data: map[string]any{verify.KeyState: verify.Produced, verify.KeyAction: "a", verify.KeyOracle: oracle}}
+		return domain.ChangeItem{Type: verify.TypeVerification, Data: map[string]any{verify.KeyState: verify.Produced, verify.KeyAction: "a", verify.KeyOracle: oracle}}
 	}
 	if err := check(ctx, change(C1), produced("model")); err != nil {
 		t.Errorf("C1 accepts a model: %v", err)
@@ -50,7 +50,7 @@ func TestItemPolicy(t *testing.T) {
 	if err := check(ctx, change(C3), produced("")); err != nil {
 		t.Errorf("an effect with no declared oracle is not constrained: %v", err)
 	}
-	verified := domain.ChangeItem{Kind: verify.KindVerification, Data: map[string]any{verify.KeyState: verify.Verified, verify.KeyOracle: "model"}}
+	verified := domain.ChangeItem{Type: verify.TypeVerification, Data: map[string]any{verify.KeyState: verify.Verified, verify.KeyOracle: "model"}}
 	if err := check(ctx, change(C3), verified); err != nil {
 		t.Errorf("only the produced entry names the oracle: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestItemPolicy(t *testing.T) {
 		if status != "" {
 			data["status"] = status
 		}
-		return domain.ChangeItem{Kind: risk.KindDerogation, Data: data}
+		return domain.ChangeItem{Type: risk.TypeDerogation, Data: data}
 	}
 	if err := check(ctx, change(C3), drg(24*time.Hour, "")); err != nil {
 		t.Errorf("a day at C3: %v", err)

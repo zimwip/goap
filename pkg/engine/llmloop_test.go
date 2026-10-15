@@ -21,7 +21,7 @@ func docsAsLLM(m *methodology.Methodology) {
 	}
 }
 
-const docItems = `{"items":[{"kind":"artifact","type":"doc","data":{"seen":"ok"}}]}`
+const docItems = `{"items":[{"type":"artifact","target":"doc","data":{"seen":"ok"}}]}`
 
 func TestLLMActionRepairsAnUnreadableAnswer(t *testing.T) {
 	hub := &fakeHub{bound: map[string][]string{"acme": {"document-repository"}}}
@@ -35,7 +35,7 @@ func TestLLMActionRepairsAnUnreadableAnswer(t *testing.T) {
 		case 1:
 			return llm.Response{Text: "Sure, here is what I found."}, nil
 		case 2:
-			return llm.Response{Text: `{"items":[{"kind":"artifact","type":"doc","da`, StopReason: llm.StopMaxTokens}, nil
+			return llm.Response{Text: `{"items":[{"type":"artifact","target":"doc","da`, StopReason: llm.StopMaxTokens}, nil
 		}
 		return llm.Response{Text: docItems}, nil
 	})

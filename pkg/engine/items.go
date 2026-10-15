@@ -14,10 +14,10 @@ import (
 // existing items by "@<itemId>".
 type ItemInput struct {
 	Ref string `json:"ref,omitempty"`
-	// Kind is artifact or decision; "changeImpact" carries an operation on a change impact (ChangeImpact:
+	// Type is artifact or decision; "changeImpact" carries an operation on a change impact (ChangeImpact:
 	// declare, write or review, ADR 0024), applied in order with the ones of the batch.
-	Kind        string         `json:"kind"`
-	Type        string         `json:"type,omitempty"`
+	Type        string         `json:"type"`
+	Target      string         `json:"target,omitempty"`
 	Decision    *DecisionInput `json:"decision,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
 	DerivedFrom []string       `json:"derivedFrom,omitempty"`
@@ -83,7 +83,7 @@ func (r *resolver) resolve(in []ItemInput, producedBy string) ([]domain.ChangeIt
 	}
 	out := make([]domain.ChangeItem, 0, len(in))
 	for i, it := range in {
-		item := domain.ChangeItem{ID: r.local[fmt.Sprintf("%d", i)], Kind: domain.ItemKind(it.Kind), Type: it.Type, Data: it.Data, ProducedBy: producedBy}
+		item := domain.ChangeItem{ID: r.local[fmt.Sprintf("%d", i)], Type: domain.ItemType(it.Type), Target: it.Target, Data: it.Data, ProducedBy: producedBy}
 		for _, d := range it.DerivedFrom {
 			id, err := r.item(d)
 			if err != nil {

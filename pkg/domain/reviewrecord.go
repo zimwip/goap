@@ -7,11 +7,11 @@ import (
 	"time"
 )
 
-// KindReview is the kind of the items that hold a review of a change (ADR 0080, built in since ADR 0105): every verdict
+// TypeReview is the kind of the items that hold a review of a change (ADR 0080, built in since ADR 0105): every verdict
 // on a change impact is made by a submitted review, so the graph writes the record of one with the verdicts it decides.
 // Each item is a version of the record of its data.key; pkg/review is the use case that builds one up before it is
 // submitted.
-const KindReview ItemKind = "review"
+const TypeReview ItemType = "review"
 
 // Statuses of a review record: open while the reviewer builds it, then submitted or discarded, which are final.
 const (

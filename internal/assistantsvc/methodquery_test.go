@@ -22,11 +22,11 @@ roles:
   - {name: developer, description: Writes code}
   - {name: release_manager}
 conditions:
-  - {name: built, description: The build exists, expr: 'artifacts.exists(a, a.type == "build")'}
-  - {name: released, expr: 'artifacts.exists(a, a.type == "release")'}
+  - {name: built, description: The build exists, expr: 'artifacts.exists(a, a.target == "build")'}
+  - {name: released, expr: 'artifacts.exists(a, a.target == "release")'}
 actions:
-  - {name: build, description: Compile the shop, kind: builtin, builtin: test.emit, effects: {built: true}, params: {kind: artifact, type: build}, roles: [developer]}
-  - {name: release, description: Publish the shop, kind: builtin, builtin: test.emit, pre: {built: true}, effects: {released: true}, params: {kind: artifact, type: release}}
+  - {name: build, description: Compile the shop, kind: builtin, builtin: test.emit, effects: {built: true}, params: {type: artifact, target: build}, roles: [developer]}
+  - {name: release, description: Publish the shop, kind: builtin, builtin: test.emit, pre: {built: true}, effects: {released: true}, params: {type: artifact, target: release}}
 goals:
   - {name: built, description: The build exists, examples: ["compile the shop"], pre: {built: true}}
   - {name: ship, description: Released, pre: {released: true}}

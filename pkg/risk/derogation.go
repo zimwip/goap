@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// KindDerogation is a waiver with a rule, a signatory and an expiry (ADR 0075 §2): the decision to accept a gap (a
+// TypeDerogation is a waiver with a rule, a signatory and an expiry (ADR 0075 §2): the decision to accept a gap (a
 // waived postcondition, gate criterion or policy rule) for a bounded time, by a person who answers for it. It names
 // what it waives, covers a target, is signed and expires. It is an item of the change versioned by its key like a risk: closing it adds a version.
 //
@@ -17,7 +17,7 @@ import (
 // (the principal who answers for it, checked by the ABAC permission derogation:sign when the item is written), expires
 // (RFC 3339, or a date: the end of that day, UTC) and status (open, the default, or closed). Every version restates
 // rule, target, reason, signatory and expires.
-const KindDerogation domain.ItemKind = "derogation"
+const TypeDerogation domain.ItemType = "derogation"
 
 // PermissionSign is the permission asked of whoever writes a derogation (ABAC resource "derogation", action "sign").
 const PermissionSign = "derogation:sign"
@@ -92,7 +92,7 @@ func validateDerogation(it domain.ChangeItem) error {
 
 // Derogations returns the derogations of the change: the current version of each key, in the order they were signed.
 func Derogations(c domain.Change) []Derogation {
-	order, last, versions := registerOf(&c, KindDerogation)
+	order, last, versions := registerOf(&c, TypeDerogation)
 	out := make([]Derogation, 0, len(order))
 	for _, key := range order {
 		it := last[key]

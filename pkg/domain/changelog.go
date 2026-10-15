@@ -113,8 +113,8 @@ func (f LogFilter) Match(e LogEntry) bool {
 // FactEntry is the log entry of a fact. A flow event belongs to the flow it opens, adopts or discards.
 func FactEntry(change ChangeID, it ChangeItem) (LogEntry, error) {
 	raw, err := json.Marshal(it)
-	e := LogEntry{ID: string(it.ID), Change: change, Type: LogFact + "." + string(it.Kind), Flow: it.Flow, Execution: it.Execution,
-		Subject: it.Type, By: it.ProducedBy, At: it.CreatedAt, Payload: raw}
+	e := LogEntry{ID: string(it.ID), Change: change, Type: LogFact + "." + string(it.Type), Flow: it.Flow, Execution: it.Execution,
+		Subject: it.Target, By: it.ProducedBy, At: it.CreatedAt, Payload: raw}
 	if f := it.FlowEvent; f != nil {
 		e.Flow, e.Subject = f.Flow, f.Op
 		if f.By != "" {

@@ -30,7 +30,7 @@ type OpenFlowRequest struct {
 
 // openFlowEvent appends a flow event to the log of a change.
 func (g *Graph) flowEvent(ctx context.Context, tx Tx, id domain.ChangeID, e domain.FlowEvent) error {
-	return putItem(ctx, tx, id, domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindFlow, Type: "flow." + e.Op,
+	return putItem(ctx, tx, id, domain.ChangeItem{ID: domain.ItemID(g.newID()), Type: domain.TypeFlow, Target: "flow." + e.Op,
 		Status: domain.ItemAccepted, ProducedBy: "graph.flow", FlowEvent: &e, CreatedAt: g.now()})
 }
 
@@ -78,8 +78,8 @@ func (g *Graph) OpenFlow(ctx context.Context, id domain.ChangeID, in OpenFlowReq
 			return err
 		}
 		for _, it := range in.Items {
-			if it.Kind == domain.KindFlow || it.Kind == domain.KindTransition || it.Kind == domain.KindDecisionPoint {
-				return fmt.Errorf("a %s item is recorded by its own operation, not at the opening of a flow: %w", it.Kind, ErrInvalid)
+			if it.Type == domain.TypeFlow || it.Type == domain.TypeTransition || it.Type == domain.TypeDecisionPoint {
+				return fmt.Errorf("a %s item is recorded by its own operation, not at the opening of a flow: %w", it.Type, ErrInvalid)
 			}
 			it.ID, it.Flow, it.CreatedAt = domain.ItemID(g.newID()), flow, g.now()
 			if it.Status == "" {

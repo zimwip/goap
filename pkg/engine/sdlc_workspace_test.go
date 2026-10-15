@@ -94,14 +94,14 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 		p := req.Messages[0].Content
 		switch {
 		case strings.Contains(p, "Design the evolution"):
-			return llm.Response{Text: `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0",
+			return llm.Response{Text: `{"items":[{"type":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
+			{"type":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0",
 			  "repository":"file://` + filepath.ToSlash(origin) + `","buildCommand":"test -f feature.txt"},"links":[{"type":"implements","to":"FCT-1"}]}},
-			{"kind":"artifact","type":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`}, nil
+			{"type":"artifact","target":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`}, nil
 		case strings.Contains(p, "You implement ONE component"):
 			last := req.Messages[len(req.Messages)-1]
 			if len(last.ToolResults) > 0 {
-				return llm.Response{Text: `{"items":[{"kind":"artifact","type":"code_change","data":{"component":"CMP-10","summary":"engine","files":["feature.txt"],"tests":"test -f"}}]}`}, nil
+				return llm.Response{Text: `{"items":[{"type":"artifact","target":"code_change","data":{"component":"CMP-10","summary":"engine","files":["feature.txt"],"tests":"test -f"}}]}`}, nil
 			}
 			mu.Lock()
 			attempts++
@@ -168,7 +168,7 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 	c, _ := g.Change(ctx, p.ChangeID)
 	reports, builds, artifacts := 0, 0, 0
 	for _, it := range c.Items {
-		switch it.Type {
+		switch it.Target {
 		case "build_report":
 			reports++
 			if ok := it.Data["ok"] == true; ok != (reports == 2) {

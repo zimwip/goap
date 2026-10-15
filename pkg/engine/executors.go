@@ -86,21 +86,21 @@ type LLMExecutor struct {
 
 const llmSystem = `You are an agent of an enterprise methodology platform. You work on a change of a versioned domain graph.
 Answer ONLY with a JSON object {"items":[...]} where each item is one of:
-{"kind":"artifact","type":"...","data":{...}}
-{"kind":"decision","decision":{"item":"@<item id>","accept":true,"comment":"why"}}
-An item of another kind the instructions name (assessment, comment, risk, action...) keeps that kind: {"kind":"<that kind>","data":{...}}, never an artifact of that type.
-The nodes the change acts on are change impacts: items of kind "changeImpact", applied in order:
-{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
-{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
-{"kind":"changeImpact","changeImpact":{"op":"write","node":"<node key or #n1>","props":{...},"links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
-{"kind":"changeImpact","changeImpact":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
-{"kind":"changeImpact","changeImpact":{"op":"transition","node":"<node key>","state":"<lifecycle state>"}}
-{"kind":"changeImpact","changeImpact":{"op":"cancel","node":"<node key>"}}
-Decision points of the change (a question to settle, usually which option) are items of kind "decisionPoint":
-{"kind":"decisionPoint","decisionPoint":{"op":"open","ref":"#d1","question":"...","options":["<option name>"],"criteria":["..."]}}
-{"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id or #d1>","outcome":"decided","option":"<option name>","confidence":0.8,"justification":"why"}}
-{"kind":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id>","outcome":"undecidable","justification":"why it cannot be decided","questions":["what must be known first"]}}
-{"kind":"decisionPoint","decisionPoint":{"op":"answer","questionId":"<question id>","answer":"..."}}
+{"type":"artifact","target":"...","data":{...}}
+{"type":"decision","decision":{"item":"@<item id>","accept":true,"comment":"why"}}
+An item of another type the instructions name (assessment, comment, risk, action...) keeps that type: {"type":"<that type>","data":{...}}, never an artifact of that target.
+The nodes the change acts on are change impacts: items of type "changeImpact", applied in order:
+{"type":"changeImpact","changeImpact":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
+{"type":"changeImpact","changeImpact":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
+{"type":"changeImpact","changeImpact":{"op":"write","node":"<node key or #n1>","props":{...},"links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
+{"type":"changeImpact","changeImpact":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
+{"type":"changeImpact","changeImpact":{"op":"transition","node":"<node key>","state":"<lifecycle state>"}}
+{"type":"changeImpact","changeImpact":{"op":"cancel","node":"<node key>"}}
+Decision points of the change (a question to settle, usually which option) are items of type "decisionPoint":
+{"type":"decisionPoint","decisionPoint":{"op":"open","ref":"#d1","question":"...","options":["<option name>"],"criteria":["..."]}}
+{"type":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id or #d1>","outcome":"decided","option":"<option name>","confidence":0.8,"justification":"why"}}
+{"type":"decisionPoint","decisionPoint":{"op":"rule","point":"<point id>","outcome":"undecidable","justification":"why it cannot be decided","questions":["what must be known first"]}}
+{"type":"decisionPoint","decisionPoint":{"op":"answer","questionId":"<question id>","answer":"..."}}
 A write edits the draft of the node: the first write checks it out, the next ones edit it (no version exists until the change lands). A write never reviews: a review is an operation of its own, and a write after an accepted review sends the review back to proposed. A lifecycle state is a transition of the draft. A node is written in any state of its lifecycle; a change lands only when its nodes rest in landable states (a state flagged notLandable blocks it): move a node to a landable state with a transition once its review is accepted. A node is never deleted: removing a child is a write of its parent without the link.
 Reference nodes by their key. Reference items and change impacts created in the same answer by "#<ref>".`
 
@@ -186,7 +186,7 @@ func RenderPrompt(ctx context.Context, ac ActionContext) (string, error) {
 	}
 	d.Baseline.Nodes = filterNamespace(nodes, ac.Blackboard.Change.Namespace)
 	for _, it := range ac.Blackboard.Change.Items {
-		if it.Kind == domain.KindArtifact {
+		if it.Type == domain.TypeArtifact {
 			d.Artifacts = append(d.Artifacts, ItemView{ChangeItem: it})
 		}
 	}
@@ -216,7 +216,7 @@ const GuidanceType = "guidance"
 func guidanceSection(bb domain.Blackboard) string {
 	var lines []string
 	for _, it := range bb.Change.Items {
-		if it.Kind != domain.KindArtifact || it.Type != GuidanceType || !bb.Change.InEffect(it.ID) {
+		if it.Type != domain.TypeArtifact || it.Target != GuidanceType || !bb.Change.InEffect(it.ID) {
 			continue
 		}
 		if text, _ := it.Data["text"].(string); strings.TrimSpace(text) != "" {
@@ -390,7 +390,7 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 // fingerprint of an earlier text, and its new rating would never count.
 func stampRated(bb domain.Blackboard, items []ItemInput) {
 	for i := range items {
-		if items[i].Kind != string(assess.KindAssessment) || items[i].Data == nil {
+		if items[i].Type != string(assess.TypeAssessment) || items[i].Data == nil {
 			continue
 		}
 		key, _ := items[i].Data["key"].(string)
@@ -400,15 +400,15 @@ func stampRated(bb domain.Blackboard, items []ItemInput) {
 	}
 }
 
-// kindsOfUseCases are the item kinds a model is told to write that it may still wrap as an artifact of that type.
-var kindsOfUseCases = map[string]bool{string(assess.KindAssessment): true, string(assess.KindComment): true}
+// typesOfUseCases are the item types a model is told to write that it may still wrap as an artifact of that target.
+var typesOfUseCases = map[string]bool{string(assess.TypeAssessment): true, string(assess.TypeComment): true}
 
-// unwrapKinds gives back their kind to the items a model wrote as an artifact whose type is that kind
-// ({"kind":"artifact","type":"assessment"}): the conditions, the brief and the web read the kind (ADR 0110).
-func unwrapKinds(items []ItemInput) {
+// unwrapTypes gives back their type to the items a model wrote as an artifact whose target is that type
+// ({"type":"artifact","target":"assessment"}): the conditions, the brief and the web read the type (ADR 0110).
+func unwrapTypes(items []ItemInput) {
 	for i := range items {
-		if items[i].Kind == string(domain.KindArtifact) && kindsOfUseCases[items[i].Type] {
-			items[i].Kind, items[i].Type = items[i].Type, ""
+		if items[i].Type == string(domain.TypeArtifact) && typesOfUseCases[items[i].Target] {
+			items[i].Type, items[i].Target = items[i].Target, ""
 		}
 	}
 }
@@ -482,7 +482,7 @@ func (e LLMExecutor) runLoop(ctx context.Context, ac ActionContext, prompt, syst
 					ac.Host.e.event(ctx, "llm.answer", map[string]any{"goap.llm.tool_rounds": round, "goap.llm.repairs": repairs,
 						"goap.tool_calls": calls, "goap.items": len(out.Items)})
 				}
-				unwrapKinds(out.Items)
+				unwrapTypes(out.Items)
 				stampRated(ac.Blackboard, out.Items)
 				return ActionResult{Items: out.Items, Output: fmt.Sprintf("%s/%s: %d items, %d tool calls", resp.Provider, resp.Model, len(out.Items), calls),
 					Turn: &Turn{Prompt: prompt, Answer: resp.Text}}, nil
@@ -663,7 +663,7 @@ func (ToolExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResult
 		return ActionResult{}, err
 	}
 	return ActionResult{
-		Items:  []ItemInput{{Kind: string(domain.KindArtifact), Type: artifact, Data: map[string]any{"tool": ac.Action.Tool, "result": res}}},
+		Items:  []ItemInput{{Type: string(domain.TypeArtifact), Target: artifact, Data: map[string]any{"tool": ac.Action.Tool, "result": res}}},
 		Output: "called " + ac.Action.Tool,
 	}, nil
 }
@@ -821,7 +821,7 @@ func Propagate(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	if layer != "" {
 		data["layer"] = layer
 	}
-	items := []ItemInput{{Kind: string(domain.KindArtifact), Type: "propagation", Data: data}}
+	items := []ItemInput{{Type: string(domain.TypeArtifact), Target: "propagation", Data: data}}
 	return ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d propagated impacts", len(ops))}, nil
 }
 

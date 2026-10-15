@@ -22,9 +22,9 @@ imports: [risks]
 on:
   - {event: process.attached}
   - {event: step.completed}
-  - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "risk" || i.kind == "action")'}
+  - {event: change.item_added, filter: 'event.items.exists(i, i.type == "risk" || i.type == "action")'}
 conditions:
-  - {name: risks_identified, expr: 'artifacts.exists(a, a.type == "risk_review")'}
+  - {name: risks_identified, expr: 'artifacts.exists(a, a.target == "risk_review")'}
 actions:
   - {name: identify, kind: human, description: Identify the risks, effects: {risks_identified: true}}
   - {name: mitigate, kind: human, description: Define the mitigation actions, pre: {risks_identified: true}, effects: {risks_under_control: true}}
@@ -79,14 +79,14 @@ func TestTransverseProcessRunsAlongsideTheChange(t *testing.T) {
 	}
 	risk := cs[0]
 	// the risks are identified: a high one needs an action
-	if _, err := e.Submit(ctx, risk.ID, []ItemInput{{Kind: "artifact", Type: "risk_review"},
-		{Kind: "risk", Data: map[string]any{"key": "RSK-1", "title": "the note is wrong", "probability": 4.0, "impact": 4.0}}}); err != nil {
+	if _, err := e.Submit(ctx, risk.ID, []ItemInput{{Type: "artifact", Target: "risk_review"},
+		{Type: "risk", Data: map[string]any{"key": "RSK-1", "title": "the note is wrong", "probability": 4.0, "impact": 4.0}}}); err != nil {
 		t.Fatal(err)
 	}
 	if risk, _ = e.Run(ctx, risk.ID); risk.Pending == nil || risk.Pending.Action != "risk_watch/mitigate" {
 		t.Fatalf("mitigation expected: %+v", risk)
 	}
-	if _, err := e.Submit(ctx, risk.ID, []ItemInput{{Kind: "action", Data: map[string]any{"key": "ACT-1", "title": "review the note", "for": "RSK-1"}}}); err != nil {
+	if _, err := e.Submit(ctx, risk.ID, []ItemInput{{Type: "action", Data: map[string]any{"key": "ACT-1", "title": "review the note", "for": "RSK-1"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if risk, _ = e.Run(ctx, risk.ID); risk.Status != StatusCompleted {
@@ -100,7 +100,7 @@ func TestTransverseProcessRunsAlongsideTheChange(t *testing.T) {
 		t.Fatalf("nothing to do: %s %d steps", risk.Status, len(risk.Steps))
 	}
 	// someone raises a new high risk: the companion wakes up and asks for its mitigation
-	items, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Kind: rsk.KindRisk, Status: domain.ItemProposed, ProducedBy: "alice",
+	items, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Type: rsk.TypeRisk, Status: domain.ItemProposed, ProducedBy: "alice",
 		Data: map[string]any{"key": "RSK-2", "title": "the reviewer is away", "probability": 3.0, "impact": 5.0}}})
 	if err != nil {
 		t.Fatal(err)
@@ -128,7 +128,7 @@ version: 1.0.0
 namespace: alm
 imports: [risks]
 conditions:
-  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note")'}
 actions:
   - {name: write_note, kind: human, effects: {noted: true}}
 processes:
@@ -148,7 +148,7 @@ on:
   - {event: step.completed, filter: 'event.step.process == "flow"'}
 conditions:
   # reviewed for the event that woke the watch: a review written after it
-  - {name: reviewed, expr: 'artifacts.exists(a, a.type == "risk_review" && has(vars.event) && double(a.at) >= double(vars.event.at))'}
+  - {name: reviewed, expr: 'artifacts.exists(a, a.target == "risk_review" && has(vars.event) && double(a.at) >= double(vars.event.at))'}
 actions:
   - {name: review, kind: human, effects: {reviewed: true}}
   - {name: mitigate, kind: human, pre: {reviewed: true}, effects: {risks_under_control: true}}
@@ -209,8 +209,8 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 		return false
 	})
 	// the review raises a high risk: its mitigation is asked
-	if _, err := e.Submit(ctx, watch.ID, []ItemInput{{Kind: "artifact", Type: "risk_review"},
-		{Kind: "risk", Data: map[string]any{"key": "RSK-1", "title": "wrong note", "probability": 4.0, "impact": 4.0}}}); err != nil {
+	if _, err := e.Submit(ctx, watch.ID, []ItemInput{{Type: "artifact", Target: "risk_review"},
+		{Type: "risk", Data: map[string]any{"key": "RSK-1", "title": "wrong note", "probability": 4.0, "impact": 4.0}}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(watch.ID)
@@ -218,7 +218,7 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 	eventually(t, "the flow asks for the note", func() bool { q := get(p.ID); return q.Pending != nil && q.Pending.Action == "flow/note" })
 
 	// the flow completes its note step: the event waits in the watch's inbox; the approval waits for the risks
-	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Type: "artifact", Target: "note"}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(p.ID)
@@ -234,7 +234,7 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 	}
 
 	// the watch mitigates: the flow is tried again and reaches its approval; the watch reviews the risks of the step
-	if _, err := e.Submit(ctx, watch.ID, []ItemInput{{Kind: "action", Data: map[string]any{"key": "ACT-1", "title": "check the note", "for": "RSK-1"}}}); err != nil {
+	if _, err := e.Submit(ctx, watch.ID, []ItemInput{{Type: "action", Data: map[string]any{"key": "ACT-1", "title": "check the note", "for": "RSK-1"}}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(watch.ID)

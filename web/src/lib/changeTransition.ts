@@ -56,7 +56,7 @@ export function availableTransitions(lc: Lifecycle | undefined, state: string | 
 export function consumedDecisions(items: ChangeItem[] | undefined): Set<string> {
   const out = new Set<string>();
   for (const it of items ?? []) {
-    const d = (it.kind === 'transition' ? (it.data as Record<string, unknown> | undefined)?.decision : undefined) as string | undefined;
+    const d = (it.type === 'transition' ? (it.data as Record<string, unknown> | undefined)?.decision : undefined) as string | undefined;
     if (d) out.add(d);
   }
   return out;

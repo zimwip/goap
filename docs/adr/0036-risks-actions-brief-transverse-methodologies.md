@@ -36,7 +36,7 @@ and in which run (ADR 0030).
   score ≥ 9 with no open or done action), `risks_under_control`, `open_actions`, `no_open_actions`.
 - `goap-change` serves `risks` (the register and the actions), `risk` (raise or update), `action`; actions and people
   write them as items
-  (`{"kind":"risk","data":{...}}`).
+  (`{"type":"risk","data":{...}}`).
 - The change page has a Risks & actions pane (register, heat, actions by owner).
 
 ### 2. The change brief and the trace tools

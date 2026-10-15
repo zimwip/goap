@@ -206,7 +206,7 @@ func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
 }
 
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
-	out := &graphv1.ChangeItem{Id: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(it.Status),
+	out := &graphv1.ChangeItem{Id: string(it.ID), Type: string(it.Type), Target: it.Target, Status: string(it.Status),
 		Data: Struct(it.Data), ProducedBy: it.ProducedBy, CreatedAt: Time(it.CreatedAt)}
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, string(d))
@@ -229,7 +229,7 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 }
 
 func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
-	out := domain.ChangeItem{ID: domain.ItemID(it.Id), Kind: domain.ItemKind(it.Kind), Type: it.Type, Status: domain.ItemStatus(it.Status),
+	out := domain.ChangeItem{ID: domain.ItemID(it.Id), Type: domain.ItemType(it.Type), Target: it.Target, Status: domain.ItemStatus(it.Status),
 		Data: Map(it.Data), ProducedBy: it.ProducedBy, CreatedAt: FromTime(it.CreatedAt)}
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, domain.ItemID(d))
@@ -397,20 +397,20 @@ func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
 	return out
 }
 
-// StructuresToPB converts the structures of the graph (ADR 0054).
-// ItemKindsToPB converts the catalogue of item kinds (domain.ItemKinds).
-func ItemKindsToPB(kinds []domain.ItemKindInfo) *graphv1.ListItemKindsResponse {
-	out := &graphv1.ListItemKindsResponse{}
-	for _, k := range kinds {
-		pb := &graphv1.ItemKindInfo{Kind: string(k.Kind), Origin: k.Origin, Description: k.Description}
+// ItemTypesToPB converts the catalogue of item types (domain.ItemTypes).
+func ItemTypesToPB(types []domain.ItemTypeInfo) *graphv1.ListItemTypesResponse {
+	out := &graphv1.ListItemTypesResponse{}
+	for _, k := range types {
+		pb := &graphv1.ItemTypeInfo{Type: string(k.Type), Origin: k.Origin, Description: k.Description}
 		if k.Permission != nil {
 			pb.Permission, pb.SubjectField = k.Permission.Permission, k.Permission.SubjectField
 		}
-		out.Kinds = append(out.Kinds, pb)
+		out.Types = append(out.Types, pb)
 	}
 	return out
 }
 
+// StructuresToPB converts the structures of the graph (ADR 0054).
 func StructuresToPB(s domain.Structures) *graphv1.GetStructuresResponse {
 	out := &graphv1.GetStructuresResponse{}
 	for _, x := range s {
