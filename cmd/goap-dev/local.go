@@ -74,12 +74,12 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 				return stores{}, err
 			}
 		}
-		processes := enginesvc.SQLiteStore{DB: db}
-		if n, err := processes.Interrupted(ctx); err != nil {
+		// the local mode is the one process on its file: the locks the previous start left are dropped, so that
+		// its runs are resumed at once (ADR 0124)
+		processes := enginesvc.SQLStore{DB: db, Holder: enginesvc.NewHolder()}
+		if err := processes.ReleaseAll(ctx); err != nil {
 			db.Close()
 			return stores{}, err
-		} else if n > 0 {
-			log.Warn("processes interrupted by the previous shutdown marked failed", "count", n)
 		}
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)

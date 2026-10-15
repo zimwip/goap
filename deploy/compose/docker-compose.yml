@@ -143,6 +143,8 @@ services:
     build: {context: ../.., args: {SERVICE: engine}}
     environment:
       <<: *env
+      # processes shared by the engine replicas (ADR 0124)
+      GOAP_DB_DSN: postgres://engine:engine@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080

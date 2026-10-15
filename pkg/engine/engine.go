@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -63,8 +64,27 @@ type Engine struct {
 	// Types returns the type catalogue in force (ADR 0012 §2): the ancestors behind `x.types`. Unset, or nil, the
 	// methodology's own resolved types apply.
 	Types func() def.TypeSet
+	// Locks is the lock service shared by the engine replicas working on one store (ADR 0124): the work on a
+	// process is serialized across them, a run interrupted by another replica, a run left by a stopped one resumed
+	// (Recover). Nil: one replica, the locks are this process's own.
+	Locks Locker
+	// LockTTL is the lease of a shared lock (default DefaultLockTTL): a replica that stops is taken over after it.
+	LockTTL time.Duration
+	// MaxRuns bounds the runs this replica holds at once with shared locks (0: no bound): a process made runnable
+	// beyond it is left to the pool, taken by a replica with room (Recover, Signals).
+	MaxRuns int
+	// Signals carries the wake-ups and interruptions between replicas (nil: the replicas find them at their next
+	// recovery pass or lock renewal).
+	Signals Signals
 
-	locks sync.Map // process id -> *sync.Mutex
+	locks sync.Map // key (process id, section) -> *sync.Mutex
+	// recovering holds the processes Recover resumes in this replica, held the shared locks it holds (key ->
+	// *held), inflight the runs it holds (MaxRuns), wake the wake-ups of Recover.
+	recovering sync.Map
+	held       sync.Map
+	inflight   atomic.Int64
+	wake       chan struct{}
+	wakeOnce   sync.Once
 	// running holds the cancel function of every run in flight (process id -> *runHandle), cancelling the
 	// cancellations asked for (process id -> subject): Cancel interrupts the run, Run then stops without failing.
 	running    sync.Map
@@ -90,11 +110,11 @@ func (e *Engine) schedule(id string) {
 		e.Schedule(id)
 		return
 	}
-	e.background(func() {
-		if _, err := e.Run(context.Background(), id); err != nil {
-			e.log().Error("run", "process", id, "err", err)
-		}
-	})
+	if e.Locks != nil && e.atCapacity() {
+		e.leave(id)
+		return
+	}
+	e.background(func() { e.runCounted(id) })
 }
 
 // queue notes why p is runnable: the run that picks it up journals it as a schedule record.
@@ -150,13 +170,6 @@ type StartRequest struct {
 	Flow string
 }
 
-func (e *Engine) lock(id string) func() {
-	m, _ := e.locks.LoadOrStore(id, &sync.Mutex{})
-	mu := m.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
-}
-
 func (e *Engine) clock() time.Time {
 	if e.now != nil {
 		return e.now()
@@ -181,8 +194,7 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 	}
 	if key != "" {
 		// a persistent agent (ADR 0112): the execution goes to its instance on the scope, if one is open
-		instances.Lock()
-		defer instances.Unlock()
+		defer e.lock(instanceLock + key)()
 		p, handled, fresh, err := e.resumeInstance(ctx, key, req)
 		if err != nil || handled {
 			return p, err
@@ -676,6 +688,12 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
 	p.MethodologyVersion = m.Version // the version it started with (ADR 0113), the latest for a run that named none
+	if e.Locks != nil {
+		// steps a stopped replica left in flight are closed before the run goes on (ADR 0124)
+		if err := e.settleInterrupted(ctx, p, m); err != nil {
+			return nil, err
+		}
+	}
 	// process.started is written the first time a process has a change to journal to.
 	// JournalSeq can't gate this any more (a deferred process, ADR 0031 gap 5, may
 	// journal an attach record before it ever reaches here); an eager bind always has
@@ -747,6 +765,9 @@ func (e *Engine) fail(p *Process, err error) {
 func (e *Engine) execute(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) error {
 	id := uuid.NewString()
 	p.Steps[i].Execution = id
+	if err := e.checkpoint(ctx, p); err != nil {
+		return err
+	}
 	impl, spec, err := e.specialize(ctx, p, m, action, bb)
 	if err != nil {
 		step := &p.Steps[i]

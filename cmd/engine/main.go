@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
 	"github.com/zimwip/goap/internal/domainclient"
@@ -96,6 +98,15 @@ func main() {
 			time.Sleep(delay)
 		}
 	}()
+	// processes: in memory (one replica), or in PostgreSQL (GOAP_DB_DSN), shared by the replicas, which serialize
+	// their work on a process through its locks and resume the runs a stopped replica left (ADR 0124)
+	var store engine.Store = engine.NewMemoryStore()
+	var locks engine.Locker
+	if pool := platform.OptionalPostgres(ctx, log, enginesvc.Migrations); pool != nil {
+		defer pool.Close()
+		shared := enginesvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true, Holder: enginesvc.NewHolder()}
+		store, locks = shared, shared
+	}
 	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{
 		Graph:         graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...),
@@ -108,7 +119,10 @@ func main() {
 			methodology.KindTool:    engine.ToolExecutor{},
 		},
 		Intent:      intent.Resolver{Ranker: ranker},
-		Store:       engine.NewMemoryStore(), // PostgreSQL store: milestone M1
+		Store:       store,
+		Locks:       locks,
+		LockTTL:     platform.EnvDuration("GOAP_ENGINE_LOCK_TTL", engine.DefaultLockTTL),
+		MaxRuns:     platform.EnvInt("GOAP_ENGINE_MAX_RUNS", 0),
 		Events:      publisher,
 		Scope:       engine.AuthzScope{Authz: authorizer, Hub: mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...)},
 		LLM:         models,
@@ -118,6 +132,17 @@ func main() {
 		MaxSteps:    platform.EnvInt("GOAP_MAX_STEPS", 50),
 		MaxParallel: platform.EnvInt("GOAP_MAX_PARALLEL", 4),
 		Types:       func() def.TypeSet { return types.Get() },
+	}
+	if locks != nil {
+		if events != nil {
+			// wake-ups and interruptions reach the other replicas at once (ADR 0124)
+			signals := enginesvc.NATSSignals{Bus: events}
+			if err := signals.Listen(e); err != nil {
+				platform.Fatal(log, "subscribe", err)
+			}
+			e.Signals = signals
+		}
+		go e.Recover(ctx, 0)
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	selfimprove.Register(builtins, e, enginetel.SelfImprovementFromEnv(registry))

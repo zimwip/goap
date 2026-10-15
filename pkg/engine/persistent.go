@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -22,8 +21,9 @@ import (
 // the work from start to end. An instance is closed when a run completes with its `until` conditions holding (or
 // when a person cancels it): the next execution on its scope starts a new one.
 
-// instances serializes the lookup and the creation of the instances of persistent agents.
-var instances sync.Mutex
+// instanceLock prefixes the lock serializing the lookup and the creation of the instance of a key of a persistent
+// agent, across the engine replicas (ADR 0124).
+const instanceLock = "instance:"
 
 // Turn is one exchange of an llm action of a persistent instance with the model: what was asked and the answer.
 type Turn struct {

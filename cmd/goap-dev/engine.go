@@ -60,6 +60,12 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		MaxParallel: platform.EnvInt("GOAP_MAX_PARALLEL", 4),
 		Types:       func() def.TypeSet { return rp.types.Get() },
 	}
+	// a store shared by replicas (sqlite) serializes the work on a process through its locks, and the runs left by
+	// the previous start are resumed (ADR 0124)
+	if locks, ok := st.processes.(engine.Locker); ok {
+		eg.Locks = locks
+		go eg.Recover(e.ctx, 0)
+	}
 	// self-observation (methodology-improvement): journal, traces, drafts
 	selfimprove.Register(builtins, eg, enginetel.SelfImprovementFromEnv(registrysvc.Drafts{Service: rp.reg}))
 	triggers := &engine.TriggerManager{Engine: eg, Log: e.log}
