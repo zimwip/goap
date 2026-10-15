@@ -885,6 +885,9 @@ starts on a suspended version, no run reads it, the lists leave it out, until a 
 published or the domains come back. The graph and the domain are never blocked. Migrating the data of a domain is a
 separate matter.
 
+The engine is tested without the graph: the scenarios that run it on a real graph are the platform's integration tests
+(`internal/enginee2e`), reaching the engine's unexported workings through `engine.Internals` only.
+
 ### 3.1 Communication
 
 - **External**: HTTP via Echo on the gateway. The frontend uses the **Connect JSON**

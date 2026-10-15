@@ -1,0 +1,20 @@
+name: roled
+version: 1.0.0
+namespace: alm
+roles:
+  - {name: developer}
+  - {name: release_manager}
+  - {name: auditor}
+conditions:
+  - {name: built, expr: 'artifacts.exists(a, a.target == "build")'}
+  - {name: released, expr: 'artifacts.exists(a, a.target == "release")'}
+actions:
+  - {name: build, kind: builtin, builtin: test.emit, effects: {built: true}, params: {type: artifact, target: build}}
+  - {name: release, kind: builtin, builtin: test.emit, roles: [release_manager], pre: {built: true}, effects: {released: true}, params: {type: artifact, target: release}}
+  - {name: audit, kind: builtin, builtin: test.emit, effects: {built: true}, params: {type: artifact, target: build}}
+goals:
+  - {name: ship, pre: {released: true}}
+  - {name: audited, pre: {built: true}}
+agents:
+  - {name: shipper, roles: [developer, release_manager], actions: [build, release], goals: [ship]}
+  - {name: auditing, roles: [auditor], actions: [audit], goals: [audited]}

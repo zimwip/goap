@@ -150,3 +150,54 @@ func TestLayering(t *testing.T) {
 		}
 	}
 }
+
+// forbiddenInTests lists, by package, the packages its tests must not depend on either: the engine is tested without
+// the graph (a real graph runs it in internal/enginee2e, ADR 0125 §5), so that it can become a module of its own.
+var forbiddenInTests = map[string][]string{
+	"pkg/engine": {"pkg/graph", "pkg/graph/graphtest", "internal/graphsvc", "internal/devseed", "pkg/mcpbuiltin"},
+}
+
+func TestTestLayering(t *testing.T) {
+	for pkg, banned := range forbiddenInTests {
+		out, err := exec.Command("go", "list", "-test", "-deps", "-f", "{{.ImportPath}}", mod+pkg).Output()
+		if err != nil {
+			t.Fatalf("go list -test %s: %v", pkg, err)
+		}
+		deps := strings.Fields(string(out))
+		for _, b := range banned {
+			if slices.Contains(deps, mod+b) {
+				t.Errorf("the tests of %s depend on %s", pkg, b)
+			}
+		}
+	}
+}
+
+// engine.Internals opens the engine to the integration tests of the platform; no production code calls it.
+func TestEngineInternalsOnlyInTests(t *testing.T) {
+	err := filepath.WalkDir("../..", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "node_modules", ".git", "web", "gen":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || filepath.Dir(path) == filepath.Join("..", "engine") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(b), "engine.Internals") {
+			t.Errorf("%s uses engine.Internals", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}

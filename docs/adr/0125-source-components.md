@@ -1,8 +1,8 @@
 # ADR 0125 — Source components: a contract, the graph, the engine, the MCP hub, the gateway, the platform
 
-**Status**: accepted; steps 1 to 3 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
+**Status**: accepted; steps 1 to 4 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
 service no longer import each other; the gateway, the hub and the connectors off the graph and the engine; the two
-registries), the next steps not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
+registries; the engine's tests without the graph), the next steps not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
 0063 (the engine's scope port), ADR 0066 (the hooks of the graph), ADR 0113 (pinned domains)
 
 ## Context
@@ -78,9 +78,19 @@ service sets up (`internal/telemetry/enginetel`). Since the registries are split
 through `internal/domainclient` and the methodologies through the generated registry client, never compiled: it
 depends on neither the graph, the engine nor the methodology model.
 
+### 5. The engine's tests
+
+The tests of the engine that run it on a real graph are the platform's: `internal/enginee2e` (the runs of a
+methodology, the node and decision operations, the companions, the sdlc scenarios). What stays in `pkg/engine` tests the
+engine alone (planners, the loop budget, the scope, the preview, the pure helpers) and imports no graph. The integration
+tests reach the few unexported workings they check through `engine.Internals` (`InternalsOf(e)`: schedule a run, set
+the clock, apply node or decision operations, the host of an action, ...), which no production code calls. A fake
+graph port was not written: the scenarios check the graph's rules as much as the engine's, and a fake would have to
+repeat them.
+
 ## Consequences
 
 - `go list -deps ./pkg/engine` holds neither `pkg/graph` nor a database driver; `internal/graphsvc` no engine type.
-- The engine's unit tests still build a real graph (`graph.NewMemory`): they move to a fake port or to the
-  platform's integration tests before the engine becomes a module.
-- Next steps: the engine's tests, the generated TypeScript, the `go.work`.
+- `go list -test -deps ./pkg/engine` holds no graph either (`pkg/layering`, `TestTestLayering`); `engine.Internals`
+  is used by tests only (`TestEngineInternalsOnlyInTests`).
+- Next steps: the generated TypeScript, the `go.work`.
