@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"strconv"
 	"testing"
 
 	"go.opentelemetry.io/otel"
@@ -12,7 +13,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 
-	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/llm"
@@ -74,7 +74,7 @@ func TestErrorTypes(t *testing.T) {
 		llm.ErrRefusal:                       "refusal",
 		context.Canceled:                     "canceled",
 		errors.New("x"):                      "_OTHER",
-		&modelgw.StatusError{Code: 503}:      "503",
+		statusError(503):                     "503",
 		errors.Join(errors.New("w"), io.EOF): "_OTHER",
 	} {
 		if got := errorType(err); got != want {
@@ -139,3 +139,9 @@ func TestProcessTraceContinues(t *testing.T) {
 		t.Fatalf("action span missing or wrong: %v", action)
 	}
 }
+
+// statusError is a provider error typed by its HTTP status, as the model gateway's are.
+type statusError int
+
+func (e statusError) Error() string     { return "status " + strconv.Itoa(int(e)) }
+func (e statusError) ErrorType() string { return strconv.Itoa(int(e)) }

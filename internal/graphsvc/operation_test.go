@@ -3,11 +3,11 @@ package graphsvc
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/operations"
 )
 
@@ -18,21 +18,28 @@ func TestOperationAuthorizer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	methods := map[string]*methodology.Methodology{
-		"restricted": {Roles: []methodology.Role{
-			{Name: "author", Operations: []string{"doer"}},
-			{Name: "reviewer", Operations: []string{"reviewer"}},
-			{Name: "lead"}, // lists none: allows every operation
-		}},
-		"open": {Roles: []methodology.Role{{Name: "author"}}},
+	// the roles of each methodology and the operations they list (none: every operation), as the registry resolves
+	// them (methodology.Methodology.OperationRoles)
+	type role struct {
+		name string
+		ops  []string
+	}
+	methods := map[string][]role{
+		"restricted": {{"author", []string{"doer"}}, {"reviewer", []string{"reviewer"}}, {"lead", nil}},
+		"open":       {{"author", nil}},
 	}
 	resolve := func(_ context.Context, name, op string) ([]string, bool, error) {
-		m, ok := methods[name]
-		if !ok {
+		rs, ok := methods[name]
+		if !ok || !slices.ContainsFunc(rs, func(r role) bool { return len(r.ops) > 0 }) {
 			return nil, false, nil
 		}
-		roles, restricted := m.OperationRoles(op)
-		return roles, restricted, nil
+		var roles []string
+		for _, r := range rs {
+			if len(r.ops) == 0 || operations.Allows(r.ops, op) {
+				roles = append(roles, r.name)
+			}
+		}
+		return roles, true, nil
 	}
 	who := func(roles ...string) authz.Principal { return authz.Principal{Subject: "u", Roles: roles} }
 	for name, tc := range map[string]struct {

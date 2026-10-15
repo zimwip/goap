@@ -2,7 +2,8 @@
 
 **Status**: accepted; steps 1 to 5 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
 service no longer import each other; the gateway, the hub and the connectors off the graph and the engine; the two
-registries; the engine's tests without the graph; the web's types generated and checked), the `go.work` not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
+registries; the engine's tests without the graph; the web's types generated and checked; every package placed in a
+component and the rules between components checked, tests included), the `go.work` not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
 0063 (the engine's scope port), ADR 0066 (the hooks of the graph), ADR 0113 (pinned domains)
 
 ## Context
@@ -21,17 +22,23 @@ which define the graph, and the methodologies, compiled by the engine's compiler
 ### 1. Components, and who may depend on whom
 
 - **contracts**: the protos and the generated code (Go, then TypeScript for the web), the pure model (`pkg/domain`,
-  `def`, `algo`, `authz`, `events`, `operations`, `builtins`, `form`, `mcp`, the item use cases) and the contract of
-  the graph, `pkg/graphapi`. Depends on nothing of the platform.
-- **lib**: the shared execution libraries (`typecat`, `guard` (CEL), `dsl` (goja, yaegi), `access`).
-- **graph**: `pkg/graph` and what reads it (`graphsnap`, `okf`, `prov`, `index`), its service, the **domain
+  `algo`, `authz`, `events`, `operations`, `builtins`, `form`, `mcp`, `llm`, the journal's records, the item use cases
+  and their policies: `risk`, `assess`, `verify`, `review`, `criticality`, `decision`) and the contract of the graph,
+  `pkg/graphapi`. Depends on nothing of the platform.
+- **lib**: the shared libraries: the domain model (`def`, `domains/builtin`), `typecat`, `guard` (CEL), `dsl` (goja,
+  yaegi), `adapter`, the built-in MCPs (`mcpbuiltin`), `access`, `llmcfg`, `graphsnap`, `brief`, and the service
+  plumbing (`internal/platform`, `identity`, `telemetry`, `rpcerr`, `pbconv`, the schema and PostgreSQL test helpers),
+  with the clients of the graph and of the domain registry (`graphclient`, `domainclient`, `domainpb`).
+- **graph**: `pkg/graph` and what reads it (`okf`, `prov`, `index`), its service, the indexer, the **domain
   registry**. Never the engine.
-- **engine**: `pkg/engine`, the methodology compiler and conditions, the journal, the observer, its service and
-  sandboxes, the **methodology registry**. Never the graph: it defines its ports with the types of the contract.
+- **engine**: `pkg/engine`, the planners, the methodology compiler and conditions, the observer and self-improvement,
+  the evaluation, its service and sandboxes, its telemetry, the **methodology registry** (still in the platform: see
+  §7). Never the graph: it defines its ports with the types of the contract.
 - **mcp**: the hub, the connector kit and the connectors. **gateway**: the gateway and the credentials. Neither
   the graph nor the engine: they call them through the generated clients.
-- **platform**: the composition (`goap-dev`, the services that are none of the above) and the tests that need the
-  graph and the engine together.
+- **platform**: the compositions (every `cmd/*`, `goap-dev` first), the services that are none of the above (the
+  model gateway, preferences, conversations and the assistant, the event stream, the development data) and the tests
+  that need several components together (`internal/e2e/*`).
 - **web**: the generated TypeScript only.
 
 Each rule is first a `pkg/layering` rule in the one module; the components become Go modules of a `go.work` once
@@ -80,7 +87,7 @@ depends on neither the graph, the engine nor the methodology model.
 
 ### 5. The engine's tests
 
-The tests of the engine that run it on a real graph are the platform's: `internal/enginee2e` (the runs of a
+The tests of the engine that run it on a real graph are the platform's: `internal/e2e/engine` (the runs of a
 methodology, the node and decision operations, the companions, the sdlc scenarios). What stays in `pkg/engine` tests the
 engine alone (planners, the loop budget, the scope, the preview, the pure helpers) and imports no graph. The integration
 tests reach the few unexported workings they check through `engine.Internals` (`InternalsOf(e)`: schedule a run, set
@@ -98,9 +105,26 @@ use the generated types directly (`NodeType.structure` is a `StructureTagJson`).
 here: the roles allowed to run an agent or an action (ADR 0043) did not cross the registry's protocol (the methodology
 editor lost them on save), and several web types missed fields the services send.
 
+### 7. Every package in a component, tests included
+
+`pkg/layering` places every package of the repository in its component (`components`, by the longest path prefix: a
+new package that matches none fails) and checks every import, the tests' included, against what its component may
+depend on (`dependsOn`, `TestComponents`): contracts on nothing, lib on contracts, graph / engine / mcp / gateway on
+contracts and lib, the platform on all. The tests that need two components together are the platform's
+(`internal/e2e/<name>`, an external package `<name>e2e` each): the engine on a real graph (`engine`, `enginesvc`,
+`selfimprove`, `condition` for the conditions over a change's blackboard), the hub and the connectors over a graph
+the graph service seeded (`mcpsvc`, `connectorkit`, `builtin`), the access read from such a graph (`access`). What
+stays in a component tests it alone: the graph's lifecycle tests stand for the guardian with `pkg/guard` rather than
+`pkg/condition`, the graph service's boot test writes its own development data rather than `internal/devseed`'s. The
+command interceptor every service installs moved from the event stream to `internal/identity`. The methodology
+registry stays in the platform until it moves to the engine (it still names the graph's service in its tests); every
+`cmd/*` is the platform's composition of the components it serves.
+
 ## Consequences
 
 - `go list -deps ./pkg/engine` holds neither `pkg/graph` nor a database driver; `internal/graphsvc` no engine type.
 - `go list -test -deps ./pkg/engine` holds no graph either (`pkg/layering`, `TestTestLayering`); `engine.Internals`
   is used by tests only (`TestEngineInternalsOnlyInTests`).
-- Next step: the `go.work`.
+- `TestComponents` holds: once each component becomes a module of a `go.work`, its `go.mod` needs no other component
+  than those of `dependsOn`.
+- Next step: the `go.work` (the move of the sources into the module directories).

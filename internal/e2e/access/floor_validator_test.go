@@ -1,4 +1,4 @@
-package access_test
+package accesse2e
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 // the way cmd/goap-dev and cmd/graph wire it (ADR 0048).
 func floorGraph(t *testing.T) *graph.Graph {
 	t.Helper()
-	ds, err := def.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package builtin_test
+package builtine2e
 
 import (
 	"os"

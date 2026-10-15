@@ -104,7 +104,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := methodology.LoadFile("../../methodologies/sdlc.yaml")
+	m, err := methodology.LoadFile("../../../methodologies/sdlc.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +113,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 		t.Fatal(err)
 	}
 	// the graph and the engine judge by the types of the repository's domains (ADR 0012)
-	ds, err := def.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

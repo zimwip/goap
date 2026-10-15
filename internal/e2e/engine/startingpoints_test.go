@@ -136,7 +136,7 @@ func ptr[T any](v T) *T { return &v }
 func TestStartingPointsOfSDLC(t *testing.T) {
 	ctx := context.Background()
 	e, _, _ := setup(t)
-	m, err := methodology.LoadFile("../../methodologies/sdlc.yaml")
+	m, err := methodology.LoadFile("../../../methodologies/sdlc.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-package access_test
+package accesse2e
 
 import (
 	"context"

@@ -1,4 +1,4 @@
-package mcpsvc_test
+package mcpsvce2e
 
 import (
 	"context"

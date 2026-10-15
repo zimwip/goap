@@ -1,4 +1,5 @@
-package builtin_test
+// The connectors of the built-in MCPs against a real graph, served by the graph service (ADR 0125).
+package builtine2e
 
 import (
 	"context"

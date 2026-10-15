@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graph/graphtest"
 	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
@@ -62,12 +62,19 @@ func TestBoot(t *testing.T) {
 	if after, _ := g.Changes(ctx); len(after) != len(cs) {
 		t.Fatalf("a second boot wrote changes: %d -> %d", len(cs), len(after))
 	}
-	if _, err := devseed.Demo(ctx, g); err != nil {
+	if err := demo(ctx, g); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.NodeByKey(ctx, "alm", "NEED-1"); err != nil {
-		t.Fatalf("the demo after Boot: %v", err)
+		t.Fatalf("development data after Boot: %v", err)
 	}
+}
+
+// demo stands for the development data a composition passes as Options.Dev (internal/devseed, which the graph's
+// tests do not import).
+func demo(ctx context.Context, g *graph.Graph) error {
+	_, err := graphtest.Import(ctx, g, graphtest.Node{Namespace: "alm", Key: "NEED-1", Type: "alm@Need", Properties: map[string]any{"title": "Pay online"}})
+	return err
 }
 
 // Options.Dev runs after the platform steps.
@@ -78,8 +85,7 @@ func TestBootRunsDevLast(t *testing.T) {
 		if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.PolicyKey(authz.FloorPolicies[0])); err != nil {
 			return err
 		}
-		_, err := devseed.Demo(ctx, g)
-		return err
+		return demo(ctx, g)
 	}})
 	if err != nil {
 		t.Fatal(err)

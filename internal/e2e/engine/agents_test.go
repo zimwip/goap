@@ -18,9 +18,9 @@ import (
 
 func loadMethodology(t *testing.T, file string) *methodology.Compiled {
 	t.Helper()
-	path := "../../methodologies/" + file
+	path := "../../../methodologies/" + file
 	if _, err := os.Stat(path); err != nil { // the examples are not seeded at start: they live in methodologies/examples
-		path = "../../methodologies/examples/" + file
+		path = "../../../methodologies/examples/" + file
 	}
 	m, err := methodology.LoadFile(path)
 	if err != nil {

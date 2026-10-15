@@ -23,7 +23,7 @@ import (
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/engine"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -384,9 +384,9 @@ func (h *Handler) ResolveMerge(ctx context.Context, r *connect.Request[enginev1.
 	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
 		return nil, toConnect(err)
 	}
-	resolutions := map[domain.NodeID]graph.Resolution{}
+	resolutions := map[domain.NodeID]graphapi.Resolution{}
 	for id, rs := range r.Msg.Resolutions {
-		resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(rs.GetProps()), Skip: rs.GetSkip()}
+		resolutions[domain.NodeID(id)] = graphapi.Resolution{Props: pbconv.Map(rs.GetProps()), Skip: rs.GetSkip()}
 	}
 	p, err := h.Engine.ResolveMerge(ctx, r.Msg.ProcessId, resolutions, r.Msg.Comment)
 	if err != nil {

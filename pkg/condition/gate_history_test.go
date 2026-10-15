@@ -20,3 +20,12 @@ func TestGuardReadsTheHistory(t *testing.T) {
 		t.Fatalf("the step ran and stands: %v %v", ok, err)
 	}
 }
+
+// Without vetos or objectives nothing is asked of the lifecycle, and a met objective needs no derogation.
+func TestGateObjectiveMet(t *testing.T) {
+	bb := domain.Blackboard{}
+	res, err := CheckGate(domain.Transition{Name: "t", Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}, bb, map[string]bool{"docs": true}, "")
+	if err != nil || !res.Passed() || res.WithReserve() {
+		t.Fatalf("%+v %v", res, err)
+	}
+}

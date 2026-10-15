@@ -19,7 +19,7 @@ import (
 // knows the methodology once the intent is identified).
 func TestStartWithoutBaseline(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "acme", Roles: []string{"contributor"}})
-	m, err := methodology.LoadFile("../../methodologies/sdlc.yaml")
+	m, err := methodology.LoadFile("../../../methodologies/sdlc.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ds, err := def.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

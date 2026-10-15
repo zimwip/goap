@@ -1,4 +1,4 @@
-package connectorkit_test
+package connectorkite2e
 
 import (
 	"context"

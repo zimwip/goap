@@ -145,7 +145,7 @@ true on its subject is what another of the same scope needs, the first is planne
 second (`pending:<second>` among its effects, lifted: never checked once it ran). Without it no plan reached past
 the first action of a flat agent (`delivery`). `publish_build` needs `build_checked` and `built`: the first chains it
 after the build, the second holds it to a success. Tested end to end on a local git repository
-(`internal/enginee2e/sdlc_workspace_test.go`).
+(`internal/e2e/engine/sdlc_workspace_test.go`).
 
 ### 7. The docker connector: the commands in a container per workspace
 

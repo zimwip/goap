@@ -86,7 +86,7 @@ func (m mainGoals) CheckGuardians(context.Context, domain.Blackboard, string, []
 func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	t.Helper()
 	ctx := context.Background()
-	m, err := methodology.LoadFile("../../methodologies/examples/impact-analysis.yaml")
+	m, err := methodology.LoadFile("../../../methodologies/examples/impact-analysis.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

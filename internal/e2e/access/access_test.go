@@ -1,4 +1,5 @@
-package access_test
+// Access read from a real graph seeded by the graph service (ADR 0125: pkg/access names the graph through its contract only).
+package accesse2e
 
 import (
 	"context"
@@ -18,7 +19,7 @@ import (
 // through the same user lifecycle (ADR 0048) a real deployment enforces.
 func setup(t *testing.T) (*graph.Graph, *access.Authorizer) {
 	t.Helper()
-	ds, err := def.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

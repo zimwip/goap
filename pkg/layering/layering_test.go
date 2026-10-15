@@ -152,7 +152,7 @@ func TestLayering(t *testing.T) {
 }
 
 // forbiddenInTests lists, by package, the packages its tests must not depend on either: the engine is tested without
-// the graph (a real graph runs it in internal/enginee2e, ADR 0125 §5), so that it can become a module of its own.
+// the graph (a real graph runs it in internal/e2e/engine, ADR 0125 §5), so that it can become a module of its own.
 var forbiddenInTests = map[string][]string{
 	"pkg/engine": {"pkg/graph", "pkg/graph/graphtest", "internal/graphsvc", "internal/devseed", "pkg/mcpbuiltin"},
 }

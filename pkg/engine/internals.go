@@ -11,7 +11,7 @@ import (
 )
 
 // Internals reaches the unexported workings of an engine for the integration tests of the platform
-// (internal/enginee2e): they run the engine on a real graph, which the engine's own tests do not import, so that the
+// (internal/e2e/engine): they run the engine on a real graph, which the engine's own tests do not import, so that the
 // engine depends on the graph's contract only (ADR 0125 §5). Production code never calls it (pkg/layering).
 type Internals struct{ e *Engine }
 

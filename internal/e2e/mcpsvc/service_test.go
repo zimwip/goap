@@ -1,27 +1,22 @@
-package mcpsvc_test
+// The MCP hub over a real graph seeded by the graph service (ADR 0125: the hub reads the graph through its client).
+package mcpsvce2e
 
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
 	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/pbconv"
-	"github.com/zimwip/goap/internal/pgtest"
-	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
-
-	"github.com/jackc/pgx/v5/stdlib"
 )
 
 type fakeInvoker struct {
@@ -71,54 +66,6 @@ func world(t *testing.T) *graph.Graph {
 		t.Fatal(err)
 	}
 	return g
-}
-
-func TestConnectorRegistryMemory(t *testing.T) { testRegistry(t, mcpsvc.NewMemoryStore()) }
-
-func TestConnectorRegistrySQLite(t *testing.T) {
-	ctx := context.Background()
-	db, err := platform.OpenSQLite(ctx, filepath.Join(t.TempDir(), "goap.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	if err := platform.MigrateSQLite(ctx, db, "mcp", mcpsvc.SQLiteMigrations, "migrations_sqlite"); err != nil {
-		t.Fatal(err)
-	}
-	testRegistry(t, mcpsvc.SQLStore{DB: db})
-}
-
-func TestConnectorRegistryPG(t *testing.T) {
-	testRegistry(t, mcpsvc.SQLStore{DB: stdlib.OpenDBFromPool(pgtest.Pool(t, mcpsvc.Migrations)), Dollar: true})
-}
-
-func testRegistry(t *testing.T, st mcpsvc.Store) {
-	ctx := context.Background()
-	now := time.Now().UTC()
-	svc := &mcpsvc.Service{Store: st, Now: func() time.Time { return now }, Lease: time.Minute}
-	if _, err := st.Connector(ctx, "localfs"); !errors.Is(err, mcpsvc.ErrNotFound) {
-		t.Fatalf("unknown connector = %v", err)
-	}
-	if _, err := svc.RegisterConnector(ctx, &connectorv1.ConnectorInfo{Id: "Bad Id"}, "http://x"); !errors.Is(err, mcp.ErrInvalid) {
-		t.Fatalf("bad id = %v", err)
-	}
-	if _, err := svc.RegisterConnector(ctx, localfsInfo(), "http://localfs:8080"); err != nil {
-		t.Fatal(err)
-	}
-	cs, err := svc.Connectors(ctx)
-	if err != nil || len(cs) != 1 || !cs[0].Live || cs[0].Endpoint != "http://localfs:8080" || len(cs[0].Info.Operations) != 3 {
-		t.Fatalf("connectors = %+v, %v", cs, err)
-	}
-	now = now.Add(2 * time.Minute)
-	if cs, _ = svc.Connectors(ctx); cs[0].Live {
-		t.Fatal("expired registration is live")
-	}
-	if _, err := svc.RegisterConnector(ctx, localfsInfo(), "http://other:8080"); err != nil {
-		t.Fatal(err)
-	}
-	if cs, _ = svc.Connectors(ctx); !cs[0].Live || cs[0].Endpoint != "http://other:8080" {
-		t.Fatalf("renewed registration = %+v", cs[0])
-	}
 }
 
 // newHub makes a hub over g; extra adapter definitions are added to the graph first (as a change of the platform namespace).

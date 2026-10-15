@@ -1,4 +1,5 @@
-package enginesvc
+// The starting points served by the engine service over a real graph (ADR 0125 §5).
+package enginesvce2e
 
 import (
 	"context"
@@ -7,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
+	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
@@ -41,7 +43,7 @@ func (d denySome) Authorize(_ context.Context, r authz.Request) (bool, error) {
 	return !(r.Action == "start" && r.Resource.Name == d.deny), nil
 }
 
-func pointsHandler(t *testing.T, a authz.Authorizer) (*Handler, *graph.Graph) {
+func pointsHandler(t *testing.T, a authz.Authorizer) (*enginesvc.Handler, *graph.Graph) {
 	t.Helper()
 	m, err := methodology.Parse([]byte(pointsYAML))
 	if err != nil {
@@ -63,7 +65,7 @@ func pointsHandler(t *testing.T, a authz.Authorizer) (*Handler, *graph.Graph) {
 	}
 	e := &engine.Engine{Graph: g, Methodologies: engine.StaticMethodologies{"pts": c}, Store: engine.NewMemoryStore(),
 		Executors: map[string]engine.Executor{methodology.KindHuman: engine.HumanExecutor{}}}
-	return &Handler{Engine: e, Authz: a}, g
+	return &enginesvc.Handler{Engine: e, Authz: a}, g
 }
 
 func TestListStartingPoints(t *testing.T) {

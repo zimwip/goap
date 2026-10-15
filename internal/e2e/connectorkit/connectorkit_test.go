@@ -1,4 +1,5 @@
-package connectorkit_test
+// The connector kit against a hub over a real graph (ADR 0125).
+package connectorkite2e
 
 import (
 	"context"

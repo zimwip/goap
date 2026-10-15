@@ -3,15 +3,16 @@
 package main
 
 import (
-	"connectrpc.com/connect"
 	"context"
 	"fmt"
 	"time"
 
+	"connectrpc.com/connect"
+
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/domainclient"
-	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/graphclient"
+	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
@@ -83,7 +84,7 @@ func main() {
 			time.Sleep(delay)
 		}
 	}()
-	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
+	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

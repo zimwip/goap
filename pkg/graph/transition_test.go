@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/guard"
 )
 
 // lifecycles is a ChangeLifecycles whose world state the test sets.
@@ -24,12 +24,51 @@ type lifecycles struct {
 func (l *lifecycles) MethodologyVersion(context.Context, string) (string, error)   { return "", nil }
 func (l *lifecycles) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return &l.lc, nil }
 func (l *lifecycles) DefaultGoal(context.Context, string) (string, error)          { return l.goal, nil }
-func (l *lifecycles) Gate(_ context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
-	return condition.CheckGate(t, bb, l.world, decision)
+
+// Gate stands for the guardian of the methodology (the registry's condition.CheckGate, which the graph does not
+// import, ADR 0125): the vetos and objectives over the world and the decision points, an unmet objective covered by
+// a derogation in force naming it.
+func (l *lifecycles) Gate(ctx context.Context, bb domain.Blackboard, t domain.Transition, decision string) (domain.GateResult, error) {
+	var res domain.GateResult
+	for _, c := range t.Vetos {
+		ok, err := l.Guard(ctx, bb, c.Expr, t.Name, decision)
+		if err != nil {
+			return res, err
+		}
+		if !ok {
+			res.Vetoed = append(res.Vetoed, c.Name)
+		}
+	}
+	for _, c := range t.Objectives {
+		ok, err := l.Guard(ctx, bb, c.Expr, t.Name, decision)
+		if err != nil {
+			return res, err
+		}
+		if ok {
+			continue
+		}
+		res.Unmet = append(res.Unmet, c.Name)
+		for _, d := range risk.Derogations(bb.Change) {
+			if d.Rule == c.Name && d.InForce(time.Now()) {
+				res.Reserve = map[string]string{c.Name: d.Key}
+				break
+			}
+		}
+	}
+	return res, nil
 }
 
+// Guard evaluates expr over the world, the change (with the transition and the decision) and its decision points.
 func (l *lifecycles) Guard(_ context.Context, bb domain.Blackboard, expr, transition, decision string) (bool, error) {
-	return condition.CheckGuard(expr, bb, l.world, transition, decision)
+	gd, err := guard.Compile(expr)
+	if err != nil {
+		return false, err
+	}
+	var f guard.Facts
+	for _, d := range domain.DecisionPointsOf(bb) {
+		f.DecisionPoints = append(f.DecisionPoints, map[string]any{"id": d.ID, "status": d.Status, "option": d.Option})
+	}
+	return gd.CheckChange(map[string]any{"id": string(bb.Change.ID), "transition": transition, "decision": decision}, f, l.world)
 }
 
 func (l *lifecycles) Merge(context.Context, domain.Change, domain.Blackboard) (bool, bool, error) {
@@ -258,15 +297,6 @@ func testGateVetosAndObjectives(t *testing.T, repo Repo) {
 	}
 	if r := fmt.Sprint(moves[0].Data["reserve"]); r != "map[docs:DRG-1]" || fmt.Sprint(moves[0].Data["unmet"]) != "[docs]" {
 		t.Fatalf("the move says what it goes with reserve of: %v", moves[0].Data)
-	}
-}
-
-// Without vetos or objectives nothing is asked of the lifecycle, and a met objective needs no derogation.
-func TestGateObjectiveMet(t *testing.T) {
-	bb := domain.Blackboard{}
-	res, err := condition.CheckGate(domain.Transition{Name: "t", Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}, bb, map[string]bool{"docs": true}, "")
-	if err != nil || !res.Passed() || res.WithReserve() {
-		t.Fatalf("%+v %v", res, err)
 	}
 }
 

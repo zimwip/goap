@@ -101,7 +101,7 @@ func parseDocs(t *testing.T, edit func(*methodology.Methodology)) *methodology.C
 	if edit != nil {
 		edit(m)
 	}
-	ds, err := def.LoadDomains("../../domains")
+	ds, err := def.LoadDomains("../../../domains")
 	if err != nil {
 		t.Fatal(err)
 	}

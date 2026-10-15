@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/events/v1/eventsv1connect"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/pbconv"
+	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/pkg/authz"
 )
 
@@ -27,21 +28,8 @@ type Handler struct {
 
 var _ eventsv1connect.EventServiceHandler = (*Handler)(nil)
 
-// CommandInterceptor stamps the events published while a request is served with the id its client gave it
-// (X-Goap-Command) and the caller, so a client recognises the echo of its own writes. Wrap the services that write.
-func CommandInterceptor() connect.Interceptor {
-	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
-		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if c := req.Header().Get(HeaderCommand); c != "" {
-				ctx = WithCommand(ctx, identity.FromHeaders(req.Header()).Subject, c)
-			}
-			return next(ctx, req)
-		}
-	})
-}
-
 // HeaderCommand is the header a client names its command with.
-const HeaderCommand = "X-Goap-Command"
+const HeaderCommand = platform.HeaderCommand
 
 // Watch streams the events the caller may read.
 func (h *Handler) Watch(ctx context.Context, r *connect.Request[eventsv1.WatchRequest], stream *connect.ServerStream[eventsv1.Event]) error {

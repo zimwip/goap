@@ -20,7 +20,7 @@ import (
 // that identification picks from the question, and the decider comes back to decide: the option is selected.
 func TestDecisionLoopEndToEnd(t *testing.T) {
 	ctx := context.Background()
-	m, err := methodology.LoadFile("../../methodologies/examples/option-decision.yaml")
+	m, err := methodology.LoadFile("../../../methodologies/examples/option-decision.yaml")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -9,7 +9,7 @@ import (
 
 // readRoles reads the methodology with roles the engine's own tests use too.
 func readRoles() string {
-	b, err := os.ReadFile("../../pkg/engine/testdata/roles.yaml")
+	b, err := os.ReadFile("../../../pkg/engine/testdata/roles.yaml")
 	if err != nil {
 		panic(err)
 	}
