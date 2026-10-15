@@ -4,7 +4,7 @@
 import { graph, isDraft, type CatalogModel, type LlmBehavior, type LlmProvider, type ModelAlias, type Struct } from './api';
 import { headGraph } from './graphEdit';
 import { ns, isUserKey } from './stores/session.svelte';
-import { pending, stageRetire, stageUpsert, stagedOfType } from './stores/pending.svelte';
+import { pending, stageEdits, stageRetire, stageUpsert, stagedOfType } from './stores/pending.svelte';
 
 export const PROVIDER_TYPE = 'platform@LlmProvider';
 export const MODEL_TYPE = 'platform@LlmModel';
@@ -54,8 +54,8 @@ export const looksLikeRawKey = (ref: string): boolean => {
 export const saveProvider = (p: LlmProvider) => stageUpsert(ns.platform, PROVIDER_TYPE, providerKey(p.name), providerProps(p));
 
 /** Adds or updates models of the catalog. */
-export async function saveModels(ms: CatalogModel[]): Promise<void> {
-  for (const m of ms) await stageUpsert(ns.platform, MODEL_TYPE, modelKey(m.provider, m.model), modelProps(m));
+export function saveModels(ms: CatalogModel[]): Promise<void> {
+  return stageEdits(ms.map((m) => ({ namespace: ns.platform, type: MODEL_TYPE, key: modelKey(m.provider, m.model), props: modelProps(m) })));
 }
 
 export const saveModel = (m: CatalogModel) => saveModels([m]);
@@ -99,20 +99,27 @@ async function effective(): Promise<{ key: string; type: string; props: Record<s
   return [...out.values()];
 }
 
+/** The retirement of a node of the platform namespace, as an edit of a batch. */
+const retiring = (n: { key: string; type: string }) => ({ namespace: ns.platform, type: n.type, key: n.key, retire: true });
+
 /** Stages the removal of a model with the aliases that point to it; a protected alias stays, unavailable until retargeted. */
 export async function deleteModel(provider: string, model: string): Promise<void> {
   const target = `${provider}/${model}`;
   const nodes = await effective();
-  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && !isProtected(n) && str(n.props.target) === target)) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
-  if (nodes.some((n) => n.key === modelKey(provider, model))) await stageRetire(ns.platform, MODEL_TYPE, modelKey(provider, model));
+  const gone = nodes.filter((n) => n.type === ALIAS_TYPE && !isProtected(n) && str(n.props.target) === target);
+  if (nodes.some((n) => n.key === modelKey(provider, model))) gone.push({ key: modelKey(provider, model), type: MODEL_TYPE, props: {} });
+  await stageEdits(gone.map(retiring));
 }
 
 /** Stages the removal of a provider with its models and the aliases that point to them (the protected ones stay). */
 export async function deleteProvider(name: string): Promise<void> {
   const nodes = await effective();
-  for (const a of nodes.filter((n) => n.type === ALIAS_TYPE && !isProtected(n) && str(n.props.target).startsWith(`${name}/`))) await stageRetire(ns.platform, ALIAS_TYPE, a.key);
-  for (const m of nodes.filter((n) => n.type === MODEL_TYPE && str(n.props.provider) === name)) await stageRetire(ns.platform, MODEL_TYPE, m.key);
-  if (nodes.some((n) => n.key === providerKey(name))) await stageRetire(ns.platform, PROVIDER_TYPE, providerKey(name));
+  const gone = [
+    ...nodes.filter((n) => n.type === ALIAS_TYPE && !isProtected(n) && str(n.props.target).startsWith(`${name}/`)),
+    ...nodes.filter((n) => n.type === MODEL_TYPE && str(n.props.provider) === name),
+  ];
+  if (nodes.some((n) => n.key === providerKey(name))) gone.push({ key: providerKey(name), type: PROVIDER_TYPE, props: {} });
+  await stageEdits(gone.map(retiring));
 }
 
 export async function deleteAlias(alias: string): Promise<void> {

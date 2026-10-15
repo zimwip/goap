@@ -43,7 +43,8 @@ impact per node, its draft edited by each edit (ADR 0079; first, a new version p
 *unsaved*. The **Save / Discard bar is always in the dialog**: Save accepts the impacts and applies the changes;
 Discard, or leaving the dialog and accepting the warning that the edits will be lost, purges the changes. An unsaved
 change survives a reload and is offered again at the next load. Only graph functions are used; the engine is not
-involved (`web/src/lib/stores/pending.svelte.ts`, `settings.svelte.ts`, `llmEdit.ts`).
+involved (`web/src/lib/stores/pending.svelte.ts`, `settings.svelte.ts`, `llmEdit.ts`). Since ADR 0120 the graph service
+does the steps (`StageSettings`, `SaveSettings`, `DiscardSettings`, `GetPendingSettings`), the dialog one call per edit.
 
 ### 4. Proposals are reviewed in the dialog
 
