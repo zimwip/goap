@@ -187,17 +187,6 @@ func checkDependencies(c domain.Change, deps []domain.Dependency) error {
 	return nil
 }
 
-// ChangeDependencies are the dependencies of a change around it (ADR 0108).
-type ChangeDependencies struct {
-	// DependsOn are the changes it depends on, as it sees them.
-	DependsOn []domain.Dependency
-	// Dependents are the open changes depending on it, each as that change sees it.
-	Dependents []domain.Dependency
-	// Order is the order in which its open sub-changes merge into it (domain.DependencyOrder), each with whether its
-	// own dependencies are satisfied.
-	Order []domain.Dependency
-}
-
 // ChangeDependencies reads the dependencies of a change, the open changes depending on it and the merge order of its
 // open sub-changes.
 func (g *Graph) ChangeDependencies(ctx context.Context, id domain.ChangeID) (out ChangeDependencies, err error) {

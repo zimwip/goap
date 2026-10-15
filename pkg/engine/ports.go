@@ -5,15 +5,15 @@ import (
 	"sort"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // GraphPort is what the engine needs from the graph service. *graph.Graph
 // implements it in-process; the engine service uses a connect client.
 type GraphPort interface {
-	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
-	UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error)
+	CreateChange(ctx context.Context, in graphapi.NewChange) (domain.Change, error)
+	UpdateChange(ctx context.Context, id domain.ChangeID, p graphapi.ChangePatch) (domain.Change, error)
 	// MoveChange moves a root change to another project, with its open sub-changes (ADR 0091).
 	MoveChange(ctx context.Context, id domain.ChangeID, project string) (domain.Change, error)
 	// AttachChange makes a root change a sub-change of a change whose methodology integrates its own, DetachChange
@@ -23,7 +23,7 @@ type GraphPort interface {
 	// SetChangeDependencies replaces the changes a change depends on; ChangeDependencies reads them, the changes
 	// depending on it and the merge order of its sub-changes (ADR 0108).
 	SetChangeDependencies(ctx context.Context, id domain.ChangeID, deps []domain.ChangeID) (domain.Change, error)
-	ChangeDependencies(ctx context.Context, id domain.ChangeID) (graph.ChangeDependencies, error)
+	ChangeDependencies(ctx context.Context, id domain.ChangeID) (graphapi.ChangeDependencies, error)
 	// UpgradeChange moves an open change to another version of its methodology, the latest when version is "" (ADR
 	// 0113).
 	UpgradeChange(ctx context.Context, id domain.ChangeID, version string) (domain.Change, error)
@@ -33,19 +33,19 @@ type GraphPort interface {
 	// Change impacts (ADR 0024, 0076, 0079): declare the nodes a change acts on, check them out, edit their draft,
 	// review and move them.
 	ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) ([]domain.ChangeImpact, error)
-	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error)
-	ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graph.NodeCheckout) (domain.ChangeImpact, error)
-	ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graph.NodeUpdate) (domain.ChangeImpact, error)
-	ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graph.LinkWrite, flow, execution string) (domain.Link, error)
+	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graphapi.NodeCreate) (domain.ChangeImpact, error)
+	ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graphapi.NodeCheckout) (domain.ChangeImpact, error)
+	ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graphapi.NodeUpdate) (domain.ChangeImpact, error)
+	ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graphapi.LinkWrite, flow, execution string) (domain.Link, error)
 	ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link domain.LinkID, flow, execution string) error
-	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graph.NodeTransition) (domain.ChangeImpact, error)
+	ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graphapi.NodeTransition) (domain.ChangeImpact, error)
 	ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) (domain.ChangeImpact, error)
 	WithdrawImpact(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, flow, execution string) error
 	// WithdrawImpacts takes several change impacts out of the change at once, all or none.
 	WithdrawImpacts(ctx context.Context, id domain.ChangeID, impacts []domain.ChangeImpactID, flow, execution string) error
 	// ImpactNodeMerge and ImpactNodeSplit replace nodes by successors from the side of their parents (ADR 0077).
-	ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in graph.MergeInput) (graph.Restructured, error)
-	ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in graph.SplitInput) (graph.Restructured, error)
+	ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in graphapi.MergeInput) (graphapi.Restructured, error)
+	ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in graphapi.SplitInput) (graphapi.Restructured, error)
 	ImpactNodeReviewOn(ctx context.Context, id domain.ChangeID, flow, execution string, node domain.ChangeImpactID, status domain.NodeReview, by, comment string) (domain.ChangeImpact, error)
 	// ImpactNodeReviewBatch applies reviews together, all or none (ADR 0080: the submission of a review).
 	ImpactNodeReviewBatch(ctx context.Context, id domain.ChangeID, b domain.ReviewBatch) ([]domain.ChangeImpact, error)
@@ -55,7 +55,7 @@ type GraphPort interface {
 	// BlackboardIn is the blackboard of a flow branch ("" = main); OpenFlow /
 	// AdoptFlow / DiscardFlow relaunch a step on a new branch and decide it.
 	BlackboardIn(ctx context.Context, id domain.ChangeID, flow string) (domain.Blackboard, error)
-	OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error)
+	OpenFlow(ctx context.Context, id domain.ChangeID, in graphapi.OpenFlowRequest) (domain.Flow, error)
 	AdoptFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
 	DiscardFlow(ctx context.Context, id domain.ChangeID, flow, by string) (domain.Flow, error)
 	// ValidateBoard checks the consistency of the blackboard seen from a flow.
@@ -68,14 +68,14 @@ type GraphPort interface {
 	ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error)
 	// Options of a change (ADR 0009 §3, ADR 0032 §6): open, activate, evaluate, list and compare them. Selecting and
 	// rejecting one is a decision, made through the graph service.
-	OpenOption(ctx context.Context, id domain.ChangeID, in graph.OpenOptionRequest) (domain.Flow, error)
+	OpenOption(ctx context.Context, id domain.ChangeID, in graphapi.OpenOptionRequest) (domain.Flow, error)
 	ActivateOption(ctx context.Context, id domain.ChangeID, option, by string) (string, error)
 	EvaluateOption(ctx context.Context, id domain.ChangeID, option, by, comment string) (domain.Flow, error)
 	Options(ctx context.Context, id domain.ChangeID) ([]domain.Flow, error)
-	CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error)
+	CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graphapi.OptionComparison, error)
 	// Decision points (ADR 0009 §4): the item operations of kind decisionPoint and decision.investigate go through them.
-	OpenDecision(ctx context.Context, id domain.ChangeID, in graph.OpenDecisionRequest) (domain.DecisionPoint, error)
-	RuleDecision(ctx context.Context, id domain.ChangeID, in graph.RuleRequest) (domain.DecisionPoint, error)
+	OpenDecision(ctx context.Context, id domain.ChangeID, in graphapi.OpenDecisionRequest) (domain.DecisionPoint, error)
+	RuleDecision(ctx context.Context, id domain.ChangeID, in graphapi.RuleRequest) (domain.DecisionPoint, error)
 	AnswerQuestion(ctx context.Context, id domain.ChangeID, question, answer, process, by string) (domain.DecisionPoint, error)
 	RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, by, comment string) (domain.DecisionPoint, error)
 	DecisionPoints(ctx context.Context, id domain.ChangeID) ([]domain.DecisionPoint, error)
@@ -83,10 +83,10 @@ type GraphPort interface {
 	// Branch, PlanMerge and IntegrateChange are the second step of Apply: the merge of a committed change into the
 	// branch it was forked from, with the resolutions of the conflicts a person settled (ADR 0056).
 	Branch(ctx context.Context, namespace, name string) (domain.Branch, error)
-	PlanMerge(ctx context.Context, namespace, from, into string) (graph.MergePlan, error)
-	IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graph.Resolution) (domain.Change, error)
+	PlanMerge(ctx context.Context, namespace, from, into string) (graphapi.MergePlan, error)
+	IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graphapi.Resolution) (domain.Change, error)
 	// RebaseState tells where a change stands against what it builds on: the conflicts a rebase left to settle (ADR 0101).
-	RebaseState(ctx context.Context, id domain.ChangeID) (graph.RebaseState, error)
+	RebaseState(ctx context.Context, id domain.ChangeID) (graphapi.RebaseState, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// AppendLog / ChangeLog are the log of the changes, where the execution journal lives (ADR 0011, pkg/journal).
 	AppendLog(ctx context.Context, entries []domain.LogEntry) error
@@ -95,7 +95,7 @@ type GraphPort interface {
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	// ListChanges lists the changes matching a filter (goap-change.list): which open change a request
 	// continues, else a new one is proposed.
-	ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error)
+	ListChanges(ctx context.Context, f graphapi.ChangesFilter) ([]domain.Change, error)
 	// Structures are the organisation and project hierarchies in force (ADR 0054); AdminOnlyType tells a node type
 	// platform administrators alone write (ADR 0068).
 	Structures(ctx context.Context) (domain.Structures, error)

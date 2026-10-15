@@ -2,11 +2,12 @@ package engine
 
 import (
 	"context"
+
 	"github.com/zimwip/goap/pkg/events"
+	"github.com/zimwip/goap/pkg/graphapi"
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
 )
 
 // EventingGraph wraps an in-process GraphPort and reports change lifecycle
@@ -31,7 +32,7 @@ func (g EventingGraph) emit(ctx context.Context, typ string, id domain.ChangeID,
 }
 
 // CreateChange implements GraphPort.
-func (g EventingGraph) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
+func (g EventingGraph) CreateChange(ctx context.Context, in graphapi.NewChange) (domain.Change, error) {
 	c, err := g.GraphPort.CreateChange(ctx, in)
 	if err == nil {
 		g.emit(ctx, events.ChangeCreated, c.ID, nil, nil)
@@ -64,7 +65,7 @@ func (g EventingGraph) DetachChange(ctx context.Context, id domain.ChangeID) (do
 }
 
 // UpdateChange implements GraphPort: change.edited when a field of the header changed (ADR 0110).
-func (g EventingGraph) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error) {
+func (g EventingGraph) UpdateChange(ctx context.Context, id domain.ChangeID, p graphapi.ChangePatch) (domain.Change, error) {
 	before, err := g.GraphPort.Change(ctx, id)
 	if err != nil {
 		return before, err
@@ -107,7 +108,7 @@ func (g EventingGraph) Apply(ctx context.Context, id domain.ChangeID, name strin
 }
 
 // IntegrateChange implements GraphPort: a merge that completes applies the change.
-func (g EventingGraph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graph.Resolution) (domain.Change, error) {
+func (g EventingGraph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graphapi.Resolution) (domain.Change, error) {
 	c, err := g.GraphPort.IntegrateChange(ctx, id, resolutions)
 	if err == nil && c.Status == domain.ChangeApplied {
 		g.emit(ctx, events.ChangeApplied, id, nil, nil)

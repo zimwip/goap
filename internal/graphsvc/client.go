@@ -14,16 +14,14 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 )
 
-// Client adapts the graph Connect client to engine.GraphPort.
+// Client adapts the graph Connect client to engine.GraphPort (checked by client_port_test.go: the graph service names
+// no engine type, pkg/layering).
 type Client struct {
 	rpc graphv1connect.GraphServiceClient
 }
-
-var _ engine.GraphPort = (*Client)(nil)
 
 // NewClient returns a client for the graph service at baseURL.
 // The requests carry the principal of their context: the engine acts for the initiator of a process, which the graph

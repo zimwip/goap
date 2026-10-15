@@ -196,25 +196,6 @@ func (g *Graph) checkSettled(ctx context.Context, tx Tx, c domain.Change, impact
 	return nil
 }
 
-// ImpactConflicts are the conflicts a rebase left on a change impact, not settled yet.
-type ImpactConflicts struct {
-	Impact    domain.ChangeImpactID `json:"impactId"`
-	Key       string                `json:"key"`
-	Conflicts []string              `json:"conflicts"`
-}
-
-// RebaseState is where a change stands against the branch it was forked from (ADR 0101, 0103): the change impacts whose
-// node that branch changed since the fork, a rebase bringing them up to date, and the conflicts left to settle.
-type RebaseState struct {
-	Parent    domain.ChangeID         `json:"parentId"`
-	Behind    []domain.ChangeImpactID `json:"behind,omitempty"`
-	Conflicts []ImpactConflicts       `json:"conflicts,omitempty"`
-	// Branch and Onto, for a change behind the head of the branch it was forked from: that branch and the head baseline a
-	// rebase moves it to (empty: not behind).
-	Branch string            `json:"branch,omitempty"`
-	Onto   domain.BaselineID `json:"onto,omitempty"`
-}
-
 // RebaseState reads where a change stands against the branch it was forked from. A change that committed nothing, or a
 // closed one, has nothing behind.
 func (g *Graph) RebaseState(ctx context.Context, id domain.ChangeID) (st RebaseState, err error) {

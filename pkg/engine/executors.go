@@ -18,7 +18,7 @@ import (
 	"github.com/zimwip/goap/pkg/builtins"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/llm"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/methodology"
@@ -837,7 +837,7 @@ func ApplyChange(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	b, err := ac.Graph.Apply(ctx, c.ID, name)
 	if err != nil {
 		// the rebase before landing left conflicts: a person settles them (TaskRebase); any other refusal is an error
-		if errors.Is(err, graph.ErrConflict) {
+		if errors.Is(err, graphapi.ErrConflict) {
 			if task := rebaseTaskOf(ctx, ac.Graph, c.ID); task != nil {
 				return ActionResult{Rebase: task, Output: fmt.Sprintf("rebase found conflicts on %d impact(s) to settle", len(task.Impacts))}, nil
 			}

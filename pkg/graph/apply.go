@@ -7,6 +7,7 @@ import (
 	"maps"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/operations"
 )
 
@@ -29,7 +30,7 @@ import (
 // Apply is both: it commits what is pending, then merges.
 
 // ErrNothingToCommit refuses a commit that would write nothing: no accepted modification, nothing to revert (ADR 0102).
-var ErrNothingToCommit = fmt.Errorf("nothing to commit: %w", ErrInvalid)
+var ErrNothingToCommit = graphapi.ErrNothingToCommit
 
 // Apply commits what the change has pending, then merges it (IntegrateChange). It returns the baseline the change left
 // on the branch it was forked from, or its last commit when the merge waits for a resolution.

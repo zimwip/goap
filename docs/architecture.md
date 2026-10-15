@@ -866,6 +866,14 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
 | **vault** | Secrets (LLM API keys, MCP credentials, DSN) | HashiCorp Vault KV v2 | — | 🟢 dev mode |
 
+### 3.0 Source components ([ADR 0124](adr/0124-source-components.md))
+
+The services are cut along components the sources follow too: a **contract** (protos, generated code, the pure
+model, `pkg/graphapi`: the requests, answers and errors of the graph's operations), the **graph**, the **engine**, the
+**MCP hub**, the **gateway** and the **platform** that composes them. The engine reaches the graph only through the
+ports it defines (`engine.GraphPort`, written with `pkg/graphapi`), the graph and its service name no engine type;
+`pkg/layering` holds every rule until the components become the modules of a `go.work`.
+
 ### 3.1 Communication
 
 - **External**: HTTP via Echo on the gateway. The frontend uses the **Connect JSON**

@@ -12,7 +12,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/journal"
 )
 
@@ -75,7 +75,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 	if who.Anonymous() {
 		who = old.Initiator
 	}
-	req := graph.OpenFlowRequest{Parent: old.Flow, ForkAfter: old.Steps[step].LastItem, Seeds: seeds, StaleRuns: execs,
+	req := graphapi.OpenFlowRequest{Parent: old.Flow, ForkAfter: old.Steps[step].LastItem, Seeds: seeds, StaleRuns: execs,
 		Origin: map[string]any{"step": step, "execution": old.Steps[step].Execution, "process": old.ID, "reason": reason}}
 	if guidance != "" {
 		by := who.Subject

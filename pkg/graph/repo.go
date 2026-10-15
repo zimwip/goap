@@ -4,18 +4,16 @@ package graph
 
 import (
 	"context"
-	"errors"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/graphapi"
 )
 
+// The errors of the graph are the ones of its contract (pkg/graphapi).
 var (
-	// ErrNotFound is returned when an entity does not exist.
-	ErrNotFound = errors.New("not found")
-	// ErrConflict is returned on optimistic concurrency violations.
-	ErrConflict = errors.New("conflict")
-	// ErrInvalid is returned on invalid input.
-	ErrInvalid = errors.New("invalid")
+	ErrNotFound = graphapi.ErrNotFound
+	ErrConflict = graphapi.ErrConflict
+	ErrInvalid  = graphapi.ErrInvalid
 )
 
 // Repo is the persistence primitive implemented by storage backends.

@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/form"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -31,7 +31,7 @@ func (e *Engine) formItems(ctx context.Context, p *Process, m *methodology.Compi
 	env, impacted := formEnv(bb, nodes)
 	clean, issues := form.Validate(*action.Form, values, env)
 	if len(issues) > 0 {
-		return nil, nil, errors.Join(graph.ErrInvalid, fmt.Errorf("the form of %s: %w", action.Name, issues))
+		return nil, nil, errors.Join(graphapi.ErrInvalid, fmt.Errorf("the form of %s: %w", action.Name, issues))
 	}
 	if action.Code != "" {
 		return e.runFormCode(ctx, p, m, action, step, bb, clean)
@@ -81,10 +81,10 @@ func (e *Engine) runFormCode(ctx context.Context, p *Process, m *methodology.Com
 		step.Logs = append(step.Logs, l)
 	}
 	if err != nil {
-		return nil, nil, errors.Join(graph.ErrInvalid, fmt.Errorf("the code of %s: %w", action.Name, err))
+		return nil, nil, errors.Join(graphapi.ErrInvalid, fmt.Errorf("the code of %s: %w", action.Name, err))
 	}
 	if res.Suspended {
-		return nil, nil, fmt.Errorf("the code of the human action %s cannot wait for a sub-agent: %w", action.Name, graph.ErrInvalid)
+		return nil, nil, fmt.Errorf("the code of the human action %s cannot wait for a sub-agent: %w", action.Name, graphapi.ErrInvalid)
 	}
 	if res.Output != "" {
 		step.Output = res.Output

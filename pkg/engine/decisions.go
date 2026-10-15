@@ -9,7 +9,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 )
 
 // Decision loops (ADR 0009 §4). An action works on the decision points of its change through items of kind
@@ -87,7 +87,7 @@ func (e *Engine) applyDecisionOps(ctx context.Context, p *Process, ops []Decisio
 		}
 		switch op.Op {
 		case domain.DecisionOpenOp:
-			in := graph.OpenDecisionRequest{Question: op.Question, Criteria: op.Criteria, Policy: op.Policy, By: by}
+			in := graphapi.OpenDecisionRequest{Question: op.Question, Criteria: op.Criteria, Policy: op.Policy, By: by}
 			for _, o := range op.Options {
 				in.Options = append(in.Options, option(o))
 			}
@@ -100,7 +100,7 @@ func (e *Engine) applyDecisionOps(ctx context.Context, p *Process, ops []Decisio
 				refs[strings.TrimPrefix(op.Ref, "#")] = d.ID
 			}
 		case domain.DecisionRuleOp:
-			in := graph.RuleRequest{Point: point(op.Point), Outcome: op.Outcome, Confidence: op.Confidence, Justification: op.Justification,
+			in := graphapi.RuleRequest{Point: point(op.Point), Outcome: op.Outcome, Confidence: op.Confidence, Justification: op.Justification,
 				Questions: op.Questions, Human: human, By: by}
 			if op.Option != "" {
 				in.Option = option(op.Option)

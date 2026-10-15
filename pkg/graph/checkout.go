@@ -27,61 +27,6 @@ import (
 // out the key of a planned creation gives it its draft (a checkedOut event, so a flow fulfils it as it edits any
 // impact); it lands like any creation.
 
-// NodeCreate is a node ImpactNodeCreate creates.
-type NodeCreate struct {
-	Key, Type  string
-	Properties map[string]any
-	// Owner is the key of the organisational unit owning the node (ADR 0054); empty: the unit holding the change.
-	Owner     string
-	Rationale string
-	// Links are outgoing links of the draft.
-	Links []LinkWrite
-	// Flow is the flow the call works on ("": the active option, else the main flow; domain.MainFlow names the main
-	// flow) and Execution the action run that makes it (ADR 0025).
-	Flow, Execution string
-	ProducedBy      string
-	DerivedFrom     []domain.ItemID
-}
-
-// NodeCheckout names the node ImpactNodeCheckout or ImpactNodeTransition works on: a change impact, or a node (then the impact the
-// flow sees on it, declared when the change holds none).
-type NodeCheckout struct {
-	Impact domain.ChangeImpactID
-	Node   domain.NodeID
-	// Key names the node by its key, when neither Impact nor Node is given.
-	Key string
-	// Rationale says why, when the call declares the impact.
-	Rationale       string
-	Flow, Execution string
-	ProducedBy      string
-}
-
-// NodeTransition moves a node along its lifecycle (ImpactNodeTransition): To is the state it goes to.
-type NodeTransition struct {
-	NodeCheckout
-	To string
-}
-
-// NodeUpdate edits a draft.
-type NodeUpdate struct {
-	// Node and Key name the node when ImpactNodeUpdate is given no change impact (see resolve).
-	Node domain.NodeID
-	Key  string
-	// Properties are merged over the ones of the draft.
-	Properties map[string]any
-	// Owner transfers the node to another organisational unit (its key, ADR 0054).
-	Owner           string
-	Flow, Execution string
-}
-
-// LinkWrite is an outgoing link of a draft: to an exact node version, or, with Version 0, to the draft of a node the
-// change holds (resolved to the version landing writes for it).
-type LinkWrite struct {
-	Type       string
-	To         domain.NodeRef
-	Properties map[string]any
-}
-
 // work is what an operation on a change impact needs: the change, the flow it works on and the branch versions are
 // written on, and the change impact as the flow sees it.
 type work struct {
@@ -178,7 +123,8 @@ type target struct {
 	DerivedFrom     []domain.ItemID
 }
 
-func (in NodeCheckout) target() target {
+// checkoutTarget is the node a checkout or a transition names.
+func checkoutTarget(in NodeCheckout) target {
 	return target{Impact: in.Impact, Node: in.Node, Key: in.Key, Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution, ProducedBy: in.ProducedBy}
 }
 
@@ -427,7 +373,7 @@ func (g *Graph) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in N
 		return cn, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		w, err := g.resolve(ctx, tx, id, in.target())
+		w, err := g.resolve(ctx, tx, id, checkoutTarget(in))
 		if err != nil {
 			return err
 		}
@@ -888,7 +834,7 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 // node), the node as the flow sees it (its draft, else the stored version it starts from) with the state it leaves, and
 // the transition of the lifecycle.
 func (g *Graph) transitionOf(ctx context.Context, tx Tx, id domain.ChangeID, in NodeTransition) (*work, domain.Node, domain.Transition, error) {
-	w, err := g.resolve(ctx, tx, id, in.target())
+	w, err := g.resolve(ctx, tx, id, checkoutTarget(in.NodeCheckout))
 	if err != nil {
 		return nil, domain.Node{}, domain.Transition{}, err
 	}

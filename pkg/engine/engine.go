@@ -20,7 +20,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/dsl"
 	"github.com/zimwip/goap/pkg/goap"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
@@ -552,7 +552,7 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		baseline = b
 	}
 	p.BaselineID = baseline
-	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID,
+	c, err := e.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID,
 		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
 	if err != nil {
 		return "", err

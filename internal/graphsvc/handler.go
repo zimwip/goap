@@ -22,7 +22,6 @@ import (
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/okf"
@@ -32,10 +31,16 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+// Publisher publishes the events of the changes (NATS in services, the event hub in process); the engine's
+// Publisher has the same method, so one publisher serves both.
+type Publisher interface {
+	Publish(ctx context.Context, subject string, v any) error
+}
+
 // Handler implements graphv1connect.GraphServiceHandler.
 type Handler struct {
 	Graph  *graph.Graph
-	Events engine.Publisher
+	Events Publisher
 	// Authz gates the creation of a node in a change (resource "object": ImpactNodeCreate, the successors of a
 	// merge or split, a graph import), the tags and the reading of prompts. Nil grants everything. The other
 	// impact operations are not gated by it.

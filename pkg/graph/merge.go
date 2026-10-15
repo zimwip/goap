@@ -297,45 +297,6 @@ const (
 	MergeThreeWay    = "merge"        // changed on both branches
 )
 
-// MergeCandidate is a node changed on the source branch since its fork.
-type MergeCandidate struct {
-	Node     domain.NodeID   `json:"node"`
-	Key      string          `json:"key"`
-	Type     string          `json:"type"`
-	Kind     string          `json:"kind"`
-	Ancestor *domain.NodeRef `json:"ancestor,omitempty"`
-	// Ours is the version on the target branch (nil when added or deleted there).
-	Ours   *domain.NodeRef `json:"ours,omitempty"`
-	Theirs domain.NodeRef  `json:"theirs"`
-	// Deleted is set when the source branch deleted the node.
-	Deleted   bool           `json:"deleted,omitempty"`
-	Base      map[string]any `json:"base,omitempty"`
-	OursProps map[string]any `json:"oursProps,omitempty"`
-	// TheirsProps and Merged are the source and proposed merged properties.
-	TheirsProps map[string]any `json:"theirsProps,omitempty"`
-	Merged      map[string]any `json:"merged,omitempty"`
-	Conflicts   []string       `json:"conflicts,omitempty"`
-}
-
-// MergePlan lists what merging a branch into another would do.
-type MergePlan struct {
-	From       string            `json:"from"`
-	Into       string            `json:"into"`
-	IntoHead   domain.BaselineID `json:"intoHead"`
-	Candidates []MergeCandidate  `json:"candidates"`
-}
-
-// Conflicting returns the candidates that need a resolution.
-func (p MergePlan) Conflicting() []MergeCandidate {
-	var out []MergeCandidate
-	for _, c := range p.Candidates {
-		if len(c.Conflicts) > 0 {
-			out = append(out, c)
-		}
-	}
-	return out
-}
-
 // PlanMerge computes the 3-way merge of branch from into branch into, both of namespace.
 func (g *Graph) PlanMerge(ctx context.Context, namespace, from, into string) (p MergePlan, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { p, err = planMerge(ctx, tx, namespace, from, into); return err })
@@ -438,14 +399,6 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 		plan.Candidates = append(plan.Candidates, c)
 	}
 	return plan, nil
-}
-
-// Resolution resolves a merge conflict: Props is the resolved property map
-// (for a deletion conflict, any resolution with Skip unset applies the
-// deletion); Skip keeps the target version unchanged.
-type Resolution struct {
-	Props map[string]any `json:"props,omitempty"`
-	Skip  bool           `json:"skip,omitempty"`
 }
 
 // MergeRequest merges a branch into another one.

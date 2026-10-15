@@ -6,7 +6,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/journal"
 )
 
@@ -38,7 +38,7 @@ func mergeTaskOf(ctx context.Context, g GraphPort, c domain.Change) (*MergeTask,
 // ResolveMerge settles the conflicts of a TaskMerge (by node id: the properties to keep, or skip the node) and
 // completes the merge of the change; the process goes on (the caller runs it). Conflicts that remain, because the
 // target branch moved meanwhile, keep the process waiting with the new ones.
-func (e *Engine) ResolveMerge(ctx context.Context, id string, resolutions map[domain.NodeID]graph.Resolution, comment string) (*Process, error) {
+func (e *Engine) ResolveMerge(ctx context.Context, id string, resolutions map[domain.NodeID]graphapi.Resolution, comment string) (*Process, error) {
 	defer e.lock(id)()
 	p, err := e.Store.Get(ctx, id)
 	if err != nil {

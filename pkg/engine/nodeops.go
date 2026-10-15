@@ -10,17 +10,17 @@ import (
 	"github.com/google/uuid"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/dsl"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
 
 // impactWriteRetries bounds the retry of a single change-impact write on
-// graph.ErrConflict (ADR 0031, gap 6): with concurrent processes now sharing
+// graphapi.ErrConflict (ADR 0031, gap 6): with concurrent processes now sharing
 // one change's main branch by default, a transient version clash on a node
 // the graph layer re-validates internally (e.g. a concurrent WriteNode) is
-// expected rather than rare. graph.ErrConflict is a single sentinel shared by
+// expected rather than rare. graphapi.ErrConflict is a single sentinel shared by
 // several non-transient conditions too (an unresolved merge, a flow that
 // needs a decision, a key already in use); retrying those is harmless (the
 // graph layer re-checks live state on every call, so a non-transient cause
@@ -35,7 +35,7 @@ func retryOnConflict[T any](call func() (T, error)) (T, error) {
 	)
 	for attempt := 0; attempt < impactWriteRetries; attempt++ {
 		out, err = call()
-		if err == nil || !errors.Is(err, graph.ErrConflict) {
+		if err == nil || !errors.Is(err, graphapi.ErrConflict) {
 			return out, err
 		}
 	}
@@ -124,7 +124,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		}
 		if cn.Post != nil {
 			posts[cn.ID] = *cn.Post
-			out[cn.ID] = graph.IsWorking(bb.Change, p.Flow, bb.Nodes[*cn.Post].Node)
+			out[cn.ID] = graphapi.IsWorking(bb.Change, p.Flow, bb.Nodes[*cn.Post].Node)
 		}
 	}
 	local := map[string]domain.ChangeImpactID{}
@@ -177,7 +177,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			}
 			if planned[id] { // a planned creation a link needs: its draft, bare
 				cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-					return e.Graph.ImpactNodeCheckout(ctx, p.ChangeID, graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
+					return e.Graph.ImpactNodeCheckout(ctx, p.ChangeID, graphapi.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
 				})
 				if err != nil {
 					return domain.NodeRef{}, err
@@ -234,7 +234,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		delete(pending, c.ref)
 		delete(pending, c.key)
 		cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-			return e.Graph.ImpactNodeCreate(ctx, p.ChangeID, graph.NodeCreate{Key: c.key, Type: c.typ, Properties: props, Rationale: c.rationale,
+			return e.Graph.ImpactNodeCreate(ctx, p.ChangeID, graphapi.NodeCreate{Key: c.key, Type: c.typ, Properties: props, Rationale: c.rationale,
 				Flow: p.Flow, Execution: execution, ProducedBy: producedBy})
 		})
 		if err != nil {
@@ -296,26 +296,26 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if op.Op == "split" {
 				names = []string{op.Node}
 			}
-			var srcs []graph.NodeName
+			var srcs []graphapi.NodeName
 			for _, s := range names {
 				if id, err := resolve(s); err == nil {
-					srcs = append(srcs, graph.NodeName{Impact: id})
+					srcs = append(srcs, graphapi.NodeName{Impact: id})
 				} else if strings.HasPrefix(s, "#") {
 					return declared, fail(err)
 				} else {
-					srcs = append(srcs, graph.NodeName{Key: s})
+					srcs = append(srcs, graphapi.NodeName{Key: s})
 				}
 			}
-			var into []graph.NodeCreate
+			var into []graphapi.NodeCreate
 			for _, x := range op.Into {
-				into = append(into, graph.NodeCreate{Key: x.Key, Type: qualify(x.Type), Properties: x.Props, Rationale: x.Rationale, Flow: p.Flow, Execution: execution, ProducedBy: producedBy})
+				into = append(into, graphapi.NodeCreate{Key: x.Key, Type: qualify(x.Type), Properties: x.Props, Rationale: x.Rationale, Flow: p.Flow, Execution: execution, ProducedBy: producedBy})
 			}
-			var res graph.Restructured
+			var res graphapi.Restructured
 			var err error
 			if op.Op == "merge" && len(into) == 1 {
-				res, err = e.Graph.ImpactNodeMerge(ctx, p.ChangeID, graph.MergeInput{Sources: srcs, Into: into[0], Rationale: op.Rationale, Flow: p.Flow, Execution: execution})
+				res, err = e.Graph.ImpactNodeMerge(ctx, p.ChangeID, graphapi.MergeInput{Sources: srcs, Into: into[0], Rationale: op.Rationale, Flow: p.Flow, Execution: execution})
 			} else if op.Op == "split" && len(srcs) == 1 {
-				res, err = e.Graph.ImpactNodeSplit(ctx, p.ChangeID, graph.SplitInput{Source: srcs[0], Into: into, Rationale: op.Rationale, Flow: p.Flow, Execution: execution})
+				res, err = e.Graph.ImpactNodeSplit(ctx, p.ChangeID, graphapi.SplitInput{Source: srcs[0], Into: into, Rationale: op.Rationale, Flow: p.Flow, Execution: execution})
 			} else {
 				err = fmt.Errorf("malformed %s", op.Op)
 			}
@@ -363,7 +363,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			// the first write checks the node out: its draft, edited by the next ones (ADR 0076, 0079)
 			if !out[id] {
 				cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-					return e.Graph.ImpactNodeCheckout(ctx, p.ChangeID, graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
+					return e.Graph.ImpactNodeCheckout(ctx, p.ChangeID, graphapi.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
 				})
 				if err != nil {
 					return declared, fail(err)
@@ -372,7 +372,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				delete(planned, id)
 			}
 			if len(op.Props) > 0 && !propsIn {
-				if _, err := e.Graph.ImpactNodeUpdate(ctx, p.ChangeID, id, graph.NodeUpdate{Properties: op.Props, Flow: p.Flow, Execution: execution}); err != nil {
+				if _, err := e.Graph.ImpactNodeUpdate(ctx, p.ChangeID, id, graphapi.NodeUpdate{Properties: op.Props, Flow: p.Flow, Execution: execution}); err != nil {
 					return declared, fail(err)
 				}
 			}
@@ -381,7 +381,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				if err != nil {
 					return declared, fail(err)
 				}
-				if _, err := e.Graph.ImpactLinkCreate(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to, Properties: l.Props}, p.Flow, execution); err != nil {
+				if _, err := e.Graph.ImpactLinkCreate(ctx, p.ChangeID, id, graphapi.LinkWrite{Type: qualify(l.Type), To: to, Properties: l.Props}, p.Flow, execution); err != nil {
 					return declared, fail(err)
 				}
 			}
@@ -399,7 +399,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				return declared, fail(err)
 			}
 			cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
-				return e.Graph.ImpactNodeTransition(ctx, p.ChangeID, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution}, To: op.State})
+				return e.Graph.ImpactNodeTransition(ctx, p.ChangeID, graphapi.NodeTransition{NodeCheckout: graphapi.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution}, To: op.State})
 			})
 			if err != nil {
 				return declared, fail(err)

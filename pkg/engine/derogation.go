@@ -10,7 +10,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/risk"
 	"github.com/zimwip/goap/pkg/verify"
 )
@@ -85,7 +85,7 @@ func ExpireDerogations(ctx context.Context, g GraphPort, id domain.ChangeID, now
 // expireAllDerogations is the builtin derogation.expire: it applies the expiry to every live change that holds an
 // open derogation.
 func expireAllDerogations(ctx context.Context, ac ActionContext) (ActionResult, error) {
-	changes, err := ac.Graph.ListChanges(ctx, graph.ChangesFilter{Status: []domain.ChangeStatus{domain.ChangeActive}})
+	changes, err := ac.Graph.ListChanges(ctx, graphapi.ChangesFilter{Status: []domain.ChangeStatus{domain.ChangeActive}})
 	if err != nil {
 		return ActionResult{}, err
 	}
