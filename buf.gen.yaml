@@ -11,3 +11,11 @@ plugins:
   - local: protoc-gen-connect-go
     out: gen
     opt: paths=source_relative
+  # the TypeScript of the web (ADR 0125): message types and their JSON forms (json_types), read by
+  # web/src/lib/api/types; needs `npm ci` in web/
+  - local: ["node", "web/node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es"]
+    out: web/src/gen
+    opt:
+      - target=ts
+      - json_types=true
+      - import_extension=none

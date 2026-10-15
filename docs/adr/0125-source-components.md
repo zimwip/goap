@@ -1,8 +1,8 @@
 # ADR 0125 — Source components: a contract, the graph, the engine, the MCP hub, the gateway, the platform
 
-**Status**: accepted; steps 1 to 4 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
+**Status**: accepted; steps 1 to 5 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
 service no longer import each other; the gateway, the hub and the connectors off the graph and the engine; the two
-registries; the engine's tests without the graph), the next steps not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
+registries; the engine's tests without the graph; the web's types generated and checked), the `go.work` not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
 0063 (the engine's scope port), ADR 0066 (the hooks of the graph), ADR 0113 (pinned domains)
 
 ## Context
@@ -88,9 +88,19 @@ the clock, apply node or decision operations, the host of an action, ...), which
 graph port was not written: the scenarios check the graph's rules as much as the engine's, and a fake would have to
 repeat them.
 
+### 6. The web's types
+
+`buf generate` writes the TypeScript of the contract into `web/src/gen` (`protoc-gen-es`, with the JSON forms
+`<Message>Json` the web reads over Connect JSON). The hand-written types of `web/src/lib/api/types` stay, as they narrow
+enums and document the fields, but `contract.test.ts` compares each one named like a message with it: a field the
+message has and the type lacks, or the reverse, fails, unless the exception is listed with its reason. New fields can
+use the generated types directly (`NodeType.structure` is a `StructureTagJson`). The first run found two drifts, fixed
+here: the roles allowed to run an agent or an action (ADR 0043) did not cross the registry's protocol (the methodology
+editor lost them on save), and several web types missed fields the services send.
+
 ## Consequences
 
 - `go list -deps ./pkg/engine` holds neither `pkg/graph` nor a database driver; `internal/graphsvc` no engine type.
 - `go list -test -deps ./pkg/engine` holds no graph either (`pkg/layering`, `TestTestLayering`); `engine.Internals`
   is used by tests only (`TestEngineInternalsOnlyInTests`).
-- Next steps: the generated TypeScript, the `go.work`.
+- Next step: the `go.work`.

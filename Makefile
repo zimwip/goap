@@ -12,7 +12,8 @@ tools: ## install code generators
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
 	go install github.com/air-verse/air@latest
 
-generate: ## regenerate connect-rpc code from proto/ and the catalogue of operations (pkg/operations)
+generate: ## regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/, and the catalogue of operations (pkg/operations)
+	@test -x web/node_modules/.bin/protoc-gen-es || (cd web && npm ci --ignore-scripts)
 	buf lint
 	buf generate
 	go generate ./pkg/operations/

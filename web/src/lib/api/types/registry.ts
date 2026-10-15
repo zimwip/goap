@@ -2,6 +2,7 @@
 
 import type { Struct } from './common';
 import type { FormDef } from '../../forms/types';
+import type { RequiredLinkJson, StructureTagJson } from '../../../gen/goap/registry/v1/registry_pb';
 
 // --- registry ---------------------------------------------------------------
 
@@ -160,6 +161,12 @@ export interface NodeType {
   search?: SearchProperty[];
   /** editor the UI opens the nodes with (inherited through extends; absent: the default node editor) */
   editor?: string;
+  /** tags the type as a structure of the graph (ADR 0054): the organisation or the project hierarchy */
+  structure?: StructureTagJson;
+  /** links a node of the type must carry (ADR 0065) */
+  requires?: RequiredLinkJson[];
+  /** nodes of the type are written by platform administrators only (ADR 0068) */
+  adminOnly?: boolean;
 }
 
 /** How the node index uses a property: text (full text and embedding), facet (filter and count). */

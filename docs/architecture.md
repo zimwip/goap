@@ -888,6 +888,9 @@ separate matter.
 The engine is tested without the graph: the scenarios that run it on a real graph are the platform's integration tests
 (`internal/enginee2e`), reaching the engine's unexported workings through `engine.Internals` only.
 
+The web's TypeScript is generated from the protos too (`web/src/gen`, `protoc-gen-es` with the JSON forms); the
+hand-written API types are checked against it field by field (`web/src/lib/api/contract.test.ts`).
+
 ### 3.1 Communication
 
 - **External**: HTTP via Echo on the gateway. The frontend uses the **Connect JSON**

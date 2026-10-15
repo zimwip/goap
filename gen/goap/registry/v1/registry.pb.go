@@ -1786,7 +1786,9 @@ type Action struct {
 	// fields [{name, widget, label, help, placeholder, section, required, default, constraints}])
 	Form *structpb.Struct `protobuf:"bytes,29,opt,name=form,proto3" json:"form,omitempty"`
 	// llm actions: the budget of the tool loop (ADR 0118)
-	Loop          *ActionLoop `protobuf:"bytes,30,opt,name=loop,proto3" json:"loop,omitempty"`
+	Loop *ActionLoop `protobuf:"bytes,30,opt,name=loop,proto3" json:"loop,omitempty"`
+	// roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent
+	Roles         []string `protobuf:"bytes,31,rep,name=roles,proto3" json:"roles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2031,6 +2033,13 @@ func (x *Action) GetLoop() *ActionLoop {
 	return nil
 }
 
+func (x *Action) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
 // The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default.
 type ActionLoop struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
@@ -2185,7 +2194,9 @@ type Agent struct {
 	// LLM alias (required when planner is llm or llm-scoring)
 	Model string `protobuf:"bytes,9,opt,name=model,proto3" json:"model,omitempty"`
 	// one instance per scope, run again for every new execution there with its conversation (ADR 0112)
-	Persistent    *Persistence `protobuf:"bytes,10,opt,name=persistent,proto3" json:"persistent,omitempty"`
+	Persistent *Persistence `protobuf:"bytes,10,opt,name=persistent,proto3" json:"persistent,omitempty"`
+	// roles allowed to run the agent (ADR 0043), declared by the methodology; empty: any member of the project
+	Roles         []string `protobuf:"bytes,11,rep,name=roles,proto3" json:"roles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2286,6 +2297,13 @@ func (x *Agent) GetModel() string {
 func (x *Agent) GetPersistent() *Persistence {
 	if x != nil {
 		return x.Persistent
+	}
+	return nil
+}
+
+func (x *Agent) GetRoles() []string {
+	if x != nil {
+		return x.Roles
 	}
 	return nil
 }
@@ -8407,7 +8425,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\bfor_each\x18\x01 \x01(\tR\aforEach\x12\x14\n" +
 	"\x05where\x18\x02 \x01(\tR\x05where\x127\n" +
 	"\aproduce\x18\x03 \x01(\v2\x1d.goap.registry.v1.ProduceSpecR\aproduce\x12.\n" +
-	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xcb\b\n" +
+	"\x04link\x18\x04 \x01(\v2\x1a.goap.registry.v1.LinkSpecR\x04link\"\xe1\b\n" +
 	"\x06Action\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x12\n" +
@@ -8441,7 +8459,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x05where\x18\x1b \x01(\tR\x05where\x12\x1a\n" +
 	"\bparallel\x18\x1c \x01(\x05R\bparallel\x12+\n" +
 	"\x04form\x18\x1d \x01(\v2\x17.google.protobuf.StructR\x04form\x120\n" +
-	"\x04loop\x18\x1e \x01(\v2\x1c.goap.registry.v1.ActionLoopR\x04loop\x1a6\n" +
+	"\x04loop\x18\x1e \x01(\v2\x1c.goap.registry.v1.ActionLoopR\x04loop\x12\x14\n" +
+	"\x05roles\x18\x1f \x03(\tR\x05roles\x1a6\n" +
 	"\bPreEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\bR\x05value:\x028\x01\x1a:\n" +
@@ -8460,7 +8479,7 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\x06Verify\x12\x16\n" +
 	"\x06oracle\x18\x01 \x01(\tR\x06oracle\x12%\n" +
 	"\vindependent\x18\x02 \x01(\bH\x00R\vindependent\x88\x01\x01B\x0e\n" +
-	"\f_independent\"\xc3\x02\n" +
+	"\f_independent\"\xd9\x02\n" +
 	"\x05Agent\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x1a\n" +
@@ -8474,7 +8493,8 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\n" +
 	"persistent\x18\n" +
 	" \x01(\v2\x1d.goap.registry.v1.PersistenceR\n" +
-	"persistent\"\xb5\x01\n" +
+	"persistent\x12\x14\n" +
+	"\x05roles\x18\v \x03(\tR\x05roles\"\xb5\x01\n" +
 	"\vPersistence\x12\x14\n" +
 	"\x05scope\x18\x01 \x01(\tR\x05scope\x12>\n" +
 	"\x05until\x18\x02 \x03(\v2(.goap.registry.v1.Persistence.UntilEntryR\x05until\x12\x16\n" +

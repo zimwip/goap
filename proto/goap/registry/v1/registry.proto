@@ -347,6 +347,8 @@ message Action {
   google.protobuf.Struct form = 29;
   // llm actions: the budget of the tool loop (ADR 0118)
   ActionLoop loop = 30;
+  // roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent
+  repeated string roles = 31;
 }
 
 // The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default.
@@ -388,6 +390,8 @@ message Agent {
   string model = 9;
   // one instance per scope, run again for every new execution there with its conversation (ADR 0112)
   Persistence persistent = 10;
+  // roles allowed to run the agent (ADR 0043), declared by the methodology; empty: any member of the project
+  repeated string roles = 11;
 }
 
 // The persistence of an agent (ADR 0112): what one instance is for, what closes it, how much of its conversation it

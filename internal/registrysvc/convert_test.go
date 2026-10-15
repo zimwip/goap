@@ -2,6 +2,7 @@ package registrysvc
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/pkg/methodology"
@@ -67,5 +68,18 @@ func TestGoalRoundTripsThroughPB(t *testing.T) {
 	in := methodology.Methodology{Name: "m", Version: "1", Goal: "deliver"}
 	if out := FromPB(ToPB(Record{Methodology: in})); out.Goal != "deliver" {
 		t.Fatalf("goal: %q", out.Goal)
+	}
+}
+
+// The roles allowed to run an agent or an action (ADR 0043) cross the protocol: the methodology editor saves them.
+func TestRunRolesRoundTripThroughPB(t *testing.T) {
+	back := FromPB(ToPB(Record{Methodology: methodology.Methodology{Name: "m", Version: "1",
+		Agents:  []methodology.Agent{{Name: "a", Roles: []string{"release_manager"}}},
+		Actions: []methodology.Action{{Name: "x", Kind: methodology.KindHuman, Roles: []string{"developer", "auditor"}}}}}))
+	if got := back.Agents[0].Roles; !slices.Equal(got, []string{"release_manager"}) {
+		t.Fatalf("agent roles: %v", got)
+	}
+	if got := back.Actions[0].Roles; !slices.Equal(got, []string{"developer", "auditor"}) {
+		t.Fatalf("action roles: %v", got)
 	}
 }
