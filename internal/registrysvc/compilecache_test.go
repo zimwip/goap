@@ -1,7 +1,6 @@
 package registrysvc
 
 import (
-	"strings"
 	"sync"
 	"testing"
 
@@ -108,29 +107,5 @@ func TestWarningsDoNotBlockPublish(t *testing.T) {
 	}
 	if _, err := s.Publish(as("admin"), m.Name, m.Version); err != nil {
 		t.Fatalf("a warning must not block the publish: %v", err)
-	}
-}
-
-// An element connected to nothing is a warning (ADR 0120, a principle): the draft saves and publishes.
-func TestIsolatedElementDoesNotBlockPublish(t *testing.T) {
-	enf, _ := authz.NewCasbin(nil)
-	s := &Service{Store: NewMemoryStore(), Authz: enf}
-	withALM(t, s)
-	m := example(t)
-	m.Name = "lonely"
-	m.Conditions = append(m.Conditions, methodology.Condition{Name: "orphan", Expr: "true"})
-	_, issues, err := s.Save(as("admin"), m)
-	if err != nil || issues.HasErrors() {
-		t.Fatalf("save: %v %v", issues, err)
-	}
-	found := false
-	for _, i := range issues.Warnings() {
-		found = found || strings.Contains(i.Message, "orphan")
-	}
-	if !found {
-		t.Fatalf("the isolated condition is a warning: %v", issues)
-	}
-	if _, err := s.Publish(as("admin"), m.Name, m.Version); err != nil {
-		t.Fatalf("an isolated element must not block the publish: %v", err)
 	}
 }

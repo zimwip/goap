@@ -72,12 +72,9 @@ definition drops its links.
 ### 4. No element stands alone
 
 By default no element of a methodology exists alone: each is linked to another element of the version (a link of its
-own, or one reaching it), or names something outside it (a library condition, another methodology). The registry
-reports an isolated element as a warning (ADR 0097) at the path of its name (`conditions[3].name`), shown by the editor
-(`connectivityIssues`, in `Service.validate`). It is a principle, not a constraint: the graph enforces nothing, the
-warning never refuses a save or a publication, and a methodology of a single element works. The version's
-`defines` does not count: it holds every element. An agent naming no action or no goal plans over all of them and is
-not isolated. The shipped methodologies had three dead conditions (`release-based` 0.1.1, `methodology-improvement`
+own, or one reaching it), or names something outside it (a library condition, another methodology). This is a
+principle of modelling, not a rule of the graph: nothing checks it, no issue or warning reports it, and a methodology
+of a single element saves, publishes and runs. The shipped methodologies had three dead conditions (`release-based` 0.1.1, `methodology-improvement`
 1.5.1, `sdlc` 0.8.2 drop them).
 
 ### 5. The self-observation writes links
@@ -93,7 +90,7 @@ A link written by a DSL node operation may carry attributes (`NodeOpLink.Props`)
 - The graph of the `methodology` namespace says what the methodology does: from a condition, the activities producing
   and requiring it; from a role, what it is assigned; the baseline explorer and any graph query read it without
   parsing JSON.
-- A methodology with a dead element no longer publishes: the issue names it.
+- A dead element is visible in the graph (a node with no link), but nothing refuses or flags it.
 - The definition, the registry API, YAML import / export and the web editor are unchanged; the stored form of a
   version changes. A version stored before reads back as it was (its names are properties, which `DecodeRefs` keeps);
   its next save writes the links.

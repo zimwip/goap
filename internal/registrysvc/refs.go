@@ -1,17 +1,9 @@
 package registrysvc
 
-import (
-	"fmt"
-	"strings"
-	"time"
-
-	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/methodology"
-)
+import "github.com/zimwip/goap/pkg/methodology"
 
 // The references between the elements of a version are links (ADR 0120, methodology.EncodeRefs): this is what the
-// store adds to them, the steps' sub-activities, the capabilities of the steps, and the rule that no element stands
-// alone.
+// store adds to them: the steps' sub-activities and the capabilities of the steps.
 
 // sameRef reports whether a stored link is the reference wanted (type, target and attributes).
 func sameRef(w methodology.RefLink, typ, to string, props map[string]any) bool {
@@ -69,13 +61,11 @@ type elementGraph struct {
 	headerLinks []methodology.RefLink
 	els         []defEl
 	links       map[string][]methodology.RefLink // relative key -> outgoing links
-	outside     map[string]bool                  // relative key -> it names something outside the version
-	implicit    map[string]bool                  // relative key -> an agent naming no action or no goal: it has them all
 }
 
 func buildElementGraph(header map[string]any, els []defEl, subActivity map[string][]string) elementGraph {
 	ix := indexElements(els)
-	g := elementGraph{links: map[string][]methodology.RefLink{}, outside: map[string]bool{}, implicit: map[string]bool{}}
+	g := elementGraph{links: map[string][]methodology.RefLink{}}
 	h := methodology.EncodeRefs(methodology.ElementVersion, header, ix)
 	g.header, g.headerLinks = h.Props, append(h.Links, methodology.DerivedRefs(methodology.ElementVersion, h.Props, ix, "")...)
 	for rel, ls := range capabilityLinks(els) {
@@ -89,69 +79,6 @@ func buildElementGraph(header map[string]any, els []defEl, subActivity map[strin
 		for _, child := range subActivity[rel] {
 			g.links[rel] = append(g.links[rel], methodology.RefLink{Type: linkSubActivity, To: child})
 		}
-		g.outside[rel] = enc.Outside
-		if e.kind == kindAgent {
-			actions, _ := e.props["actions"].([]any)
-			goals, _ := e.props["goals"].([]any)
-			g.implicit[rel] = len(actions) == 0 || len(goals) == 0
-		}
 	}
 	return g
-}
-
-// isolated lists the elements connected to no other element of the version (ADR 0120): no link of theirs reaches
-// another element, none reaches them, and they name nothing outside the version. The header defines every element and
-// does not count. An agent naming no action (or no goal) plans over all of them: it is not isolated.
-func (g elementGraph) isolated() []defEl {
-	degree := map[string]int{}
-	for from, ls := range g.links {
-		for _, l := range ls {
-			if l.To != from {
-				degree[from]++
-				degree[l.To]++
-			}
-		}
-	}
-	for _, l := range g.headerLinks {
-		degree[l.To]++
-	}
-	var out []defEl
-	for _, e := range g.els {
-		rel := e.kind + "/" + e.name
-		if degree[rel] > 0 || g.outside[rel] || g.implicit[rel] {
-			continue
-		}
-		out = append(out, e)
-	}
-	return out
-}
-
-// connectivityIssue says an element is isolated, at the path of its name in the definition.
-func connectivityIssue(e defEl) (path, msg string) {
-	field := ""
-	for _, k := range defKinds {
-		if k.kind == e.kind {
-			field = k.field
-		}
-	}
-	pos, _ := e.props["position"].(float64)
-	name, _ := e.props["name"].(string)
-	noun := strings.ToLower(nodeTypeOf(e.kind)[len("methodology@"):])
-	return fmt.Sprintf("%s[%d].name", field, int(pos)), fmt.Sprintf("%s %s is connected to nothing: no element of the methodology refers to it and it refers to none (a condition is the input or the output of an activity or a goal, a role is assigned, an action is run by a step, an agent or a method); use it or remove it", noun, name)
-}
-
-// connectivityIssues reports the elements of a definition connected to nothing (ADR 0120): by default no element of a
-// methodology stands alone, it is linked to the rest of the version. It is a principle, not a constraint: the issues are
-// warnings, which never refuse a save or a publication (a methodology of one element works).
-func connectivityIssues(m methodology.Methodology) def.Issues {
-	eg, err := encodeVersion(m, "", time.Time{}, time.Time{}, time.Time{}, "")
-	if err != nil {
-		return nil
-	}
-	var out def.Issues
-	for _, e := range eg.isolated() {
-		path, msg := connectivityIssue(e)
-		out = append(out, def.Issue{Path: path, Message: msg, Severity: def.SeverityWarning})
-	}
-	return out
 }

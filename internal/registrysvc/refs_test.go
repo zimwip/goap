@@ -2,7 +2,6 @@ package registrysvc
 
 import (
 	"context"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -152,47 +151,5 @@ func TestReferencesAreLinks(t *testing.T) {
 	expect("condition/framed")
 	if p := node(t, g, hk+"/action/frame").Properties; canon(t, p["effects"]) != `{"framed":true}` {
 		t.Fatalf("a name the version no longer declares is a property again: %v", p)
-	}
-}
-
-// By default no element of a methodology stands alone (ADR 0120): one nothing refers to and that refers to nothing is
-// a warning, never an error.
-func TestIsolatedElementsAreIssues(t *testing.T) {
-	m, err := methodology.Parse([]byte(refsYAML + `
-  - {name: unused, steps: [{name: alone}]}
-`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if issues := connectivityIssues(*m); len(issues) != 0 {
-		t.Fatalf("a process is connected to its steps: %v", issues)
-	}
-	m.Conditions = append(m.Conditions, methodology.Condition{Name: "orphan", Expr: "true"})
-	m.Roles = append(m.Roles, methodology.Role{Name: "nobody"})
-	m.Agents = append(m.Agents, methodology.Agent{Name: "all", Planner: "goap"})
-	var got []string
-	for _, i := range connectivityIssues(*m) {
-		if !i.IsWarning() {
-			t.Fatalf("an isolated element is a warning, not an error: %v", i)
-		}
-		got = append(got, i.Path)
-	}
-	if want := []string{"conditions[4].name", "roles[1].name"}; !slices.Equal(got, want) {
-		t.Fatalf("isolated elements: %q, want %q (an agent naming no action plans over all of them)", got, want)
-	}
-}
-
-// The methodologies of the repository have no isolated element.
-func TestRepositoryMethodologiesAreConnected(t *testing.T) {
-	files, _ := filepath.Glob("../../methodologies/*.yaml")
-	more, _ := filepath.Glob("../../methodologies/examples/*.yaml")
-	for _, f := range append(files, more...) {
-		m, err := methodology.LoadFile(f)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if issues := connectivityIssues(*m); len(issues) > 0 {
-			t.Errorf("%s: %v", f, issues)
-		}
 	}
 }

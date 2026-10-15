@@ -177,11 +177,10 @@ func setField(p map[string]any, path []string, v any) {
 }
 
 // Encoded is what EncodeRefs makes of the properties of an element: the properties left (the names that resolved
-// cut out), the links and whether a name stayed unresolved (the element refers to something outside the version).
+// cut out) and the links.
 type Encoded struct {
-	Props   map[string]any
-	Links   []RefLink
-	Outside bool
+	Props map[string]any
+	Links []RefLink
 }
 
 // EncodeRefs cuts the references of an element (kind, props) that resolve to an element of the version out of its
@@ -209,8 +208,6 @@ func EncodeRefs(kind string, props map[string]any, ix RefIndex) Encoded {
 			if rel, ok := ix.resolve(f.to, name); ok {
 				out.Links = append(out.Links, RefLink{f.link, rel, attrs(nil)})
 				setField(out.Props, f.path, nil)
-			} else if name != "" {
-				out.Outside = true
 			}
 		case refList:
 			list, _ := v.([]any)
@@ -221,7 +218,6 @@ func EncodeRefs(kind string, props map[string]any, ix RefIndex) Encoded {
 					out.Links = append(out.Links, RefLink{f.link, rel, attrs(map[string]any{LinkAttrPosition: float64(i)})})
 				} else {
 					rest = append(rest, item)
-					out.Outside = true
 				}
 			}
 			if rest == nil {
@@ -237,7 +233,6 @@ func EncodeRefs(kind string, props map[string]any, ix RefIndex) Encoded {
 					out.Links = append(out.Links, RefLink{f.link, rel, attrs(map[string]any{LinkAttrValue: m[name]})})
 				} else {
 					rest[name] = m[name]
-					out.Outside = true
 				}
 			}
 			if len(rest) == 0 && len(m) > 0 {
