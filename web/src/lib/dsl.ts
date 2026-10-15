@@ -35,6 +35,7 @@ export const DSL_FUNCTIONS: DslFunction[] = [
   { name: 'changeImpacts', args: [], returns: 'ChangeImpact[]', doc: 'Nodes the change reads, modifies or creates.', group: 'read' },
   { name: 'impactNode', args: ['key', 'rationale'], returns: '"#nN"', doc: 'The change acts on a baseline node, and why (no version written yet).', group: 'write' },
   { name: 'impactNodeCreate', args: ['type', 'key', 'rationale'], returns: '"#nN"', doc: 'The change creates a node, and why.', group: 'write' },
+  { name: 'impactNodePlan', args: ['type', 'key', 'rationale'], returns: '"#nN"', doc: 'The change will create a node, not written yet (a planned creation, no draft): a later writeNode of its key creates it.', group: 'write' },
   { name: 'impactNodeMerge', args: ['sources', 'type', 'key', 'rationale'], returns: '"#nN"', doc: 'Merge nodes (keys) into a new one, from the side of their parents: they lose the links to the sources and gain one to the new node; the sources stay as they are.', group: 'write' },
   { name: 'impactNodeSplit', args: ['source', '[{type, key, rationale, props}]'], returns: '"#nN"[]', doc: 'Split a node into new ones, from the side of its parents; the node stays as it is.', group: 'write' },
   {

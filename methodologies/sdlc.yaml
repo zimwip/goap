@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.8.1
+version: 0.8.2
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -302,8 +302,8 @@ actions:
       You are an analyst in a software development lifecycle, on the pass of the impact analysis about the needs and requirements.
       Change intent: "{{ .Change.Intent }}"
 
-      What the change already concerns (impacts of the layers above, confirmed):
-      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
+      What the change already concerns (impacts of the layers above: modified, or created; planned = to be written later):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Needs and requirements of the ALM repository (key, type, properties):
       {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Need") (isa .Type "alm@Requirement") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
@@ -311,8 +311,12 @@ actions:
       Name only the elements of this layer the change itself concerns DIRECTLY; the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
       {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
-      Finish with the summary of the pass (also when the layer is not concerned):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"requirements","summary":"<what changes at this layer, and why>"}}
+      What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
+      this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
+      repository; the specification or the design writes it under that key (types: alm@Need, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement):
+      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"requirements","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_requirements
     kind: builtin
@@ -338,8 +342,8 @@ actions:
       You are an analyst in a software development lifecycle, on the pass of the impact analysis about the functions (the functional layer).
       Change intent: "{{ .Change.Intent }}"
 
-      What the change already concerns (impacts of the layers above, confirmed):
-      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
+      What the change already concerns (impacts of the layers above: modified, or created; planned = to be written later):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Functions of the ALM repository (key, type, properties):
       {{ range .Baseline.Nodes }}{{ if isa .Type "alm@Function" }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
@@ -347,8 +351,12 @@ actions:
       Name only the elements of this layer the change itself concerns (a new behaviour of an existing function, beyond what the impacted requirements carry); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
       {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
-      Finish with the summary of the pass (also when the layer is not concerned):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"functions","summary":"<what changes at this layer, and why>"}}
+      What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
+      this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
+      repository; the specification or the design writes it under that key (types: alm@Function):
+      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"functions","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_functions
     kind: builtin
@@ -374,8 +382,8 @@ actions:
       You are an analyst in a software development lifecycle, on the pass of the impact analysis about the applications, solutions, interfaces, flows and data (the logical layer).
       Change intent: "{{ .Change.Intent }}"
 
-      What the change already concerns (impacts of the layers above, confirmed):
-      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
+      What the change already concerns (impacts of the layers above: modified, or created; planned = to be written later):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Applications, solutions, interfaces, flows and data of the ALM repository (key, type, properties):
       {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Application") (isa .Type "alm@Solution") (isa .Type "alm@Interface") (isa .Type "alm@Flow") (isa .Type "alm@Data") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
@@ -383,8 +391,12 @@ actions:
       Name only the elements of this layer the change itself concerns (a contract, a flow or a data structure to change); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
       {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
-      Finish with the summary of the pass (also when the layer is not concerned):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"applications","summary":"<what changes at this layer, and why>"}}
+      What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
+      this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
+      repository; the specification or the design writes it under that key (types: alm@Application, alm@Solution, alm@Interface, alm@Flow, alm@Data):
+      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"applications","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_applications
     kind: builtin
@@ -410,8 +422,8 @@ actions:
       You are an analyst in a software development lifecycle, on the pass of the impact analysis about the components and build artifacts (the physical layer).
       Change intent: "{{ .Change.Intent }}"
 
-      What the change already concerns (impacts of the layers above, confirmed):
-      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ .Rationale }}
+      What the change already concerns (impacts of the layers above: modified, or created; planned = to be written later):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ .Rationale }}
       {{ end }}
       Components and build artifacts of the ALM repository (key, type, properties):
       {{ range .Baseline.Nodes }}{{ if or (isa .Type "alm@Component") (isa .Type "alm@BuildArtifact") }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
@@ -419,8 +431,12 @@ actions:
       Name only the elements of this layer the change itself concerns (a technical change no function or application carries); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
       {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
-      Finish with the summary of the pass (also when the layer is not concerned):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"components","summary":"<what changes at this layer, and why>"}}
+      What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
+      this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
+      repository; the specification or the design writes it under that key (types: alm@Component, alm@BuildArtifact):
+      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
+      {"kind":"artifact","type":"impact_pass","data":{"layer":"components","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_components
     kind: builtin
@@ -443,7 +459,8 @@ actions:
     cost: 8
     instructions: >
       Indicate the needs and requirements of the ALM repository the change directly concerns, and why (impacted change
-      impacts), then record the pass: an artifact impact_pass with data {layer: requirements, summary}.
+      impacts), plan the ones the change needs that do not exist yet (planned creations: a type, a key, why; written
+      by the specification), then record the pass: an artifact impact_pass with data {layer: requirements, summary}.
 
   # one suspected impact at a time (scope impact, ADR 0109 §3.5): the planner sees "a suspected impact is pending" and
   # reaches the aggregates of `confirmed`; the engine runs it for each pending impact, given as .Subject
@@ -479,7 +496,10 @@ actions:
     cost: 1
     instructions: >
       Review the impacts of the change, layer by layer (requirements, functions, applications, components): add what is
-      missing, withdraw what is not concerned (reject it with the reason first). Then validate: an artifact
+      missing, withdraw what is not concerned (reject it with the reason first). The planned creations (intent created,
+      no content yet) are what the change will create: check their type, key and reason, the specification and the
+      design write them. An analysis may find nothing existing concerned (a green field) and plan creations only, or
+      nothing at all when the summaries of the passes say why: it is validated the same way. Then validate: an artifact
       impact_validation with data {accepted: true, comment}.
 
   # ======================= specification
@@ -492,9 +512,11 @@ actions:
     model: default
     prompt: |
       Change intent: "{{ .Change.Intent }}"
-      Impacted elements:
-      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}) {{ json .Pre.Properties }} : {{ .Rationale }}
+      Impacted elements (planned: a creation the analysis planned, to be written):
+      {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ if .Pre.ID }}{{ json .Pre.Properties }} {{ end }}: {{ .Rationale }}
       {{ end }}
+      Write the needs and requirements the analysis planned under their key (a write creates them; withdraw one the
+      change does not need after all: {"kind":"changeImpact","changeImpact":{"op":"remove","node":"<planned key>"}}).
       Revise the impacted requirements and create new requirements (types:
       FunctionalRequirement, NonFunctionalRequirement, SecurityRequirement), each one
       linked to the need it satisfies. A revised requirement is an impacted change impact: move it to draft
@@ -504,6 +526,7 @@ actions:
       {"kind":"changeImpact","changeImpact":{"op":"write","node":"<impacted key>","props":{...}}}
       {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"alm@FunctionalRequirement","key":"REQ-...","rationale":"why"}}
       {"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"...","priority":"high"},"links":[{"type":"alm@satisfies","to":"<need key>"}]}}
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<planned key>","props":{"title":"...","priority":"high"},"links":[{"type":"alm@satisfies","to":"<need key>"}]}}
 
   - name: write_requirements
     kind: human
@@ -514,7 +537,7 @@ actions:
     nodeTypes: [alm@Requirement, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement]
     instructions: >
       Write the new versions of the impacted requirements and create the new
-      requirements (with their "satisfies" link to the need).
+      requirements (with their "satisfies" link to the need), the planned ones under their key.
 
   - name: trace_requirements
     kind: script
@@ -595,13 +618,17 @@ actions:
         const nodes = ctx.changeImpacts();
         const realized = new Set();
         for (const f of nodes) if (f.post) for (const l of f.links) if (l.type === "alm@realizes") realized.add(l.to.key);
-        const functions = nodes.filter(f => f.intent === "modified" && f.type === "alm@Function").map(f => f.key).sort();
+        // the impacted functions, and the ones the analysis planned (written here at their first allocation)
+        const functions = nodes.filter(f => f.type === "alm@Function" && (f.intent === "modified" || f.planned)).map(f => f.key).sort();
+        const planned = new Set(nodes.filter(f => f.planned && f.type === "alm@Function").map(f => f.key));
         let n = 0;
         for (const r of nodes) {
           if (r.intent !== "created" || !r.post || !r.type.endsWith("Requirement") || realized.has(r.key)) continue;
           let fn = functions[0];
           if (!fn) {
             fn = ctx.impactNodeCreate("alm@Function", "FCT-" + r.key, "realizes " + r.key);
+            ctx.writeNode(fn, { props: { title: "Function: " + ((r.post.props && r.post.props.title) || r.key) }, links: [{ type: "alm@realizes", to: r.key }] });
+          } else if (planned.delete(fn)) {
             ctx.writeNode(fn, { props: { title: "Function: " + ((r.post.props && r.post.props.title) || r.key) }, links: [{ type: "alm@realizes", to: r.key }] });
           } else {
             ctx.writeNode(fn, { links: [{ type: "alm@realizes", to: r.key }] });
@@ -623,8 +650,8 @@ actions:
       Impacted elements:
       {{ range .ChangeImpacts }}{{ if eq .Intent "modified" }}- {{ .Key }} ({{ .Type }}) {{ json .Pre.Properties }}
       {{ end }}{{ end }}
-      Change impacts already made:
-      {{ range .ChangeImpacts }}- {{ .Intent }} {{ .Type }} {{ .Key }}: {{ .Rationale }}
+      Change impacts already made (planned: a creation the analysis planned, to be written under its key):
+      {{ range .ChangeImpacts }}- {{ .Intent }}{{ if .Planned }} planned{{ end }} {{ .Type }} {{ .Key }}: {{ .Rationale }}
       {{ end }}
       Design the evolution: components to modify (declare the impacted one if it is not, then write
       version / technology props) or to create (type Component, technology java|c|shell|…, an
@@ -632,6 +659,9 @@ actions:
       (source, target, through, carries) and data, as change impacts:
       {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"alm@Component","key":"CMP-...","rationale":"why"}}
       {"kind":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{...},"links":[{"type":"alm@implements","to":"<function key>"}]}}
+      Write the components, interfaces, flows and data the analysis planned under their key (or remove the ones the
+      design does not need):
+      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<planned key>","props":{...},"links":[...]}}
       End with
       {"kind":"artifact","type":"design","data":{"summary":"...","decisions":["..."]}}
 
@@ -644,8 +674,8 @@ actions:
     utility: 'has(vars.design) && vars.design == "manual" ? 2.0 : 0.3'
     nodeTypes: [alm@Component, alm@Interface, alm@Flow, alm@Data]
     instructions: >
-      Write the changes to components, interfaces, flows and data (change impacts), then a
-      "design" artifact summarizing the decisions.
+      Write the changes to components, interfaces, flows and data (change impacts), the planned
+      creations under their key, then a "design" artifact summarizing the decisions.
 
   - name: check_design
     kind: script
@@ -664,6 +694,7 @@ actions:
         for (const n of ctx.changeImpacts()) {
           const kind = n.type.split("@").pop();
           if (n.intent !== "created" || !required[kind]) continue;
+          if (n.planned) { issues.push(n.type + " " + n.key + " : planned, not designed yet (write or withdraw it)"); continue; }
           for (const t of required[kind]) {
             if (!n.post || !n.links.some(l => l.type === "alm@" + t)) issues.push(n.type + " " + n.key + " : missing link \"" + t + "\"");
           }
@@ -1232,7 +1263,9 @@ methods:
       the functional layer (functions), the logical layer (applications, with their solutions, interfaces, flows and
       data), the physical layer (components and their build artifacts). In each pass, name only what the change
       itself carries at that layer; the propagation finds the rest, and every element it finds is qualified: kept when
-      the change concerns it, rejected with the reason and withdrawn otherwise.
+      the change concerns it, rejected with the reason and withdrawn otherwise. What the change needs that does not
+      exist yet is planned in its pass (a planned creation: a type, a key, why), written later by the specification
+      or the design; on a green field the passes find nothing existing and plan what is new.
     deliverables: [ImpactAnalysis]
     roles: {responsible: business_analyst, accountable: product_owner, consulted: [solution_architect]}
     steps:
