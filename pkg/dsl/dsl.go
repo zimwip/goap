@@ -79,7 +79,8 @@ type ChangeImpact struct {
 // NodeOp is an operation on a change impact buffered by a script; the engine
 // applies them in order after the script ends.
 type NodeOp struct {
-	// Op is declare (ImpactNode: the impact of an existing node; ImpactNodeCreate: held until the node is created by its first operation), write (WriteNode: the draft, the node checked out on the first write,
+	// Op is declare (ImpactNode: the impact of an existing node; ImpactNodeCreate: held until the node is created by its first operation), plan
+	// (ImpactNodePlan: a creation planned, with no draft, until a write of its key creates it), write (WriteNode: the draft, the node checked out on the first write,
 	// then edited), review (ImpactNodeReview: an explicit operation, an acceptance runs the checks of a version on the draft), transition (ImpactNodeTransition), cancel
 	// (ImpactNodeCancel), remove (WithdrawImpact) (ADR 0076), merge (ImpactNodeMerge) or split (ImpactNodeSplit, ADR 0077).
 	Op string `json:"op"`
@@ -322,6 +323,17 @@ func (c *Ctx) ImpactNodeCreate(nodeType, key, rationale string) string {
 	c.nseq++
 	ref := fmt.Sprintf("#n%d", c.nseq)
 	c.nodeOps = append(c.nodeOps, NodeOp{Op: "declare", Ref: ref, Intent: string(domain.IntentCreated), Key: key, Type: nodeType, Rationale: rationale, ProducedBy: c.job.Action})
+	return ref
+}
+
+// ImpactNodePlan plans the creation of a node of a type, and why, without writing it: a change impact of intent
+// created with no draft (what an impact analysis finds the change will create). A later WriteNode of its key (in this
+// script or another action) creates it; a change cannot merge while it holds a planned creation (create or withdraw
+// it). It returns a reference ("#nN") for the next operations of the script.
+func (c *Ctx) ImpactNodePlan(nodeType, key, rationale string) string {
+	c.nseq++
+	ref := fmt.Sprintf("#n%d", c.nseq)
+	c.nodeOps = append(c.nodeOps, NodeOp{Op: "plan", Ref: ref, Intent: string(domain.IntentCreated), Key: key, Type: nodeType, Rationale: rationale, ProducedBy: c.job.Action})
 	return ref
 }
 

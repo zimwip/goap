@@ -112,12 +112,16 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 	}
 	byKey := map[string]domain.ChangeImpactID{} // stored change impacts, then the ones this script declares
 	posts := map[domain.ChangeImpactID]domain.NodeRef{}
-	out := map[domain.ChangeImpactID]bool{} // the change impacts with a draft of their own on the flow (ADR 0076, 0079)
+	out := map[domain.ChangeImpactID]bool{}     // the change impacts with a draft of their own on the flow (ADR 0076, 0079)
+	planned := map[domain.ChangeImpactID]bool{} // the planned creations, no draft yet: the first write or link creates them
 	for _, cn := range bb.Change.Nodes {
 		if len(cn.Items) > 0 {
 			continue // derived from items: decided through them
 		}
 		byKey[cn.Key] = cn.ID
+		if cn.Intent == domain.IntentCreated && cn.Post == nil && cn.Landed == nil {
+			planned[cn.ID] = true
+		}
 		if cn.Post != nil {
 			posts[cn.ID] = *cn.Post
 			out[cn.ID] = graph.IsWorking(bb.Change, p.Flow, bb.Nodes[*cn.Post].Node)
@@ -170,6 +174,17 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 		if id, ok := byKey[s]; ok {
 			if ref, ok := posts[id]; ok {
 				return ref, nil
+			}
+			if planned[id] { // a planned creation a link needs: its draft, bare
+				cn, err := retryOnConflict(func() (domain.ChangeImpact, error) {
+					return e.Graph.ImpactNodeCheckout(ctx, p.ChangeID, graph.NodeCheckout{Impact: id, Flow: p.Flow, Execution: execution})
+				})
+				if err != nil {
+					return domain.NodeRef{}, err
+				}
+				delete(planned, id)
+				posts[id], out[id] = *cn.Post, true
+				return *cn.Post, nil
 			}
 		}
 		if ref, ok := baseline[s]; ok {
@@ -264,6 +279,18 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			if err := produce(added[0].ID); err != nil {
 				return declared, fail(err)
 			}
+		case "plan":
+			// a creation planned, not written (an impact analysis naming what is new): no draft until a write of its key
+			cn := domain.ChangeImpact{Intent: domain.IntentCreated, Key: op.Key, Type: qualify(op.Type), Rationale: op.Rationale, ProducedBy: producedBy, Execution: execution, Flow: p.Flow}
+			added, err := retryOnConflict(func() ([]domain.ChangeImpact, error) {
+				return e.Graph.ProposeImpact(ctx, p.ChangeID, []domain.ChangeImpact{cn})
+			})
+			if err != nil {
+				return declared, fail(err)
+			}
+			local[op.Ref], byKey[added[0].Key] = added[0].ID, added[0].ID
+			planned[added[0].ID] = true
+			declared = append(declared, added[0].ID)
 		case "merge", "split":
 			names := op.Sources
 			if op.Op == "split" {
@@ -342,6 +369,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 					return declared, fail(err)
 				}
 				posts[id], out[id] = *cn.Post, true
+				delete(planned, id)
 			}
 			if len(op.Props) > 0 && !propsIn {
 				if _, err := e.Graph.ImpactNodeUpdate(ctx, p.ChangeID, id, graph.NodeUpdate{Properties: op.Props, Flow: p.Flow, Execution: execution}); err != nil {

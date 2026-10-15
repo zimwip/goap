@@ -92,6 +92,7 @@ An item of another type the instructions name (assessment, comment, risk, action
 The nodes the change acts on are change impacts: items of type "changeImpact", applied in order:
 {"type":"changeImpact","changeImpact":{"op":"declare","ref":"#n1","intent":"modified","key":"<node key>","rationale":"why the node is impacted"}}
 {"type":"changeImpact","changeImpact":{"op":"declare","ref":"#n2","intent":"created","type":"<node type>","key":"<new key>","rationale":"why"}}
+{"type":"changeImpact","changeImpact":{"op":"plan","ref":"#n3","type":"<node type>","key":"<new key>","rationale":"why"}} (a creation planned, not written yet: a later write of its key creates it)
 {"type":"changeImpact","changeImpact":{"op":"write","node":"<node key or #n1>","props":{...},"links":[{"type":"...","to":"<node key or a #nN already written>"}]}}
 {"type":"changeImpact","changeImpact":{"op":"review","node":"<node key>","accept":true,"comment":"why"}}
 {"type":"changeImpact","changeImpact":{"op":"transition","node":"<node key>","state":"<lifecycle state>"}}

@@ -21,6 +21,11 @@ import (
 //   - a lifecycle transition (ImpactNodeTransition) sets the state of the draft, which a node with none is checked out
 //     for first; authorized and guarded when it is taken (the guard sees the change, the impact and the draft);
 //   - ImpactNodeCancel drops the draft; a creation cancelled leaves no node.
+//
+// A creation may be planned before it is written (ProposeImpact with intent created: a key, a type, a rationale, no
+// draft): the impact analysis names what the change will create, the specification writes it. Creating or checking
+// out the key of a planned creation gives it its draft (a checkedOut event, so a flow fulfils it as it edits any
+// impact); it lands like any creation.
 
 // NodeCreate is a node ImpactNodeCreate creates.
 type NodeCreate struct {
@@ -88,6 +93,8 @@ type work struct {
 	seen   []domain.ChangeImpact
 	cn     domain.ChangeImpact // the stored change impact
 	vcn    domain.ChangeImpact // as the flow sees it
+	// planned is set when a creation names the key of a planned creation (resolve): its draft fulfils that impact
+	planned bool
 }
 
 // workOn opens an operation on a change, on a flow: the change gets its branch (where its versions are written when it
@@ -207,6 +214,10 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		}
 	}
 	if found != nil {
+		if t.create && plannedCreation(*found) && (t.Type == "" || found.Type == t.Type) {
+			w.planned = true
+			return w, g.impact(ctx, tx, w, found.ID)
+		}
 		if t.create {
 			return nil, fmt.Errorf("cannot create %s (%s): the change already holds it as change impact %s (%s): %w", t.Key, t.Type, found.ID, found.Intent, ErrConflict)
 		}
@@ -256,6 +267,12 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		return w, nil
 	}
 	return w, g.impact(ctx, tx, w, out[0].ID)
+}
+
+// plannedCreation reports whether the change impact is a creation planned by ProposeImpact and not drafted yet: no
+// draft, no version.
+func plannedCreation(cn domain.ChangeImpact) bool {
+	return cn.Intent == domain.IntentCreated && cn.Post == nil && cn.Landed == nil
 }
 
 // base is the stored version a draft of the impact starts from: its pre version (on the main flow, the latest of the
@@ -348,38 +365,54 @@ func (g *Graph) createTx(ctx context.Context, tx Tx, id domain.ChangeID, in Node
 	if err != nil {
 		return domain.ChangeImpact{}, err
 	}
-	d := domain.Draft{Change: id, Impact: w.cn.ID, Flow: w.flow, Node: domain.NodeID(g.newID()), Key: in.Key, Type: in.Type,
+	d, err := g.newDraft(ctx, tx, w, in, origins)
+	if err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	ref := d.Ref()
+	var patch map[string]any
+	if len(origins) > 0 {
+		patch = map[string]any{"origins": originsPatch(ctx, tx, origins)}
+	}
+	if w.planned {
+		// the creation was planned: its impact is recorded, the draft fulfils it
+		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: in.Execution, Post: &ref, Draft: &d, Patch: patch}); err != nil {
+			return domain.ChangeImpact{}, err
+		}
+		return w.seenAs(&ref), nil
+	}
+	st := w.cn // the creation adds its impact (ADR 0077)
+	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactCreated, Flow: w.flow, Execution: in.Execution, State: &st, Post: &ref, Draft: &d, Patch: patch}); err != nil {
+		return domain.ChangeImpact{}, err
+	}
+	return w.seenAs(&ref), nil
+}
+
+// newDraft is the draft of a new node: its id, key, type, initial state, owner, properties and links, checked.
+func (g *Graph) newDraft(ctx context.Context, tx Tx, w *work, in NodeCreate, origins []domain.NodeRef) (domain.Draft, error) {
+	d := domain.Draft{Change: w.c.ID, Impact: w.cn.ID, Flow: w.flow, Node: domain.NodeID(g.newID()), Key: in.Key, Type: in.Type,
 		Properties: cloneMap(in.Properties), Origins: slices.Clone(origins), Execution: in.Execution}
 	if lc := w.ix.lifecycleOf(d.Type); lc != nil {
 		d.State = lc.Initial
 	}
 	if err := w.checkDraftAttributes(d, d.Properties); err != nil {
-		return domain.ChangeImpact{}, err
+		return d, err
 	}
 	if in.Owner != "" {
 		unit, err := g.structureNode(ctx, tx, domain.StructureOrganisation, in.Owner)
 		if err != nil {
-			return domain.ChangeImpact{}, err
+			return d, err
 		}
 		d.Owner = unit.ID
 	}
 	for _, l := range in.Links {
 		dl, err := g.newDraftLink(ctx, tx, w, d, l)
 		if err != nil {
-			return domain.ChangeImpact{}, err
+			return d, err
 		}
 		d.Links = append(d.Links, dl)
 	}
-	var patch map[string]any
-	if len(origins) > 0 {
-		patch = map[string]any{"origins": originsPatch(ctx, tx, origins)}
-	}
-	ref := d.Ref()
-	st := w.cn // the creation adds its impact (ADR 0077)
-	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: w.c.ID, Impact: w.cn.ID, Op: domain.ImpactCreated, Flow: w.flow, Execution: in.Execution, State: &st, Post: &ref, Draft: &d, Patch: patch}); err != nil {
-		return domain.ChangeImpact{}, err
-	}
-	return w.seenAs(&ref), nil
+	return d, nil
 }
 
 // ImpactNodeCheckout puts a node in edit mode in a change: it gives the node a draft on the flow, a copy of what the
@@ -427,6 +460,14 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 		base, err := w.base(ctx, tx)
 		if err != nil {
 			return domain.NodeRef{}, err
+		}
+		if base == nil && plannedCreation(w.cn) {
+			// a planned creation checked out: its first draft, bare (ADR 0076: the creation fulfils the plan)
+			if d, err = g.newDraft(ctx, tx, w, NodeCreate{Key: w.cn.Key, Type: w.cn.Type, Execution: execution}, nil); err != nil {
+				return domain.NodeRef{}, err
+			}
+			ref := d.Ref()
+			return ref, g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: execution, Post: &ref, Draft: &d})
 		}
 		if base == nil {
 			return domain.NodeRef{}, invalidf("change impact %s has no version to check out", w.cn.ID)

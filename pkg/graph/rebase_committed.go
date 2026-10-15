@@ -101,6 +101,8 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 		switch {
 		case cn.Review == domain.ReviewRejected:
 			out = append(out, cn.Key+" is rejected (rework or withdraw it)")
+		case plannedCreation(cn):
+			out = append(out, cn.Key+" is planned, not created yet (create or withdraw it)")
 		case !modifies && cn.Landed == nil:
 			out = append(out, cn.Key+" modifies nothing (modify or withdraw it)")
 		case modifies && cn.Review != domain.ReviewAccepted:

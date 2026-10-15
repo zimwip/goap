@@ -300,3 +300,58 @@ func TestScriptDeclaredCreation(t *testing.T) {
 		t.Fatalf("the properties of the write: %+v %v", n, err)
 	}
 }
+
+// A script plans a creation (an impact analysis naming what is new): an impact with no draft; another action writes it
+// under its key, which creates the node on the same impact; a link to a planned key creates it bare.
+func TestScriptPlannedCreation(t *testing.T) {
+	ctx := context.Background()
+	e, g, base := setup(t)
+	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: "alm", Title: "green field", BaselineID: base, OwnBranch: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := dsl.Run(ctx, dsl.Job{Language: "javascript", Action: "identify", Code: `
+ctx.impactNodePlan("Requirement", "REQ-9", "the change needs a new requirement");
+ctx.impactNodePlan("TestCase", "TST-9", "and its test");
+`}, nopHost{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.applyNodeOps(ctx, &Process{ChangeID: c.ID}, res.Nodes, "identify", "exec-1"); err != nil {
+		t.Fatal(err)
+	}
+	ch, _ := g.Change(ctx, c.ID)
+	if len(ch.Nodes) != 2 {
+		t.Fatalf("change impacts: %+v", ch.Nodes)
+	}
+	for _, cn := range ch.Nodes {
+		if cn.Intent != domain.IntentCreated || !cn.Planned() || cn.ProducedBy != "identify" || !strings.HasPrefix(cn.Type, "alm@") {
+			t.Fatalf("a planned creation has no draft: %+v", cn)
+		}
+	}
+	bb, _ := g.Blackboard(ctx, c.ID)
+	if snap := ChangeImpactsFromBlackboard(bb); !snap[0].Planned || snap[0].Intent != "created" {
+		t.Fatalf("a script sees it planned: %+v", snap[0])
+	}
+	// the specification writes the planned keys
+	ops := []dsl.NodeOp{
+		{Op: "write", Node: "TST-9", Props: map[string]any{"title": "nine"}, Links: []dsl.NodeOpLink{{Type: "verifies", To: "REQ-9"}}},
+	}
+	if _, err := e.applyNodeOps(ctx, &Process{ChangeID: c.ID}, ops, "specify", "exec-2"); err != nil {
+		t.Fatal(err)
+	}
+	ch, _ = g.Change(ctx, c.ID)
+	if len(ch.Nodes) != 2 {
+		t.Fatalf("the writes fulfil the planned impacts: %+v", ch.Nodes)
+	}
+	for _, cn := range ch.Nodes {
+		if cn.Post == nil || !cn.Post.IsDraft() {
+			t.Fatalf("written, then a draft: %+v", cn)
+		}
+	}
+	i := slices.IndexFunc(ch.Nodes, func(cn domain.ChangeImpact) bool { return cn.Key == "TST-9" })
+	n, err := g.ChangeNodeView(ctx, c.ID, "", *ch.Nodes[i].Post)
+	if err != nil || n.Properties["title"] != "nine" || len(n.Out) != 1 {
+		t.Fatalf("the write and its link: %+v %v", n, err)
+	}
+}

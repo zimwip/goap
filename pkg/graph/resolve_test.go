@@ -48,9 +48,9 @@ func testResolveCreate(t *testing.T, repo Repo) {
 		t.Fatalf("one impact: %+v", got)
 	}
 
-	// a new node has no proposal (ADR 0077): the proposal is refused, and nothing is declared
-	if _, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-9", Type: "TestCase", Rationale: "plan"}}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "ImpactNodeCreate") {
-		t.Fatalf("a proposal of a creation: %v", err)
+	// a creation is planned with a key and a type (planned_test.go): one without a type is refused, and nothing is declared
+	if _, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentCreated, Key: "TST-9", Rationale: "plan"}}); !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), "planned creation") {
+		t.Fatalf("a planned creation with no type: %v", err)
 	}
 	if got := impactsOn(t, g, c.ID, "TST-9"); len(got) != 0 {
 		t.Fatalf("a refused proposal declares nothing: %+v", got)

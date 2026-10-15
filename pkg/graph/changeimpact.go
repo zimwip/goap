@@ -35,8 +35,9 @@ func findChangeImpact(c domain.Change, id domain.ChangeImpactID) (int, error) {
 
 // ProposeImpact adds change impacts to a change (ADR 0024): each names an existing node (intent modified) and a
 // rationale; its pre version must be in the reference baseline. The impact has no version until a ImpactNodeCheckout
-// writes one (ADR 0076). A new node is not proposed: it is created by ImpactNodeCreate, which adds its impact and its
-// first version in one event (ADR 0077).
+// writes one (ADR 0076). A new node is created by ImpactNodeCreate, which adds its impact and its draft in one event
+// (ADR 0077); it may be planned before (intent created, a key and a type, no draft): what an impact analysis finds the
+// change will create, written later by ImpactNodeCreate or ImpactNodeCheckout on the same key, else withdrawn.
 //
 //goap:operation impact.propose doer
 func (g *Graph) ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []domain.ChangeImpact) (out []domain.ChangeImpact, err error) {
@@ -44,8 +45,8 @@ func (g *Graph) ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []d
 		return out, err
 	}
 	for _, cn := range nodes {
-		if cn.Intent == domain.IntentCreated {
-			return nil, fmt.Errorf("change impact of %s: a new node is created with ImpactNodeCreate; ProposeImpact is for existing nodes: %w", cn.Key, ErrInvalid)
+		if cn.Intent == domain.IntentCreated && (cn.Key == "" || cn.Type == "") {
+			return nil, fmt.Errorf("change impact of %q: a planned creation needs a key and a type: %w", cn.Key, ErrInvalid)
 		}
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) (err error) {
@@ -149,6 +150,11 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 					return fmt.Errorf("change impact %s: %w", cn.ID, err)
 				}
 			}
+			if propose && cn.Intent == domain.IntentCreated {
+				if err := g.checkPlannedKey(ctx, tx, c, b, cn); err != nil {
+					return err
+				}
+			}
 			cn.CreatedAt = g.now()
 			if err := cn.Validate(); err != nil {
 				return fmt.Errorf("change impact %s: %v: %w", cn.ID, err, ErrInvalid)
@@ -168,6 +174,25 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		return nil
 	}()
 	return out, err
+}
+
+// checkPlannedKey refuses a planned creation whose key a node already holds, or the change already acts on in the
+// flow (createTx makes the same checks when the node is created).
+func (g *Graph) checkPlannedKey(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline, cn domain.ChangeImpact) error {
+	if nid, err := tx.NodeIDByKey(ctx, domain.NamespaceOf(c.Namespace), cn.Key); err == nil {
+		if _, ok := b.Nodes[nid]; ok {
+			return fmt.Errorf("cannot plan %s (%s): the reference baseline of change %s already holds it: %w", cn.Key, cn.Type, c.ID, ErrConflict)
+		}
+	} else if !errors.Is(err, ErrNotFound) {
+		return err
+	}
+	fv := g.newFlowNodes(tx, c, cn.Flow)
+	for _, other := range c.Nodes {
+		if other.Key == cn.Key && other.ID != cn.ID && fv.visible(other) {
+			return fmt.Errorf("cannot plan %s (%s): the change already holds it as change impact %s: %w", cn.Key, cn.Type, other.ID, ErrConflict)
+		}
+	}
+	return nil
 }
 
 // ListChangeImpacts returns the change impacts of a change.
