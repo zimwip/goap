@@ -1,4 +1,5 @@
-// Command registry stores the methodologies (in the graph) and the domains (in its database).
+// Command registry is the methodology registry: it stores the methodologies (in the graph) and compiles them against the
+// domains of the domain registry, served by the graph (ADR 0125 §3).
 package main
 
 import (
@@ -7,9 +8,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jackc/pgx/v5/stdlib"
-
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/internal/domainclient"
 	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/mcpsvc"
@@ -28,37 +28,26 @@ func main() {
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
 
-	// methodologies are nodes of the graph; domains are kept in the registry's database (ADR 0023)
-	graphClient := graphclient.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
+	// methodologies are nodes of the graph; the domains are the graph's (ADR 0125 §3), read from its domain registry
+	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
+	graphClient := graphclient.NewClient(platform.H2CClient(), graphURL, telemetry.ClientOptions()...)
 	store := registrysvc.NewGraphStore(graphClient)
-	var domains registrysvc.DomainStore = registrysvc.NewMemoryStore()
-	if pool := platform.OptionalPostgres(ctx, log, registrysvc.Migrations); pool != nil {
-		defer pool.Close()
-		domains = registrysvc.SQLDomainStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
-		srv.Readiness(pool.Ping)
-	}
+	domains := domainclient.NewClient(platform.H2CClient(), graphURL, telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
-	svc := &registrysvc.Service{Store: store, DomainStore: domains, Authz: authorizer, Events: events,
+	svc := &registrysvc.Service{Store: store, Domains: domains, Authz: authorizer, Events: events,
 		MCPScopes:  (&mcpsvc.Directory{Graph: graphClient}).Scopes, // the scope of the MCPs (ADR 0028)
 		Applicable: applicable(directory)}                          // the integrators in force in a project (ADR 0106)
 	if dir := platform.Env("GOAP_METHODOLOGIES_DIR", ""); dir != "" {
 		// bootstrap: import the YAML files of versions not stored yet, once the graph answers
 		go func() {
 			system := authz.With(ctx, authz.System("registry", access.RoleAdmin))
-			seed := &registrysvc.Service{Store: store, DomainStore: domains, Events: events}
+			seed := &registrysvc.Service{Store: store, Domains: domains, Events: events}
 			for delay := time.Second; ; delay = min(2*delay, time.Minute) {
 				err := func() error {
-					if ddir := platform.Env("GOAP_DOMAINS_DIR", ""); ddir != "" {
-						doms, err := seed.SeedDomains(system, ddir)
-						if err != nil {
-							return fmt.Errorf("import domains: %w", err)
-						}
-						log.Info("domains imported", "dir", ddir, "domains", doms)
-					}
 					loaded, err := seed.Seed(system, dir)
 					if err != nil {
 						return fmt.Errorf("import methodologies: %w", err)
@@ -74,6 +63,26 @@ func main() {
 			}
 		}()
 	}
+	// a domain published or archived: the methodologies are checked again, the ones it breaks are suspended (ADR 0125 §3)
+	for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
+		if err := events.Subscribe(subject, func([]byte) {
+			domains.Invalidate()
+			if _, err := svc.DomainsChanged(context.Background()); err != nil {
+				log.Error("check the methodologies", "err", err)
+			}
+		}); err != nil {
+			platform.Fatal(log, "subscribe", err)
+		}
+	}
+	go func() {
+		// the domains of a new start may break a methodology too (a built-in domain changes with the platform)
+		for delay := time.Second; ; delay = min(2*delay, time.Minute) {
+			if _, err := svc.Recheck(ctx); err == nil {
+				return
+			}
+			time.Sleep(delay)
+		}
+	}()
 	srv.Mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: svc}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)

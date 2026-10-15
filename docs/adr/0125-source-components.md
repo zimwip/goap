@@ -1,8 +1,8 @@
-# ADR 0124 — Source components: a contract, the graph, the engine, the MCP hub, the gateway, the platform
+# ADR 0125 — Source components: a contract, the graph, the engine, the MCP hub, the gateway, the platform
 
-**Status**: accepted; steps 1 and 2 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
-service no longer import each other; the gateway, the hub and the connectors off the graph and the engine), the
-next steps not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
+**Status**: accepted; steps 1 to 3 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
+service no longer import each other; the gateway, the hub and the connectors off the graph and the engine; the two
+registries), the next steps not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
 0063 (the engine's scope port), ADR 0066 (the hooks of the graph), ADR 0113 (pinned domains)
 
 ## Context
@@ -55,20 +55,32 @@ methodology registry checks the methodologies again, and a methodology a new dom
 never the domain nor the graph. A methodology stays compatible with its domains when it is updated (warnings at its
 publication). Migrating the data of a domain is a separate matter (a change rewriting the nodes it touches).
 
+In the sources: the domain registry is `internal/domainsvc` (`registry.v1.DomainService`, its store and migrations),
+served by `cmd/graph`, which seeds the shipped domains and reloads its type catalogue in process (`Service.Changed`);
+the methodology registry, `internal/registrysvc`, reads it through its port `registrysvc.Domains` (the service in
+process, `internal/domainclient` over RPC) and the graph through `graphapi`. The shapes both speak are the
+contract's: `def.Record`, `def.Status`, the protocol converters `internal/domainpb`. A suspension is never stored: a
+published methodology version is suspended while it does not compile against the domains in force (what the graph
+judges its writes by: the pins of ADR 0113 choose the types a version compiles against while it is in force, they do
+not shield it from the graph it writes to). `DomainsChanged` (on the domain events) and `Recheck` (at start, a
+built-in domain changing with the platform) publish `goap.registry.methodology.suspended` / `resumed`;
+`MethodologyVersion` and `Methodology` refuse a suspended version (`ErrSuspended`), `List` and the hub leave it out,
+the protocol carries the reason (`Methodology.suspended`, `MethodologySummary.suspended`), the methodology editor
+shows it.
+
 ### 4. The gateway and the MCP hub
 
 The client of the graph service leaves `graphsvc` (`internal/graphclient`), the interface both the engine and the
 built-in MCPs call becomes the contract's (`graphapi.Port`, `engine.GraphPort` an alias of it: when two consumers
 need the same port it is the contract's), `pkg/access`, `llmcfg` and `graphsnap` name the graph through the contract
 (`graphapi.NodeValidator`, `ValidatorQuery`, the errors), and the telemetry of the engine leaves the telemetry every
-service sets up (`internal/telemetry/enginetel`). `cmd/mcp` still reaches the engine through the registry client
-until the registries are split (§3).
+service sets up (`internal/telemetry/enginetel`). Since the registries are split (§3), `cmd/mcp` reads the domains
+through `internal/domainclient` and the methodologies through the generated registry client, never compiled: it
+depends on neither the graph, the engine nor the methodology model.
 
 ## Consequences
 
 - `go list -deps ./pkg/engine` holds neither `pkg/graph` nor a database driver; `internal/graphsvc` no engine type.
 - The engine's unit tests still build a real graph (`graph.NewMemory`): they move to a fake port or to the
   platform's integration tests before the engine becomes a module.
-- Next steps: the MCP hub and the gateway off the graph and the engine (the graph client out of `graphsvc`,
-  `access` behind a port reading the organisation, `telemetry` split), the two registries, the engine's tests, the
-  generated TypeScript, the `go.work`.
+- Next steps: the engine's tests, the generated TypeScript, the `go.work`.

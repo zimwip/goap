@@ -2,6 +2,7 @@ package registrysvc
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 
@@ -10,7 +11,6 @@ import (
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -30,7 +30,7 @@ func NewClient(hc *http.Client, baseURL string, opts ...connect.ClientOption) *C
 	return &Client{rpc: registryv1connect.NewRegistryServiceClient(hc, baseURL, opts...), cache: map[string]*methodology.Compiled{}}
 }
 
-// List implements engine.MethodologyPort (latest published versions).
+// List implements engine.MethodologyPort (latest published versions, the suspended ones left out).
 func (c *Client) List(ctx context.Context) ([]*methodology.Compiled, error) {
 	r, err := c.rpc.ListMethodologies(ctx, connect.NewRequest(&registryv1.ListMethodologiesRequest{}))
 	if err != nil {
@@ -38,35 +38,14 @@ func (c *Client) List(ctx context.Context) ([]*methodology.Compiled, error) {
 	}
 	var out []*methodology.Compiled
 	for _, m := range r.Msg.Methodologies {
-		if m.Status != string(StatusPublished) {
-			continue
+		if m.Status != string(StatusPublished) || m.Suspended != "" {
+			continue // a suspended version is not in force (ADR 0125 §3)
 		}
 		cm, err := c.Methodology(ctx, m.Name)
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, cm)
-	}
-	return out, nil
-}
-
-// Domains returns the latest published version of every domain (the source of a typecat.Live catalogue).
-func (c *Client) Domains(ctx context.Context) ([]*def.Domain, error) {
-	r, err := c.rpc.ListDomains(ctx, connect.NewRequest(&registryv1.ListDomainsRequest{}))
-	if err != nil {
-		return nil, err
-	}
-	var out []*def.Domain
-	for _, s := range r.Msg.Domains {
-		if s.Status != string(StatusPublished) || s.Builtin {
-			continue // the catalogue adds the built-in domains itself
-		}
-		d, err := c.rpc.GetDomain(ctx, connect.NewRequest(&registryv1.GetDomainRequest{Name: s.Name, Version: s.Version}))
-		if err != nil {
-			return nil, err
-		}
-		dom := DomainFromPB(d.Msg.Domain)
-		out = append(out, &dom)
 	}
 	return out, nil
 }
@@ -83,6 +62,9 @@ func (c *Client) Methodology(ctx context.Context, ref string) (*methodology.Comp
 		return nil, err
 	}
 	k := key(r.Msg.Methodology.Name, r.Msg.Methodology.Version)
+	if why := r.Msg.Methodology.Suspended; why != "" {
+		return nil, suspendedError{ref: k, cause: errors.New(why)}
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if m, ok := c.cache[k]; ok {

@@ -13,12 +13,13 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
+	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/connectors/builtin"
+	"github.com/zimwip/goap/internal/domainclient"
 	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
-	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
 )
@@ -54,15 +55,17 @@ func main() {
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
-	// they call the platform's services for the caller of the tool
+	// they call the platform's services for the caller of the tool; the domains are the graph's, the methodologies the
+	// methodology registry's (ADR 0125 §3), both read through the contract
 	copts := append(telemetry.ClientOptions(), builtin.ForwardIdentity())
 	maps.Copy(connectors, builtin.Connectors(builtin.Ports{
-		Graph:    graphclient.NewClient(hc, graphURL, copts...),
-		Engine:   enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...),
-		Registry: registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...),
-		Hub:      svc,
-		Authz:    iam,
-		Floor:    iam.Floor(),
+		Graph:         graphclient.NewClient(hc, graphURL, copts...),
+		Engine:        enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...),
+		Domains:       domainclient.NewClient(hc, graphURL, copts...),
+		Methodologies: registryv1connect.NewRegistryServiceClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...),
+		Hub:           svc,
+		Authz:         iam,
+		Floor:         iam.Floor(),
 	}))
 	svc.KeepRegistered(ctx, connectors)
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: svc, Authz: iam, ConnectorToken: token}, telemetry.HandlerOptions()...))

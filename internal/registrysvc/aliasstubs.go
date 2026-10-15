@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -85,7 +85,7 @@ func referencedAliases(m *methodology.Methodology) []string {
 // counts as "exists" - don't re-stub it).
 func missingAliases(ctx context.Context, g StoreGraph, aliases []string) ([]string, error) {
 	head, err := g.BranchHead(ctx, llmcfg.NamespacePlatform, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
+	if errors.Is(err, graphapi.ErrNotFound) {
 		return aliases, nil // no platform graph yet: every alias is "missing"
 	}
 	if err != nil {
@@ -150,7 +150,7 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 	if err != nil {
 		return err
 	}
-	c, err := g.CreateChange(ctx, graph.NewChange{
+	c, err := g.CreateChange(ctx, graphapi.NewChange{
 		Namespace:  llmcfg.NamespacePlatform,
 		ProjectID:  root,
 		Title:      fmt.Sprintf("Model aliases needed by %s (%s)", methodologyName, strings.Join(aliases, ", ")),
@@ -163,7 +163,7 @@ func createAliasStubs(ctx context.Context, g StoreGraph, aliases []string, metho
 	}
 	for _, alias := range aliases {
 		// a draft, its review proposed (ADR 0076, 0079): the change stays open
-		if _, err := g.ImpactNodeCreate(ctx, c.ID, graph.NodeCreate{Key: llmcfg.AliasKey(alias), Type: llmcfg.NodeTypeAlias, Properties: map[string]any{"alias": alias},
+		if _, err := g.ImpactNodeCreate(ctx, c.ID, graphapi.NodeCreate{Key: llmcfg.AliasKey(alias), Type: llmcfg.NodeTypeAlias, Properties: map[string]any{"alias": alias},
 			Rationale: fmt.Sprintf("alias %s needs a target provider/model before this change can be accepted (referenced by methodology %s)", alias, methodologyName), ProducedBy: "methodology-load"}); err != nil {
 			return err
 		}

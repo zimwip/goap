@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/condition"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -30,9 +31,9 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 	if err != nil {
 		return nil, err
 	}
-	recs := builtinDomains()
+	recs := builtinRecords()
 	for _, d := range ds {
-		recs = append(recs, DomainRecord{Domain: *d, Status: StatusPublished})
+		recs = append(recs, def.Record{Domain: *d, Status: StatusPublished})
 	}
 	found := lifecycleIn(recs, &m)
 	if found == nil {
@@ -42,7 +43,7 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 }
 
 // lifecycleIn is the lifecycle m names among the domains: the one of its namespace, else of any domain (nil: none).
-func lifecycleIn(recs []DomainRecord, m *methodology.Methodology) *domain.Lifecycle {
+func lifecycleIn(recs []def.Record, m *methodology.Methodology) *domain.Lifecycle {
 	if m.Lifecycle == "" {
 		return nil
 	}

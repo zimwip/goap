@@ -686,6 +686,8 @@ export interface Methodology {
   version?: string;
   description?: string;
   status?: MethodologyStatus | string;
+  /** why a published version is suspended (ADR 0125 §3): the domains in force break it; empty: in force. Read only. */
+  suspended?: string;
   /** namespace (domain) the changes of the methodology act on; its types are "<namespace>@<NodeType>" */
   namespace?: string;
   conditions?: Condition[];
@@ -802,6 +804,8 @@ export interface MethodologySummary {
   publishedAt?: string;
   /** namespace (domain) the changes of the methodology act on */
   namespace?: string;
+  /** why a published version is suspended (ADR 0125 §3): the domains in force break it; empty: in force */
+  suspended?: string;
 }
 
 /** Validation issue; `path` locates the field, e.g. "conditions[2].expr". */

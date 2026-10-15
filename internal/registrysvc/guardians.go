@@ -250,7 +250,7 @@ func (s *Service) compositionIssues(ctx context.Context, m *methodology.Methodol
 	if !composed {
 		return nil
 	}
-	domains, err := s.DomainVersions(ctx, false)
+	domains, err := s.domainVersions(ctx, false)
 	if err != nil {
 		return nil
 	}

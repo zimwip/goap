@@ -1,4 +1,4 @@
-package registrysvc
+package domainsvc
 
 import (
 	"testing"

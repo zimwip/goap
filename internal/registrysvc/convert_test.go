@@ -4,8 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
@@ -57,17 +55,11 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 	}
 }
 
-// The default criticality of a methodology and the vetos and objectives of a gate survive the PB round trip (ADR 0075 §3).
-func TestCriticalityAndGateCriteriaRoundTripThroughPB(t *testing.T) {
+// The default criticality of a methodology survives the PB round trip (ADR 0075 §3).
+func TestCriticalityRoundTripsThroughPB(t *testing.T) {
 	in := methodology.Methodology{Name: "m", Version: "1", Criticality: "C3"}
 	if out := FromPB(ToPB(Record{Methodology: in})); out.Criticality != "C3" {
 		t.Fatalf("criticality: %q", out.Criticality)
-	}
-	ls := []domain.Lifecycle{{Name: "l", Initial: "a", States: []domain.LifecycleState{{Name: "a"}, {Name: "b"}}, Transitions: []domain.Transition{{Name: "go", From: "a", To: "b",
-		Vetos:      []domain.Criterion{{Name: "safe", Expr: `world["safe"]`, Description: "no blocker"}},
-		Objectives: []domain.Criterion{{Name: "docs", Expr: `world["docs"]`}}}}}}
-	if back := lifecyclesFromPB(lifecyclesToPB(ls)); !reflect.DeepEqual(back, ls) {
-		t.Fatalf("lifecycle changed through PB:\n%+v\n%+v", ls, back)
 	}
 }
 
@@ -75,13 +67,5 @@ func TestGoalRoundTripsThroughPB(t *testing.T) {
 	in := methodology.Methodology{Name: "m", Version: "1", Goal: "deliver"}
 	if out := FromPB(ToPB(Record{Methodology: in})); out.Goal != "deliver" {
 		t.Fatalf("goal: %q", out.Goal)
-	}
-}
-
-func TestIssuesRoundTripKeepSeverity(t *testing.T) {
-	in := def.Issues{{Path: "goal", Message: "w", Severity: def.SeverityWarning}, {Path: "name", Message: "e", Activity: "p/s"}}
-	out := IssuesFromPB(IssuesToPB(in))
-	if len(out) != 2 || out[0] != in[0] || out[1] != in[1] || !out[0].IsWarning() || out[1].IsWarning() {
-		t.Fatalf("%v", out)
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 
 	enginev1 "github.com/zimwip/goap/gen/goap/engine/v1"
+	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/internal/connectors/builtin"
 	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
@@ -26,7 +27,6 @@ import (
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
-	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -71,8 +71,9 @@ func (f *fakeEngine) ListStartingPoints(_ context.Context, r *connect.Request[en
 
 type fakeRegistry struct{ domains []*def.Domain }
 
-func (fakeRegistry) List(context.Context) ([]*methodology.Compiled, error) {
-	return []*methodology.Compiled{{Methodology: &methodology.Methodology{Name: "impact-analysis", Namespace: "alm"}}}, nil
+func (fakeRegistry) ListMethodologies(context.Context, *connect.Request[registryv1.ListMethodologiesRequest]) (*connect.Response[registryv1.ListMethodologiesResponse], error) {
+	return connect.NewResponse(&registryv1.ListMethodologiesResponse{Methodologies: []*registryv1.MethodologySummary{
+		{Name: "impact-analysis", Namespace: "alm", Status: "published"}}}), nil
 }
 func (f fakeRegistry) Domains(context.Context) ([]*def.Domain, error) {
 	return f.domains, nil
@@ -110,7 +111,7 @@ func newPlatform(t *testing.T) platform {
 	}
 	eng := &fakeEngine{}
 	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g}}
-	cs := builtin.Connectors(builtin.Ports{Graph: g, Engine: eng, Hub: hub, Registry: fakeRegistry{domains: ds}, Authz: az, Floor: az.Floor()})
+	cs := builtin.Connectors(builtin.Ports{Graph: g, Engine: eng, Hub: hub, Domains: fakeRegistry{domains: ds}, Methodologies: fakeRegistry{}, Authz: az, Floor: az.Floor()})
 	if len(cs) != 4 {
 		t.Fatalf("%d built-in connectors", len(cs))
 	}
@@ -142,7 +143,7 @@ func keys(list any) []string {
 
 // The operations of each built-in connector are the tools of the built-in MCP of the same name.
 func TestConnectorsImplementTheBuiltinMCPs(t *testing.T) {
-	cs := builtin.Connectors(builtin.Ports{Graph: &graph.Graph{}, Engine: &fakeEngine{}, Hub: &mcpsvc.Service{}, Registry: fakeRegistry{}})
+	cs := builtin.Connectors(builtin.Ports{Graph: &graph.Graph{}, Engine: &fakeEngine{}, Hub: &mcpsvc.Service{}, Domains: fakeRegistry{}, Methodologies: fakeRegistry{}})
 	for _, d := range mcpbuiltin.Defs() {
 		c, ok := cs[d.Name]
 		if !ok || c.Info().Id != d.Name {

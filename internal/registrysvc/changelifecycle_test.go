@@ -19,7 +19,7 @@ import (
 func TestChangeLifecycleGate(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
+	store := NewGraphStore(g)
 	reg := &Service{Store: store}
 	g.Lifecycles = reg
 	g.DecisionPolicy = decision.Policy{}
@@ -32,7 +32,7 @@ func TestChangeLifecycleGate(t *testing.T) {
 			{Name: "implement", From: "analysing", To: "implementing",
 				Guard: `decisionPoints.exists(d, d.id == change.decision && d.status == "decided" && d.option == "go") && (world["analysed"] || actions.exists(a, a.for == change.decision))`},
 		}}}}}
-	if err := store.DomainStore.SaveDomain(ctx, DomainRecord{Domain: d, Status: StatusPublished}); err != nil {
+	if err := domainsOf(reg).Store.SaveDomain(ctx, def.Record{Domain: d, Status: StatusPublished}); err != nil {
 		t.Fatal(err)
 	}
 	m := methodology.Methodology{

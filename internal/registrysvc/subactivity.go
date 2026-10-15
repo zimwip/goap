@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 )
 
 // SubChangeValidator resolves pkg/graph.Graph.SubChangeValidator (architecture plan "Activity concept" cascade): the
@@ -28,7 +28,7 @@ func (s *Service) SubChangeValidator(ctx context.Context, parent, child domain.C
 		return err
 	}
 	if !within {
-		return fmt.Errorf("activity %s is not part of %s, the activity of the parent change: %w", ref, ancestor, graph.ErrInvalid)
+		return fmt.Errorf("activity %s is not part of %s, the activity of the parent change: %w", ref, ancestor, graphapi.ErrInvalid)
 	}
 	return nil
 }

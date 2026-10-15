@@ -8,25 +8,32 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/zimwip/goap/internal/domainsvc"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/llmcfg"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// graphWithDomains is the store of a registry on a graph: the methodologies in the graph, the domains in a DomainStore
-// (the Service finds it through the Store).
-type graphWithDomains struct {
-	*GraphStore
-	DomainStore
+// domainsOf is the domain registry a registry under test reads (ADR 0125 §3): one in memory, given to it the first
+// time, that tells it of each publication as goap-dev does.
+func domainsOf(s *Service) *domainsvc.Service {
+	if d, ok := s.Domains.(*domainsvc.Service); ok {
+		return d
+	}
+	d := &domainsvc.Service{Store: domainsvc.NewMemoryStore(), Authz: s.Authz,
+		Changed: func(ctx context.Context, _ def.Record) { _, _ = s.DomainsChanged(ctx) }}
+	s.Domains = d
+	return d
 }
 
 func stores(t *testing.T) map[string]func(t *testing.T) Store {
 	return map[string]func(t *testing.T) Store{
 		"memory": func(*testing.T) Store { return NewMemoryStore() },
 		"graph": func(*testing.T) Store {
-			return graphWithDomains{NewGraphStore(graph.New(graph.NewMemory())), NewMemoryStore()}
+			return NewGraphStore(graph.New(graph.NewMemory()))
 		},
 	}
 }
@@ -52,7 +59,7 @@ func withALM(t *testing.T, s *Service) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, issues, err := s.ImportDomain(as("admin"), src, true); err != nil || len(issues) > 0 {
+	if _, issues, err := domainsOf(s).ImportDomain(as("admin"), src, true); err != nil || len(issues) > 0 {
 		t.Fatalf("alm domain: %v %v", issues, err)
 	}
 }
@@ -173,7 +180,7 @@ func TestAgentsAndScriptsRoundTrip(t *testing.T) {
 	for name, mk := range stores(t) {
 		t.Run(name, func(t *testing.T) {
 			s := &Service{Store: mk(t)}
-			if _, err := s.SeedDomains(as("admin"), "../../domains"); err != nil {
+			if _, err := domainsOf(s).SeedDomains(as("admin"), "../../domains"); err != nil {
 				t.Fatal(err)
 			}
 			data, _ := os.ReadFile("../../methodologies/examples/test-design.yaml")
@@ -220,7 +227,7 @@ func pendingAliasImpacts(t *testing.T, g *graph.Graph, alias string) []domain.Ch
 
 func TestPublishStubsMissingAlias(t *testing.T) {
 	g := graph.New(graph.NewMemory())
-	s := &Service{Store: graphWithDomains{NewGraphStore(g), NewMemoryStore()}}
+	s := &Service{Store: NewGraphStore(g)}
 	withALM(t, s)
 	ctx := as("admin")
 	m := example(t)
@@ -256,7 +263,7 @@ func TestPublishStubsMissingAlias(t *testing.T) {
 // Two methodologies referencing the same missing alias, published concurrently, leave exactly one open stub.
 func TestPublishStubsMissingAliasOnce(t *testing.T) {
 	g := graph.New(graph.NewMemory())
-	s := &Service{Store: graphWithDomains{NewGraphStore(g), NewMemoryStore()}}
+	s := &Service{Store: NewGraphStore(g)}
 	withALM(t, s)
 	ctx := as("admin")
 	var srcs [][]byte

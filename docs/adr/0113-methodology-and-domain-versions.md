@@ -1,6 +1,6 @@
 # ADR 0113 — Versions in use: a change follows a methodology version, a methodology pins domain versions
 
-**Status**: accepted, implemented (see "Not done") · **Date**: 2026-10 · Extends ADR 0012 / 0013 (domains, versioned),
+**Status**: accepted, implemented (see "Not done"); the check of the published methodologies when a domain is published is replaced by their suspension (ADR 0125 §3) · **Date**: 2026-10 · Extends ADR 0012 / 0013 (domains, versioned),
 ADR 0023 (methodologies in the graph), ADR 0072 (the compile cache), ADR 0106 (the guardian chain saved on a change)
 
 ## Context

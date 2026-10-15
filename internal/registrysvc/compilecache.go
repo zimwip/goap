@@ -87,16 +87,33 @@ func contentHash(m methodology.Methodology) string {
 
 // Methodology implements engine.MethodologyPort for in-process use: the version a reference names (domain.MethodologyRef,
 // ADR 0113), else the latest published one, compiled against the domain versions it pins once for as long as neither
-// it nor those types change.
+// it nor those types change. A published version the domains in force break is suspended (ErrSuspended, ADR 0125 §3).
 func (s *Service) Methodology(ctx context.Context, ref string) (*methodology.Compiled, error) {
 	r, err := s.record(ctx, ref)
 	if err != nil {
 		return nil, engine.ErrUnknownMethodology{Name: ref}
 	}
-	ds, err := s.domainsFor(ctx, &r.Methodology, r.PublishedAt)
+	inForce, err := s.domainsInForce(ctx)
 	if err != nil {
 		return nil, err
 	}
+	ds, err := s.domainsAmong(ctx, &r.Methodology, r.PublishedAt, inForce)
+	if err != nil {
+		return nil, err
+	}
+	c, broken := s.compileAgainst(r, ds)
+	if broken == nil && r.Status == StatusPublished {
+		_, broken = s.compileAgainst(r, inForce) // suspended (ADR 0125 §3): the same compile when it pins what is in force
+	}
+	if broken != nil && r.Status == StatusPublished {
+		return nil, suspendedError{ref: key(r.Methodology.Name, r.Methodology.Version), cause: broken}
+	}
+	return c, broken
+}
+
+// compileAgainst compiles a stored version against domains, through the cache: the refusal of the compiler, or of the
+// type catalogue when the domains do not make one together.
+func (s *Service) compileAgainst(r Record, ds []*def.Domain) (*methodology.Compiled, error) {
 	k := compileKey{name: r.Methodology.Name, version: r.Methodology.Version, content: contentHash(r.Methodology), types: typesStamp(ds)}
 	if k.content != "" {
 		if e, ok := s.compiled.get(k); ok {

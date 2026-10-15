@@ -67,6 +67,12 @@
   </div>
 {/if}
 {#if draft.error}<div class="alert">{draft.error}</div>{/if}
+{#if draft.suspended}
+  <div class="alert" role="alert">
+    Suspended: the domains in force no longer accept this version, so no change starts on it and no run reads it. Publish
+    a new version written against them. <span class="fix">{draft.suspended}</span>
+  </div>
+{/if}
 {#if draft.readonly && !draft.loading}
   <div class="alert info">
     {draft.status === 'published'

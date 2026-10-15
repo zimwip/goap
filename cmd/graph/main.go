@@ -1,4 +1,4 @@
-// Command graph serves the domain/change graph.
+// Command graph serves the domain/change graph and the domain registry, the definition of the graph (ADR 0125 §3).
 package main
 
 import (
@@ -10,16 +10,20 @@ import (
 	"slices"
 	"time"
 
+	"github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/devseed"
+	"github.com/zimwip/goap/internal/domainsvc"
 	"github.com/zimwip/goap/internal/eventsvc"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
-	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/assess"
+	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
@@ -31,8 +35,7 @@ import (
 	"github.com/zimwip/goap/pkg/verify"
 )
 
-// loadTypes loads the type catalogue until it holds the domains the seeds write to (the registry may start after
-// the graph, and seeds its domains once the graph answers), then runs the seeds.
+// loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds.
 func loadTypes(ctx context.Context, log *slog.Logger, types *typecat.Live, need []string, seed func()) {
 	for delay := time.Second; ; delay = min(2*delay, time.Minute) {
 		err := types.Reload(ctx)
@@ -63,10 +66,16 @@ func main() {
 	log := platform.Logger("graph")
 	defer telemetry.Setup(context.Background(), log, "graph")(context.Background())
 	var repo graph.Repo = graph.NewMemory()
+	var domainStore domainsvc.Store = domainsvc.NewMemoryStore()
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	if pool := platform.OptionalPostgres(ctx, log, graph.Migrations); pool != nil {
 		defer pool.Close()
+		// the domain registry keeps its versions next to the graph they define
+		if err := platform.Migrate(ctx, log, pool, domainsvc.Migrations, "migrations"); err != nil {
+			platform.Fatal(log, "migrate domains", err)
+		}
 		repo = graph.NewPostgres(pool)
+		domainStore = domainsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
 		srv.Readiness(pool.Ping)
 	}
 	events := platform.OptionalEvents(ctx, log)
@@ -87,23 +96,24 @@ func main() {
 			log.Info("baselines compacted", "rewritten", n)
 		}
 	}()
-	// the graph judges nodes by the types of the published domains (ADR 0012): the registry is the reference, the
-	// graph holds a copy reloaded on its domain events; without a registry, the domain files are the source
-	var source typecat.Source = func(context.Context) ([]*def.Domain, error) {
-		return def.LoadDomains(platform.Env("GOAP_DOMAINS_DIR", "domains"))
+	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the
+	// reference (ADR 0125 §3), the graph holds a copy reloaded when a version is published or archived; the methodology
+	// registry follows the same publications through the events
+	domains := &domainsvc.Service{Store: domainStore, Events: events}
+	types := typecat.NewLive(domains.Domains)
+	domains.Changed = func(ctx context.Context, r def.Record) {
+		if err := types.Reload(ctx); err != nil {
+			log.Error("type catalogue", "domain", r.Domain.Name, "err", err)
+		}
 	}
-	if url := platform.Env("GOAP_REGISTRY_URL", ""); url != "" {
-		source = registrysvc.NewClient(platform.H2CClient(), url, telemetry.ClientOptions()...).Domains
-	}
-	types := typecat.NewLive(source)
 	g.Types = func() graph.TypeCatalog { return types.Get() }
-	for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
-		if err := events.Subscribe(subject, func([]byte) {
-			if err := types.Reload(context.Background()); err != nil {
-				log.Error("type catalogue", "err", err)
-			}
-		}); err != nil {
-			platform.Fatal(log, "subscribe", err)
+	// every start publishes the domain versions of GOAP_DOMAINS_DIR not stored yet (ADR 0113)
+	if dir := platform.Env("GOAP_DOMAINS_DIR", "domains"); dir != "" {
+		system := authz.With(ctx, authz.System("graph", access.RoleAdmin))
+		if doms, err := domains.SeedDomains(system, dir); err != nil {
+			log.Error("import domains", "dir", dir, "err", err)
+		} else {
+			log.Info("domains imported", "dir", dir, "domains", doms)
 		}
 	}
 	// the roots of the organisation and of the projects, before serving (ADR 0054): the structures are tagged by the
@@ -160,8 +170,10 @@ func main() {
 			log.Info("platform bootstrapped", "access", r.Access, "builtins", r.Builtins, "models", r.Models)
 		}
 	})
+	domains.Authz = authorizer
 	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}
 	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), eventsvc.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
+	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(eventsvc.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

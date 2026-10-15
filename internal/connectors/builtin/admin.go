@@ -4,7 +4,10 @@ import (
 	"context"
 	"sort"
 
+	"connectrpc.com/connect"
+
 	connectorv1 "github.com/zimwip/goap/gen/goap/connector/v1"
+	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/pkg/access"
@@ -13,7 +16,6 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
-	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // Hub is the part of the MCP hub goap-admin reads (*mcpsvc.Service).
@@ -23,10 +25,30 @@ type Hub interface {
 	ConnectorOf(ctx context.Context, a adapter.Instance) string
 }
 
-// Registry lists the published domains and methodologies (the registry service, or its client).
-type Registry interface {
-	List(ctx context.Context) ([]*methodology.Compiled, error)
+// Domains lists the domains in force: the domain registry (*domainsvc.Service in process, *domainsvc.Client).
+type Domains interface {
 	Domains(ctx context.Context) ([]*def.Domain, error)
+}
+
+// Methodologies lists the methodologies of the methodology registry: its client (registryv1connect), or its handler in
+// process. The hub reads them through the contract, never compiled (ADR 0125 §4).
+type Methodologies interface {
+	ListMethodologies(ctx context.Context, r *connect.Request[registryv1.ListMethodologiesRequest]) (*connect.Response[registryv1.ListMethodologiesResponse], error)
+}
+
+// inForce lists the published methodologies the registry does not suspend (ADR 0125 §3).
+func inForce(ctx context.Context, m Methodologies) ([]*registryv1.MethodologySummary, error) {
+	r, err := m.ListMethodologies(ctx, connect.NewRequest(&registryv1.ListMethodologiesRequest{}))
+	if err != nil {
+		return nil, err
+	}
+	var out []*registryv1.MethodologySummary
+	for _, s := range r.Msg.Methodologies {
+		if s.Status == string(def.StatusPublished) && s.Suspended == "" {
+			out = append(out, s)
+		}
+	}
+	return out, nil
 }
 
 // Admin is the goap-admin connector: it describes the platform (who, with what, what, how). It
@@ -111,7 +133,7 @@ func (c Admin) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 		}
 		return result(map[string]any{"connectors": list})
 	case "domains":
-		ds, err := c.p.Registry.Domains(ctx)
+		ds, err := c.p.Domains.Domains(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -125,14 +147,14 @@ func (c Admin) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ m
 		}
 		return result(map[string]any{"domains": list})
 	case "methodologies":
-		ms, err := c.p.Registry.List(ctx)
+		ms, err := inForce(ctx, c.p.Methodologies)
 		if err != nil {
 			return nil, err
 		}
 		list := []map[string]any{}
 		for _, m := range ms {
 			agents := []map[string]any{}
-			for _, ag := range m.Agents {
+			for _, ag := range m.GetAgents() {
 				agents = append(agents, map[string]any{"name": ag.Name, "description": ag.Description, "planner": ag.Planner})
 			}
 			list = append(list, map[string]any{"name": m.Name, "version": m.Version, "description": m.Description, "namespace": m.Namespace, "agents": agents})

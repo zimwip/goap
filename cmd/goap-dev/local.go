@@ -18,12 +18,12 @@ import (
 
 	"github.com/zimwip/goap/internal/convsvc"
 	"github.com/zimwip/goap/internal/credsvc"
+	"github.com/zimwip/goap/internal/domainsvc"
 	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/prefssvc"
-	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/index"
@@ -39,7 +39,7 @@ type stores struct {
 	creds     credsvc.Store
 	mcp       mcpsvc.Store
 	index     index.Store
-	domains   registrysvc.DomainStore
+	domains   domainsvc.Store
 	// dir is the directory of the local database (sqlite), empty in memory: where the generated JWT
 	// secret of local sign-in is kept (localJWTSecret).
 	dir   string
@@ -51,7 +51,7 @@ type stores struct {
 func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 	switch kind := platform.Env("GOAP_STORE", "memory"); kind {
 	case "memory":
-		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), prefs: prefssvc.NewMemoryStore(), convs: convsvc.NewMemoryStore(), creds: credsvc.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), index: index.NewMemory(), domains: registrysvc.NewMemoryStore(), close: func() {}}, nil
+		return stores{graph: graph.NewMemory(), processes: engine.NewMemoryStore(), models: modelgw.NewMemoryStore(), prefs: prefssvc.NewMemoryStore(), convs: convsvc.NewMemoryStore(), creds: credsvc.NewMemoryStore(), mcp: mcpsvc.NewMemoryStore(), index: index.NewMemory(), domains: domainsvc.NewMemoryStore(), close: func() {}}, nil
 	case "sqlite":
 		path := platform.Env("GOAP_SQLITE_PATH", filepath.Join(".goap", "goap.db"))
 		db, err := platform.OpenSQLite(ctx, path)
@@ -66,7 +66,8 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 			{"engine", enginesvc.SQLiteMigrations},
 			{"modelgw", modelgw.SQLiteMigrations}, {"preferences", prefssvc.SQLiteMigrations}, {"conversations", convsvc.SQLiteMigrations}, {"credentials", credsvc.SQLiteMigrations},
 			{"mcp", mcpsvc.SQLiteMigrations}, {"index", index.SQLiteMigrations},
-			{"registry", registrysvc.SQLiteMigrations},
+			// the domain registry (ADR 0125 §3), under the component name it had in the registry: a local database keeps its table
+			{"registry", domainsvc.SQLiteMigrations},
 		} {
 			if err := platform.MigrateSQLite(ctx, db, m.component, m.fs, "migrations_sqlite"); err != nil {
 				db.Close()
@@ -83,7 +84,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 		abs, _ := filepath.Abs(path)
 		log.Info("local storage", "sqlite", abs)
 		return stores{graph: graph.NewSQLite(db),
-			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, convs: convsvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: registrysvc.SQLDomainStore{DB: db}, dir: filepath.Dir(path), close: func() { closeDB(log, db) }}, nil
+			processes: processes, models: modelgw.SQLStore{DB: db}, prefs: prefssvc.SQLStore{DB: db}, convs: convsvc.SQLStore{DB: db}, creds: credsvc.SQLStore{DB: db}, mcp: mcpsvc.SQLStore{DB: db}, index: index.NewSQLite(db), domains: domainsvc.SQLStore{DB: db}, dir: filepath.Dir(path), close: func() { closeDB(log, db) }}, nil
 	default:
 		return stores{}, fmt.Errorf("GOAP_STORE must be memory or sqlite, got %q", kind)
 	}
@@ -146,11 +147,10 @@ func serveWeb(log *slog.Logger, e *echo.Echo, dir string) {
 	log.Info("serving the IDE", "dir", dir)
 }
 
-// registryEvents receives the registry events in-process (no NATS here) and
-// reacts to publications of methodologies and domains.
+// registryEvents receives the methodology registry events in-process (no NATS here) and reacts to publications of
+// methodologies (the domain registry calls its Changed hook in process).
 type registryEvents struct {
 	methodology func(ctx context.Context, name, version string)
-	domain      func(ctx context.Context, name, version string)
 }
 
 func (f registryEvents) Publish(ctx context.Context, subject string, v any) error {
@@ -161,8 +161,6 @@ func (f registryEvents) Publish(ctx context.Context, subject string, v any) erro
 	switch subject {
 	case "goap.registry.methodology.published":
 		f.methodology(context.WithoutCancel(ctx), ev["name"], ev["version"])
-	case "goap.registry.domain.published", "goap.registry.domain.deleted":
-		f.domain(context.WithoutCancel(ctx), ev["name"], ev["version"])
 	}
 	return nil
 }

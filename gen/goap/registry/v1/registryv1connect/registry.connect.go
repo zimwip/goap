@@ -23,6 +23,8 @@ const _ = connect.IsAtLeastVersion1_13_0
 const (
 	// RegistryServiceName is the fully-qualified name of the RegistryService service.
 	RegistryServiceName = "goap.registry.v1.RegistryService"
+	// DomainServiceName is the fully-qualified name of the DomainService service.
+	DomainServiceName = "goap.registry.v1.DomainService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -69,42 +71,40 @@ const (
 	// RegistryServiceExportMethodologyProcedure is the fully-qualified name of the RegistryService's
 	// ExportMethodology RPC.
 	RegistryServiceExportMethodologyProcedure = "/goap.registry.v1.RegistryService/ExportMethodology"
-	// RegistryServiceListDomainsProcedure is the fully-qualified name of the RegistryService's
-	// ListDomains RPC.
-	RegistryServiceListDomainsProcedure = "/goap.registry.v1.RegistryService/ListDomains"
-	// RegistryServiceGetDomainProcedure is the fully-qualified name of the RegistryService's GetDomain
-	// RPC.
-	RegistryServiceGetDomainProcedure = "/goap.registry.v1.RegistryService/GetDomain"
-	// RegistryServiceSaveDomainProcedure is the fully-qualified name of the RegistryService's
-	// SaveDomain RPC.
-	RegistryServiceSaveDomainProcedure = "/goap.registry.v1.RegistryService/SaveDomain"
-	// RegistryServiceValidateDomainProcedure is the fully-qualified name of the RegistryService's
-	// ValidateDomain RPC.
-	RegistryServiceValidateDomainProcedure = "/goap.registry.v1.RegistryService/ValidateDomain"
-	// RegistryServicePublishDomainProcedure is the fully-qualified name of the RegistryService's
-	// PublishDomain RPC.
-	RegistryServicePublishDomainProcedure = "/goap.registry.v1.RegistryService/PublishDomain"
-	// RegistryServiceCreateDomainVersionProcedure is the fully-qualified name of the RegistryService's
-	// CreateDomainVersion RPC.
-	RegistryServiceCreateDomainVersionProcedure = "/goap.registry.v1.RegistryService/CreateDomainVersion"
-	// RegistryServiceDeleteDomainProcedure is the fully-qualified name of the RegistryService's
-	// DeleteDomain RPC.
-	RegistryServiceDeleteDomainProcedure = "/goap.registry.v1.RegistryService/DeleteDomain"
-	// RegistryServiceImportDomainProcedure is the fully-qualified name of the RegistryService's
-	// ImportDomain RPC.
-	RegistryServiceImportDomainProcedure = "/goap.registry.v1.RegistryService/ImportDomain"
-	// RegistryServiceExportDomainProcedure is the fully-qualified name of the RegistryService's
-	// ExportDomain RPC.
-	RegistryServiceExportDomainProcedure = "/goap.registry.v1.RegistryService/ExportDomain"
 	// RegistryServiceGetDomainUsageProcedure is the fully-qualified name of the RegistryService's
 	// GetDomainUsage RPC.
 	RegistryServiceGetDomainUsageProcedure = "/goap.registry.v1.RegistryService/GetDomainUsage"
-	// RegistryServiceListTypesProcedure is the fully-qualified name of the RegistryService's ListTypes
+	// DomainServiceListDomainsProcedure is the fully-qualified name of the DomainService's ListDomains
 	// RPC.
-	RegistryServiceListTypesProcedure = "/goap.registry.v1.RegistryService/ListTypes"
-	// RegistryServiceRunAlgorithmProcedure is the fully-qualified name of the RegistryService's
+	DomainServiceListDomainsProcedure = "/goap.registry.v1.DomainService/ListDomains"
+	// DomainServiceGetDomainProcedure is the fully-qualified name of the DomainService's GetDomain RPC.
+	DomainServiceGetDomainProcedure = "/goap.registry.v1.DomainService/GetDomain"
+	// DomainServiceSaveDomainProcedure is the fully-qualified name of the DomainService's SaveDomain
+	// RPC.
+	DomainServiceSaveDomainProcedure = "/goap.registry.v1.DomainService/SaveDomain"
+	// DomainServiceValidateDomainProcedure is the fully-qualified name of the DomainService's
+	// ValidateDomain RPC.
+	DomainServiceValidateDomainProcedure = "/goap.registry.v1.DomainService/ValidateDomain"
+	// DomainServicePublishDomainProcedure is the fully-qualified name of the DomainService's
+	// PublishDomain RPC.
+	DomainServicePublishDomainProcedure = "/goap.registry.v1.DomainService/PublishDomain"
+	// DomainServiceCreateDomainVersionProcedure is the fully-qualified name of the DomainService's
+	// CreateDomainVersion RPC.
+	DomainServiceCreateDomainVersionProcedure = "/goap.registry.v1.DomainService/CreateDomainVersion"
+	// DomainServiceDeleteDomainProcedure is the fully-qualified name of the DomainService's
+	// DeleteDomain RPC.
+	DomainServiceDeleteDomainProcedure = "/goap.registry.v1.DomainService/DeleteDomain"
+	// DomainServiceImportDomainProcedure is the fully-qualified name of the DomainService's
+	// ImportDomain RPC.
+	DomainServiceImportDomainProcedure = "/goap.registry.v1.DomainService/ImportDomain"
+	// DomainServiceExportDomainProcedure is the fully-qualified name of the DomainService's
+	// ExportDomain RPC.
+	DomainServiceExportDomainProcedure = "/goap.registry.v1.DomainService/ExportDomain"
+	// DomainServiceListTypesProcedure is the fully-qualified name of the DomainService's ListTypes RPC.
+	DomainServiceListTypesProcedure = "/goap.registry.v1.DomainService/ListTypes"
+	// DomainServiceRunAlgorithmProcedure is the fully-qualified name of the DomainService's
 	// RunAlgorithm RPC.
-	RegistryServiceRunAlgorithmProcedure = "/goap.registry.v1.RegistryService/RunAlgorithm"
+	DomainServiceRunAlgorithmProcedure = "/goap.registry.v1.DomainService/RunAlgorithm"
 )
 
 // RegistryServiceClient is a client for the goap.registry.v1.RegistryService service.
@@ -134,25 +134,8 @@ type RegistryServiceClient interface {
 	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
 	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
 	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
-	// Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
-	// methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
-	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
-	// version empty = latest published version
-	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
-	SaveDomain(context.Context, *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error)
-	ValidateDomain(context.Context, *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error)
-	// Freeze a valid draft, once no published methodology would break.
-	PublishDomain(context.Context, *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error)
-	CreateDomainVersion(context.Context, *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error)
-	DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error)
-	ImportDomain(context.Context, *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error)
-	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
-	// The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
-	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
-	// Try an algorithm of a domain on a sample input, without saving anything.
-	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
 }
 
 // NewRegistryServiceClient constructs a client for the goap.registry.v1.RegistryService service. By
@@ -238,76 +221,10 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(registryServiceMethods.ByName("ExportMethodology")),
 			connect.WithClientOptions(opts...),
 		),
-		listDomains: connect.NewClient[v1.ListDomainsRequest, v1.ListDomainsResponse](
-			httpClient,
-			baseURL+RegistryServiceListDomainsProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("ListDomains")),
-			connect.WithClientOptions(opts...),
-		),
-		getDomain: connect.NewClient[v1.GetDomainRequest, v1.GetDomainResponse](
-			httpClient,
-			baseURL+RegistryServiceGetDomainProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("GetDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		saveDomain: connect.NewClient[v1.SaveDomainRequest, v1.SaveDomainResponse](
-			httpClient,
-			baseURL+RegistryServiceSaveDomainProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("SaveDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		validateDomain: connect.NewClient[v1.ValidateDomainRequest, v1.ValidateDomainResponse](
-			httpClient,
-			baseURL+RegistryServiceValidateDomainProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("ValidateDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		publishDomain: connect.NewClient[v1.PublishDomainRequest, v1.PublishDomainResponse](
-			httpClient,
-			baseURL+RegistryServicePublishDomainProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("PublishDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		createDomainVersion: connect.NewClient[v1.CreateDomainVersionRequest, v1.CreateDomainVersionResponse](
-			httpClient,
-			baseURL+RegistryServiceCreateDomainVersionProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("CreateDomainVersion")),
-			connect.WithClientOptions(opts...),
-		),
-		deleteDomain: connect.NewClient[v1.DeleteDomainRequest, v1.DeleteDomainResponse](
-			httpClient,
-			baseURL+RegistryServiceDeleteDomainProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("DeleteDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		importDomain: connect.NewClient[v1.ImportDomainRequest, v1.ImportDomainResponse](
-			httpClient,
-			baseURL+RegistryServiceImportDomainProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("ImportDomain")),
-			connect.WithClientOptions(opts...),
-		),
-		exportDomain: connect.NewClient[v1.ExportDomainRequest, v1.ExportDomainResponse](
-			httpClient,
-			baseURL+RegistryServiceExportDomainProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("ExportDomain")),
-			connect.WithClientOptions(opts...),
-		),
 		getDomainUsage: connect.NewClient[v1.GetDomainUsageRequest, v1.GetDomainUsageResponse](
 			httpClient,
 			baseURL+RegistryServiceGetDomainUsageProcedure,
 			connect.WithSchema(registryServiceMethods.ByName("GetDomainUsage")),
-			connect.WithClientOptions(opts...),
-		),
-		listTypes: connect.NewClient[v1.ListTypesRequest, v1.ListTypesResponse](
-			httpClient,
-			baseURL+RegistryServiceListTypesProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("ListTypes")),
-			connect.WithClientOptions(opts...),
-		),
-		runAlgorithm: connect.NewClient[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse](
-			httpClient,
-			baseURL+RegistryServiceRunAlgorithmProcedure,
-			connect.WithSchema(registryServiceMethods.ByName("RunAlgorithm")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -327,18 +244,7 @@ type registryServiceClient struct {
 	deleteMethodology   *connect.Client[v1.DeleteMethodologyRequest, v1.DeleteMethodologyResponse]
 	importMethodology   *connect.Client[v1.ImportMethodologyRequest, v1.ImportMethodologyResponse]
 	exportMethodology   *connect.Client[v1.ExportMethodologyRequest, v1.ExportMethodologyResponse]
-	listDomains         *connect.Client[v1.ListDomainsRequest, v1.ListDomainsResponse]
-	getDomain           *connect.Client[v1.GetDomainRequest, v1.GetDomainResponse]
-	saveDomain          *connect.Client[v1.SaveDomainRequest, v1.SaveDomainResponse]
-	validateDomain      *connect.Client[v1.ValidateDomainRequest, v1.ValidateDomainResponse]
-	publishDomain       *connect.Client[v1.PublishDomainRequest, v1.PublishDomainResponse]
-	createDomainVersion *connect.Client[v1.CreateDomainVersionRequest, v1.CreateDomainVersionResponse]
-	deleteDomain        *connect.Client[v1.DeleteDomainRequest, v1.DeleteDomainResponse]
-	importDomain        *connect.Client[v1.ImportDomainRequest, v1.ImportDomainResponse]
-	exportDomain        *connect.Client[v1.ExportDomainRequest, v1.ExportDomainResponse]
 	getDomainUsage      *connect.Client[v1.GetDomainUsageRequest, v1.GetDomainUsageResponse]
-	listTypes           *connect.Client[v1.ListTypesRequest, v1.ListTypesResponse]
-	runAlgorithm        *connect.Client[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse]
 }
 
 // ListMethodologies calls goap.registry.v1.RegistryService.ListMethodologies.
@@ -401,64 +307,9 @@ func (c *registryServiceClient) ExportMethodology(ctx context.Context, req *conn
 	return c.exportMethodology.CallUnary(ctx, req)
 }
 
-// ListDomains calls goap.registry.v1.RegistryService.ListDomains.
-func (c *registryServiceClient) ListDomains(ctx context.Context, req *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error) {
-	return c.listDomains.CallUnary(ctx, req)
-}
-
-// GetDomain calls goap.registry.v1.RegistryService.GetDomain.
-func (c *registryServiceClient) GetDomain(ctx context.Context, req *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error) {
-	return c.getDomain.CallUnary(ctx, req)
-}
-
-// SaveDomain calls goap.registry.v1.RegistryService.SaveDomain.
-func (c *registryServiceClient) SaveDomain(ctx context.Context, req *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error) {
-	return c.saveDomain.CallUnary(ctx, req)
-}
-
-// ValidateDomain calls goap.registry.v1.RegistryService.ValidateDomain.
-func (c *registryServiceClient) ValidateDomain(ctx context.Context, req *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error) {
-	return c.validateDomain.CallUnary(ctx, req)
-}
-
-// PublishDomain calls goap.registry.v1.RegistryService.PublishDomain.
-func (c *registryServiceClient) PublishDomain(ctx context.Context, req *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error) {
-	return c.publishDomain.CallUnary(ctx, req)
-}
-
-// CreateDomainVersion calls goap.registry.v1.RegistryService.CreateDomainVersion.
-func (c *registryServiceClient) CreateDomainVersion(ctx context.Context, req *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error) {
-	return c.createDomainVersion.CallUnary(ctx, req)
-}
-
-// DeleteDomain calls goap.registry.v1.RegistryService.DeleteDomain.
-func (c *registryServiceClient) DeleteDomain(ctx context.Context, req *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error) {
-	return c.deleteDomain.CallUnary(ctx, req)
-}
-
-// ImportDomain calls goap.registry.v1.RegistryService.ImportDomain.
-func (c *registryServiceClient) ImportDomain(ctx context.Context, req *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error) {
-	return c.importDomain.CallUnary(ctx, req)
-}
-
-// ExportDomain calls goap.registry.v1.RegistryService.ExportDomain.
-func (c *registryServiceClient) ExportDomain(ctx context.Context, req *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error) {
-	return c.exportDomain.CallUnary(ctx, req)
-}
-
 // GetDomainUsage calls goap.registry.v1.RegistryService.GetDomainUsage.
 func (c *registryServiceClient) GetDomainUsage(ctx context.Context, req *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error) {
 	return c.getDomainUsage.CallUnary(ctx, req)
-}
-
-// ListTypes calls goap.registry.v1.RegistryService.ListTypes.
-func (c *registryServiceClient) ListTypes(ctx context.Context, req *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error) {
-	return c.listTypes.CallUnary(ctx, req)
-}
-
-// RunAlgorithm calls goap.registry.v1.RegistryService.RunAlgorithm.
-func (c *registryServiceClient) RunAlgorithm(ctx context.Context, req *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
-	return c.runAlgorithm.CallUnary(ctx, req)
 }
 
 // RegistryServiceHandler is an implementation of the goap.registry.v1.RegistryService service.
@@ -488,25 +339,8 @@ type RegistryServiceHandler interface {
 	DeleteMethodology(context.Context, *connect.Request[v1.DeleteMethodologyRequest]) (*connect.Response[v1.DeleteMethodologyResponse], error)
 	ImportMethodology(context.Context, *connect.Request[v1.ImportMethodologyRequest]) (*connect.Response[v1.ImportMethodologyResponse], error)
 	ExportMethodology(context.Context, *connect.Request[v1.ExportMethodologyRequest]) (*connect.Response[v1.ExportMethodologyResponse], error)
-	// Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
-	// methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
-	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
-	// version empty = latest published version
-	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
-	SaveDomain(context.Context, *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error)
-	ValidateDomain(context.Context, *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error)
-	// Freeze a valid draft, once no published methodology would break.
-	PublishDomain(context.Context, *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error)
-	CreateDomainVersion(context.Context, *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error)
-	DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error)
-	ImportDomain(context.Context, *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error)
-	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
 	// Methodology versions referencing a domain version.
 	GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error)
-	// The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
-	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
-	// Try an algorithm of a domain on a sample input, without saving anything.
-	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
 }
 
 // NewRegistryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -588,76 +422,10 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		connect.WithSchema(registryServiceMethods.ByName("ExportMethodology")),
 		connect.WithHandlerOptions(opts...),
 	)
-	registryServiceListDomainsHandler := connect.NewUnaryHandler(
-		RegistryServiceListDomainsProcedure,
-		svc.ListDomains,
-		connect.WithSchema(registryServiceMethods.ByName("ListDomains")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceGetDomainHandler := connect.NewUnaryHandler(
-		RegistryServiceGetDomainProcedure,
-		svc.GetDomain,
-		connect.WithSchema(registryServiceMethods.ByName("GetDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceSaveDomainHandler := connect.NewUnaryHandler(
-		RegistryServiceSaveDomainProcedure,
-		svc.SaveDomain,
-		connect.WithSchema(registryServiceMethods.ByName("SaveDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceValidateDomainHandler := connect.NewUnaryHandler(
-		RegistryServiceValidateDomainProcedure,
-		svc.ValidateDomain,
-		connect.WithSchema(registryServiceMethods.ByName("ValidateDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServicePublishDomainHandler := connect.NewUnaryHandler(
-		RegistryServicePublishDomainProcedure,
-		svc.PublishDomain,
-		connect.WithSchema(registryServiceMethods.ByName("PublishDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceCreateDomainVersionHandler := connect.NewUnaryHandler(
-		RegistryServiceCreateDomainVersionProcedure,
-		svc.CreateDomainVersion,
-		connect.WithSchema(registryServiceMethods.ByName("CreateDomainVersion")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceDeleteDomainHandler := connect.NewUnaryHandler(
-		RegistryServiceDeleteDomainProcedure,
-		svc.DeleteDomain,
-		connect.WithSchema(registryServiceMethods.ByName("DeleteDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceImportDomainHandler := connect.NewUnaryHandler(
-		RegistryServiceImportDomainProcedure,
-		svc.ImportDomain,
-		connect.WithSchema(registryServiceMethods.ByName("ImportDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceExportDomainHandler := connect.NewUnaryHandler(
-		RegistryServiceExportDomainProcedure,
-		svc.ExportDomain,
-		connect.WithSchema(registryServiceMethods.ByName("ExportDomain")),
-		connect.WithHandlerOptions(opts...),
-	)
 	registryServiceGetDomainUsageHandler := connect.NewUnaryHandler(
 		RegistryServiceGetDomainUsageProcedure,
 		svc.GetDomainUsage,
 		connect.WithSchema(registryServiceMethods.ByName("GetDomainUsage")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceListTypesHandler := connect.NewUnaryHandler(
-		RegistryServiceListTypesProcedure,
-		svc.ListTypes,
-		connect.WithSchema(registryServiceMethods.ByName("ListTypes")),
-		connect.WithHandlerOptions(opts...),
-	)
-	registryServiceRunAlgorithmHandler := connect.NewUnaryHandler(
-		RegistryServiceRunAlgorithmProcedure,
-		svc.RunAlgorithm,
-		connect.WithSchema(registryServiceMethods.ByName("RunAlgorithm")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/goap.registry.v1.RegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -686,30 +454,8 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceImportMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceExportMethodologyProcedure:
 			registryServiceExportMethodologyHandler.ServeHTTP(w, r)
-		case RegistryServiceListDomainsProcedure:
-			registryServiceListDomainsHandler.ServeHTTP(w, r)
-		case RegistryServiceGetDomainProcedure:
-			registryServiceGetDomainHandler.ServeHTTP(w, r)
-		case RegistryServiceSaveDomainProcedure:
-			registryServiceSaveDomainHandler.ServeHTTP(w, r)
-		case RegistryServiceValidateDomainProcedure:
-			registryServiceValidateDomainHandler.ServeHTTP(w, r)
-		case RegistryServicePublishDomainProcedure:
-			registryServicePublishDomainHandler.ServeHTTP(w, r)
-		case RegistryServiceCreateDomainVersionProcedure:
-			registryServiceCreateDomainVersionHandler.ServeHTTP(w, r)
-		case RegistryServiceDeleteDomainProcedure:
-			registryServiceDeleteDomainHandler.ServeHTTP(w, r)
-		case RegistryServiceImportDomainProcedure:
-			registryServiceImportDomainHandler.ServeHTTP(w, r)
-		case RegistryServiceExportDomainProcedure:
-			registryServiceExportDomainHandler.ServeHTTP(w, r)
 		case RegistryServiceGetDomainUsageProcedure:
 			registryServiceGetDomainUsageHandler.ServeHTTP(w, r)
-		case RegistryServiceListTypesProcedure:
-			registryServiceListTypesHandler.ServeHTTP(w, r)
-		case RegistryServiceRunAlgorithmProcedure:
-			registryServiceRunAlgorithmHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -767,50 +513,346 @@ func (UnimplementedRegistryServiceHandler) ExportMethodology(context.Context, *c
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ExportMethodology is not implemented"))
 }
 
-func (UnimplementedRegistryServiceHandler) ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ListDomains is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetDomain is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) SaveDomain(context.Context, *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.SaveDomain is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) ValidateDomain(context.Context, *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ValidateDomain is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) PublishDomain(context.Context, *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.PublishDomain is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) CreateDomainVersion(context.Context, *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.CreateDomainVersion is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.DeleteDomain is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) ImportDomain(context.Context, *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ImportDomain is not implemented"))
-}
-
-func (UnimplementedRegistryServiceHandler) ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ExportDomain is not implemented"))
-}
-
 func (UnimplementedRegistryServiceHandler) GetDomainUsage(context.Context, *connect.Request[v1.GetDomainUsageRequest]) (*connect.Response[v1.GetDomainUsageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetDomainUsage is not implemented"))
 }
 
-func (UnimplementedRegistryServiceHandler) ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.ListTypes is not implemented"))
+// DomainServiceClient is a client for the goap.registry.v1.DomainService service.
+type DomainServiceClient interface {
+	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
+	// version empty = latest published version
+	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
+	SaveDomain(context.Context, *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error)
+	ValidateDomain(context.Context, *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error)
+	// Freeze a valid draft: it becomes the version in force. The methodologies it breaks are suspended by the
+	// methodology registry, which follows the events of the domains (ADR 0125 §3).
+	PublishDomain(context.Context, *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error)
+	CreateDomainVersion(context.Context, *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error)
+	DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error)
+	ImportDomain(context.Context, *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error)
+	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
+	// The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
+	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
+	// Try an algorithm of a domain on a sample input, without saving anything.
+	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
 }
 
-func (UnimplementedRegistryServiceHandler) RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.RunAlgorithm is not implemented"))
+// NewDomainServiceClient constructs a client for the goap.registry.v1.DomainService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewDomainServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) DomainServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	domainServiceMethods := v1.File_goap_registry_v1_registry_proto.Services().ByName("DomainService").Methods()
+	return &domainServiceClient{
+		listDomains: connect.NewClient[v1.ListDomainsRequest, v1.ListDomainsResponse](
+			httpClient,
+			baseURL+DomainServiceListDomainsProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("ListDomains")),
+			connect.WithClientOptions(opts...),
+		),
+		getDomain: connect.NewClient[v1.GetDomainRequest, v1.GetDomainResponse](
+			httpClient,
+			baseURL+DomainServiceGetDomainProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("GetDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		saveDomain: connect.NewClient[v1.SaveDomainRequest, v1.SaveDomainResponse](
+			httpClient,
+			baseURL+DomainServiceSaveDomainProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("SaveDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		validateDomain: connect.NewClient[v1.ValidateDomainRequest, v1.ValidateDomainResponse](
+			httpClient,
+			baseURL+DomainServiceValidateDomainProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("ValidateDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		publishDomain: connect.NewClient[v1.PublishDomainRequest, v1.PublishDomainResponse](
+			httpClient,
+			baseURL+DomainServicePublishDomainProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("PublishDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		createDomainVersion: connect.NewClient[v1.CreateDomainVersionRequest, v1.CreateDomainVersionResponse](
+			httpClient,
+			baseURL+DomainServiceCreateDomainVersionProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("CreateDomainVersion")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteDomain: connect.NewClient[v1.DeleteDomainRequest, v1.DeleteDomainResponse](
+			httpClient,
+			baseURL+DomainServiceDeleteDomainProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("DeleteDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		importDomain: connect.NewClient[v1.ImportDomainRequest, v1.ImportDomainResponse](
+			httpClient,
+			baseURL+DomainServiceImportDomainProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("ImportDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		exportDomain: connect.NewClient[v1.ExportDomainRequest, v1.ExportDomainResponse](
+			httpClient,
+			baseURL+DomainServiceExportDomainProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("ExportDomain")),
+			connect.WithClientOptions(opts...),
+		),
+		listTypes: connect.NewClient[v1.ListTypesRequest, v1.ListTypesResponse](
+			httpClient,
+			baseURL+DomainServiceListTypesProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("ListTypes")),
+			connect.WithClientOptions(opts...),
+		),
+		runAlgorithm: connect.NewClient[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse](
+			httpClient,
+			baseURL+DomainServiceRunAlgorithmProcedure,
+			connect.WithSchema(domainServiceMethods.ByName("RunAlgorithm")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// domainServiceClient implements DomainServiceClient.
+type domainServiceClient struct {
+	listDomains         *connect.Client[v1.ListDomainsRequest, v1.ListDomainsResponse]
+	getDomain           *connect.Client[v1.GetDomainRequest, v1.GetDomainResponse]
+	saveDomain          *connect.Client[v1.SaveDomainRequest, v1.SaveDomainResponse]
+	validateDomain      *connect.Client[v1.ValidateDomainRequest, v1.ValidateDomainResponse]
+	publishDomain       *connect.Client[v1.PublishDomainRequest, v1.PublishDomainResponse]
+	createDomainVersion *connect.Client[v1.CreateDomainVersionRequest, v1.CreateDomainVersionResponse]
+	deleteDomain        *connect.Client[v1.DeleteDomainRequest, v1.DeleteDomainResponse]
+	importDomain        *connect.Client[v1.ImportDomainRequest, v1.ImportDomainResponse]
+	exportDomain        *connect.Client[v1.ExportDomainRequest, v1.ExportDomainResponse]
+	listTypes           *connect.Client[v1.ListTypesRequest, v1.ListTypesResponse]
+	runAlgorithm        *connect.Client[v1.RunAlgorithmRequest, v1.RunAlgorithmResponse]
+}
+
+// ListDomains calls goap.registry.v1.DomainService.ListDomains.
+func (c *domainServiceClient) ListDomains(ctx context.Context, req *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error) {
+	return c.listDomains.CallUnary(ctx, req)
+}
+
+// GetDomain calls goap.registry.v1.DomainService.GetDomain.
+func (c *domainServiceClient) GetDomain(ctx context.Context, req *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error) {
+	return c.getDomain.CallUnary(ctx, req)
+}
+
+// SaveDomain calls goap.registry.v1.DomainService.SaveDomain.
+func (c *domainServiceClient) SaveDomain(ctx context.Context, req *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error) {
+	return c.saveDomain.CallUnary(ctx, req)
+}
+
+// ValidateDomain calls goap.registry.v1.DomainService.ValidateDomain.
+func (c *domainServiceClient) ValidateDomain(ctx context.Context, req *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error) {
+	return c.validateDomain.CallUnary(ctx, req)
+}
+
+// PublishDomain calls goap.registry.v1.DomainService.PublishDomain.
+func (c *domainServiceClient) PublishDomain(ctx context.Context, req *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error) {
+	return c.publishDomain.CallUnary(ctx, req)
+}
+
+// CreateDomainVersion calls goap.registry.v1.DomainService.CreateDomainVersion.
+func (c *domainServiceClient) CreateDomainVersion(ctx context.Context, req *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error) {
+	return c.createDomainVersion.CallUnary(ctx, req)
+}
+
+// DeleteDomain calls goap.registry.v1.DomainService.DeleteDomain.
+func (c *domainServiceClient) DeleteDomain(ctx context.Context, req *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error) {
+	return c.deleteDomain.CallUnary(ctx, req)
+}
+
+// ImportDomain calls goap.registry.v1.DomainService.ImportDomain.
+func (c *domainServiceClient) ImportDomain(ctx context.Context, req *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error) {
+	return c.importDomain.CallUnary(ctx, req)
+}
+
+// ExportDomain calls goap.registry.v1.DomainService.ExportDomain.
+func (c *domainServiceClient) ExportDomain(ctx context.Context, req *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error) {
+	return c.exportDomain.CallUnary(ctx, req)
+}
+
+// ListTypes calls goap.registry.v1.DomainService.ListTypes.
+func (c *domainServiceClient) ListTypes(ctx context.Context, req *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error) {
+	return c.listTypes.CallUnary(ctx, req)
+}
+
+// RunAlgorithm calls goap.registry.v1.DomainService.RunAlgorithm.
+func (c *domainServiceClient) RunAlgorithm(ctx context.Context, req *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
+	return c.runAlgorithm.CallUnary(ctx, req)
+}
+
+// DomainServiceHandler is an implementation of the goap.registry.v1.DomainService service.
+type DomainServiceHandler interface {
+	ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error)
+	// version empty = latest published version
+	GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error)
+	SaveDomain(context.Context, *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error)
+	ValidateDomain(context.Context, *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error)
+	// Freeze a valid draft: it becomes the version in force. The methodologies it breaks are suspended by the
+	// methodology registry, which follows the events of the domains (ADR 0125 §3).
+	PublishDomain(context.Context, *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error)
+	CreateDomainVersion(context.Context, *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error)
+	DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error)
+	ImportDomain(context.Context, *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error)
+	ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error)
+	// The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
+	ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error)
+	// Try an algorithm of a domain on a sample input, without saving anything.
+	RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error)
+}
+
+// NewDomainServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewDomainServiceHandler(svc DomainServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	domainServiceMethods := v1.File_goap_registry_v1_registry_proto.Services().ByName("DomainService").Methods()
+	domainServiceListDomainsHandler := connect.NewUnaryHandler(
+		DomainServiceListDomainsProcedure,
+		svc.ListDomains,
+		connect.WithSchema(domainServiceMethods.ByName("ListDomains")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceGetDomainHandler := connect.NewUnaryHandler(
+		DomainServiceGetDomainProcedure,
+		svc.GetDomain,
+		connect.WithSchema(domainServiceMethods.ByName("GetDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceSaveDomainHandler := connect.NewUnaryHandler(
+		DomainServiceSaveDomainProcedure,
+		svc.SaveDomain,
+		connect.WithSchema(domainServiceMethods.ByName("SaveDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceValidateDomainHandler := connect.NewUnaryHandler(
+		DomainServiceValidateDomainProcedure,
+		svc.ValidateDomain,
+		connect.WithSchema(domainServiceMethods.ByName("ValidateDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServicePublishDomainHandler := connect.NewUnaryHandler(
+		DomainServicePublishDomainProcedure,
+		svc.PublishDomain,
+		connect.WithSchema(domainServiceMethods.ByName("PublishDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceCreateDomainVersionHandler := connect.NewUnaryHandler(
+		DomainServiceCreateDomainVersionProcedure,
+		svc.CreateDomainVersion,
+		connect.WithSchema(domainServiceMethods.ByName("CreateDomainVersion")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceDeleteDomainHandler := connect.NewUnaryHandler(
+		DomainServiceDeleteDomainProcedure,
+		svc.DeleteDomain,
+		connect.WithSchema(domainServiceMethods.ByName("DeleteDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceImportDomainHandler := connect.NewUnaryHandler(
+		DomainServiceImportDomainProcedure,
+		svc.ImportDomain,
+		connect.WithSchema(domainServiceMethods.ByName("ImportDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceExportDomainHandler := connect.NewUnaryHandler(
+		DomainServiceExportDomainProcedure,
+		svc.ExportDomain,
+		connect.WithSchema(domainServiceMethods.ByName("ExportDomain")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceListTypesHandler := connect.NewUnaryHandler(
+		DomainServiceListTypesProcedure,
+		svc.ListTypes,
+		connect.WithSchema(domainServiceMethods.ByName("ListTypes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	domainServiceRunAlgorithmHandler := connect.NewUnaryHandler(
+		DomainServiceRunAlgorithmProcedure,
+		svc.RunAlgorithm,
+		connect.WithSchema(domainServiceMethods.ByName("RunAlgorithm")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/goap.registry.v1.DomainService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case DomainServiceListDomainsProcedure:
+			domainServiceListDomainsHandler.ServeHTTP(w, r)
+		case DomainServiceGetDomainProcedure:
+			domainServiceGetDomainHandler.ServeHTTP(w, r)
+		case DomainServiceSaveDomainProcedure:
+			domainServiceSaveDomainHandler.ServeHTTP(w, r)
+		case DomainServiceValidateDomainProcedure:
+			domainServiceValidateDomainHandler.ServeHTTP(w, r)
+		case DomainServicePublishDomainProcedure:
+			domainServicePublishDomainHandler.ServeHTTP(w, r)
+		case DomainServiceCreateDomainVersionProcedure:
+			domainServiceCreateDomainVersionHandler.ServeHTTP(w, r)
+		case DomainServiceDeleteDomainProcedure:
+			domainServiceDeleteDomainHandler.ServeHTTP(w, r)
+		case DomainServiceImportDomainProcedure:
+			domainServiceImportDomainHandler.ServeHTTP(w, r)
+		case DomainServiceExportDomainProcedure:
+			domainServiceExportDomainHandler.ServeHTTP(w, r)
+		case DomainServiceListTypesProcedure:
+			domainServiceListTypesHandler.ServeHTTP(w, r)
+		case DomainServiceRunAlgorithmProcedure:
+			domainServiceRunAlgorithmHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedDomainServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedDomainServiceHandler struct{}
+
+func (UnimplementedDomainServiceHandler) ListDomains(context.Context, *connect.Request[v1.ListDomainsRequest]) (*connect.Response[v1.ListDomainsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.ListDomains is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) GetDomain(context.Context, *connect.Request[v1.GetDomainRequest]) (*connect.Response[v1.GetDomainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.GetDomain is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) SaveDomain(context.Context, *connect.Request[v1.SaveDomainRequest]) (*connect.Response[v1.SaveDomainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.SaveDomain is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) ValidateDomain(context.Context, *connect.Request[v1.ValidateDomainRequest]) (*connect.Response[v1.ValidateDomainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.ValidateDomain is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) PublishDomain(context.Context, *connect.Request[v1.PublishDomainRequest]) (*connect.Response[v1.PublishDomainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.PublishDomain is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) CreateDomainVersion(context.Context, *connect.Request[v1.CreateDomainVersionRequest]) (*connect.Response[v1.CreateDomainVersionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.CreateDomainVersion is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) DeleteDomain(context.Context, *connect.Request[v1.DeleteDomainRequest]) (*connect.Response[v1.DeleteDomainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.DeleteDomain is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) ImportDomain(context.Context, *connect.Request[v1.ImportDomainRequest]) (*connect.Response[v1.ImportDomainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.ImportDomain is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) ExportDomain(context.Context, *connect.Request[v1.ExportDomainRequest]) (*connect.Response[v1.ExportDomainResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.ExportDomain is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) ListTypes(context.Context, *connect.Request[v1.ListTypesRequest]) (*connect.Response[v1.ListTypesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.ListTypes is not implemented"))
+}
+
+func (UnimplementedDomainServiceHandler) RunAlgorithm(context.Context, *connect.Request[v1.RunAlgorithmRequest]) (*connect.Response[v1.RunAlgorithmResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.DomainService.RunAlgorithm is not implemented"))
 }

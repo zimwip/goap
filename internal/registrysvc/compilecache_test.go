@@ -60,12 +60,12 @@ func TestMethodologyCompileIsCached(t *testing.T) {
 		t.Fatalf("a published version is compiled afresh: %v", err)
 	}
 
-	// a domain publish
+	// a domain publish (its check of the published versions compiles them against the new types, ADR 0125 §3)
 	n := s.compiled.compiles.Load()
-	if _, _, err := s.ImportDomain(ctx, []byte("name: other\nversion: \"1\"\nnodeTypes: [X]\n"), true); err != nil {
+	if _, _, err := domainsOf(s).ImportDomain(ctx, []byte("name: other\nversion: \"1\"\nnodeTypes: [X]\n"), true); err != nil {
 		t.Fatal(err)
 	}
-	if c4, err := s.Methodology(ctx, m.Name); err != nil || c4 == c3 || s.compiled.compiles.Load() != n+1 {
+	if c4, err := s.Methodology(ctx, m.Name); err != nil || c4 == c3 || s.compiled.compiles.Load() <= n {
 		t.Fatalf("a domain publish invalidates: %v", err)
 	}
 }

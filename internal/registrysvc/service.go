@@ -23,11 +23,11 @@ import (
 type Service struct {
 	// Store holds the methodology versions (graph data, GraphStore).
 	Store Store
-	// DomainStore holds the domain versions (the registry's database, SQLDomainStore); nil: the Store when it holds
-	// domains too (MemoryStore).
-	DomainStore DomainStore
-	Authz       authz.Authorizer
-	Events      engine.Publisher
+	// Domains reads the domain registry (ADR 0125 §3): *domainsvc.Service in process, *domainsvc.Client over RPC. Nil: the
+	// built-in domains only.
+	Domains Domains
+	Authz   authz.Authorizer
+	Events  engine.Publisher
 	// MCPScopes gives the scope of each MCP of the platform (ADR 0028), checked against where a methodology
 	// declares them; nil: not checked.
 	MCPScopes func(ctx context.Context) (map[string]string, error)
@@ -42,6 +42,9 @@ type Service struct {
 	aliasMu sync.Mutex
 	// Log reports what a best-effort step could not do; nil: slog.Default.
 	Log *slog.Logger
+	// suspended is what Recheck last found suspended, by name@version: the reason of each (ADR 0125 §3).
+	suspendedMu sync.Mutex
+	suspended   map[string]string
 }
 
 // ErrInvalid wraps validation issues.
@@ -309,7 +312,7 @@ func (s *Service) Seed(ctx context.Context, dir string) ([]string, error) {
 }
 
 // List implements engine.MethodologyPort: the latest published version of
-// every methodology.
+// every methodology, the suspended ones left out.
 func (s *Service) List(ctx context.Context) ([]*methodology.Compiled, error) {
 	rs, err := s.Store.List(ctx)
 	if err != nil {
@@ -323,6 +326,9 @@ func (s *Service) List(ctx context.Context) ([]*methodology.Compiled, error) {
 		}
 		seen[r.Methodology.Name] = true
 		c, err := s.Methodology(ctx, r.Methodology.Name)
+		if errors.Is(err, ErrSuspended) {
+			continue // not in force (ADR 0125 §3)
+		}
 		if err != nil {
 			return nil, err
 		}

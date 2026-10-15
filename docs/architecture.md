@@ -61,7 +61,7 @@ model configuration), and the meta-domain `methodology` that holds the definitio
 ([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `organisation` and `platform` are **built in and
 frozen**: the platform reads them in its own way, so they are initialised at startup from `domains/builtin/`, change
 with the code and are read-only in the domain editor; a new namespace is a new domain published from the domain editor.
-Domains themselves are not graph data: the registry keeps them in its database. Keys are unique per namespace. A change acts on one namespace: it can
+Domains themselves are not graph data: the domain registry, served by the graph, keeps them in its database ([ADR 0125](adr/0125-source-components.md) §3). Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one. So that an action or agent's
 default queries (a prompt's `.Baseline.Nodes`, a script's `Host.Node`/`Nodes`/`Links`, a human task's node picker)
 are bound to the change's own declared namespace rather than exposing every namespace at once, baselines and
@@ -852,9 +852,9 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | Service | Responsibility | API | Persistence | Status |
 |---|---|---|---|---|
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
-| **registry** | Methodologies (graph data) and domains (its database), ADR 0023: editing (draft), validation, publishing, versions, the type catalogue, YAML import/export (domains also JSON, [ADR 0104](adr/0104-domain-and-graph-import-export.md)) | Connect `registry.v1` | `registry` (`domain_version`) + the graph | 🟢 |
+| **registry** | Methodologies (graph data, ADR 0023): editing (draft), validation against the domains of the domain registry, publishing, versions, suspension of a version the domains in force break (ADR 0125 §3), YAML import/export | Connect `registry.v1.RegistryService` | the graph | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
-| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply) | Connect `graph.v1` | `graph` | 🟢 |
+| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply); the **domain registry**, its definition (ADR 0125 §3): domain versions, the type catalogue, YAML / JSON import-export ([ADR 0104](adr/0104-domain-and-graph-import-export.md)) | Connect `graph.v1`, `registry.v1.DomainService` | `graph` (with `domain_version`) | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces; `Suggest`, the stateless contextual helper over the `helper` alias (ADR 0086); the **one ledger of LLM calls**: `ListUsage` / `UsageSummary` (ADR 0089) | Connect `model.v1` | `modelgw` (quota counters and the ledger of LLM calls, ADR 0089; the configuration is graph data, ADR 0021) | 🟢 core |
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0085-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
@@ -866,13 +866,25 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
 | **vault** | Secrets (LLM API keys, MCP credentials, DSN) | HashiCorp Vault KV v2 | — | 🟢 dev mode |
 
-### 3.0 Source components ([ADR 0124](adr/0124-source-components.md))
+### 3.0 Source components ([ADR 0125](adr/0125-source-components.md))
 
 The services are cut along components the sources follow too: a **contract** (protos, generated code, the pure
 model, `pkg/graphapi`: the requests, answers and errors of the graph's operations), the **graph**, the **engine**, the
 **MCP hub**, the **gateway** and the **platform** that composes them. The engine reaches the graph only through the
 ports it defines (`engine.GraphPort`, written with `pkg/graphapi`), the graph and its service name no engine type;
 `pkg/layering` holds every rule until the components become the modules of a `go.work`.
+
+Two registries: the **domain registry** (`internal/domainsvc`, `registry.v1.DomainService`) goes with the graph, which
+serves it, seeds the shipped domains and loads its type catalogue from it in process; it names no methodology. The
+**methodology registry** (`internal/registrysvc`, `cmd/registry`) goes with the engine: it reads the domains through a
+port (`registrysvc.Domains`: the service in process, `internal/domainclient` over RPC) and the graph through
+`graphapi`. Publishing or archiving a domain is never refused for a methodology: the domain registry emits
+`goap.registry.domain.published` / `deleted`, the methodology registry checks every published methodology version
+again (`DomainsChanged` → `Recheck`, also at start) and **suspends** the ones that no longer compile against the
+domains in force (`ErrSuspended`; events `goap.registry.methodology.suspended` / `resumed`; nothing stored): no change
+starts on a suspended version, no run reads it, the lists leave it out, until a compatible methodology version is
+published or the domains come back. The graph and the domain are never blocked. Migrating the data of a domain is a
+separate matter.
 
 ### 3.1 Communication
 
@@ -888,7 +900,8 @@ ports it defines (`engine.GraphPort`, written with `pkg/graphapi`), the graph an
 | `goap.change.<id>.item_added` / `.applied` | graph | `ChangeEvent` |
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
-| `goap.registry.methodology.published` | registry | name + version |
+| `goap.registry.methodology.published` / `.suspended` / `.resumed` | registry | name + version (+ reason) |
+| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph) | name + version + status |
 | `goap.engine.work` (work queue) 🟡 | engine | process tick to execute (clustering) |
 
 ### 3.2 Engine clustering 🟡
@@ -1308,8 +1321,8 @@ Every composition (`goap-dev`, `cmd/graph`) seeds the platform through one funct
 
 1. The caller sets every hook of the graph first (`Authorizer`, `ChangeAuthorizer`, `Validators`, `DecisionPolicy`, `Types`;
    `SubChangeValidator`, `Lifecycles` (the guardian of the changes) where the registry runs in process: only `goap-dev`) and has a type
-   catalogue holding the domains (`goap-dev`: `SeedDomains`, then the catalogue reload; `cmd/graph`: it waits for the
-   catalogue). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
+   catalogue holding the domains (`goap-dev` and `cmd/graph`: the domain registry's `SeedDomains`, then the catalogue
+   reload). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
    platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), then `Options.Dev`. Each step is idempotent.
@@ -1454,8 +1467,9 @@ reached through `sub_activity` only; no element stands alone (a modelling princi
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
-database (`domain_version`, PostgreSQL or SQLite, `registrysvc.SQLDomainStore`). The registry validates, compiles,
-publishes and emits the `goap.registry.*` events. Compilation is one pipeline with a policy
+database, the **domain registry** the graph serves (`domain_version`, PostgreSQL or SQLite, `domainsvc.SQLStore`,
+ADR 0125 §3). The methodology registry validates, compiles, publishes, suspends the versions the domains in force
+break, and emits the `goap.registry.methodology.*` events. Compilation is one pipeline with a policy
 (`Methodology.CompileWith(CompileOptions{Lenient, Stored})`; `Compile`, `CompileLenient`, `Validate`, `ValidateStored` are `def.Issue.Severity` (`error` default, `warning`; ADR 0097): only errors refuse a compile, a validation or a publish (`Issues.HasErrors`), and `CompileWith` adds the `Compiled.Hints()` remarks as `goal` warnings, shown by the editor without blocking Save or Publish.
 its policies, [ADR 0072](adr/0072-one-compile-pipeline-split-apply-compile-cache.md)); the registry caches the compiled
 methodologies by (name, version, content hash, published domains in force), so the engine's per-event and per-action reads
@@ -1476,27 +1490,29 @@ and the engine, whose process runs the version it started with (`Process.Methodo
 A methodology version pins the domain versions it is written against (`Methodology.Domains`, `domains:` by domain
 name): publishing pins every published domain in force, the registry validates and compiles a version against its
 pins (`domainsFor`; a version published before pins existed follows the domains in force when it was published), a
-new version of a domain does not reach the published methodologies pinned on another one, and `CreateVersion` drops
+new compatible version of a domain does not reach the published methodologies pinned on another one (one they no
+longer compile against suspends them, ADR 0125 §3), and `CreateVersion` drops
 the pins so a new draft moves to the latest domains. The graph keeps one type catalogue, the latest published
 domains: its data follows the domain in force. Each start publishes the shipped domain and methodology files whose
 version is not stored yet (`SeedDomains`, `Seed`): a new shipped version needs no reset of the database.
 
 **Domains** ([ADR 0013](adr/0013-domains.md)). The object part of the model (node types, link types, lifecycles,
 algorithms) lives in **domains**, one per namespace (`alm`, `organisation`, `platform`), versioned on their own (same
-draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, administrators).
+draft → published → archived lifecycle; `registry.v1.DomainService`, served by the graph, ABAC resource `domain`, administrators).
 A methodology is the active part only (agents, actions, conditions, goals, processes): it names its **target namespace**
 (`namespace: alm`, the domain its changes act on; it replaces `domainRef`) and the types it works on with qualified
 references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)), which may point to other domains for what it reads
 or links to. Consistency is
 checked at save / publish against the domain versions in force: action `expects`, CEL type literals
 (`"alm@Requirement" in n.types`, `l.type == "alm@verifies"`) and builtin `params.linkTypes` must resolve. A methodology
-can only be published on published domains; a published methodology stays on the domain versions it pins (ADR
-0113), so a domain version is refused only when it would break a published methodology that follows the latest one
-(published before the domain existed; `GetDomainUsage` lists the dependents).
+can only be published on published domains; a published methodology compiles against the domain versions it pins
+(ADR 0113), and a domain version is never refused for a methodology: one the domains in force break is suspended by
+the methodology registry (ADR 0125 §3; `GetDomainUsage` lists the methodologies using a domain).
 
 **YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`, `ImportDomain`, ...); the
-files in `domains/` then `methodologies/` are imported and published at registry startup if they don't already exist
-(`GOAP_DOMAINS_DIR`, `GOAP_METHODOLOGIES_DIR`; a changed file needs a new version number).
+files in `domains/` are imported and published by the graph at startup (`GOAP_DOMAINS_DIR`), those of
+`methodologies/` by the methodology registry (`GOAP_METHODOLOGIES_DIR`), when they don't already exist (a changed file
+needs a new version number).
 Example YAML definition (target format of ADR 0012):
 
 ```yaml

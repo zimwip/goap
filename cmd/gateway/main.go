@@ -78,6 +78,8 @@ func main() {
 		Routes: []gateway.Route{
 			{Prefix: "/goap.graph.v1.GraphService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
 			{Prefix: "/goap.registry.v1.RegistryService/", Upstream: platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082")},
+			// the domain registry is the graph's (ADR 0125 §3)
+			{Prefix: "/goap.registry.v1.DomainService/", Upstream: platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")},
 			{Prefix: "/goap.engine.v1.EngineService/", Upstream: platform.Env("GOAP_ENGINE_URL", "http://localhost:8083")},
 			{Prefix: "/goap.model.v1.ModelService/", Upstream: platform.Env("GOAP_MODELGW_URL", "http://localhost:8084")},
 			{Prefix: "/goap.preferences.v1.PreferencesService/", Upstream: platform.Env("GOAP_PREFERENCES_URL", "http://localhost:8087")},

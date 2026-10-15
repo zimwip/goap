@@ -17,7 +17,7 @@ import (
 func TestActivityGoalsMetGatesApply(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
+	store := NewGraphStore(g)
 	reg := &Service{Store: store}
 	g.Lifecycles = reg
 
@@ -80,7 +80,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
+	store := NewGraphStore(g)
 	reg := &Service{Store: store}
 	g.Lifecycles = reg
 

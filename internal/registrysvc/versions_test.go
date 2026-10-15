@@ -22,7 +22,7 @@ func tickingClock() func() time.Time {
 func versionedService(t *testing.T) *Service {
 	t.Helper()
 	enf, _ := authz.NewCasbin(nil)
-	return &Service{Store: NewGraphStore(graph.New(graph.NewMemory())), DomainStore: NewMemoryStore(), Authz: enf, now: tickingClock()}
+	return &Service{Store: NewGraphStore(graph.New(graph.NewMemory())), Authz: enf, now: tickingClock()}
 }
 
 // A new change takes the latest published version of its methodology, a change keeps the version it names (ADR 0113).
@@ -32,7 +32,7 @@ func TestMethodologyVersionOfAChange(t *testing.T) {
 	if v, err := s.MethodologyVersion(ctx, "uses"); err != nil || v != "" {
 		t.Fatalf("unknown methodology: %q %v", v, err)
 	}
-	if _, _, err := s.ImportDomain(ctx, mustYAML(t, almDomain("1")), true); err != nil {
+	if _, _, err := domainsOf(s).ImportDomain(ctx, mustYAML(t, almDomain("1")), true); err != nil {
 		t.Fatal(err)
 	}
 	m := refMeth("uses")
@@ -69,8 +69,8 @@ func TestMethodologyVersionOfAChange(t *testing.T) {
 }
 
 // Every start publishes the versions of the shipped files not stored yet: a new version of a domain that a published
-// methodology could not follow is loaded anyway, the methodology staying on its version, and a new version of the
-// methodology becomes the one new changes take (ADR 0113).
+// methodology could not follow is loaded anyway, the methodology being suspended (ADR 0125 §3), and a new version of
+// the methodology becomes the one new changes take (ADR 0113).
 func TestSeedLoadsNewVersions(t *testing.T) {
 	s := versionedService(t)
 	ctx := as("admin")
@@ -89,7 +89,7 @@ func TestSeedLoadsNewVersions(t *testing.T) {
 	write(mdir, "uses.yaml", src)
 	seed := func(wantD, wantM int) {
 		t.Helper()
-		ds, err := s.SeedDomains(ctx, ddir)
+		ds, err := domainsOf(s).SeedDomains(ctx, ddir)
 		if err != nil || len(ds) != wantD {
 			t.Fatalf("domains: %v %v", ds, err)
 		}
@@ -119,9 +119,11 @@ func TestSeedLoadsNewVersions(t *testing.T) {
 	if v, _ := s.MethodologyVersion(ctx, "uses"); v != "2" {
 		t.Fatalf("new changes take the new version: %q", v)
 	}
-	old, err := s.Methodology(ctx, "uses@1")
-	if err != nil || !old.Types.HasLinkType("alm@verifies") || old.Types.HasNodeType("alm@Need") {
-		t.Fatalf("version 1 keeps alm@1: %v", err)
+	if _, err := s.Methodology(ctx, "uses@1"); !errors.Is(err, ErrSuspended) {
+		t.Fatalf("version 1 relies on a link type alm@2 dropped: suspended: %v", err)
+	}
+	if _, err := s.MethodologyVersion(ctx, "uses@1"); !errors.Is(err, graph.ErrInvalid) || !errors.Is(err, ErrSuspended) {
+		t.Fatalf("no change starts on a suspended version: %v", err)
 	}
 	cur, err := s.Methodology(ctx, "uses")
 	if err != nil || !cur.Types.HasNodeType("alm@Need") {
@@ -132,24 +134,33 @@ func TestSeedLoadsNewVersions(t *testing.T) {
 	}
 }
 
-// A methodology published before the pins existed follows the domain versions in force when it was published.
+// A methodology published before the pins existed follows the domain versions in force when it was published, while
+// the domains in force do not break it.
 func TestUnpinnedPublishedMethodologyFollowsItsTime(t *testing.T) {
 	s := versionedService(t)
 	ctx := as("admin")
-	if _, _, err := s.ImportDomain(ctx, mustYAML(t, almDomain("1")), true); err != nil {
+	if _, _, err := domainsOf(s).ImportDomain(ctx, mustYAML(t, almDomain("1")), true); err != nil {
 		t.Fatal(err)
 	}
-	at := s.clock()
+	at := time.Now().UTC() // the clock of the domain registry
 	if err := s.Store.Save(ctx, Record{Methodology: refMeth("legacy"), Status: StatusPublished, CreatedAt: at, UpdatedAt: at, PublishedAt: at}); err != nil {
 		t.Fatal(err)
 	}
 	v2 := almDomain("2")
-	v2.LinkTypes = nil
-	if _, _, err := s.ImportDomain(ctx, mustYAML(t, v2), true); err != nil {
-		t.Fatalf("legacy follows alm@1, alm@2 does not reach it: %v", err)
+	v2.NodeTypes = append(v2.NodeTypes, def.NodeType{Name: "Need"})
+	if _, _, err := domainsOf(s).ImportDomain(ctx, mustYAML(t, v2), true); err != nil {
+		t.Fatal(err)
 	}
-	if c, err := s.Methodology(ctx, "legacy"); err != nil || !c.Types.HasLinkType("alm@verifies") {
+	if c, err := s.Methodology(ctx, "legacy"); err != nil || !c.Types.HasLinkType("alm@verifies") || c.Types.HasNodeType("alm@Need") {
 		t.Fatalf("compiled against alm@1: %v", err)
+	}
+	v3 := almDomain("3")
+	v3.LinkTypes = nil
+	if _, _, err := domainsOf(s).ImportDomain(ctx, mustYAML(t, v3), true); err != nil {
+		t.Fatalf("a domain is published whatever the methodologies: %v", err)
+	}
+	if _, err := s.Methodology(ctx, "legacy"); !errors.Is(err, ErrSuspended) {
+		t.Fatalf("alm@3 breaks it: suspended: %v", err)
 	}
 }
 
@@ -157,7 +168,7 @@ func TestUnpinnedPublishedMethodologyFollowsItsTime(t *testing.T) {
 func TestDomainPins(t *testing.T) {
 	s := versionedService(t)
 	ctx := as("admin")
-	if _, _, err := s.ImportDomain(ctx, mustYAML(t, almDomain("1")), true); err != nil {
+	if _, _, err := domainsOf(s).ImportDomain(ctx, mustYAML(t, almDomain("1")), true); err != nil {
 		t.Fatal(err)
 	}
 	m := refMeth("pins")

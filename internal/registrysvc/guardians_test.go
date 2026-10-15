@@ -16,7 +16,7 @@ import (
 func TestGuardianChain(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
+	store := NewGraphStore(g)
 	reg := &Service{Store: store, Applicable: func(context.Context, string) ([]string, error) {
 		return []string{"portfolio", "release", "work"}, nil
 	}}

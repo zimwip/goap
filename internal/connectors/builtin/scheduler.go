@@ -176,8 +176,8 @@ func (s Scheduler) Invoke(ctx context.Context, op string, raw, _ map[string]any,
 // the one of its methodology, else the one of the calling change.
 func (s Scheduler) baseline(ctx context.Context, a args) (string, error) {
 	ns := a.str("namespace")
-	if m := a.str("methodology"); ns == "" && m != "" && s.p.Registry != nil {
-		ms, err := s.p.Registry.List(ctx)
+	if m := a.str("methodology"); ns == "" && m != "" && s.p.Methodologies != nil {
+		ms, err := inForce(ctx, s.p.Methodologies)
 		if err != nil {
 			return "", err
 		}

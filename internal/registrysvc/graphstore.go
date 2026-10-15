@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/graphsnap"
 	"github.com/zimwip/goap/pkg/methodology"
 )
@@ -27,12 +27,12 @@ type StoreGraph interface {
 	BranchHead(ctx context.Context, namespace, name string) (domain.Baseline, error)
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 	// Commit runs a change of node edits (ADR 0024).
-	Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error)
+	Commit(ctx context.Context, in graphapi.Commit) (graphapi.CommitResult, error)
 	// CreateChange and ImpactNodeCreate let a producer open a change on a namespace of its own and propose a pending (not
 	// auto-accepted) created node in it (used for alias stubs, see aliasstubs.go); Changes lists every change, for
 	// the pending-stub dedup check.
-	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
-	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error)
+	CreateChange(ctx context.Context, in graphapi.NewChange) (domain.Change, error)
+	ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graphapi.NodeCreate) (domain.ChangeImpact, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
 	// Structures give the root project, where the registry's own changes act (ADR 0091).
 	Structures(ctx context.Context) (domain.Structures, error)
@@ -330,9 +330,9 @@ func patch(have, want map[string]any) map[string]any {
 // links dropped), ties new elements to the header (defines) and brings the links of every node to the references of
 // the definition (ADR 0120): a link the definition no longer makes is removed, one it makes is added, one whose
 // attributes changed is replaced. old, oldChildren and oldOut are the stored version, nil for a new one.
-func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChildren map[string]domain.Node, oldOut map[domain.NodeID][]keyedLink) []graph.NodeEdit {
+func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChildren map[string]domain.Node, oldOut map[domain.NodeID][]keyedLink) []graphapi.NodeEdit {
 	// linkEdits diffs the links of a stored node (only the types managed counts) with the wanted ones
-	linkEdits := func(id domain.NodeID, want []methodology.RefLink, managed func(string) bool) (add []graph.LinkEdit, remove []domain.LinkID) {
+	linkEdits := func(id domain.NodeID, want []methodology.RefLink, managed func(string) bool) (add []graphapi.LinkEdit, remove []domain.LinkID) {
 		used := make([]bool, len(want))
 		for _, l := range oldOut[id] {
 			if !managed(l.Type) {
@@ -352,22 +352,22 @@ func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChil
 		}
 		for i, w := range want {
 			if !used[i] {
-				add = append(add, graph.LinkEdit{Type: w.Type, ToKey: hkey + "/" + w.To, Props: normProps(w.Props)})
+				add = append(add, graphapi.LinkEdit{Type: w.Type, ToKey: hkey + "/" + w.To, Props: normProps(w.Props)})
 			}
 		}
 		return add, remove
 	}
 	all := func(string) bool { return true }
-	var head graph.NodeEdit
+	var head graphapi.NodeEdit
 	if old != nil {
 		ref := old.Ref()
-		head = graph.NodeEdit{Pre: &ref, Props: patch(old.Properties, eg.header)}
+		head = graphapi.NodeEdit{Pre: &ref, Props: patch(old.Properties, eg.header)}
 		head.Links, head.RemoveLinks = linkEdits(old.ID, eg.headerLinks, func(t string) bool { return t != linkDefines })
 	} else {
-		head = graph.NodeEdit{Key: hkey, Type: hType, Props: eg.header}
+		head = graphapi.NodeEdit{Key: hkey, Type: hType, Props: eg.header}
 		head.Links, _ = linkEdits("", eg.headerLinks, all)
 	}
-	var edits []graph.NodeEdit
+	var edits []graphapi.NodeEdit
 	want := map[string]bool{}
 	for _, e := range eg.els {
 		rel := e.kind + "/" + e.name
@@ -378,13 +378,13 @@ func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChil
 			add, remove := linkEdits(n.ID, eg.links[rel], all)
 			if p != nil || len(add) > 0 || len(remove) > 0 {
 				ref := n.Ref()
-				edits = append(edits, graph.NodeEdit{Pre: &ref, Props: p, Links: add, RemoveLinks: remove})
+				edits = append(edits, graphapi.NodeEdit{Pre: &ref, Props: p, Links: add, RemoveLinks: remove})
 			}
 			continue
 		}
 		add, _ := linkEdits("", eg.links[rel], all)
-		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeTypeOf(e.kind), Props: e.props, Links: add})
-		head.Links = append(head.Links, graph.LinkEdit{Type: linkDefines, ToKey: k})
+		edits = append(edits, graphapi.NodeEdit{Key: k, Type: nodeTypeOf(e.kind), Props: e.props, Links: add})
+		head.Links = append(head.Links, graphapi.LinkEdit{Type: linkDefines, ToKey: k})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
 		if n := oldChildren[k]; !want[k] {
@@ -398,7 +398,7 @@ func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChil
 	if head.Pre != nil && len(head.Props) == 0 && len(head.Links) == 0 && len(head.RemoveLinks) == 0 {
 		return edits
 	}
-	return append([]graph.NodeEdit{head}, edits...)
+	return append([]graphapi.NodeEdit{head}, edits...)
 }
 
 // read returns the versions at the head of main, looked at now.
@@ -412,7 +412,7 @@ func (s *GraphStore) read(ctx context.Context) (*defs, error) {
 
 // commit applies the items build makes from the current versions as one change on main; when main moved meanwhile, it
 // reads the new head and builds them again (up to three retries).
-func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]graph.NodeEdit, error)) error {
+func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]graphapi.NodeEdit, error)) error {
 	for attempt := 0; ; attempt++ {
 		d, err := s.read(ctx)
 		if err != nil {
@@ -430,20 +430,20 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		if rerr != nil {
 			return rerr
 		}
-		_, err = s.Graph.Commit(ctx, graph.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits, ProjectID: root})
-		if errors.Is(err, graph.ErrConflict) && attempt < 3 {
+		_, err = s.Graph.Commit(ctx, graphapi.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits, ProjectID: root})
+		if errors.Is(err, graphapi.ErrConflict) && attempt < 3 {
 			continue // main moved: read again and rebuild
 		}
-		if errors.Is(err, graph.ErrNothingToCommit) {
+		if errors.Is(err, graphapi.ErrNothingToCommit) {
 			return nil // the graph holds the definition already
 		}
 		return err
 	}
 }
 
-func update(n domain.Node, props map[string]any) graph.NodeEdit {
+func update(n domain.Node, props map[string]any) graphapi.NodeEdit {
 	ref := n.Ref()
-	return graph.NodeEdit{Pre: &ref, Props: props}
+	return graphapi.NodeEdit{Pre: &ref, Props: props}
 }
 
 // statusPatch is the update of a header node when a version changes status.
@@ -455,7 +455,7 @@ func statusPatch(st Status, at time.Time) map[string]any {
 	return p
 }
 
-func markDeleted(n domain.Node) graph.NodeEdit {
+func markDeleted(n domain.Node) graphapi.NodeEdit {
 	return update(n, map[string]any{"status": string(statusDeleted)})
 }
 
@@ -476,7 +476,7 @@ func encodeVersion(m methodology.Methodology, st Status, created, updated, publi
 func (s *GraphStore) Save(ctx context.Context, r Record) error {
 	m := r.Methodology
 	k := key(m.Name, m.Version)
-	return s.commit(ctx, NamespaceMethodology, "Methodology "+k, func(d *defs) ([]graph.NodeEdit, error) {
+	return s.commit(ctx, NamespaceMethodology, "Methodology "+k, func(d *defs) ([]graphapi.NodeEdit, error) {
 		old, exists := d.methodologies[k]
 		revive := exists && old.rec.Status == statusDeleted
 		if exists && !revive && old.rec.Status != StatusDraft {
@@ -543,18 +543,18 @@ func (s *GraphStore) List(ctx context.Context) ([]Record, error) {
 
 func (s *GraphStore) SetStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
 	k := key(name, version)
-	return s.commit(ctx, NamespaceMethodology, fmt.Sprintf("Methodology %s %s", k, st), func(d *defs) ([]graph.NodeEdit, error) {
+	return s.commit(ctx, NamespaceMethodology, fmt.Sprintf("Methodology %s %s", k, st), func(d *defs) ([]graphapi.NodeEdit, error) {
 		old, ok := d.methodologies[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, ErrNotFound)
 		}
-		return []graph.NodeEdit{update(old.node, statusPatch(st, at))}, nil
+		return []graphapi.NodeEdit{update(old.node, statusPatch(st, at))}, nil
 	})
 }
 
 func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 	k := key(name, version)
-	return s.commit(ctx, NamespaceMethodology, "Delete methodology "+k, func(d *defs) ([]graph.NodeEdit, error) {
+	return s.commit(ctx, NamespaceMethodology, "Delete methodology "+k, func(d *defs) ([]graphapi.NodeEdit, error) {
 		old, ok := d.methodologies[k]
 		if !ok || old.rec.Status == statusDeleted {
 			return nil, fmt.Errorf("%s: %w", k, ErrNotFound)
@@ -562,6 +562,6 @@ func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 		if old.rec.Status != StatusDraft {
 			return nil, fmt.Errorf("%s: %w", k, ErrImmutable)
 		}
-		return []graph.NodeEdit{markDeleted(old.node)}, nil
+		return []graphapi.NodeEdit{markDeleted(old.node)}, nil
 	})
 }

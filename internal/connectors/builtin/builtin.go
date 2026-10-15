@@ -47,8 +47,10 @@ type Ports struct {
 	Engine EngineAPI
 	// Hub describes the MCPs and connectors (goap-admin): the hub service.
 	Hub Hub
-	// Registry lists the published domains and methodologies (goap-admin).
-	Registry Registry
+	// Domains lists the published domains (goap-admin): the domain registry.
+	Domains Domains
+	// Methodologies lists the published methodologies (goap-admin, goap-scheduler): the methodology registry.
+	Methodologies Methodologies
 	// Authz authorizes reads per node type; Floor guards the access nodes (User, Policy: ADR 0020),
 	// Authz when nil. Without Authz only the platform APIs authorize.
 	Authz authz.Authorizer
@@ -65,7 +67,7 @@ func Connectors(p Ports) map[string]connectorkit.Connector {
 	if p.Engine != nil {
 		out[mcpbuiltin.Scheduler] = Scheduler{p}
 	}
-	if p.Hub != nil && p.Registry != nil && p.Graph != nil {
+	if p.Hub != nil && p.Domains != nil && p.Methodologies != nil && p.Graph != nil {
 		out[mcpbuiltin.Admin] = Admin{p}
 	}
 	return out

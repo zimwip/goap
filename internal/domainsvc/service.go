@@ -1,4 +1,8 @@
-package registrysvc
+// Package domainsvc is the domain registry (ADR 0125 §3): it stores the domains, the definition of the graph (node
+// types, link types, lifecycles, algorithms, one per namespace, ADR 0013), in its own database, and serves them over
+// Connect (registry.v1.DomainService). It goes with the graph, which loads its type catalogue from it, and names no
+// methodology: publishing a domain emits an event, and the methodology registry checks its methodologies again.
+package domainsvc
 
 import (
 	"context"
@@ -7,7 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
+	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -16,18 +20,32 @@ import (
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
-// ErrNoDomainStore is returned when the registry has no store for the domains.
-var ErrNoDomainStore = errors.New("the registry has no domain store")
+// Publisher publishes the events of the domains (goap.registry.domain.saved | published | deleted, payload {name,
+// version, status}).
+type Publisher interface {
+	Publish(ctx context.Context, subject string, v any) error
+}
 
-// domains is the store of the domain versions: DomainStore, else the Store when it holds domains too (MemoryStore).
-func (s *Service) domains() (DomainStore, error) {
-	if s.DomainStore != nil {
-		return s.DomainStore, nil
+// Service holds the rules of the domain registry: drafts are editable, published versions are immutable and must be
+// valid, writes are authorized by ABAC rules on the "domain" resource (actions write, publish, delete).
+type Service struct {
+	Store  Store
+	Authz  authz.Authorizer
+	Events Publisher
+	// Changed is called after a version is published or archived, once stored: the types in force may have changed (the
+	// graph in the same process reloads its catalogue). Nil: nothing is called.
+	Changed func(ctx context.Context, r def.Record)
+	now     func() time.Time
+}
+
+// ErrInvalid wraps validation issues.
+var ErrInvalid = errors.New("invalid domain")
+
+func (s *Service) clock() time.Time {
+	if s.now != nil {
+		return s.now()
 	}
-	if ds, ok := s.Store.(DomainStore); ok {
-		return ds, nil
-	}
-	return nil, ErrNoDomainStore
+	return time.Now().UTC()
 }
 
 // Types is the type catalogue in force (ADR 0012 §2): the latest published version of every domain and the built-in
@@ -57,18 +75,20 @@ func (s *Service) authorizeDomain(ctx context.Context, action string, d *def.Dom
 		Resource: authz.Resource{Type: "domain", ID: d.Name + "@" + d.Version, Name: d.Name, Org: authz.From(ctx).Org}})
 }
 
-func (s *Service) publishDomainEvent(ctx context.Context, event string, r DomainRecord) {
-	s.compiled.clear() // every write of a domain version goes through here: the types in force may have changed
+func (s *Service) publishDomainEvent(ctx context.Context, event string, r def.Record) {
 	if s.Events != nil {
 		_ = s.Events.Publish(ctx, "goap.registry.domain."+event, map[string]string{"name": r.Domain.Name, "version": r.Domain.Version, "status": string(r.Status)})
+	}
+	if event != "saved" && s.Changed != nil {
+		s.Changed(context.WithoutCancel(ctx), r)
 	}
 }
 
 // builtinDomains are the records of the domains shipped with the platform: published, frozen, never stored.
-func builtinDomains() []DomainRecord {
-	var out []DomainRecord
+func builtinDomains() []def.Record {
+	var out []def.Record
 	for _, d := range typecat.Builtins() {
-		out = append(out, DomainRecord{Domain: *d, Status: StatusPublished, UpdatedBy: "platform", Builtin: true})
+		out = append(out, def.Record{Domain: *d, Status: def.StatusPublished, UpdatedBy: "platform", Builtin: true})
 	}
 	return out
 }
@@ -90,16 +110,13 @@ func errBuiltin(name string) error {
 }
 
 // GetDomain returns a version (empty version: latest published), the built-in domains included.
-func (s *Service) GetDomain(ctx context.Context, name, version string) (DomainRecord, error) {
+func (s *Service) GetDomain(ctx context.Context, name, version string) (def.Record, error) {
 	for _, r := range builtinDomains() {
 		if r.Domain.Name == name && (version == "" || version == r.Domain.Version) {
 			return r, nil
 		}
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return DomainRecord{}, err
-	}
+	ds := s.Store
 	return ds.GetDomain(ctx, name, version)
 }
 
@@ -110,22 +127,13 @@ func (s *Service) Domains(ctx context.Context) ([]*def.Domain, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []*def.Domain
-	for _, r := range rs {
-		if r.Status == StatusPublished && !r.Builtin {
-			out = append(out, &r.Domain)
-		}
-	}
-	return out, nil
+	return def.InForce(rs), nil
 }
 
 // DomainVersions returns every version, or the latest version of each domain
 // (latest published if any, latest draft otherwise); the built-in domains come first.
-func (s *Service) DomainVersions(ctx context.Context, all bool) ([]DomainRecord, error) {
-	ds, err := s.domains()
-	if err != nil {
-		return nil, err
-	}
+func (s *Service) DomainVersions(ctx context.Context, all bool) ([]def.Record, error) {
+	ds := s.Store
 	rs, err := ds.ListDomains(ctx)
 	if err != nil {
 		return nil, err
@@ -134,51 +142,30 @@ func (s *Service) DomainVersions(ctx context.Context, all bool) ([]DomainRecord,
 	if all {
 		return rs, nil
 	}
-	latest := map[string]DomainRecord{}
-	var order []string
-	for _, r := range rs {
-		cur, ok := latest[r.Domain.Name]
-		if !ok {
-			order = append(order, r.Domain.Name)
-		}
-		better := !ok ||
-			(r.Status == StatusPublished && (cur.Status != StatusPublished || r.PublishedAt.After(cur.PublishedAt))) ||
-			(cur.Status != StatusPublished && r.Status != StatusArchived && r.CreatedAt.After(cur.CreatedAt))
-		if better {
-			latest[r.Domain.Name] = r
-		}
-	}
-	out := make([]DomainRecord, 0, len(order))
-	for _, n := range order {
-		out = append(out, latest[n])
-	}
-	return out, nil
+	return def.Latest(rs), nil
 }
 
 // SaveDomain creates or replaces a draft; invalid drafts are stored and
 // their issues returned.
-func (s *Service) SaveDomain(ctx context.Context, d def.Domain) (DomainRecord, def.Issues, error) {
+func (s *Service) SaveDomain(ctx context.Context, d def.Domain) (def.Record, def.Issues, error) {
 	if d.Name == "" || d.Version == "" {
-		return DomainRecord{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
+		return def.Record{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}
 	if err := errBuiltin(d.Name); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return DomainRecord{}, nil, err
-	}
+	ds := s.Store
 	if err := s.authorizeDomain(ctx, "write", &d); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	now := s.clock()
-	r := DomainRecord{Domain: d, Status: StatusDraft, CreatedAt: now, UpdatedAt: now, UpdatedBy: authz.From(ctx).Subject}
+	r := def.Record{Domain: d, Status: def.StatusDraft, CreatedAt: now, UpdatedAt: now, UpdatedBy: authz.From(ctx).Subject}
 	if err := ds.SaveDomain(ctx, r); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	saved, err := ds.GetDomain(ctx, d.Name, d.Version)
 	if err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	s.publishDomainEvent(ctx, "saved", saved)
 	return saved, s.validateDomain(ctx, &d), nil
@@ -198,53 +185,28 @@ func (s *Service) validateDomain(ctx context.Context, d *def.Domain) def.Issues 
 	return issues
 }
 
-// methodologiesUsing returns the methodology versions (not archived) that act on the namespace of a domain or
-// reference its types.
-func (s *Service) methodologiesUsing(ctx context.Context, name string) ([]Record, error) {
-	rs, err := s.Store.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var out []Record
-	for _, r := range rs {
-		if r.Status != StatusArchived && slices.Contains(r.Methodology.Namespaces(), name) {
-			out = append(out, r)
-		}
-	}
-	return out, nil
-}
-
-// DomainUsage lists the methodology versions using a domain (its namespace or its types); each follows the version
-// it pins (methodology.Methodology.Domains, ADR 0113), a draft the version in force.
-func (s *Service) DomainUsage(ctx context.Context, name, version string) ([]Record, error) {
-	return s.methodologiesUsing(ctx, name)
-}
-
-// PublishDomain freezes a valid draft; it becomes the version in force. The published methodologies must stay
-// valid against it.
-func (s *Service) PublishDomain(ctx context.Context, name, version string) (DomainRecord, error) {
+// PublishDomain freezes a valid draft; it becomes the version in force. The methodologies it breaks are the methodology
+// registry's to suspend, on the event (ADR 0125 §3): a domain is never refused for them.
+func (s *Service) PublishDomain(ctx context.Context, name, version string) (def.Record, error) {
 	if err := errBuiltin(name); err != nil {
-		return DomainRecord{}, err
+		return def.Record{}, err
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return DomainRecord{}, err
-	}
+	ds := s.Store
 	r, err := ds.GetDomain(ctx, name, version)
 	if err != nil {
-		return DomainRecord{}, err
+		return def.Record{}, err
 	}
 	if err := s.authorizeDomain(ctx, "publish", &r.Domain); err != nil {
-		return DomainRecord{}, err
+		return def.Record{}, err
 	}
-	if r.Status != StatusDraft {
-		return DomainRecord{}, fmt.Errorf("domain %s@%s: %w", name, version, ErrImmutable)
+	if r.Status != def.StatusDraft {
+		return def.Record{}, fmt.Errorf("domain %s@%s: %w", name, version, ErrImmutable)
 	}
 	if err := s.checkPublishable(ctx, &r.Domain); err != nil {
-		return DomainRecord{}, err
+		return def.Record{}, err
 	}
-	if err := ds.SetDomainStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
-		return DomainRecord{}, err
+	if err := ds.SetDomainStatus(ctx, name, version, def.StatusPublished, s.clock()); err != nil {
+		return def.Record{}, err
 	}
 	r, err = ds.GetDomain(ctx, name, version)
 	if err == nil {
@@ -253,58 +215,32 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (Doma
 	return r, err
 }
 
-// checkPublishable refuses a domain with issues, or one that would break a published methodology following its
-// latest version. A published methodology keeps the version it pins, or the one in force when it was published (ADR
-// 0113): a new version of the domain does not reach it, a new version of the methodology moves to it.
+// checkPublishable refuses a domain with issues, or one whose types do not resolve with the other domains in force.
 func (s *Service) checkPublishable(ctx context.Context, d *def.Domain) error {
 	if issues := s.validateDomain(ctx, d); len(issues) > 0 {
 		return fmt.Errorf("%w: %v", ErrInvalid, issues)
 	}
-	cat, err := s.Types(ctx, d)
-	if err != nil {
+	if _, err := s.Types(ctx, d); err != nil {
 		return fmt.Errorf("%w: %v", ErrInvalid, err)
-	}
-	users, err := s.methodologiesUsing(ctx, d.Name)
-	if err != nil {
-		return err
-	}
-	for _, u := range users {
-		if u.Status != StatusPublished {
-			continue
-		}
-		if _, pinned := u.Methodology.Domains[d.Name]; pinned {
-			continue
-		}
-		if then, err := s.domainsInForceAt(ctx, u.PublishedAt); err != nil {
-			return err
-		} else if then[d.Name] != nil {
-			continue
-		}
-		if issues := resolve(u.Methodology, cat).Validate(); issues.HasErrors() {
-			return fmt.Errorf("%w: methodology %s@%s would break: %v", ErrInvalid, u.Methodology.Name, u.Methodology.Version, issues.Errors())
-		}
 	}
 	return nil
 }
 
 // CreateDomainVersion copies a version into a new draft.
-func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string) (DomainRecord, error) {
+func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string) (def.Record, error) {
 	if err := errBuiltin(name); err != nil {
-		return DomainRecord{}, err
+		return def.Record{}, err
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return DomainRecord{}, err
-	}
+	ds := s.Store
 	src, err := s.GetDomain(ctx, name, from)
 	if err != nil {
-		return DomainRecord{}, err
+		return def.Record{}, err
 	}
 	if to == "" || to == src.Domain.Version {
-		return DomainRecord{}, fmt.Errorf("a new version number is required: %w", ErrInvalid)
+		return def.Record{}, fmt.Errorf("a new version number is required: %w", ErrInvalid)
 	}
 	if _, err := ds.GetDomain(ctx, name, to); err == nil {
-		return DomainRecord{}, fmt.Errorf("domain %s@%s already exists: %w", name, to, ErrImmutable)
+		return def.Record{}, fmt.Errorf("domain %s@%s already exists: %w", name, to, ErrImmutable)
 	}
 	d := src.Domain
 	d.Version = to
@@ -312,16 +248,13 @@ func (s *Service) CreateDomainVersion(ctx context.Context, name, from, to string
 	return r, err
 }
 
-// DeleteDomain removes a draft, or archives a published version; the version in force cannot be archived while
-// methodologies use it.
+// DeleteDomain removes a draft, or archives a published version (the methodologies the archive breaks are suspended by
+// the methodology registry, on the event).
 func (s *Service) DeleteDomain(ctx context.Context, name, version string) error {
 	if err := errBuiltin(name); err != nil {
 		return err
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return err
-	}
+	ds := s.Store
 	r, err := ds.GetDomain(ctx, name, version)
 	if err != nil {
 		return err
@@ -329,25 +262,13 @@ func (s *Service) DeleteDomain(ctx context.Context, name, version string) error 
 	if err := s.authorizeDomain(ctx, "delete", &r.Domain); err != nil {
 		return err
 	}
-	switch r.Status {
-	case StatusDraft:
-	case StatusPublished:
-		if latest, _ := ds.GetDomain(ctx, name, ""); latest.Domain.Version == version {
-			users, err := s.methodologiesUsing(ctx, name)
-			if err != nil {
-				return err
-			}
-			if len(users) > 0 {
-				return fmt.Errorf("%w: domain %s@%s is used by %s@%s", ErrInvalid, name, version, users[0].Methodology.Name, users[0].Methodology.Version)
-			}
-		}
-	default:
+	if r.Status == def.StatusArchived {
 		return nil
 	}
-	if r.Status == StatusDraft {
+	if r.Status == def.StatusDraft {
 		err = ds.DeleteDomain(ctx, name, version)
 	} else {
-		err = ds.SetDomainStatus(ctx, name, version, StatusArchived, s.clock())
+		err = ds.SetDomainStatus(ctx, name, version, def.StatusArchived, s.clock())
 	}
 	if err == nil {
 		s.publishDomainEvent(ctx, "deleted", r)
@@ -356,10 +277,10 @@ func (s *Service) DeleteDomain(ctx context.Context, name, version string) error 
 }
 
 // ImportDomain stores a YAML definition as a draft, and publishes it on request.
-func (s *Service) ImportDomain(ctx context.Context, yamlSrc []byte, publish bool) (DomainRecord, def.Issues, error) {
+func (s *Service) ImportDomain(ctx context.Context, yamlSrc []byte, publish bool) (def.Record, def.Issues, error) {
 	d, err := def.ParseDomain(yamlSrc)
 	if err != nil {
-		return DomainRecord{}, nil, fmt.Errorf("%w: %v", ErrInvalid, err)
+		return def.Record{}, nil, fmt.Errorf("%w: %v", ErrInvalid, err)
 	}
 	if !publish {
 		return s.SaveDomain(ctx, *d)
@@ -370,22 +291,19 @@ func (s *Service) ImportDomain(ctx context.Context, yamlSrc []byte, publish bool
 // importPublishedDomain stores a domain version as published in one write, with one event (SaveDomain then
 // PublishDomain would be two). A domain with issues cannot be published: it is kept as a draft, and the issues
 // returned with the error.
-func (s *Service) importPublishedDomain(ctx context.Context, d def.Domain) (DomainRecord, def.Issues, error) {
+func (s *Service) importPublishedDomain(ctx context.Context, d def.Domain) (def.Record, def.Issues, error) {
 	if d.Name == "" || d.Version == "" {
-		return DomainRecord{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
+		return def.Record{}, nil, fmt.Errorf("name and version are required: %w", ErrInvalid)
 	}
 	if err := errBuiltin(d.Name); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return DomainRecord{}, nil, err
-	}
+	ds := s.Store
 	if err := s.authorizeDomain(ctx, "write", &d); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	if err := s.authorizeDomain(ctx, "publish", &d); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	if issues := s.validateDomain(ctx, &d); len(issues) > 0 {
 		r, _, err := s.SaveDomain(ctx, d)
@@ -395,16 +313,16 @@ func (s *Service) importPublishedDomain(ctx context.Context, d def.Domain) (Doma
 		return r, issues, fmt.Errorf("%w: cannot publish: %v", ErrInvalid, issues)
 	}
 	if err := s.checkPublishable(ctx, &d); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	now := s.clock()
-	r := DomainRecord{Domain: d, Status: StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}
+	r := def.Record{Domain: d, Status: def.StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}
 	if err := ds.SaveDomain(ctx, r); err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	saved, err := ds.GetDomain(ctx, d.Name, d.Version)
 	if err != nil {
-		return DomainRecord{}, nil, err
+		return def.Record{}, nil, err
 	}
 	s.publishDomainEvent(ctx, "published", saved)
 	return saved, nil, nil
@@ -445,10 +363,7 @@ func (s *Service) SeedDomains(ctx context.Context, dir string) ([]string, error)
 	if err != nil {
 		return nil, err
 	}
-	ds, err := s.domains()
-	if err != nil {
-		return nil, err
-	}
+	ds := s.Store
 	var loaded []string
 	for _, f := range files {
 		src, err := os.ReadFile(f)

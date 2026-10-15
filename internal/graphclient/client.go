@@ -1,6 +1,6 @@
 // Package graphclient is the client of the graph service: engine.GraphPort and the reads of the other services over
 // RPC. It names the graph through its contract (pkg/graphapi) and the generated code only, so a service calling the
-// graph does not import the graph nor its service (pkg/layering, ADR 0124).
+// graph does not import the graph nor its service (pkg/layering, ADR 0125).
 package graphclient
 
 import (

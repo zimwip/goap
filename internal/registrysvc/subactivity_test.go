@@ -15,7 +15,7 @@ import (
 func TestSubChangeActivityCascade(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	store := graphWithDomains{NewGraphStore(g), NewMemoryStore()}
+	store := NewGraphStore(g)
 	reg := &Service{Store: store}
 	g.SubChangeValidator = reg.SubChangeValidator
 

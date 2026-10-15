@@ -69,7 +69,7 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	handler := &enginesvc.Handler{Engine: eg, Log: e.log, DefaultPrincipal: e.dev, Authz: gp.authorizer, Broker: broker, Triggers: triggers}
 	// the built-in connectors call the platform in-process, for the caller of the tool
 	maps.Copy(pp.connectors, builtin.Connectors(builtin.Ports{Graph: engine.EventingGraph{GraphPort: g, OnEvent: e.triggers.onChange}, Engine: handler,
-		Hub: pp.hub, Registry: rp.reg, Authz: gp.authorizer, Floor: gp.authorizer.Floor()}))
+		Hub: pp.hub, Domains: rp.domains, Methodologies: &registrysvc.Handler{Service: rp.reg}, Authz: gp.authorizer, Floor: gp.authorizer.Floor()}))
 	pp.hub.KeepRegistered(e.ctx, pp.connectors)
 	return &enginePart{e: eg, handler: handler, runtime: runtime}, nil
 }

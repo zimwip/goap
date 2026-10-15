@@ -10,16 +10,17 @@ import (
 	"sync"
 	"time"
 
+	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// Status of a methodology version.
-type Status string
+// Status of a methodology version: the lifecycle of a domain version (def.Status).
+type Status = def.Status
 
 const (
-	StatusDraft     Status = "draft"
-	StatusPublished Status = "published"
-	StatusArchived  Status = "archived"
+	StatusDraft     = def.StatusDraft
+	StatusPublished = def.StatusPublished
+	StatusArchived  = def.StatusArchived
 )
 
 // Record is a stored methodology version.
@@ -53,19 +54,10 @@ var (
 	ErrImmutable = errors.New("methodology version is not a draft")
 )
 
-// errDomainNotFound is ErrNotFound with a message that names a domain.
-var errDomainNotFound error = domainNotFound{}
-
-type domainNotFound struct{}
-
-func (domainNotFound) Error() string        { return "domain not found" }
-func (domainNotFound) Is(target error) bool { return target == ErrNotFound }
-
 // MemoryStore is an in-memory Store.
 type MemoryStore struct {
-	mu  sync.RWMutex
-	m   map[string]Record // key name@version
-	dom memoryDomains
+	mu sync.RWMutex
+	m  map[string]Record // key name@version
 }
 
 // NewMemoryStore returns an empty store.

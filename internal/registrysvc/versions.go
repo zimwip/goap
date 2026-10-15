@@ -10,7 +10,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/methodology"
 	"github.com/zimwip/goap/pkg/typecat"
 )
@@ -26,7 +26,7 @@ func (s *Service) record(ctx context.Context, ref string) (Record, error) {
 }
 
 // MethodologyVersion implements pkg/graph.ChangeLifecycles: the version a change of a methodology follows. A reference
-// naming a version gives it when it is published or archived (a draft is refused: graph.ErrInvalid); a bare name gives
+// naming a version gives it when it is published or archived (a draft is refused: graphapi.ErrInvalid); a bare name gives
 // the latest published version; "" for a methodology the registry does not know (its changes follow no version).
 func (s *Service) MethodologyVersion(ctx context.Context, ref string) (string, error) {
 	name, version := domain.SplitMethodologyRef(ref)
@@ -35,11 +35,15 @@ func (s *Service) MethodologyVersion(ctx context.Context, ref string) (string, e
 	case errors.Is(err, ErrNotFound) && version == "":
 		return "", nil
 	case errors.Is(err, ErrNotFound):
-		return "", fmt.Errorf("methodology %s has no version %s: %w", name, version, graph.ErrInvalid)
+		return "", fmt.Errorf("methodology %s has no version %s: %w", name, version, graphapi.ErrInvalid)
 	case err != nil:
 		return "", err
 	case r.Status == StatusDraft:
-		return "", fmt.Errorf("%s@%s is a draft: a change follows a published version: %w", name, version, graph.ErrInvalid)
+		return "", fmt.Errorf("%s@%s is a draft: a change follows a published version: %w", name, version, graphapi.ErrInvalid)
+	}
+	// a suspended version starts no change (ADR 0125 §3)
+	if why := s.Suspended(ctx, r); why != "" {
+		return "", fmt.Errorf("%w: %w", suspendedError{ref: key(r.Methodology.Name, r.Methodology.Version), cause: errors.New(why)}, graphapi.ErrInvalid)
 	}
 	return r.Methodology.Version, nil
 }
@@ -50,10 +54,16 @@ func (s *Service) MethodologyVersion(ctx context.Context, ref string) (string, e
 // existed (publishedAt set, a domain it does not pin) follows the version of that domain in force when it was
 // published, when there was one: what it was validated against.
 func (s *Service) domainsFor(ctx context.Context, m *methodology.Methodology, publishedAt time.Time) ([]*def.Domain, error) {
-	ds, err := s.Domains(ctx)
+	ds, err := s.domainsInForce(ctx)
 	if err != nil {
 		return nil, err
 	}
+	return s.domainsAmong(ctx, m, publishedAt, ds)
+}
+
+// domainsAmong is domainsFor given the domains in force.
+func (s *Service) domainsAmong(ctx context.Context, m *methodology.Methodology, publishedAt time.Time, ds []*def.Domain) ([]*def.Domain, error) {
+	var err error
 	var then map[string]*def.Domain
 	if !publishedAt.IsZero() && len(m.Domains) < len(ds) {
 		if then, err = s.domainsInForceAt(ctx, publishedAt); err != nil {
@@ -94,11 +104,7 @@ func (s *Service) domainsFor(ctx context.Context, m *methodology.Methodology, pu
 // domainsInForceAt are the versions of the stored domains in force at a time: the one published last before it
 // (archived since or not), by name; a domain first published after it is absent.
 func (s *Service) domainsInForceAt(ctx context.Context, at time.Time) (map[string]*def.Domain, error) {
-	store, err := s.domains()
-	if err != nil {
-		return nil, err
-	}
-	rs, err := store.ListDomains(ctx)
+	rs, err := s.domainVersions(ctx, true)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +127,7 @@ func (s *Service) pinnedDomain(ctx context.Context, name, version string) (*def.
 	if version == "" {
 		return nil, fmt.Errorf("domain %s is pinned with no version", name)
 	}
-	r, err := s.GetDomain(ctx, name, version)
+	r, err := s.getDomain(ctx, name, version)
 	if err != nil {
 		return nil, fmt.Errorf("pinned domain %s@%s: %w", name, version, err)
 	}
@@ -161,7 +167,7 @@ func (s *Service) domainPinIssues(ctx context.Context, m *methodology.Methodolog
 // pinDomains pins, on a methodology being published, every published domain in force it does not pin yet: the
 // published version keeps the types it was validated against (ADR 0113).
 func (s *Service) pinDomains(ctx context.Context, m *methodology.Methodology) error {
-	ds, err := s.Domains(ctx)
+	ds, err := s.domainsInForce(ctx)
 	if err != nil {
 		return err
 	}

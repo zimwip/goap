@@ -1,6 +1,7 @@
-package registrysvc
+package domainsvc
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -11,12 +12,11 @@ import (
 	"connectrpc.com/connect"
 
 	registryv1 "github.com/zimwip/goap/gen/goap/registry/v1"
+	"github.com/zimwip/goap/internal/domainpb"
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
-	"github.com/zimwip/goap/pkg/graph"
-	"github.com/zimwip/goap/pkg/methodology"
 )
 
 func almDomain(version string) def.Domain {
@@ -26,12 +26,20 @@ func almDomain(version string) def.Domain {
 	}}
 }
 
-func refMeth(name string) methodology.Methodology {
-	return methodology.Methodology{
-		Name: name, Version: "1", Namespace: "alm",
-		Conditions: []methodology.Condition{{Name: "c", Expr: `changeImpacts.exists(n, n.hasPost && n.post.out.exists(l, l.type == "alm@verifies"))`}},
-		Actions:    []methodology.Action{{Name: "a", Kind: methodology.KindHuman, Effects: map[string]bool{"c": true}}},
-		Goals:      []methodology.Goal{{Name: "g", Pre: map[string]bool{"c": true}}},
+// as is a caller with roles (the default policies: admin may write the domains).
+func as(roles ...string) context.Context {
+	return authz.With(context.Background(), authz.Principal{Subject: "mia", Org: "acme", Roles: roles})
+}
+
+// withALM publishes the alm domain of the repository.
+func withALM(t *testing.T, s *Service) {
+	t.Helper()
+	src, err := os.ReadFile("../../domains/alm.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, issues, err := s.ImportDomain(as("admin"), src, true); err != nil || len(issues) > 0 {
+		t.Fatalf("alm domain: %v %v", issues, err)
 	}
 }
 
@@ -39,14 +47,17 @@ func TestDomainLifecycle(t *testing.T) {
 	for name, mk := range domainStores(t) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
-			s := &Service{Store: NewGraphStore(graph.New(graph.NewMemory())), DomainStore: mk(t), Authz: enf}
+			var changed []string
+			s := &Service{Store: mk(t), Authz: enf, Changed: func(_ context.Context, r def.Record) {
+				changed = append(changed, r.Domain.Name+"@"+r.Domain.Version+":"+string(r.Status))
+			}}
 			ctx := as("admin")
 
 			if _, _, err := s.SaveDomain(as("contributor"), almDomain("1")); !errors.Is(err, authz.ErrForbidden) {
 				t.Fatalf("contributor save: %v", err)
 			}
 			rec, issues, err := s.SaveDomain(ctx, almDomain("1"))
-			if err != nil || len(issues) > 0 || rec.Status != StatusDraft {
+			if err != nil || len(issues) > 0 || rec.Status != def.StatusDraft {
 				t.Fatalf("save: %+v %v %v", rec, issues, err)
 			}
 			got, err := s.GetDomain(ctx, "alm", "1")
@@ -56,46 +67,24 @@ func TestDomainLifecycle(t *testing.T) {
 			if _, err := s.GetDomain(ctx, "alm", ""); !errors.Is(err, ErrNotFound) {
 				t.Fatalf("no published version yet: %v", err)
 			}
-
-			// a methodology is validated against the published domains: a draft one does not count
-			if _, issues, err := s.Save(ctx, refMeth("uses")); err != nil || len(issues) == 0 {
-				t.Fatalf("no published alm domain yet: %v %v", issues, err)
-			}
-			if _, err := s.Publish(ctx, "uses", "1"); !errors.Is(err, ErrInvalid) {
-				t.Fatalf("publish on a draft domain: %v", err)
+			if len(changed) != 0 {
+				t.Fatalf("a draft changes no type in force: %v", changed)
 			}
 			if _, err := s.PublishDomain(ctx, "alm", "1"); err != nil {
 				t.Fatal(err)
-			}
-			if _, err := s.Publish(ctx, "uses", "1"); err != nil {
-				t.Fatalf("publish methodology: %v", err)
-			}
-			if c, err := s.Methodology(ctx, "uses"); err != nil || c.Types == nil || !c.Types.HasLinkType("alm@verifies") {
-				t.Fatalf("the compiled methodology sees the types in force: %v", err)
 			}
 			if cat, err := s.Types(ctx); err != nil || !cat.HasNodeType("alm@Requirement") || !cat.HasNodeType("methodology@Agent") {
 				t.Fatalf("type catalogue: %v", err)
 			}
 
-			// published versions are immutable; the version in force cannot be archived while used
+			// published versions are immutable
 			if _, _, err := s.SaveDomain(ctx, almDomain("1")); !errors.Is(err, ErrImmutable) {
 				t.Fatalf("save published: %v", err)
 			}
-			users, err := s.DomainUsage(ctx, "alm", "1")
-			if err != nil || len(users) != 1 || users[0].Methodology.Name != "uses" {
-				t.Fatalf("usage: %v %v", users, err)
-			}
-			if err := s.DeleteDomain(ctx, "alm", "1"); !errors.Is(err, ErrInvalid) {
-				t.Fatalf("archive used domain: %v", err)
-			}
 
-			// the published methodology pins the domain version it was validated against (ADR 0113): a new version that
-			// drops a type it uses is published, the methodology stays on its version
-			if rec, err := s.Get(ctx, "uses", "1"); err != nil || rec.Methodology.Domains["alm"] != "1" {
-				t.Fatalf("pinned at publication: %+v %v", rec.Methodology.Domains, err)
-			}
+			// a new version that drops a type is published: the domain registry names no methodology (ADR 0125 §3)
 			v2, err := s.CreateDomainVersion(ctx, "alm", "1", "2")
-			if err != nil || v2.Status != StatusDraft {
+			if err != nil || v2.Status != def.StatusDraft {
 				t.Fatalf("new version: %+v %v", v2, err)
 			}
 			d := v2.Domain
@@ -104,19 +93,8 @@ func TestDomainLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			if _, err := s.PublishDomain(ctx, "alm", "2"); err != nil {
-				t.Fatalf("a domain version does not reach the methodologies pinned on another one: %v", err)
+				t.Fatalf("publish: %v", err)
 			}
-			if c, err := s.Methodology(ctx, "uses"); err != nil || !c.Types.HasLinkType("alm@verifies") {
-				t.Fatalf("the methodology compiles against its pinned version: %v", err)
-			}
-			// a new version of the methodology moves to the latest domains: there it no longer validates
-			if _, err := s.CreateVersion(ctx, "uses", "1", "2"); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.Publish(ctx, "uses", "2"); !errors.Is(err, ErrInvalid) {
-				t.Fatalf("the new version is checked against alm@2: %v", err)
-			}
-			// a compatible one becomes the version in force; the former one can then be archived
 			v3 := almDomain("3")
 			v3.NodeTypes = append(v3.NodeTypes, def.NodeType{Name: "Need"})
 			if _, _, err := s.SaveDomain(ctx, v3); err != nil {
@@ -128,18 +106,23 @@ func TestDomainLifecycle(t *testing.T) {
 			if cat, _ := s.Types(ctx); !cat.HasNodeType("alm@Need") || cat.Domains()["alm"] != "3" {
 				t.Fatal("the latest published version is in force")
 			}
+			// the version in force can be archived too: the methodologies it breaks are the methodology registry's
 			if err := s.DeleteDomain(ctx, "alm", "1"); err != nil {
-				t.Fatalf("a version no longer in force is archived: %v", err)
+				t.Fatalf("archive: %v", err)
 			}
-			if c, err := s.Methodology(ctx, "uses@1"); err != nil || !c.Types.HasLinkType("alm@verifies") || c.Types.HasNodeType("alm@Need") {
-				t.Fatalf("an archived pinned version still serves its methodology: %v", err)
+			if r, err := s.GetDomain(ctx, "alm", "1"); err != nil || r.Status != def.StatusArchived {
+				t.Fatalf("an archived version stays readable: %+v %v", r, err)
+			}
+			if !slices.Equal(changed, []string{"alm@1:published", "alm@2:published", "alm@3:published", "alm@1:published"}) {
+				t.Fatalf("every publication and archive is told: %v", changed)
 			}
 
 			// drafts are deletable, lists show the latest published per name
-			if err := s.Delete(ctx, "uses", "2"); err != nil {
+			v4 := almDomain("4")
+			if _, _, err := s.SaveDomain(ctx, v4); err != nil {
 				t.Fatal(err)
 			}
-			if err := s.DeleteDomain(ctx, "alm", "2"); err != nil {
+			if err := s.DeleteDomain(ctx, "alm", "4"); err != nil {
 				t.Fatal(err)
 			}
 			list, err := s.DomainVersions(ctx, false)
@@ -147,7 +130,7 @@ func TestDomainLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			var builtin []string
-			stored := slices.DeleteFunc(list, func(r DomainRecord) bool {
+			stored := slices.DeleteFunc(list, func(r def.Record) bool {
 				if r.Builtin {
 					builtin = append(builtin, r.Domain.Name)
 				}
@@ -160,22 +143,12 @@ func TestDomainLifecycle(t *testing.T) {
 	}
 }
 
-func TestMethodologyNamespaceAndTypes(t *testing.T) {
+func TestBuiltinDomainsAndReferences(t *testing.T) {
 	enf, _ := authz.NewCasbin(nil)
 	s := &Service{Store: NewMemoryStore(), Authz: enf}
 	ctx := as("admin")
 	if _, _, err := s.ImportDomain(ctx, []byte("name: alm\nversion: \"1\"\nnodeTypes: [Requirement]\n"), true); err != nil {
 		t.Fatal(err)
-	}
-	m := refMeth("nowhere")
-	m.Namespace = "nope"
-	_, issues, err := s.Save(ctx, m)
-	if err != nil || !strings.Contains(issues.Error(), "no published domain nope") || !strings.Contains(issues.Error(), "unknown link type alm@verifies") {
-		t.Fatalf("issues: %v %v", issues, err)
-	}
-	m.Namespace = ""
-	if _, issues, _ := s.Save(ctx, m); len(issues) == 0 || issues[0].Path != "namespace" {
-		t.Fatalf("a methodology names its target namespace: %v", issues)
 	}
 	for _, name := range []string{"methodology", "organisation", "platform"} {
 		if _, _, err := s.SaveDomain(ctx, def.Domain{Name: name, Version: "9", Schema: def.Schema{NodeTypes: []def.NodeType{{Name: "X"}}}}); !errors.Is(err, ErrImmutable) {
@@ -184,7 +157,7 @@ func TestMethodologyNamespaceAndTypes(t *testing.T) {
 		if _, err := s.CreateDomainVersion(ctx, name, "", "9"); !errors.Is(err, ErrImmutable) {
 			t.Fatalf("no new version of the frozen domain %s: %v", name, err)
 		}
-		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Builtin || r.Status != StatusPublished {
+		if r, err := s.GetDomain(ctx, name, ""); err != nil || !r.Builtin || r.Status != def.StatusPublished {
 			t.Fatalf("the built-in domain %s is readable: %+v %v", name, r, err)
 		}
 	}
@@ -203,7 +176,7 @@ func TestDomainImportExport(t *testing.T) {
 	ctx := as("admin")
 	src := "name: alm\nversion: \"1\"\nnodeTypes:\n  - name: Need\n  - name: Requirement\n    extends: Need\nlinkTypes:\n  - name: derives\n    from: Requirement\n    to: Need\n"
 	r, _, err := s.ImportDomain(ctx, []byte(src), true)
-	if err != nil || r.Status != StatusPublished {
+	if err != nil || r.Status != def.StatusPublished {
 		t.Fatalf("import: %+v %v", r, err)
 	}
 	out, name, err := s.ExportDomain(ctx, "alm", "1", "")
@@ -238,7 +211,7 @@ func TestSeedDomains(t *testing.T) {
 	if got, err := s.SeedDomains(as("admin"), dir); err != nil || len(got) != 0 {
 		t.Fatalf("seed again must skip stored versions: %v %v", got, err)
 	}
-	if r, err := s.GetDomain(as("admin"), "alm", ""); err != nil || r.Status != StatusPublished {
+	if r, err := s.GetDomain(as("admin"), "alm", ""); err != nil || r.Status != def.StatusPublished {
 		t.Fatalf("published: %+v %v", r, err)
 	}
 }
@@ -263,11 +236,11 @@ linkTypes:
 		t.Fatal(err)
 	}
 	// protobuf round trip keeps the three parts
-	back := DomainFromPB(DomainToPB(DomainRecord{Domain: *d, Status: StatusDraft}))
+	back := domainpb.DomainFromPB(domainpb.DomainToPB(def.Record{Domain: *d, Status: def.StatusDraft}))
 	if len(back.Lifecycles) != 1 || back.Lifecycles[0].Transitions[0].Requires.Attributes[0] != "title" || back.NodeTypes[1].Lifecycle != "req" || back.NodeTypes[1].Document == nil || len(back.LinkTypes) != 1 {
 		t.Fatalf("pb round trip: %+v", back)
 	}
-	for name, mk := range stores(t) {
+	for name, mk := range domainStores(t) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			s := &Service{Store: mk(t), Authz: enf}
@@ -308,7 +281,7 @@ func TestDomainAlgorithms(t *testing.T) {
 		t.Fatal("alm.yaml declares algorithms")
 	}
 	// wire round trip
-	back := DomainFromPB(DomainToPB(DomainRecord{Domain: *d}))
+	back := domainpb.DomainFromPB(domainpb.DomainToPB(def.Record{Domain: *d}))
 	if len(back.Algorithms) != len(d.Algorithms) || len(back.Instances) != len(d.Instances) {
 		t.Fatalf("wire round trip lost algorithms: %d/%d", len(back.Algorithms), len(back.Instances))
 	}
@@ -318,7 +291,7 @@ func TestDomainAlgorithms(t *testing.T) {
 	if back.NodeTypes[1].Attributes[0].Validators[0] != d.NodeTypes[1].Attributes[0].Validators[0] {
 		t.Fatalf("validators lost: %+v", back.NodeTypes[1])
 	}
-	for name, mk := range stores(t) {
+	for name, mk := range domainStores(t) {
 		t.Run(name, func(t *testing.T) {
 			enf, _ := authz.NewCasbin(nil)
 			s := &Service{Store: mk(t), Authz: enf}
@@ -393,7 +366,7 @@ func TestDomainNodeTypeEditors(t *testing.T) {
 		t.Fatal(issues)
 	}
 	// wire round trip
-	back := DomainFromPB(DomainToPB(DomainRecord{Domain: *d}))
+	back := domainpb.DomainFromPB(domainpb.DomainToPB(def.Record{Domain: *d}))
 	editors := map[string]string{}
 	for _, n := range back.NodeTypes {
 		editors[n.Name] = n.Editor
@@ -453,5 +426,32 @@ func TestDomainStructures(t *testing.T) {
 	}
 	if _, err := s.PublishDomain(ctx, "hr", "1"); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("and never published: %v", err)
+	}
+}
+
+type recorder struct{ subjects []string }
+
+func (r *recorder) Publish(_ context.Context, subject string, _ any) error {
+	r.subjects = append(r.subjects, subject)
+	return nil
+}
+
+// Importing a published domain is one write and one event.
+func TestImportPublishedIsOneEvent(t *testing.T) {
+	ctx := authz.With(context.Background(), authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
+	ev := &recorder{}
+	s := &Service{Store: NewMemoryStore(), Events: ev}
+	r, _, err := s.ImportDomain(ctx, []byte("name: imp\nversion: \"1\"\nnodeTypes: [{name: A}]\n"), true)
+	if err != nil || r.Status != def.StatusPublished || r.PublishedAt.IsZero() {
+		t.Fatalf("imported as published: %+v %v", r, err)
+	}
+	if len(ev.subjects) != 1 || !strings.HasSuffix(ev.subjects[0], "domain.published") {
+		t.Fatalf("one event: %v", ev.subjects)
+	}
+	// a domain with issues is kept as a draft and refused
+	ev.subjects = nil
+	r, issues, err := s.ImportDomain(ctx, []byte("name: bad\nversion: \"1\"\nnodeTypes: [{name: A, extends: Nope}]\n"), true)
+	if err == nil || len(issues) == 0 || r.Status != def.StatusDraft {
+		t.Fatalf("a domain with issues stays a draft: %+v %v %v", r, issues, err)
 	}
 }

@@ -38,7 +38,7 @@ var forbidden = map[string][]string{
 	"pkg/graphapi":      {"pkg/graph", "pkg/engine", "pkg/methodology"},
 	"internal/graphsvc": {"pkg/engine", "pkg/methodology"},
 	// The gateway, the MCP hub and what every service shares reach the graph and the engine through their contracts
-	// and clients only, never their implementation (ADR 0124).
+	// and clients only, never their implementation (ADR 0125).
 	"cmd/gateway":                 {"pkg/graph", "pkg/engine", "internal/graphsvc"},
 	"internal/gateway":            {"pkg/graph", "pkg/engine", "internal/graphsvc"},
 	"internal/credsvc":            {"pkg/graph", "pkg/engine", "internal/graphsvc"},
@@ -50,7 +50,14 @@ var forbidden = map[string][]string{
 	"internal/pbconv":             {"pkg/graph", "pkg/engine", "internal/graphsvc"},
 	"internal/rpcerr":             {"pkg/graph", "pkg/engine", "internal/graphsvc"},
 	"pkg/graphsnap":               {"pkg/graph", "pkg/engine"},
-	"pkg/review":                  {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
+	"cmd/mcp":                     {"pkg/graph", "pkg/engine", "pkg/methodology", "internal/graphsvc", "internal/registrysvc"},
+	// Two registries (ADR 0125 §3): the domain registry defines the graph and names no methodology; the methodology
+	// registry reads it through a port and the contract, and stores its nodes through the graph's contract.
+	"internal/domainsvc":    {"pkg/graph", "pkg/engine", "pkg/methodology", "internal/registrysvc"},
+	"internal/domainclient": {"pkg/graph", "pkg/engine", "pkg/methodology", "internal/domainsvc", "internal/registrysvc"},
+	"internal/domainpb":     {"pkg/graph", "pkg/engine", "pkg/methodology", "internal/domainsvc", "internal/registrysvc"},
+	"internal/registrysvc":  {"pkg/graph", "internal/graphsvc", "internal/domainsvc"},
+	"pkg/review":            {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
 }
 
 // The graph core names no concept of the methodology namespace (ADR 0066: the Activity a change is scoped to lives in
