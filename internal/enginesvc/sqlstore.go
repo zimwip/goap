@@ -30,7 +30,7 @@ var SQLiteMigrations embed.FS
 
 // SQLStore is an engine.Store keeping processes in SQLite (local development mode) or PostgreSQL (through the pgx
 // stdlib adapter, Dollar set), so that runs and pending human tasks survive restarts. It is also the lock service
-// of the engine replicas sharing it (engine.Locker, ADR 0123) and tells the processes none of them works on
+// of the engine replicas sharing it (engine.Locker, ADR 0124) and tells the processes none of them works on
 // (engine.OrphanFinder).
 type SQLStore struct {
 	DB *sql.DB
@@ -97,7 +97,7 @@ func (s SQLStore) Get(ctx context.Context, id string) (*engine.Process, error) {
 // on every turn would rewrite the row for no reason (ADR 0031) — each turn
 // is instead appended to process_log by the engine (AppendProcessLog) and
 // folded back in by Get/List. The write is refused (engine.ErrFenced) while
-// another replica holds the lock of the process (ADR 0123).
+// another replica holds the lock of the process (ADR 0124).
 func (s SQLStore) Put(ctx context.Context, p *engine.Process) error {
 	stripped := *p
 	stripped.Intent.Turns = nil

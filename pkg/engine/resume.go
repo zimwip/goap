@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// A step replayed after a recovery never writes twice (ADR 0123). With shared locks the engine records a step on the
+// A step replayed after a recovery never writes twice (ADR 0124). With shared locks the engine records a step on the
 // process before running it (checkpoint: its execution id, no end); a run that finds such a step left by a replica
 // that stopped asks the change what that execution wrote (its entries carry the execution id) before going on:
 //

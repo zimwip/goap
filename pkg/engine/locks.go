@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Locker is the lock service engine replicas share (ADR 0123): a lock is a lease on a key, held by one replica,
+// Locker is the lock service engine replicas share (ADR 0124): a lock is a lease on a key, held by one replica,
 // renewed while it works and taken over by another once it expires. The process store implements it when several
 // replicas share it (internal/enginesvc.SQLStore); the holder is the store's replica identity.
 type Locker interface {
@@ -21,13 +21,13 @@ type Locker interface {
 	Interrupt(ctx context.Context, key, by string) (bool, error)
 }
 
-// OrphanFinder is implemented by a store that knows which running processes no replica works on (ADR 0123): the
+// OrphanFinder is implemented by a store that knows which running processes no replica works on (ADR 0124): the
 // processes running, written before the instant given, whose lock nobody holds.
 type OrphanFinder interface {
 	Orphans(ctx context.Context, before time.Time) ([]string, error)
 }
 
-// ErrFenced is the refusal of a write to a process whose lock another replica holds (ADR 0123): the writer lost
+// ErrFenced is the refusal of a write to a process whose lock another replica holds (ADR 0124): the writer lost
 // its lease, and the run it was doing goes on elsewhere.
 var ErrFenced = errors.New("process held by another engine replica")
 
@@ -180,7 +180,7 @@ func (e *Engine) Interrupted(id, by string) {
 	}
 }
 
-// Signals carries hints between the replicas (ADR 0123): best effort, a lost signal only delays the work, the
+// Signals carries hints between the replicas (ADR 0124): best effort, a lost signal only delays the work, the
 // shared locks stay the arbiter. The receiving side calls Engine.Woken and Engine.Interrupted.
 type Signals interface {
 	// Wake tells the replicas that a process is runnable and no replica runs it (this one is at capacity).
@@ -233,7 +233,7 @@ func (e *Engine) runCounted(id string) {
 	}
 }
 
-// Recover resumes the processes no replica works on (ADR 0123): the running processes whose lock nobody holds,
+// Recover resumes the processes no replica works on (ADR 0124): the running processes whose lock nobody holds,
 // left by a replica that stopped or crashed, or left to the pool by a replica at capacity. At once for the
 // processes written before the call (a restart), then every interval for those idle for a lease (a run is written
 // at every step, and holds its lock while it works), and at once for every process when woken (Woken: a replica

@@ -14,7 +14,7 @@ import (
 	"github.com/zimwip/goap/pkg/llm"
 )
 
-// sharedLocks is the lock service of several replicas in memory (the SQL store's twin, ADR 0123).
+// sharedLocks is the lock service of several replicas in memory (the SQL store's twin, ADR 0124).
 type sharedLocks struct {
 	mu    sync.Mutex
 	locks map[string]*sharedLock

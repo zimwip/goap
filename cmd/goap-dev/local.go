@@ -74,7 +74,7 @@ func openStores(ctx context.Context, log *slog.Logger) (stores, error) {
 			}
 		}
 		// the local mode is the one process on its file: the locks the previous start left are dropped, so that
-		// its runs are resumed at once (ADR 0123)
+		// its runs are resumed at once (ADR 0124)
 		processes := enginesvc.SQLStore{DB: db, Holder: enginesvc.NewHolder()}
 		if err := processes.ReleaseAll(ctx); err != nil {
 			db.Close()

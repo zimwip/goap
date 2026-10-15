@@ -60,7 +60,7 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		Types:       func() def.TypeSet { return rp.types.Get() },
 	}
 	// a store shared by replicas (sqlite) serializes the work on a process through its locks, and the runs left by
-	// the previous start are resumed (ADR 0123)
+	// the previous start are resumed (ADR 0124)
 	if locks, ok := st.processes.(engine.Locker); ok {
 		eg.Locks = locks
 		go eg.Recover(e.ctx, 0)

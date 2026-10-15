@@ -64,7 +64,7 @@ type Engine struct {
 	// Types returns the type catalogue in force (ADR 0012 §2): the ancestors behind `x.types`. Unset, or nil, the
 	// methodology's own resolved types apply.
 	Types func() def.TypeSet
-	// Locks is the lock service shared by the engine replicas working on one store (ADR 0123): the work on a
+	// Locks is the lock service shared by the engine replicas working on one store (ADR 0124): the work on a
 	// process is serialized across them, a run interrupted by another replica, a run left by a stopped one resumed
 	// (Recover). Nil: one replica, the locks are this process's own.
 	Locks Locker
@@ -689,7 +689,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	defer func() { end(p) }()
 	p.MethodologyVersion = m.Version // the version it started with (ADR 0113), the latest for a run that named none
 	if e.Locks != nil {
-		// steps a stopped replica left in flight are closed before the run goes on (ADR 0123)
+		// steps a stopped replica left in flight are closed before the run goes on (ADR 0124)
 		if err := e.settleInterrupted(ctx, p, m); err != nil {
 			return nil, err
 		}

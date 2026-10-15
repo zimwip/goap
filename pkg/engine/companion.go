@@ -21,7 +21,7 @@ import (
 const CompanionPrefix = "companion:"
 
 // companionLock prefixes the lock serializing the companion runs of a change, so two events of one change never
-// start two, whichever replica handles them (ADR 0123).
+// start two, whichever replica handles them (ADR 0124).
 const companionLock = "companions:"
 
 // IsCompanion reports whether a run is the companion of a change (a process of a transverse methodology).

@@ -8,7 +8,7 @@ import (
 	"github.com/zimwip/goap/pkg/engine"
 )
 
-// Subjects of the signals between engine replicas (ADR 0123): core NATS, at most once, outside the GOAP stream (a
+// Subjects of the signals between engine replicas (ADR 0124): core NATS, at most once, outside the GOAP stream (a
 // lost signal only delays the work: the shared locks stay the arbiter).
 const (
 	SubjectWake      = "engine.wake"

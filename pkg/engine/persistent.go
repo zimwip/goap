@@ -22,7 +22,7 @@ import (
 // when a person cancels it): the next execution on its scope starts a new one.
 
 // instanceLock prefixes the lock serializing the lookup and the creation of the instance of a key of a persistent
-// agent, across the engine replicas (ADR 0123).
+// agent, across the engine replicas (ADR 0124).
 const instanceLock = "instance:"
 
 // Turn is one exchange of an llm action of a persistent instance with the model: what was asked and the answer.

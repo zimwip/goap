@@ -1,4 +1,4 @@
-# ADR 0123 — Engine replicas sharing the processes
+# ADR 0124 — Engine replicas sharing the processes
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0010 (local SQLite mode), ADR 0031
 (trigger leadership across replicas); replaces the "engine clustering" target of `docs/architecture.md` §3.2

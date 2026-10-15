@@ -97,7 +97,7 @@ func main() {
 		}
 	}()
 	// processes: in memory (one replica), or in PostgreSQL (GOAP_DB_DSN), shared by the replicas, which serialize
-	// their work on a process through its locks and resume the runs a stopped replica left (ADR 0123)
+	// their work on a process through its locks and resume the runs a stopped replica left (ADR 0124)
 	var store engine.Store = engine.NewMemoryStore()
 	var locks engine.Locker
 	if pool := platform.OptionalPostgres(ctx, log, enginesvc.Migrations); pool != nil {
@@ -133,7 +133,7 @@ func main() {
 	}
 	if locks != nil {
 		if events != nil {
-			// wake-ups and interruptions reach the other replicas at once (ADR 0123)
+			// wake-ups and interruptions reach the other replicas at once (ADR 0124)
 			signals := enginesvc.NATSSignals{Bus: events}
 			if err := signals.Listen(e); err != nil {
 				platform.Fatal(log, "subscribe", err)

@@ -654,7 +654,7 @@ With several engine replicas, event triggers are delivered through a durable Jet
 (competing consumers, one replica handles each event) and schedule (cron) firing is gated by a
 JetStream-KV lease (`TriggerManager.Leader`) — `Reload`/`States()`/manual `fire` stay available
 on every replica regardless of leadership (ADR 0031). The runs themselves are shared by the
-replicas through the process store and its locks (§3.2, ADR 0123).
+replicas through the process store and its locks (§3.2, ADR 0124).
 
 **Transverse methodologies** ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md) §3): a methodology
 that declares `appliesTo: [sdlc]` has its processes run **alongside** the changes of those methodologies, on the same
@@ -881,7 +881,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
 | `goap.registry.methodology.published` | registry | name + version |
 
-### 3.2 Engine clustering ([ADR 0123](adr/0123-engine-replicas-share-processes.md))
+### 3.2 Engine clustering ([ADR 0124](adr/0124-engine-replicas-share-processes.md))
 
 Several engine replicas share one process store (`internal/enginesvc.SQLStore`: PostgreSQL with `GOAP_DB_DSN`, SQLite
 in the local mode). The work on a process is serialized across them by a shared lock (`engine.Locker`, a lease per key
@@ -1694,7 +1694,7 @@ docs/                        architecture, ADRs
 | Step | Content |
 |---|---|
 | **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
-| **M1 — engine persistence** ✅ | PostgreSQL / SQLite process store shared by the replicas, locks with fencing, crash recovery, steps never written twice, capacity per replica (ADR 0123) |
+| **M1 — engine persistence** ✅ | PostgreSQL / SQLite process store shared by the replicas, locks with fencing, crash recovery, steps never written twice, capacity per replica (ADR 0124) |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
 | **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapter instances as graph nodes, adapter definitions as platform nodes, resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
