@@ -653,9 +653,8 @@ Events come from NATS (graph, engine, registry services) or the local bus in all
 With several engine replicas, event triggers are delivered through a durable JetStream consumer
 (competing consumers, one replica handles each event) and schedule (cron) firing is gated by a
 JetStream-KV lease (`TriggerManager.Leader`) — `Reload`/`States()`/manual `fire` stay available
-on every replica regardless of leadership (ADR 0031). This resolves leader election for trigger
-firing specifically, not the broader engine-clustering work of §3.2, which is unrelated and
-still open.
+on every replica regardless of leadership (ADR 0031). The runs themselves are shared by the
+replicas through the process store and its locks (§3.2, ADR 0123).
 
 **Transverse methodologies** ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md) §3): a methodology
 that declares `appliesTo: [sdlc]` has its processes run **alongside** the changes of those methodologies, on the same
@@ -881,16 +880,17 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
 | `goap.registry.methodology.published` | registry | name + version |
-| `goap.engine.work` (work queue) 🟡 | engine | process tick to execute (clustering) |
 
-### 3.2 Engine clustering 🟡
+### 3.2 Engine clustering ([ADR 0123](adr/0123-engine-replicas-share-processes.md))
 
-Target: a process's state is persisted (`engine` schema); each execution step is triggered by a
-message on a **work-queue** JetStream stream (`goap.engine.work`, key = processId). Any
-replica consumes the message, locks the process (`SELECT … FOR UPDATE SKIP LOCKED` or an advisory lock),
-executes **one** step, persists it, and republishes a tick if the process is not terminal. Steps are
-idempotent (key `processId/stepIndex`). The initial core uses an in-memory `ProcessStore` behind
-an interface, replaceable with the PostgreSQL implementation without changing the engine.
+Several engine replicas share one process store (`internal/enginesvc.SQLStore`: PostgreSQL with `GOAP_DB_DSN`, SQLite
+in the local mode). The work on a process is serialized across them by a shared lock (`engine.Locker`, a lease per key
+in table `engine_lock`, renewed while held, `Engine.LockTTL`): the process, its supersede, the companions of a change,
+the instance of a persistent agent. The store refuses the write of a replica that lost the lock of a process
+(`engine.ErrFenced`); `Cancel` and a supersede reach the holder through the lock; `Engine.Recover` resumes the running
+processes whose lock nobody holds (a replica stopped). A replica runs what it was asked to run; the others take over
+what is left. Not yet: idempotency keys on the writes of a step replayed after a recovery, a work queue spreading the
+runs by capacity.
 
 ### 3.3 Persistence
 
@@ -1682,7 +1682,7 @@ docs/                        architecture, ADRs
 | Step | Content |
 |---|---|
 | **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
-| **M1 — engine persistence** | PostgreSQL `ProcessStore`, JetStream work-queue, crash recovery, multi-replica |
+| **M1 — engine persistence** 🟡 | ✅ PostgreSQL / SQLite process store shared by the replicas, locks with fencing, crash recovery (ADR 0123) · remaining: idempotency keys on replayed steps, work queue |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
 | **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapter instances as graph nodes, adapter definitions as platform nodes, resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |

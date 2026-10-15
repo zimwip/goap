@@ -33,9 +33,7 @@ func (e *Engine) Cancel(ctx context.Context, id, reason string) (*Process, error
 func (e *Engine) cancel(ctx context.Context, id, by, reason string) (*Process, error) {
 	e.cancelling.Store(id, by)
 	defer e.cancelling.Delete(id)
-	if h, ok := e.running.Load(id); ok {
-		h.(*runHandle).cancel()
-	}
+	e.interrupt(ctx, id, by)
 	unlock := e.lock(id)
 	p, err := e.Store.Get(ctx, id)
 	if err != nil {

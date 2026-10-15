@@ -7,7 +7,6 @@ import (
 	"maps"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/google/uuid"
 
@@ -21,8 +20,9 @@ import (
 // CompanionPrefix starts the Trigger of a companion run: "companion:<methodology>/<process>" (ADR 0036 §3).
 const CompanionPrefix = "companion:"
 
-// companions serializes the start of companion runs, so two events of one change never start two.
-var companions sync.Mutex
+// companionLock prefixes the lock serializing the companion runs of a change, so two events of one change never
+// start two, whichever replica handles them (ADR 0123).
+const companionLock = "companions:"
 
 // IsCompanion reports whether a run is the companion of a change (a process of a transverse methodology).
 func (p *Process) IsCompanion() bool { return strings.HasPrefix(p.Trigger, CompanionPrefix) }
@@ -212,8 +212,7 @@ func (e *Engine) accompany(ctx context.Context, m *methodology.Compiled, process
 // again when it has ended, or puts the event in its inbox when it is at work (ADR 0036 §3, ADR 0110); an event of a
 // subscription that supersedes interrupts the work and runs it again (restartFor).
 func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key, agent, goal, intent string, changeID domain.ChangeID, event map[string]any, supersede bool) error {
-	companions.Lock()
-	defer companions.Unlock()
+	defer e.lock(companionLock + string(changeID))()
 	all, err := e.Store.List(ctx)
 	if err != nil {
 		return err
@@ -280,10 +279,12 @@ func (e *Engine) enqueue(ctx context.Context, id string, event map[string]any) e
 
 // nextInInbox runs a completed companion again for the next event of its inbox.
 func (e *Engine) nextInInbox(ctx context.Context, id string) error {
-	companions.Lock()
-	defer companions.Unlock()
 	p, err := e.Store.Get(ctx, id)
 	if err != nil || len(p.Inbox) == 0 {
+		return err
+	}
+	defer e.lock(companionLock + string(p.ChangeID))()
+	if p, err = e.Store.Get(ctx, id); err != nil || len(p.Inbox) == 0 {
 		return err
 	}
 	if p.Closed {
@@ -316,9 +317,7 @@ func (e *Engine) restartFor(ctx context.Context, id string, event map[string]any
 			}
 		}
 	}
-	if h, ok := e.running.Load(id); ok {
-		h.(*runHandle).cancel()
-	}
+	e.interrupt(ctx, id, supersededBy)
 	unlock := e.lock(id) // the run lets go
 	p, err := e.Store.Get(ctx, id)
 	if err != nil {

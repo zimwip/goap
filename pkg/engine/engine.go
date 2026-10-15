@@ -63,8 +63,16 @@ type Engine struct {
 	// Types returns the type catalogue in force (ADR 0012 §2): the ancestors behind `x.types`. Unset, or nil, the
 	// methodology's own resolved types apply.
 	Types func() def.TypeSet
+	// Locks is the lock service shared by the engine replicas working on one store (ADR 0123): the work on a
+	// process is serialized across them, a run interrupted by another replica, a run left by a stopped one resumed
+	// (Recover). Nil: one replica, the locks are this process's own.
+	Locks Locker
+	// LockTTL is the lease of a shared lock (default DefaultLockTTL): a replica that stops is taken over after it.
+	LockTTL time.Duration
 
-	locks sync.Map // process id -> *sync.Mutex
+	locks sync.Map // key (process id, section) -> *sync.Mutex
+	// recovering holds the processes Recover resumes in this replica.
+	recovering sync.Map
 	// running holds the cancel function of every run in flight (process id -> *runHandle), cancelling the
 	// cancellations asked for (process id -> subject): Cancel interrupts the run, Run then stops without failing.
 	running    sync.Map
@@ -150,13 +158,6 @@ type StartRequest struct {
 	Flow string
 }
 
-func (e *Engine) lock(id string) func() {
-	m, _ := e.locks.LoadOrStore(id, &sync.Mutex{})
-	mu := m.(*sync.Mutex)
-	mu.Lock()
-	return mu.Unlock
-}
-
 func (e *Engine) clock() time.Time {
 	if e.now != nil {
 		return e.now()
@@ -181,8 +182,7 @@ func (e *Engine) Start(ctx context.Context, req StartRequest) (*Process, error) 
 	}
 	if key != "" {
 		// a persistent agent (ADR 0112): the execution goes to its instance on the scope, if one is open
-		instances.Lock()
-		defer instances.Unlock()
+		defer e.lock(instanceLock + key)()
 		p, handled, fresh, err := e.resumeInstance(ctx, key, req)
 		if err != nil || handled {
 			return p, err
