@@ -178,7 +178,7 @@ func TestGraphStoreMaterializesRoles(t *testing.T) {
 	}
 }
 
-// A process's steps and sub-steps materialize as their own methodology@Step nodes, and only there (ADR 0119): each
+// A process's steps and sub-steps materialize as their own methodology@Step nodes, and only there (ADR 0120): each
 // parent (the process, or a step with sub-steps) links to its direct children by sub_activity, and the definition
 // reads its steps back from those links.
 func TestGraphStoreMaterializesSteps(t *testing.T) {

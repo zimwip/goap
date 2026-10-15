@@ -9,7 +9,7 @@ import (
 	"github.com/zimwip/goap/pkg/methodology"
 )
 
-// The references between the elements of a version are links (ADR 0119, methodology.EncodeRefs): this is what the
+// The references between the elements of a version are links (ADR 0120, methodology.EncodeRefs): this is what the
 // store adds to them, the steps' sub-activities, the capabilities of the steps, and the rule that no element stands
 // alone.
 
@@ -99,7 +99,7 @@ func buildElementGraph(header map[string]any, els []defEl, subActivity map[strin
 	return g
 }
 
-// isolated lists the elements connected to no other element of the version (ADR 0119): no link of theirs reaches
+// isolated lists the elements connected to no other element of the version (ADR 0120): no link of theirs reaches
 // another element, none reaches them, and they name nothing outside the version. The header defines every element and
 // does not count. An agent naming no action (or no goal) plans over all of them: it is not isolated.
 func (g elementGraph) isolated() []defEl {
@@ -140,7 +140,7 @@ func connectivityIssue(e defEl) (path, msg string) {
 	return fmt.Sprintf("%s[%d].name", field, int(pos)), fmt.Sprintf("%s %s is connected to nothing: no element of the methodology refers to it and it refers to none (a condition is the input or the output of an activity or a goal, a role is assigned, an action is run by a step, an agent or a method); use it or remove it", noun, name)
 }
 
-// connectivityIssues reports the elements of a definition connected to nothing (ADR 0119): by default no element of a
+// connectivityIssues reports the elements of a definition connected to nothing (ADR 0120): by default no element of a
 // methodology stands alone, it is linked to the rest of the version.
 func connectivityIssues(m methodology.Methodology) def.Issues {
 	eg, err := encodeVersion(m, "", time.Time{}, time.Time{}, time.Time{}, "")

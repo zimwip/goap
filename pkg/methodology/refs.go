@@ -337,7 +337,7 @@ func DecodeRefs(kind string, props map[string]any, links []RefTarget) map[string
 var conditionRE = regexp.MustCompile(`\bconditions\.([A-Za-z_][A-Za-z0-9_]*)`)
 
 // DerivedRefs are the references of an element the definition keeps in its own words, so that they are never read
-// back from the graph (ADR 0119): the conditions its expressions read (where, expr, when, filters: mentions) or a
+// back from the graph (ADR 0120): the conditions its expressions read (where, expr, when, filters: mentions) or a
 // nested structure of it names (the conditions of an assessment state, the until of a persistent agent), the roles and
 // goals of its triggers (assigns and pursues, as trigger). A link carrying an "as" no field of the kind has, or a type
 // no field reads, is never decoded.

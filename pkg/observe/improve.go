@@ -14,7 +14,7 @@ import (
 // Proposal is an improvement of the methodology model, expressed on its
 // definition nodes (so that it is reviewed like any other change), in the terms
 // of the definition: the self-observation writes the names of its elements as
-// links (ADR 0119, methodology.EncodeRefs). A proposed
+// links (ADR 0120, methodology.EncodeRefs). A proposed
 // MCP tool (TypeToolRequest) is not part of the definition: it is requested
 // from the platform team and referenced by tool actions once available.
 type Proposal struct {

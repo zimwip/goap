@@ -19,7 +19,7 @@ nodeTypes:
       - {name: domains, label: Domains, description: "Version of each domain the methodology is written against (ADR 0113): pinned when it is published", type: json, widget: textarea, section: Definition, order: 4}
       - {name: lifecycle, label: Lifecycle, description: "Lifecycle of the domain the changes of the methodology follow (ADR 0058); empty: none", type: string, section: Definition, order: 4}
       - {name: criticality, label: Criticality, description: "Default criticality of the changes of the methodology (C1, C2 or C3, ADR 0075); empty: C2", type: string, section: Definition, order: 4}
-      - {name: goal, label: Goal, description: "Main goal of the methodology when it names no goal or process of the version (ADR 0096): a declared one is the main_goal link (ADR 0119); empty: the first goal or process", type: string, section: Definition, order: 4}
+      - {name: goal, label: Goal, description: "Main goal of the methodology when it names no goal or process of the version (ADR 0096): a declared one is the main_goal link (ADR 0120); empty: the first goal or process", type: string, section: Definition, order: 4}
       - {name: administrative, label: Administrative, description: "The changes of the methodology name no project (it manages organisation, project, policy or adapter data)", type: boolean, section: Definition, order: 4}
       - {name: appliesTo, label: "Applies to", description: "Methodologies whose changes it runs alongside (a transverse methodology, ADR 0036)", type: json, widget: textarea, section: Definition, order: 4}
       - {name: imports, label: Imports, description: "Condition libraries the methodology uses without declaring their conditions", type: json, widget: textarea, section: Definition, order: 4}
@@ -42,13 +42,13 @@ nodeTypes:
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
       - {name: planner, label: Planner, description: "How the agent plans its actions", type: enum, enum: planner, section: Planning, order: 3}
       - {name: model, label: Model, description: "Model alias of the agent (llm actions)", type: string, section: Planning, order: 4}
-      - {name: actions, label: Actions, description: "Actions the agent can run that the version does not declare (the declared ones are uses links, ADR 0119)", type: json, widget: textarea, section: Planning, order: 5}
-      - {name: goals, label: Goals, description: "Goals the agent pursues that the version does not declare (the declared ones are pursues links, ADR 0119)", type: json, widget: textarea, section: Planning, order: 6}
+      - {name: actions, label: Actions, description: "Actions the agent can run that the version does not declare (the declared ones are uses links, ADR 0120)", type: json, widget: textarea, section: Planning, order: 5}
+      - {name: goals, label: Goals, description: "Goals the agent pursues that the version does not declare (the declared ones are pursues links, ADR 0120)", type: json, widget: textarea, section: Planning, order: 6}
       - {name: triggers, label: Triggers, description: "Events and schedules that start the agent", type: json, widget: textarea, section: Planning, order: 7}
-      - {name: roles, label: Roles, description: "Roles allowed to run the agent that the version does not declare (the declared ones are assigns links, as run, ADR 0119)", type: json, widget: textarea, section: Access, order: 8}
+      - {name: roles, label: Roles, description: "Roles allowed to run the agent that the version does not declare (the declared ones are assigns links, as run, ADR 0120)", type: json, widget: textarea, section: Access, order: 8}
       - {name: examples, label: Examples, description: "Phrasings of the intents the agent answers", type: json, widget: textarea, section: Identity, order: 3}
       - {name: mcps, label: MCPs, description: "MCPs whose tools its llm and script actions may use", type: json, widget: textarea, section: Planning, order: 8}
-      - {name: role, label: Role, description: "Role the agent acts as when the version does not declare it (a declared one is an assigns link, as actsAs, ADR 0119)", type: string, section: Access, order: 8}
+      - {name: role, label: Role, description: "Role the agent acts as when the version does not declare it (a declared one is an assigns link, as actsAs, ADR 0120)", type: string, section: Access, order: 8}
       - {name: persistent, label: Persistent, description: "One instance per scope, run again for every new execution there with its conversation (ADR 0112): scope (change, or a path into the event), until (conditions closing it), memory (exchanges kept)", type: json, widget: textarea, section: Planning, order: 9}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
@@ -62,10 +62,10 @@ nodeTypes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
       - {name: kind, label: Kind, description: "How the action is carried out", type: enum, enum: action-kind, section: Execution, order: 3}
-      - {name: roles, label: Roles, description: "Roles allowed to run the action that the version does not declare (the declared ones are assigns links, as run, ADR 0119)", type: json, widget: textarea, section: Access, order: 4}
+      - {name: roles, label: Roles, description: "Roles allowed to run the action that the version does not declare (the declared ones are assigns links, as run, ADR 0120)", type: json, widget: textarea, section: Access, order: 4}
       - {name: verify, label: Verification, description: "How the effect is verified: the oracle (tool, human, model) and whether the verifier differs from the producer", type: json, widget: textarea, section: Execution, order: 5}
-      - {name: pre, label: Preconditions, description: "Conditions required to run the action that the version does not declare (a library's, generated ones), with their expected value: a declared condition is a requires link (ADR 0119)", type: json, widget: textarea, section: Planning, order: 6}
-      - {name: effects, label: Effects, description: "Conditions the action establishes that the version does not declare, with their value: a declared condition is a produces link (ADR 0119)", type: json, widget: textarea, section: Planning, order: 7}
+      - {name: pre, label: Preconditions, description: "Conditions required to run the action that the version does not declare (a library's, generated ones), with their expected value: a declared condition is a requires link (ADR 0120)", type: json, widget: textarea, section: Planning, order: 6}
+      - {name: effects, label: Effects, description: "Conditions the action establishes that the version does not declare, with their value: a declared condition is a produces link (ADR 0120)", type: json, widget: textarea, section: Planning, order: 7}
       - {name: cost, label: Cost, description: "Cost the planner minimizes (default 1)", type: number, section: Planning, order: 8}
       - {name: utility, label: Utility, description: "CEL number used by the utility and hybrid planners (default 1)", type: string, section: Planning, order: 9}
       - {name: expects, label: Expectation, description: "Expectation on the produced items, compiled to a condition", type: json, widget: textarea, section: Planning, order: 10}
@@ -87,7 +87,7 @@ nodeTypes:
       - {name: form, label: Form, description: "What a person fills in to carry out a human action (ADR 0115): title, submit, artifact, fields with their widget and constraints", type: json, widget: textarea, section: Execution, order: 20}
       - {name: language, label: Language, description: "Language of a script action (javascript or go)", type: string, section: Execution, order: 21}
       - {name: code, label: Code, description: "Code of a script action", type: string, widget: textarea, section: Execution, order: 22}
-      - {name: specializes, label: Specializes, description: "Action of another methodology this one specializes (methodology/action): an action of the version is a specializes link (ADR 0119)", type: string, section: Specialization, order: 23}
+      - {name: specializes, label: Specializes, description: "Action of another methodology this one specializes (methodology/action): an action of the version is a specializes link (ADR 0120)", type: string, section: Specialization, order: 23}
       - {name: when, label: "Applies when", description: "CEL guard of a specialization; empty: always", type: string, section: Specialization, order: 24}
       - {name: priority, label: Priority, description: "The applicable specialization with the highest priority wins", type: number, section: Specialization, order: 25}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
@@ -102,7 +102,7 @@ nodeTypes:
       - {name: expr, label: Expression, description: "CEL predicate over the blackboard (self is the subject of a scoped condition)", type: string, widget: textarea, section: Definition, order: 3}
       - {name: scope, label: Scope, description: "Kind of subject the condition is about (ADR 0109): change (default), impact, item, risk, action, step", type: string, section: Definition, order: 4}
       - {name: where, label: Where, description: "Subjects of a scoped condition or an aggregate (CEL, self the subject)", type: string, widget: textarea, section: Definition, order: 5}
-      - {name: all, label: All, description: "Aggregate: every subject satisfies this scoped condition, when the version does not declare it (a declared one is an aggregates link, as all, ADR 0119)", type: string, section: Aggregate, order: 6}
+      - {name: all, label: All, description: "Aggregate: every subject satisfies this scoped condition, when the version does not declare it (a declared one is an aggregates link, as all, ADR 0120)", type: string, section: Aggregate, order: 6}
       - {name: any, label: Any, description: "Aggregate: some subject satisfies this scoped condition, when the version does not declare it (aggregates link, as any)", type: string, section: Aggregate, order: 7}
       - {name: none, label: None, description: "Aggregate: no subject satisfies this scoped condition, when the version does not declare it (aggregates link, as none)", type: string, section: Aggregate, order: 8}
       - {name: empty, label: Empty, description: "Value of an all aggregate over no subject (default false)", type: boolean, section: Aggregate, order: 9}
@@ -115,7 +115,7 @@ nodeTypes:
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
-      - {name: pre, label: Conditions, description: "Conditions the goal requires that the version does not declare, with their expected value: a declared condition is a requires link (ADR 0119)", type: json, widget: textarea, section: Definition, order: 3}
+      - {name: pre, label: Conditions, description: "Conditions the goal requires that the version does not declare, with their expected value: a declared condition is a requires link (ADR 0120)", type: json, widget: textarea, section: Definition, order: 3}
       - {name: examples, label: Examples, description: "Phrasings of the intents that reach the goal", type: json, widget: textarea, section: Identity, order: 3}
       - {name: value, label: Value, description: "Value of the goal for the utility planners", type: number, section: Definition, order: 4}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
@@ -133,7 +133,7 @@ nodeTypes:
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
   # Activity (architecture plan "Activity concept, Activity Runs, Change scoping"): the common shape of
-  # Process/Step/Method/MethodStep. Requires conditions, produces conditions (ADR 0119); breaks down into
+  # Process/Step/Method/MethodStep. Requires conditions, produces conditions (ADR 0120); breaks down into
   # sub-activities (sub_activity link) that feed it. A Change scopes to one Activity node (Change.Data["activityRef"], ADR 0066);
   # an Activity Run (pkg/journal.Record) is one execution instance of one, against one Change.
   - name: Activity
@@ -143,8 +143,8 @@ nodeTypes:
     attributes:
       - {name: name, label: Name, description: "Name of the element in its methodology version", type: string, section: Identity, order: 1, asName: true}
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
-      - {name: input, label: Input, description: "Conditions the activity takes that the version does not declare (generated: state:, step:; a library's): a declared condition is a requires link (ADR 0119)", type: json, widget: textarea, section: Definition, order: 3}
-      - {name: output, label: Output, description: "Conditions the activity produces that the version does not declare: a declared condition is a produces link (ADR 0119)", type: json, widget: textarea, section: Definition, order: 5}
+      - {name: input, label: Input, description: "Conditions the activity takes that the version does not declare (generated: state:, step:; a library's): a declared condition is a requires link (ADR 0120)", type: json, widget: textarea, section: Definition, order: 3}
+      - {name: output, label: Output, description: "Conditions the activity produces that the version does not declare: a declared condition is a produces link (ADR 0120)", type: json, widget: textarea, section: Definition, order: 5}
       - {name: on, label: "Reacts to", description: "Events that run the activity again on a change of its methodology (ADR 0110): event, filter (CEL over event), from", type: json, widget: textarea, section: Reactions, order: 6}
       - {name: position, label: Position, description: "Position of the element in its collection of the definition", type: number, section: Definition, order: 90}
       - {name: removed, label: Removed, description: "The element was removed from the definition (kept for the history)", type: boolean, section: Definition, order: 91}
@@ -163,9 +163,9 @@ nodeTypes:
       - {name: checklist, label: Checklist, description: "Points to check", type: json, widget: textarea, section: Guidance, order: 5}
       - {name: deliverables, label: Deliverables, description: "What the method produces", type: json, widget: textarea, section: Guidance, order: 6}
       - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 7}
-      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, as responsible, accountable, consulted or informed, ADR 0119)", type: json, widget: textarea, section: Access, order: 8}
-      - {name: actions, label: Actions, description: "Pool of actions the steps inherit that the version does not declare (the declared ones are uses links, ADR 0119)", type: json, widget: textarea, section: Execution, order: 9}
-      - {name: done, label: "Done when", description: "Conditions that complete the method that the version does not declare: a declared condition is a produces link (ADR 0119)", type: json, widget: textarea, section: Execution, order: 10}
+      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, as responsible, accountable, consulted or informed, ADR 0120)", type: json, widget: textarea, section: Access, order: 8}
+      - {name: actions, label: Actions, description: "Pool of actions the steps inherit that the version does not declare (the declared ones are uses links, ADR 0120)", type: json, widget: textarea, section: Execution, order: 9}
+      - {name: done, label: "Done when", description: "Conditions that complete the method that the version does not declare: a declared condition is a produces link (ADR 0120)", type: json, widget: textarea, section: Execution, order: 10}
       - {name: planner, label: Planner, description: "How the generated agent plans", type: enum, enum: planner, section: Execution, order: 11}
       - {name: model, label: Model, description: "Model alias of the generated agent", type: string, section: Execution, order: 12}
       - {name: mcps, label: MCPs, description: "MCPs the generated agent may use", type: json, widget: textarea, section: Execution, order: 13}
@@ -181,7 +181,7 @@ nodeTypes:
   # Step and MethodStep (architecture plan point 2): one step of a Process/Method, materialized as its own
   # node (not just compiled in-memory) so it can be an Activity in its own right - its own input/goals/output,
   # its own ActivityRuns. Still authored inline in the owning Process/Method's YAML for ergonomics; the
-  # registry stores one node per step, reached from its process or method through sub_activity only (ADR 0119).
+  # registry stores one node per step, reached from its process or method through sub_activity only (ADR 0120).
   - name: Step
     description: "Step of a Process: its own input/goals/output, done by an action, an agent, a nested process or a person"
     extends: Activity
@@ -193,11 +193,11 @@ nodeTypes:
       - {name: checklist, label: Checklist, description: "Points to check", type: json, widget: textarea, section: Guidance, order: 3}
       - {name: deliverables, label: Deliverables, description: "What the step produces", type: json, widget: textarea, section: Guidance, order: 4}
       - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 5}
-      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, ADR 0119)", type: json, widget: textarea, section: Access, order: 6}
-      - {name: action, label: Action, description: "Action that does the step, when the version does not declare it (a declared one is a performed_by link, as action, ADR 0119)", type: string, section: Execution, order: 7}
+      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, ADR 0120)", type: json, widget: textarea, section: Access, order: 6}
+      - {name: action, label: Action, description: "Action that does the step, when the version does not declare it (a declared one is a performed_by link, as action, ADR 0120)", type: string, section: Execution, order: 7}
       - {name: actions, label: "Alternative actions", description: "Actions among which the planner picks that the version does not declare (performed_by links, as alternative)", type: json, widget: textarea, section: Execution, order: 8}
       - {name: agent, label: Agent, description: "Agent that does the step", type: string, section: Execution, order: 9}
-      - {name: process, label: Process, description: "Nested process of another methodology that does the step (methodology/process): a process of the version is a nests link (ADR 0119)", type: string, section: Execution, order: 10}
+      - {name: process, label: Process, description: "Nested process of another methodology that does the step (methodology/process): a process of the version is a nests link (ADR 0120)", type: string, section: Execution, order: 10}
       - {name: method, label: Method, description: "Capability whose applicable method does the step (the methods providing it are carried_out_by links)", type: string, section: Execution, order: 11}
       - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
       - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
@@ -213,11 +213,11 @@ nodeTypes:
       - {name: checklist, label: Checklist, description: "Points to check", type: json, widget: textarea, section: Guidance, order: 3}
       - {name: deliverables, label: Deliverables, description: "What the step produces", type: json, widget: textarea, section: Guidance, order: 4}
       - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 5}
-      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, ADR 0119)", type: json, widget: textarea, section: Access, order: 6}
-      - {name: action, label: Action, description: "Action that does the step, when the version does not declare it (a declared one is a performed_by link, as action, ADR 0119)", type: string, section: Execution, order: 7}
+      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, ADR 0120)", type: json, widget: textarea, section: Access, order: 6}
+      - {name: action, label: Action, description: "Action that does the step, when the version does not declare it (a declared one is a performed_by link, as action, ADR 0120)", type: string, section: Execution, order: 7}
       - {name: actions, label: "Alternative actions", description: "Actions among which the planner picks that the version does not declare (performed_by links, as alternative)", type: json, widget: textarea, section: Execution, order: 8}
       - {name: agent, label: Agent, description: "Agent that does the step", type: string, section: Execution, order: 9}
-      - {name: process, label: Process, description: "Nested process of another methodology that does the step (methodology/process): a process of the version is a nests link (ADR 0119)", type: string, section: Execution, order: 10}
+      - {name: process, label: Process, description: "Nested process of another methodology that does the step (methodology/process): a process of the version is a nests link (ADR 0120)", type: string, section: Execution, order: 10}
       - {name: method, label: Method, description: "Capability whose applicable method does the step (the methods providing it are carried_out_by links)", type: string, section: Execution, order: 11}
       - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
       - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
@@ -256,7 +256,7 @@ linkTypes:
     from: Activity
     to: Activity
     compose: true
-  # References between the elements of a version (ADR 0119): what the definition names, the graph links. A condition is
+  # References between the elements of a version (ADR 0120): what the definition names, the graph links. A condition is
   # the output of an activity (produces) and the input of another (requires): the same node. A name the version does
   # not declare (a library's condition, a generated one, another methodology's element) stays in the property.
   - name: requires

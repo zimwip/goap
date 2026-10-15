@@ -322,7 +322,7 @@ func definitionLinks(ctx context.Context, e *engine.Engine) (map[string][]stored
 }
 
 // graphWrite is the write of a proposal (in the terms of the definition) on its node, in the terms of the graph
-// (ADR 0119): the names of elements of the methodology are links, the links of the fields it sets replace those the
+// (ADR 0120): the names of elements of the methodology are links, the links of the fields it sets replace those the
 // node has (stored, its outgoing links).
 func graphWrite(p observe.Proposal, ix methodology.RefIndex, hkey string, stored []storedLink) dsl.NodeOp {
 	kind := ""
@@ -366,7 +366,7 @@ func graphWrite(p observe.Proposal, ix methodology.RefIndex, hkey string, stored
 }
 
 // definitionProps are the properties of a definition node in the terms of the definition: its links to the elements
-// of the methodology named again (ADR 0119), the nodes they reach read from the blackboard.
+// of the methodology named again (ADR 0120), the nodes they reach read from the blackboard.
 func definitionProps(bb domain.Blackboard, v domain.NodeView) map[string]any {
 	nodeOf := func(id domain.NodeID) (domain.Node, bool) {
 		for ref, n := range bb.Nodes {

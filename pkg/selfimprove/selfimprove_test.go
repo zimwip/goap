@@ -43,7 +43,7 @@ func (d *memDrafts) SaveDraft(ctx context.Context, m methodology.Methodology) (d
 }
 
 // storeDefinition writes the definition nodes of a methodology version as the registry does (ADR 0023): the version
-// node and one node per element, typed by the meta-domain methodology, the actions of an agent its uses links (ADR 0119).
+// node and one node per element, typed by the meta-domain methodology, the actions of an agent its uses links (ADR 0120).
 func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID, m *methodology.Methodology) (graph.CommitResult, error) {
 	hkey := observe.ElementKey(m.Name, m.Version, "methodology", "")
 	head := graph.NodeEdit{Key: hkey, Type: "methodology@MethodologyVersion", Props: map[string]any{"name": m.Name, "version": m.Version, "status": "published"}}
@@ -211,7 +211,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		}
 		decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
 	}
-	// the specialization proposed is a link to the action it specializes, not a name in its properties (ADR 0119)
+	// the specialization proposed is a link to the action it specializes, not a name in its properties (ADR 0120)
 	specialized := ""
 	for _, n := range c.Nodes {
 		if !strings.HasSuffix(n.Key, "/action/identify_impacts_script") {
@@ -278,7 +278,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 }
 
 // A proposal names the elements of the methodology; written on the graph, the names are links and the links of the
-// fields it sets replace those of the node (ADR 0119).
+// fields it sets replace those of the node (ADR 0120).
 func TestGraphWriteTurnsNamesIntoLinks(t *testing.T) {
 	m := &methodology.Methodology{Name: "m", Version: "1", Actions: []methodology.Action{{Name: "a"}, {Name: "b"}, {Name: "c"}}, Agents: []methodology.Agent{{Name: "ag"}}}
 	hkey := observe.ElementKey("m", "1", "methodology", "")

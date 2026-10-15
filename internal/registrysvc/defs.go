@@ -13,7 +13,7 @@ import (
 // A version of a methodology is a node (its header: the scalar fields, the status, the timestamps) and one node per
 // element (condition, action, goal, agent, process, method, role, step), keyed "<header key>/<kind>/<name>" and typed by
 // the built-in meta-domain methodology (methodology@Agent, ...; ADR 0023); the references between elements are links
-// (ADR 0119, refs.go). The version is the graph content; the definition a caller gets is assembled from it.
+// (ADR 0120, refs.go). The version is the graph content; the definition a caller gets is assembled from it.
 
 // Kinds of the element nodes and the collection of the definition each one fills.
 const (
@@ -27,7 +27,7 @@ const (
 	// kindStep and kindMethodStep are the steps of a process/method, materialized as their own nodes (one per
 	// step and sub-step, architecture plan "Activity concept"): they fill no top-level collection field of their own
 	// (field ""), the definition reads them back as the steps of their process or method, from its sub_activity links
-	// (ADR 0119, steps.go).
+	// (ADR 0120, steps.go).
 	kindStep       = methodology.ElementStep
 	kindMethodStep = methodology.ElementMethodStep
 )

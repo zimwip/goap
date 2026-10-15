@@ -1425,7 +1425,7 @@ Methodologies are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.m
 version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar fields,
 status) and one node per element typed by the built-in meta-domain (`methodology@Agent`, `@Action`, `@Condition`,
 `@Goal`, `@Process`, `@Method`, `@Role`, one `@Step` / `@MethodStep` per step), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. The references between elements are links
-([ADR 0119](adr/0119-methodology-references-are-links.md)): a condition is the output of the activities that
+([ADR 0120](adr/0120-methodology-references-are-links.md)): a condition is the output of the activities that
 `produces` it and the input of those that `requires` it (`uses`, `pursues`, `performed_by`, `nests`, `assigns`,
 `aggregates`, `specializes`, `main_goal`; derived `mentions`, `carried_out_by`), a name the version does not declare (a
 library's or a generated condition, another methodology's element) stays a property, the steps of a process are nodes

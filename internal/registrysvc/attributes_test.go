@@ -51,7 +51,7 @@ func TestDefinitionPropertiesAreAttributes(t *testing.T) {
 		{"methodology@Action", jsonFields(reflect.TypeFor[methodology.Action]()), nil, extra},
 		{"methodology@Goal", jsonFields(reflect.TypeFor[methodology.Goal]()), nil, extra},
 		{"methodology@Agent", jsonFields(reflect.TypeFor[methodology.Agent]()), nil, extra},
-		// the steps of a process or a method are nodes of their own, reached through sub_activity (ADR 0119)
+		// the steps of a process or a method are nodes of their own, reached through sub_activity (ADR 0120)
 		{"methodology@Process", jsonFields(reflect.TypeFor[methodology.Process]()), []string{"steps"}, extra},
 		{"methodology@Method", jsonFields(reflect.TypeFor[methodology.Method]()), []string{"steps"}, extra},
 		{"methodology@Role", jsonFields(reflect.TypeFor[methodology.Role]()), nil, extra},

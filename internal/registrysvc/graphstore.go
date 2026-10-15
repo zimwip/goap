@@ -90,7 +90,7 @@ type suspectReader interface {
 
 // withSuspects reads a baseline with its suspect links too: a link to an element is a link to the version the element
 // had when the reference was written (ADR 0003), and editing the element (a new version of its node) leaves the
-// references to it in place, suspect. They are references all the same (ADR 0119).
+// references to it in place, suspect. They are references all the same (ADR 0120).
 type withSuspects struct{ StoreGraph }
 
 // withSuspectsReader reads both at once (the graph service client: one call).
@@ -328,7 +328,7 @@ func patch(have, want map[string]any) map[string]any {
 // versionEdits reconciles the nodes of a version with a definition (an elementGraph): it creates or updates the
 // header, creates, updates and, for the elements that left the definition, marks removed the element nodes (their
 // links dropped), ties new elements to the header (defines) and brings the links of every node to the references of
-// the definition (ADR 0119): a link the definition no longer makes is removed, one it makes is added, one whose
+// the definition (ADR 0120): a link the definition no longer makes is removed, one it makes is added, one whose
 // attributes changed is replaced. old, oldChildren and oldOut are the stored version, nil for a new one.
 func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChildren map[string]domain.Node, oldOut map[domain.NodeID][]keyedLink) []graph.NodeEdit {
 	// linkEdits diffs the links of a stored node (only the types managed counts) with the wanted ones
@@ -462,7 +462,7 @@ func markDeleted(n domain.Node) graph.NodeEdit {
 // ---- methodologies ---------------------------------------------------------
 
 // encodeVersion is a definition as the graph holds it: the header, an element per declared element and per step, and
-// the links of their references (ADR 0119).
+// the links of their references (ADR 0120).
 func encodeVersion(m methodology.Methodology, st Status, created, updated, published time.Time, by string) (elementGraph, error) {
 	header, els, err := encodeMethodology(m)
 	if err != nil {

@@ -9,7 +9,7 @@ import (
 // step and sub-step (methodology@Step for a process, methodology@MethodStep for a method), keyed by its full path
 // ("<process>/<step>/<sub-step>"), plus the sub_activity children each parent (a process, method or step element,
 // named "<kind>/<name-or-path>") is composed of, in their order. A step is a node of its own and nothing else holds it
-// (ADR 0119): the definition reads the steps of a process back from its sub_activity links (stepsOf), each step at
+// (ADR 0120): the definition reads the steps of a process back from its sub_activity links (stepsOf), each step at
 // its position among its siblings.
 func stepChildren(els []defEl) (stepEls []defEl, children map[string][]string) {
 	children = map[string][]string{}

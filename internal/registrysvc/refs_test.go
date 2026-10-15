@@ -86,7 +86,7 @@ func node(t *testing.T, g *graph.Graph, key string) domain.Node {
 	return n
 }
 
-// The references between the elements of a version are links (ADR 0119): a condition is the output of an action
+// The references between the elements of a version are links (ADR 0120): a condition is the output of an action
 // (produces) and the input of another (requires), the same node; the names that resolve to no element stay in the
 // properties; the definition reads back as it was saved.
 func TestReferencesAreLinks(t *testing.T) {
@@ -155,7 +155,7 @@ func TestReferencesAreLinks(t *testing.T) {
 	}
 }
 
-// By default no element of a methodology stands alone (ADR 0119): one nothing refers to and that refers to nothing is
+// By default no element of a methodology stands alone (ADR 0120): one nothing refers to and that refers to nothing is
 // an issue, which refuses the publication.
 func TestIsolatedElementsAreIssues(t *testing.T) {
 	m, err := methodology.Parse([]byte(refsYAML + `

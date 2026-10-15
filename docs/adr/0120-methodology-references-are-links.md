@@ -1,4 +1,4 @@
-# ADR 0119 — The references of a methodology are links of the graph
+# ADR 0120 — The references of a methodology are links of the graph
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0023 (definitions in the graph), ADR 0034
 (processes), ADR 0035 (methods, roles), ADR 0109 (conditions derived from the context) · Amends ADR 0023
