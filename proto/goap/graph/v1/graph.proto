@@ -126,6 +126,19 @@ service GraphService {
   // Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
   rpc DeleteChange(DeleteChangeRequest) returns (DeleteChangeResponse);
 
+  // Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
+  // (one per namespace). Each call does on the server what the dialog did call by call, and answers the whole pending
+  // state of the caller.
+  rpc GetPendingSettings(GetPendingSettingsRequest) returns (PendingSettingsResponse);
+  // Stage edits in order: the creation or new properties of a node (props), or its retirement (retire). The personal
+  // change of a namespace is opened on the first edit; a node created by it and retired again is given up.
+  rpc StageSettings(StageSettingsRequest) returns (PendingSettingsResponse);
+  // Save: the edits that modify something are accepted (one review per change) and their changes applied; the others are
+  // withdrawn, and a change left with nothing is removed.
+  rpc SaveSettings(SaveSettingsRequest) returns (PendingSettingsResponse);
+  // Discard: the personal changes holding the edits are removed.
+  rpc DiscardSettings(DiscardSettingsRequest) returns (PendingSettingsResponse);
+
   // Version branches (ADR 0009)
   rpc CreateBranch(CreateBranchRequest) returns (CreateBranchResponse);
   rpc ListBranches(ListBranchesRequest) returns (ListBranchesResponse);
@@ -935,6 +948,52 @@ message DeleteChangeRequest {
 message DeleteChangeResponse {
   // the removed change (as it was)
   Change change = 1;
+}
+
+message GetPendingSettingsRequest {}
+
+message SaveSettingsRequest {}
+
+message DiscardSettingsRequest {}
+
+// One edit of the settings dialog.
+message SettingEdit {
+  string namespace = 1;
+  // node type, <namespace>@<NodeType>
+  string type = 2;
+  string key = 3;
+  // the properties set (merged into the node's); ignored with retire
+  google.protobuf.Struct props = 4;
+  // retire the node (its lifecycle state retired) instead of setting properties
+  bool retire = 5;
+}
+
+message StageSettingsRequest {
+  repeated SettingEdit edits = 1;
+}
+
+// A node the caller touched, not saved yet.
+message StagedSetting {
+  string key = 1;
+  string type = 2;
+  // the properties of its draft (empty when it is not written yet or retired)
+  google.protobuf.Struct props = 3;
+  bool retire = 4;
+  // the node does not exist on main yet
+  bool created = 5;
+  string change_impact_id = 6;
+  // a draft was written for it
+  bool written = 7;
+}
+
+message PendingSettings {
+  string namespace = 1;
+  string change_id = 2;
+  repeated StagedSetting nodes = 3;
+}
+
+message PendingSettingsResponse {
+  repeated PendingSettings changes = 1;
 }
 
 message ApplyChangeResponse {

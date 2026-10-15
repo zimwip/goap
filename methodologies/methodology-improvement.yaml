@@ -1,5 +1,5 @@
 name: methodology-improvement
-version: 1.5.0
+version: 1.5.1
 namespace: methodology
 goal: improve_methodology
 description: >
@@ -23,9 +23,6 @@ conditions:
   - name: analyzed
     description: The cost of the observed run has been analyzed (journal + traces)
     expr: 'artifacts.exists(a, a.target == "cost_report" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id))'
-  - name: has_findings
-    description: The analysis found pain points
-    expr: 'artifacts.exists(a, a.target == "cost_report" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id) && size(a.data.findings) > 0)'
   - name: proposed
     description: Improvements have been proposed for the observed run (or the analysis found none)
     expr: 'artifacts.exists(a, a.target == "improvement_plan" && a.data.process == ("process" in vars ? vars.process : vars.event.process.id))'

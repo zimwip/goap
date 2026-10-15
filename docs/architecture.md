@@ -449,7 +449,9 @@ organization and the owner (= the initiator) as attributes. The default policy a
 person (`USR:<subject>`) is visible to and changeable by that person only, and is never split into sub-changes. A change
 that landed nothing can be purged with its log (`DeleteChange`).
 The settings of the platform edited in the web dialog are staged this way: each edit is an impact of the personal
-change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. Personal
+change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. The graph
+service does the staging, one call per edit or batch of edits (`GetPendingSettings`, `StageSettings`, `SaveSettings`,
+`DiscardSettings`, [ADR 0122](adr/0122-settings-staged-by-the-server.md)). Personal
 preferences are not graph data ([ADR 0038](adr/0038-user-preferences-service.md)).
 
 ### 2.7b Verification, derogations and criticality ([ADR 0075](adr/0075-verification-derogation-criticality.md))
@@ -1424,7 +1426,12 @@ tool panel, console and status bar, and gives way to the field helper (they are 
 Methodologies are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)), edited from the frontend: a
 version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar fields,
 status) and one node per element typed by the built-in meta-domain (`methodology@Agent`, `@Action`, `@Condition`,
-`@Goal`, `@Process`), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. Every save, publication or deletion is
+`@Goal`, `@Process`, `@Method`, `@Role`, one `@Step` / `@MethodStep` per step), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. The references between elements are links
+([ADR 0120](adr/0120-methodology-references-are-links.md)): a condition is the output of the activities that
+`produces` it and the input of those that `requires` it (`uses`, `pursues`, `performed_by`, `nests`, `assigns`,
+`aggregates`, `specializes`, `main_goal`; derived `mentions`, `carried_out_by`), a name the version does not declare (a
+library's or a generated condition, another methodology's element) stays a property, the steps of a process are nodes
+reached through `sub_activity` only; no element stands alone (a modelling principle, never checked by the graph). Every save, publication or deletion is
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its

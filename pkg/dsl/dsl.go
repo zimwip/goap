@@ -122,6 +122,8 @@ type NodeInto struct {
 type NodeOpLink struct {
 	Type string `json:"type"`
 	To   string `json:"to"`
+	// Props are the attributes of the link.
+	Props map[string]any `json:"props,omitempty"`
 }
 
 // CompleteRequest is an LLM request.

@@ -11,6 +11,7 @@ vi.mock('./stores/pending.svelte', () => ({
   pending: { byNs: {} },
   stageUpsert: (...a: unknown[]) => stageUpsert(...(a as [])),
   stageRetire: (...a: unknown[]) => stageRetire(...(a as [])),
+  stageEdits: vi.fn(async () => {}),
   stagedOfType: (_ns: string, type: string) => staged.filter((s) => s.type === type),
 }));
 
