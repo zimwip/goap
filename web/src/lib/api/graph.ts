@@ -346,7 +346,7 @@ export const graph = {
     ),
   /** Removes a change that landed nothing, with its log (ADR 0037); refused once anything of it is applied or used. */
   deleteChange: (changeId: string) => rpc<{ changeId: string }, { change?: Change }>(GRAPH, 'DeleteChange', { changeId }),
-  /** The settings dialog's edits not saved yet (ADR 0037, 0120): the personal changes of the caller, one per namespace. */
+  /** The settings dialog's edits not saved yet (ADR 0037, 0122): the personal changes of the caller, one per namespace. */
   getPendingSettings: () => rpc<Empty, PendingSettings>(GRAPH, 'GetPendingSettings', {}),
   /** Stages edits of the settings dialog in order, on the server; answers the whole pending state. */
   stageSettings: (edits: SettingEdit[]) => rpc<{ edits: SettingEdit[] }, PendingSettings>(GRAPH, 'StageSettings', { edits }),

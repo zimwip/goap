@@ -18,7 +18,7 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// The settings dialog stages its edits through the server (ADR 0120): one call per edit or batch of edits, the pending
+// The settings dialog stages its edits through the server (ADR 0122): one call per edit or batch of edits, the pending
 // state of the caller in every answer, Save and Discard in one call each.
 func TestStagedSettings(t *testing.T) {
 	ctx := context.Background()

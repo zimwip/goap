@@ -1,4 +1,4 @@
-# ADR 0120 — Settings staged by the server
+# ADR 0122 — Settings staged by the server
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0037 (personal changes, staged settings), ADR 0079
 (drafts), ADR 0102 (only a modification is accepted), ADR 0105 (verdicts made by a submitted review)

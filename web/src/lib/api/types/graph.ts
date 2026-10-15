@@ -594,7 +594,7 @@ export interface GraphImportResult {
   warnings?: string[];
 }
 
-/** One edit of the settings dialog (ADR 0120): the creation or new properties of a node, or its retirement. */
+/** One edit of the settings dialog (ADR 0122): the creation or new properties of a node, or its retirement. */
 export interface SettingEdit {
   namespace: string;
   type: string;
@@ -603,7 +603,7 @@ export interface SettingEdit {
   retire?: boolean;
 }
 
-/** A node the user touched in the settings dialog, not saved yet (ADR 0037, 0120). */
+/** A node the user touched in the settings dialog, not saved yet (ADR 0037, 0122). */
 export interface StagedSetting {
   key: string;
   type: string;

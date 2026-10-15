@@ -451,7 +451,7 @@ that landed nothing can be purged with its log (`DeleteChange`).
 The settings of the platform edited in the web dialog are staged this way: each edit is an impact of the personal
 change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. The graph
 service does the staging, one call per edit or batch of edits (`GetPendingSettings`, `StageSettings`, `SaveSettings`,
-`DiscardSettings`, [ADR 0120](adr/0120-settings-staged-by-the-server.md)). Personal
+`DiscardSettings`, [ADR 0122](adr/0122-settings-staged-by-the-server.md)). Personal
 preferences are not graph data ([ADR 0038](adr/0038-user-preferences-service.md)).
 
 ### 2.7b Verification, derogations and criticality ([ADR 0075](adr/0075-verification-derogation-criticality.md))

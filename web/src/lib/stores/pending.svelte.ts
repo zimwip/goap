@@ -4,7 +4,7 @@
 // else sees it) and is written as an impact of it: the node is checked out and its draft edited in place (ADR 0079),
 // a removal is the transition of its lifecycle that retires it (a node is never deleted, ADR 0076). Nothing is
 // applied until the user saves: Save accepts the impacts and applies the changes, Discard removes them from the
-// system. The server does those steps (ADR 0120: StageSettings, SaveSettings, DiscardSettings), one call per edit or
+// system. The server does those steps (ADR 0122: StageSettings, SaveSettings, DiscardSettings), one call per edit or
 // batch of edits, and answers the whole pending state, which this store holds. The dialog shows the graph with the
 // pending nodes laid over it (see llmEdit.ts for the model gateway).
 import { graph, errorMessage, type PendingSettings, type SettingEdit, type Struct } from '../api';

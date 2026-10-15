@@ -445,7 +445,7 @@ type GraphServiceClient interface {
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
-	// Staged settings (ADR 0037, ADR 0120): the edits of the settings dialog, held by the personal changes of the caller
+	// Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
 	// (one per namespace). Each call does on the server what the dialog did call by call, and answers the whole pending
 	// state of the caller.
 	GetPendingSettings(context.Context, *connect.Request[v1.GetPendingSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
@@ -1891,7 +1891,7 @@ type GraphServiceHandler interface {
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
-	// Staged settings (ADR 0037, ADR 0120): the edits of the settings dialog, held by the personal changes of the caller
+	// Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
 	// (one per namespace). Each call does on the server what the dialog did call by call, and answers the whole pending
 	// state of the caller.
 	GetPendingSettings(context.Context, *connect.Request[v1.GetPendingSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
