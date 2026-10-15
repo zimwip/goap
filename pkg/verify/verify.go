@@ -21,8 +21,8 @@ import (
 	"github.com/zimwip/goap/pkg/domain"
 )
 
-// KindVerification is the kind of the items that record a state of verification: fact.verification in the log.
-const KindVerification domain.ItemKind = "verification"
+// TypeVerification is the kind of the items that record a state of verification: fact.verification in the log.
+const TypeVerification domain.ItemType = "verification"
 
 // States of a produced effect.
 const (
@@ -50,8 +50,8 @@ const (
 // Register makes the verification item kind known to the graph (domain.RegisterItemKind). The services that write or
 // read such items call it at start, and so does a test that builds them; it may be called any number of times.
 func Register() {
-	domain.RegisterItemKind(KindVerification, validate)
-	domain.DescribeItemKind(KindVerification, "verify", "A state of verification of a produced effect: produced, verified, accepted (with reserve) or rejected (ADR 0075).")
+	domain.RegisterItemType(TypeVerification, validate)
+	domain.DescribeItemType(TypeVerification, "verify", "A state of verification of a produced effect: produced, verified, accepted (with reserve) or rejected (ADR 0075).")
 }
 
 // ValidState reports whether s is a state of verification.
@@ -105,7 +105,7 @@ func Subjects(items []domain.ChangeItem) []Subject {
 	var out []Subject
 	byImpact := map[string]int{} // impact id -> index in out
 	for n, it := range items {
-		if it.Kind != KindVerification {
+		if it.Type != TypeVerification {
 			continue
 		}
 		state, _ := it.Data[KeyState].(string)

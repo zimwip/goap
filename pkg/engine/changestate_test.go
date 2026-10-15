@@ -35,7 +35,7 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 		e.Drain()
 		text, _ := assess.Text(bb, assess.SubjectDescription)
 		p := companionOf(t, e, ch.ID)[0]
-		if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: string(assess.KindAssessment), Data: map[string]any{"key": "description", "score": score, "verdict": "unclear", "rated": text}}}); err != nil {
+		if _, err := e.Submit(ctx, p.ID, []ItemInput{{Type: string(assess.TypeAssessment), Data: map[string]any{"key": "description", "score": score, "verdict": "unclear", "rated": text}}}); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := e.Run(ctx, p.ID); err != nil {

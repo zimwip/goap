@@ -69,7 +69,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import ChangeDecisions from '../../components/ChangeDecisions.svelte';
   import ChangeRisks from '../../components/ChangeRisks.svelte';
   import AssessmentBubble from '../../components/AssessmentBubble.svelte';
-  import { ASSESSMENT_STATES, INTENT, TITLE, itemSubjects, kindOf, type AssessmentStatesContext } from '../../descriptionReview';
+  import { ASSESSMENT_STATES, INTENT, TITLE, itemSubjects, typeOf, type AssessmentStatesContext } from '../../descriptionReview';
   import ChangeCriticality from '../../components/ChangeCriticality.svelte';
   import ChangeVerification from '../../components/ChangeVerification.svelte';
   import ChangeDerogations from '../../components/ChangeDerogations.svelte';
@@ -376,7 +376,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   // given to every bubble of the tab; read again when the platform stream says the change moved, at most once per second
   let assessmentStates = $state<AssessmentState[] | undefined>();
   setContext<AssessmentStatesContext>(ASSESSMENT_STATES, () => assessmentStates);
-  const assessed = $derived(!!change?.items?.some((i) => kindOf(i) === 'assessment'));
+  const assessed = $derived(!!change?.items?.some((i) => typeOf(i) === 'assessment'));
   let readingStates: AbortController | undefined;
   const statesSoon = throttled(() => {
     const id = selected;
@@ -489,7 +489,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     return i.status;
   }
   // flow events are part of the log but not shown as items
-  const items = $derived((view?.items ?? []).filter((i) => i.kind !== 'flow' && i.kind !== 'decision_point').map((i) => ({ ...i, status: effectiveStatus(i) })));
+  const items = $derived((view?.items ?? []).filter((i) => i.type !== 'flow' && i.type !== 'decision_point').map((i) => ({ ...i, status: effectiveStatus(i) })));
   const flowProcess = (f: Flow) => processOfFlow(f);
   // options are flows opened as hypotheses (ADR 0032 §6): they have a pane of their own
   const options = $derived(flows.filter((f) => f.option));
@@ -500,7 +500,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     const decided = new Set<string>();
     for (const it of change?.items ?? []) {
       const e = it.decisionEvent;
-      if (it.kind !== 'decision_point' || !e || it.flow) continue;
+      if (it.type !== 'decision_point' || !e || it.flow) continue;
       if (e.op === 'open') threshold.set(it.id ?? '', e.policy?.threshold ?? 0);
       else if (e.op === 'rule' && e.outcome === 'decided' && (e.human || (e.confidence ?? 0) >= (threshold.get(e.point ?? '') ?? 1))) decided.add(e.point ?? '');
       else if (e.op === 'ratify' && e.accept) decided.add(e.point ?? '');
@@ -1365,12 +1365,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           {@const md = markdownOf(i)}
           <article class="artifact" class:superseded={i.status === ITEM_SUPERSEDED}>
             <h4>
-              {#if i.type === 'guidance'}<span class="badge-guidance">guidance</span>{:else}{i.type || 'artifact'}{/if}
+              {#if i.target === 'guidance'}<span class="badge-guidance">guidance</span>{:else}{i.target || 'artifact'}{/if}
               <span class="hint">· {@render producer(i)}</span>
-              <AssessmentBubble change={ch} subject={itemSubjects(i)} label="the {i.type || 'artifact'}" compact {closed} onchange={() => load(selected)} />
+              <AssessmentBubble change={ch} subject={itemSubjects(i)} label="the {i.target || 'artifact'}" compact {closed} onchange={() => load(selected)} />
               {#if i.status === ITEM_SUPERSEDED || i.status === 'candidate' || i.status === 'stale' || i.status === 'rejected'}<StatusBadge status={i.status} />{/if}
             </h4>
-            {#if i.type === 'guidance' && typeof i.data?.text === 'string'}
+            {#if i.target === 'guidance' && typeof i.data?.text === 'string'}
               <blockquote class="guidance-quote">{i.data.text}</blockquote>
             {:else if md !== undefined}
               <pre class="md">{md}</pre>

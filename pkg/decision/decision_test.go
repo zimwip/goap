@@ -16,7 +16,7 @@ type replay struct {
 }
 
 func (r *replay) add(id string, e domain.DecisionEvent) {
-	r.c.Items = append(r.c.Items, domain.ChangeItem{ID: domain.ItemID(id), Kind: domain.KindDecisionPoint, DecisionEvent: &e, CreatedAt: t0.Add(time.Duration(len(r.c.Items)) * time.Minute)})
+	r.c.Items = append(r.c.Items, domain.ChangeItem{ID: domain.ItemID(id), Type: domain.TypeDecisionPoint, DecisionEvent: &e, CreatedAt: t0.Add(time.Duration(len(r.c.Items)) * time.Minute)})
 }
 
 // open opens a point with the values the policy resolves.

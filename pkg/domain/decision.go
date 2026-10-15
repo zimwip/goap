@@ -20,8 +20,8 @@ import (
 //
 // Like the flows, a decision point is a replay of events: KindDecisionPoint items of the main flow.
 
-// KindDecisionPoint is an event of a decision point (DecisionEvent).
-const KindDecisionPoint ItemKind = "decision_point"
+// TypeDecisionPoint is an event of a decision point (DecisionEvent).
+const TypeDecisionPoint ItemType = "decision_point"
 
 // Decision event operations.
 const (
@@ -226,7 +226,7 @@ func (c *Change) DecisionPointsAt(now time.Time, policy DecisionPolicy) []Decisi
 	at := map[string]int{}
 	for _, it := range c.Items {
 		e := it.DecisionEvent
-		if it.Kind != KindDecisionPoint || e == nil || it.Flow != "" {
+		if it.Type != TypeDecisionPoint || e == nil || it.Flow != "" {
 			continue
 		}
 		if e.Op == DecisionOpenOp {

@@ -197,7 +197,7 @@ func subjectRef(scope string, entry map[string]any) string {
 	case condition.ScopeItem:
 		data, _ := entry["data"].(map[string]any)
 		if k := str(data, "key"); k != "" {
-			return fmt.Sprintf("%s:%s", str(entry, "kind"), k)
+			return fmt.Sprintf("%s:%s", str(entry, "type"), k)
 		}
 		return str(entry, "id")
 	case condition.ScopeRisk, condition.ScopeAction:

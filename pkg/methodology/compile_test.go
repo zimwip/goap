@@ -67,8 +67,8 @@ name: chain
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: written, scope: impact, expr: 'artifacts.exists(a, a.type == "w" && a.data.impact == self.key)'}
-  - {name: checked, scope: impact, expr: 'artifacts.exists(a, a.type == "c" && a.data.impact == self.key)'}
+  - {name: written, scope: impact, expr: 'artifacts.exists(a, a.target == "w" && a.data.impact == self.key)'}
+  - {name: checked, scope: impact, expr: 'artifacts.exists(a, a.target == "c" && a.data.impact == self.key)'}
   - {name: all_written, all: written}
   - {name: all_checked, all: checked}
 actions:

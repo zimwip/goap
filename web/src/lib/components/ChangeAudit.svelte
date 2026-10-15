@@ -130,7 +130,7 @@
   const ctx = $derived(makeContext([], change.items ?? []));
   function itemLabel(id: string): string {
     const it = ctx.items.get(id);
-    return it ? `${it.kind ?? 'item'}${it.type ? ` ${it.type}` : ''}` : shortId(id);
+    return it ? `${it.type ?? 'item'}${it.target ? ` ${it.target}` : ''}` : shortId(id);
   }
 
   const q = $derived(filter.trim().toLowerCase());

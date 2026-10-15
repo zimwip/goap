@@ -623,7 +623,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		}
 		items = slices.Clone(items)
 		for i := range items {
-			if items[i].Kind != domain.KindFlow {
+			if items[i].Type != domain.TypeFlow {
 				items[i].Flow = c.ResolveFlow(items[i].Flow) // no flow: the active option (ADR 0032 §6)
 			}
 		}
@@ -632,16 +632,16 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 			batchFlow = items[0].Flow
 		}
 		for _, it := range items {
-			if it.Kind == domain.KindFlow {
+			if it.Type == domain.TypeFlow {
 				return fmt.Errorf("flow events are recorded by OpenFlow, AdoptFlow and DiscardFlow: %w", ErrInvalid)
 			}
-			if it.Kind == domain.KindTransition {
+			if it.Type == domain.TypeTransition {
 				return fmt.Errorf("transitions are recorded by TransitionChange: %w", ErrInvalid)
 			}
-			if it.Kind == domain.KindDecisionPoint {
+			if it.Type == domain.TypeDecisionPoint {
 				return fmt.Errorf("decision points are recorded by OpenDecision, RuleDecision, AnswerQuestion and RatifyDecision: %w", ErrInvalid)
 			}
-			if it.Kind == domain.KindReview && domain.ReviewRecordOf(it.Data).Status == domain.ReviewStatusSubmitted {
+			if it.Type == domain.TypeReview && domain.ReviewRecordOf(it.Data).Status == domain.ReviewStatusSubmitted {
 				return fmt.Errorf("a review is submitted with its verdicts, by ImpactNodeReviewBatch (ADR 0105): %w", ErrInvalid)
 			}
 			if it.Flow != batchFlow {
@@ -716,7 +716,7 @@ func (g *Graph) authorizeItems(ctx context.Context, id domain.ChangeID, items []
 				return fmt.Errorf("%w: %w", err, ErrInvalid)
 			}
 		}
-		p, ok := domain.ItemPermissionOf(it.Kind)
+		p, ok := domain.ItemPermissionOf(it.Type)
 		if !ok || g.ItemAuthorizer == nil {
 			continue
 		}

@@ -130,7 +130,7 @@ func observeAnalyze(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 		data["traceUrl"] = cfg.TraceURL + r.TraceID
 	}
 	out := fmt.Sprintf("%s/%s: %d findings (%d steps, %d tokens, %d spans)", r.Methodology, r.Agent, len(r.Findings), r.Steps, r.Tokens, len(spans))
-	return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "cost_report", Data: data}}, Output: out, Logs: logs}, nil
+	return engine.ActionResult{Items: []engine.ItemInput{{Type: "artifact", Target: "cost_report", Data: data}}, Output: out, Logs: logs}, nil
 }
 
 // toData converts a value into JSON-compatible data (lists never null).
@@ -156,7 +156,7 @@ func costReport(bb domain.Blackboard) (observe.Report, error) {
 	var r observe.Report
 	for i := len(bb.Change.Items) - 1; i >= 0; i-- {
 		it := bb.Change.Items[i]
-		if it.Kind == domain.KindArtifact && it.Type == "cost_report" && bb.Change.Active(it.ID) {
+		if it.Type == domain.TypeArtifact && it.Target == "cost_report" && bb.Change.Active(it.ID) {
 			b, err := json.Marshal(it.Data)
 			if err != nil {
 				return r, err
@@ -201,7 +201,7 @@ func observePropose(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 	if notes == nil {
 		notes = []string{}
 	}
-	items := []engine.ItemInput{{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
+	items := []engine.ItemInput{{Type: "artifact", Target: "improvement_plan", Data: map[string]any{
 		"methodology": r.Methodology, "process": r.Process, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}}}
 	return engine.ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
 }
@@ -235,7 +235,7 @@ func methodologyDraft(ctx context.Context, e *engine.Engine, ac engine.ActionCon
 		edits = append(edits, ed)
 	}
 	if len(edits) == 0 {
-		return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "methodology_draft",
+		return engine.ActionResult{Items: []engine.ItemInput{{Type: "artifact", Target: "methodology_draft",
 			Data: map[string]any{"methodology": r.Methodology, "skipped": true, "reason": "no proposal accepted"}}}, Output: "nothing to merge"}, nil
 	}
 	// the draft is saved with the identity of the process initiator
@@ -263,7 +263,7 @@ func methodologyDraft(ctx context.Context, e *engine.Engine, ac engine.ActionCon
 		is = append(is, i.String())
 	}
 	data["issues"] = orEmptyAnyList(is)
-	return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "methodology_draft", Data: data}},
+	return engine.ActionResult{Items: []engine.ItemInput{{Type: "artifact", Target: "methodology_draft", Data: data}},
 		Output: fmt.Sprintf("draft %s@%s: %d changes, %d issues", cur.Name, d.Methodology.Version, len(d.Applied), len(issues))}, nil
 }
 

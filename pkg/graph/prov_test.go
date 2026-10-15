@@ -29,7 +29,7 @@ func testProvenanceExport(t *testing.T, repo Repo) {
 	if err := journal.Append(ctx, g, []journal.Record{run}); err != nil {
 		t.Fatal(err)
 	}
-	items, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "analysis", Status: domain.ItemProposed,
+	items, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "analysis", Status: domain.ItemProposed,
 		ProducedBy: "analyst", Execution: "e1", Data: map[string]any{"summary": "PSP v1 is retired"}}})
 	if err != nil {
 		t.Fatal(err)

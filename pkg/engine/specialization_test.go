@@ -17,7 +17,7 @@ name: demo
 version: "1.0.0"
 namespace: alm
 conditions:
-  - {name: built, expr: 'artifacts.exists(a, a.type == "build")'}
+  - {name: built, expr: 'artifacts.exists(a, a.target == "build")'}
 actions:
   - {name: build, kind: abstract, effects: {built: true}, cost: 1}
   - {name: build_java, kind: builtin, builtin: build.java, specializes: build, when: 'vars.lang == "java"', priority: 1}
@@ -59,7 +59,7 @@ func TestSpecializationChosenAtExecution(t *testing.T) {
 	}
 	builtin := func(tag string) BuiltinFunc {
 		return func(context.Context, ActionContext) (ActionResult, error) {
-			return ActionResult{Items: []ItemInput{{Kind: "artifact", Type: "build", Data: map[string]any{"by": tag}}}}, nil
+			return ActionResult{Items: []ItemInput{{Type: "artifact", Target: "build", Data: map[string]any{"by": tag}}}}, nil
 		}
 	}
 	g := graph.New(graph.NewMemory())

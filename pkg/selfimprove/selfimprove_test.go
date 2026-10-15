@@ -80,14 +80,14 @@ func scripted(t *testing.T) llm.Client {
 			if !strings.Contains(p, "REQ-1 (alm@Requirement)") {
 				t.Errorf("prompt misses baseline nodes:\n%s", p)
 			}
-			out = `Here: {"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
+			out = `Here: {"items":[{"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}`
 		case strings.Contains(p, "new version"):
-			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Use PSP v2"}}}]}`
+			out = `{"items":[{"type":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Use PSP v2"}}}]}`
 		case strings.Contains(p, "test case"):
-			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-9","rationale":"cover REQ-1"}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"PSP v2 test"},"links":[{"type":"verifies","to":"REQ-1"}]}}]}`
+			out = `{"items":[{"type":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-9","rationale":"cover REQ-1"}},
+			{"type":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"PSP v2 test"},"links":[{"type":"verifies","to":"REQ-1"}]}}]}`
 		case strings.Contains(p, "report"):
-			out = `{"items":[{"kind":"artifact","type":"report","data":{"markdown":"# Impact"}}]}`
+			out = `{"items":[{"type":"artifact","target":"report","data":{"markdown":"# Impact"}}]}`
 		default:
 			t.Errorf("unexpected prompt %s", p)
 		}
@@ -199,7 +199,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	var decisions []engine.ItemInput
 	var titles []string
 	for _, it := range c.Items {
-		if it.Type == "cost_report" {
+		if it.Target == "cost_report" {
 			report = it.Data
 		}
 	}
@@ -209,7 +209,7 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		if n.Post == nil || n.Review != domain.ReviewProposed {
 			t.Fatalf("an improvement is written and awaits its review: %+v", n)
 		}
-		decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
+		decisions = append(decisions, engine.ItemInput{Type: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
 	}
 	// the specialization proposed is a link to the action it specializes, not a name in its properties (ADR 0120)
 	specialized := ""

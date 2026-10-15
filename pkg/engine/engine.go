@@ -1318,7 +1318,7 @@ func (e *Engine) emitEvents(ctx context.Context, p *Process, action methodology.
 		if action.Step != "" {
 			data["step"] = action.Step
 		}
-		items = append(items, domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: domain.KindSignal, Type: name, Status: domain.ItemProposed,
+		items = append(items, domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Type: domain.TypeSignal, Target: name, Status: domain.ItemProposed,
 			Data: data, ProducedBy: action.Name, Execution: step.Execution, Flow: p.Flow})
 	}
 	added, err := e.Graph.AddItems(ctx, p.ChangeID, items)
@@ -1395,14 +1395,14 @@ func (e *Engine) addItems(ctx context.Context, p *Process, in []ItemInput, produ
 	var decisions []DecisionOp
 	items := make([]ItemInput, 0, len(in))
 	for _, it := range in {
-		if it.Kind == "decisionPoint" {
+		if it.Type == "decisionPoint" {
 			if it.DecisionPoint == nil {
 				return nil, nil, nil, fmt.Errorf("item of kind decisionPoint needs a decisionPoint operation: %w", ErrInvalidState)
 			}
 			decisions = append(decisions, *it.DecisionPoint)
 			continue
 		}
-		if it.Kind == "changeImpact" {
+		if it.Type == "changeImpact" {
 			if it.ChangeImpact == nil {
 				return nil, nil, nil, fmt.Errorf("item of kind changeImpact needs a changeImpact operation: %w", ErrInvalidState)
 			}
@@ -1466,8 +1466,8 @@ func (e *Engine) wakeOnSignals(ctx context.Context, p *Process, items []domain.C
 	}
 	var names []string
 	for _, it := range items {
-		if it.Kind == domain.KindSignal && (it.Target == "" || it.Target == p.ParentID) {
-			names = append(names, it.Type)
+		if it.Type == domain.TypeSignal && (it.Recipient == "" || it.Recipient == p.ParentID) {
+			names = append(names, it.Target)
 		}
 	}
 	if len(names) == 0 {

@@ -278,7 +278,7 @@ function fromHeader(l: LogEntry): Entry {
 
 function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
   const base = { key: `i:${it.id}`, at: it.createdAt ?? '', flow: it.flow ?? '', by: it.producedBy ?? '', execution: it.execution ?? '', processId: '', item: it };
-  if (it.kind === 'flow' && it.flowEvent) {
+  if (it.type === 'flow' && it.flowEvent) {
     const f = it.flowEvent;
     const id = f.flow ?? '';
     const parent = parents.get(id) ?? '';
@@ -305,7 +305,7 @@ function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
       tone: f.op === 'discard' ? 'warn' : f.op === 'adopt' ? 'ok' : 'neutral',
     };
   }
-  if (it.kind === 'decision' && it.decision) {
+  if (it.type === 'decision' && it.decision) {
     return {
       ...base,
       source: 'fact',
@@ -315,7 +315,7 @@ function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
       tone: it.decision.accept ? 'ok' : 'warn',
     };
   }
-  if (it.kind === 'review') {
+  if (it.type === 'review') {
     // a version of a review object (ADR 0080): opened, edited, then submitted or discarded
     const r = foldReviews([it])[0];
     if (r) {
@@ -332,7 +332,7 @@ function fromItem(it: ChangeItem, parents: Map<string, string>): Entry {
     }
   }
   const title = str(it.data?.['title']) || str(it.data?.['summary']) || str(it.data?.['name']);
-  return { ...base, source: 'fact', label: it.kind ?? 'fact', subject: it.type ?? '', summary: [title, it.status].filter(Boolean).join(' · '), tone: 'neutral' };
+  return { ...base, source: 'fact', label: it.type ?? 'fact', subject: it.target ?? '', summary: [title, it.status].filter(Boolean).join(' · '), tone: 'neutral' };
 }
 
 /** The flow each flow branch forks from, from the flow events of the log. */

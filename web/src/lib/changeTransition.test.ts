@@ -36,7 +36,7 @@ describe('transitions of a change lifecycle', () => {
   });
 
   it('offers the decided points no transition used yet', () => {
-    const items: ChangeItem[] = [{ id: 'T1', kind: 'transition', data: { transition: 'x', decision: 'D3' } }, { id: 'T2', kind: 'fact', data: { decision: 'D1' } }];
+    const items: ChangeItem[] = [{ id: 'T1', type: 'transition', data: { transition: 'x', decision: 'D3' } }, { id: 'T2', type: 'fact', data: { decision: 'D1' } }];
     expect([...consumedDecisions(items)]).toEqual(['D3']);
     expect(pickableDecisions(points, items).map((p) => p.id)).toEqual(['D1']);
   });

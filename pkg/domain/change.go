@@ -170,21 +170,21 @@ func EditedFields(before, after Change) map[string]HeaderValue {
 	return out
 }
 
-// ItemKind classifies the facts of the blackboard (the nodes a change acts on are its change impacts).
-type ItemKind string
+// ItemType classifies the facts of the blackboard (the nodes a change acts on are its change impacts).
+type ItemType string
 
 const (
-	KindDecision ItemKind = "decision"
-	KindArtifact ItemKind = "artifact"
-	// KindFlow is an event of the action flow: a step is relaunched on a new flow
+	TypeDecision ItemType = "decision"
+	TypeArtifact ItemType = "artifact"
+	// TypeFlow is an event of the action flow: a step is relaunched on a new flow
 	// branch, and the branch is adopted or discarded (see flow.go).
-	KindFlow ItemKind = "flow"
-	// KindSignal is a named notification other agents or a live parent may react
+	TypeFlow ItemType = "flow"
+	// TypeSignal is a named notification other agents or a live parent may react
 	// to (Type is the signal's name, Target addresses a process, "" = broadcast).
-	KindSignal ItemKind = "signal"
-	// KindTransition records a move of the lifecycle of the change (ADR 0058): Data holds transition, from, to and,
+	TypeSignal ItemType = "signal"
+	// TypeTransition records a move of the lifecycle of the change (ADR 0058): Data holds transition, from, to and,
 	// when a decision point gated it, decision. Written only by TransitionChange.
-	KindTransition ItemKind = "transition"
+	TypeTransition ItemType = "transition"
 )
 
 // ItemStatus is the review state of an item.
@@ -206,8 +206,8 @@ const (
 // ChangeItem is one fact on the blackboard: an artifact, a decision, a merge or a flow event.
 type ChangeItem struct {
 	ID     ItemID     `json:"id"`
-	Kind   ItemKind   `json:"kind"`
-	Type   string     `json:"type,omitempty"`
+	Type   ItemType   `json:"type"`
+	Target string     `json:"target,omitempty"`
 	Status ItemStatus `json:"status"`
 	// Flow is the flow branch that produced the item ("" = the main flow);
 	// FlowEvent is set on KindFlow items.
@@ -216,8 +216,8 @@ type ChangeItem struct {
 	// DecisionEvent is set on KindDecisionPoint items (ADR 0009 §4).
 	DecisionEvent *DecisionEvent `json:"decisionEvent,omitempty"`
 	Decision      *Decision      `json:"decision,omitempty"` // decision only
-	// Target addresses a signal item to a process id ("" = broadcast).
-	Target      string         `json:"target,omitempty"`
+	// Recipient addresses a signal item to a process id ("" = broadcast).
+	Recipient   string         `json:"recipient,omitempty"`
 	Data        map[string]any `json:"data,omitempty"`
 	ProducedBy  string         `json:"producedBy,omitempty"`
 	DerivedFrom []ItemID       `json:"derivedFrom,omitempty"`
@@ -238,72 +238,72 @@ type Decision struct {
 
 // Validate checks the structural consistency of an item.
 func (it ChangeItem) Validate() error {
-	switch it.Kind {
-	case KindFlow:
+	switch it.Type {
+	case TypeFlow:
 		if err := it.FlowEvent.validate(); err != nil {
 			return err
 		}
-	case KindDecisionPoint:
+	case TypeDecisionPoint:
 		if err := it.DecisionEvent.validate(); err != nil {
 			return err
 		}
-	case KindDecision:
+	case TypeDecision:
 		if it.Decision == nil || it.Decision.Item == "" {
 			return fmt.Errorf("decision item requires decision.item")
 		}
-	case KindArtifact:
-	case KindSignal:
-		if it.Type == "" {
+	case TypeArtifact:
+	case TypeSignal:
+		if it.Target == "" {
 			return fmt.Errorf("signal item requires type")
 		}
-	case KindTransition:
+	case TypeTransition:
 		if s, _ := it.Data["to"].(string); s == "" {
 			return fmt.Errorf("transition item requires data.to")
 		}
-	case KindReview:
+	case TypeReview:
 		return validateReview(it)
 	default:
-		validate := itemKinds.get(it.Kind)
+		validate := itemTypes.get(it.Type)
 		if validate == nil {
-			return fmt.Errorf("unknown item kind %q", it.Kind)
+			return fmt.Errorf("unknown item kind %q", it.Type)
 		}
 		return validate(it)
 	}
 	return nil
 }
 
-// itemKinds holds the kinds of item the use cases add to the built-in ones (RegisterItemKind).
-var itemKinds registry
+// itemTypes holds the kinds of item the use cases add to the built-in ones (RegisterItemKind).
+var itemTypes registry
 
 type registry struct {
 	mu sync.RWMutex
-	m  map[ItemKind]func(ChangeItem) error
+	m  map[ItemType]func(ChangeItem) error
 	// perms are the permissions a kind of item asks of its writer (RequireItemPermission).
-	perms map[ItemKind]ItemPermission
+	perms map[ItemType]ItemPermission
 	// desc describes the kinds for the catalogue (DescribeItemKind).
-	desc map[ItemKind]ItemKindInfo
+	desc map[ItemType]ItemTypeInfo
 }
 
-func (r *registry) get(k ItemKind) func(ChangeItem) error {
+func (r *registry) get(k ItemType) func(ChangeItem) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.m[k]
 }
 
-// RegisterItemKind makes a kind of item known to ChangeItem.Validate: a use case adds the facts it writes to a
+// RegisterItemType makes a kind of item known to ChangeItem.Validate: a use case adds the facts it writes to a
 // change (pkg/risk: risks, actions, waivers) without the core naming them. Registration is explicit, done by the
 // composition root (the cmd/* mains) or by a test, never by init; it is idempotent (the last validation of a kind
 // wins) and safe for concurrent use. A nil validate accepts every item of the kind.
-func RegisterItemKind(kind ItemKind, validate func(ChangeItem) error) {
+func RegisterItemType(kind ItemType, validate func(ChangeItem) error) {
 	if validate == nil {
 		validate = func(ChangeItem) error { return nil }
 	}
-	itemKinds.mu.Lock()
-	defer itemKinds.mu.Unlock()
-	if itemKinds.m == nil {
-		itemKinds.m = map[ItemKind]func(ChangeItem) error{}
+	itemTypes.mu.Lock()
+	defer itemTypes.mu.Unlock()
+	if itemTypes.m == nil {
+		itemTypes.m = map[ItemType]func(ChangeItem) error{}
 	}
-	itemKinds.m[kind] = validate
+	itemTypes.m[kind] = validate
 }
 
 // ItemPermission is what writing an item of a kind asks of the writer (RequireItemPermission).
@@ -318,28 +318,28 @@ type ItemPermission struct {
 // RequireItemPermission makes the write of the items of a kind subject to a permission (ADR 0075): the graph asks its
 // ItemAuthorizer before it stores them and knows nothing of what the kind means. Registration is explicit and
 // idempotent, like RegisterItemKind.
-func RequireItemPermission(kind ItemKind, p ItemPermission) {
-	itemKinds.mu.Lock()
-	defer itemKinds.mu.Unlock()
-	if itemKinds.perms == nil {
-		itemKinds.perms = map[ItemKind]ItemPermission{}
+func RequireItemPermission(kind ItemType, p ItemPermission) {
+	itemTypes.mu.Lock()
+	defer itemTypes.mu.Unlock()
+	if itemTypes.perms == nil {
+		itemTypes.perms = map[ItemType]ItemPermission{}
 	}
-	itemKinds.perms[kind] = p
+	itemTypes.perms[kind] = p
 }
 
 // ItemPermissionOf returns the permission the items of a kind ask of their writer, if any.
-func ItemPermissionOf(kind ItemKind) (ItemPermission, bool) {
-	itemKinds.mu.RLock()
-	defer itemKinds.mu.RUnlock()
-	p, ok := itemKinds.perms[kind]
+func ItemPermissionOf(kind ItemType) (ItemPermission, bool) {
+	itemTypes.mu.RLock()
+	defer itemTypes.mu.RUnlock()
+	p, ok := itemTypes.perms[kind]
 	return p, ok
 }
 
-// ItemsOfKind returns the items of the given kind.
-func (c *Change) ItemsOfKind(k ItemKind) []ChangeItem {
+// ItemsOfType returns the items of the given kind.
+func (c *Change) ItemsOfType(k ItemType) []ChangeItem {
 	var out []ChangeItem
 	for _, it := range c.Items {
-		if it.Kind == k {
+		if it.Type == k {
 			out = append(out, it)
 		}
 	}
@@ -375,7 +375,7 @@ func (c *Change) EffectiveStatus(id ItemID) ItemStatus {
 		}
 	}
 	for _, it := range c.Items {
-		if it.Kind == KindDecision && it.Decision != nil && it.Decision.Item == id {
+		if it.Type == TypeDecision && it.Decision != nil && it.Decision.Item == id {
 			if it.Decision.Accept {
 				st = ItemAccepted
 			} else {

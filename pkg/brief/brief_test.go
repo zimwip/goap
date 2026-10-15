@@ -12,7 +12,7 @@ import (
 // already a thread the next rater reads.
 func TestBriefGivesTheDiscussionOfARatedTopic(t *testing.T) {
 	rating := func(id string, score int, reply string) domain.ChangeItem {
-		return domain.ChangeItem{ID: domain.ItemID(id), Kind: assess.KindAssessment, Status: domain.ItemAccepted,
+		return domain.ChangeItem{ID: domain.ItemID(id), Type: assess.TypeAssessment, Status: domain.ItemAccepted,
 			Data: map[string]any{"key": "description", "score": score, "reply": reply}}
 	}
 	c := domain.Change{ID: "C1", Title: "Note", Intent: "write a note", Items: []domain.ChangeItem{rating("a", 2, "say which release"), rating("b", 4, "clear now")}}

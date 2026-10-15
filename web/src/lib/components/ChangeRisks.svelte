@@ -29,7 +29,7 @@
     busy = true;
     error = '';
     try {
-      await graph.addItems(change.id, [{ kind, type: kind, data }]);
+      await graph.addItems(change.id, [{ type: kind, target: kind, data }]);
       onchange?.();
     } catch (e) {
       error = errorMessage(e);

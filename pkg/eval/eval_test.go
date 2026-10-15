@@ -29,7 +29,7 @@ cases:
             result: {text: the spec}
     expect:
       items:
-        - {kind: artifact, type: doc, data: {seen: true}}
+        - {type: artifact, target: doc, data: {seen: true}}
       trajectory: {match: in_order, tools: [document-repository/read]}
       maxToolCalls: 2
       noToolErrors: true
@@ -77,7 +77,7 @@ func TestRunScoresTheAnswerTheTrajectoryAndTheJudge(t *testing.T) {
 			return llm.Response{ToolCalls: []llm.ToolCall{{ID: "c1", Name: "document-repository/read", Arguments: map[string]any{"path": "spec.txt"}}},
 				Usage: llm.Usage{InputTokens: 100, OutputTokens: 10}}, nil
 		}
-		return llm.Response{Text: `{"items":[{"kind":"artifact","type":"doc","data":{"seen":true,"extra":1}}]}`, Usage: llm.Usage{InputTokens: 120, OutputTokens: 20}}, nil
+		return llm.Response{Text: `{"items":[{"type":"artifact","target":"doc","data":{"seen":true,"extra":1}}]}`, Usage: llm.Usage{InputTokens: 120, OutputTokens: 20}}, nil
 	})
 	rep := Runner{Client: client}.Run(context.Background(), cs[0])
 	if !rep.Passed || rep.PassRate != 1 || len(rep.Runs) != 2 || rep.ToolCalls != 1 {
@@ -173,13 +173,13 @@ func TestTrajectoryMatches(t *testing.T) {
 }
 
 func TestSubset(t *testing.T) {
-	got := map[string]any{"kind": "artifact", "data": map[string]any{"n": 3.0, "tags": []any{"a", "b"}}}
+	got := map[string]any{"type": "artifact", "data": map[string]any{"n": 3.0, "tags": []any{"a", "b"}}}
 	for want, ok := range map[string]bool{
-		`{"kind": "artifact"}`:      true,
+		`{"type": "artifact"}`:      true,
 		`{"data": {"n": 3}}`:        true,
 		`{"data": {"tags": ["b"]}}`: true,
 		`{"data": {"tags": ["c"]}}`: false,
-		`{"kind": "decision"}`:      false,
+		`{"type": "decision"}`:      false,
 		`{"missing": "x"}`:          false,
 	} {
 		var w map[string]any

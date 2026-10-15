@@ -1,9 +1,9 @@
-// The item types (ADR 0119): the kinds of item a change may hold, loaded once from the graph (they change with the
+// The item types (ADR 0119) a change may hold, loaded once from the graph (they change with the
 // platform code only).
-import { graph, errorMessage, type ItemKindInfo } from '../api';
+import { graph, errorMessage, type ItemTypeInfo } from '../api';
 
 interface ItemTypes {
-  items: ItemKindInfo[];
+  items: ItemTypeInfo[];
   loading: boolean;
   loaded: boolean;
   error: string;
@@ -14,7 +14,7 @@ export const itemTypes: ItemTypes = $state({ items: [], loading: false, loaded: 
 export async function refreshItemTypes(): Promise<void> {
   itemTypes.loading = true;
   try {
-    itemTypes.items = (await graph.listItemKinds()).kinds ?? [];
+    itemTypes.items = (await graph.listItemTypes()).types ?? [];
     itemTypes.error = '';
   } catch (e) {
     itemTypes.error = errorMessage(e);
@@ -24,4 +24,4 @@ export async function refreshItemTypes(): Promise<void> {
   }
 }
 
-export const itemTypeOf = (kind: string): ItemKindInfo | undefined => itemTypes.items.find((k) => k.kind === kind);
+export const itemTypeOf = (type: string): ItemTypeInfo | undefined => itemTypes.items.find((k) => k.type === type);

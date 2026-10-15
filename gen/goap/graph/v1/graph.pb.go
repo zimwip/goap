@@ -722,9 +722,10 @@ func (x *Decision) GetComment() string {
 type ChangeItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// decision | artifact | merge | flow
-	Kind        string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Type        string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	// item type (ADR 0119): decision | artifact | flow | signal | risk ... (ListItemTypes)
+	Type string `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	// what the item is about within its type: the type of an artifact, the name of a signal
+	Target      string                 `protobuf:"bytes,3,opt,name=target,proto3" json:"target,omitempty"`
 	Status      string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`
 	Decision    *Decision              `protobuf:"bytes,7,opt,name=decision,proto3" json:"decision,omitempty"`
 	Data        *structpb.Struct       `protobuf:"bytes,8,opt,name=data,proto3" json:"data,omitempty"`
@@ -735,10 +736,10 @@ type ChangeItem struct {
 	Supersedes []string `protobuf:"bytes,12,rep,name=supersedes,proto3" json:"supersedes,omitempty"`
 	// journal record of the action execution that produced the item
 	Execution string `protobuf:"bytes,13,opt,name=execution,proto3" json:"execution,omitempty"`
-	// flow branch that produced the item; flow_event on kind = flow
+	// flow branch that produced the item; flow_event on type = flow
 	Flow      string     `protobuf:"bytes,15,opt,name=flow,proto3" json:"flow,omitempty"`
 	FlowEvent *FlowEvent `protobuf:"bytes,16,opt,name=flow_event,json=flowEvent,proto3" json:"flow_event,omitempty"`
-	// event of a decision point on kind = decision_point (ADR 0009 §4)
+	// event of a decision point on type = decision_point (ADR 0009 §4)
 	DecisionEvent *DecisionEvent `protobuf:"bytes,17,opt,name=decision_event,json=decisionEvent,proto3" json:"decision_event,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -781,16 +782,16 @@ func (x *ChangeItem) GetId() string {
 	return ""
 }
 
-func (x *ChangeItem) GetKind() string {
+func (x *ChangeItem) GetType() string {
 	if x != nil {
-		return x.Kind
+		return x.Type
 	}
 	return ""
 }
 
-func (x *ChangeItem) GetType() string {
+func (x *ChangeItem) GetTarget() string {
 	if x != nil {
-		return x.Type
+		return x.Target
 	}
 	return ""
 }
@@ -3890,26 +3891,26 @@ func (*GetStructuresRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{50}
 }
 
-type ListItemKindsRequest struct {
+type ListItemTypesRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListItemKindsRequest) Reset() {
-	*x = ListItemKindsRequest{}
+func (x *ListItemTypesRequest) Reset() {
+	*x = ListItemTypesRequest{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListItemKindsRequest) String() string {
+func (x *ListItemTypesRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListItemKindsRequest) ProtoMessage() {}
+func (*ListItemTypesRequest) ProtoMessage() {}
 
-func (x *ListItemKindsRequest) ProtoReflect() protoreflect.Message {
+func (x *ListItemTypesRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3921,16 +3922,16 @@ func (x *ListItemKindsRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListItemKindsRequest.ProtoReflect.Descriptor instead.
-func (*ListItemKindsRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListItemTypesRequest.ProtoReflect.Descriptor instead.
+func (*ListItemTypesRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{51}
 }
 
-// A kind of item a change may hold (domain.ItemKindInfo).
-type ItemKindInfo struct {
+// An item type a change may hold (domain.ItemTypeInfo).
+type ItemTypeInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Kind  string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
-	// "core" for the kinds the graph knows itself, else the use case registering it (risk, assess, verify…)
+	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// "core" for the types the graph knows itself, else the use case registering it (risk, assess, verify…)
 	Origin      string `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
 	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	// permission asked of the writer of such an item ("<resource>:<action>"), empty when none
@@ -3941,20 +3942,20 @@ type ItemKindInfo struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ItemKindInfo) Reset() {
-	*x = ItemKindInfo{}
+func (x *ItemTypeInfo) Reset() {
+	*x = ItemTypeInfo{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ItemKindInfo) String() string {
+func (x *ItemTypeInfo) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ItemKindInfo) ProtoMessage() {}
+func (*ItemTypeInfo) ProtoMessage() {}
 
-func (x *ItemKindInfo) ProtoReflect() protoreflect.Message {
+func (x *ItemTypeInfo) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -3966,67 +3967,67 @@ func (x *ItemKindInfo) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ItemKindInfo.ProtoReflect.Descriptor instead.
-func (*ItemKindInfo) Descriptor() ([]byte, []int) {
+// Deprecated: Use ItemTypeInfo.ProtoReflect.Descriptor instead.
+func (*ItemTypeInfo) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{52}
 }
 
-func (x *ItemKindInfo) GetKind() string {
+func (x *ItemTypeInfo) GetType() string {
 	if x != nil {
-		return x.Kind
+		return x.Type
 	}
 	return ""
 }
 
-func (x *ItemKindInfo) GetOrigin() string {
+func (x *ItemTypeInfo) GetOrigin() string {
 	if x != nil {
 		return x.Origin
 	}
 	return ""
 }
 
-func (x *ItemKindInfo) GetDescription() string {
+func (x *ItemTypeInfo) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
 	return ""
 }
 
-func (x *ItemKindInfo) GetPermission() string {
+func (x *ItemTypeInfo) GetPermission() string {
 	if x != nil {
 		return x.Permission
 	}
 	return ""
 }
 
-func (x *ItemKindInfo) GetSubjectField() string {
+func (x *ItemTypeInfo) GetSubjectField() string {
 	if x != nil {
 		return x.SubjectField
 	}
 	return ""
 }
 
-type ListItemKindsResponse struct {
+type ListItemTypesResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Kinds         []*ItemKindInfo        `protobuf:"bytes,1,rep,name=kinds,proto3" json:"kinds,omitempty"`
+	Types         []*ItemTypeInfo        `protobuf:"bytes,1,rep,name=types,proto3" json:"types,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListItemKindsResponse) Reset() {
-	*x = ListItemKindsResponse{}
+func (x *ListItemTypesResponse) Reset() {
+	*x = ListItemTypesResponse{}
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListItemKindsResponse) String() string {
+func (x *ListItemTypesResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListItemKindsResponse) ProtoMessage() {}
+func (*ListItemTypesResponse) ProtoMessage() {}
 
-func (x *ListItemKindsResponse) ProtoReflect() protoreflect.Message {
+func (x *ListItemTypesResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_goap_graph_v1_graph_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4038,14 +4039,14 @@ func (x *ListItemKindsResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListItemKindsResponse.ProtoReflect.Descriptor instead.
-func (*ListItemKindsResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListItemTypesResponse.ProtoReflect.Descriptor instead.
+func (*ListItemTypesResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{53}
 }
 
-func (x *ListItemKindsResponse) GetKinds() []*ItemKindInfo {
+func (x *ListItemTypesResponse) GetTypes() []*ItemTypeInfo {
 	if x != nil {
-		return x.Kinds
+		return x.Types
 	}
 	return nil
 }
@@ -16263,12 +16264,12 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bDecision\x12\x12\n" +
 	"\x04item\x18\x01 \x01(\tR\x04item\x12\x16\n" +
 	"\x06accept\x18\x02 \x01(\bR\x06accept\x12\x18\n" +
-	"\acomment\x18\x03 \x01(\tR\acomment\"\x8d\x04\n" +
+	"\acomment\x18\x03 \x01(\tR\acomment\"\x91\x04\n" +
 	"\n" +
 	"ChangeItem\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x16\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x16\n" +
+	"\x06target\x18\x03 \x01(\tR\x06target\x12\x16\n" +
 	"\x06status\x18\x04 \x01(\tR\x06status\x123\n" +
 	"\bdecision\x18\a \x01(\v2\x17.goap.graph.v1.DecisionR\bdecision\x12+\n" +
 	"\x04data\x18\b \x01(\v2\x17.google.protobuf.StructR\x04data\x12\x1f\n" +
@@ -16540,17 +16541,17 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"namespaces\x18\x01 \x03(\tR\n" +
 	"namespaces\"\x16\n" +
 	"\x14GetStructuresRequest\"\x16\n" +
-	"\x14ListItemKindsRequest\"\xa1\x01\n" +
-	"\fItemKindInfo\x12\x12\n" +
-	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x16\n" +
+	"\x14ListItemTypesRequest\"\xa1\x01\n" +
+	"\fItemTypeInfo\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1e\n" +
 	"\n" +
 	"permission\x18\x04 \x01(\tR\n" +
 	"permission\x12#\n" +
 	"\rsubject_field\x18\x05 \x01(\tR\fsubjectField\"J\n" +
-	"\x15ListItemKindsResponse\x121\n" +
-	"\x05kinds\x18\x01 \x03(\v2\x1b.goap.graph.v1.ItemKindInfoR\x05kinds\",\n" +
+	"\x15ListItemTypesResponse\x121\n" +
+	"\x05types\x18\x01 \x03(\v2\x1b.goap.graph.v1.ItemTypeInfoR\x05types\",\n" +
 	"\x16IsAdminOnlyTypeRequest\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\"8\n" +
 	"\x17IsAdminOnlyTypeResponse\x12\x1d\n" +
@@ -17495,7 +17496,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x14GetNodeNeighbourhood\x12*.goap.graph.v1.GetNodeNeighbourhoodRequest\x1a+.goap.graph.v1.GetNodeNeighbourhoodResponse\x12]\n" +
 	"\x0eListNamespaces\x12$.goap.graph.v1.ListNamespacesRequest\x1a%.goap.graph.v1.ListNamespacesResponse\x12Z\n" +
 	"\rGetStructures\x12#.goap.graph.v1.GetStructuresRequest\x1a$.goap.graph.v1.GetStructuresResponse\x12Z\n" +
-	"\rListItemKinds\x12#.goap.graph.v1.ListItemKindsRequest\x1a$.goap.graph.v1.ListItemKindsResponse\x12`\n" +
+	"\rListItemTypes\x12#.goap.graph.v1.ListItemTypesRequest\x1a$.goap.graph.v1.ListItemTypesResponse\x12`\n" +
 	"\x0fIsAdminOnlyType\x12%.goap.graph.v1.IsAdminOnlyTypeRequest\x1a&.goap.graph.v1.IsAdminOnlyTypeResponse\x12c\n" +
 	"\x10ListChangeEvents\x12&.goap.graph.v1.ListChangeEventsRequest\x1a'.goap.graph.v1.ListChangeEventsResponse\x12Z\n" +
 	"\rListChangeLog\x12#.goap.graph.v1.ListChangeLogRequest\x1a$.goap.graph.v1.ListChangeLogResponse\x12u\n" +
@@ -17654,9 +17655,9 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*ListNamespacesRequest)(nil),          // 48: goap.graph.v1.ListNamespacesRequest
 	(*ListNamespacesResponse)(nil),         // 49: goap.graph.v1.ListNamespacesResponse
 	(*GetStructuresRequest)(nil),           // 50: goap.graph.v1.GetStructuresRequest
-	(*ListItemKindsRequest)(nil),           // 51: goap.graph.v1.ListItemKindsRequest
-	(*ItemKindInfo)(nil),                   // 52: goap.graph.v1.ItemKindInfo
-	(*ListItemKindsResponse)(nil),          // 53: goap.graph.v1.ListItemKindsResponse
+	(*ListItemTypesRequest)(nil),           // 51: goap.graph.v1.ListItemTypesRequest
+	(*ItemTypeInfo)(nil),                   // 52: goap.graph.v1.ItemTypeInfo
+	(*ListItemTypesResponse)(nil),          // 53: goap.graph.v1.ListItemTypesResponse
 	(*IsAdminOnlyTypeRequest)(nil),         // 54: goap.graph.v1.IsAdminOnlyTypeRequest
 	(*IsAdminOnlyTypeResponse)(nil),        // 55: goap.graph.v1.IsAdminOnlyTypeResponse
 	(*Structure)(nil),                      // 56: goap.graph.v1.Structure
@@ -17920,7 +17921,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	247, // 55: goap.graph.v1.ListChangeLogResponse.counts:type_name -> goap.graph.v1.ListChangeLogResponse.CountsEntry
 	9,   // 56: goap.graph.v1.ImportGraphResponse.change:type_name -> goap.graph.v1.Change
 	34,  // 57: goap.graph.v1.ListChangeEventsResponse.events:type_name -> goap.graph.v1.ImpactEvent
-	52,  // 58: goap.graph.v1.ListItemKindsResponse.kinds:type_name -> goap.graph.v1.ItemKindInfo
+	52,  // 58: goap.graph.v1.ListItemTypesResponse.types:type_name -> goap.graph.v1.ItemTypeInfo
 	254, // 59: goap.graph.v1.Structure.bootstrap:type_name -> google.protobuf.Struct
 	56,  // 60: goap.graph.v1.GetStructuresResponse.structures:type_name -> goap.graph.v1.Structure
 	254, // 61: goap.graph.v1.CreateChangeRequest.data:type_name -> google.protobuf.Struct
@@ -18101,7 +18102,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	32,  // 236: goap.graph.v1.GraphService.GetNodeNeighbourhood:input_type -> goap.graph.v1.GetNodeNeighbourhoodRequest
 	48,  // 237: goap.graph.v1.GraphService.ListNamespaces:input_type -> goap.graph.v1.ListNamespacesRequest
 	50,  // 238: goap.graph.v1.GraphService.GetStructures:input_type -> goap.graph.v1.GetStructuresRequest
-	51,  // 239: goap.graph.v1.GraphService.ListItemKinds:input_type -> goap.graph.v1.ListItemKindsRequest
+	51,  // 239: goap.graph.v1.GraphService.ListItemTypes:input_type -> goap.graph.v1.ListItemTypesRequest
 	54,  // 240: goap.graph.v1.GraphService.IsAdminOnlyType:input_type -> goap.graph.v1.IsAdminOnlyTypeRequest
 	46,  // 241: goap.graph.v1.GraphService.ListChangeEvents:input_type -> goap.graph.v1.ListChangeEventsRequest
 	36,  // 242: goap.graph.v1.GraphService.ListChangeLog:input_type -> goap.graph.v1.ListChangeLogRequest
@@ -18200,7 +18201,7 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	33,  // 335: goap.graph.v1.GraphService.GetNodeNeighbourhood:output_type -> goap.graph.v1.GetNodeNeighbourhoodResponse
 	49,  // 336: goap.graph.v1.GraphService.ListNamespaces:output_type -> goap.graph.v1.ListNamespacesResponse
 	57,  // 337: goap.graph.v1.GraphService.GetStructures:output_type -> goap.graph.v1.GetStructuresResponse
-	53,  // 338: goap.graph.v1.GraphService.ListItemKinds:output_type -> goap.graph.v1.ListItemKindsResponse
+	53,  // 338: goap.graph.v1.GraphService.ListItemTypes:output_type -> goap.graph.v1.ListItemTypesResponse
 	55,  // 339: goap.graph.v1.GraphService.IsAdminOnlyType:output_type -> goap.graph.v1.IsAdminOnlyTypeResponse
 	47,  // 340: goap.graph.v1.GraphService.ListChangeEvents:output_type -> goap.graph.v1.ListChangeEventsResponse
 	37,  // 341: goap.graph.v1.GraphService.ListChangeLog:output_type -> goap.graph.v1.ListChangeLogResponse

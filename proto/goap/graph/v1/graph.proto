@@ -25,8 +25,8 @@ service GraphService {
   rpc ListNamespaces(ListNamespacesRequest) returns (ListNamespacesResponse);
   // The structures of the graph (ADR 0054): the organisation and the projects, with the node types belonging to each.
   rpc GetStructures(GetStructuresRequest) returns (GetStructuresResponse);
-  // The kinds of item the graph accepts on a change, described (the "item types" of the web, ADR 0119).
-  rpc ListItemKinds(ListItemKindsRequest) returns (ListItemKindsResponse);
+  // The item types the graph accepts on a change, described (ADR 0119).
+  rpc ListItemTypes(ListItemTypesRequest) returns (ListItemTypesResponse);
   // Whether a node type is written by platform administrators only (`adminOnly:` on the node type, ADR 0068).
   rpc IsAdminOnlyType(IsAdminOnlyTypeRequest) returns (IsAdminOnlyTypeResponse);
   // The impact log of a change (ADR 0029): every operation on its change impacts, with its caller.
@@ -281,9 +281,10 @@ message Decision {
 
 message ChangeItem {
   string id = 1;
-  // decision | artifact | merge | flow
-  string kind = 2;
-  string type = 3;
+  // item type (ADR 0119): decision | artifact | flow | signal | risk ... (ListItemTypes)
+  string type = 2;
+  // what the item is about within its type: the type of an artifact, the name of a signal
+  string target = 3;
   string status = 4;
   Decision decision = 7;
   google.protobuf.Struct data = 8;
@@ -294,10 +295,10 @@ message ChangeItem {
   repeated string supersedes = 12;
   // journal record of the action execution that produced the item
   string execution = 13;
-  // flow branch that produced the item; flow_event on kind = flow
+  // flow branch that produced the item; flow_event on type = flow
   string flow = 15;
   FlowEvent flow_event = 16;
-  // event of a decision point on kind = decision_point (ADR 0009 §4)
+  // event of a decision point on type = decision_point (ADR 0009 §4)
   DecisionEvent decision_event = 17;
 }
 
@@ -686,12 +687,12 @@ message ListNamespacesResponse {
 
 message GetStructuresRequest {}
 
-message ListItemKindsRequest {}
+message ListItemTypesRequest {}
 
-// A kind of item a change may hold (domain.ItemKindInfo).
-message ItemKindInfo {
-  string kind = 1;
-  // "core" for the kinds the graph knows itself, else the use case registering it (risk, assess, verify…)
+// An item type a change may hold (domain.ItemTypeInfo).
+message ItemTypeInfo {
+  string type = 1;
+  // "core" for the types the graph knows itself, else the use case registering it (risk, assess, verify…)
   string origin = 2;
   string description = 3;
   // permission asked of the writer of such an item ("<resource>:<action>"), empty when none
@@ -700,8 +701,8 @@ message ItemKindInfo {
   string subject_field = 5;
 }
 
-message ListItemKindsResponse {
-  repeated ItemKindInfo kinds = 1;
+message ListItemTypesResponse {
+  repeated ItemTypeInfo types = 1;
 }
 
 message IsAdminOnlyTypeRequest {

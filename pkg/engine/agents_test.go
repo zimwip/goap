@@ -120,7 +120,7 @@ func TestSubAgentsWithSuspension(t *testing.T) {
 	var decisions []ItemInput
 	for _, n := range bb.Change.Nodes {
 		if n.Intent == domain.IntentCreated {
-			decisions = append(decisions, ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed by a human"}})
+			decisions = append(decisions, ItemInput{Type: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "reviewed by a human"}})
 		}
 	}
 	if len(decisions) == 0 {
@@ -171,7 +171,7 @@ func TestSubAgentWakesParentOnSignal(t *testing.T) {
 	stepsBeforeSignal := len(p.Steps)
 
 	// let the pinger send its progress signal, without letting it terminate
-	if _, err := e.Submit(ctx, child, []ItemInput{{Kind: "artifact", Type: "go"}}); err != nil {
+	if _, err := e.Submit(ctx, child, []ItemInput{{Type: "artifact", Target: "go"}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(child)
@@ -197,7 +197,7 @@ func TestSubAgentWakesParentOnSignal(t *testing.T) {
 	}
 
 	// now let the pinger actually finish, and the watcher complete
-	if _, err := e.Submit(ctx, child, []ItemInput{{Kind: "artifact", Type: "wrapped"}}); err != nil {
+	if _, err := e.Submit(ctx, child, []ItemInput{{Type: "artifact", Target: "wrapped"}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(child)
@@ -230,7 +230,7 @@ func TestChildVarsAreIsolated(t *testing.T) {
 
 	// the pinger's own ping/wait_ready scripts set vars ("pinged"); the parent
 	// must not see them, and the parent's own var must stay untouched by the child.
-	if _, err := e.Submit(ctx, child, []ItemInput{{Kind: "artifact", Type: "go"}}); err != nil {
+	if _, err := e.Submit(ctx, child, []ItemInput{{Type: "artifact", Target: "go"}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(child)

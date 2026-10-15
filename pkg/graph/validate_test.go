@@ -16,7 +16,7 @@ func issuesByCode(is []domain.BoardIssue) map[string][]domain.BoardIssue {
 }
 
 func note(id string, derived ...domain.ItemID) domain.ChangeItem {
-	return domain.ChangeItem{ID: domain.ItemID(id), Kind: domain.KindArtifact, Type: "note", DerivedFrom: derived}
+	return domain.ChangeItem{ID: domain.ItemID(id), Type: domain.TypeArtifact, Target: "note", DerivedFrom: derived}
 }
 
 func TestValidateBoard(t *testing.T) { forEachRepo(t, testValidateBoard) }
@@ -34,7 +34,7 @@ func testValidateBoard(t *testing.T, repo Repo) {
 	}
 
 	// a decision rejects p1: p2 builds on an invalid item, the culprit is p1
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{ID: "d1", Kind: domain.KindDecision, Decision: &domain.Decision{Item: "p1", Accept: false}}}); err != nil {
+	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{ID: "d1", Type: domain.TypeDecision, Decision: &domain.Decision{Item: "p1", Accept: false}}}); err != nil {
 		t.Fatal(err)
 	}
 	is, _ := g.ValidateBoard(ctx, c.ID, "")

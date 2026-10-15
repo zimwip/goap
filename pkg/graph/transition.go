@@ -156,7 +156,7 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 			// go with reserve (ADR 0075 §3): which objectives were not met and the derogation that covered each
 			data["unmet"], data["reserve"] = gate.Unmet, gate.Reserve
 		}
-		it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindTransition, Type: "transition." + t.Name, Status: domain.ItemAccepted,
+		it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Type: domain.TypeTransition, Target: "transition." + t.Name, Status: domain.ItemAccepted,
 			ProducedBy: firstNonEmpty(in.By, g.caller(ctx), "graph.transition"), Data: data, CreatedAt: g.now()}
 		if err := it.Validate(); err != nil {
 			return fmt.Errorf("%w: %w", err, ErrInvalid)
@@ -251,7 +251,7 @@ func (g *Graph) phases(ctx context.Context, tx Tx, c domain.Change) (map[domain.
 	out := map[domain.ChangeImpactID]phase{}
 	for _, l := range entries {
 		switch {
-		case l.Type == domain.LogFact+"."+string(domain.KindTransition):
+		case l.Type == domain.LogFact+"."+string(domain.TypeTransition):
 			var it domain.ChangeItem
 			if err := json.Unmarshal(l.Payload, &it); err != nil {
 				return nil, err
@@ -306,7 +306,7 @@ func (g *Graph) reopenPhase(ctx context.Context, tx Tx, c domain.Change, to stri
 		}
 	}
 	var since int64
-	entries, err := tx.Log(ctx, domain.LogFilter{Change: c.ID, Types: []string{domain.LogFact + "." + string(domain.KindTransition)}})
+	entries, err := tx.Log(ctx, domain.LogFilter{Change: c.ID, Types: []string{domain.LogFact + "." + string(domain.TypeTransition)}})
 	if err != nil {
 		return err
 	}

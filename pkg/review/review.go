@@ -22,7 +22,7 @@ import (
 )
 
 // KindReview is the kind of the items that hold a review of a change: built in (domain.KindReview, ADR 0105).
-const KindReview = domain.KindReview
+const KindReview = domain.TypeReview
 
 // Statuses of a review: it is open while the reviewer builds it, then submitted or discarded, which are final.
 const (
@@ -107,7 +107,7 @@ func Reviews(items []domain.ChangeItem) []Review {
 	out := []Review{}
 	at := map[string]int{}
 	for _, it := range items {
-		if it.Kind != KindReview || it.Status == domain.ItemRejected || it.Status == domain.ItemSuperseded {
+		if it.Type != KindReview || it.Status == domain.ItemRejected || it.Status == domain.ItemSuperseded {
 			continue
 		}
 		rec := domain.ReviewRecordOf(it.Data)

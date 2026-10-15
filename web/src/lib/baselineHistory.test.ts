@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { badgesOf, historyEntries, isOpenHead, kindOf, OPEN_KIND } from './baselineHistory';
+import { badgesOf, historyEntries, isOpenHead, typeOf, OPEN_KIND } from './baselineHistory';
 
 // base B on main; test1 and test2 both start from B, each commits on its own branch; test1 is applied first (a
 // fast-forward onto main), then test2 (a merge of its branch into main)
@@ -75,7 +75,7 @@ describe('a rebased change', () => {
   });
 
   it('badges each row with its kind and the rebase', () => {
-    expect(kindOf(rebased[1])).toBe('commit');
+    expect(typeOf(rebased[1])).toBe('commit');
     expect(badgesOf(rebased[2], rebased).kind).toBe('fast-forward');
     expect(badgesOf(rebased[3], rebased)).toEqual({ kind: 'commit', rebased: 'rebased onto test1, was base' });
     expect(badgesOf(rebased[0], rebased).kind).toBe('snapshot');

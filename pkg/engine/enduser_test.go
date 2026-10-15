@@ -41,7 +41,7 @@ func TestTriggeredRunActsOnBehalfOfTheEndUser(t *testing.T) {
 		mu.Lock()
 		callers = append(callers, authz.From(ctx))
 		mu.Unlock()
-		return llm.Response{Text: `{"items":[{"kind":"artifact","type":"note","data":{"text":"done"}}]}`}, nil
+		return llm.Response{Text: `{"items":[{"type":"artifact","target":"note","data":{"text":"done"}}]}`}, nil
 	})}
 	// alice edits the change: the event names her (domain.ChangeEvent.EndUser), the trigger's run acts for her
 	bb, _ := e.Graph.Blackboard(ctx, ch.ID)

@@ -110,25 +110,25 @@ func (c *Ctx) OpenDecision(question string, spec map[string]any) string {
 	if len(policy) > 0 {
 		op["policy"] = policy
 	}
-	c.emit(map[string]any{"kind": "decisionPoint", "decisionPoint": op})
+	c.emit(map[string]any{"type": "decisionPoint", "decisionPoint": op})
 	return ref
 }
 
 // Decide rules a decision point decided: the option (name or id), the confidence (0 to 1) and why. point is an id,
 // a "#dN" reference, or "" for the only pending point.
 func (c *Ctx) Decide(point, option string, confidence float64, justification string) {
-	c.emit(map[string]any{"kind": "decisionPoint", "decisionPoint": map[string]any{"op": domain.DecisionRuleOp, "point": point,
+	c.emit(map[string]any{"type": "decisionPoint", "decisionPoint": map[string]any{"op": domain.DecisionRuleOp, "point": point,
 		"outcome": domain.OutcomeDecided, "option": option, "confidence": confidence, "justification": justification}})
 }
 
 // Undecidable rules a decision point undecidable: why, and the questions that must be answered first.
 func (c *Ctx) Undecidable(point, justification string, questions []string) {
-	c.emit(map[string]any{"kind": "decisionPoint", "decisionPoint": map[string]any{"op": domain.DecisionRuleOp, "point": point,
+	c.emit(map[string]any{"type": "decisionPoint", "decisionPoint": map[string]any{"op": domain.DecisionRuleOp, "point": point,
 		"outcome": domain.OutcomeUndecidable, "justification": justification, "questions": questions}})
 }
 
 // Answer answers an open question of a decision point.
 func (c *Ctx) Answer(questionID, answer string) {
-	c.emit(map[string]any{"kind": "decisionPoint", "decisionPoint": map[string]any{"op": domain.DecisionAnswerOp, "questionId": questionID,
+	c.emit(map[string]any{"type": "decisionPoint", "decisionPoint": map[string]any{"op": domain.DecisionAnswerOp, "questionId": questionID,
 		"answer": answer}})
 }

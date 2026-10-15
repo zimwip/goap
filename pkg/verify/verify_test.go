@@ -8,7 +8,7 @@ import (
 )
 
 func item(id string, execution, by string, data map[string]any) domain.ChangeItem {
-	return domain.ChangeItem{ID: domain.ItemID(id), Kind: KindVerification, Execution: execution, ProducedBy: by, Data: data}
+	return domain.ChangeItem{ID: domain.ItemID(id), Type: TypeVerification, Execution: execution, ProducedBy: by, Data: data}
 }
 
 func produced(id, execution, by string, independent bool, impacts ...string) domain.ChangeItem {
@@ -43,7 +43,7 @@ func TestSubjects(t *testing.T) {
 		judged("2", Verified, "i1", "check"),
 		judged("3", Accepted, "i1", "check"),
 		judged("4", Rejected, "i2", "check"),
-		{ID: "x", Kind: domain.KindArtifact},
+		{ID: "x", Type: domain.TypeArtifact},
 	}
 	got := Subjects(items)
 	if len(got) != 2 || got[0].Impact != "i1" || got[0].State != Accepted || got[0].By != "check" || got[0].Producer != "write" || !got[0].Independent ||

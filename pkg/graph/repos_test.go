@@ -300,7 +300,7 @@ func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
 			continue
 		}
 		cause, ok := seen[e.Causation]
-		if !ok || cause.Type != domain.LogFact+"."+string(domain.KindReview) {
+		if !ok || cause.Type != domain.LogFact+"."+string(domain.TypeReview) {
 			return fmt.Errorf("verdict %d on %s has no earlier review as its cause (%q)", e.Seq, ev.Impact, e.Causation)
 		}
 		var it domain.ChangeItem

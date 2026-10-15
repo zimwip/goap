@@ -52,8 +52,8 @@ var changeOps = []op{
 	{"split", "Split a node into new ones, seen from its parents (the node stays as it is): {successors, sources, parents, suspect}", schema(map[string]string{"change": "string", "source": "string", "into": "array"}, "source", "into")},
 	{"cancel", "Cancel the checkout of a node of the change: its draft is dropped (a node created by the change goes away): {node}", schema(map[string]string{"change": "string", "key": "string"}, "key")},
 	{"remove", "Take a node out of the change (its draft is dropped), or several at once with keys (all or none): {removed}", schema(map[string]string{"change": "string", "key": "string", "keys": "array"})},
-	{"note", "Add an artifact item to the blackboard: {item}", schema(map[string]string{"change": "string", "type": "string", "text": "string", "data": "object"}, "text")},
-	{"signal", "Emit a named notification other agents or a live parent may react to: {item}", schema(map[string]string{"change": "string", "type": "string", "data": "object", "target": "string"}, "type")},
+	{"note", "Add an artifact item to the blackboard (target: what the artifact is, default note): {item}", schema(map[string]string{"change": "string", "target": "string", "text": "string", "data": "object"}, "text")},
+	{"signal", "Emit a named notification other agents or a live parent may react to (target: the signal's name, recipient: a process id, empty for all): {item}", schema(map[string]string{"change": "string", "target": "string", "data": "object", "recipient": "string"}, "target")},
 	{"validate", "Check the consistency of the change: {issues}", schema(map[string]string{"change": "string"})},
 	{"options", "List the options of the change and the active one: {active, options}", schema(map[string]string{"change": "string"})},
 	{"option", "Open an option of the change, a hypothesis explored on its own flow: {option}", schema(map[string]string{"change": "string", "name": "string", "hypothesis": "string", "activate": "boolean"}, "name", "hypothesis")},
@@ -217,7 +217,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		if err != nil {
 			return nil, err
 		}
-		typ := a.str("type")
+		typ := a.str("target")
 		if typ == "" {
 			typ = "note"
 		}
@@ -226,19 +226,19 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			data[k] = v
 		}
 		data["text"] = text
-		items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: typ, Status: domain.ItemProposed,
+		items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: typ, Status: domain.ItemProposed,
 			Data: data, ProducedBy: producer(ctx)}})
 		if err != nil {
 			return nil, err
 		}
 		return result(map[string]any{"item": items[0]})
 	case "signal":
-		typ, err := a.required("type")
+		typ, err := a.required("target")
 		if err != nil {
 			return nil, err
 		}
-		items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindSignal, Type: typ, Status: domain.ItemProposed,
-			Data: a.object("data"), Target: a.str("target"), ProducedBy: producer(ctx)}})
+		items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Type: domain.TypeSignal, Target: typ, Status: domain.ItemProposed,
+			Data: a.object("data"), Recipient: a.str("recipient"), ProducedBy: producer(ctx)}})
 		if err != nil {
 			return nil, err
 		}
@@ -549,7 +549,7 @@ const intentItemType = "intent"
 // (none: the change is still on the definition it was created with).
 func latestIntentItem(c domain.Change) *domain.ChangeItem {
 	for i := len(c.Items) - 1; i >= 0; i-- {
-		if c.Items[i].Kind == domain.KindArtifact && c.Items[i].Type == intentItemType {
+		if c.Items[i].Type == domain.TypeArtifact && c.Items[i].Target == intentItemType {
 			return &c.Items[i]
 		}
 	}
@@ -577,14 +577,14 @@ func (c Change) reformulate(ctx context.Context, bb domain.Blackboard, a args) (
 	if prev == nil {
 		// the definition set at creation has no item of its own yet: snapshot it first, so the
 		// history stays complete in the items once the header is overwritten below.
-		snap, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: intentItemType, Status: domain.ItemAccepted,
+		snap, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: intentItemType, Status: domain.ItemAccepted,
 			Data: map[string]any{"title": bb.Change.Title, "intent": bb.Change.Intent}, ProducedBy: "create"}})
 		if err != nil {
 			return nil, err
 		}
 		prev = &snap[0]
 	}
-	items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: intentItemType, Status: domain.ItemAccepted,
+	items, err := c.p.Graph.AddItems(ctx, id, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: intentItemType, Status: domain.ItemAccepted,
 		Data: map[string]any{"title": title, "intent": newIntent, "rationale": rationale}, ProducedBy: producer(ctx), Supersedes: []domain.ItemID{prev.ID}}})
 	if err != nil {
 		return nil, err
@@ -893,15 +893,15 @@ func nodeResult(out domain.ChangeImpact) (map[string]any, error) {
 // record raises or updates a risk or an action of the change (ADR 0036 §1): a new version of the record of its key,
 // keeping what it does not restate. Without a key, a new record gets the next free one (RSK-n, ACT-n).
 func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a args) (map[string]any, error) {
-	kind, prefix, fields := risk.KindRisk, "RSK-", []string{"title", "description", "status", "owner"}
+	kind, prefix, fields := risk.TypeRisk, "RSK-", []string{"title", "description", "status", "owner"}
 	if op == "action" {
-		kind, prefix, fields = risk.KindAction, "ACT-", []string{"title", "status", "owner", "due", "for", "result"}
+		kind, prefix, fields = risk.TypeAction, "ACT-", []string{"title", "status", "owner", "due", "for", "result"}
 	}
 	key := a.str("key")
 	var existing bool
 	n := 0
 	for _, it := range bb.Change.Items {
-		if it.Kind != kind {
+		if it.Type != kind {
 			continue
 		}
 		k, _ := it.Data["key"].(string)
@@ -920,7 +920,7 @@ func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a a
 			data[f] = v
 		}
 	}
-	if kind == risk.KindRisk {
+	if kind == risk.TypeRisk {
 		for _, f := range []string{"probability", "impact"} {
 			if v, ok := a[f].(float64); ok {
 				data[f] = v
@@ -939,7 +939,7 @@ func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a a
 	if existing {
 		// the title is required on every version: keep the current one
 		for _, it := range slices.Backward(bb.Change.Items) {
-			if k, _ := it.Data["key"].(string); it.Kind == kind && k == key {
+			if k, _ := it.Data["key"].(string); it.Type == kind && k == key {
 				if _, ok := data["title"]; !ok {
 					data["title"] = it.Data["title"]
 				}
@@ -947,7 +947,7 @@ func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a a
 			}
 		}
 	}
-	items, err := c.p.Graph.AddItems(ctx, bb.Change.ID, []domain.ChangeItem{{Kind: kind, Type: op, Status: domain.ItemProposed, Data: data, ProducedBy: producer(ctx)}})
+	items, err := c.p.Graph.AddItems(ctx, bb.Change.ID, []domain.ChangeItem{{Type: kind, Target: op, Status: domain.ItemProposed, Data: data, ProducedBy: producer(ctx)}})
 	if err != nil {
 		return nil, err
 	}
@@ -981,7 +981,7 @@ func (c Change) derogate(ctx context.Context, bb domain.Blackboard, a args) (map
 			data[f] = v
 		}
 	}
-	items, err := c.p.Graph.AddItems(ctx, bb.Change.ID, []domain.ChangeItem{{Kind: risk.KindDerogation, Type: "derogation", Status: domain.ItemProposed, Data: data, ProducedBy: producer(ctx)}})
+	items, err := c.p.Graph.AddItems(ctx, bb.Change.ID, []domain.ChangeItem{{Type: risk.TypeDerogation, Target: "derogation", Status: domain.ItemProposed, Data: data, ProducedBy: producer(ctx)}})
 	if err != nil {
 		return nil, err
 	}
