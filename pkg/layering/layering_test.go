@@ -22,8 +22,8 @@ var forbidden = map[string][]string{
 	"pkg/algo":        {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
 	"pkg/dsl":         {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
 	"pkg/domain/def":  {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/access"},
-	"pkg/access":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
-	"pkg/llmcfg":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin"},
+	"pkg/access":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/graph", "pkg/engine"},
+	"pkg/llmcfg":      {"pkg/mcp", "pkg/adapter", "pkg/mcpbuiltin", "pkg/graph", "pkg/engine"},
 	"pkg/engine":      {"pkg/adapter", "pkg/mcpbuiltin", "pkg/observe", "pkg/selfimprove", "internal/assistantsvc", "pkg/graph"},
 	"pkg/builtins":    {"pkg/methodology", "pkg/engine", "pkg/domain"},
 	"pkg/adapter":     {"pkg/mcpbuiltin", "pkg/access"},
@@ -37,7 +37,20 @@ var forbidden = map[string][]string{
 	// engine names no graph implementation, the graph and its service no engine type (docs/architecture.md, "Components").
 	"pkg/graphapi":      {"pkg/graph", "pkg/engine", "pkg/methodology"},
 	"internal/graphsvc": {"pkg/engine", "pkg/methodology"},
-	"pkg/review":        {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
+	// The gateway, the MCP hub and what every service shares reach the graph and the engine through their contracts
+	// and clients only, never their implementation (ADR 0124).
+	"cmd/gateway":                 {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/gateway":            {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/credsvc":            {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/mcpsvc":             {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/connectorkit":       {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/connectors/builtin": {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/graphclient":        {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/telemetry":          {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/pbconv":             {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"internal/rpcerr":             {"pkg/graph", "pkg/engine", "internal/graphsvc"},
+	"pkg/graphsnap":               {"pkg/graph", "pkg/engine"},
+	"pkg/review":                  {"pkg/graph", "pkg/engine", "pkg/methodology", "pkg/risk", "pkg/journal", "pkg/decision", "pkg/condition", "pkg/access"},
 }
 
 // The graph core names no concept of the methodology namespace (ADR 0066: the Activity a change is scoped to lives in

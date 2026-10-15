@@ -17,7 +17,7 @@ import (
 	"github.com/zimwip/goap/pkg/brief"
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
 	"github.com/zimwip/goap/pkg/risk"
@@ -259,7 +259,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		} else if ok {
 			return nil, fmt.Errorf("%s exists in the baseline of the change: edit it", key)
 		}
-		out, err := c.p.Graph.ImpactNodeCreate(ctx, id, graph.NodeCreate{Key: key, Type: typ, Properties: a.object("properties"), Rationale: a.str("rationale"), ProducedBy: producer(ctx)})
+		out, err := c.p.Graph.ImpactNodeCreate(ctx, id, graphapi.NodeCreate{Key: key, Type: typ, Properties: a.object("properties"), Rationale: a.str("rationale"), ProducedBy: producer(ctx)})
 		if err != nil {
 			return nil, err
 		}
@@ -282,7 +282,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 			}
 			return w.edit(imp, props, nil)
 		}
-		out, err := w.c.p.Graph.ImpactNodeTransition(ctx, id, graph.NodeTransition{NodeCheckout: graph.NodeCheckout{Impact: imp.ID}, To: state})
+		out, err := w.c.p.Graph.ImpactNodeTransition(ctx, id, graphapi.NodeTransition{NodeCheckout: graphapi.NodeCheckout{Impact: imp.ID}, To: state})
 		if err != nil {
 			return nil, err
 		}
@@ -385,7 +385,7 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		if err != nil {
 			return nil, err
 		}
-		return w.edit(imp, nil, []graph.LinkWrite{{Type: typ, To: ref}})
+		return w.edit(imp, nil, []graphapi.LinkWrite{{Type: typ, To: ref}})
 	}
 	return nil, unknown(op)
 }
@@ -422,7 +422,7 @@ func (c Change) options(ctx context.Context, who authz.Principal, id domain.Chan
 		if err != nil {
 			return nil, err
 		}
-		f, err := c.p.Graph.OpenOption(ctx, id, graph.OpenOptionRequest{Name: name, Hypothesis: a.str("hypothesis"), Activate: a.boolean("activate"), By: who.Subject})
+		f, err := c.p.Graph.OpenOption(ctx, id, graphapi.OpenOptionRequest{Name: name, Hypothesis: a.str("hypothesis"), Activate: a.boolean("activate"), By: who.Subject})
 		if err != nil {
 			return nil, err
 		}
@@ -487,7 +487,7 @@ func (c Change) decisions(ctx context.Context, who authz.Principal, id domain.Ch
 		}
 		return result(map[string]any{"points": ps})
 	case "decision":
-		in := graph.OpenDecisionRequest{Question: a.str("question"), Criteria: strs("criteria"), By: who.Subject}
+		in := graphapi.OpenDecisionRequest{Question: a.str("question"), Criteria: strs("criteria"), By: who.Subject}
 		if _, ok := a["options"]; ok {
 			in.Options = append([]string{}, strs("options")...)
 		}
@@ -502,7 +502,7 @@ func (c Change) decisions(ctx context.Context, who authz.Principal, id domain.Ch
 		}
 		d, err = c.p.Graph.OpenDecision(ctx, id, in)
 	case "rule":
-		d, err = c.p.Graph.RuleDecision(ctx, id, graph.RuleRequest{Point: a.str("point"), Outcome: a.str("outcome"), Option: a.str("option"),
+		d, err = c.p.Graph.RuleDecision(ctx, id, graphapi.RuleRequest{Point: a.str("point"), Outcome: a.str("outcome"), Option: a.str("option"),
 			Confidence: num("confidence"), Justification: a.str("justification"), Questions: strs("questions"), By: who.Subject})
 	case "answer":
 		d, err = c.p.Graph.AnswerQuestion(ctx, id, a.str("question"), a.str("answer"), mcp.CallFrom(ctx).Process, who.Subject)
@@ -532,7 +532,7 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 		}
 		project = st.Project().Root
 	}
-	ch, err := c.p.Graph.CreateChange(ctx, graph.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: ns,
+	ch, err := c.p.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: ns,
 		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), ProjectID: project, Data: map[string]any{"createdBy": who.Subject, "via": mcpbuiltin.Change}})
 	if err != nil {
 		return nil, err
@@ -589,7 +589,7 @@ func (c Change) reformulate(ctx context.Context, bb domain.Blackboard, a args) (
 	if err != nil {
 		return nil, err
 	}
-	ch, err := c.p.Graph.UpdateChange(ctx, id, graph.ChangePatch{Title: &title, Intent: &newIntent})
+	ch, err := c.p.Graph.UpdateChange(ctx, id, graphapi.ChangePatch{Title: &title, Intent: &newIntent})
 	if err != nil {
 		return nil, err
 	}
@@ -599,7 +599,7 @@ func (c Change) reformulate(ctx context.Context, bb domain.Blackboard, a args) (
 // list lists changes matching a filter, the latest first: the caller checks whether a request
 // continues one of them before opening a new one (goap-change.create).
 func (c Change) list(ctx context.Context, a args) (map[string]any, error) {
-	f := graph.ChangesFilter{Namespace: a.str("namespace"), OwnerOrg: a.str("unit")}
+	f := graphapi.ChangesFilter{Namespace: a.str("namespace"), OwnerOrg: a.str("unit")}
 	if st := a.str("status"); st != "" {
 		f.Status = []domain.ChangeStatus{domain.ChangeStatus(st)}
 	}
@@ -804,21 +804,21 @@ func (w *working) ref(key string) (domain.NodeRef, error) {
 // it has none (ADR 0076, 0079).
 func (w *working) checkout(imp domain.ChangeImpact) (domain.ChangeImpact, error) {
 	if imp.Post != nil {
-		if nv, ok := w.bb.Nodes[*imp.Post]; ok && graph.IsWorking(w.bb.Change, domain.ActiveOptionOf(w.bb), nv.Node) {
+		if nv, ok := w.bb.Nodes[*imp.Post]; ok && graphapi.IsWorking(w.bb.Change, domain.ActiveOptionOf(w.bb), nv.Node) {
 			return imp, nil
 		}
 	}
-	return w.c.p.Graph.ImpactNodeCheckout(w.ctx, w.bb.Change.ID, graph.NodeCheckout{Impact: imp.ID})
+	return w.c.p.Graph.ImpactNodeCheckout(w.ctx, w.bb.Change.ID, graphapi.NodeCheckout{Impact: imp.ID})
 }
 
 // edit edits the draft of a change impact: its properties and outgoing links.
-func (w *working) edit(imp domain.ChangeImpact, props map[string]any, links []graph.LinkWrite) (map[string]any, error) {
+func (w *working) edit(imp domain.ChangeImpact, props map[string]any, links []graphapi.LinkWrite) (map[string]any, error) {
 	imp, err := w.checkout(imp)
 	if err != nil {
 		return nil, err
 	}
 	if len(props) > 0 {
-		if imp, err = w.c.p.Graph.ImpactNodeUpdate(w.ctx, w.bb.Change.ID, imp.ID, graph.NodeUpdate{Properties: props}); err != nil {
+		if imp, err = w.c.p.Graph.ImpactNodeUpdate(w.ctx, w.bb.Change.ID, imp.ID, graphapi.NodeUpdate{Properties: props}); err != nil {
 			return nil, err
 		}
 	}
@@ -835,30 +835,30 @@ func (w *working) edit(imp domain.ChangeImpact, props map[string]any, links []gr
 func (c Change) restructure(ctx context.Context, w *working, op string, a args) (map[string]any, error) {
 	id, who := w.bb.Change.ID, w.who
 	gate := func(typ string) error { return c.gate(ctx, who, typ) }
-	create := func(m map[string]any) graph.NodeCreate {
+	create := func(m map[string]any) graphapi.NodeCreate {
 		s := args(m)
 		props, _ := m["properties"].(map[string]any)
-		return graph.NodeCreate{Key: s.str("key"), Type: s.str("type"), Properties: props, Rationale: s.str("rationale"), ProducedBy: producer(ctx)}
+		return graphapi.NodeCreate{Key: s.str("key"), Type: s.str("type"), Properties: props, Rationale: s.str("rationale"), ProducedBy: producer(ctx)}
 	}
-	var out graph.Restructured
+	var out graphapi.Restructured
 	var err error
 	switch op {
 	case "merge":
-		var sources []graph.NodeName
+		var sources []graphapi.NodeName
 		for _, x := range asStrings(a["sources"]) {
-			sources = append(sources, graph.NodeName{Key: x})
+			sources = append(sources, graphapi.NodeName{Key: x})
 		}
-		out, err = c.p.Graph.ImpactNodeMerge(ctx, id, graph.MergeInput{Sources: sources, Gate: gate,
+		out, err = c.p.Graph.ImpactNodeMerge(ctx, id, graphapi.MergeInput{Sources: sources, Gate: gate,
 			Into: create(map[string]any{"key": a.str("key"), "type": a.str("type"), "properties": a.object("properties"), "rationale": a.str("rationale")})})
 	default:
-		var into []graph.NodeCreate
+		var into []graphapi.NodeCreate
 		raw, _ := a["into"].([]any)
 		for _, x := range raw {
 			if m, ok := x.(map[string]any); ok {
 				into = append(into, create(m))
 			}
 		}
-		out, err = c.p.Graph.ImpactNodeSplit(ctx, id, graph.SplitInput{Source: graph.NodeName{Key: a.str("source")}, Into: into, Gate: gate,
+		out, err = c.p.Graph.ImpactNodeSplit(ctx, id, graphapi.SplitInput{Source: graphapi.NodeName{Key: a.str("source")}, Into: into, Gate: gate,
 			Rationale: a.str("rationale")})
 	}
 	if err != nil {

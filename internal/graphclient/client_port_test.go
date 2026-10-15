@@ -1,4 +1,4 @@
-package graphsvc
+package graphclient
 
 import "github.com/zimwip/goap/pkg/engine"
 

@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
@@ -31,7 +31,7 @@ func main() {
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
 	// providers, models and aliases are nodes of the graph; API keys are references resolved here
-	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphsvc.NewClient(hc, graphURL, telemetry.ClientOptions()...)}, store, secrets.Resolve, log)
+	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...)}, store, secrets.Resolve, log)
 	svc.Vault = secrets.Put
 	genai := telemetry.NewGenAI()
 	svc.Router.Instrument, svc.Router.InstrumentEmbed = genai.Instrument, genai.InstrumentEmbed
@@ -44,7 +44,7 @@ func main() {
 	}
 	log.Info("providers", "providers", providers)
 
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, graphURL)})
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, graphURL)})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}

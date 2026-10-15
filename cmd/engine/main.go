@@ -14,7 +14,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
 	"github.com/zimwip/goap/internal/enginesvc"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/modelgw"
@@ -22,6 +22,7 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/internal/telemetry/enginetel"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/assess"
 	"github.com/zimwip/goap/pkg/domain"
@@ -46,7 +47,7 @@ func main() {
 	defer telemetry.Setup(ctx, log, "engine")(ctx)
 	hc := platform.H2CClient()
 	copts := telemetry.ClientOptions()
-	var models llm.Client = telemetry.LLMClient{Next: modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), append(slices.Clone(copts), identity.Forward())...)}
+	var models llm.Client = enginetel.LLMClient{Next: modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), append(slices.Clone(copts), identity.Forward())...)}
 	events := platform.OptionalEvents(ctx, log)
 	defer events.Close()
 
@@ -82,7 +83,7 @@ func main() {
 	if platform.Env("GOAP_INTENT_RANKER", "lexical") == "llm" {
 		ranker = intent.LLMRanker{Client: models, Model: platform.Env("GOAP_INTENT_MODEL", "fast")}
 	}
-	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...)})
+	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...)})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
@@ -96,7 +97,7 @@ func main() {
 	}()
 	builtins := engine.DefaultBuiltins()
 	e := &engine.Engine{
-		Graph:         graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...),
+		Graph:         graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), copts...),
 		Methodologies: registry,
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: models},
@@ -111,14 +112,14 @@ func main() {
 		Scope:       engine.AuthzScope{Authz: authorizer, Hub: mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...)},
 		LLM:         models,
 		Sandboxes:   sandboxes,
-		Tracer:      telemetry.NewEngineTracer(),
+		Tracer:      enginetel.NewEngineTracer(),
 		Log:         log,
 		MaxSteps:    platform.EnvInt("GOAP_MAX_STEPS", 50),
 		MaxParallel: platform.EnvInt("GOAP_MAX_PARALLEL", 4),
 		Types:       func() def.TypeSet { return types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
-	selfimprove.Register(builtins, e, telemetry.SelfImprovementFromEnv(registry))
+	selfimprove.Register(builtins, e, enginetel.SelfImprovementFromEnv(registry))
 	for _, subject := range []string{"goap.registry.domain.published", "goap.registry.domain.deleted"} {
 		if err := events.Subscribe(subject, func([]byte) {
 			if err := types.Reload(context.Background()); err != nil {

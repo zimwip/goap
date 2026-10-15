@@ -1381,7 +1381,7 @@ The preferences service keeps an opaque JSON object per user (size-limited): the
 file, unless an external identity provider issues the tokens (`hs256` today); `"none"` must be asked for.
 `goap-dev` generates its JWT secret when none is configured (kept in `.goap/jwt_secret` with SQLite).
 `gateway.Config.OnSignIn` declares the user before a register/login returns a token (`graphsvc.EnsureUser`
-in process, `graphsvc.Client.DeclareUser` from the gateway) and refreshes the `access.Directory`, so the first
+in process, `graphclient.Client.DeclareUser` from the gateway) and refreshes the `access.Directory`, so the first
 calls carry the user's unit and roles. `EnsureUser` commits the `User` node and its `member_of` as one change
 on `main` (journaled, moves the head the access snapshot reads — the import write described above no longer
 happens), serialized per process. New users join the waiting unit, an `OrgUnit` an administrator created and

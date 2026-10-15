@@ -14,58 +14,6 @@ import (
 // three-way (domain.MergeDrafts, rebaseCommittedTx); the fields changed on both sides are conflicts the change settles by
 // editing its draft, and its merge is then a fast-forward. A change that committed nothing has nothing to rebase.
 
-// RebasedImpact is what a rebase did to a change impact.
-type RebasedImpact struct {
-	Impact domain.ChangeImpactID `json:"impactId"`
-	Key    string                `json:"key"`
-	// Changed is set when its review went back to proposed: the rebase left conflicts on a decided impact (a clean
-	// rebase keeps the reviews, ADR 0101 §2).
-	Changed bool `json:"changed"`
-	// Merged is set when the node was merged three-way with the target's version.
-	Merged bool `json:"merged,omitempty"`
-	// Conflicts are the fields changed on both sides (domain.ConflictProp, ...), kept as the change had them.
-	Conflicts []string `json:"conflicts,omitempty"`
-}
-
-// RebaseResult is what RebaseChange did.
-type RebaseResult struct {
-	// Parent is the parent change of a sub-change, empty for a root change.
-	Parent domain.ChangeID `json:"parentId"`
-	// Branch is the target branch of a root change; From the baseline it was forked from and Onto the head it moved to
-	// (equal: it was not behind).
-	Branch  string            `json:"branch,omitempty"`
-	From    domain.BaselineID `json:"from,omitempty"`
-	Onto    domain.BaselineID `json:"onto,omitempty"`
-	Impacts []RebasedImpact   `json:"impacts,omitempty"`
-}
-
-// Changed reports a rebase that left conflicts: the change has impacts to settle and review again.
-func (r RebaseResult) Changed() bool {
-	for _, i := range r.Impacts {
-		if i.Changed || len(i.Conflicts) > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func (r RebaseResult) summary() string {
-	var review, conflicts []string
-	for _, i := range r.Impacts {
-		if i.Changed || len(i.Conflicts) > 0 {
-			review = append(review, i.Key)
-		}
-		for _, c := range i.Conflicts {
-			conflicts = append(conflicts, i.Key+" "+c)
-		}
-	}
-	out := fmt.Sprintf("rebased onto branch %s: review again %s", r.Branch, strings.Join(review, ", "))
-	if len(conflicts) > 0 {
-		out += "; settle the conflicts " + strings.Join(conflicts, ", ")
-	}
-	return out
-}
-
 // RebaseChange brings what a change committed up to date with the head of the branch it was forked from (the branch of
 // its parent change for a sub-change, ADR 0103).
 //

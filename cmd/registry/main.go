@@ -11,7 +11,7 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/eventsvc"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
@@ -29,7 +29,7 @@ func main() {
 	defer events.Close()
 
 	// methodologies are nodes of the graph; domains are kept in the registry's database (ADR 0023)
-	graphClient := graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
+	graphClient := graphclient.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
 	store := registrysvc.NewGraphStore(graphClient)
 	var domains registrysvc.DomainStore = registrysvc.NewMemoryStore()
 	if pool := platform.OptionalPostgres(ctx, log, registrysvc.Migrations); pool != nil {

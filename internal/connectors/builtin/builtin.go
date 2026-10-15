@@ -26,7 +26,7 @@ import (
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/mcp"
 	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
@@ -41,7 +41,7 @@ const DefaultLimit = 50
 type Ports struct {
 	// Graph is the graph (in-process *graph.Graph or the graph service client): goap-graph, goap-change
 	// and the organisation read by goap-admin.
-	Graph engine.GraphPort
+	Graph graphapi.Port
 	// Engine starts and reads processes (goap-scheduler): the engine service handler in-process, its
 	// client otherwise.
 	Engine EngineAPI

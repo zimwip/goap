@@ -58,17 +58,6 @@ type ChangeLifecycles interface {
 // every transition.
 type ChangeTransitionAuthorizer func(ctx context.Context, c domain.Change, t domain.Transition) error
 
-// TransitionRequest asks for a transition of the lifecycle of a change.
-type TransitionRequest struct {
-	// Transition is the name of the transition out of the current state.
-	Transition string
-	// Decision is the decision point that gates the transition, when its guard asks for one: it is seen by the guard
-	// as change.decision, and is consumed by the move (a point gates one transition only).
-	Decision string
-	// By is the caller, recorded in the journal.
-	By string
-}
-
 // changeLifecycle resolves the lifecycle a change follows.
 func (g *Graph) changeLifecycle(ctx context.Context, c domain.Change) (*domain.Lifecycle, error) {
 	if c.Lifecycle == "" {

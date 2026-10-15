@@ -7,7 +7,7 @@ import (
 
 	"github.com/zimwip/goap/gen/goap/events/v1/eventsv1connect"
 	"github.com/zimwip/goap/internal/eventsvc"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
@@ -23,7 +23,7 @@ func main() {
 	}
 	defer bus.Close()
 	hc := platform.H2CClient()
-	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)})
+	authorizer, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/engine/v1/enginev1connect"
 	"github.com/zimwip/goap/internal/assistantsvc"
 	"github.com/zimwip/goap/internal/convsvc"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/modelgw"
 	"github.com/zimwip/goap/internal/platform"
@@ -39,7 +39,7 @@ func main() {
 	// the assistant calls the platform for the caller: every client carries the principal of its context
 	hc := platform.H2CClient()
 	copts := append(telemetry.ClientOptions(), identity.Forward())
-	graphClient := graphsvc.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
+	graphClient := graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
 	assistant := &assistantsvc.Service{
 		Convs:         convs,
 		Model:         modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), copts...),

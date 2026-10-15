@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/zimwip/goap/pkg/authz"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/review"
 )
 
@@ -20,7 +20,7 @@ var ErrNotFound = errors.New("not found")
 const reasonHeader = "Goap-Error-Reason"
 
 // reasons are the sentinels a Connect code does not tell apart, by the name they travel under.
-var reasons = map[string]error{"nothing-to-commit": graph.ErrNothingToCommit}
+var reasons = map[string]error{"nothing-to-commit": graphapi.ErrNothingToCommit}
 
 func withReason(err error, ce *connect.Error) error {
 	for name, sentinel := range reasons {
@@ -42,11 +42,11 @@ func ToConnect(err error) error {
 		return err
 	case errors.Is(err, authz.ErrForbidden):
 		return connect.NewError(connect.CodePermissionDenied, err)
-	case errors.Is(err, graph.ErrNotFound), errors.Is(err, ErrNotFound), errors.Is(err, review.ErrNotFound):
+	case errors.Is(err, graphapi.ErrNotFound), errors.Is(err, ErrNotFound), errors.Is(err, review.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, graph.ErrConflict), errors.Is(err, review.ErrConflict):
+	case errors.Is(err, graphapi.ErrConflict), errors.Is(err, review.ErrConflict):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, graph.ErrInvalid), errors.Is(err, review.ErrInvalid):
+	case errors.Is(err, graphapi.ErrInvalid), errors.Is(err, review.ErrInvalid):
 		return withReason(err, connect.NewError(connect.CodeInvalidArgument, err))
 	case errors.Is(err, context.Canceled):
 		return connect.NewError(connect.CodeCanceled, err)
@@ -72,11 +72,11 @@ func FromConnect(err error) error {
 	case connect.CodePermissionDenied:
 		return errors.Join(authz.ErrForbidden, err)
 	case connect.CodeNotFound:
-		return errors.Join(graph.ErrNotFound, err)
+		return errors.Join(graphapi.ErrNotFound, err)
 	case connect.CodeFailedPrecondition:
-		return errors.Join(graph.ErrConflict, err)
+		return errors.Join(graphapi.ErrConflict, err)
 	case connect.CodeInvalidArgument:
-		return errors.Join(graph.ErrInvalid, err)
+		return errors.Join(graphapi.ErrInvalid, err)
 	}
 	return err
 }

@@ -1,7 +1,8 @@
 # ADR 0124 — Source components: a contract, the graph, the engine, the MCP hub, the gateway, the platform
 
-**Status**: accepted; step 1 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph service
-no longer import each other), the next steps not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
+**Status**: accepted; steps 1 and 2 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
+service no longer import each other; the gateway, the hub and the connectors off the graph and the engine), the
+next steps not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
 0063 (the engine's scope port), ADR 0066 (the hooks of the graph), ADR 0113 (pinned domains)
 
 ## Context
@@ -53,6 +54,15 @@ Publishing a domain no longer asks the methodologies: the domain registry publis
 methodology registry checks the methodologies again, and a methodology a new domain version breaks is suspended,
 never the domain nor the graph. A methodology stays compatible with its domains when it is updated (warnings at its
 publication). Migrating the data of a domain is a separate matter (a change rewriting the nodes it touches).
+
+### 4. The gateway and the MCP hub
+
+The client of the graph service leaves `graphsvc` (`internal/graphclient`), the interface both the engine and the
+built-in MCPs call becomes the contract's (`graphapi.Port`, `engine.GraphPort` an alias of it: when two consumers
+need the same port it is the contract's), `pkg/access`, `llmcfg` and `graphsnap` name the graph through the contract
+(`graphapi.NodeValidator`, `ValidatorQuery`, the errors), and the telemetry of the engine leaves the telemetry every
+service sets up (`internal/telemetry/enginetel`). `cmd/mcp` still reaches the engine through the registry client
+until the registries are split (§3).
 
 ## Consequences
 

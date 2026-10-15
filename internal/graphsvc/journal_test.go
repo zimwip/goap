@@ -8,6 +8,7 @@ import (
 
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -17,7 +18,7 @@ import (
 )
 
 // The execution journal through the service: the engine's client appends the entries of its records to the log of the
-// change (journal.Append over graphsvc.Client) and reads them back as entries, the web reads them as records.
+// change (journal.Append over graphclient.Client) and reads them back as entries, the web reads them as records.
 func TestJournalThroughTheService(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
@@ -26,7 +27,7 @@ func TestJournalThroughTheService(t *testing.T) {
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphsvc.NewClient(srv.Client(), srv.URL)
+	cl := graphclient.NewClient(srv.Client(), srv.URL)
 
 	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	if err != nil {

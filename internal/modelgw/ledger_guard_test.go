@@ -22,10 +22,10 @@ func TestEveryModelCallGoesThroughTheLedger(t *testing.T) {
 	// the implementations of llm.Client / llm.Embedder: the ledger-backed service, the RPC client to it, the router
 	// below the ledger (only the service calls it), and the instrumenting wrapper of the engine's client
 	implementations := map[string]bool{
-		"internal/modelgw.Service":     true,
-		"internal/modelgw.Client":      true,
-		"internal/modelgw.Router":      true,
-		"internal/telemetry.LLMClient": true,
+		"internal/modelgw.Service":               true,
+		"internal/modelgw.Client":                true,
+		"internal/modelgw.Router":                true,
+		"internal/telemetry/enginetel.LLMClient": true,
 	}
 	var problems []string
 	fset := token.NewFileSet()

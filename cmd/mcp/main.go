@@ -15,7 +15,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/connectors/builtin"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/mcpsvc"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/registrysvc"
@@ -45,19 +45,19 @@ func main() {
 	svc := &mcpsvc.Service{
 		Store: store,
 		// the MCPs, the adapter definitions, the adapters and the organisation hierarchy are nodes of the graph
-		Directory: &mcpsvc.Directory{Graph: graphsvc.NewClient(hc, graphURL)},
+		Directory: &mcpsvc.Directory{Graph: graphclient.NewClient(hc, graphURL)},
 		Invoker:   mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: token}},
 		Secrets:   mcpsvc.ResolveSecret(platform.NewSecrets()),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphsvc.NewClient(hc, graphURL)})
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, graphURL)})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
 	// they call the platform's services for the caller of the tool
 	copts := append(telemetry.ClientOptions(), builtin.ForwardIdentity())
 	maps.Copy(connectors, builtin.Connectors(builtin.Ports{
-		Graph:    graphsvc.NewClient(hc, graphURL, copts...),
+		Graph:    graphclient.NewClient(hc, graphURL, copts...),
 		Engine:   enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...),
 		Registry: registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...),
 		Hub:      svc,

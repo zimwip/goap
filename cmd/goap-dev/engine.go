@@ -10,6 +10,7 @@ import (
 	"github.com/zimwip/goap/internal/registrysvc"
 	"github.com/zimwip/goap/internal/sandbox"
 	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/internal/telemetry/enginetel"
 	"github.com/zimwip/goap/pkg/domain/def"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/intent"
@@ -30,7 +31,7 @@ type enginePart struct {
 func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platformPart) (*enginePart, error) {
 	g := gp.g
 	// the engine calls the gateway in-process, without an identity: trusted
-	models := telemetry.LLMClient{Next: llm.ClientFunc(pp.gw.Complete)}
+	models := enginetel.LLMClient{Next: llm.ClientFunc(pp.gw.Complete)}
 	// scripts run in-process unless GOAP_SANDBOX selects a provisioner
 	sandboxes, runtime, _, err := sandbox.FromEnv(e.log, platform.H2CClient(), telemetry.ClientOptions())
 	if err != nil {
@@ -54,13 +55,13 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		Scope:       engine.AuthzScope{Authz: gp.authorizer, Hub: mcpsvc.HubPort{Service: pp.hub}},
 		LLM:         models,
 		Sandboxes:   sandboxes,
-		Tracer:      telemetry.NewEngineTracer(),
+		Tracer:      enginetel.NewEngineTracer(),
 		Log:         e.log,
 		MaxParallel: platform.EnvInt("GOAP_MAX_PARALLEL", 4),
 		Types:       func() def.TypeSet { return rp.types.Get() },
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
-	selfimprove.Register(builtins, eg, telemetry.SelfImprovementFromEnv(registrysvc.Drafts{Service: rp.reg}))
+	selfimprove.Register(builtins, eg, enginetel.SelfImprovementFromEnv(registrysvc.Drafts{Service: rp.reg}))
 	triggers := &engine.TriggerManager{Engine: eg, Log: e.log}
 	e.triggers.set(triggers)
 	triggers.Start(e.ctx)

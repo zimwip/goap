@@ -10,7 +10,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/mcp"
 )
 
@@ -249,11 +249,11 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 		return nil, err
 	}
 	orgHead, err := d.Graph.BranchHead(ctx, st.Organisation().Namespace, domain.MainBranch)
-	if err != nil && !errors.Is(err, graph.ErrNotFound) {
+	if err != nil && !errors.Is(err, graphapi.ErrNotFound) {
 		return nil, err
 	}
 	platHead, err := d.Graph.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
-	if err != nil && !errors.Is(err, graph.ErrNotFound) {
+	if err != nil && !errors.Is(err, graphapi.ErrNotFound) {
 		return nil, err
 	}
 	baselines := Baselines{Organisation: orgHead.ID, Platform: platHead.ID}

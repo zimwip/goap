@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 )
 
 // Graph is the part of the graph a snapshot reads.
@@ -60,7 +60,7 @@ func (c *Cache[T]) get(ctx context.Context, fresh bool) (T, domain.BaselineID, e
 		return c.cur, c.id, nil
 	}
 	head, err := c.Graph.BranchHead(ctx, c.Namespace, domain.MainBranch)
-	if errors.Is(err, graph.ErrNotFound) {
+	if errors.Is(err, graphapi.ErrNotFound) {
 		c.cur, c.id, c.have, c.checked = c.Build("", nil, nil), "", true, time.Now()
 		return c.cur, c.id, nil
 	}

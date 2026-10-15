@@ -33,6 +33,16 @@ type (
 	MergeCandidate      = graphapi.MergeCandidate
 	ImpactConflicts     = graphapi.ImpactConflicts
 	RebaseState         = graphapi.RebaseState
+	RebaseResult        = graphapi.RebaseResult
+	RebasedImpact       = graphapi.RebasedImpact
+	NodeEdit            = graphapi.NodeEdit
+	LinkEdit            = graphapi.LinkEdit
+	Commit              = graphapi.Commit
+	CommitResult        = graphapi.CommitResult
+	TransitionRequest   = graphapi.TransitionRequest
+	NodeValidator       = graphapi.NodeValidator
+	ValidatedNode       = graphapi.ValidatedNode
+	ValidatorQuery      = graphapi.ValidatorQuery
 )
 
 // IsWorking is graphapi.IsWorking.

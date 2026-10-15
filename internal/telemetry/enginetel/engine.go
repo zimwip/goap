@@ -1,4 +1,4 @@
-package telemetry
+package enginetel
 
 import (
 	"context"
@@ -17,11 +17,14 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/llm"
 )
 
-const scope = "github.com/zimwip/goap"
+// scope is the instrumentation scope of the platform, the one of package telemetry (span names stay stable,
+// docs/architecture.md §3.7).
+const scope = telemetry.Scope
 
 // EngineTracer implements engine.Tracer with OpenTelemetry. A process keeps
 // a single trace across its runs: the W3C traceparent of its root span is

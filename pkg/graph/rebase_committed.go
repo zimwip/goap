@@ -149,7 +149,7 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		return c, err
 	}
 	if res.Changed() {
-		return c, fmt.Errorf("change %s %s: %w", id, res.summary(), ErrConflict)
+		return c, fmt.Errorf("change %s %s: %w", id, res.Summary(), ErrConflict)
 	}
 	if err := g.checkMerge(ctx, id); err != nil {
 		return c, err

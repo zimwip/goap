@@ -7,7 +7,7 @@ import (
 
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 	"github.com/zimwip/goap/pkg/typecat"
 )
 
@@ -28,7 +28,7 @@ func (AdminFloorValidator) Types() []string {
 // platform Assignment held by a unit the user belongs to (or one of its ancestors) count as much as one held by the
 // User node itself. Counting less would refuse a change that leaves an administrator; counting more, accept one
 // that locks everybody out.
-func (AdminFloorValidator) Validate(ctx context.Context, q graph.ValidatorQuery, impacted []graph.ValidatedNode) error {
+func (AdminFloorValidator) Validate(ctx context.Context, q graphapi.ValidatorQuery, impacted []graphapi.ValidatedNode) error {
 	var nodes []domain.Node
 	var links []domain.Link
 	st := typecat.Builtin().Structures()
@@ -55,5 +55,5 @@ func (AdminFloorValidator) Validate(ctx context.Context, q graph.ValidatorQuery,
 			return nil // at least one active administrator remains
 		}
 	}
-	return fmt.Errorf("this change would leave no active administrator: %w", graph.ErrInvalid)
+	return fmt.Errorf("this change would leave no active administrator: %w", graphapi.ErrInvalid)
 }

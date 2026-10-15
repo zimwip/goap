@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/adapter"
@@ -135,7 +136,7 @@ func TestStructuresThroughTheService(t *testing.T) {
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	got, err := graphsvc.NewClient(srv.Client(), srv.URL).Structures(context.Background())
+	got, err := graphclient.NewClient(srv.Client(), srv.URL).Structures(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

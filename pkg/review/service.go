@@ -14,7 +14,7 @@ import (
 )
 
 // Port is what the operations need of the graph: the change (with its items), the write of items, and the batch of
-// reviews that applies a submission atomically (graph.Graph and graphsvc.Client implement it).
+// reviews that applies a submission atomically (graph.Graph and graphclient.Client implement it).
 type Port interface {
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	AddItems(ctx context.Context, id domain.ChangeID, items []domain.ChangeItem) ([]domain.ChangeItem, error)

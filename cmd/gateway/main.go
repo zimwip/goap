@@ -13,7 +13,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/credentials/v1/credentialsv1connect"
 	"github.com/zimwip/goap/internal/credsvc"
 	"github.com/zimwip/goap/internal/gateway"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/platform"
 	"github.com/zimwip/goap/internal/telemetry"
 	"github.com/zimwip/goap/pkg/access"
@@ -89,7 +89,7 @@ func main() {
 		},
 	}
 	// who a caller is comes from the User nodes of the graph as well as from its token
-	graphClient := graphsvc.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
+	graphClient := graphclient.NewClient(platform.H2CClient(), platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
 	directory := &access.Directory{Graph: graphClient}
 	cfg.Enrich = directory.Enrich
 	authorizer, err := access.NewAuthorizer(directory)

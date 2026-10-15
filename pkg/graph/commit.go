@@ -16,60 +16,6 @@ import (
 // the apply follow. Services that project their own definitions into the graph
 // (registry, seeds) use it.
 
-// NodeEdit is one node created or modified by a Commit.
-type NodeEdit struct {
-	// Key and Type name a created node (Pre is nil).
-	Key, Type string
-	// Pre is the version a modified node starts from (in the reference baseline).
-	Pre *domain.NodeRef
-	// Props are merged over the current properties (a nil value clears one).
-	Props map[string]any
-	// State moves the node to a lifecycle state, after its other edits: a transition of its draft, the node checked out
-	// first when it has none (ImpactNodeTransition, ADR 0076, 0079): a retired entry is edited and restored in the same change.
-	State string
-	// Owner transfers the node to another organisational unit (its key, ADR 0054); empty: unchanged, or the unit
-	// holding the commit for a created node.
-	Owner string
-	// Rationale says why; the title of the commit when empty.
-	Rationale string
-	Links     []LinkEdit
-	// RemoveLinks are outgoing links of the Pre version the new version leaves out (removing a child is a
-	// modification of its parent, ADR 0024 §4).
-	RemoveLinks []domain.LinkID
-}
-
-// LinkEdit is an outgoing link added by an edit: to an existing version (To) or
-// to a node created by another edit of the commit (ToKey). Nodes created by the commit may link each other in
-// any direction, cycles included: a link to a node not written yet is added, in the same change, once it is.
-type LinkEdit struct {
-	Type  string
-	To    *domain.NodeRef
-	ToKey string
-	Props map[string]any
-}
-
-// Commit describes a change made of node edits, applied as one unit.
-type Commit struct {
-	Namespace, Title, Intent, Methodology string
-	Data                                  map[string]any
-	Baseline                              domain.BaselineID
-	// Branch the commit lands on (default main).
-	Branch string
-	// By is who accepts the edits: the producer.
-	By           string
-	BaselineName string
-	Edits        []NodeEdit
-	// OwnerOrg is the unit holding the commit and ProjectID the project it acts in (ADR 0054); empty: the root unit.
-	// The project is required (ADR 0091).
-	OwnerOrg, ProjectID string
-}
-
-// CommitResult is the outcome of a Commit.
-type CommitResult struct {
-	Change   domain.ChangeID
-	Baseline domain.Baseline
-}
-
 // Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
 // the state edits are transitions (ImpactNodeTransition, on the draft), each impact that modifies its node is accepted by

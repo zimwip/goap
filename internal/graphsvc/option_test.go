@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/decision"
 	"github.com/zimwip/goap/pkg/domain"
@@ -24,7 +25,7 @@ func TestOptionsThroughTheService(t *testing.T) {
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphsvc.NewClient(srv.Client(), srv.URL)
+	cl := graphclient.NewClient(srv.Client(), srv.URL)
 
 	req1, err := graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
 	if err != nil {
@@ -95,7 +96,7 @@ func TestDecisionsThroughTheService(t *testing.T) {
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphsvc.NewClient(srv.Client(), srv.URL)
+	cl := graphclient.NewClient(srv.Client(), srv.URL)
 
 	_, _ = graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement"})
 	base, _ := g.BranchHead(ctx, "", domain.MainBranch)

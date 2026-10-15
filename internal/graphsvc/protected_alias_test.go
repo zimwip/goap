@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
@@ -228,7 +229,7 @@ func TestAliasNeedsTargetShownOnTheImpact(t *testing.T) {
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
-	cl := graphsvc.NewClient(srv.Client(), srv.URL)
+	cl := graphclient.NewClient(srv.Client(), srv.URL)
 
 	c, err := g.CreateChange(ctx, graph.NewChange{ProjectID: "PROJ-ROOT", Namespace: domain.NamespacePlatform, Title: "alias"})
 	if err != nil {

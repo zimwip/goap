@@ -11,7 +11,7 @@ import (
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
 	"github.com/zimwip/goap/gen/goap/index/v1/indexv1connect"
-	"github.com/zimwip/goap/internal/graphsvc"
+	"github.com/zimwip/goap/internal/graphclient"
 	"github.com/zimwip/goap/internal/identity"
 	"github.com/zimwip/goap/internal/indexersvc"
 	"github.com/zimwip/goap/internal/modelgw"
@@ -39,7 +39,7 @@ func main() {
 
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
-	directory := &access.Directory{Graph: graphsvc.NewClient(hc, graphURL, telemetry.ClientOptions()...)}
+	directory := &access.Directory{Graph: graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...)}
 	iam, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)

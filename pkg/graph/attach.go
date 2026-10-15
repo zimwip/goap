@@ -261,7 +261,7 @@ func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target str
 		return c, err
 	}
 	if res.Changed() {
-		return c, fmt.Errorf("change %s %s: settle it on its own before it moves: %w", c.ID, res.summary(), ErrConflict)
+		return c, fmt.Errorf("change %s %s: settle it on its own before it moves: %w", c.ID, res.Summary(), ErrConflict)
 	}
 	return tx.Change(ctx, c.ID)
 }

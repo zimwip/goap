@@ -24,6 +24,11 @@ import (
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
+// Scope is the instrumentation scope of the platform's spans and metrics.
+const Scope = "github.com/zimwip/goap"
+
+const scope = Scope
+
 // Setup installs the global tracer and meter providers for a service. The
 // exporters are enabled when OTEL_EXPORTER_OTLP_ENDPOINT is set; otherwise
 // only context propagation is installed. The returned function flushes and

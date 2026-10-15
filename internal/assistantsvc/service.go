@@ -80,7 +80,7 @@ const (
 type Model = modelgw.SuggestModel
 
 // Graph is what the assistant needs of the graph: to create a change, to read one and to list them, as the caller
-// (*graph.Graph, *graphsvc.Client, engine.EventingGraph).
+// (*graph.Graph, *graphclient.Client, engine.EventingGraph).
 type Graph interface {
 	CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)

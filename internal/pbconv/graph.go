@@ -10,7 +10,7 @@ import (
 
 	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 )
 
 // Struct converts a map to a protobuf Struct (nil for an empty map).
@@ -353,7 +353,7 @@ func ChangeImpactsFromPB(cns []*graphv1.ChangeImpact) []domain.ChangeImpact {
 	return out
 }
 
-func EditsToPB(edits []graph.NodeEdit) []*graphv1.NodeEdit {
+func EditsToPB(edits []graphapi.NodeEdit) []*graphv1.NodeEdit {
 	out := make([]*graphv1.NodeEdit, len(edits))
 	for i, e := range edits {
 		pe := &graphv1.NodeEdit{Key: e.Key, Type: e.Type, Pre: RefPtrToPB(e.Pre), Props: Struct(e.Props), Rationale: e.Rationale, Owner: e.Owner, State: e.State}
@@ -368,12 +368,12 @@ func EditsToPB(edits []graph.NodeEdit) []*graphv1.NodeEdit {
 	return out
 }
 
-func EditsFromPB(edits []*graphv1.NodeEdit) []graph.NodeEdit {
-	out := make([]graph.NodeEdit, len(edits))
+func EditsFromPB(edits []*graphv1.NodeEdit) []graphapi.NodeEdit {
+	out := make([]graphapi.NodeEdit, len(edits))
 	for i, pe := range edits {
-		e := graph.NodeEdit{Key: pe.Key, Type: pe.Type, Pre: RefPtrFromPB(pe.Pre), Props: Map(pe.Props), Rationale: pe.Rationale, Owner: pe.Owner, State: pe.State}
+		e := graphapi.NodeEdit{Key: pe.Key, Type: pe.Type, Pre: RefPtrFromPB(pe.Pre), Props: Map(pe.Props), Rationale: pe.Rationale, Owner: pe.Owner, State: pe.State}
 		for _, l := range pe.Links {
-			e.Links = append(e.Links, graph.LinkEdit{Type: l.Type, To: RefPtrFromPB(l.To), ToKey: l.ToKey, Props: Map(l.Props)})
+			e.Links = append(e.Links, graphapi.LinkEdit{Type: l.Type, To: RefPtrFromPB(l.To), ToKey: l.ToKey, Props: Map(l.Props)})
 		}
 		for _, id := range pe.RemoveLinks {
 			e.RemoveLinks = append(e.RemoveLinks, domain.LinkID(id))
@@ -439,7 +439,7 @@ func StructuresFromPB(r *graphv1.GetStructuresResponse) domain.Structures {
 }
 
 // RestructuredToPB and RestructuredFromPB carry the result of a merge or a split (ADR 0077).
-func RestructuredToPB(r graph.Restructured) *graphv1.ImpactNodeRestructureResponse {
+func RestructuredToPB(r graphapi.Restructured) *graphv1.ImpactNodeRestructureResponse {
 	out := &graphv1.ImpactNodeRestructureResponse{Successors: ChangeImpactsToPB(r.Successors), Sources: ChangeImpactsToPB(r.Sources), Parents: ChangeImpactsToPB(r.Parents)}
 	for _, s := range r.Suspect {
 		out.Suspect = append(out.Suspect, &graphv1.SuspectLink{From: RefToPB(s.From), FromKey: s.FromKey, Type: s.Type, To: RefToPB(s.To), ToKey: s.ToKey})
@@ -447,10 +447,10 @@ func RestructuredToPB(r graph.Restructured) *graphv1.ImpactNodeRestructureRespon
 	return out
 }
 
-func RestructuredFromPB(r *graphv1.ImpactNodeRestructureResponse) graph.Restructured {
-	out := graph.Restructured{Successors: ChangeImpactsFromPB(r.GetSuccessors()), Sources: ChangeImpactsFromPB(r.GetSources()), Parents: ChangeImpactsFromPB(r.GetParents())}
+func RestructuredFromPB(r *graphv1.ImpactNodeRestructureResponse) graphapi.Restructured {
+	out := graphapi.Restructured{Successors: ChangeImpactsFromPB(r.GetSuccessors()), Sources: ChangeImpactsFromPB(r.GetSources()), Parents: ChangeImpactsFromPB(r.GetParents())}
 	for _, s := range r.GetSuspect() {
-		out.Suspect = append(out.Suspect, graph.SuspectLink{From: RefFromPB(s.From), FromKey: s.FromKey, Type: s.Type, To: RefFromPB(s.To), ToKey: s.ToKey})
+		out.Suspect = append(out.Suspect, graphapi.SuspectLink{From: RefFromPB(s.From), FromKey: s.FromKey, Type: s.Type, To: RefFromPB(s.To), ToKey: s.ToKey})
 	}
 	return out
 }

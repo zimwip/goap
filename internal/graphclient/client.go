@@ -1,4 +1,7 @@
-package graphsvc
+// Package graphclient is the client of the graph service: engine.GraphPort and the reads of the other services over
+// RPC. It names the graph through its contract (pkg/graphapi) and the generated code only, so a service calling the
+// graph does not import the graph nor its service (pkg/layering, ADR 0124).
+package graphclient
 
 import (
 	"context"
@@ -14,7 +17,7 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/domain"
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 )
 
 // Client adapts the graph Connect client to engine.GraphPort (checked by client_port_test.go: the graph service names
@@ -57,7 +60,7 @@ func (c *Client) DeclareUser(ctx context.Context, subject string) error {
 	return rpcerr.FromConnect(err)
 }
 
-func (c *Client) CreateChange(ctx context.Context, in graph.NewChange) (domain.Change, error) {
+func (c *Client) CreateChange(ctx context.Context, in graphapi.NewChange) (domain.Change, error) {
 	r, err := c.rpc.CreateChange(ctx, connect.NewRequest(&graphv1.CreateChangeRequest{Title: in.Title, Intent: in.Intent,
 		Methodology: in.Methodology, MethodologyVersion: in.MethodologyVersion, Namespace: in.Namespace, BaselineId: string(in.BaselineID), Branch: in.Branch, OwnBranch: in.OwnBranch, ParentId: string(in.ParentID), OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Data: pbconv.Struct(in.Data)}))
 	if err != nil {
@@ -116,16 +119,16 @@ func (c *Client) UpgradeChange(ctx context.Context, id domain.ChangeID, version 
 }
 
 // ChangeDependencies implements engine.GraphPort (ADR 0108).
-func (c *Client) ChangeDependencies(ctx context.Context, id domain.ChangeID) (graph.ChangeDependencies, error) {
+func (c *Client) ChangeDependencies(ctx context.Context, id domain.ChangeID) (graphapi.ChangeDependencies, error) {
 	r, err := c.rpc.GetChangeDependencies(ctx, connect.NewRequest(&graphv1.GetChangeDependenciesRequest{ChangeId: string(id)}))
 	if err != nil {
-		return graph.ChangeDependencies{}, rpcerr.FromConnect(err)
+		return graphapi.ChangeDependencies{}, rpcerr.FromConnect(err)
 	}
-	return graph.ChangeDependencies{DependsOn: pbconv.DependenciesFromPB(r.Msg.DependsOn), Dependents: pbconv.DependenciesFromPB(r.Msg.Dependents),
+	return graphapi.ChangeDependencies{DependsOn: pbconv.DependenciesFromPB(r.Msg.DependsOn), Dependents: pbconv.DependenciesFromPB(r.Msg.Dependents),
 		Order: pbconv.DependenciesFromPB(r.Msg.Order)}, nil
 }
 
-func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graph.ChangePatch) (domain.Change, error) {
+func (c *Client) UpdateChange(ctx context.Context, id domain.ChangeID, p graphapi.ChangePatch) (domain.Change, error) {
 	req := &graphv1.UpdateChangeRequest{Id: string(id), Title: p.Title, Intent: p.Intent, Goal: p.Goal, Data: pbconv.Struct(p.Data)}
 	if p.Status != nil {
 		s := string(*p.Status)
@@ -156,7 +159,7 @@ func (c *Client) ProposeImpact(ctx context.Context, id domain.ChangeID, nodes []
 }
 
 // ImpactNodeCreate creates a node in a change (ADR 0076).
-func (c *Client) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graph.NodeCreate) (domain.ChangeImpact, error) {
+func (c *Client) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in graphapi.NodeCreate) (domain.ChangeImpact, error) {
 	req := &graphv1.ImpactNodeCreateRequest{ChangeId: string(id), Key: in.Key, Type: in.Type, Props: pbconv.Struct(in.Properties), Owner: in.Owner,
 		Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}
 	for _, l := range in.Links {
@@ -169,11 +172,11 @@ func (c *Client) ImpactNodeCreate(ctx context.Context, id domain.ChangeID, in gr
 	return pbconv.ChangeImpactFromPB(r.Msg.Node), nil
 }
 
-func nameToPB(n graph.NodeName) *graphv1.NodeName {
+func nameToPB(n graphapi.NodeName) *graphv1.NodeName {
 	return &graphv1.NodeName{ChangeImpactId: string(n.Impact), NodeId: string(n.Node), Key: n.Key}
 }
 
-func specToPB(c graph.NodeCreate) *graphv1.NodeCreateSpec {
+func specToPB(c graphapi.NodeCreate) *graphv1.NodeCreateSpec {
 	s := &graphv1.NodeCreateSpec{Key: c.Key, Type: c.Type, Props: pbconv.Struct(c.Properties), Owner: c.Owner, Rationale: c.Rationale}
 	for _, l := range c.Links {
 		s.Links = append(s.Links, &graphv1.NodeLinkWrite{Type: l.Type, To: pbconv.RefToPB(l.To), Props: pbconv.Struct(l.Properties)})
@@ -182,27 +185,27 @@ func specToPB(c graph.NodeCreate) *graphv1.NodeCreateSpec {
 }
 
 // ImpactNodeMerge implements engine.GraphPort (ADR 0077). The Gate of the input is the handler's here.
-func (c *Client) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in graph.MergeInput) (graph.Restructured, error) {
+func (c *Client) ImpactNodeMerge(ctx context.Context, id domain.ChangeID, in graphapi.MergeInput) (graphapi.Restructured, error) {
 	req := &graphv1.ImpactNodeMergeRequest{ChangeId: string(id), Into: specToPB(in.Into), Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}
 	for _, s := range in.Sources {
 		req.Sources = append(req.Sources, nameToPB(s))
 	}
 	r, err := c.rpc.ImpactNodeMerge(ctx, connect.NewRequest(req))
 	if err != nil {
-		return graph.Restructured{}, rpcerr.FromConnect(err)
+		return graphapi.Restructured{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.RestructuredFromPB(r.Msg), nil
 }
 
 // ImpactNodeSplit implements engine.GraphPort (ADR 0077).
-func (c *Client) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in graph.SplitInput) (graph.Restructured, error) {
+func (c *Client) ImpactNodeSplit(ctx context.Context, id domain.ChangeID, in graphapi.SplitInput) (graphapi.Restructured, error) {
 	req := &graphv1.ImpactNodeSplitRequest{ChangeId: string(id), Source: nameToPB(in.Source), Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}
 	for _, s := range in.Into {
 		req.Into = append(req.Into, specToPB(s))
 	}
 	r, err := c.rpc.ImpactNodeSplit(ctx, connect.NewRequest(req))
 	if err != nil {
-		return graph.Restructured{}, rpcerr.FromConnect(err)
+		return graphapi.Restructured{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.RestructuredFromPB(r.Msg), nil
 }
@@ -217,7 +220,7 @@ func (c *Client) DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain
 }
 
 // ImpactNodeCheckout implements engine.GraphPort.
-func (c *Client) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graph.NodeCheckout) (domain.ChangeImpact, error) {
+func (c *Client) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in graphapi.NodeCheckout) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeCheckout(ctx, connect.NewRequest(&graphv1.ImpactNodeCheckoutRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
 		Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}))
 	if err != nil {
@@ -227,7 +230,7 @@ func (c *Client) ImpactNodeCheckout(ctx context.Context, id domain.ChangeID, in 
 }
 
 // ImpactNodeUpdate implements engine.GraphPort.
-func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graph.NodeUpdate) (domain.ChangeImpact, error) {
+func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, in graphapi.NodeUpdate) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Props: pbconv.Struct(in.Properties),
 		Owner: in.Owner, Flow: in.Flow, Execution: in.Execution}))
 	if err != nil {
@@ -237,7 +240,7 @@ func (c *Client) ImpactNodeUpdate(ctx context.Context, id domain.ChangeID, impac
 }
 
 // ImpactLinkCreate implements engine.GraphPort.
-func (c *Client) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graph.LinkWrite, flow, execution string) (domain.Link, error) {
+func (c *Client) ImpactLinkCreate(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID, l graphapi.LinkWrite, flow, execution string) (domain.Link, error) {
 	r, err := c.rpc.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: string(id), ChangeImpactId: string(impact), Type: l.Type, To: pbconv.RefToPB(l.To),
 		Props: pbconv.Struct(l.Properties), Flow: flow, Execution: execution}))
 	if err != nil {
@@ -262,7 +265,7 @@ func (c *Client) ImpactLinkDelete(ctx context.Context, id domain.ChangeID, link 
 }
 
 // ImpactNodeTransition implements engine.GraphPort.
-func (c *Client) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graph.NodeTransition) (domain.ChangeImpact, error) {
+func (c *Client) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in graphapi.NodeTransition) (domain.ChangeImpact, error) {
 	r, err := c.rpc.ImpactNodeTransition(ctx, connect.NewRequest(&graphv1.ImpactNodeTransitionRequest{ChangeId: string(id), ChangeImpactId: string(in.Impact), NodeId: string(in.Node),
 		State: in.To, Rationale: in.Rationale, Flow: in.Flow, Execution: in.Execution}))
 	if err != nil {
@@ -281,14 +284,14 @@ func (c *Client) ImpactNodeCancel(ctx context.Context, id domain.ChangeID, impac
 }
 
 // RebaseChange brings a sub-change up to date with its parent (ADR 0082), a root change with the head of its target branch (ADR 0101).
-func (c *Client) RebaseChange(ctx context.Context, id domain.ChangeID) (graph.RebaseResult, error) {
+func (c *Client) RebaseChange(ctx context.Context, id domain.ChangeID) (graphapi.RebaseResult, error) {
 	r, err := c.rpc.RebaseChange(ctx, connect.NewRequest(&graphv1.RebaseChangeRequest{ChangeId: string(id)}))
 	if err != nil {
-		return graph.RebaseResult{}, rpcerr.FromConnect(err)
+		return graphapi.RebaseResult{}, rpcerr.FromConnect(err)
 	}
-	out := graph.RebaseResult{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, From: domain.BaselineID(r.Msg.From), Onto: domain.BaselineID(r.Msg.Onto)}
+	out := graphapi.RebaseResult{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, From: domain.BaselineID(r.Msg.From), Onto: domain.BaselineID(r.Msg.Onto)}
 	for _, i := range r.Msg.Impacts {
-		out.Impacts = append(out.Impacts, graph.RebasedImpact{Impact: domain.ChangeImpactID(i.ChangeImpactId), Key: i.Key, Changed: i.Changed, Merged: i.Merged, Conflicts: i.Conflicts})
+		out.Impacts = append(out.Impacts, graphapi.RebasedImpact{Impact: domain.ChangeImpactID(i.ChangeImpactId), Key: i.Key, Changed: i.Changed, Merged: i.Merged, Conflicts: i.Conflicts})
 	}
 	return out, nil
 }
@@ -303,17 +306,17 @@ func (c *Client) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impa
 }
 
 // RebaseState tells where a change stands against its parent or its target branch (ADR 0082, 0101).
-func (c *Client) RebaseState(ctx context.Context, id domain.ChangeID) (graph.RebaseState, error) {
+func (c *Client) RebaseState(ctx context.Context, id domain.ChangeID) (graphapi.RebaseState, error) {
 	r, err := c.rpc.GetRebaseState(ctx, connect.NewRequest(&graphv1.GetRebaseStateRequest{ChangeId: string(id)}))
 	if err != nil {
-		return graph.RebaseState{}, rpcerr.FromConnect(err)
+		return graphapi.RebaseState{}, rpcerr.FromConnect(err)
 	}
-	out := graph.RebaseState{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, Onto: domain.BaselineID(r.Msg.Onto)}
+	out := graphapi.RebaseState{Parent: domain.ChangeID(r.Msg.ParentId), Branch: r.Msg.Branch, Onto: domain.BaselineID(r.Msg.Onto)}
 	for _, id := range r.Msg.BehindImpactIds {
 		out.Behind = append(out.Behind, domain.ChangeImpactID(id))
 	}
 	for _, x := range r.Msg.Conflicts {
-		out.Conflicts = append(out.Conflicts, graph.ImpactConflicts{Impact: domain.ChangeImpactID(x.ChangeImpactId), Key: x.Key, Conflicts: x.Conflicts})
+		out.Conflicts = append(out.Conflicts, graphapi.ImpactConflicts{Impact: domain.ChangeImpactID(x.ChangeImpactId), Key: x.Key, Conflicts: x.Conflicts})
 	}
 	return out, nil
 }
@@ -404,7 +407,7 @@ func (c *Client) Change(ctx context.Context, id domain.ChangeID) (domain.Change,
 }
 
 // ListChanges implements engine.GraphPort.
-func (c *Client) ListChanges(ctx context.Context, f graph.ChangesFilter) ([]domain.Change, error) {
+func (c *Client) ListChanges(ctx context.Context, f graphapi.ChangesFilter) ([]domain.Change, error) {
 	req := &graphv1.ListChangesRequest{Namespace: f.Namespace, OwnerOrg: f.OwnerOrg}
 	for _, s := range f.Status {
 		req.Status = append(req.Status, string(s))
@@ -420,15 +423,15 @@ func (c *Client) ListChanges(ctx context.Context, f graph.ChangesFilter) ([]doma
 	return out, nil
 }
 
-// Commit runs a change of node edits in the graph service (see graph.Commit).
-func (c *Client) Commit(ctx context.Context, in graph.Commit) (graph.CommitResult, error) {
+// Commit runs a change of node edits in the graph service (see graphapi.Commit).
+func (c *Client) Commit(ctx context.Context, in graphapi.Commit) (graphapi.CommitResult, error) {
 	r, err := c.rpc.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,
 		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), BaselineId: string(in.Baseline), BaselineName: in.BaselineName, Edits: pbconv.EditsToPB(in.Edits),
 		OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID}))
 	if err != nil {
-		return graph.CommitResult{}, rpcerr.FromConnect(err)
+		return graphapi.CommitResult{}, rpcerr.FromConnect(err)
 	}
-	return graph.CommitResult{Change: domain.ChangeID(r.Msg.ChangeId), Baseline: pbconv.BaselineFromPB(r.Msg.Baseline)}, nil
+	return graphapi.CommitResult{Change: domain.ChangeID(r.Msg.ChangeId), Baseline: pbconv.BaselineFromPB(r.Msg.Baseline)}, nil
 }
 
 func (c *Client) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error) {
@@ -498,7 +501,7 @@ func (c *Client) ChangeView(ctx context.Context, id domain.ChangeID, flow, level
 }
 
 // OpenOption implements engine.GraphPort (the principal comes from the request identity).
-func (c *Client) OpenOption(ctx context.Context, id domain.ChangeID, in graph.OpenOptionRequest) (domain.Flow, error) {
+func (c *Client) OpenOption(ctx context.Context, id domain.ChangeID, in graphapi.OpenOptionRequest) (domain.Flow, error) {
 	r, err := c.rpc.OpenOption(ctx, connect.NewRequest(&graphv1.OpenOptionRequest{ChangeId: string(id), Name: in.Name, Hypothesis: in.Hypothesis, Activate: in.Activate}))
 	if err != nil {
 		return domain.Flow{}, rpcerr.FromConnect(err)
@@ -547,17 +550,17 @@ func (c *Client) DiffFlows(ctx context.Context, id domain.ChangeID, left, right,
 }
 
 // CompareOptions implements engine.GraphPort.
-func (c *Client) CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graph.OptionComparison, error) {
+func (c *Client) CompareOptions(ctx context.Context, id domain.ChangeID, level string, all bool) (graphapi.OptionComparison, error) {
 	r, err := c.rpc.CompareOptions(ctx, connect.NewRequest(&graphv1.CompareOptionsRequest{ChangeId: string(id), Level: level, All: all}))
 	if err != nil {
-		return graph.OptionComparison{}, rpcerr.FromConnect(err)
+		return graphapi.OptionComparison{}, rpcerr.FromConnect(err)
 	}
-	out := graph.OptionComparison{Level: r.Msg.Level}
+	out := graphapi.OptionComparison{Level: r.Msg.Level}
 	for _, f := range r.Msg.Options {
 		out.Options = append(out.Options, pbconv.FlowFromPB(f))
 	}
 	for _, n := range r.Msg.Nodes {
-		on := graph.OptionNode{Node: domain.NodeID(n.Node), Key: n.Key, Type: n.Type, Main: pbconv.RefPtrFromPB(n.Main),
+		on := graphapi.OptionNode{Node: domain.NodeID(n.Node), Key: n.Key, Type: n.Type, Main: pbconv.RefPtrFromPB(n.Main),
 			Options: map[string]*domain.NodeRef{}, Props: map[string]map[string]any{}}
 		for _, f := range out.Options {
 			on.Options[f.ID] = nil
@@ -600,16 +603,16 @@ func (c *Client) Branch(ctx context.Context, namespace, name string) (domain.Bra
 }
 
 // PlanMerge implements engine.GraphPort.
-func (c *Client) PlanMerge(ctx context.Context, namespace, from, into string) (graph.MergePlan, error) {
+func (c *Client) PlanMerge(ctx context.Context, namespace, from, into string) (graphapi.MergePlan, error) {
 	r, err := c.rpc.PlanMerge(ctx, connect.NewRequest(&graphv1.PlanMergeRequest{Namespace: namespace, From: from, Into: into}))
 	if err != nil {
-		return graph.MergePlan{}, rpcerr.FromConnect(err)
+		return graphapi.MergePlan{}, rpcerr.FromConnect(err)
 	}
 	return pbconv.MergePlanFromPB(r.Msg.Plan), nil
 }
 
 // IntegrateChange implements engine.GraphPort (MergeChange over RPC).
-func (c *Client) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graph.Resolution) (domain.Change, error) {
+func (c *Client) IntegrateChange(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]graphapi.Resolution) (domain.Change, error) {
 	r, err := c.rpc.MergeChange(ctx, connect.NewRequest(&graphv1.MergeChangeRequest{ChangeId: string(id), Resolutions: pbconv.ResolutionsToPB(resolutions)}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
@@ -618,7 +621,7 @@ func (c *Client) IntegrateChange(ctx context.Context, id domain.ChangeID, resolu
 }
 
 // TransitionChange moves the state of a change along a transition of its lifecycle (ADR 0058).
-func (c *Client) TransitionChange(ctx context.Context, id domain.ChangeID, in graph.TransitionRequest) (domain.Change, error) {
+func (c *Client) TransitionChange(ctx context.Context, id domain.ChangeID, in graphapi.TransitionRequest) (domain.Change, error) {
 	r, err := c.rpc.TransitionChange(ctx, connect.NewRequest(&graphv1.TransitionChangeRequest{ChangeId: string(id), Transition: in.Transition, Decision: in.Decision}))
 	if err != nil {
 		return domain.Change{}, rpcerr.FromConnect(err)
@@ -726,7 +729,7 @@ func (c *Client) DeleteTag(ctx context.Context, id domain.TagID) error {
 }
 
 // OpenFlow implements engine.GraphPort.
-func (c *Client) OpenFlow(ctx context.Context, id domain.ChangeID, in graph.OpenFlowRequest) (domain.Flow, error) {
+func (c *Client) OpenFlow(ctx context.Context, id domain.ChangeID, in graphapi.OpenFlowRequest) (domain.Flow, error) {
 	r, err := c.rpc.OpenFlow(ctx, connect.NewRequest(&graphv1.OpenFlowRequest{ChangeId: string(id), Parent: in.Parent, ForkAfter: string(in.ForkAfter),
 		Seeds: seedsToPB(in.Seeds), StaleRuns: in.StaleRuns, Origin: pbconv.Struct(in.Origin), Items: pbconv.ItemsToPB(in.Items)}))
 	if err != nil {
@@ -775,7 +778,7 @@ func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow str
 }
 
 // OpenDecision implements engine.GraphPort (the principal comes from the request identity).
-func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graph.OpenDecisionRequest) (domain.DecisionPoint, error) {
+func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graphapi.OpenDecisionRequest) (domain.DecisionPoint, error) {
 	req := &graphv1.OpenDecisionRequest{ChangeId: string(id), Question: in.Question, Options: in.Options, AllOptions: in.Options == nil,
 		Criteria: in.Criteria, Policy: pbconv.Struct(in.Policy)}
 	r, err := c.rpc.OpenDecision(ctx, connect.NewRequest(req))
@@ -786,7 +789,7 @@ func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graph.
 }
 
 // RuleDecision implements engine.GraphPort.
-func (c *Client) RuleDecision(ctx context.Context, id domain.ChangeID, in graph.RuleRequest) (domain.DecisionPoint, error) {
+func (c *Client) RuleDecision(ctx context.Context, id domain.ChangeID, in graphapi.RuleRequest) (domain.DecisionPoint, error) {
 	r, err := c.rpc.RuleDecision(ctx, connect.NewRequest(&graphv1.RuleDecisionRequest{ChangeId: string(id), Point: in.Point, Outcome: in.Outcome,
 		Option: in.Option, Confidence: in.Confidence, Justification: in.Justification, Questions: in.Questions, Agent: !in.Human}))
 	if err != nil {

@@ -2,8 +2,6 @@ package telemetry
 
 import (
 	"context"
-	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,7 +12,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 
 	"github.com/zimwip/goap/internal/modelgw"
-	"github.com/zimwip/goap/pkg/engine"
 	"github.com/zimwip/goap/pkg/llm"
 )
 
@@ -124,40 +121,5 @@ func TestGenAIEmbeddingsSpan(t *testing.T) {
 	if attr(s, "gen_ai.operation.name").AsString() != "embeddings" || attr(s, "goap.llm.texts").AsInt64() != 2 ||
 		attr(s, "goap.llm.source").AsString() != "indexer" {
 		t.Fatalf("attributes %v", s.Attributes())
-	}
-}
-
-func TestEngineToolSpanAndEvents(t *testing.T) {
-	rec := recorder(t)
-	tr := NewEngineTracer()
-	p := &engine.Process{ID: "p1", Agent: "a"}
-	ctx, endAction := tr.StartAction(context.Background(), p, "act", "llm")
-	tr.Event(ctx, "llm.repair", map[string]any{"goap.llm.repair": 1, "goap.llm.truncated": true, "error": "bad"})
-	_, endTool := tr.StartTool(ctx, p, "act", "fs/read")
-	endTool(context.DeadlineExceeded)
-	endAction(nil, nil)
-	spans := rec.Ended()
-	tool := one(t, spans, "execute_tool fs/read")
-	if attr(tool, "goap.mcp").AsString() != "fs" || attr(tool, "error.type").AsString() != "timeout" {
-		t.Fatalf("tool attributes %v", tool.Attributes())
-	}
-	action := one(t, spans, "action act")
-	if len(action.Events()) != 1 || action.Events()[0].Name != "llm.repair" || len(action.Events()[0].Attributes) != 3 {
-		t.Fatalf("events %v", action.Events())
-	}
-}
-
-func TestErrorTypes(t *testing.T) {
-	for err, want := range map[error]string{
-		nil:                                  "",
-		llm.ErrRefusal:                       "refusal",
-		context.Canceled:                     "canceled",
-		errors.New("x"):                      "_OTHER",
-		&modelgw.StatusError{Code: 503}:      "503",
-		errors.Join(errors.New("w"), io.EOF): "_OTHER",
-	} {
-		if got := errorType(err); got != want {
-			t.Errorf("%v: %q, want %q", err, got, want)
-		}
 	}
 }

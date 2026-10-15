@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/graphapi"
 )
 
 // ProtectedAliasValidator keeps the protected aliases of the platform (ADR 0084) in place: a change may retarget one but
@@ -16,7 +16,7 @@ type ProtectedAliasValidator struct{}
 func (ProtectedAliasValidator) Types() []string { return []string{NodeTypeAlias} }
 
 // Validate checks every alias version the change writes against the one it replaces.
-func (ProtectedAliasValidator) Validate(_ context.Context, _ graph.ValidatorQuery, impacted []graph.ValidatedNode) error {
+func (ProtectedAliasValidator) Validate(_ context.Context, _ graphapi.ValidatorQuery, impacted []graphapi.ValidatedNode) error {
 	for _, v := range impacted {
 		post, err := aliasOfProps(v.Post.Properties)
 		if err != nil {
@@ -24,7 +24,7 @@ func (ProtectedAliasValidator) Validate(_ context.Context, _ graph.ValidatorQuer
 		}
 		if v.Pre == nil {
 			if isProtectedName(post.Alias) && !post.Protected {
-				return fmt.Errorf("alias %s is protected: it must be created with protected set: %w", post.Alias, graph.ErrInvalid)
+				return fmt.Errorf("alias %s is protected: it must be created with protected set: %w", post.Alias, graphapi.ErrInvalid)
 			}
 			continue
 		}
@@ -34,11 +34,11 @@ func (ProtectedAliasValidator) Validate(_ context.Context, _ graph.ValidatorQuer
 		}
 		switch {
 		case v.Post.State == StateRetired:
-			return fmt.Errorf("alias %s is protected: it cannot be retired, only retargeted: %w", pre.Alias, graph.ErrInvalid)
+			return fmt.Errorf("alias %s is protected: it cannot be retired, only retargeted: %w", pre.Alias, graphapi.ErrInvalid)
 		case !post.Protected:
-			return fmt.Errorf("alias %s is protected: its protected flag cannot be removed: %w", pre.Alias, graph.ErrInvalid)
+			return fmt.Errorf("alias %s is protected: its protected flag cannot be removed: %w", pre.Alias, graphapi.ErrInvalid)
 		case post.Alias != pre.Alias:
-			return fmt.Errorf("alias %s is protected: it cannot be renamed to %q: %w", pre.Alias, post.Alias, graph.ErrInvalid)
+			return fmt.Errorf("alias %s is protected: it cannot be renamed to %q: %w", pre.Alias, post.Alias, graphapi.ErrInvalid)
 		}
 	}
 	return nil
