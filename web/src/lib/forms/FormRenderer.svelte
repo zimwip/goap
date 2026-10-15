@@ -4,10 +4,10 @@
   import { untrack } from 'svelte';
   import type { FormDef, FormValues, NodeSource } from './types';
   import { emptySource } from './types';
-  import { widgetOf } from './registry';
   import { registerBuiltinWidgets } from './builtins';
-  import { formIssues, initialValues, sections, submittedValues } from './validate';
-  import JsonWidget from './widgets/JsonWidget.svelte';
+  import { formIssues, initialValues, isRequired, sections, submittedValues, visibleState } from './validate';
+  import FieldRow from './FieldRow.svelte';
+  import { offerForm } from './assist';
 
   registerBuiltinWidgets();
 
@@ -18,6 +18,7 @@
     serverError = '',
     onsubmit,
     actions,
+    assist,
   }: {
     form: FormDef;
     source?: NodeSource;
@@ -27,6 +28,8 @@
     onsubmit: (values: FormValues) => void;
     /** more buttons next to the submit one */
     actions?: import('svelte').Snippet;
+    /** offers the form to the assistant under this id and label (fill_form, submit_form) */
+    assist?: { id: string; label: string };
   } = $props();
 
   const uid = Math.random().toString(36).slice(2, 8);
@@ -35,7 +38,9 @@
   let tried = $state(false);
   const issues = $derived(formIssues(form, values, source));
   const blocked = $derived(Object.keys(issues).length > 0);
-  const groups = $derived(sections(form));
+  const shown = $derived(visibleState(form.fields, values));
+  // the sections with the fields their conditions show
+  const groups = $derived(sections(form).map((g) => ({ ...g, fields: g.fields.filter((f) => shown.visible.has(f.name)) })).filter((g) => g.fields.length > 0));
 
   function set(name: string, v: unknown) {
     values = { ...values, [name]: v };
@@ -43,10 +48,35 @@
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
+    send();
+  }
+
+  /** sends the values when they hold; else the issues, which the form now shows */
+  function send(): string | undefined {
     tried = true;
-    if (blocked) return;
+    if (busy) return 'The form is being sent.';
+    if (blocked)
+      return `The form has issues: ${Object.entries(issues)
+        .map(([k, l]) => `${k}: ${l.join(', ')}`)
+        .join('; ')}`;
     onsubmit(submittedValues(form, values));
   }
+
+  $effect(() => {
+    const a = assist;
+    if (!a) return;
+    return untrack(() =>
+      offerForm({
+        id: a.id,
+        label: a.label,
+        form: () => form,
+        issues: () => issues,
+        values: () => values,
+        fill: (v) => (values = { ...values, ...v }),
+        submit: send,
+      }),
+    );
+  });
 </script>
 
 <form class="decl-form" onsubmit={submit} novalidate>
@@ -56,23 +86,17 @@
     <fieldset>
       {#if g.name}<legend>{g.name}</legend>{/if}
       {#each g.fields as f (f.name)}
-        {@const w = widgetOf(f.widget)}
-        {@const id = `ff-${uid}-${f.name}`}
-        {@const shown = tried || values[f.name] !== undefined ? (issues[f.name] ?? []) : []}
-        {#if w?.display}
-          <div class="display"><w.component {id} field={f} value={undefined} onchange={() => {}} {values} {source} /></div>
-        {:else}
-          <div class="field" class:invalid={shown.length > 0}>
-            <label for={id}>{f.label || f.name}{#if f.required}<span class="req" aria-label="required"> *</span>{/if}</label>
-            {#if w}
-              <w.component {id} field={f} value={values[f.name]} onchange={(v: unknown) => set(f.name, v)} {values} {source} disabled={busy} invalid={shown.length > 0} />
-            {:else}
-              <JsonWidget {id} field={f} value={values[f.name]} onchange={(v: unknown) => set(f.name, v)} {values} {source} disabled={busy} invalid={shown.length > 0} />
-            {/if}
-            {#if f.help}<p class="help">{f.help}</p>{/if}
-            {#each shown as msg (msg)}<p class="issue" role="alert">{msg}</p>{/each}
-          </div>
-        {/if}
+        <FieldRow
+          id={`ff-${uid}-${f.name}`}
+          field={f}
+          value={values[f.name]}
+          onchange={(v: unknown) => set(f.name, v)}
+          values={shown.seen}
+          {source}
+          disabled={busy}
+          required={isRequired(f, shown.seen)}
+          issues={tried || values[f.name] !== undefined ? (issues[f.name] ?? []) : []}
+        />
       {/each}
     </fieldset>
   {/each}
@@ -103,34 +127,5 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
     margin-bottom: 0.3rem;
-  }
-  .field {
-    margin-bottom: 0.7rem;
-  }
-  .field :global(input:not([type='checkbox'])),
-  .field :global(textarea),
-  .field :global(select) {
-    width: 100%;
-  }
-  .req {
-    color: var(--danger);
-  }
-  .help {
-    color: var(--muted);
-    font-size: 0.8rem;
-    margin: 0.2rem 0 0;
-  }
-  .issue {
-    color: var(--danger);
-    font-size: 0.8rem;
-    margin: 0.2rem 0 0;
-  }
-  .invalid :global(input),
-  .invalid :global(textarea),
-  .invalid :global(select) {
-    border-color: var(--danger);
-  }
-  .display {
-    margin-bottom: 0.6rem;
   }
 </style>

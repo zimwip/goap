@@ -6,7 +6,7 @@
 // between this model and the proto message.
 
 import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
-import type { Action, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -137,6 +137,8 @@ export interface NodeTypeForm {
   validators: string[];
   /** editor the UI opens the nodes with ("" : inherited, or the default node editor) */
   editor: string;
+  /** the creation form of the nodes as JSON (ADR 0115 §7; "" : none, or inherited) */
+  form: string;
   /** node index declarations (kept as they are: not edited by the form) */
   search: SearchProperty[];
 }
@@ -237,6 +239,12 @@ export interface ActionForm extends Identified {
   where: string;
   /** subjects a scoped llm or tool action runs for at once (0: the engine's bound) */
   parallel: number;
+  /** llm: the budget of the tool loop (ADR 0118); 0 / empty: the engine's default */
+  loopRounds: number;
+  loopTokens: number;
+  loopTimeout: string;
+  loopToolResult: number;
+  loopCompact: number;
   /** human: the form the person fills in, as JSON (ADR 0115); the code (language, code) runs on its values */
   form: string;
 }
@@ -483,7 +491,7 @@ export const PRODUCE_OPS = ['create_node', 'update_node'] as const;
 
 // --- constructors --------------------------------------------------------------
 
-export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, validators: [], editor: '', search: [] });
+export const emptyNodeType = (): NodeTypeForm => ({ uid: newUid(), name: '', description: '', attributes: [], extends: '', lifecycle: '', document: '', changeControlled: true, additionalProperties: false, validators: [], editor: '', form: '', search: [] });
 export const emptyLinkType = (): LinkTypeForm => ({ uid: newUid(), name: '', description: '', from: '', to: '', attributes: [], compose: false, validators: [], label: '', inverseLabel: '' });
 let uidSeq = 0;
 /** New local id (elements created in the UI). */
@@ -532,6 +540,11 @@ export const emptyAction = (): ActionForm => ({
   scope: '',
   where: '',
   parallel: 0,
+  loopRounds: 0,
+  loopTokens: 0,
+  loopTimeout: '',
+  loopToolResult: 0,
+  loopCompact: 0,
   form: '',
 });
 export const emptyGoal = (): GoalForm => ({ uid: newUid(), name: '', description: '', examples: '', pre: [], value: 1 });
@@ -702,6 +715,11 @@ function actionToForm(a: Action, uid: string): ActionForm {
     scope: a.scope ?? '',
     where: a.where ?? '',
     parallel: a.parallel ?? 0,
+    loopRounds: a.loop?.maxRounds ?? 0,
+    loopTokens: a.loop?.maxTokens ?? 0,
+    loopTimeout: a.loop?.timeout ?? '',
+    loopToolResult: a.loop?.maxToolResultBytes ?? 0,
+    loopCompact: a.loop?.compactBytes ?? 0,
     form: a.form ? JSON.stringify(a.form, null, 2) : '',
   };
 }
@@ -779,6 +797,7 @@ export function nodeTypeToForm(n: NodeType): NodeTypeForm {
     additionalProperties: n.additionalProperties === true,
     validators: [...(n.validators ?? [])],
     editor: n.editor ?? '',
+    form: n.form ? JSON.stringify(n.form, null, 2) : '',
     search: (n.search ?? []).map((s) => ({ ...s })),
   };
 }
@@ -926,6 +945,14 @@ export function nodeTypeFromForm(n: NodeTypeForm): NodeType {
   put(o, 'validators', n.validators.map((v) => v.trim()).filter(Boolean));
   if (n.search.length) o.search = n.search.map((s) => ({ ...s }));
   put(o, 'editor', n.editor.trim());
+  if (n.form.trim()) {
+    try {
+      const f: unknown = JSON.parse(n.form);
+      if (f && typeof f === 'object' && !Array.isArray(f)) o.form = f as NonNullable<NodeType['form']>;
+    } catch {
+      /* the designer keeps the text: the JSON tab shows what is wrong */
+    }
+  }
   return o;
 }
 
@@ -1217,6 +1244,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
         put(o, 'model', a.model.trim());
         put(o, 'prompt', a.prompt);
         put(o, 'mcps', mcpList(a.mcps));
+        put(o, 'loop', loopFromForm(a));
       } else if (a.kind === 'script') {
         put(o, 'language', a.language);
         put(o, 'code', a.code);
@@ -1574,4 +1602,15 @@ export function goalChoices(f: Pick<MethodologyForm, 'goals' | 'processes'>): st
     if (name && !out.includes(name)) out.push(name);
   }
   return out;
+}
+
+/** The loop budget of an llm action from its form fields (ADR 0118); undefined when every field keeps the default. */
+export function loopFromForm(a: Pick<ActionForm, 'loopRounds' | 'loopTokens' | 'loopTimeout' | 'loopToolResult' | 'loopCompact'>): ActionLoop | undefined {
+  const l: ActionLoop = {};
+  if (a.loopRounds > 0) l.maxRounds = a.loopRounds;
+  if (a.loopTokens > 0) l.maxTokens = a.loopTokens;
+  if (a.loopTimeout.trim()) l.timeout = a.loopTimeout.trim();
+  if (a.loopToolResult > 0) l.maxToolResultBytes = a.loopToolResult;
+  if (a.loopCompact > 0) l.compactBytes = a.loopCompact;
+  return Object.keys(l).length ? l : undefined;
 }

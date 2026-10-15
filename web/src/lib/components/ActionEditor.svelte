@@ -308,6 +308,29 @@
         Agent level only, not here: <code>{agentOnly.join(', ')}</code>.{/if}</span
     >
   </div>
+  <fieldset class="loop">
+    <legend title="The budget of the tool loop (ADR 0118): an action coding in a workspace needs many rounds. Empty or 0: the engine's default (6 rounds).">Tool loop budget</legend>
+    <div class="field">
+      <label for="{id}-loop-rounds">Rounds</label>
+      <input id="{id}-loop-rounds" type="number" min="0" max="500" step="1" bind:value={action.loopRounds} class:bad={bad(`${p}.loop`)} data-path="{p}.loop" disabled={readonly} />
+    </div>
+    <div class="field">
+      <label for="{id}-loop-tokens">Tokens</label>
+      <input id="{id}-loop-tokens" type="number" min="0" step="1000" bind:value={action.loopTokens} disabled={readonly} />
+    </div>
+    <div class="field">
+      <label for="{id}-loop-timeout">Time</label>
+      <input id="{id}-loop-timeout" type="text" class="mono" bind:value={action.loopTimeout} placeholder="45m, 2h" disabled={readonly} />
+    </div>
+    <div class="field">
+      <label for="{id}-loop-result" title="A longer tool result keeps its head and its tail">Tool result bytes</label>
+      <input id="{id}-loop-result" type="number" min="0" step="1000" bind:value={action.loopToolResult} disabled={readonly} />
+    </div>
+    <div class="field">
+      <label for="{id}-loop-compact" title="Past this size the older tool results of the conversation are elided">Compact past bytes</label>
+      <input id="{id}-loop-compact" type="number" min="0" step="10000" bind:value={action.loopCompact} disabled={readonly} />
+    </div>
+  </fieldset>
 {:else if action.kind === 'script'}
   <div class="script-head">
     <div class="field lang">
@@ -579,5 +602,20 @@
   }
   .check input {
     margin: 0;
+  }
+  .loop {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0 0.75rem;
+  }
+  .loop .field {
+    margin: 0;
+  }
+  .loop input {
+    width: 8rem;
   }
 </style>

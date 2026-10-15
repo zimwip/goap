@@ -206,7 +206,7 @@ func BaselineFromPB(b *graphv1.Baseline) domain.Baseline {
 }
 
 func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
-	out := &graphv1.ChangeItem{Id: string(it.ID), Kind: string(it.Kind), Type: it.Type, Status: string(it.Status),
+	out := &graphv1.ChangeItem{Id: string(it.ID), Type: string(it.Type), Target: it.Target, Status: string(it.Status),
 		Data: Struct(it.Data), ProducedBy: it.ProducedBy, CreatedAt: Time(it.CreatedAt)}
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, string(d))
@@ -229,7 +229,7 @@ func ItemToPB(it domain.ChangeItem) *graphv1.ChangeItem {
 }
 
 func ItemFromPB(it *graphv1.ChangeItem) domain.ChangeItem {
-	out := domain.ChangeItem{ID: domain.ItemID(it.Id), Kind: domain.ItemKind(it.Kind), Type: it.Type, Status: domain.ItemStatus(it.Status),
+	out := domain.ChangeItem{ID: domain.ItemID(it.Id), Type: domain.ItemType(it.Type), Target: it.Target, Status: domain.ItemStatus(it.Status),
 		Data: Map(it.Data), ProducedBy: it.ProducedBy, CreatedAt: FromTime(it.CreatedAt)}
 	for _, d := range it.DerivedFrom {
 		out.DerivedFrom = append(out.DerivedFrom, domain.ItemID(d))
@@ -393,6 +393,19 @@ func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
 	}
 	if r := e.Review; r != nil {
 		out.Review = &graphv1.Review{Status: string(r.Status), By: r.By, Comment: r.Comment, At: Time(r.At), Flow: r.Flow, Execution: r.Execution, Superseded: r.Superseded, ReviewId: r.ReviewID}
+	}
+	return out
+}
+
+// ItemTypesToPB converts the catalogue of item types (domain.ItemTypes).
+func ItemTypesToPB(types []domain.ItemTypeInfo) *graphv1.ListItemTypesResponse {
+	out := &graphv1.ListItemTypesResponse{}
+	for _, k := range types {
+		pb := &graphv1.ItemTypeInfo{Type: string(k.Type), Origin: k.Origin, Description: k.Description}
+		if k.Permission != nil {
+			pb.Permission, pb.SubjectField = k.Permission.Permission, k.Permission.SubjectField
+		}
+		out.Types = append(out.Types, pb)
 	}
 	return out
 }

@@ -5,6 +5,9 @@ import (
 	"errors"
 	"testing"
 
+	"connectrpc.com/connect"
+
+	graphv1 "github.com/zimwip/goap/gen/goap/graph/v1"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/criticality"
 	"github.com/zimwip/goap/pkg/domain"
@@ -19,9 +22,9 @@ func TestItemAuthorizer(t *testing.T) {
 		t.Fatal(err)
 	}
 	check := authz.Authorizer(c)
-	perm, _ := domain.ItemPermissionOf(risk.KindDerogation)
+	perm, _ := domain.ItemPermissionOf(risk.TypeDerogation)
 	item := func(signatory string) domain.ChangeItem {
-		return domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"signatory": signatory}}
+		return domain.ChangeItem{Type: risk.TypeDerogation, Data: map[string]any{"signatory": signatory}}
 	}
 	for name, tc := range map[string]struct {
 		who       authz.Principal
@@ -53,7 +56,7 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	perm, _ := domain.ItemPermissionOf(risk.KindDerogation)
+	perm, _ := domain.ItemPermissionOf(risk.TypeDerogation)
 	resolve := func(_ context.Context, _ domain.Change, l criticality.Level) criticality.Policy {
 		return criticality.Policy{SignatoryRole: map[criticality.Level]string{criticality.C3: "ciso"}[l]}
 	}
@@ -61,8 +64,8 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 		return domain.Change{ID: "c", Data: map[string]any{domain.DataCriticality: l}}
 	}
 	signer := authz.Principal{Subject: "bob", Roles: []string{"derogation_signatory"}}
-	item := domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"signatory": "bob"}}
-	closing := domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"signatory": "bob", "status": "closed"}}
+	item := domain.ChangeItem{Type: risk.TypeDerogation, Data: map[string]any{"signatory": "bob"}}
+	closing := domain.ChangeItem{Type: risk.TypeDerogation, Data: map[string]any{"signatory": "bob", "status": "closed"}}
 	for name, tc := range map[string]struct {
 		who    authz.Principal
 		change domain.Change
@@ -79,5 +82,25 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 		if tc.denied != errors.Is(err, authz.ErrForbidden) {
 			t.Errorf("%s: %v", name, err)
 		}
+	}
+}
+
+// The item types of the process are listed with their origin and the permission they ask (ADR 0119).
+func TestListItemTypes(t *testing.T) {
+	risk.Register()
+	h := &Handler{}
+	r, err := h.ListItemTypes(context.Background(), connect.NewRequest(&graphv1.ListItemTypesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]*graphv1.ItemTypeInfo{}
+	for _, k := range r.Msg.Types {
+		got[k.Type] = k
+	}
+	if k := got["artifact"]; k == nil || k.Origin != "core" {
+		t.Errorf("artifact: %v", k)
+	}
+	if k := got["derogation"]; k == nil || k.Origin != risk.Origin || k.Permission != risk.PermissionSign || k.SubjectField != "signatory" {
+		t.Errorf("derogation: %v", k)
 	}
 }

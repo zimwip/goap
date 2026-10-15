@@ -54,7 +54,7 @@ func TestVerificationConditions(t *testing.T) {
 		t.Fatal(err)
 	}
 	it := func(id string, data map[string]any) domain.ChangeItem {
-		return domain.ChangeItem{ID: domain.ItemID(id), Kind: verify.KindVerification, Data: data}
+		return domain.ChangeItem{ID: domain.ItemID(id), Type: verify.TypeVerification, Data: data}
 	}
 	var bb domain.Blackboard
 	if st := set.Evaluate(bb).State; !st["all_verified"] || st["unverified_effects"] || st["reserves_open"] {
@@ -83,7 +83,7 @@ func TestDerogationConditions(t *testing.T) {
 		if status != "" {
 			d["status"] = status
 		}
-		return domain.ChangeItem{ID: domain.ItemID(id), Kind: risk.KindDerogation, Data: d}
+		return domain.ChangeItem{ID: domain.ItemID(id), Type: risk.TypeDerogation, Data: d}
 	}
 	bb := domain.Blackboard{At: at}
 	if st := set.Evaluate(bb).State; !st["no_expired_derogation"] || st["derogation_debt"] {
@@ -143,7 +143,7 @@ func TestCriticalityVariables(t *testing.T) {
 func TestCheckGate(t *testing.T) {
 	at := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
 	drg := func(key, rule, exp string) domain.ChangeItem {
-		return domain.ChangeItem{ID: domain.ItemID(key), Kind: risk.KindDerogation, Data: map[string]any{"key": key, "rule": rule, "target": "t", "reason": "why", "signatory": "alice", "expires": exp}}
+		return domain.ChangeItem{ID: domain.ItemID(key), Type: risk.TypeDerogation, Data: map[string]any{"key": key, "rule": rule, "target": "t", "reason": "why", "signatory": "alice", "expires": exp}}
 	}
 	tr := domain.Transition{Name: "ship",
 		Vetos:      []domain.Criterion{{Name: "safe", Expr: `change.criticality != "C3" || world["reviewed"]`}},

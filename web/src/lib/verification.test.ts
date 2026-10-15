@@ -3,7 +3,7 @@ import type { ChangeItem, Struct } from './api';
 import { closing, derogationRegister, expiredDerogation, expiryOf, verifications } from './verification';
 import { criticalityOf, lowers, selectable } from './criticality';
 
-const v = (data: Struct, extra: Partial<ChangeItem> = {}): ChangeItem => ({ kind: 'verification', data, ...extra });
+const v = (data: Struct, extra: Partial<ChangeItem> = {}): ChangeItem => ({ type: 'verification', data, ...extra });
 
 describe('verifications', () => {
   it('folds the entries of an effect into its last state', () => {
@@ -33,7 +33,7 @@ describe('verifications', () => {
 });
 
 describe('derogations', () => {
-  const d = (data: Struct): ChangeItem => ({ kind: 'derogation', data: { key: 'DRG-1', rule: 'docs', target: 't', reason: 'why', signatory: 'alice', expires: '2030-01-02', ...data } });
+  const d = (data: Struct): ChangeItem => ({ type: 'derogation', data: { key: 'DRG-1', rule: 'docs', target: 't', reason: 'why', signatory: 'alice', expires: '2030-01-02', ...data } });
 
   it('keeps the current version of each key', () => {
     const rows = derogationRegister([d({}), d({ key: 'DRG-2' }), d({ status: 'closed' })]);

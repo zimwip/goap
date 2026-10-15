@@ -474,6 +474,22 @@ func (c *Client) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]dom
 	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), nil
 }
 
+// SuspectLinks returns the links whose source is in the baseline and whose target is there at another version (the
+// suspect links GetBaselineGraph answers with).
+func (c *Client) SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error) {
+	_, _, sus, err := c.BaselineGraphWithSuspects(ctx, id)
+	return sus, err
+}
+
+// BaselineGraphWithSuspects is BaselineGraph and SuspectLinks in one call.
+func (c *Client) BaselineGraphWithSuspects(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, []domain.Link, error) {
+	r, err := c.rpc.GetBaselineGraph(ctx, connect.NewRequest(&graphv1.GetBaselineGraphRequest{Id: string(id)}))
+	if err != nil {
+		return nil, nil, nil, rpcerr.FromConnect(err)
+	}
+	return pbconv.NodesFromPB(r.Msg.Nodes), pbconv.LinksFromPB(r.Msg.Links), pbconv.LinksFromPB(r.Msg.SuspectLinks), nil
+}
+
 // ChangeView implements engine.GraphPort.
 func (c *Client) ChangeView(ctx context.Context, id domain.ChangeID, flow, level string) (domain.Baseline, error) {
 	r, err := c.rpc.GetChangeView(ctx, connect.NewRequest(&graphv1.GetChangeViewRequest{ChangeId: string(id), Flow: flow, Level: level}))

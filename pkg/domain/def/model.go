@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/form"
 )
 
 // TypeSet is what a methodology needs of the types in force (pkg/typecat.Catalog, or DomainTypes): the qualified
@@ -68,6 +69,10 @@ type NodeType struct {
 	// of it (a free-form type). By default a property that is not an attribute of the type, or of a supertype, is
 	// refused by the graph. A subtype inherits it.
 	AdditionalProperties bool `yaml:"additionalProperties,omitempty" json:"additionalProperties,omitempty"`
+	// Form is what a person fills in to create a node of the type (ADR 0115 §7): fields named after its attributes,
+	// link fields starting from the node (`fromKey: $self`) and explanations. The user interface shows it in its
+	// creation dialogs; the graph still checks the node as it checks any write. Inherited through extends.
+	Form *form.Form `yaml:"form,omitempty" json:"form,omitempty"`
 }
 
 // StructureTag tags a node type as a structure of the graph (ADR 0054, domain.Structure).

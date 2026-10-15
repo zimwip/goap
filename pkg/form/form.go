@@ -36,6 +36,12 @@ type Field struct {
 	Default  any    `yaml:"default,omitempty" json:"default,omitempty"`
 	// Constraints limit the choices of the widget; their keys are the ones it declares.
 	Constraints map[string]any `yaml:"constraints,omitempty" json:"constraints,omitempty"`
+	// VisibleWhen: the field is shown, checked and submitted only while every condition holds (none: always).
+	VisibleWhen []Condition `yaml:"visibleWhen,omitempty" json:"visibleWhen,omitempty"`
+	// RequiredWhen: the field must be filled in while every condition holds (Required: always).
+	RequiredWhen []Condition `yaml:"requiredWhen,omitempty" json:"requiredWhen,omitempty"`
+	// Fields are the sub-fields of a group: each entry of its value is an object of their values.
+	Fields []Field `yaml:"fields,omitempty" json:"fields,omitempty"`
 }
 
 // IsZero reports whether the form declares nothing.
@@ -81,16 +87,23 @@ func (is Issues) Error() string {
 	return strings.Join(parts, "; ")
 }
 
+// SelfKey names, as the fixed source of a link field (fromKey), the node a form creates or edits: the form of a node
+// type (ADR 0115 §7).
+const SelfKey = "$self"
+
 // NameRE is the shape of a field name.
 var NameRE = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9_]*$`)
 
 // CheckForm reports the problems of a form definition: names, widgets known to the registry, constraints declared by
-// the widget and of their type, the constraints a widget requires, and the references between fields.
-func CheckForm(f Form) Issues {
+// the widget and of their type, the constraints a widget requires, the references between fields, the conditions
+// (on an earlier field) and the sub-fields of a group (no group nor link field inside a group).
+func CheckForm(f Form) Issues { return checkFields(f.Fields, "fields", false) }
+
+func checkFields(fields []Field, path string, nested bool) Issues {
 	var out Issues
 	seen := map[string]bool{}
-	for j, fd := range f.Fields {
-		at := fmt.Sprintf("fields[%d]", j)
+	for j, fd := range fields {
+		at := fmt.Sprintf("%s[%d]", path, j)
 		switch {
 		case !NameRE.MatchString(fd.Name):
 			out = append(out, Issue{Path: at + ".name", Message: fmt.Sprintf("invalid field name %q (a letter, then letters, digits or _)", fd.Name)})
@@ -98,10 +111,23 @@ func CheckForm(f Form) Issues {
 			out = append(out, Issue{Path: at + ".name", Message: fmt.Sprintf("duplicate field %q", fd.Name)})
 		}
 		seen[fd.Name] = true
+		out = append(out, checkConditions(fields, j, "visibleWhen", fd.VisibleWhen, at)...)
+		out = append(out, checkConditions(fields, j, "requiredWhen", fd.RequiredWhen, at)...)
 		w, ok := Lookup(fd.Widget)
 		if !ok {
 			out = append(out, Issue{Path: at + ".widget", Message: fmt.Sprintf("unknown widget %q (known: %s)", fd.Widget, strings.Join(Names(), ", "))})
 			continue
+		}
+		if nested && (w.Value == ValueObjects || w.Value == ValueLinks || w.Name == WidgetNewNode || w.Name == WidgetDecision) {
+			out = append(out, Issue{Path: at + ".widget", Message: fmt.Sprintf("a group holds no %s field", w.Name)})
+		}
+		if w.Value == ValueObjects {
+			if len(fd.Fields) == 0 {
+				out = append(out, Issue{Path: at + ".fields", Message: "a group needs at least one sub-field"})
+			}
+			out = append(out, checkFields(fd.Fields, at+".fields", true)...)
+		} else if len(fd.Fields) > 0 {
+			out = append(out, Issue{Path: at + ".fields", Message: fmt.Sprintf("only a group has sub-fields, not a %s", w.Name)})
 		}
 		for _, k := range sortedKeys(fd.Constraints) {
 			c, ok := w.constraint(k)
@@ -115,11 +141,11 @@ func CheckForm(f Form) Issues {
 			}
 			if c.Type == ConstraintField {
 				ref, _ := fd.Constraints[k].(string)
-				other, ok := f.Field(ref)
+				other, ok := fieldOf(fields, ref)
 				if !ok || ref == fd.Name {
 					out = append(out, Issue{Path: at + ".constraints." + k, Message: fmt.Sprintf("no other field %q", ref)})
-				} else if c.Widget != "" && other.Widget != c.Widget {
-					out = append(out, Issue{Path: at + ".constraints." + k, Message: fmt.Sprintf("field %q is a %s, not a %s", ref, other.Widget, c.Widget)})
+				} else if len(c.Widgets) > 0 && !contains(c.Widgets, other.Widget) {
+					out = append(out, Issue{Path: at + ".constraints." + k, Message: fmt.Sprintf("field %q is a %s, not a %s", ref, other.Widget, strings.Join(c.Widgets, " or "))})
 				}
 			}
 		}
@@ -135,7 +161,7 @@ func CheckForm(f Form) Issues {
 				out = append(out, Issue{Path: at, Message: msg})
 			}
 		}
-		if fd.Default != nil && w.Value != ValueNone && w.Value != ValueLinks {
+		if fd.Default != nil && w.Value != ValueNone && w.Value != ValueLinks && w.Value != ValueObjects && w.Value != ValueObject {
 			if is := w.check(fd, fd.Default, Env{}, nil); len(is) > 0 {
 				out = append(out, Issue{Path: at + ".default", Message: is[0]})
 			}
@@ -144,25 +170,39 @@ func CheckForm(f Form) Issues {
 	return out
 }
 
+func fieldOf(fields []Field, name string) (Field, bool) {
+	for _, x := range fields {
+		if x.Name == name {
+			return x, true
+		}
+	}
+	return Field{}, false
+}
+
 // Validate checks the values a person submitted against the form and returns them cleaned (numbers as float64, lists
-// as []any, the defaults of the fields left out, the links of a link field completed with their source): a value for
-// a field the form does not declare, a missing required value, a value of the wrong kind or one its constraints
-// exclude is an issue. env resolves the node keys (nil Node: unchecked).
+// as []any, the defaults of the fields left out, the links of a link field completed with their source, the entries of
+// a group cleaned the same way): a value for a field the form does not declare, a missing required value, a value of
+// the wrong kind or one its constraints exclude is an issue. A field its conditions hide is left out, whatever was
+// sent for it. env resolves the node keys (nil Node: unchecked).
 func Validate(f Form, values map[string]any, env Env) (map[string]any, Issues) {
+	return validateFields(f, f.Fields, values, env)
+}
+
+func validateFields(f Form, fields []Field, values map[string]any, env Env) (map[string]any, Issues) {
 	var out Issues
 	clean := map[string]any{}
 	for _, k := range sortedKeys(values) {
-		if _, ok := f.Field(k); !ok {
+		if _, ok := fieldOf(fields, k); !ok {
 			out = append(out, Issue{Field: k, Message: "not a field of the form"})
 		}
 	}
-	for _, fd := range f.Fields {
+	for _, fd := range fields {
 		w, ok := Lookup(fd.Widget)
 		if !ok {
 			out = append(out, Issue{Field: fd.Name, Message: fmt.Sprintf("unknown widget %q", fd.Widget)})
 			continue
 		}
-		if w.Value == ValueNone {
+		if w.Value == ValueNone || !fd.Visible(clean) {
 			continue
 		}
 		v, ok := values[fd.Name]
@@ -170,21 +210,53 @@ func Validate(f Form, values map[string]any, env Env) (map[string]any, Issues) {
 			v = fd.Default
 		}
 		if empty(v) {
-			if fd.Required {
+			if fd.RequiredFor(clean) {
 				out = append(out, Issue{Field: fd.Name, Message: "required"})
 			}
 			continue
 		}
 		v = normalize(v)
-		if fd.Widget == WidgetLink {
+		switch w.Value {
+		case ValueLinks:
 			v = completeLinks(f, fd, v, values)
+		case ValueObjects:
+			var is Issues
+			v, is = validateEntries(f, fd, v, env)
+			out = append(out, is...)
 		}
 		for _, msg := range w.check(fd, v, env, values) {
 			out = append(out, Issue{Field: fd.Name, Message: msg})
 		}
 		clean[fd.Name] = v
+		if fd.Widget == WidgetNewNode {
+			// the links of the fields after it may start from or go to the nodes it creates
+			env = env.with(newNodesOf(fd, v))
+		}
 	}
 	return clean, out
+}
+
+// validateEntries checks and cleans the entries of a group, each against its sub-fields.
+func validateEntries(f Form, fd Field, v any, env Env) (any, Issues) {
+	list, ok := v.([]any)
+	if !ok {
+		return v, nil
+	}
+	var out Issues
+	entries := make([]any, len(list))
+	for i, e := range list {
+		m, ok := e.(map[string]any)
+		if !ok {
+			entries[i] = e
+			continue
+		}
+		c, is := validateFields(f, fd.Fields, m, env)
+		for _, x := range is {
+			out = append(out, Issue{Field: fd.Name, Message: fmt.Sprintf("entry %d, %s: %s", i+1, x.Field, x.Message)})
+		}
+		entries[i] = c
+	}
+	return entries, out
 }
 
 // empty reports a value the person left blank.
@@ -199,6 +271,8 @@ func empty(v any) bool {
 	case []string:
 		return len(x) == 0
 	case []map[string]any:
+		return len(x) == 0
+	case map[string]any:
 		return len(x) == 0
 	}
 	return false
@@ -235,6 +309,103 @@ func normalize(v any) any {
 		return out
 	}
 	return v
+}
+
+// keysOf reads the node keys of the value of a node or new node field: a key, keys, a new node {key}, new nodes.
+func keysOf(v any) []string {
+	switch x := normalize(v).(type) {
+	case string:
+		if x != "" {
+			return []string{x}
+		}
+	case map[string]any:
+		if k, _ := x["key"].(string); k != "" {
+			return []string{k}
+		}
+	case []any:
+		var out []string
+		for _, e := range x {
+			out = append(out, keysOf(e)...)
+		}
+		return out
+	}
+	return nil
+}
+
+// NewNode is a node a new node field asks the change to create.
+type NewNode struct {
+	Field string         `json:"field"`
+	Key   string         `json:"key"`
+	Type  string         `json:"type"`
+	Props map[string]any `json:"props,omitempty"`
+}
+
+// NewNodes lists the nodes the new node fields of validated values create, in the order of the fields.
+func NewNodes(f Form, values map[string]any) []NewNode {
+	var out []NewNode
+	for _, fd := range f.Fields {
+		if fd.Widget == WidgetNewNode {
+			out = append(out, newNodesOf(fd, values[fd.Name])...)
+		}
+	}
+	return out
+}
+
+func newNodesOf(fd Field, v any) []NewNode {
+	var out []NewNode
+	for _, m := range objectsOf(v) {
+		key, _ := m["key"].(string)
+		typ, _ := m["type"].(string)
+		props, _ := m["props"].(map[string]any)
+		if key != "" && typ != "" {
+			out = append(out, NewNode{Field: fd.Name, Key: key, Type: typ, Props: props})
+		}
+	}
+	return out
+}
+
+// Ruling is the ruling of a decision point a decision field asks for.
+type Ruling struct {
+	Field         string `json:"field"`
+	Point         string `json:"point"`
+	Option        string `json:"option"`
+	Justification string `json:"justification,omitempty"`
+}
+
+// Rulings lists the rulings of the decision fields of validated values, in the order of the fields.
+func Rulings(f Form, values map[string]any) []Ruling {
+	var out []Ruling
+	for _, fd := range f.Fields {
+		if fd.Widget != WidgetDecision {
+			continue
+		}
+		for _, m := range objectsOf(values[fd.Name]) {
+			p, _ := m["point"].(string)
+			o, _ := m["option"].(string)
+			j, _ := m["justification"].(string)
+			if p != "" && o != "" {
+				out = append(out, Ruling{Field: fd.Name, Point: p, Option: o, Justification: j})
+			}
+		}
+	}
+	return out
+}
+
+// objectsOf reads an object, or a list of objects.
+func objectsOf(v any) []map[string]any {
+	switch x := v.(type) {
+	case map[string]any:
+		return []map[string]any{x}
+	case []any:
+		var out []map[string]any
+		for _, e := range x {
+			if m, ok := e.(map[string]any); ok {
+				out = append(out, m)
+			}
+		}
+		return out
+	}
+	return nil
 }
 
 // Link is a link a link field asks for.
@@ -308,18 +479,10 @@ func linkSource(f Form, fd Field, values map[string]any) string {
 	if ref == "" {
 		return ""
 	}
-	switch x := values[ref].(type) {
-	case string:
-		return x
-	case []any:
-		if len(x) == 1 {
-			s, _ := x[0].(string)
-			return s
-		}
-	case []string:
-		if len(x) == 1 {
-			return x[0]
-		}
+	if keys := keysOf(values[ref]); len(keys) == 1 {
+		return keys[0]
+	} else if len(keys) > 1 {
+		return ""
 	}
 	if fdRef, ok := f.Field(ref); ok {
 		if s, ok := fdRef.Default.(string); ok {

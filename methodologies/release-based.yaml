@@ -1,5 +1,5 @@
 name: release-based
-version: 0.1.0
+version: 0.1.1
 description: >
   Release-based delivery of a project (ADR 0106): a release is a change of this methodology, the parent of the sdlc
   changes it integrates. It screens the open changes of its project for candidates, attaches the selected ones as its
@@ -31,28 +31,25 @@ roles:
   - {name: integrator, description: Integrates the selected changes into the release}
 
 conditions:
-  - name: in_planning
-    description: The release is being planned
-    expr: change.state == "planning"
   - name: scoped
     description: The scope and the target of the release are written down
-    expr: artifacts.exists(a, a.type == "release_scope")
+    expr: artifacts.exists(a, a.target == "release_scope")
   - name: screened
     description: The open changes of the project were screened for candidates
-    expr: artifacts.exists(a, a.type == "screening")
+    expr: artifacts.exists(a, a.target == "screening")
   - name: selected
     description: The candidates are selected (attached) or set aside, by a decision of the release manager
-    expr: artifacts.exists(a, a.type == "selection")
+    expr: artifacts.exists(a, a.target == "selection")
   - name: integrated
     description: The selected changes merged into the release
-    expr: artifacts.exists(a, a.type == "integration")
+    expr: artifacts.exists(a, a.target == "integration")
   - name: delivered
     description: The release landed
     expr: change.status == "applied"
   - name: candidates_followed
     description: The last move of an integrated change was taken into account
     expr: >
-      artifacts.exists(a, a.type == "candidate_note" && has(vars.event) && double(a.at) >= double(vars.event.at))
+      artifacts.exists(a, a.target == "candidate_note" && has(vars.event) && double(a.at) >= double(vars.event.at))
 
 actions:
   - name: scope_release
@@ -76,7 +73,7 @@ actions:
       The release "{{ .Change.Title }}": {{ .Change.Intent }}
       1. Call goap-change/list (status draft, active; namespace "alm") to see the open changes of the project.
       2. Keep the root sdlc changes that fit the scope of the release.
-      Finish with {"kind":"artifact","type":"screening","data":{"candidates":[{"changeId":"<id>","title":"<title>","why":"<one sentence>"}]}}.
+      Finish with {"type":"artifact","target":"screening","data":{"candidates":[{"changeId":"<id>","title":"<title>","why":"<one sentence>"}]}}.
 
   - name: select_candidates
     kind: human
@@ -117,7 +114,7 @@ actions:
     prompt: |
       An integrated change of the release moved: {{ with .Vars.event }}{{ .type }} of change {{ .change.id }} ({{ .change.title }}), now {{ .change.status }}{{ with .change.state }} in state {{ . }}{{ end }}{{ end }}.
       Say in one sentence what it means for the release (ready to merge, needs attention, left the release).
-      Finish with {"kind":"artifact","type":"candidate_note","data":{"changeId":"<its id>","note":"<the sentence>"}}.
+      Finish with {"type":"artifact","target":"candidate_note","data":{"changeId":"<its id>","note":"<the sentence>"}}.
 
 processes:
   - name: release

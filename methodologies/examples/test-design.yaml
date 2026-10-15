@@ -22,19 +22,19 @@ conditions:
     expr: changeImpacts.exists(n, n.intent == "created" && n.type == "alm@TestCase")
   - name: summarized
     description: A summary of the campaign is written
-    expr: artifacts.exists(a, a.type == "summary")
+    expr: artifacts.exists(a, a.target == "summary")
   - name: reviewed
     description: All the test cases have received a decision
     expr: changeImpacts.exists(n, n.intent == "created") && changeImpacts.filter(n, n.intent == "created").all(n, n.review != "proposed")
   - name: pinger_ready
     description: A human let the pinger proceed
-    expr: artifacts.exists(a, a.type == "go")
+    expr: artifacts.exists(a, a.target == "go")
   - name: pinger_pinged
     description: The pinger sent its progress signal to its parent
     expr: has(vars.pinged) && vars.pinged == true
   - name: pinger_wrapped
     description: A human let the pinger finish
-    expr: artifacts.exists(a, a.type == "wrapped")
+    expr: artifacts.exists(a, a.target == "wrapped")
   - name: ping_done
     description: The watcher's sub-agent call to the pinger has returned
     expr: has(vars.childStatus)

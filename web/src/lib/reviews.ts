@@ -1,5 +1,5 @@
 // The review object of a change (ADR 0080): a review built up while open (a global comment, one entry per change
-// impact with its own comment and outcome), then submitted. It is an item of kind `review`, each version of the item
+// impact with its own comment and outcome), then submitted. It is an item of type `review`, each version of the item
 // the whole record of its data.key (the server's review.Reviews); this module folds the items and holds the pure rules
 // the panel shows: which impacts await a review, when a review may be submitted, the comment each impact keeps.
 import type { ChangeImpact, ChangeItem, ReviewEntry, ReviewRecord } from './api';
@@ -29,7 +29,7 @@ export function foldReviews(items: ChangeItem[]): ReviewRecord[] {
   const out: ReviewRecord[] = [];
   const at = new Map<string, number>();
   for (const it of items) {
-    if (it.kind !== REVIEW_KIND || it.status === 'rejected' || it.status === 'superseded') continue;
+    if (it.type !== REVIEW_KIND || it.status === 'rejected' || it.status === 'superseded') continue;
     const data = it.data as Record<string, unknown> | undefined;
     const key = str(data?.key);
     const status = str(data?.status);

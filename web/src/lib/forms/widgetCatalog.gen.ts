@@ -25,6 +25,67 @@ export const WIDGET_CATALOG: WidgetSpec[] = [
     ]
   },
   {
+    "name": "decision",
+    "description": "rules a decision point of the change: an option and why",
+    "value": "object",
+    "constraints": [
+      {
+        "name": "justify",
+        "type": "boolean",
+        "description": "the justification is required"
+      }
+    ]
+  },
+  {
+    "name": "file",
+    "description": "a file the person attaches, kept in the values",
+    "value": "object",
+    "constraints": [
+      {
+        "name": "accept",
+        "type": "strings",
+        "description": "media types (text/*, application/pdf) or extensions (.csv) accepted"
+      },
+      {
+        "name": "maxBytes",
+        "type": "number",
+        "description": "largest file, in bytes (at most 524288)"
+      },
+      {
+        "name": "multiple",
+        "type": "boolean",
+        "description": "several files"
+      },
+      {
+        "name": "min",
+        "type": "number",
+        "description": "fewest files (multiple)"
+      },
+      {
+        "name": "max",
+        "type": "number",
+        "description": "most files (multiple)"
+      }
+    ]
+  },
+  {
+    "name": "group",
+    "description": "entries repeated by the person, each made of the sub-fields",
+    "value": "objects",
+    "constraints": [
+      {
+        "name": "min",
+        "type": "number",
+        "description": "fewest entries"
+      },
+      {
+        "name": "max",
+        "type": "number",
+        "description": "most entries"
+      }
+    ]
+  },
+  {
     "name": "link",
     "description": "links to create from a node to nodes found by a search",
     "value": "links",
@@ -32,8 +93,11 @@ export const WIDGET_CATALOG: WidgetSpec[] = [
       {
         "name": "from",
         "type": "field",
-        "description": "the node field whose node is the source",
-        "widget": "node"
+        "description": "the node field (or new node field) whose node is the source",
+        "widgets": [
+          "node",
+          "newNode"
+        ]
       },
       {
         "name": "fromKey",
@@ -100,6 +164,38 @@ export const WIDGET_CATALOG: WidgetSpec[] = [
         "name": "max",
         "type": "number",
         "description": "most values"
+      }
+    ]
+  },
+  {
+    "name": "newNode",
+    "description": "a node the change creates: its type, key and properties",
+    "value": "object",
+    "constraints": [
+      {
+        "name": "types",
+        "type": "strings",
+        "description": "qualified node types the person may create (a subtype qualifies)"
+      },
+      {
+        "name": "properties",
+        "type": "strings",
+        "description": "the attributes asked (none: the name of the type)"
+      },
+      {
+        "name": "multiple",
+        "type": "boolean",
+        "description": "several nodes"
+      },
+      {
+        "name": "min",
+        "type": "number",
+        "description": "fewest nodes (multiple)"
+      },
+      {
+        "name": "max",
+        "type": "number",
+        "description": "most nodes (multiple)"
       }
     ]
   },

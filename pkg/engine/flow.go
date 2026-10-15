@@ -36,7 +36,7 @@ func baseTitle(t string) string {
 
 func lastItem(c domain.Change) domain.ItemID {
 	for i := len(c.Items) - 1; i >= 0; i-- {
-		if c.Items[i].Kind != domain.KindFlow {
+		if c.Items[i].Type != domain.TypeFlow {
 			return c.Items[i].ID
 		}
 	}
@@ -82,7 +82,7 @@ func (e *Engine) relaunchLocked(ctx context.Context, id string, step int, reason
 		if by == "" {
 			by = "human"
 		}
-		req.Items = []domain.ChangeItem{{Kind: domain.KindArtifact, Type: GuidanceType, ProducedBy: by, Data: map[string]any{"text": guidance, "step": step}}}
+		req.Items = []domain.ChangeItem{{Type: domain.TypeArtifact, Target: GuidanceType, ProducedBy: by, Data: map[string]any{"text": guidance, "step": step}}}
 	}
 	flow, err := e.Graph.OpenFlow(ctx, old.ChangeID, req)
 	if err != nil {

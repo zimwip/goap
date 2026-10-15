@@ -15,7 +15,7 @@ func TestRiskScaleIsOneToFive(t *testing.T) {
 		for k, v := range extra {
 			d[k] = v
 		}
-		return domain.ChangeItem{Kind: KindRisk, Data: d}
+		return domain.ChangeItem{Type: TypeRisk, Data: d}
 	}
 	for name, c := range map[string]struct {
 		data map[string]any

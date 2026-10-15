@@ -67,13 +67,13 @@ type AssessmentState struct {
 var DefaultAssessmentViews = []SubjectView{
 	{Subject: assess.ImpactPrefix + "*", States: []StateRule{
 		{When: `subject.entry != null && subject.entry.review in ["accepted", "rejected"]`, Tone: ToneOK, Label: "processed"},
-		{Tone: ToneWarn, Label: "not processed yet", Open: true},
+		{Tone: ToneWarn, Label: "not processed yet"},
 	}},
 	{Subject: "*", States: []StateRule{
-		{When: "!assessment.current", Tone: ToneWarn, Label: "changed since its rating", Open: true},
-		{When: "!assessment.answered", Tone: ToneWarn, Label: "your remark awaits an answer", Open: true},
+		{When: "!assessment.current", Tone: ToneWarn, Label: "changed since its rating"},
+		{When: "!assessment.answered", Tone: ToneWarn, Label: "your remark awaits an answer"},
 		{When: fmt.Sprintf("assessment.score >= %d", AcceptableScore), Tone: ToneOK, Label: "accepted"},
-		{Tone: ToneWarn, Label: "to be improved", Open: true},
+		{Tone: ToneWarn, Label: "to be improved"},
 	}},
 }
 

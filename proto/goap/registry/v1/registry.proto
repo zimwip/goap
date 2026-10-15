@@ -83,6 +83,8 @@ message NodeType {
   bool admin_only = 13;
   // nodes of the type may carry properties that are no attribute of it (strict attributes, ADR 0079); inherited
   bool additional_properties = 14;
+  // what a person fills in to create a node of the type (pkg/form.Form, ADR 0115 §7); inherited
+  google.protobuf.Struct form = 15;
 }
 
 // RequiredLink: a node of the type has exactly count outgoing links of the link type (ADR 0065).
@@ -337,6 +339,18 @@ message Action {
   // human actions: what the person fills in (ADR 0115, pkg/form.Form as JSON: title, description, submit, artifact,
   // fields [{name, widget, label, help, placeholder, section, required, default, constraints}])
   google.protobuf.Struct form = 29;
+  // llm actions: the budget of the tool loop (ADR 0118)
+  ActionLoop loop = 30;
+}
+
+// The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default.
+message ActionLoop {
+  int32 max_rounds = 1;
+  int32 max_tool_result_bytes = 2;
+  int64 max_tokens = 3;
+  // a Go duration (45m, 2h)
+  string timeout = 4;
+  int32 compact_bytes = 5;
 }
 
 // The verification an action declares (ADR 0075): the kind of verifier its effect needs.
@@ -923,6 +937,8 @@ message TypeInfo {
   repeated string node_validators = 9;
   // the nodes may carry properties that are no attribute of the type (own or inherited)
   bool additional_properties = 10;
+  // the creation form of the nodes (own or the nearest ancestor's, pkg/form.Form, ADR 0115 §7)
+  google.protobuf.Struct form = 11;
 }
 
 // LinkTypeInfo is the resolved model of a link type; an empty end accepts any node type.

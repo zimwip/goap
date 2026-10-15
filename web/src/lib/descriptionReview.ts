@@ -1,6 +1,6 @@
 // The assessments of a change (ADR 0110): an action of the methodology rates a subject (the description, the title,
-// the intent, an impact, an item) with items of kind assessment (each the whole record of its key, the latest in
-// effect is the rating), and the person answers in the thread of the rating with items of kind comment. Mirrors the
+// the intent, an impact, an item) with items of type assessment (each the whole record of its key, the latest in
+// effect is the rating), and the person answers in the thread of the rating with items of type comment. Mirrors the
 // server's pkg/assess.
 import type { AssessmentState, ChangeItem, Process } from './api';
 
@@ -53,11 +53,11 @@ export interface Message {
   at?: string;
 }
 
-/** kindOf is the kind of an item, an assessment or a comment a model wrapped as an artifact of that type counting as
+/** typeOf is the type of an item, an assessment or a comment a model wrapped as an artifact of that target counting as
  *  one (the engine unwraps them since, ADR 0110; older changes keep them). */
-export function kindOf(it: ChangeItem): string {
-  const k = it.kind ?? '';
-  return k === 'artifact' && (it.type === 'assessment' || it.type === 'comment') ? it.type : k;
+export function typeOf(it: ChangeItem): string {
+  const k = it.type ?? '';
+  return k === 'artifact' && (it.target === 'assessment' || it.target === 'comment') ? it.target : k;
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
@@ -110,8 +110,8 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
   let versions = 0;
   inEffect(change.items ?? []).forEach((it, i) => {
     const d = dataOf(it);
-    if (kindOf(it) === 'comment' && keys.includes(str(d.about))) commented = i;
-    if (kindOf(it) === 'assessment' && keys.includes(str(d.key))) {
+    if (typeOf(it) === 'comment' && keys.includes(str(d.about))) commented = i;
+    if (typeOf(it) === 'assessment' && keys.includes(str(d.key))) {
       last = it;
       at = i;
       versions++;
@@ -146,8 +146,8 @@ export function threadOf(items: ChangeItem[] | undefined, subject: Subject = DES
   const out: Message[] = [];
   for (const it of inEffect(items ?? [])) {
     const d = dataOf(it);
-    if (kindOf(it) === 'comment' && keys.includes(str(d.about))) out.push({ kind: 'comment', id: it.id ?? '', text: str(d.text), at: it.createdAt });
-    else if (kindOf(it) === 'assessment' && keys.includes(str(d.key)))
+    if (typeOf(it) === 'comment' && keys.includes(str(d.about))) out.push({ kind: 'comment', id: it.id ?? '', text: str(d.text), at: it.createdAt });
+    else if (typeOf(it) === 'assessment' && keys.includes(str(d.key)))
       out.push({ kind: 'assessment', id: it.id ?? '', text: str(d.reply) || str(d.verdict), score: num(d.score), at: it.createdAt });
   }
   return out;
@@ -180,8 +180,8 @@ export function raterRun(processes: Iterable<Process>, change: { id?: string }, 
 
 /** commentItem is the item a person writes to answer the rater. */
 export const commentItem = (text: string, subject: Subject = DESCRIPTION): ChangeItem => ({
-  kind: 'comment',
   type: 'comment',
+  target: 'comment',
   data: { about: keysOf(subject)[0] ?? DESCRIPTION, text: text.trim() },
 });
 
@@ -227,8 +227,9 @@ const LABELS: Record<ReturnType<typeof reviewState>, string> = {
 
 /** bubbleView is the state of the bubble: the one the server evaluated from what the methodology declares (ADR 0116)
  *  for the rating shown, else the local judgement (a score of ACCEPTABLE_SCORE or more, or `processed` as the caller
- *  judges it), used while the states load or when they lag behind the rating. */
-export function bubbleView(rating: Assessment | undefined, states: AssessmentState[] | undefined, processed?: boolean, working = false): BubbleView {
+ *  judges it), used while the states load or when they lag behind the rating. The bubble opens on a click; by itself
+ *  only when the methodology declares a state `open`. */
+export function bubbleView(rating: Assessment | undefined, states: AssessmentState[] | undefined, processed?: boolean): BubbleView {
   const s = rating ? states?.find((x) => x.subject === rating.key) : undefined;
   if (rating && s && (s.score ?? 0) === rating.score && !!s.current === rating.current) {
     const tone = (TONES as readonly string[]).includes(s.tone ?? '') ? (s.tone as Tone) : 'neutral';
@@ -237,7 +238,7 @@ export function bubbleView(rating: Assessment | undefined, states: AssessmentSta
   const st = reviewState(rating);
   const due = processed !== undefined ? !processed && !!rating : st !== 'accepted' && st !== 'none';
   const label = processed === undefined || !rating ? LABELS[st] : processed ? 'processed' : 'not processed yet';
-  return { tone: due ? 'warn' : rating ? 'ok' : 'neutral', label, open: pending(st, working, processed), declared: false };
+  return { tone: due ? 'warn' : rating ? 'ok' : 'neutral', label, open: false, declared: false };
 }
 
 /** The context key under which a change view gives its bubbles the evaluated states: a getter of the list. */

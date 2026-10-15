@@ -1,4 +1,4 @@
-SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs goap-dev goap-runner goap-eval
+SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace goap-dev goap-runner goap-eval
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 

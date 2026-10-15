@@ -1,5 +1,5 @@
 name: platform
-version: 2.6.0
+version: 2.7.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -78,6 +78,16 @@ nodeTypes:
       - {name: sources, label: Sources, description: "Only the calls of these callers: engine, assistant, helper, indexer, intent, other (empty: all)", type: json, widget: textarea, section: Scope, order: 9}
       - {name: kinds, label: Kinds, description: "complete only: a behaviour never applies to an embedding", type: json, widget: textarea, section: Scope, order: 10}
       - {name: appliesToJSON, label: "Applies to JSON calls", description: "Also apply it to calls that require a JSON answer, wrapped so it cannot change the format", type: boolean, section: Scope, order: 11}
+  # a pattern of the form designer (ADR 0115 §9): a ready-made set of fields the methodologies of the platform share,
+  # offered next to the patterns shipped with the web (FP:<name>)
+  - name: FormPattern
+    description: "A ready-made set of form fields the form designer offers (ADR 0115)"
+    lifecycle: config
+    attributes:
+      - {name: name, label: Name, description: "Name of the pattern", type: string, section: Identity, order: 1, asName: true}
+      - {name: label, label: Label, description: "What the palette shows", type: string, section: Identity, order: 2}
+      - {name: description, label: Description, description: "What the pattern is for", type: string, widget: textarea, section: Identity, order: 3}
+      - {name: form, label: Form, description: "The fields of the pattern and its submit label (a form of pkg/form)", type: json, widget: textarea, section: Pattern, order: 4}
   # a built-in, platform-wide role (ADR 0046): granted by an organisation@Assignment naming no project
   # (assigns_org only), it holds everywhere, independent of any project's applicable methodologies — unlike
   # methodology@Role, which only exists where a project names the methodology declaring it. A fixed catalog

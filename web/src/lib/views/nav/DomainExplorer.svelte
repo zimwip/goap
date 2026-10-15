@@ -1,5 +1,6 @@
 <script lang="ts">
-  // Explorer of domains (one per namespace): domain → version → node types / link types.
+  // Explorer of domains (one per namespace): domain → version → node types / link types; then the item types of the
+  // platform (ADR 0119), read-only.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -15,12 +16,34 @@
   import { emptyNodeType, emptyLinkType, emptyAttribute, emptyEnum, defaultLifecycle } from '../../methodologyForm';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { itemTypes, refreshItemTypes } from '../../stores/itemTypes.svelte';
+  import { filterItemTypes, itemTypeShownIn, originLabel } from '../../itemTypes';
+  import type { ItemTypeInfo } from '../../api';
 
   let filter = $state('');
 
   $effect(() => {
     if (!domains.loaded) void refreshDomains();
   });
+  $effect(() => {
+    if (!itemTypes.loaded && !itemTypes.loading) void refreshItemTypes();
+  });
+
+  const shownItemTypes = $derived(filterItemTypes(itemTypes.items, filter));
+
+  function selectItemType(k: ItemTypeInfo, pin = false) {
+    openTab({ kind: 'itemtype', params: { type: k.type ?? '' } }, { pin });
+    select({
+      title: k.type ?? '',
+      subtitle: 'Item type',
+      rows: [
+        ['Origin', originLabel(k)],
+        ['Description', k.description ?? ''],
+        ['Shown in', itemTypeShownIn(k.type ?? '')],
+        ['Permission', k.permission ?? ''],
+      ],
+    });
+  }
 
   const groups = $derived.by(() => {
     const q = filter.trim().toLowerCase();
@@ -180,7 +203,7 @@
     <button type="button" class="ghost small" title="Import a domain (YAML or JSON)" aria-label="Import a domain"
       onclick={() => openTab({ kind: 'import', params: { what: 'domain' } }, { pin: true })}><Icon name="upload" size={14} /></button
     >
-    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={domains.loading} onclick={() => refreshDomains()}
+    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={domains.loading} onclick={() => { void refreshDomains(); void refreshItemTypes(); }}
       ><Icon name="refresh" size={14} /></button
     >
   </div>
@@ -689,6 +712,38 @@
         {/each}
       {/if}
     {/each}
+  </div>
+
+  <div role="tree" aria-label="Item types">
+    {#if !filter.trim() || shownItemTypes.length}
+      <TreeRow
+        icon="list"
+        label="Item types"
+        detail={itemTypes.loaded ? String(itemTypes.items.length) : ''}
+        title="The types of item a change holds next to its impacts (risk, assessment, artifact…): they change with the platform code"
+        expanded={isOpen('it:all') || !!filter.trim()}
+        ontoggle={() => toggle('it:all')}
+      />
+      {#if isOpen('it:all') || filter.trim()}
+        {#if itemTypes.error}
+          <div class="alert small">{itemTypes.error}</div>
+        {:else if !itemTypes.loaded}
+          <p class="empty pad2">Loading…</p>
+        {/if}
+        {#each shownItemTypes as k (k.type)}
+          <TreeRow
+            depth={1}
+            icon="tag"
+            label={k.type ?? ''}
+            detail={k.origin === 'core' ? 'built-in' : k.origin}
+            title={k.description || k.type}
+            active={tabsState.active === tabId({ kind: 'itemtype', params: { type: k.type ?? '' } })}
+            onselect={() => selectItemType(k)}
+            onopen={() => selectItemType(k, true)}
+          />
+        {/each}
+      {/if}
+    {/if}
   </div>
 </div>
 

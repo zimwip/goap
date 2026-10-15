@@ -115,6 +115,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.compileConditions()
 	s.injectLibraries()
 	s.compileActions()
+	s.chainScoped()
 	s.checkSpecializations()
 	s.checkReferences()
 	s.compileGoals()
@@ -404,6 +405,33 @@ func (s *compileState) compileActions() {
 	}
 }
 
+// chainScoped lets the planner chain two scoped actions of the same scope (ADR 0118): when what one makes true on its
+// subject is what the other needs on its own, running the first is planned to leave a subject pending for the second
+// (its pending condition among the effects of the first, for the plan only: lifted, never checked once it ran).
+// Without it a plan could not reach past the first, since no action makes the second's pending condition true.
+func (s *compileState) chainScoped() {
+	for _, name := range slices.Sorted(maps.Keys(s.actions)) {
+		a := s.actions[name]
+		if !a.IsScoped() || a.Lifted == nil {
+			continue
+		}
+		for _, other := range slices.Sorted(maps.Keys(s.actions)) {
+			b := s.actions[other]
+			if other == name || !b.IsScoped() || b.Scope != a.Scope || b.Lifted == nil {
+				continue
+			}
+			for k, v := range a.ScopedEffects {
+				if want, ok := b.ScopedPre[k]; ok && want == v {
+					a.Effects[b.PendingCondition()] = true
+					a.Lifted[b.PendingCondition()] = true
+					break
+				}
+			}
+		}
+		s.actions[name] = a
+	}
+}
+
 // checkSpecialization checks the specialization side of an action (ADR 0035's specializes / when / priority).
 func (s *compileState) checkSpecialization(path string, a Action) {
 	if !a.IsSpecialization() {
@@ -442,6 +470,9 @@ func (s *compileState) checkImplementation(path string, a Action) {
 		}
 	}
 	s.checkForm(path, a)
+	for _, msg := range a.Loop.issues(a.Kind) {
+		s.add(path+".loop", "%s", msg)
+	}
 	switch {
 	case a.Kind == KindLLM && a.Prompt == "":
 		s.add(path+".prompt", "llm action requires a prompt")
@@ -481,7 +512,12 @@ func (s *compileState) checkForm(path string, a Action) {
 	for _, is := range form.CheckForm(*a.Form) {
 		s.add(path+".form."+is.Path, "%s", is.Message)
 	}
-	for j, f := range a.Form.Fields {
+	s.checkFormTypes(path+".form.fields", a.Form.Fields)
+}
+
+// checkFormTypes checks the node and link types the constraints of form fields name, sub-fields included.
+func (s *compileState) checkFormTypes(path string, fields []form.Field) {
+	for j, f := range fields {
 		for _, c := range []struct {
 			name string
 			link bool
@@ -490,11 +526,12 @@ func (s *compileState) checkForm(path string, a Action) {
 			for _, t := range list {
 				if ref, ok := t.(string); ok {
 					if msg := s.m.checkTypeRef(ref, c.link); msg != "" {
-						s.add(fmt.Sprintf("%s.form.fields[%d].constraints.%s", path, j, c.name), "%s", msg)
+						s.add(fmt.Sprintf("%s[%d].constraints.%s", path, j, c.name), "%s", msg)
 					}
 				}
 			}
 		}
+		s.checkFormTypes(fmt.Sprintf("%s[%d].fields", path, j), f.Fields)
 	}
 }
 

@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +17,7 @@ import (
 	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
 	"github.com/zimwip/goap/internal/connectorkit"
 	"github.com/zimwip/goap/internal/connectors/localfs"
+	"github.com/zimwip/goap/internal/connectors/workspace"
 	"github.com/zimwip/goap/internal/devseed"
 	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/identity"
@@ -21,6 +25,8 @@ import (
 	"github.com/zimwip/goap/pkg/access"
 	"github.com/zimwip/goap/pkg/authz"
 	"github.com/zimwip/goap/pkg/graph"
+	"github.com/zimwip/goap/pkg/mcp"
+	"github.com/zimwip/goap/pkg/mcpbuiltin"
 )
 
 // A connector started later registers by itself; a call from an organization goes
@@ -96,5 +102,51 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 	var ce *connect.Error
 	if !errors.As(err, &ce) || ce.Code() != connect.CodePermissionDenied {
 		t.Fatalf("call without token = %v", err)
+	}
+}
+
+// The change a tool call runs for reaches a remote connector (ADR 0118): the workspace of a change is found from it,
+// through the engine's client, the hub and the connector over HTTP.
+func TestCallContextReachesTheConnector(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	const token = "s3cret"
+	root := t.TempDir()
+	g := graph.New(graph.NewMemory())
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := graphsvc.SeedBuiltins(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if err := graphsvc.SeedAdapter(ctx, g, mcpbuiltin.WorkspaceAdapter(access.DefaultOrg, root)); err != nil {
+		t.Fatal(err)
+	}
+	hub := &mcpsvc.Service{Store: mcpsvc.NewMemoryStore(), Directory: &mcpsvc.Directory{Graph: g},
+		Invoker: &mcpsvc.ConnectInvoker{Token: token, HTTP: http.DefaultClient}, Lease: 3 * time.Second}
+	dev := authz.Principal{Subject: "u", Org: "acme", Roles: []string{"admin"}}
+	mux := http.NewServeMux()
+	mux.Handle(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Identity: identity.Extractor{Default: &dev}, ConnectorToken: token}))
+	hubSrv := httptest.NewServer(mux)
+	defer hubSrv.Close()
+	conn := workspace.New()
+	cmux := http.NewServeMux()
+	cmux.Handle(connectorkit.Handler(conn, token))
+	connSrv := httptest.NewServer(cmux)
+	defer connSrv.Close()
+	if _, err := hub.RegisterConnector(ctx, conn.Info(), connSrv.URL); err != nil {
+		t.Fatal(err)
+	}
+
+	client := mcpsvc.NewClient(http.DefaultClient, hubSrv.URL)
+	cctx := mcp.WithCall(authz.With(ctx, dev), mcp.CallContext{Change: "CHG-42", Process: "P-1"})
+	if _, err := client.CallTool(cctx, "acme", "workspace/write", map[string]any{"path": "a.txt", "content": "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(root, "CHG-42", "a.txt")); err != nil || string(b) != "hi" {
+		t.Fatalf("workspace of CHG-42: %q %v", b, err)
+	}
+	if _, err := client.CallTool(authz.With(ctx, dev), "acme", "workspace/ls", nil); err == nil || !strings.Contains(err.Error(), "runs for none") {
+		t.Fatalf("a call for no change: %v", err)
 	}
 }

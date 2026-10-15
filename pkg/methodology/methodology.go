@@ -238,6 +238,9 @@ type Action struct {
 	// llm
 	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
 	Prompt string `yaml:"prompt,omitempty" json:"prompt,omitempty"`
+	// Loop is the budget of the tool loop of an llm action (ADR 0118): rounds, size of a tool result, tokens,
+	// duration, compaction; nil: the engine's defaults, fit for an analysis.
+	Loop *Loop `yaml:"loop,omitempty" json:"loop,omitempty"`
 	// tool: "<mcp>/<tool>", a tool of an MCP the organization of the change binds
 	Tool string `yaml:"tool,omitempty" json:"tool,omitempty"`
 	// MCPs the action uses (llm and script actions; a tool action uses the MCP of its

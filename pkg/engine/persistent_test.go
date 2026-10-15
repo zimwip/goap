@@ -45,7 +45,7 @@ func TestPersistentRaterKeepsItsInstanceAndConversation(t *testing.T) {
 		reqs = append(reqs, r)
 		bb, _ := e.Graph.Blackboard(ctx, ch.ID)
 		fp := assess.FingerprintOf(bb, assess.SubjectDescription)
-		return llm.Response{Text: `{"items":[{"kind":"assessment","data":{"key":"description","score":3,"verdict":"clear","rated":"` + fp + `","reply":"answer ` + string(rune('0'+len(reqs))) + `"}}]}`}, nil
+		return llm.Response{Text: `{"items":[{"type":"assessment","data":{"key":"description","score":3,"verdict":"clear","rated":"` + fp + `","reply":"answer ` + string(rune('0'+len(reqs))) + `"}}]}`}, nil
 	})}
 	raters := func() []*Process {
 		t.Helper()
@@ -107,8 +107,8 @@ name: notes
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: noted, expr: 'artifacts.exists(a, a.type == "note" && a.data.n == vars.event.n)'}
-  - {name: final, expr: 'artifacts.exists(a, a.type == "note" && a.data.final == true)'}
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note" && a.data.n == vars.event.n)'}
+  - {name: final, expr: 'artifacts.exists(a, a.target == "note" && a.data.final == true)'}
 actions:
   - {name: note, kind: llm, model: default, prompt: Write the note, effects: {noted: true}}
 goals:
@@ -141,7 +141,7 @@ func TestPersistentInstanceClosesUntil(t *testing.T) {
 			if final[n] {
 				f = "true"
 			}
-			return llm.Response{Text: `{"items":[{"kind":"artifact","type":"note","data":{"n":` + string(rune('0'+n)) + `,"final":` + f + `}}]}`}, nil
+			return llm.Response{Text: `{"items":[{"type":"artifact","target":"note","data":{"n":` + string(rune('0'+n)) + `,"final":` + f + `}}]}`}, nil
 		})}
 		p, err := e.Start(ctx, StartRequest{Methodology: "notes", Agent: "writer", Goal: "noted", ChangeID: ch.ID, Vars: map[string]any{"event": map[string]any{"type": "manual", "n": n}}})
 		if err != nil {
@@ -214,7 +214,7 @@ func TestPersistentRaterRatesTheCurrentText(t *testing.T) {
 			stale = assess.FingerprintOf(bb, assess.SubjectDescription)
 		}
 		n++
-		return llm.Response{Text: `{"items":[{"kind":"assessment","data":{"key":"description","score":` + string(rune('0'+n+1)) + `,"verdict":"clear","rated":"` + stale + `"}}]}`}, nil
+		return llm.Response{Text: `{"items":[{"type":"assessment","data":{"key":"description","score":` + string(rune('0'+n+1)) + `,"verdict":"clear","rated":"` + stale + `"}}]}`}, nil
 	})}
 	bb, _ := e.Graph.Blackboard(ctx, ch.ID)
 	e.Accompany(ctx, TriggerEvent{Type: "change.created", Change: &bb.Change})

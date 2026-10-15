@@ -1,6 +1,6 @@
 // The checks of a form, the same as the engine's (pkg/form.Validate) minus what only the server knows: run before
 // sending, so a person sees the issues by their fields. Pure.
-import type { FieldDef, FormDef, FormValues, LinkValue, NodeOption, NodeSource } from './types';
+import type { Condition, DecisionValue, FieldDef, FileValue, FormDef, FormValues, LinkValue, NewNodeValue, NodeOption, NodeSource } from './types';
 
 /** Widgets that show something and produce no value. */
 export const DISPLAY_WIDGETS = new Set(['markdown']);
@@ -10,7 +10,86 @@ const num = (v: unknown): number | undefined => (typeof v === 'number' && Number
 const bool = (v: unknown): boolean => v === true;
 
 export function isEmpty(v: unknown): boolean {
-  return v === undefined || v === null || (typeof v === 'string' && v.trim() === '') || (Array.isArray(v) && v.length === 0);
+  return (
+    v === undefined ||
+    v === null ||
+    (typeof v === 'string' && v.trim() === '') ||
+    (Array.isArray(v) && v.length === 0) ||
+    (typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length === 0)
+  );
+}
+
+/** The largest file a file field accepts (pkg/form.MaxFileBytes). */
+export const MAX_FILE_BYTES = 512 << 10;
+
+const objects = <T>(v: unknown): T[] => (Array.isArray(v) ? (v.filter((x) => x && typeof x === 'object') as T[]) : v && typeof v === 'object' ? [v as T] : []);
+
+/** The node keys of a node or new node value: a key, keys, a new node {key}, new nodes. */
+export function keysOf(v: unknown): string[] {
+  if (typeof v === 'string') return v ? [v] : [];
+  if (Array.isArray(v)) return v.flatMap(keysOf);
+  if (v && typeof v === 'object') {
+    const k = (v as NewNodeValue).key;
+    return typeof k === 'string' && k ? [k] : [];
+  }
+  return [];
+}
+
+/** The types of the nodes the new node fields of the values create, by key. */
+export function newNodeTypes(form: { fields?: FieldDef[] } | undefined, values: FormValues): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const f of form?.fields ?? []) {
+    if (f.widget !== 'newNode') continue;
+    for (const n of objects<NewNodeValue>(values[f.name])) if (n.key && n.type) out.set(n.key, n.type);
+  }
+  return out;
+}
+
+/** Whether a file matches one of the accepted media types (text/*) or extensions (.csv). */
+export function accepts(accept: string[], name: string, type = ''): boolean {
+  const ext = name.includes('.') ? name.slice(name.lastIndexOf('.')).toLowerCase() : '';
+  return accept.some((raw) => {
+    const a = raw.trim().toLowerCase();
+    if (a.startsWith('.')) return ext === a;
+    if (a.endsWith('/*')) return type.toLowerCase().startsWith(a.slice(0, -1));
+    return a === type.toLowerCase();
+  });
+}
+
+const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.:-]*$/;
+
+const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** Whether a condition holds on the value of its field (undefined: blank or hidden). On a list, equals and in hold
+ * when the list holds one of the values. */
+export function holds(c: Condition, v: unknown): boolean {
+  if (c.set !== undefined) return isEmpty(v) !== c.set;
+  if (isEmpty(v)) return false;
+  const want = c.equals !== undefined ? [c.equals] : (c.in ?? []);
+  const got = Array.isArray(v) ? v : [v];
+  return got.some((g) => want.some((w) => same(g, w)));
+}
+
+export const allHold = (cs: Condition[] | undefined, values: FormValues): boolean => (cs ?? []).every((c) => holds(c, values[c.field]));
+
+/** Whether a field is shown given the values of the fields before it. */
+export const isVisible = (f: FieldDef, values: FormValues): boolean => allHold(f.visibleWhen, values);
+
+/** Whether a field must be filled in given the values of the fields before it. */
+export const isRequired = (f: FieldDef, values: FormValues): boolean => !!f.required || (!!f.requiredWhen?.length && allHold(f.requiredWhen, values));
+
+/** The fields shown and the values the conditions read: a field's value (or default) when it is shown, in order. */
+export function visibleState(fields: FieldDef[] | undefined, values: FormValues): { visible: Set<string>; seen: FormValues } {
+  const visible = new Set<string>();
+  const seen: FormValues = {};
+  for (const f of fields ?? []) {
+    if (!isVisible(f, seen)) continue;
+    visible.add(f.name);
+    if (DISPLAY_WIDGETS.has(f.widget)) continue;
+    const v = values[f.name];
+    seen[f.name] = isEmpty(v) ? f.default : v;
+  }
+  return { visible, seen };
 }
 
 /** The values a form starts with: the defaults of its fields. */
@@ -59,8 +138,7 @@ export function linkSources(f: FieldDef, values: FormValues): string[] {
   if (typeof key === 'string' && key) return [key];
   const ref = f.constraints?.['from'];
   if (typeof ref !== 'string') return [];
-  const v = values[ref];
-  return typeof v === 'string' ? (v ? [v] : []) : strings(v);
+  return keysOf(values[ref]);
 }
 
 /** The link types a link field offers from a source: its constraint, else what the type catalogue allows. */
@@ -91,7 +169,7 @@ function count(f: FieldDef, n: number, what: string): string[] {
 export function fieldIssues(f: FieldDef, value: unknown, values: FormValues, source: NodeSource): string[] {
   if (DISPLAY_WIDGETS.has(f.widget)) return [];
   const v = isEmpty(value) ? f.default : value;
-  if (isEmpty(v)) return f.required ? ['required'] : [];
+  if (isEmpty(v)) return isRequired(f, values) ? ['required'] : [];
   const c = f.constraints ?? {};
   const out: string[] = [];
   const byKey = new Map(source.nodes.map((n) => [n.key, n]));
@@ -150,6 +228,58 @@ export function fieldIssues(f: FieldDef, value: unknown, values: FormValues, sou
       }
       return bool(c['multiple']) ? [...out, ...count(f, keys.length, 'nodes')] : out;
     }
+    case 'newNode': {
+      const multiple = bool(c['multiple']);
+      if (multiple ? !Array.isArray(v) : typeof v !== 'object' || Array.isArray(v)) return [multiple ? 'expects a list of nodes' : 'expects a node'];
+      const isA = source.isA ?? ((t: string, a: string) => t === a);
+      const types = strings(c['types']);
+      const asked = strings(c['properties']);
+      const seen = new Set<string>();
+      objects<NewNodeValue>(v).forEach((n, i) => {
+        const at = multiple ? `node ${i + 1}: ` : '';
+        if (!n.type) out.push(`${at}needs a type`);
+        else if (types.length && !types.some((t) => isA(n.type ?? '', t))) out.push(`${at}${n.type} is not one of ${types.join(', ')}`);
+        if (!n.key) out.push(`${at}needs a key`);
+        else if (!KEY_RE.test(n.key)) out.push(`${at}invalid key ${n.key} (letters, digits, _ . : -)`);
+        else if (seen.has(n.key)) out.push(`${at}${n.key} is given twice`);
+        else if (byKey.has(n.key)) out.push(`${at}${n.key} already exists`);
+        if (n.key) seen.add(n.key);
+        for (const k of Object.keys(n.props ?? {})) if (asked.length && !asked.includes(k)) out.push(`${at}${k} is not a property asked`);
+      });
+      return multiple ? [...out, ...count(f, objects(v).length, 'nodes')] : out;
+    }
+    case 'decision': {
+      const d = (v ?? {}) as DecisionValue;
+      if (!d.point) out.push('needs the decision point');
+      if (!d.option) out.push('needs an option');
+      if (bool(c['justify']) && !d.justification?.trim()) out.push('needs a justification');
+      if (out.length || !source.decisions) return out;
+      const p = source.decisions.find((x) => x.id === d.point);
+      if (!p) return [`unknown decision point ${d.point}`];
+      if (p.decided) return [`the decision point "${p.question}" is already decided`];
+      if (p.options.length && !p.options.some((o) => o.id === d.option)) return [`${d.option} is not an option of "${p.question}"`];
+      return out;
+    }
+    case 'file': {
+      const multiple = bool(c['multiple']);
+      const max = Math.min(num(c['maxBytes']) ?? MAX_FILE_BYTES, MAX_FILE_BYTES);
+      const accept = strings(c['accept']);
+      objects<FileValue>(v).forEach((file, i) => {
+        const at = multiple ? `file ${i + 1}: ` : '';
+        if (!file.name) out.push(`${at}needs a name`);
+        else if ((file.size ?? 0) > max) out.push(`${at}${file.name} is larger than ${max} bytes`);
+        else if (accept.length && !accepts(accept, file.name, file.type)) out.push(`${at}${file.name} is not one of ${accept.join(', ')}`);
+      });
+      return multiple ? [...out, ...count(f, objects(v).length, 'files')] : out;
+    }
+    case 'group': {
+      if (!Array.isArray(v)) return ['expects a list of entries'];
+      v.forEach((e, i) => {
+        const is = fieldsIssues(f.fields, (e ?? {}) as FormValues, source);
+        for (const [name, msgs] of Object.entries(is)) for (const m of msgs) out.push(`entry ${i + 1}, ${name}: ${m}`);
+      });
+      return [...out, ...count(f, v.length, 'entries')];
+    }
     case 'link': {
       const links = completeLinks(f, v, values);
       const sources = linkSources(f, values);
@@ -170,24 +300,36 @@ export function fieldIssues(f: FieldDef, value: unknown, values: FormValues, sou
   return out;
 }
 
-/** The issues of every field, by field name. */
-export function formIssues(form: FormDef | undefined, values: FormValues, source: NodeSource): Record<string, string[]> {
+/** The issues of every field shown, by field name. */
+export function fieldsIssues(fields: FieldDef[] | undefined, values: FormValues, source: NodeSource): Record<string, string[]> {
   const out: Record<string, string[]> = {};
-  for (const f of form?.fields ?? []) {
-    const is = fieldIssues(f, values[f.name], values, source);
+  const { visible, seen } = visibleState(fields, values);
+  for (const f of fields ?? []) {
+    if (!visible.has(f.name)) continue;
+    const is = fieldIssues(f, values[f.name], seen, source);
     if (is.length) out[f.name] = is;
   }
   return out;
 }
 
-/** The values to send: blanks dropped, links completed with their source and type. */
-export function submittedValues(form: FormDef | undefined, values: FormValues): FormValues {
+/** The issues of every field of a form shown, by field name. */
+export const formIssues = (form: FormDef | undefined, values: FormValues, source: NodeSource): Record<string, string[]> =>
+  fieldsIssues(form?.fields, values, source);
+
+/** The values to send: hidden fields and blanks dropped, links completed with their source and type, the entries of a
+ * group sent the same way. */
+export const submittedValues = (form: FormDef | undefined, values: FormValues): FormValues => submittedOf(form?.fields, values);
+
+function submittedOf(fields: FieldDef[] | undefined, values: FormValues): FormValues {
   const out: FormValues = {};
-  for (const f of form?.fields ?? []) {
-    if (DISPLAY_WIDGETS.has(f.widget)) continue;
+  const { visible } = visibleState(fields, values);
+  for (const f of fields ?? []) {
+    if (DISPLAY_WIDGETS.has(f.widget) || !visible.has(f.name)) continue;
     const v = values[f.name];
     if (isEmpty(v)) continue;
-    out[f.name] = f.widget === 'link' ? completeLinks(f, v, values) : v;
+    if (f.widget === 'link') out[f.name] = completeLinks(f, v, values);
+    else if (f.widget === 'group' && Array.isArray(v)) out[f.name] = v.map((e) => submittedOf(f.fields, (e ?? {}) as FormValues));
+    else out[f.name] = v;
   }
   return out;
 }

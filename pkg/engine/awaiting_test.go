@@ -98,8 +98,8 @@ func TestAPersonEstablishesWhatARunWaitsFor(t *testing.T) {
 		t.Fatal(err)
 	}
 	p, _ = e.Run(ctx, p.ID)
-	if _, err = e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "note"},
-		{Kind: "risk", Data: map[string]any{"key": "RSK-1", "title": "wrong note", "probability": 4.0, "impact": 4.0}}}); err != nil {
+	if _, err = e.Submit(ctx, p.ID, []ItemInput{{Type: "artifact", Target: "note"},
+		{Type: "risk", Data: map[string]any{"key": "RSK-1", "title": "wrong note", "probability": 4.0, "impact": 4.0}}}); err != nil {
 		t.Fatal(err)
 	}
 	if p, _ = e.Run(ctx, p.ID); !p.WaitsForConditions() {
@@ -107,7 +107,7 @@ func TestAPersonEstablishesWhatARunWaitsFor(t *testing.T) {
 	}
 	// nobody declares the risks under control (ADR 0109 §6): a person mitigates the risk on the change, and the run,
 	// asked to retry, sees it
-	if _, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Kind: risk.KindAction,
+	if _, err := e.Graph.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Type: risk.TypeAction,
 		Data: map[string]any{"key": "ACT-1", "title": "review the note", "status": "open", "for": "RSK-1"}}}); err != nil {
 		t.Fatal(err)
 	}

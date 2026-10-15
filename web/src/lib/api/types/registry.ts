@@ -73,6 +73,8 @@ export interface TypeInfo {
   contains?: string[];
   /** node_validator instances checking a node as a whole, in call order (own and inherited) */
   nodeValidators?: string[];
+  /** the creation form of the nodes (own or the nearest ancestor's, ADR 0115 §7) */
+  form?: import('../../forms/types').FormDef;
 }
 
 /** Resolved model of a link type; an empty end accepts any node type. */
@@ -150,6 +152,8 @@ export interface NodeType {
   changeControlled?: boolean;
   /** the nodes may carry properties that are no attribute of the type (a free-form type, strict attributes opt-out) */
   additionalProperties?: boolean;
+  /** what a person fills in to create a node of the type (ADR 0115 §7); inherited */
+  form?: import('../../forms/types').FormDef;
   /** node_validator instances (ADR 0018) checking a node as a whole, in call order */
   validators?: string[];
   /** properties the node index keeps (ADR 0026) */
@@ -321,6 +325,18 @@ export interface Action {
   where?: string;
   /** subjects a scoped llm or tool action runs for at once (0: the engine's bound, 1: one after the other) */
   parallel?: number;
+  /** llm actions: the budget of the tool loop (ADR 0118) */
+  loop?: ActionLoop;
+}
+
+/** The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default. */
+export interface ActionLoop {
+  maxRounds?: number;
+  maxToolResultBytes?: number;
+  maxTokens?: number;
+  /** a Go duration (45m, 2h) */
+  timeout?: string;
+  compactBytes?: number;
 }
 
 /** An event an activity reacts to (ADR 0036 §3, 0106, 0110): a standard event or one the methodology declares. */

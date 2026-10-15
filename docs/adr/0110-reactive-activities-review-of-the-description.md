@@ -69,7 +69,7 @@ processes:
           - event: change.edited
             filter: '"intent" in event.fields || "title" in event.fields'
           - event: change.item_added         # the person answered in the bubble
-            filter: 'event.items.exists(i, i.kind == "comment" && i.data.about == "intent")'
+            filter: 'event.items.exists(i, i.type == "comment" && i.data.about == "intent")'
 ```
 
 The run is a standard `Process` (trigger `companion:<methodology>/<activity path>`): its journal, model calls, prompts

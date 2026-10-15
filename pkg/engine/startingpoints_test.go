@@ -75,7 +75,7 @@ func TestStartingPointsArePossibleStepsOnly(t *testing.T) {
 	}
 
 	// the note is written: the step is done and leaves; verify is now possible, through the method that applies
-	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+	if _, err := e.Submit(ctx, p.ID, []ItemInput{{Type: "artifact", Target: "note"}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(p.ID)

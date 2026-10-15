@@ -14,6 +14,11 @@
   import { impactSubject } from '../descriptionReview';
   import type { Change } from '../api';
   import ImpactDiffDialog from './ImpactDiffDialog.svelte';
+  import type { LinkWrite, NodeRef } from '../api';
+  import FormRenderer from '../forms/FormRenderer.svelte';
+  import type { FormValues, NodeSource } from '../forms/types';
+  import { nodeWrite } from '../forms/nodeForm';
+  import { typeCatalog } from '../stores/types.svelte';
 
   let {
     rows,
@@ -54,8 +59,8 @@
     lifecycleOf: (type: string) => Lifecycle | undefined;
     /** keys already taken (baseline and pending nodes) */
     keys: string[];
-    /** creates a node: identity and type only, the rest comes from Edit */
-    oncreate: (key: string, type: string, state: string) => Promise<boolean> | boolean;
+    /** creates a node: identity and type, with what the form of its type gave (ADR 0115 §7); the rest comes from Edit */
+    oncreate: (key: string, type: string, state: string, init?: { props: Record<string, unknown>; links: LinkWrite[] }) => Promise<boolean> | boolean;
     /** takes a node out of the change (a node the change creates is discarded) */
     onremove: (row: LifecycleRow) => Promise<boolean> | boolean;
     /** takes the selected nodes out of the change at once (all of them or none); with impacts, rows get a checkbox */
@@ -148,15 +153,44 @@
     newNodeState = newLifecycle?.initial ?? '';
   });
 
-  async function create() {
+  // the creation form of the chosen type (ADR 0115 §7): its link fields offer the nodes of the change and the candidates
+  const typeForm = $derived(newNodeType ? typeCatalog.cat.type(newNodeType)?.form : undefined);
+  const refs = $derived.by(() => {
+    const out = new Map<string, NodeRef>();
+    for (const n of candidates) if (n.key && n.id) out.set(n.key, { id: n.id, version: n.version ?? 0 });
+    for (const r of rows) {
+      const ref = r.impact?.post?.id ? r.impact.post : r.node.id ? { id: r.node.id, version: r.node.version ?? 0 } : undefined;
+      if (r.node.key && ref) out.set(r.node.key, ref);
+    }
+    return out;
+  });
+  const formSource = $derived.by((): NodeSource => {
+    const cat = typeCatalog.cat;
+    const nodes = new Map<string, NodeSource['nodes'][number]>();
+    for (const n of candidates) if (n.key) nodes.set(n.key, { key: n.key, type: n.type ?? '', state: n.state, namespace: n.namespace });
+    for (const r of rows) if (r.node.key) nodes.set(r.node.key, { key: r.node.key, type: r.node.type ?? '', state: r.node.state, inChange: true });
+    return {
+      nodes: [...nodes.values()].filter((n) => refs.has(n.key)).sort((a, b) => a.key.localeCompare(b.key)),
+      isA: (t, a) => t === a || cat.typesOf(t).includes(a),
+      linkTypesFrom: () => (newNodeType ? cat.linksFrom(newNodeType).map((l) => l.ref ?? '').filter(Boolean) : []),
+      linkLabel: (t) => cat.links.find((l) => l.ref === t)?.label ?? '',
+    };
+  });
+
+  async function create(values?: FormValues) {
     createError = '';
     const key = newNodeKey.trim();
     if (!key) return void (createError = 'A node needs a key.');
     if (!newNodeType) return void (createError = 'Choose the node type.');
     if (keys.includes(key)) return void (createError = `The key “${key}” is already used.`);
+    let init: { props: Record<string, unknown>; links: LinkWrite[] } | undefined;
+    if (typeForm && values) {
+      const w = nodeWrite(typeForm, values);
+      init = { props: w.props, links: w.links.flatMap((l) => (refs.has(l.to) ? [{ type: l.type, to: refs.get(l.to)! }] : [])) };
+    }
     creating = true;
     try {
-      if (await oncreate(key, newNodeType, newNodeState)) {
+      if (await oncreate(key, newNodeType, newNodeState, init)) {
         newNodeKey = '';
         newNodeType = '';
       }
@@ -443,10 +477,19 @@
           {#each newStates as s (s)}<option value={s}>{s}</option>{/each}
         </select>
       {/if}
-      <button type="submit" disabled={creating || busy !== ''}>{creating ? 'Creating…' : 'Create'}</button>
+      {#if !typeForm}<button type="submit" disabled={creating || busy !== ''}>{creating ? 'Creating…' : 'Create'}</button>{/if}
     </form>
-    {#if createError}<div class="alert">{createError}</div>{/if}
-    <p class="hint">A new node starts with its key and type only: fill in its properties with Edit.</p>
+    {#if typeForm}
+      <div class="typeform">
+        {#key newNodeType}
+          <FormRenderer form={typeForm} source={formSource} busy={creating || busy !== ''} serverError={createError} onsubmit={(v) => void create(v)}
+            assist={{ id: `create:${newNodeType}`, label: `${typeForm.title || 'New node'} (${newNodeType}); the key and type are chosen above the form` }} />
+        {/key}
+      </div>
+    {:else}
+      {#if createError}<div class="alert">{createError}</div>{/if}
+      <p class="hint">A new node starts with its key and type only: fill in its properties with Edit.</p>
+    {/if}
   {/if}
 
   {#if !disabled && candidates.length}
@@ -514,6 +557,13 @@
     align-items: center;
     flex-wrap: wrap;
     margin-top: 0.7rem;
+  }
+  .typeform {
+    max-width: 36rem;
+    margin-top: 0.4rem;
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
   }
   .create input[type='text'] {
     width: 12rem;

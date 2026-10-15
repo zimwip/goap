@@ -13,6 +13,7 @@ import {
   removeField,
   setConstraint,
   updateField,
+  withOp,
 } from './design';
 import type { FormDef } from './types';
 
@@ -70,7 +71,7 @@ describe('form designer', () => {
     expect(is['0']).toEqual(['the name is a letter, then letters, digits or _']);
     expect(is['1']).toEqual(['options is required']);
     expect(is['2']).toEqual(['another field is named b', 'text has no constraint options']);
-    expect(is['3']).toEqual(['b is not a node search field']);
+    expect(is['3']).toEqual(['b is not a node search or new node field']);
   });
 
   it('adds a pattern, renaming its fields when taken', () => {
@@ -88,5 +89,47 @@ describe('form designer', () => {
     expect(formJSON({ title: ' ', fields: [] })).toBe('');
     const json = formJSON({ title: 'T', fields: [{ name: 'a', widget: 'text' }] });
     expect(parseForm(json).form).toEqual({ title: 'T', fields: [{ name: 'a', widget: 'text' }] });
+  });
+});
+
+describe('conditions and groups in the designer', () => {
+  const form: FormDef = {
+    fields: [
+      { name: 'decision', widget: 'select', constraints: { options: ['go', 'stop'] } },
+      { name: 'reason', widget: 'text', visibleWhen: [{ field: 'decision', equals: 'stop' }] },
+    ],
+  };
+  it('follows a rename and a removal into the conditions', () => {
+    const renamed = updateField(form, 0, { name: 'verdict' });
+    expect(renamed.fields?.[1].visibleWhen).toEqual([{ field: 'verdict', equals: 'stop' }]);
+    expect(removeField(form, 0).fields?.[0].visibleWhen).toBeUndefined();
+  });
+  it('reports a condition on a later field and a group without sub-fields', () => {
+    const moved = moveField(form, 1, 0);
+    expect(designIssues(moved)['0']).toContain('shown when: no field decision before this one');
+    const g = designIssues({ fields: [{ name: 'g', widget: 'group', fields: [] }, { name: 'h', widget: 'group', fields: [{ name: 'l', widget: 'link', constraints: { fromKey: 'X' } }] }] });
+    expect(g['0']).toContain('a group needs at least one sub-field');
+    expect(g['1']).toContain('sub-field l: a group holds no links field');
+  });
+  it('keeps the value when the operator changes', () => {
+    expect(withOp({ field: 'a', equals: 'x' }, 'in')).toEqual({ field: 'a', in: ['x'] });
+    expect(withOp({ field: 'a', in: ['x', 'y'] }, 'equals')).toEqual({ field: 'a', equals: 'x' });
+    expect(withOp({ field: 'a', equals: 'x' }, 'unset')).toEqual({ field: 'a', set: false });
+  });
+  it('starts a group with a sub-field', () => {
+    expect(newField({}, 'group').fields?.length).toBe(1);
+    expect(changeWidget({ name: 'g', widget: 'group', fields: [{ name: 'x', widget: 'text' }] }, 'text').fields).toBeUndefined();
+  });
+});
+
+describe('shared patterns', () => {
+  it('reads a FormPattern node and lets a shared pattern shadow a shipped one', async () => {
+    const { allPatterns, patternOfNode } = await import('./patterns.svelte');
+    const p = patternOfNode({ key: 'FP:decide', type: 'platform@FormPattern', props: { name: 'decide', label: 'Decide (house)', form: { fields: [{ name: 'd', widget: 'text' }] } } });
+    expect(p).toMatchObject({ key: 'FP:decide', name: 'decide', label: 'Decide (house)' });
+    expect(patternOfNode({ key: 'FP:x', props: { name: 'x' } })).toBeUndefined();
+    const all = allPatterns([p!]);
+    expect(all.filter((x) => x.name === 'decide')).toEqual([p]);
+    expect(all.length).toBe(PATTERNS.length);
   });
 });

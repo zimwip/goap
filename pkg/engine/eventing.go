@@ -84,7 +84,7 @@ func (g EventingGraph) AddItems(ctx context.Context, id domain.ChangeID, items [
 	if err == nil {
 		g.emit(ctx, events.ChangeItemAdded, id, nil, out)
 		for _, it := range out {
-			if it.Kind == domain.KindSignal {
+			if it.Type == domain.TypeSignal {
 				g.emit(ctx, events.ChangeSignal, id, nil, out)
 				break
 			}

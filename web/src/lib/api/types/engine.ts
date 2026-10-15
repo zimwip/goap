@@ -1,7 +1,7 @@
 // Engine types (proto3 JSON).
 
 import type { Int64, JsonValue, Struct } from './common';
-import type { ChangeImpact, DecisionPolicy, FlowOrigin, GraphNode, ItemKind, NodeRef, OptionSpec } from './graph';
+import type { ChangeImpact, DecisionPolicy, FlowOrigin, GraphNode, ItemType, NodeRef, OptionSpec } from './graph';
 import type { DocumentReference, PlannerKind, Responsibilities, TriggerType } from './registry';
 import type { FormDef } from '../../forms/types';
 
@@ -717,10 +717,10 @@ export interface NodeOp {
 
 export interface ItemInput {
   ref?: string;
-  kind: ItemKind | 'changeImpact';
-  /** kind changeImpact: the operation */
+  type: ItemType | 'changeImpact';
+  /** type changeImpact: the operation */
   changeImpact?: NodeOp;
-  type?: string;
+  target?: string;
   decision?: { item: string; accept: boolean; comment?: string };
   data?: Struct;
   derivedFrom?: string[];

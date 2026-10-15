@@ -5,7 +5,6 @@
   import { untrack } from 'svelte';
   import type { FieldDef, FormDef } from '../types';
   import {
-    PATTERNS,
     applyPattern,
     designIssues,
     formJSON,
@@ -22,10 +21,55 @@
   import FormRenderer from '../FormRenderer.svelte';
   import FieldProperties from './FieldProperties.svelte';
   import { loadTypes } from '../../stores/types.svelte';
+  import { allPatterns, formPatterns, loadPatterns, retirePattern, savePattern } from '../patterns.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
+  import { errorMessage } from '../../api';
 
-  let { value = $bindable(''), disabled = false, id = 'form-designer' }: { value?: string; disabled?: boolean; id?: string } = $props();
+  let {
+    value = $bindable(''),
+    disabled = false,
+    id = 'form-designer',
+    artifact = true,
+  }: {
+    value?: string;
+    disabled?: boolean;
+    id?: string;
+    /** the form records its values as an artifact (a human action); false for the form of a node type */
+    artifact?: boolean;
+  } = $props();
 
   void loadTypes();
+  if (!formPatterns.loaded) void loadPatterns();
+
+  const patterns = $derived(allPatterns(formPatterns.shared));
+  const sharedNames = $derived(new Set(formPatterns.shared.map((p) => p.name)));
+  // saving the form as a shared pattern
+  let saving = $state(false);
+  let pat = $state({ name: '', label: '', description: '' });
+  let patError = $state('');
+  let patBusy = $state(false);
+
+  async function saveAsPattern() {
+    patError = '';
+    patBusy = true;
+    try {
+      await savePattern({ ...pat, form: { submit: form.submit, fields } });
+      saving = false;
+      pat = { name: '', label: '', description: '' };
+    } catch (e) {
+      patError = errorMessage(e);
+    } finally {
+      patBusy = false;
+    }
+  }
+  async function retire(p: Pattern) {
+    if (!(await confirmDialog({ message: `Stop offering the shared pattern “${p.label}”? It is retired, not deleted.`, danger: true }))) return;
+    try {
+      await retirePattern(p.name);
+    } catch (e) {
+      patError = errorMessage(e);
+    }
+  }
 
   const WIDGET = 'text/x-goap-widget';
   const PATTERN = 'text/x-goap-pattern';
@@ -85,8 +129,8 @@
     const f = dt.getData(FIELD);
     if (w) addWidget(w, at);
     else if (p) {
-      const pat = PATTERNS.find((x) => x.name === p);
-      if (pat) addPattern(pat, at);
+      const found = patterns.find((x) => x.name === p);
+      if (found) addPattern(found, at);
     } else if (f !== '') move(Number(f), at);
   }
 
@@ -132,12 +176,33 @@
           </button>
         {/each}
         <h5>Patterns</h5>
-        {#each PATTERNS as p (p.name)}
-          <button type="button" class="item" draggable={!disabled} title={p.description} {disabled}
-            ondragstart={(e) => e.dataTransfer?.setData(PATTERN, p.name)} onclick={() => addPattern(p)}>
-            {p.label}<span class="sub">{(p.form.fields ?? []).length} fields</span>
-          </button>
+        {#each patterns as p (p.name)}
+          <div class="patrow">
+            <button type="button" class="item" draggable={!disabled} title={p.description} {disabled}
+              ondragstart={(e) => e.dataTransfer?.setData(PATTERN, p.name)} onclick={() => addPattern(p)}>
+              {p.label}<span class="sub">{(p.form.fields ?? []).length} fields{#if sharedNames.has(p.name)} · shared{/if}</span>
+            </button>
+            {#if sharedNames.has(p.name) && !disabled}
+              <button type="button" class="small x" aria-label="Retire the shared pattern {p.label}" title="Stop offering this shared pattern" onclick={() => retire(p)}>×</button>
+            {/if}
+          </div>
         {/each}
+        {#if !disabled && fields.length}
+          {#if saving}
+            <div class="savepat">
+              <input type="text" class="mono" placeholder="name" aria-label="Name of the pattern" bind:value={pat.name} />
+              <input type="text" placeholder="label" aria-label="Label of the pattern" bind:value={pat.label} />
+              <input type="text" placeholder="what it is for" aria-label="Description of the pattern" bind:value={pat.description} />
+              <div class="two">
+                <button type="button" class="small primary" disabled={patBusy || !pat.name.trim()} onclick={saveAsPattern}>{patBusy ? 'Saving…' : 'Share'}</button>
+                <button type="button" class="small" onclick={() => (saving = false)}>Cancel</button>
+              </div>
+            </div>
+          {:else}
+            <button type="button" class="small" title="Share the fields of this form with every methodology of the platform" onclick={() => (saving = true)}>Save as pattern…</button>
+          {/if}
+        {/if}
+        {#if patError || formPatterns.error}<p class="err">{patError || formPatterns.error}</p>{/if}
       </aside>
 
       <section class="canvas" aria-label="Fields of the form" role="list"
@@ -161,7 +226,7 @@
             <button type="button" class="pick" onclick={() => (selected = selected === i ? undefined : i)}>
               <span class="grip" aria-hidden="true">⋮⋮</span>
               <span class="lbl">{f.widget === 'markdown' ? 'Explanation' : f.label || f.name}{#if f.required}<span class="req"> *</span>{/if}</span>
-              <span class="sub">{labelOf(f.widget)} · <code>{f.name}</code>{#if f.section} · {f.section}{/if}</span>
+              <span class="sub">{labelOf(f.widget)} · <code>{f.name}</code>{#if f.section} · {f.section}{/if}{#if f.visibleWhen?.length} · conditional{/if}{#if f.widget === 'group'} · {(f.fields ?? []).length} sub-fields{/if}</span>
               {#if issues[String(i)]}<span class="err">{issues[String(i)].length} issue{issues[String(i)].length > 1 ? 's' : ''}</span>{/if}
             </button>
             {#if !disabled}
@@ -175,8 +240,10 @@
         {#if !fields.length}<p class="empty">Drag a widget or a pattern here, or click it.</p>{/if}
         <div class="formprops two">
           <label>Submit button <input type="text" placeholder="Submit" value={form.submit ?? ''} {disabled} oninput={(e) => setForm({ submit: e.currentTarget.value })} /></label>
-          <label title="Type of the artifact recording the values when the action has no code">Artifact type
-            <input type="text" class="mono" placeholder="the action name" value={form.artifact ?? ''} {disabled} oninput={(e) => setForm({ artifact: e.currentTarget.value })} /></label>
+          {#if artifact}
+            <label title="Type of the artifact recording the values when the action has no code">Artifact type
+              <input type="text" class="mono" placeholder="the action name" value={form.artifact ?? ''} {disabled} oninput={(e) => setForm({ artifact: e.currentTarget.value })} /></label>
+          {/if}
         </div>
       </section>
 
@@ -253,6 +320,29 @@
     text-align: left;
     cursor: grab;
     font-weight: 500;
+  }
+  .patrow {
+    display: flex;
+    gap: 0.2rem;
+    align-items: stretch;
+  }
+  .patrow .item {
+    flex: 1;
+  }
+  .patrow .x {
+    margin-bottom: 0.25rem;
+  }
+  .savepat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .savepat input {
+    width: 100%;
+  }
+  .savepat .two {
+    display: flex;
+    gap: 0.25rem;
   }
   .sub {
     color: var(--muted);

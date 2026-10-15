@@ -5,11 +5,11 @@ import type { ChangeItem, Process } from './api';
 const change = { id: 'C1', methodology: 'sdlc', title: 'Pay', intent: 'Pay in 3 installments' };
 const rating = (id: string, score: number, rated: string, reply = ''): ChangeItem => ({
   id,
-  kind: 'assessment',
+  type: 'assessment',
   producedBy: 'description_review/rate',
   data: { key: 'description', score, verdict: 'unclear', rated, reply, findings: ['no scope', { text: 'why?', severity: 'major' }] },
 });
-const comment = (id: string, text: string): ChangeItem => ({ id, kind: 'comment', data: { about: 'description', text } });
+const comment = (id: string, text: string): ChangeItem => ({ id, type: 'comment', data: { about: 'description', text } });
 
 describe('descriptionReview', () => {
   it('rates the current text and follows the thread', () => {
@@ -37,7 +37,7 @@ describe('descriptionReview', () => {
     expect(fingerprint('abc')).toBe('1a47e90b');
     expect(fingerprint('é')).toBe(fingerprint('\u00e9'));
     const change = { title: 'T', intent: 'I' };
-    const items: ChangeItem[] = [{ id: 'a', kind: 'assessment', data: { key: 'description', score: 4, rated: fingerprint(subjectText(change)) } } as ChangeItem];
+    const items: ChangeItem[] = [{ id: 'a', type: 'assessment', data: { key: 'description', score: 4, rated: fingerprint(subjectText(change)) } } as ChangeItem];
     expect(assessmentOf({ ...change, items })?.current).toBe(true);
     expect(assessmentOf({ ...change, intent: 'J', items })?.current).toBe(false);
   });
@@ -51,7 +51,7 @@ describe('descriptionReview', () => {
     ] as Process[];
     expect(raterRun(runs, change, 'I1')?.id).toBe('P1');
     expect(raterRun(runs, change, '')).toBeUndefined();
-    expect(commentItem('  hello ')).toEqual({ kind: 'comment', type: 'comment', data: { about: 'description', text: 'hello' } });
+    expect(commentItem('  hello ')).toEqual({ type: 'comment', target: 'comment', data: { about: 'description', text: 'hello' } });
   });
 
   it('keeps the bubble open until the rating is accepted', () => {
@@ -82,13 +82,13 @@ describe('descriptionReview', () => {
   });
 
   it('rates any subject: the title and the intent by their text, impacts and items by their key or id', () => {
-    const rate = (id: string, key: string, rated: string): ChangeItem => ({ id, kind: 'assessment', data: { key, score: 4, rated, verdict: 'confirmed' } });
+    const rate = (id: string, key: string, rated: string): ChangeItem => ({ id, type: 'assessment', data: { key, score: 4, rated, verdict: 'confirmed' } });
     const items = [
       rate('A1', 'title', 'Pay'),
       rate('A2', 'intent', 'old intent'),
       rate('A3', impactSubject('REQ-1'), 'fp'),
       rate('A4', 'item:A9', 'x'),
-      { id: 'C9', kind: 'comment', data: { about: 'item:RSK-1', text: 'why?' } } as ChangeItem,
+      { id: 'C9', type: 'comment', data: { about: 'item:RSK-1', text: 'why?' } } as ChangeItem,
     ];
     const c = { ...change, items };
     expect(assessmentOf(c, 'title')?.current).toBe(true);
@@ -103,7 +103,7 @@ describe('descriptionReview', () => {
   });
 
   it('reads an assessment a model wrapped as an artifact of that type', () => {
-    const items: ChangeItem[] = [{ id: 'W1', kind: 'artifact', type: 'assessment', data: { key: 'description', score: 2, rated: subjectText(change) } }];
+    const items: ChangeItem[] = [{ id: 'W1', type: 'artifact', target: 'assessment', data: { key: 'description', score: 2, rated: subjectText(change) } }];
     expect(assessmentOf({ ...change, items })?.item).toBe('W1');
     expect(state(assessmentOf({ ...change, items }))).toBe('refused');
   });
@@ -123,7 +123,7 @@ describe('bubbleView', () => {
     expect(v).toEqual({ tone: 'danger', label: 'to be rewritten', open: true, declared: true });
   });
   it('judges by itself while the states load or lag behind the rating', () => {
-    expect(bubbleView(rating, undefined)).toEqual({ tone: 'warn', label: 'to be improved', open: true, declared: false });
+    expect(bubbleView(rating, undefined)).toEqual({ tone: 'warn', label: 'to be improved', open: false, declared: false });
     expect(bubbleView(rating, [{ subject: 'description', score: 4, current: true, tone: 'ok' }]).declared).toBe(false);
     expect(bubbleView({ ...rating, score: 4 }, [])).toMatchObject({ tone: 'ok', label: 'accepted', open: false });
     expect(bubbleView(rating, undefined, true)).toMatchObject({ tone: 'ok', label: 'processed', open: false });

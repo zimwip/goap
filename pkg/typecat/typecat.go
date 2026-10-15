@@ -18,6 +18,7 @@ import (
 	"github.com/zimwip/goap/pkg/algo"
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/domain/def"
+	"github.com/zimwip/goap/pkg/form"
 )
 
 // Type is the resolved model of a node type.
@@ -44,6 +45,8 @@ type Type struct {
 	Search []domain.SearchProperty
 	// Editor is the IDE editor of the nodes (own or inherited); empty: the default node editor.
 	Editor string
+	// Form is the creation form of the nodes (own or the nearest ancestor's, ADR 0115 §7); nil: none.
+	Form *form.Form
 	// Requires are the links a node must carry (own and inherited, a subtype redefining one by link), the link types
 	// qualified.
 	Requires []domain.RequiredLink
@@ -342,6 +345,9 @@ func resolve(ref domain.TypeRef, decl map[domain.TypeRef]declared) (*Type, error
 		}
 		if t.Editor == "" {
 			t.Editor = dc.t.Editor
+		}
+		if t.Form == nil {
+			t.Form = dc.t.Form
 		}
 		if dc.t.AdminOnly {
 			t.AdminOnly = true

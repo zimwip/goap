@@ -353,7 +353,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				if err != nil {
 					return declared, fail(err)
 				}
-				if _, err := e.Graph.ImpactLinkCreate(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to}, p.Flow, execution); err != nil {
+				if _, err := e.Graph.ImpactLinkCreate(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to, Properties: l.Props}, p.Flow, execution); err != nil {
 					return declared, fail(err)
 				}
 			}
@@ -499,7 +499,7 @@ func modelAlias(a methodology.Action) string {
 
 // recordVerification writes a verification entry of the change log (fact.verification, ADR 0030) for an action run.
 func (e *Engine) recordVerification(ctx context.Context, p *Process, execution, by string, data map[string]any) error {
-	it := domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Kind: verify.KindVerification, Type: data[verify.KeyState].(string),
+	it := domain.ChangeItem{ID: domain.ItemID(uuid.NewString()), Type: verify.TypeVerification, Target: data[verify.KeyState].(string),
 		Data: data, ProducedBy: by, Execution: execution, Flow: p.Flow}
 	if err := it.Validate(); err != nil {
 		return err

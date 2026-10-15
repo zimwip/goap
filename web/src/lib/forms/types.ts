@@ -21,6 +21,21 @@ export interface FieldDef {
   required?: boolean;
   default?: unknown;
   constraints?: Record<string, unknown>;
+  /** shown, checked and submitted only while every condition holds */
+  visibleWhen?: Condition[];
+  /** required while every condition holds */
+  requiredWhen?: Condition[];
+  /** the sub-fields of a group: each entry of its value is an object of their values */
+  fields?: FieldDef[];
+}
+
+/** A test on the value of an earlier field (pkg/form.Condition): exactly one of equals, in or set. */
+export interface Condition {
+  field: string;
+  equals?: unknown;
+  in?: unknown[];
+  /** filled in (true) or left blank (false) */
+  set?: boolean;
 }
 
 export type FormValues = Record<string, unknown>;
@@ -53,6 +68,40 @@ export interface NodeSource {
   linkTypesFrom?: (type: string) => string[];
   /** label of a link type */
   linkLabel?: (type: string) => string;
+  /** the decision points a decision field may rule (a human task: those of the change) */
+  decisions?: DecisionOption[];
+}
+
+/** A decision point a decision field may rule. */
+export interface DecisionOption {
+  id: string;
+  question: string;
+  /** the options it chooses among (none: a free answer) */
+  options: { id: string; label: string }[];
+  /** settled: nobody rules it any more */
+  decided?: boolean;
+}
+
+/** The value of a new node field (one, or a list with multiple). */
+export interface NewNodeValue {
+  type?: string;
+  key?: string;
+  props?: Record<string, unknown>;
+}
+
+/** The value of a decision field. */
+export interface DecisionValue {
+  point?: string;
+  option?: string;
+  justification?: string;
+}
+
+/** A file of a file field: its content in base64. */
+export interface FileValue {
+  name: string;
+  type?: string;
+  size?: number;
+  content: string;
 }
 
 export const emptySource: NodeSource = { nodes: [] };
@@ -63,14 +112,14 @@ export interface ConstraintSpec {
   type: 'string' | 'number' | 'boolean' | 'strings' | 'field' | string;
   description?: string;
   required?: boolean;
-  /** a field constraint: the widget the named field must have */
-  widget?: string;
+  /** a field constraint: the widgets the named field may have */
+  widgets?: string[];
 }
 
 /** A widget of the server's registry (pkg/form.Widget): its value and constraints. */
 export interface WidgetSpec {
   name: string;
   description?: string;
-  value: 'string' | 'number' | 'boolean' | 'list' | 'node' | 'links' | 'none' | 'any' | string;
+  value: 'string' | 'number' | 'boolean' | 'list' | 'node' | 'links' | 'objects' | 'none' | 'any' | string;
   constraints?: ConstraintSpec[];
 }

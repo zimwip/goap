@@ -21,7 +21,7 @@ version: 1.0.0
 namespace: alm
 conditions:
   - {name: impacted, expr: 'changeImpacts.exists(i, i.intent == "modified")'}
-  - {name: qualified, scope: impact, expr: 'artifacts.exists(a, a.type == "qualified" && a.data.impact == self.key)'}
+  - {name: qualified, scope: impact, expr: 'artifacts.exists(a, a.target == "qualified" && a.data.impact == self.key)'}
   - {name: all_qualified, all: qualified}
 actions:
   - {name: qualify, kind: human, scope: impact, description: Qualify the impact, pre: {impacted: true}, effects: {qualified: true}}
@@ -80,7 +80,7 @@ func TestScopedActionRunsOncePerSubject(t *testing.T) {
 			t.Fatalf("one run per subject, got %q after %v", subject, seen)
 		}
 		seen[subject] = true
-		if p, err = e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "qualified", Data: map[string]any{"impact": subject}}}); err != nil {
+		if p, err = e.Submit(ctx, p.ID, []ItemInput{{Type: "artifact", Target: "qualified", Data: map[string]any{"impact": subject}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -101,7 +101,7 @@ version: 1.0.0
 namespace: alm
 conditions:
   - {name: impacted, expr: 'changeImpacts.exists(i, i.intent == "modified")'}
-  - {name: qualified, scope: impact, expr: 'artifacts.exists(a, a.type == "qualified" && a.data.impact == self.key)'}
+  - {name: qualified, scope: impact, expr: 'artifacts.exists(a, a.target == "qualified" && a.data.impact == self.key)'}
   - {name: requirement, scope: impact, expr: '"alm@Requirement" in self.types'}
   - {name: component, scope: impact, expr: '"alm@Component" in self.types'}
   - {name: requirements_qualified, all: qualified, where: self.conditions.requirement, empty: true}
@@ -162,7 +162,7 @@ func TestStepNarrowsTheSubjectsOfAScopedAction(t *testing.T) {
 		}
 		s := p.Steps[p.Pending.Step]
 		passes = append(passes, s.Action+" "+s.Subject)
-		if p, err = e.Submit(ctx, p.ID, []ItemInput{{Kind: "artifact", Type: "qualified", Data: map[string]any{"impact": s.Subject}}}); err != nil {
+		if p, err = e.Submit(ctx, p.ID, []ItemInput{{Type: "artifact", Target: "qualified", Data: map[string]any{"impact": s.Subject}}}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -182,7 +182,7 @@ version: 1.0.0
 namespace: alm
 conditions:
   - {name: impacted, expr: 'changeImpacts.exists(i, i.intent == "modified")'}
-  - {name: qualified, scope: impact, expr: 'artifacts.exists(a, a.type == "qualified" && a.data.impact == self.key)'}
+  - {name: qualified, scope: impact, expr: 'artifacts.exists(a, a.target == "qualified" && a.data.impact == self.key)'}
   - {name: all_qualified, all: qualified}
 actions:
   - name: qualify
@@ -243,7 +243,7 @@ func TestScopedActionRunsSubjectsInParallel(t *testing.T) {
 						key = m[1]
 					}
 				}
-				out := `{"items":[{"kind":"artifact","type":"qualified","data":{"impact":"` + key + `"}}]}`
+				out := `{"items":[{"type":"artifact","target":"qualified","data":{"impact":"` + key + `"}}]}`
 				return llm.Response{Text: out, Provider: "test", Model: req.Model}, nil
 			})}
 			ch, err := g.CreateChange(ctx, graph.NewChange{Title: "Q", Intent: "qualify", Methodology: "parallel", Namespace: "alm", ProjectID: testProject, BaselineID: base})

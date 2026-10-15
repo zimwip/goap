@@ -20,8 +20,8 @@ name: staged
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
-  - {name: checked, expr: 'artifacts.exists(a, a.type == "check")'}
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note")'}
+  - {name: checked, expr: 'artifacts.exists(a, a.target == "check")'}
 actions:
   - {name: write_note, kind: human, description: Write the note, effects: {noted: true}}
   - {name: check, kind: human, description: Check the note, pre: {noted: true}, effects: {checked: true}}
@@ -36,7 +36,7 @@ roles:
 methods:
   - name: peer_check
     for: verification
-    when: 'artifacts.exists(a, a.type == "note")'
+    when: 'artifacts.exists(a, a.target == "note")'
     priority: 10
     guidance: Check the note with a peer
     references: [{title: Peer review guide, ref: "doc:PEER"}]
@@ -110,11 +110,11 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 		t.Fatalf("the note step inherits the roles of its phase: %+v", c.Roles)
 	}
 	outsider := authz.With(ctx, authz.Principal{Subject: "o", Roles: []string{"contributor", "writer@TEAM-OTHER"}})
-	if _, err := e.Submit(outsider, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); !errors.Is(err, authz.ErrForbidden) {
+	if _, err := e.Submit(outsider, p.ID, []ItemInput{{Type: "artifact", Target: "note"}}); !errors.Is(err, authz.ErrForbidden) {
 		t.Fatalf("a person without the responsible role here may not perform the step: %v", err)
 	}
 	writer := authz.With(ctx, authz.Principal{Subject: "w", Roles: []string{"writer@ORG-DEFAULT"}})
-	if _, err := e.Submit(writer, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+	if _, err := e.Submit(writer, p.ID, []ItemInput{{Type: "artifact", Target: "note"}}); err != nil {
 		t.Fatal(err)
 	}
 	p, _ = e.Run(ctx, p.ID)
@@ -140,7 +140,7 @@ func TestProcessStepsAndNestedProcesses(t *testing.T) {
 	if checker.Agent != "peer_check" || checker.Goal != "peer_check" || checker.ChangeID != p.ChangeID || checker.Pending == nil || checker.Pending.Action != "check" {
 		t.Fatalf("unexpected checker %+v", checker)
 	}
-	if _, err := e.Submit(ctx, checker.ID, []ItemInput{{Kind: "artifact", Type: "check"}}); err != nil { // the method assigns no role
+	if _, err := e.Submit(ctx, checker.ID, []ItemInput{{Type: "artifact", Target: "check"}}); err != nil { // the method assigns no role
 		t.Fatal(err)
 	}
 	e.schedule(checker.ID)
@@ -222,8 +222,8 @@ name: inspected
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
-  - {name: checked, expr: 'artifacts.exists(a, a.type == "check")'}
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note")'}
+  - {name: checked, expr: 'artifacts.exists(a, a.target == "check")'}
 actions:
   - {name: write_note, kind: human, effects: {noted: true}}
   - {name: check, kind: human, pre: {noted: true}, effects: {checked: true}}
@@ -270,7 +270,7 @@ func TestMethodComposedOfStepsRunsAsASubAgent(t *testing.T) {
 	if sub.Pending == nil || sub.Pending.Action != "thorough_check/note" {
 		t.Fatalf("the method's own first step: %+v", sub.Pending)
 	}
-	if _, err := e.Submit(ctx, sub.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+	if _, err := e.Submit(ctx, sub.ID, []ItemInput{{Type: "artifact", Target: "note"}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(sub.ID)
@@ -279,7 +279,7 @@ func TestMethodComposedOfStepsRunsAsASubAgent(t *testing.T) {
 	if sub.Pending == nil || sub.Pending.Action != "thorough_check/verify" {
 		t.Fatalf("the method's own second step: %+v %s", sub.Pending, sub.Status)
 	}
-	if _, err := e.Submit(ctx, sub.ID, []ItemInput{{Kind: "artifact", Type: "check"}}); err != nil {
+	if _, err := e.Submit(ctx, sub.ID, []ItemInput{{Type: "artifact", Target: "check"}}); err != nil {
 		t.Fatal(err)
 	}
 	e.schedule(sub.ID)

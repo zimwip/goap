@@ -14,10 +14,10 @@ conditions:
     expr: changeImpacts.exists(n, n.intent == "modified")
   - name: propagated
     description: Impacts have been propagated along traceability links
-    expr: artifacts.exists(a, a.type == "propagation")
+    expr: artifacts.exists(a, a.target == "propagation")
   - name: reported
     description: An impact report has been written
-    expr: artifacts.exists(a, a.type == "report")
+    expr: artifacts.exists(a, a.target == "report")
   - name: reviewed
     description: All the change impacts (impacts, updates, new tests) have received a decision
     expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
@@ -41,7 +41,7 @@ actions:
       {{ range .Baseline.Nodes }}- {{ .Key }} ({{ .Type }}) {{ json .Properties }}
       {{ end }}
       Identify the elements DIRECTLY impacted. For each one, declare a change impact
-      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is impacted"}}.
+      {"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is impacted"}}.
 
   - name: select_impacts
     kind: human
@@ -79,7 +79,7 @@ actions:
       {{ range .ChangeImpacts }}{{ if eq .Type "alm@Requirement" }}- {{ .Key }} {{ json .Pre.Properties }} (reason: {{ .Rationale }})
       {{ end }}{{ end }}
       For each requirement, write its new version:
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<key>","props":{...}}}
+      {"type":"changeImpact","changeImpact":{"op":"write","node":"<key>","props":{...}}}
 
   - name: propose_tests
     kind: llm
@@ -99,8 +99,8 @@ actions:
       {{ range .ChangeImpacts }}{{ if eq .Type "alm@Requirement" }}- {{ .Key }} {{ json .Post.Properties }}
       {{ end }}{{ end }}
       For each requirement, create a test case and link it to the requirement:
-      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"alm@TestCase","key":"TST-...","rationale":"why"}}
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"..."},"links":[{"type":"alm@verifies","to":"<requirement key>"}]}}
+      {"type":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"alm@TestCase","key":"TST-...","rationale":"why"}}
+      {"type":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"..."},"links":[{"type":"alm@verifies","to":"<requirement key>"}]}}
 
   - name: write_report
     kind: llm
@@ -114,7 +114,7 @@ actions:
       Impacts:
       {{ range .ChangeImpacts }}{{ if eq .Intent "modified" }}- {{ .Key }} ({{ .Type }}) : {{ .Rationale }}
       {{ end }}{{ end }}
-      Write a concise report: {"kind":"artifact","type":"report","data":{"markdown":"..."}}
+      Write a concise report: {"type":"artifact","target":"report","data":{"markdown":"..."}}
 
   - name: review_proposals
     kind: human

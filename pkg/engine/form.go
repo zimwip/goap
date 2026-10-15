@@ -14,8 +14,8 @@ import (
 )
 
 // formItems checks the values of the form of a human action and turns them into what the submission adds (ADR 0115):
-// the items and change impact operations its code returns, else an artifact of the values and the links its link
-// fields ask for.
+// the items and change impact operations its code returns, else an artifact of the values, the nodes its new node
+// fields create, the rulings of its decision fields and the links its link fields ask for.
 func (e *Engine) formItems(ctx context.Context, p *Process, m *methodology.Compiled, action methodology.Action, step *Step, values map[string]any) ([]ItemInput, []dsl.NodeOp, error) {
 	if p.ChangeID == "" {
 		return nil, nil, fmt.Errorf("process %s has no change attached: %w", p.ID, ErrInvalidState)
@@ -40,8 +40,26 @@ func (e *Engine) formItems(ctx context.Context, p *Process, m *methodology.Compi
 	if typ == "" {
 		typ = action.Name
 	}
-	items := []ItemInput{{Kind: "artifact", Type: typ, Data: clean}}
-	return items, linkOps(form.Links(*action.Form, clean), impacted), nil
+	items := []ItemInput{{Type: "artifact", Target: typ, Data: clean}}
+	for _, r := range form.Rulings(*action.Form, clean) {
+		items = append(items, ItemInput{Type: "decisionPoint", DecisionPoint: &DecisionOp{
+			Op: "rule", Point: r.Point, Outcome: domain.OutcomeDecided, Option: r.Option, Justification: r.Justification}})
+	}
+	ops := createOps(form.NewNodes(*action.Form, clean), impacted)
+	return items, append(ops, linkOps(form.Links(*action.Form, clean), impacted)...), nil
+}
+
+// createOps are the change impact operations creating the nodes of a form: each declared created, then written with
+// its properties; the nodes join the ones the change has an impact on.
+func createOps(nodes []form.NewNode, impacted map[string]bool) []dsl.NodeOp {
+	var ops []dsl.NodeOp
+	for _, n := range nodes {
+		ops = append(ops,
+			dsl.NodeOp{Op: "declare", Intent: string(domain.IntentCreated), Key: n.Key, Type: n.Type, Rationale: "created by a form"},
+			dsl.NodeOp{Op: "write", Node: n.Key, Props: n.Props})
+		impacted[n.Key] = true
+	}
+	return ops
 }
 
 // runFormCode runs the code of a human action on the values of its form, as a script action runs.
@@ -107,11 +125,16 @@ func formEnv(bb domain.Blackboard, baseline []domain.Node) (form.Env, map[string
 		}
 		known[cn.Key] = n
 	}
+	points := map[string]form.Decision{}
+	for _, d := range domain.DecisionPointsOf(bb) {
+		points[d.ID] = form.Decision{ID: d.ID, Question: d.Question, Options: d.Options, Decided: !d.Pending()}
+	}
 	env := form.Env{
 		Node: func(k string) (form.Node, bool) { n, ok := known[k]; return n, ok },
 		IsA: func(typ, super string) bool {
 			return typ == super || slices.Contains(bb.Supertypes[typ], super)
 		},
+		Decision: func(id string) (form.Decision, bool) { d, ok := points[id]; return d, ok },
 	}
 	return env, impacted
 }

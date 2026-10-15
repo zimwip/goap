@@ -36,4 +36,12 @@ describe('the methodology form', () => {
     f.assessments = '{"subject": "x"}';
     expect(fromForm(f).issues.map((i) => i.path)).toContain('assessments');
   });
+
+  it('keeps the loop budget of an llm action (ADR 0118)', () => {
+    const loop = { maxRounds: 200, maxTokens: 2000000, timeout: '2h', maxToolResultBytes: 60000, compactBytes: 500000 };
+    const m: Methodology = { name: 'm', version: '1.0.0', actions: [{ name: 'code', kind: 'llm', prompt: 'code it', mcps: ['workspace'], effects: { done: true }, loop }] };
+    expect(fromForm(toForm(m)).methodology.actions?.[0].loop).toEqual(loop);
+    const none: Methodology = { name: 'm', version: '1.0.0', actions: [{ name: 'a', kind: 'llm', prompt: 'p', effects: { done: true } }] };
+    expect(fromForm(toForm(none)).methodology.actions?.[0].loop).toBeUndefined();
+  });
 });

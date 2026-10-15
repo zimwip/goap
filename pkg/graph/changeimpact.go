@@ -404,7 +404,7 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 // log entry of the record, the cause of the reviewed events that follow.
 func (g *Graph) putReviewRecord(ctx context.Context, tx Tx, change domain.ChangeID, by, comment string, entries []domain.ReviewEntry) (key, cause string, err error) {
 	rec := domain.ReviewRecord{Key: "REV-" + g.newID(), Comment: comment, Status: domain.ReviewStatusSubmitted, Entries: entries, By: by, SubmittedAt: g.now()}
-	it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Kind: domain.KindReview, Status: domain.ItemProposed, Data: rec.Data(), ProducedBy: by, CreatedAt: g.now()}
+	it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Type: domain.TypeReview, Status: domain.ItemProposed, Data: rec.Data(), ProducedBy: by, CreatedAt: g.now()}
 	if err := it.Validate(); err != nil {
 		return "", "", fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
 	}
@@ -418,8 +418,8 @@ func (g *Graph) reviewRecord(b domain.ReviewBatch) (domain.ChangeItem, error) {
 	if b.Item != nil {
 		it = *b.Item
 		rec := domain.ReviewRecordOf(it.Data)
-		if it.Kind != domain.KindReview || rec.Status != domain.ReviewStatusSubmitted {
-			return it, fmt.Errorf("the item of a review batch is the submitted review, not a %s %s item: %w", rec.Status, it.Kind, ErrInvalid)
+		if it.Type != domain.TypeReview || rec.Status != domain.ReviewStatusSubmitted {
+			return it, fmt.Errorf("the item of a review batch is the submitted review, not a %s %s item: %w", rec.Status, it.Type, ErrInvalid)
 		}
 		if b.ID != "" && rec.Key != b.ID {
 			return it, fmt.Errorf("review batch %s carries the record of review %s: %w", b.ID, rec.Key, ErrInvalid)
@@ -442,7 +442,7 @@ func (g *Graph) reviewRecord(b domain.ReviewBatch) (domain.ChangeItem, error) {
 		for _, v := range b.Verdicts {
 			rec.Entries = append(rec.Entries, domain.ReviewEntry{Impact: string(v.Impact), Comment: strings.TrimSpace(v.Comment), Outcome: domain.ReviewOutcome(v.Status)})
 		}
-		it = domain.ChangeItem{Kind: domain.KindReview, Data: rec.Data(), ProducedBy: b.By, Execution: b.Execution}
+		it = domain.ChangeItem{Type: domain.TypeReview, Data: rec.Data(), ProducedBy: b.By, Execution: b.Execution}
 	}
 	if it.ID == "" {
 		it.ID = domain.ItemID(g.newID())

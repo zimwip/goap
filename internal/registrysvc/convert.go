@@ -24,7 +24,7 @@ func ToPB(r Record) *registryv1.Methodology {
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
 			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
 			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On), Emits: a.Emits, Scope: a.Scope, Where: a.Where, Parallel: int32(a.Parallel),
-			Form: pbconv.FormToPB(a.Form)}
+			Form: pbconv.FormToPB(a.Form), Loop: loopToPB(a.Loop)}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
 			if e.Link != nil {
@@ -233,7 +233,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
 			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
 			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On), Emits: nilIfNone(a.Emits), Scope: a.Scope, Where: a.Where, Parallel: int(a.Parallel),
-			Form: pbconv.FormFromPB(a.Form)}
+			Form: pbconv.FormFromPB(a.Form), Loop: loopFromPB(a.Loop)}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
 			if e.Produce != nil {
@@ -355,7 +355,7 @@ func DomainFromPB(p *registryv1.Domain) def.Domain {
 
 func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 	out := &registryv1.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesToPB(n.Attributes), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: n.Validators, Search: searchToPB(n.Search), Editor: n.Editor, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormToPB(n.Form)}
 	if d := n.Document; d != nil {
 		out.Document = &registryv1.DocumentSpec{Contains: d.Contains}
 	}
@@ -370,7 +370,7 @@ func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {
 
 func nodeTypeFromPB(n *registryv1.NodeType) def.NodeType {
 	out := def.NodeType{Name: n.Name, Description: n.Description, Attributes: attributesFromPB(n.Attributes), Extends: n.Extends,
-		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties}
+		Lifecycle: n.Lifecycle, ChangeControlled: n.ChangeControlled, Validators: nilIfNone(n.Validators), Search: searchFromPB(n.Search), Editor: n.Editor, AdminOnly: n.AdminOnly, AdditionalProperties: n.AdditionalProperties, Form: pbconv.FormFromPB(n.Form)}
 	if d := n.Document; d != nil {
 		out.Document = &domain.DocumentSpec{Contains: nilIfNone(d.Contains)}
 	}
@@ -537,4 +537,20 @@ func persistFromPB(p *registryv1.Persistence) *methodology.Persistence {
 		return nil
 	}
 	return &methodology.Persistence{Scope: p.Scope, Until: nilIfEmpty(p.Until), Memory: int(p.Memory)}
+}
+
+func loopToPB(l *methodology.Loop) *registryv1.ActionLoop {
+	if l == nil {
+		return nil
+	}
+	return &registryv1.ActionLoop{MaxRounds: int32(l.MaxRounds), MaxToolResultBytes: int32(l.MaxToolResultBytes),
+		MaxTokens: int64(l.MaxTokens), Timeout: l.Timeout, CompactBytes: int32(l.CompactBytes)}
+}
+
+func loopFromPB(l *registryv1.ActionLoop) *methodology.Loop {
+	if l == nil {
+		return nil
+	}
+	return &methodology.Loop{MaxRounds: int(l.MaxRounds), MaxToolResultBytes: int(l.MaxToolResultBytes),
+		MaxTokens: int(l.MaxTokens), Timeout: l.Timeout, CompactBytes: int(l.CompactBytes)}
 }

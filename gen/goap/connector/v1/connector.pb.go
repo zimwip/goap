@@ -257,8 +257,12 @@ type InvokeRequest struct {
 	// per-organization configuration (validated against config_schema by the connector)
 	Config *structpb.Struct `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`
 	// resolved secrets, by name; never logged
-	Secrets       map[string]string `protobuf:"bytes,4,rep,name=secrets,proto3" json:"secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	OrgId         string            `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	Secrets map[string]string `protobuf:"bytes,4,rep,name=secrets,proto3" json:"secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	OrgId   string            `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
+	// what the call runs for (ADR 0028, 0118): the change and the process of the calling action, when there is one;
+	// a connector keeping state per change (a workspace) reads them, others ignore them
+	ChangeId      string `protobuf:"bytes,6,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	ProcessId     string `protobuf:"bytes,7,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -324,6 +328,20 @@ func (x *InvokeRequest) GetSecrets() map[string]string {
 func (x *InvokeRequest) GetOrgId() string {
 	if x != nil {
 		return x.OrgId
+	}
+	return ""
+}
+
+func (x *InvokeRequest) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
+func (x *InvokeRequest) GetProcessId() string {
+	if x != nil {
+		return x.ProcessId
 	}
 	return ""
 }
@@ -409,13 +427,16 @@ const file_goap_connector_v1_connector_proto_rawDesc = "" +
 	"operations\"\x11\n" +
 	"\x0fDescribeRequest\"H\n" +
 	"\x10DescribeResponse\x124\n" +
-	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\"\xb1\x02\n" +
+	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\"\xed\x02\n" +
 	"\rInvokeRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x125\n" +
 	"\targuments\x18\x02 \x01(\v2\x17.google.protobuf.StructR\targuments\x12/\n" +
 	"\x06config\x18\x03 \x01(\v2\x17.google.protobuf.StructR\x06config\x12G\n" +
 	"\asecrets\x18\x04 \x03(\v2-.goap.connector.v1.InvokeRequest.SecretsEntryR\asecrets\x12\x15\n" +
-	"\x06org_id\x18\x05 \x01(\tR\x05orgId\x1a:\n" +
+	"\x06org_id\x18\x05 \x01(\tR\x05orgId\x12\x1b\n" +
+	"\tchange_id\x18\x06 \x01(\tR\bchangeId\x12\x1d\n" +
+	"\n" +
+	"process_id\x18\a \x01(\tR\tprocessId\x1a:\n" +
 	"\fSecretsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"r\n" +

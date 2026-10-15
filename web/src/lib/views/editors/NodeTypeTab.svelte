@@ -7,6 +7,7 @@
   import ValidatorList from '../../components/ValidatorList.svelte';
   import NodeTypeMeta from '../../components/NodeTypeMeta.svelte';
   import AttributeEditor from '../../components/AttributeEditor.svelte';
+  import FormDesigner from '../../forms/designer/FormDesigner.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { closeWhere } from '../../shell/tabs.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
@@ -203,6 +204,15 @@
           readonly={d.readonly}
           {path}
         />
+      </section>
+      <section class="card">
+        <h3>Creation form</h3>
+        <p class="hint">
+          What a person fills in to create a node of this type (ADR 0115 §7): fields named after its attributes, links starting from the
+          node (<code>fromKey: $self</code>) and explanations. None: the creation dialogs ask the key and type only{#if x.extends}, or show the form of
+          the parent type{/if}.
+        </p>
+        <FormDesigner id="nt-form-{x.uid}" bind:value={f.nodeTypes[index].form} disabled={d.readonly} artifact={false} />
       </section>
 
   {/if}

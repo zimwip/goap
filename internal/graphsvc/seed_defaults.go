@@ -280,6 +280,12 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 		sync(mcp.MCPKey(d.Name), mcp.NodeTypeMCP, d.Props())
 		sync(adapter.DefKey(defs[i].Name), domain.TypeAdapterDef, defs[i].Props())
 	}
+	// the workspace MCP is defined everywhere and held by no unit by default (ADR 0118)
+	ws := mcpbuiltin.WorkspaceDef()
+	sync(mcp.MCPKey(ws.Name), mcp.NodeTypeMCP, ws.Props())
+	for _, d := range mcpbuiltin.WorkspaceAdapterDefs() {
+		sync(adapter.DefKey(d.Name), domain.TypeAdapterDef, d.Props())
+	}
 	for _, r := range access.BuiltinRoles() {
 		sync(access.RoleKey(r.Name), access.NodeTypeRole, r.Props())
 	}

@@ -16,11 +16,11 @@ import (
 
 // The kinds of item of an assessment.
 const (
-	// KindAssessment is a rating of a subject: each item is the whole record of its key (data.key), the latest one in
+	// TypeAssessment is a rating of a subject: each item is the whole record of its key (data.key), the latest one in
 	// effect is the rating.
-	KindAssessment domain.ItemKind = "assessment"
-	// KindComment is a message of a person about a subject (data.about), in the thread of its assessment.
-	KindComment domain.ItemKind = "comment"
+	TypeAssessment domain.ItemType = "assessment"
+	// TypeComment is a message of a person about a subject (data.about), in the thread of its assessment.
+	TypeComment domain.ItemType = "comment"
 )
 
 // The subjects of a rating (data.key of an assessment, data.about of a comment): the description of the change (its
@@ -76,7 +76,7 @@ type Assessment struct {
 
 // Message is a message of the thread of a subject: a comment of a person, or a rating (its reply).
 type Message struct {
-	Kind domain.ItemKind `json:"kind"`
+	Type domain.ItemType `json:"type"`
 	Item domain.ItemID   `json:"item"`
 	Text string          `json:"text"`
 	By   string          `json:"by,omitempty"`
@@ -87,8 +87,10 @@ type Message struct {
 // Register makes the kinds known to the graph (domain.RegisterItemKind); the services writing or reading such items
 // call it at start, and so does a test building them. It may be called any number of times.
 func Register() {
-	domain.RegisterItemKind(KindAssessment, validateAssessment)
-	domain.RegisterItemKind(KindComment, validateComment)
+	domain.RegisterItemType(TypeAssessment, validateAssessment)
+	domain.RegisterItemType(TypeComment, validateComment)
+	domain.DescribeItemType(TypeAssessment, "assess", "A rating of a subject of the change (score, verdict, findings, suggestion): each item is the whole record of its key (ADR 0110).")
+	domain.DescribeItemType(TypeComment, "assess", "A message of a person about a subject, in the thread of its assessment (ADR 0110).")
 }
 
 func validateAssessment(it domain.ChangeItem) error {
@@ -140,11 +142,11 @@ func Text(bb domain.Blackboard, key string) (string, bool) {
 		ref := strings.TrimPrefix(key, ItemPrefix)
 		for i := len(c.Items) - 1; i >= 0; i-- {
 			it := c.Items[i]
-			if it.Kind == KindAssessment || it.Kind == KindComment || !c.Active(it.ID) {
+			if it.Type == TypeAssessment || it.Type == TypeComment || !c.Active(it.ID) {
 				continue
 			}
 			if string(it.ID) == ref || str(it.Data, "key") == ref {
-				return canonical(map[string]any{"kind": string(it.Kind), "type": it.Type, "data": it.Data}), true
+				return canonical(map[string]any{"type": string(it.Type), "target": it.Target, "data": it.Data}), true
 			}
 		}
 	}
@@ -209,10 +211,10 @@ func Assessments(bb domain.Blackboard) []Assessment {
 		if !c.Active(it.ID) || it.Status == domain.ItemRejected {
 			continue
 		}
-		switch it.Kind {
-		case KindComment:
+		switch it.Type {
+		case TypeComment:
 			lastComment[str(it.Data, "about")] = i
-		case KindAssessment:
+		case TypeAssessment:
 			key := str(it.Data, "key")
 			if key == "" {
 				continue
@@ -259,14 +261,14 @@ func Thread(c domain.Change, key string) []Message {
 			continue
 		}
 		switch {
-		case it.Kind == KindComment && str(it.Data, "about") == key:
-			out = append(out, Message{Kind: KindComment, Item: it.ID, Text: str(it.Data, "text"), By: str(it.Data, "by")})
-		case it.Kind == KindAssessment && str(it.Data, "key") == key:
+		case it.Type == TypeComment && str(it.Data, "about") == key:
+			out = append(out, Message{Type: TypeComment, Item: it.ID, Text: str(it.Data, "text"), By: str(it.Data, "by")})
+		case it.Type == TypeAssessment && str(it.Data, "key") == key:
 			text := str(it.Data, "reply")
 			if text == "" {
 				text = str(it.Data, "verdict")
 			}
-			out = append(out, Message{Kind: KindAssessment, Item: it.ID, Text: text, By: it.ProducedBy, Score: num(it.Data, "score")})
+			out = append(out, Message{Type: TypeAssessment, Item: it.ID, Text: text, By: it.ProducedBy, Score: num(it.Data, "score")})
 		}
 	}
 	return out

@@ -72,7 +72,7 @@ func testReviewBatch(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f, c, imps, _ := reviewWorld(t, repo)
 	g := f.g
-	item := domain.ChangeItem{Kind: review.KindReview, Data: map[string]any{"key": "REV-1", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
+	item := domain.ChangeItem{Type: review.KindReview, Data: map[string]any{"key": "REV-1", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
 		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}, map[string]any{"impact": string(imps[1].ID), "outcome": "reject"}}}}
 	out, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-1", By: "alice", Item: &item, Verdicts: []domain.ImpactVerdict{
 		{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "fine"},
@@ -136,7 +136,7 @@ func causesOf(t *testing.T, g *Graph, id domain.ChangeID) []causedVerdict {
 			continue
 		}
 		cause, ok := byID[e.Causation]
-		if !ok || cause.Type != domain.LogFact+"."+string(domain.KindReview) {
+		if !ok || cause.Type != domain.LogFact+"."+string(domain.TypeReview) {
 			t.Fatalf("entry %d names cause %q, not an earlier review: %+v", e.Seq, e.Causation, cause)
 		}
 		out = append(out, causedVerdict{seq: e.Seq, cause: cause})
@@ -176,7 +176,7 @@ func testReviewBatchIsAtomic(t *testing.T, repo Repo) {
 		return len(entries)
 	}
 	before := logLen()
-	item := domain.ChangeItem{Kind: review.KindReview, Data: map[string]any{"key": "REV-2", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
+	item := domain.ChangeItem{Type: review.KindReview, Data: map[string]any{"key": "REV-2", "status": review.Submitted, "submittedAt": "2026-01-01T00:00:00Z",
 		"entries": []any{map[string]any{"impact": string(imps[0].ID), "outcome": "accept"}, map[string]any{"impact": string(imps[1].ID), "outcome": "accept"}}}}
 	_, err := g.ImpactNodeReviewBatch(ctx, c.ID, domain.ReviewBatch{ID: "REV-2", By: "bob", Item: &item, Verdicts: []domain.ImpactVerdict{
 		{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "ok"},
@@ -199,7 +199,7 @@ func testReviewBatchIsAtomic(t *testing.T, repo Repo) {
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewProposed, Comment: "x"}}},
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted}}},
 		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}, {Impact: imps[0].ID, Status: domain.ReviewRejected, Comment: "y"}}},
-		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}}, Item: &domain.ChangeItem{Kind: domain.KindTransition, Data: map[string]any{"to": "x"}}},
+		{By: "a", Verdicts: []domain.ImpactVerdict{{Impact: imps[0].ID, Status: domain.ReviewAccepted, Comment: "x"}}, Item: &domain.ChangeItem{Type: domain.TypeTransition, Data: map[string]any{"to": "x"}}},
 	} {
 		if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, bad); !errors.Is(err, ErrInvalid) {
 			t.Fatalf("%+v: %v", bad, err)

@@ -18,7 +18,7 @@ type StateMove struct {
 func (c *Change) StateMoves() []StateMove {
 	var out []StateMove
 	for _, it := range c.Items {
-		if it.Kind != KindTransition || it.Flow != "" {
+		if it.Type != TypeTransition || it.Flow != "" {
 			continue
 		}
 		str := func(k string) string { s, _ := it.Data[k].(string); return s }

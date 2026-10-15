@@ -199,7 +199,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   and a count of the identical impacts it does not list; a row opens the impact in the Impacts pane of its scope; the
   decide bar (evaluate, select, reject) acts on the option on the right.
   The Artifacts pane lists the artifact items of the scope; an item-level decision (`kind: decision`, accept / reject with a comment) is
-  shown on the artifact it concerns, and stays in the Audit pane; item kinds with no pane of their own sit in a collapsed raw list.
+  shown on the artifact it concerns, and stays in the Audit pane; item types with no pane of their own sit in a collapsed raw list.
 - **Decision loops** ([ADR 0009](adr/0009-branches-options-decisions.md) §4): a **decision point** is a question the
   change must settle, usually which option (`OpenDecision`). A ruling is *decided* (an option, a confidence, a
   justification) or *undecidable* (why, and the questions to answer first).
@@ -212,8 +212,8 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   settles the point). The platform's policy is `pkg/decision`: an agent ruling below the point's confidence threshold
   waits for a person's **ratification**; after `maxRounds` rulings that did not settle it, or past its deadline, the
   point is **escalated**: only a person rules it (values `decider`, `threshold`, `maxRounds`, `maxDuration`). A
-  decided point selects its option; `Apply` refuses a change with a pending decision. The points are facts of the main flow (`KindDecisionPoint`, replayed by
-  `Change.DecisionPointsAt(now, policy)`); actions work on them through items of kind `decisionPoint` (LLM, script, human task:
+  decided point selects its option; `Apply` refuses a change with a pending decision. The points are facts of the main flow (`TypeDecisionPoint`, replayed by
+  `Change.DecisionPointsAt(now, policy)`); actions work on them through items of type `decisionPoint` (LLM, script, human task:
   a human task's ruling is a person's), scripts through `ctx.decisionPoints()` / `openDecision` / `decide` /
   `undecidable` / `answer`, agents through the `goap-change` tools `decisions` / `decision` / `rule` / `answer`,
   people through the Decisions pane of a change (`methodologies/examples/option-decision.yaml` runs the loop).
@@ -223,14 +223,14 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 | Concept | Description |
 |---|---|
 | **Change** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
-| **ChangeItem** | Blackboard **fact** with no node: `kind` ∈ `decision`, `artifact`, `merge`, `flow`. Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
+| **ChangeItem** | Blackboard **fact** with no node: its `type` (the **item type**) is a built-in one (`artifact`, `decision`, `decision_point`, `flow`, `review`, `signal`, `transition`) or one a use case registers (`risk`, `action`, `derogation`, `assessment`, `comment`, `verification`); its `target` is what it is about within that type (what an artifact is, the name of a signal), a signal's `recipient` the process it addresses. The types are listed, described, by `ListItemTypes` and shown read-only under *Item types* in the domain explorer ([ADR 0119](adr/0119-item-types-in-the-domain-explorer.md)). Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
 | **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (the **draft reference** `{node, version 0}` while the change works on the node, the version written once it is committed; empty while the impact of an existing node is only proposed: `ProposeImpact` takes existing nodes only, a new node is created by `ImpactNodeCreate`, one `created` event for its impact and draft), `landed` (version on the target branch once applied: the post version itself when it joined the target, a merge version when the node changed on both sides), `review` with a mandatory comment. Every node write names a change and works on a **draft** ([ADR 0076](adr/0076-checkout-working-versions.md), [ADR 0079](adr/0079-drafts-and-versions-at-landing.md)): `ImpactNodeCreate` / `ImpactNodeCheckout` give the node its draft (once per change and flow; the impact's post), `ImpactNodeUpdate` and the link operations (`ImpactLinkCreate`, `ImpactLinkUpdate`, `ImpactLinkDelete`) edit it, `ImpactNodeReview` accepts or rejects (always an explicit operation: an edit never reviews; an acceptance is gated by the checks of a version run on the draft and writes nothing; editing after it sends the review back to `proposed`), `ImpactNodeTransition` moves a node along its lifecycle (on the draft, which a node with none is checked out for first, the guard seeing the change, the impact and the draft); `ImpactNodeCancel` drops a draft and `WithdrawImpact` takes an impact out of the change (`WithdrawImpacts` several at once, in one transaction: all or none, the impacts tab's *Remove selected from change* over the checked rows; a node is never deleted: a creation dropped leaves no node, a node no parent holds is retired by its lifecycle). A draft is free to be incomplete (only the attributes, their types and enums are checked as it is edited); its validators, required links and link attributes are checked when its review is accepted and when it lands. `Apply` (every impact accepted) commits the change, which **writes the versions from the drafts** on its own branch (the next version number, the version checked out from as parent, owner, origins, comment, links resolved to the versions of the change) after rebasing a root change onto the head of its target branch ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-lands.md)), and lands the branch (a fast-forward; the three-way merge only when the target moved between the rebase and the integration, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`proposed` for an existing node, `created` for a new one with its draft, `checkedOut`, `transitioned`, `updated`, `cancelled`, `withdrawn`, `reviewed`, `discarded`, `adopted`, `landed`, `rebased`) is an event of the change's impact log with its caller (principal, action run, flow); the `change_impact` table is its projection, and the drafts are not stored at all: they are the fold of the log (`domain.FoldDrafts`), kept in a per-change in-process cache validated by the log position (`pkg/graph/draftcache.go`, ADR 0079 §2), and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export, and the whole log as W3C PROV-O provenance in JSON-LD, `ExportChangeProvenance`, `pkg/prov`, [ADR 0057](adr/0057-change-log-as-prov-o.md)). The state of a namespace at a baseline is exported as a JSON snapshot without history (`ExportGraph`, `pkg/graph/snapshot.go`) and imported as one new change left for review, which creates the missing nodes and brings the others to the snapshot (`ImportGraph`, [ADR 0104](adr/0104-domain-and-graph-import-export.md)); the same state is exported as an OKF tree, a zip of one Markdown file per node with a YAML front matter (`ExportGraphOkf`, streamed while it is written, `pkg/okf`, [ADR 0111](adr/0111-okf-export-of-the-graph.md)). Merging nodes into a new one and splitting one into several are modifications of the **parents** (`ImpactNodeMerge`, `ImpactNodeSplit`, [ADR 0077](adr/0077-impact-node-operations.md)): the parent's draft loses the links to the sources and gains the links to the successors, the sources stay untouched and their impacts carry the parent's impact as `via`; a successor is accepted and landed only once the impacts of its origins are accepted. |
 | **Change lifecycle, gate** | A change may have a lifecycle ([ADR 0058](adr/0058-change-lifecycle-and-gates.md)), orthogonal to its technical status: the domain defines it (`domain.Lifecycle`), the methodology says which one its changes follow, the change holds its state. A transition is guarded by a CEL guard in the condition environment; a **gate** is a guard requiring a decided decision point and the expected world state (the `done` of the steps of the state being left, no checklist of its own). A step names the state it is active in through `pre: {"state:<name>": true}`. Leaving a state freezes its impacts, going back needs a new decision and marks later impacts `stale`; landing stays at the end of the change. Which states and gates exist is a use case, not the platform's. |
 | **Model exchange** | The request and the answer of one LLM call of an action, an entry `model.call` of the change log ([ADR 0059](adr/0059-prompts-in-the-change-log.md)): capped, read with `prompt:inspect`, shown by the Tokens console (the call itself is a row of the gateway's ledger, ADR 0089, which stores the exchange of every call this log does not keep); the journal record keeps the token counts only (`pkg/journal`, ADR 0066). |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
-| **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of the built-in kind `review` (`domain.KindReview`; `pkg/review` the use case), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. Every verdict is made by a submitted review ([ADR 0105](adr/0105-every-verdict-is-a-submitted-review.md)): a single verdict, a producer's commit, an action's review and a merge each write the record of a submitted review first, and each decided `impact.reviewed` log entry names it as its `causation`. |
-| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `pkg/risk` registers the item kinds (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Derogations`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
+| **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of the built-in kind `review` (`domain.TypeReview`; `pkg/review` the use case), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. Every verdict is made by a submitted review ([ADR 0105](adr/0105-every-verdict-is-a-submitted-review.md)): a single verdict, a producer's commit, an action's review and a merge each write the record of a submitted review first, and each decided `impact.reviewed` log entry names it as its `causation`. |
+| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `pkg/risk` registers the item types (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Derogations`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
 
 Applying a Change (`ApplyChange`) commits its accepted modifications on its branch and merges it (ADR 0102: the same two acts as *Commit* then *Merge*), creating a new baseline. The Change remains the explainable history of *why* the graph changed.
 
@@ -449,7 +449,9 @@ organization and the owner (= the initiator) as attributes. The default policy a
 person (`USR:<subject>`) is visible to and changeable by that person only, and is never split into sub-changes. A change
 that landed nothing can be purged with its log (`DeleteChange`).
 The settings of the platform edited in the web dialog are staged this way: each edit is an impact of the personal
-change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. Personal
+change, **Save** applies it, **Discard** (or leaving the dialog and accepting to lose the edits) purges it. The graph
+service does the staging, one call per edit or batch of edits (`GetPendingSettings`, `StageSettings`, `SaveSettings`,
+`DiscardSettings`, [ADR 0122](adr/0122-settings-staged-by-the-server.md)). Personal
 preferences are not graph data ([ADR 0038](adr/0038-user-preferences-service.md)).
 
 ### 2.7b Verification, derogations and criticality ([ADR 0075](adr/0075-verification-derogation-criticality.md))
@@ -464,12 +466,12 @@ A result produced is not a result accepted. Three small mechanisms, each placed 
 | WHAT | Domain | nothing: the domains stay unaware |
 | WITH WHAT | Adapter / model alias | the alias of a `model` oracle must differ from the producer's |
 
-- **Verification** (`pkg/verify`). When an action with `verify` ends, the engine writes a `produced` item of kind
+- **Verification** (`pkg/verify`). When an action with `verify` ends, the engine writes a `produced` item of type
   `verification` (oracle, `independent`, producer alias, impact ids); the states `produced`, `verified`, `accepted`,
   `accepted_with_reserve`, `rejected` are items of the change log (`fact.verification`), folded by `verify.Subjects`.
   `Graph.ReviewPolicy` (a `domain.ReviewPolicy`) is asked by every review of an impact and `verify.Policy` refuses a
   verifier equal to the producer. The graph keeps the mechanism, `pkg/verify` the rule, as for decisions.
-- **Derogations** (`pkg/risk`). An item of kind `derogation` (key, rule, target, reason, signatory, `expires`; no
+- **Derogations** (`pkg/risk`). An item of type `derogation` (key, rule, target, reason, signatory, `expires`; no
   expiry, no derogation), versioned like a risk; `derogation:sign` (and `derogation:sign-role` for the role the policy
   of the level asks) is checked through `Graph.ItemAuthorizer`; `accepted_with_reserve` needs one in force
   (`ImpactNodeReviewWithReserve`). The builtin `derogation.expire` (`methodologies/examples/derogation-expiry.yaml`) closes
@@ -698,8 +700,8 @@ work on that change before it starts the new one (`Engine.supersedeRuns`). The g
 `sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the web shows every assessment
 by its subject as a comment bubble (`AssessmentBubble.svelte`, `web/src/lib/descriptionReview.ts`): the description wraps
-the intent and floats open while its rating is pending (not accepted yet; `pending`, hidden by the person until the
-rating or its thread moves), folded into its badge once accepted; the title, the intent, the impacts (rows of the
+the intent, its badge coloured by the state of the rating and the bubble opened by a click (by itself only for a
+state the methodology declares `open`); the title, the intent, the impacts (rows of the
 impact table, processed once the impact is decided by its review), the risks, the actions and the artifacts carry a
 compact badge, coloured while pending, whose bubble opens on a click (placed on the viewport, never clipped by a
 table); assessments and comments are no longer in the raw items list. A rating is about any subject:
@@ -1133,6 +1135,20 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   process) lets `goap-change` work on the change of the calling process by default. Pass-through adapter
   definitions and instances on `ORG-DEFAULT` give them to every unit (`graphsvc.SeedBuiltins`, which keeps the
   definitions in sync with the code at every start).
+- **Workspace of a change** ([ADR 0118](adr/0118-workspace-of-a-change.md)): the MCP `workspace` (`open`, `status`,
+  `close`, `read`, `write`, `edit`, `ls`, `glob`, `grep`, `bash`, `bash_output`, `bash_kill`, `diff`, `push`) is the
+  tool box of a coding agent, one workspace per change found from the call context (`InvokeRequest.change_id` /
+  `process_id`, put back in the context by `connectorkit`). Defined on every platform, held by no unit by default;
+  the local connector `workspace-local` (`internal/connectors/workspace`, `cmd/connector-workspace`) keeps a
+  directory per change, files confined by `os.Root`, commands in a cleaned environment with a timeout but not
+  isolated; `goap-dev` gives it to the default organisation with `GOAP_DEV_WORKSPACE_ROOT`. An llm action coding in
+  it states the budget of its tool loop (`loop: {maxRounds, maxTokens, timeout, maxToolResultBytes, compactBytes}`):
+  once spent it is asked for its final answer instead of failing, and its conversation is compacted as it grows.
+  `sdlc` 0.8.0 builds the components naming a repository from their sources (method `workspace_build`: workspace
+  opened, each component implemented by an agent, built by its command, sent back on a failed build, pushed and
+  recorded); two scoped actions of one scope chain in a plan (`chainScoped`).
+  The connector `workspace-docker` (`workspace.NewDocker`) keeps the files and git on its host and runs the commands
+  of each workspace in a container of its own (the unit's `image`, no network by default, hardened, limits).
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
@@ -1410,7 +1426,12 @@ tool panel, console and status bar, and gives way to the field helper (they are 
 Methodologies are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)), edited from the frontend: a
 version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar fields,
 status) and one node per element typed by the built-in meta-domain (`methodology@Agent`, `@Action`, `@Condition`,
-`@Goal`, `@Process`), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. Every save, publication or deletion is
+`@Goal`, `@Process`, `@Method`, `@Role`, one `@Step` / `@MethodStep` per step), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. The references between elements are links
+([ADR 0120](adr/0120-methodology-references-are-links.md)): a condition is the output of the activities that
+`produces` it and the input of those that `requires` it (`uses`, `pursues`, `performed_by`, `nests`, `assigns`,
+`aggregates`, `specializes`, `main_goal`; derived `mentions`, `carried_out_by`), a name the version does not declare (a
+library's or a generated condition, another methodology's element) stays a property, the steps of a process are nodes
+reached through `sub_activity` only; no element stands alone (a modelling principle, never checked by the graph). Every save, publication or deletion is
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
@@ -1468,7 +1489,7 @@ conditions:
   - name: has_impacts
     expr: changeImpacts.exists(n, n.intent == "modified")
   - name: propagated
-    expr: artifacts.exists(a, a.type == "propagation")
+    expr: artifacts.exists(a, a.target == "propagation")
 actions:
   - name: identify_impacts
     kind: llm

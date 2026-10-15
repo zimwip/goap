@@ -130,7 +130,7 @@ func observeAnalyze(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 		data["traceUrl"] = cfg.TraceURL + r.TraceID
 	}
 	out := fmt.Sprintf("%s/%s: %d findings (%d steps, %d tokens, %d spans)", r.Methodology, r.Agent, len(r.Findings), r.Steps, r.Tokens, len(spans))
-	return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "cost_report", Data: data}}, Output: out, Logs: logs}, nil
+	return engine.ActionResult{Items: []engine.ItemInput{{Type: "artifact", Target: "cost_report", Data: data}}, Output: out, Logs: logs}, nil
 }
 
 // toData converts a value into JSON-compatible data (lists never null).
@@ -156,7 +156,7 @@ func costReport(bb domain.Blackboard) (observe.Report, error) {
 	var r observe.Report
 	for i := len(bb.Change.Items) - 1; i >= 0; i-- {
 		it := bb.Change.Items[i]
-		if it.Kind == domain.KindArtifact && it.Type == "cost_report" && bb.Change.Active(it.ID) {
+		if it.Type == domain.TypeArtifact && it.Target == "cost_report" && bb.Change.Active(it.ID) {
 			b, err := json.Marshal(it.Data)
 			if err != nil {
 				return r, err
@@ -177,8 +177,14 @@ func observePropose(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 		return engine.ActionResult{}, err
 	}
 	props, notes := observe.Propose(r, cm.Methodology)
+	stored, err := definitionLinks(ctx, e)
+	if err != nil {
+		return engine.ActionResult{}, err
+	}
+	ix := methodology.RefIndexOf(cm.Methodology)
+	hkey := observe.ElementKey(cm.Name, cm.Version, "methodology", "")
 	// an improvement is a change impact on an element of the methodology (ADR 0024): the rationale says what and
-	// why, the version written on the change branch holds the proposed properties
+	// why, the version written on the change branch holds the proposed properties and links
 	var ops []dsl.NodeOp
 	for _, p := range props {
 		why := p.Title
@@ -190,12 +196,12 @@ func observePropose(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 		} else {
 			ops = append(ops, dsl.NodeOp{Op: "declare", Intent: string(domain.IntentCreated), Key: p.Key, Type: p.Type, Rationale: why})
 		}
-		ops = append(ops, dsl.NodeOp{Op: "write", Node: p.Key, Props: p.Props})
+		ops = append(ops, graphWrite(p, ix, hkey, stored[p.Key]))
 	}
 	if notes == nil {
 		notes = []string{}
 	}
-	items := []engine.ItemInput{{Kind: "artifact", Type: "improvement_plan", Data: map[string]any{
+	items := []engine.ItemInput{{Type: "artifact", Target: "improvement_plan", Data: map[string]any{
 		"methodology": r.Methodology, "process": r.Process, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}}}
 	return engine.ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
 }
@@ -218,18 +224,18 @@ func methodologyDraft(ctx context.Context, e *engine.Engine, ac engine.ActionCon
 		if !ok {
 			continue
 		}
-		ed := observe.Edit{Op: "create_node", Key: cn.Key, Type: cn.Type, Props: post.Properties}
+		ed := observe.Edit{Op: "create_node", Key: cn.Key, Type: cn.Type, Props: definitionProps(bb, post)}
 		if cn.Pre != nil {
 			pre, ok := bb.Nodes[*cn.Pre]
 			if !ok {
 				continue
 			}
-			ed.Op, ed.Props = "update_node", changedProps(pre.Properties, post.Properties)
+			ed.Op, ed.Props = "update_node", changedProps(definitionProps(bb, pre), ed.Props)
 		}
 		edits = append(edits, ed)
 	}
 	if len(edits) == 0 {
-		return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "methodology_draft",
+		return engine.ActionResult{Items: []engine.ItemInput{{Type: "artifact", Target: "methodology_draft",
 			Data: map[string]any{"methodology": r.Methodology, "skipped": true, "reason": "no proposal accepted"}}}, Output: "nothing to merge"}, nil
 	}
 	// the draft is saved with the identity of the process initiator
@@ -257,11 +263,11 @@ func methodologyDraft(ctx context.Context, e *engine.Engine, ac engine.ActionCon
 		is = append(is, i.String())
 	}
 	data["issues"] = orEmptyAnyList(is)
-	return engine.ActionResult{Items: []engine.ItemInput{{Kind: "artifact", Type: "methodology_draft", Data: data}},
+	return engine.ActionResult{Items: []engine.ItemInput{{Type: "artifact", Target: "methodology_draft", Data: data}},
 		Output: fmt.Sprintf("draft %s@%s: %d changes, %d issues", cur.Name, d.Methodology.Version, len(d.Applied), len(issues))}, nil
 }
 
-// changedProps are the properties a version changes compared to the one it starts from.
+// changedProps are the properties a version changes compared to the one it starts from (a property it drops: nil).
 func changedProps(pre, post map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, v := range post {
@@ -269,7 +275,120 @@ func changedProps(pre, post map[string]any) map[string]any {
 			out[k] = v
 		}
 	}
+	for k := range pre {
+		if _, ok := post[k]; !ok {
+			out[k] = nil
+		}
+	}
 	return out
+}
+
+// storedLink is a link of a definition node, with the key of its target.
+type storedLink struct {
+	domain.Link
+	toKey string
+}
+
+// definitionLinks are the outgoing links of the definition nodes at the head of the methodology namespace, by key of
+// their source; suspect ones too when the graph gives them (a reference to an element edited since stays one).
+func definitionLinks(ctx context.Context, e *engine.Engine) (map[string][]storedLink, error) {
+	head, err := e.Graph.BranchHead(ctx, domain.NamespaceMethodology, domain.MainBranch)
+	if err != nil || head.ID == "" {
+		return nil, err
+	}
+	nodes, links, err := e.Graph.BaselineGraph(ctx, head.ID)
+	if err != nil {
+		return nil, err
+	}
+	if sr, ok := e.Graph.(interface {
+		SuspectLinks(context.Context, domain.BaselineID) ([]domain.Link, error)
+	}); ok {
+		sus, err := sr.SuspectLinks(ctx, head.ID)
+		if err != nil {
+			return nil, err
+		}
+		links = append(links, sus...)
+	}
+	keys := map[domain.NodeID]string{}
+	for _, n := range nodes {
+		keys[n.ID] = n.Key
+	}
+	out := map[string][]storedLink{}
+	for _, l := range links {
+		from := keys[l.From.ID]
+		out[from] = append(out[from], storedLink{l, keys[l.To.ID]})
+	}
+	return out, nil
+}
+
+// graphWrite is the write of a proposal (in the terms of the definition) on its node, in the terms of the graph
+// (ADR 0120): the names of elements of the methodology are links, the links of the fields it sets replace those the
+// node has (stored, its outgoing links).
+func graphWrite(p observe.Proposal, ix methodology.RefIndex, hkey string, stored []storedLink) dsl.NodeOp {
+	kind := ""
+	if rest, ok := strings.CutPrefix(p.Key, hkey+"/"); ok {
+		kind, _, _ = strings.Cut(rest, "/")
+	}
+	enc := methodology.EncodeRefs(kind, p.Props, ix)
+	w := dsl.NodeOp{Op: "write", Node: p.Key, Props: enc.Props}
+	if p.Op == "update_node" {
+		for k := range p.Props {
+			if _, ok := enc.Props[k]; !ok {
+				w.Props[k] = nil // every name of the field is a link now
+			}
+		}
+	}
+	want := enc.Links
+	kept := make([]bool, len(want))
+	if p.Op == "update_node" {
+		replaced := methodology.RefKindsOf(kind, p.Props)
+		for _, l := range stored {
+			as, _ := l.Properties[methodology.LinkAttrAs].(string)
+			if !slices.Contains(replaced, methodology.RefKind{Type: l.Type, As: as}) {
+				continue
+			}
+			same := slices.IndexFunc(want, func(x methodology.RefLink) bool {
+				return x.Type == l.Type && hkey+"/"+x.To == l.toKey && fmt.Sprint(x.Props) == fmt.Sprint(l.Properties)
+			})
+			if same >= 0 && !kept[same] {
+				kept[same] = true
+				continue
+			}
+			w.RemoveLinks = append(w.RemoveLinks, string(l.ID))
+		}
+	}
+	for i, l := range want {
+		if !kept[i] {
+			w.Links = append(w.Links, dsl.NodeOpLink{Type: l.Type, To: hkey + "/" + l.To, Props: l.Props})
+		}
+	}
+	return w
+}
+
+// definitionProps are the properties of a definition node in the terms of the definition: its links to the elements
+// of the methodology named again (ADR 0120), the nodes they reach read from the blackboard.
+func definitionProps(bb domain.Blackboard, v domain.NodeView) map[string]any {
+	nodeOf := func(id domain.NodeID) (domain.Node, bool) {
+		for ref, n := range bb.Nodes {
+			if ref.ID == id {
+				return n.Node, true
+			}
+		}
+		for ref, n := range bb.Neighbors {
+			if ref.ID == id {
+				return n, true
+			}
+		}
+		return domain.Node{}, false
+	}
+	var targets []methodology.RefTarget
+	for _, l := range v.Out {
+		if t, ok := nodeOf(l.To.ID); ok {
+			name, _ := t.Properties["name"].(string)
+			targets = append(targets, methodology.RefTarget{Type: l.Type, Props: l.Properties, Kind: methodology.ElementOfType(t.Type), Name: name})
+		}
+	}
+	return methodology.DecodeRefs(methodology.ElementOfType(v.Type), v.Properties, targets)
 }
 
 func cmpErr(err error, fallback string) string {

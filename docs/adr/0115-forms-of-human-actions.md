@@ -1,6 +1,6 @@
 # ADR 0115 — Forms of human actions: a declared form, its code, an extensible widget registry
 
-**Status**: accepted, implemented except the items of "Not done" (see "Not done") · **Date**: 2026-10 · Extends ADR 0034 (manual steps),
+**Status**: accepted, implemented · **Date**: 2026-10 · Extends ADR 0034 (manual steps),
 ADR 0018 / DSL (script code), ADR 0076 / 0079 (change impacts, drafts), ADR 0092 (screens of the web)
 
 ## Context
@@ -57,7 +57,11 @@ name panics), with the built-in widgets:
 | `select` | string | `options` (required) |
 | `multiselect` | list of strings | `options` (required), `min`, `max` |
 | `node` | node key, or a list with `multiple` | `types`, `states`, `namespace`, `inChange`, `multiple`, `min`, `max` |
-| `link` | `[{from, type, to}]` | `from` (a `node` field, or a fixed key `fromKey`), `linkTypes`, `toTypes`, `toStates`, `min`, `max` |
+| `link` | `[{from, type, to}]` | `from` (a `node` or `newNode` field, or a fixed key `fromKey`), `linkTypes`, `toTypes`, `toStates`, `min`, `max` |
+| `newNode` | `{type, key, props}`, or a list with `multiple` | `types`, `properties` (the attributes asked; none: the name of the type), `multiple`, `min`, `max` |
+| `decision` | `{point, option, justification}` | `justify` (the justification is required) |
+| `file` | `{name, type, size, content}` (base64), or a list with `multiple` | `accept` (media types `text/*` or extensions `.csv`), `maxBytes` (at most `form.MaxFileBytes`, 512 KiB), `multiple`, `min`, `max` |
+| `group` | list of objects (§6) | `min`, `max` |
 | `markdown` | none (shows `constraints.text`) | `text` |
 
 **Constraints limit the choices**: a `node` field offers only the nodes of those types (a subtype qualifies), states
@@ -77,16 +81,19 @@ without options, a `link` whose `from` names no `node` field.
 `SubmitHumanInput` takes `form` (a `Struct`, the values by field name) next to `items`. `Engine.SubmitForm`
 validates them against the form of the pending task (`form.Validate`: required, value kind, constraints; node keys
 resolved against the reference baseline of the change and its impacts through `form.Env`, with their types, the
-supertypes of the type catalogue and their states), refuses with `ErrInvalid` and the list of the field issues
+supertypes of the type catalogue and their states; a new node's key must be free; a decision point must exist,
+be pending, and the option be one of its options; `Env.Decision` reads the decision points of the change), refuses with `ErrInvalid` and the list of the field issues
 otherwise, then turns them into items:
 
 - **with code** (`language` + `code` on the human action, the DSL of script actions, docs/dsl.md): the code runs in
   the sandbox of the process with the values as `ctx.var("form")` and returns items and change impact operations,
   exactly as a script action does; it decides what the values mean;
-- **without code**: one artifact of type `form.artifact` (default: the action name) with the values as data, and
-  for every `link` field the change impact operations adding the links (the source declared as modified when the
-  change does not hold it yet, then written with the links): a form without code still changes the graph through its
-  links.
+- **without code**: one artifact of type `form.artifact` (default: the action name) with the values as data; for
+  every `newNode` field the nodes declared created and written with their properties (`form.NewNodes`,
+  `createOps`); for every `decision` field a `decisionPoint` item ruling the point (`form.Rulings`, a person's
+  ruling); for every `link` field the change impact operations adding the links (the source declared as modified when
+  the change does not hold it yet, then written with the links; a link may start from a node the form creates, the
+  fields after a `newNode` field see its nodes): a form without code still changes the graph.
 
 Either way the items are added as the submission of the step (the record of its run, ADR 0109), as `Submit` does:
 the roles of the step and of the action are checked first.
@@ -114,7 +121,7 @@ form when the task has one and keeps the former heuristics otherwise. The render
 The methodology editor builds the form of a human action with a designer (`web/src/lib/forms/designer/`, model in
 `web/src/lib/forms/design.ts`, pure and tested): a palette of the widgets of the server's registry (copied to
 `widgetCatalog.gen.ts` by `pkg/form`'s `TestWebCatalogIsCurrent`, `GOAP_UPDATE_WEB=1 go test ./pkg/form/` rewrites it)
-and of **patterns** (ready-made sets of fields: pick and link, qualify a node, decide, checklist), dragged onto the
+and of **patterns** (ready-made sets of fields: pick and link, create and link, qualify a node, decide, checklist), dragged onto the
 canvas or clicked; the fields are reordered by dragging (or the arrows) and edited in a properties panel (identity,
 required, default, then the constraints the widget declares, with suggestions from the type catalogue: node types,
 link types allowed from the source field's types, lifecycle states, namespaces). A rename follows into the link fields
@@ -122,10 +129,53 @@ naming the field, a removed source leaves them without one, a change of widget d
 not accept. The designer reports what the server would refuse (`designIssues`), shows the form as a person sees it
 (Preview) and as the methodology stores it (JSON). The code run on the values is edited below it.
 
-## Not done
+### 6. Conditional fields and repeated groups
 
-- Conditional fields (`visible` / `requiredWhen` in CEL over the other values) and repeated groups.
-- Patterns stored as data (shared by the methodologies of an organisation) rather than shipped with the web.
-- Standard pages using `FormRenderer` with a form declared by a node type (an `form:` on a node type of a domain, for
-  its creation dialog), and the assistant filling a form (a screen tool per declared form, ADR 0092).
-- Widgets beyond the built-in set (a node creation widget with its attributes, a decision point, a file).
+A field may declare `visibleWhen` and `requiredWhen`, lists of **conditions** that must all hold (`form.Condition`,
+`web/src/lib/forms/types.ts` `Condition`): each names an **earlier** field of the same list (`field`) and tests its
+value with exactly one of `equals`, `in` (one of the values; on a list value, the list holds one of them) or `set`
+(true: filled in, false: blank). A hidden field is not shown, not checked, not required and not submitted, whatever
+was sent for it, and reads as blank to the conditions after it; `requiredWhen` makes a field required while its
+conditions hold. Declarative rather than CEL: the web evaluates them as it renders (`visibleState`, `isRequired`) and
+the engine as it validates (`Field.Visible`, `RequiredFor`), with the same few lines on both sides. `CheckForm`
+refuses a condition on a later or unknown field, on a field without a value (explanation, links, group) or testing
+none or several things.
+
+The widget `group` (value kind `objects`, constraints `min` / `max` entries) repeats its **sub-fields** (`fields` on
+the field): its value is a list of objects, each validated and cleaned like a form of its own (defaults, conditions
+between sibling sub-fields, issues reported as `entry <n>, <sub-field>: <message>`). A group holds neither a group nor a
+link field. The renderer shows one card per entry (`GroupWidget.svelte`, rows by `FieldRow.svelte`), the designer edits
+the conditions of a field (*Shown when*, *Required when*, `ConditionsEditor.svelte`) and the sub-fields of a group in
+the properties panel; a rename or a removal follows into the conditions naming the field.
+
+### 7. The form of a node type
+
+A node type may declare `form` (`def.NodeType.Form`, inherited through `extends`, the nearest wins: `typecat.Type.Form`;
+proto `registry.v1.NodeType.form` and `TypeInfo.form`, both a `Struct`): what a person fills in to create a node of the
+type. Its fields are **attributes** of the type (own or inherited; the value is the property), **link** fields
+starting from the node itself (`fromKey: $self`, `form.SelfKey`) and explanations; the domain validation refuses any
+other field (`Schema.checkForms`: not an attribute, a link from elsewhere, a new node or decision field). It describes a
+screen only: the graph checks the node it writes as it checks any write. The creation row of the nodes of a change
+(`ChangeLifecycle.svelte`, the change tab and the human tasks) shows the form of the chosen type under the key and the
+type, and creates the node with its properties and links in one go (`nodeWrite`, `web/src/lib/forms/nodeForm.ts`);
+the domain editor builds it with the same designer (*Creation form* of the node type tab). `alm` 1.6.0 gives
+`Requirement` one (title, description, priority, the needs it satisfies).
+
+### 8. The assistant fills a form
+
+A renderer given `assist: {id, label}` offers its form to the assistant while it is mounted (`offerForm`,
+`web/src/lib/forms/assist.ts`; the human task as `task:<process>`, the creation form as `create:<type>`): a screen
+entity of type `form` whose props say what each value looks like (`fieldShape`: `decision*: one of go|stop`, `links:
+list of {to: node key}`...), which fields are filled and the issues left, and two screen tools of the catalog:
+`fill_form` (an effect: the values, a JSON object by field name, are merged into the form, unknown fields refused;
+the person reviews them) and `submit_form` (a write: a proposal the person accepts, then the renderer submits as its
+button does, or answers with the issues). A file is never filled by the assistant.
+
+### 9. Patterns are shared as platform data
+
+The designer's patterns are the shipped ones (`PATTERNS`, `web/src/lib/forms/design.ts`) and the shared ones: a
+`platform@FormPattern` node (`FP:<name>`, lifecycle `config`; attributes `name`, `label`, `description`, `form` the
+fields as JSON; `platform` 2.7.0) is a pattern of every methodology and node type form of the platform. *Save as
+pattern…* in the designer writes the fields selected (or all of them) as one, *×* retires it, each through a change
+applied on main (`savePattern` / `retirePattern`, `web/src/lib/forms/patterns.svelte.ts`); a shared pattern shadows
+a shipped one of the same name.

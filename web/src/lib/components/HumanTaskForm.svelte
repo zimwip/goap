@@ -12,6 +12,7 @@
     type ItemInput,
     type LifecycleTransition,
     type NodeRef,
+    type LinkWrite,
     type Process,
   } from '../api';
   import ChangeLifecycle from './ChangeLifecycle.svelte';
@@ -29,7 +30,7 @@
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
   import { openNode } from '../nodeEditors';
   import FormRenderer from '../forms/FormRenderer.svelte';
-  import type { FormValues, NodeOption, NodeSource } from '../forms/types';
+  import type { DecisionOption, FieldDef, FormValues, NodeOption, NodeSource } from '../forms/types';
 
   let { process, onsubmitted }: { process: Process; onsubmitted: (p: Process) => void } = $props();
 
@@ -87,6 +88,7 @@
     baselineNodes = allNodes;
     attached = (await graph.getChangeImpacts(id, signal)).nodes ?? [];
     posts = await loadPosts(changeImpacts, false, { changeId: id });
+    decisions = hasDecision(task?.form?.fields) ? await loadDecisions(id, signal) : undefined;
     const initNodes: Record<string, boolean> = {};
     for (const n of changeImpacts) if (isPending(n) && n.id) initNodes[n.id] = true;
     nodeDecisions = initNodes;
@@ -119,7 +121,7 @@
   ]);
 
   /** Writes a node of this change through its change impact (mirrors ChangeTab's own `write`). */
-  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string }, rationale: string): Promise<boolean> {
+  async function write(label: string, target: { pre?: NodeRef; key?: string; type?: string }, w: { props?: Record<string, unknown>; state?: string; addLinks?: LinkWrite[] }, rationale: string): Promise<boolean> {
     if (!changeId) return false;
     moving = label;
     error = '';
@@ -144,9 +146,9 @@
     return write(`${row.node.id}:edit`, { pre: { id: row.node.id, version: row.node.version } }, { props: patch }, `edit ${row.node.key}`);
   }
 
-  function createNode(key: string, type: string, state: string): Promise<boolean> {
+  function createNode(key: string, type: string, state: string, init?: { props: Record<string, unknown>; links: LinkWrite[] }): Promise<boolean> {
     const born = lifecycleOf(type) && state && state !== lifecycleOf(type)?.initial ? state : undefined;
-    return write('create', { key, type }, { props: {}, state: born }, `create ${key}`);
+    return write('create', { key, type }, { props: init?.props ?? {}, state: born, addLinks: init?.links }, `create ${key}`);
   }
 
   /** Takes a node out of the change, at any time (ADR 0102): its draft is dropped (a node the change creates goes away),
@@ -184,7 +186,7 @@
     if (mode === 'select') {
       const r = reason.trim() || 'impacted';
       return selectedKeys.map((key) => ({
-        kind: 'changeImpact',
+        type: 'changeImpact',
         changeImpact: { op: 'declare', intent: 'modified', key, rationale: r },
       }));
     }
@@ -193,7 +195,7 @@
       return [
         ...pendingNodes.map(
           (n): ItemInput => ({
-            kind: 'changeImpact',
+            type: 'changeImpact',
             changeImpact: { op: 'review', node: n.key, accept: nodeDecisions[n.id ?? ''] ?? true, comment: why },
           }),
         ),
@@ -203,6 +205,23 @@
   });
 
   // --- declared form (ADR 0115): the nodes its widgets may offer are the reference baseline and what the change writes
+  let decisions = $state<DecisionOption[] | undefined>(undefined);
+  const hasDecision = (fields: FieldDef[] | undefined): boolean => !!fields?.some((f) => f.widget === 'decision' || hasDecision(f.fields));
+
+  /** the decision points of the change, their options named by the options of the change */
+  async function loadDecisions(id: string, signal?: AbortSignal): Promise<DecisionOption[]> {
+    const bb = await graph.getBlackboard(id, '', signal);
+    const label = (o: string) => {
+      const f = (bb.options ?? []).find((x) => x.id === o);
+      return f?.option?.name || o;
+    };
+    return (bb.decisionPoints ?? []).map((d) => ({
+      id: d.id ?? '',
+      question: d.question ?? '',
+      options: (d.options ?? []).map((o) => ({ id: o, label: label(o) })),
+      decided: d.status === 'decided',
+    }));
+  }
   const formSource = $derived.by((): NodeSource => {
     const byKey = new Map<string, NodeOption>();
     for (const n of baselineNodes) {
@@ -220,6 +239,7 @@
       isA: (t, a) => t === a || cat.typesOf(t).includes(a),
       linkTypesFrom: (t) => cat.linksFrom(t).map((l) => l.ref ?? '').filter(Boolean),
       linkLabel: (t) => cat.links.find((l) => l.ref === t)?.label ?? '',
+      decisions,
     };
   });
 
@@ -285,7 +305,8 @@
   {#if loadError}<div class="alert">{loadError}</div>{/if}
 
   {#if mode === 'form' && task?.form}
-    <FormRenderer form={task.form} source={formSource} busy={submitting} serverError={error} onsubmit={sendForm} />
+    <FormRenderer form={task.form} source={formSource} busy={submitting} serverError={error} onsubmit={sendForm}
+      assist={{ id: `task:${process.id}`, label: task.form.title || task.action || 'human task' }} />
   {:else if mode === 'select'}
     <form onsubmit={submitStructured}>
       <div class="row" style="margin-bottom: 0.5rem">
@@ -381,7 +402,7 @@
         class="mono"
         rows="8"
         bind:value={raw}
-        placeholder={'[\n  {"kind": "changeImpact", "changeImpact": {"op": "declare", "intent": "modified", "key": "REQ-1", "rationale": "…"}}\n]'}
+        placeholder={'[\n  {"type": "changeImpact", "changeImpact": {"op": "declare", "intent": "modified", "key": "REQ-1", "rationale": "…"}}\n]'}
       ></textarea>
       <div class="row" style="margin-top: 0.5rem">
         <button class="primary" type="button" onclick={submitRaw} disabled={submitting}>

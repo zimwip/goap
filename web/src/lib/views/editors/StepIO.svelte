@@ -21,7 +21,7 @@
     if (!target || !nameOk || !value.trim()) return;
     const c = emptyCondition();
     c.name = name;
-    c.expr = mode === 'static' ? `artifacts.exists(a, a.type == ${JSON.stringify(value.trim())})` : value.trim();
+    c.expr = mode === 'static' ? `artifacts.exists(a, a.target == ${JSON.stringify(value.trim())})` : value.trim();
     c.description = mode === 'static' ? `${value.trim()} exists` : '';
     d.form.conditions.push(c);
     (step[target] as CondRow[]).push({ cond: name, value: true });

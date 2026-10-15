@@ -1,12 +1,12 @@
 <script lang="ts">
   // The assessment of a subject of a change and its thread (ADR 0110): an action of the methodology rates the
   // description (title and intent), the title, the intent, an impact or an item, and the person answers it here. The
-  // field it rates is rendered inside (`children`) and its badge sits next to it; a bubble floats by the badge while
-  // the assessment waits to be processed (`pending`: not accepted yet, or `processed` as the caller judges it, e.g. an
-  // impact decided by its review), showing the latest rating, its findings, the wording it suggests (Apply, when the
-  // caller can apply it, as suggested or after the person edited it: Edit) and the thread; an answer is a comment item of the change, which wakes the run of the rater.
-  // Once processed, or hidden by the person until the rating or its thread moves, it folds into the badge. A compact
-  // bubble (rows of a table) never opens by itself: its badge is coloured while pending, the bubble opens on a click.
+  // field it rates is rendered inside (`children`) and its badge sits next to it, coloured by the state of the
+  // rating (declared by the methodology, ADR 0116); a click on the badge opens the bubble, showing the latest rating, its
+  // findings, the wording it suggests (Apply, when the caller can apply it, as suggested or after the person edited it:
+  // Edit) and the thread; an answer is a comment item of the change, which wakes the run of the rater. The bubble opens
+  // by itself only for a state the methodology declares `open` (never on a compact badge, rows of a table), until the
+  // person hides it or the rating or its thread moves.
   // The bubble is positioned on the viewport, so a scrolling table does not clip it.
   import { getContext, type Snippet } from 'svelte';
   import { graph, errorMessage, type Change } from '../api';
@@ -63,7 +63,7 @@
   const states = getContext<AssessmentStatesContext | undefined>(ASSESSMENT_STATES);
   const run = $derived(rating ? raterRun(processes.values(), change, rating.item) : undefined);
   const working = $derived(run?.status === 'running');
-  const view = $derived(bubbleView(rating, states?.(), processed, working));
+  const view = $derived(bubbleView(rating, states?.(), processed));
   const key = $derived(bubbleKey(rating, thread));
   // open: asked by the person; hidden: the key of what the person closed while it was pending
   let open = $state(false);

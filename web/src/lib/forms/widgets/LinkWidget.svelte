@@ -3,7 +3,7 @@
   // link types its constraints allow.
   import type { WidgetProps } from '../registry';
   import type { LinkValue, NodeOption } from '../types';
-  import { completeLinks, linkSources, linkTargets, linkTypes } from '../validate';
+  import { completeLinks, linkSources, linkTargets, linkTypes, newNodeTypes } from '../validate';
   import NodePicker from './NodePicker.svelte';
   import { typeName } from '../../stores/types.svelte';
 
@@ -13,7 +13,9 @@
   const byKey = $derived(new Map(source.nodes.map((n) => [n.key, n])));
   let from = $state('');
   const current = $derived(sources.includes(from) ? from : (sources[0] ?? ''));
-  const types = $derived(linkTypes(field, byKey.get(current)?.type, source));
+  // a source the form creates (a new node field) carries its type in its value
+  const created = $derived(newNodeTypes({ fields: [{ name: String(field.constraints?.['from'] ?? ''), widget: 'newNode' }] }, values));
+  const types = $derived(linkTypes(field, byKey.get(current)?.type ?? created.get(current), source));
   let type = $state('');
   const currentType = $derived(types.includes(type) ? type : (types[0] ?? ''));
   const targets = $derived(linkTargets(field, source));

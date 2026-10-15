@@ -47,40 +47,40 @@ func sdlcModelOf(t *testing.T, record *[]string) llm.Client {
 		switch {
 		case strings.Contains(p, `"layer":"requirements"`):
 			// the first pass of the impact analysis names what the intent directly concerns
-			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
-			{"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}},
-			{"kind":"artifact","type":"impact_pass","data":{"layer":"requirements","summary":"the payment need and its PSP requirement"}}]}`
-		case strings.Contains(p, `"type":"impact_pass","data":{"layer":"`):
+			out = `{"items":[{"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"NEED-1","rationale":"new payment method"}},
+			{"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"the PSP must handle split payments"}},
+			{"type":"artifact","target":"impact_pass","data":{"layer":"requirements","summary":"the payment need and its PSP requirement"}}]}`
+		case strings.Contains(p, `"target":"impact_pass","data":{"layer":"`):
 			// the next passes name nothing directly: the propagation finds their elements
-			layer := between(p, `"type":"impact_pass","data":{"layer":"`, `"`)
-			out = `{"items":[{"kind":"artifact","type":"impact_pass","data":{"layer":"` + layer + `","summary":"nothing beyond what propagates"}}]}`
+			layer := between(p, `"target":"impact_pass","data":{"layer":"`, `"`)
+			out = `{"items":[{"type":"artifact","target":"impact_pass","data":{"layer":"` + layer + `","summary":"nothing beyond what propagates"}}]}`
 		case strings.Contains(p, "You qualify ONE suspected impact"):
 			// one suspected impact at a time: the settlement batch, its artifact and its settlement file are not concerned
 			key, fp := between(p, "Suspected impact: ", " ("), between(p, `"rated":"`, `"`)
 			verdict, ops := "confirmed", ""
 			if key == "CMP-3" || key == "ART-3" || key == "ITF-3" {
 				verdict = "refuted"
-				ops = `,{"kind":"changeImpact","changeImpact":{"op":"review","node":"` + key + `","accept":false,"comment":"not impacted: settlement is untouched"}},
-				{"kind":"changeImpact","changeImpact":{"op":"remove","node":"` + key + `"}}`
+				ops = `,{"type":"changeImpact","changeImpact":{"op":"review","node":"` + key + `","accept":false,"comment":"not impacted: settlement is untouched"}},
+				{"type":"changeImpact","changeImpact":{"op":"remove","node":"` + key + `"}}`
 			}
 			mu.Lock()
 			*record = append(*record, key)
 			mu.Unlock()
-			out = `{"items":[{"kind":"assessment","data":{"key":"impact:` + key + `","score":4,"verdict":"` + verdict + `","findings":[],"rated":"` + fp + `"}}` + ops + `]}`
+			out = `{"items":[{"type":"assessment","data":{"key":"impact:` + key + `","score":4,"verdict":"` + verdict + `","findings":[],"rated":"` + fp + `"}}` + ops + `]}`
 		case strings.Contains(p, "Revise the impacted requirements"):
 			// REQ-1 starts proposed: a transition moves it to draft, then it is written, the way the
 			// system prompt's lifecycle instructions ask of any compliant agent (llmSystem, ADR 0076). REQ-10 is
 			// created. The review accepts both, approve_requirements approves them.
-			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"transition","node":"REQ-1","state":"draft"}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}},
-			{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-10","rationale":"pay in installments"}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"Pay in 3 installments with no fees","priority":"high"},"links":[{"type":"satisfies","to":"NEED-1"}]}}]}`
+			out = `{"items":[{"type":"changeImpact","changeImpact":{"op":"transition","node":"REQ-1","state":"draft"}},
+			{"type":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Card payment (in full or in 3 installments) goes through the Acme PSP (API v2)"}}},
+			{"type":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"FunctionalRequirement","key":"REQ-10","rationale":"pay in installments"}},
+			{"type":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"Pay in 3 installments with no fees","priority":"high"},"links":[{"type":"satisfies","to":"NEED-1"}]}}]}`
 		case strings.Contains(p, "Design the evolution"):
-			out = `{"items":[{"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
-			{"kind":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0"},"links":[{"type":"implements","to":"FCT-1"}]}},
-			{"kind":"artifact","type":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`
+			out = `{"items":[{"type":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"Component","key":"CMP-10","rationale":"a dedicated engine"}},
+			{"type":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0"},"links":[{"type":"implements","to":"FCT-1"}]}},
+			{"type":"artifact","target":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`
 		case strings.Contains(p, "Write the release note"):
-			out = `{"items":[{"kind":"artifact","type":"release_note","data":{"markdown":"# Payment in 3 installments"}}]}`
+			out = `{"items":[{"type":"artifact","target":"release_note","data":{"markdown":"# Payment in 3 installments"}}]}`
 		default:
 			t.Errorf("unexpected prompt:\n%s", p)
 		}
@@ -160,7 +160,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 }
 
 // validation is what a person submits to validate the impact analysis.
-var validation = engine.ItemInput{Kind: "artifact", Type: "impact_validation", Data: map[string]any{"accepted": true, "comment": "the four layers are right"}}
+var validation = engine.ItemInput{Type: "artifact", Target: "impact_validation", Data: map[string]any{"accepted": true, "comment": "the four layers are right"}}
 
 // qualified are the subjects the qualify step of the impact analysis ran for, in order.
 func qualified(p *engine.Process) []string {
@@ -271,16 +271,16 @@ func TestSDLCDelivery(t *testing.T) {
 			if n.Post == nil {
 				op = &dsl.NodeOp{Op: "remove", Node: n.Key}
 			}
-			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: op})
+			decisions = append(decisions, engine.ItemInput{Type: "changeImpact", ChangeImpact: op})
 		}
 		if n.Intent == domain.IntentCreated {
 			count[n.Type]++
 		}
 	}
 	for _, it := range c.Items {
-		if it.Kind == domain.KindArtifact {
-			count["artifact:"+it.Type]++
-			if it.Type == "design_check" && it.Data["ok"] != true {
+		if it.Type == domain.TypeArtifact {
+			count["artifact:"+it.Target]++
+			if it.Target == "design_check" && it.Data["ok"] != true {
 				t.Fatalf("design check: %+v", it.Data)
 			}
 		}
@@ -368,7 +368,7 @@ func TestSDLCProcess(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the analysis waits for the description to be accepted (ADR 0110): the description_review process rated it
-	if _, err := g.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Kind: assess.KindAssessment, Status: domain.ItemProposed, ProducedBy: "description_review/rate",
+	if _, err := g.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Type: assess.TypeAssessment, Status: domain.ItemProposed, ProducedBy: "description_review/rate",
 		Data: map[string]any{"key": assess.SubjectDescription, "score": 4, "verdict": assess.VerdictClear,
 			"rated": "Payment in 3 installments\n\nAllow payment in 3 installments with no fees"}}}); err != nil {
 		t.Fatal(err)
@@ -433,7 +433,7 @@ func TestSDLCProcess(t *testing.T) {
 	}
 	want := []string{"software_delivery/framing", "software_delivery/analysis/impacts",
 		// the traceability sub-step is skipped: its criteria hold (the new requirement satisfies a need)
-		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/analysis/specification/test_plan", "software_delivery/design", "software_delivery/build", "software_delivery/release"}
+		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/design", "software_delivery/analysis/specification/test_plan", "software_delivery/build", "software_delivery/release"}
 	if !slices.Equal(steps, want) {
 		t.Fatalf("steps %v", steps)
 	}
@@ -463,10 +463,22 @@ func TestSDLCProcess(t *testing.T) {
 	if pr.Total != 9 || pr.Done != 7 {
 		t.Fatalf("progress %d/%d", pr.Done, pr.Total)
 	}
+	// the build step names a capability: no component has a repository, so the recorded_build method was chosen
+	// (ADR 0118), and the specializations of its build action apply
 	var builds []string
 	for _, s := range p.Steps {
-		if s.Action == "software_delivery/build" {
-			builds = append(builds, s.Specialization) // the specializations of the action a step runs apply
+		if s.Action != "software_delivery/build" || len(s.Children) == 0 {
+			continue
+		}
+		if s.Specialization != "recorded_build" {
+			t.Fatalf("build method: %q", s.Specialization)
+		}
+		builder, err := e.Store.Get(ctx, s.Children[0])
+		if err != nil || builder.Status != engine.StatusCompleted {
+			t.Fatalf("build step: %+v %v", builder, err)
+		}
+		for _, bs := range builder.Steps {
+			builds = append(builds, bs.Specialization)
 		}
 	}
 	if !slices.Equal(builds, []string{"build_java", "build_c", "build_generic"}) {
@@ -500,7 +512,7 @@ func TestSDLCProcess(t *testing.T) {
 			if n.Post == nil {
 				op = &dsl.NodeOp{Op: "remove", Node: n.Key}
 			}
-			decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: op})
+			decisions = append(decisions, engine.ItemInput{Type: "changeImpact", ChangeImpact: op})
 		}
 	}
 	if _, err = e.Submit(ctx, train.ID, decisions); err != nil {

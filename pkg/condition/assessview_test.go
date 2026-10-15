@@ -16,9 +16,9 @@ func assessedBoard(score int) domain.Blackboard {
 			{ID: "i2", Key: "REQ-2", Type: "alm@Requirement", Intent: domain.IntentModified, Review: domain.ReviewProposed},
 		},
 		Items: []domain.ChangeItem{
-			{ID: "a1", Kind: assess.KindAssessment, Data: map[string]any{"key": assess.SubjectDescription, "score": score, "rated": desc}},
-			{ID: "a2", Kind: assess.KindAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-1", "score": 4, "verdict": "confirmed"}},
-			{ID: "a3", Kind: assess.KindAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-2", "score": 1, "verdict": "refuted"}},
+			{ID: "a1", Type: assess.TypeAssessment, Data: map[string]any{"key": assess.SubjectDescription, "score": score, "rated": desc}},
+			{ID: "a2", Type: assess.TypeAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-1", "score": 4, "verdict": "confirmed"}},
+			{ID: "a3", Type: assess.TypeAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-2", "score": 1, "verdict": "refuted"}},
 		}}}
 }
 
@@ -42,10 +42,10 @@ func TestDefaultAssessmentStates(t *testing.T) {
 	if s := stateOf(t, states, "impact:REQ-1"); s.Tone != ToneOK || s.Label != "processed" {
 		t.Fatalf("decided impact %+v", s)
 	}
-	if s := stateOf(t, states, "impact:REQ-2"); s.Tone != ToneWarn || !s.Open {
+	if s := stateOf(t, states, "impact:REQ-2"); s.Tone != ToneWarn || s.Open {
 		t.Fatalf("impact waiting for its review %+v", s)
 	}
-	if s := stateOf(t, none.States(assessedBoard(2), Result{}), "description"); s.Tone != ToneWarn || s.Label != "to be improved" || !s.Open {
+	if s := stateOf(t, none.States(assessedBoard(2), Result{}), "description"); s.Tone != ToneWarn || s.Label != "to be improved" || s.Open {
 		t.Fatalf("low score %+v", s)
 	}
 	bb := assessedBoard(4)

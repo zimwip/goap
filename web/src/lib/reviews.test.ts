@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { awaitingImpacts, canSubmit, invalidReason, validImpacts, reviewRows, staleEntries, effectiveComment, foldReviews, mayEdit, overlay, reviewOrder, submitProblems, tally } from './reviews';
 import type { ChangeImpact, ChangeItem, ReviewRecord } from './api';
 
-const item = (id: string, data: Record<string, unknown>, extra: Partial<ChangeItem> = {}): ChangeItem => ({ id, kind: 'review', status: 'proposed', producedBy: 'alice', data: data as ChangeItem['data'], ...extra });
+const item = (id: string, data: Record<string, unknown>, extra: Partial<ChangeItem> = {}): ChangeItem => ({ id, type: 'review', status: 'proposed', producedBy: 'alice', data: data as ChangeItem['data'], ...extra });
 const rec = (r: Partial<ReviewRecord>): ReviewRecord => ({ key: 'R', status: 'open', entries: [], ...r });
 
 describe('foldReviews', () => {
@@ -11,7 +11,7 @@ describe('foldReviews', () => {
       item('1', { key: 'R1', status: 'open', comment: 'first' }),
       item('2', { key: 'R2', status: 'open' }),
       item('3', { key: 'R1', status: 'open', comment: 'second', entries: [{ impact: 'a', outcome: 'accept', comment: 'c' }] }),
-      { id: 'x', kind: 'artifact' },
+      { id: 'x', type: 'artifact' },
     ]);
     expect(got.map((r) => r.key)).toEqual(['R1', 'R2']);
     expect(got[0]).toMatchObject({ comment: 'second', versions: 2, item: '3', by: 'alice', entries: [{ changeImpactId: 'a', outcome: 'accept', comment: 'c' }] });

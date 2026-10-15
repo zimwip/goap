@@ -249,20 +249,30 @@ export interface Decision {
   comment?: string;
 }
 
-export type ItemKind = 'decision' | 'artifact' | 'flow';
+export type ItemType = 'decision' | 'artifact' | 'flow';
+
+/** An item type a change may hold (ADR 0119): `origin` is `core` for the types the graph
+ * knows itself, else the use case registering it; `permission` / `subjectField` what writing one asks of its writer. */
+export interface ItemTypeInfo {
+  type?: string;
+  origin?: string;
+  description?: string;
+  permission?: string;
+  subjectField?: string;
+}
 
 /** Status of a superseded item (rebase, merge): see its replacement's `supersedes`. */
 export const ITEM_SUPERSEDED = 'superseded';
 
 export interface ChangeItem {
   id?: string;
-  kind?: ItemKind | string;
-  type?: string;
+  type?: ItemType | string;
+  target?: string;
   status?: string;
-  /** flow branch that produced the item (empty: the main flow); flowEvent on kind 'flow' */
+  /** flow branch that produced the item (empty: the main flow); flowEvent on type 'flow' */
   flow?: string;
   flowEvent?: FlowEvent;
-  /** event of a decision point on kind 'decision_point' (ADR 0009 §4) */
+  /** event of a decision point on type 'decision_point' (ADR 0009 §4) */
   decisionEvent?: { op?: string; point?: string; outcome?: string; confidence?: number; policy?: DecisionPolicy; human?: boolean; accept?: boolean };
   decision?: Decision;
   data?: Struct;
@@ -517,7 +527,7 @@ export interface FlowOrigin {
   reason?: string;
 }
 
-/** Event of the action flow, carried by change items of kind "flow". */
+/** Event of the action flow, carried by change items of type "flow". */
 export interface FlowEvent {
   op?: 'open' | 'adopt' | 'discard' | string;
   flow?: string;
@@ -582,4 +592,32 @@ export interface GraphImportResult {
   updated?: number;
   unchanged?: number;
   warnings?: string[];
+}
+
+/** One edit of the settings dialog (ADR 0122): the creation or new properties of a node, or its retirement. */
+export interface SettingEdit {
+  namespace: string;
+  type: string;
+  key: string;
+  props?: Struct;
+  retire?: boolean;
+}
+
+/** A node the user touched in the settings dialog, not saved yet (ADR 0037, 0122). */
+export interface StagedSetting {
+  key: string;
+  type: string;
+  /** the properties of its draft */
+  props?: Struct;
+  retire?: boolean;
+  /** the node does not exist on main yet */
+  created?: boolean;
+  changeImpactId?: string;
+  /** a draft was written for it */
+  written?: boolean;
+}
+
+/** The pending edits of the user, one personal change per namespace. */
+export interface PendingSettings {
+  changes?: { namespace: string; changeId: string; nodes?: StagedSetting[] }[];
 }
