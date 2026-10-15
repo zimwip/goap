@@ -150,7 +150,6 @@ func ElementKey(meth, version, kind, name string) string {
 const (
 	TypeAction      = "methodology@Action"
 	TypeToolRequest = "methodology@ToolRequest"
-	LinkSpecializes = "methodology@specializes"
 )
 
 func outputKey(it domain.ChangeItem) string {

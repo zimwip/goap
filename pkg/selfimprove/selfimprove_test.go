@@ -6,6 +6,7 @@ import (
 	"github.com/zimwip/goap/pkg/intent"
 	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
+	"slices"
 	"strings"
 	"testing"
 
@@ -42,22 +43,26 @@ func (d *memDrafts) SaveDraft(ctx context.Context, m methodology.Methodology) (d
 }
 
 // storeDefinition writes the definition nodes of a methodology version as the registry does (ADR 0023): the version
-// node and one node per element, typed by the meta-domain methodology.
+// node and one node per element, typed by the meta-domain methodology, the actions of an agent its uses links (ADR 0119).
 func storeDefinition(ctx context.Context, g *graph.Graph, base domain.BaselineID, m *methodology.Methodology) (graph.CommitResult, error) {
 	hkey := observe.ElementKey(m.Name, m.Version, "methodology", "")
 	head := graph.NodeEdit{Key: hkey, Type: "methodology@MethodologyVersion", Props: map[string]any{"name": m.Name, "version": m.Version, "status": "published"}}
 	edits := []graph.NodeEdit{}
-	el := func(kind, typ, name string, props map[string]any) {
+	el := func(kind, typ, name string, props map[string]any, links ...graph.LinkEdit) {
 		k := observe.ElementKey(m.Name, m.Version, kind, name)
 		props["name"] = name
-		edits = append(edits, graph.NodeEdit{Key: k, Type: typ, Props: props})
+		edits = append(edits, graph.NodeEdit{Key: k, Type: typ, Props: props, Links: links})
 		head.Links = append(head.Links, graph.LinkEdit{Type: "methodology@defines", ToKey: k})
 	}
 	for _, a := range m.Actions {
 		el("action", "methodology@Action", a.Name, map[string]any{"kind": a.Kind, "cost": a.Cost, "model": a.Model})
 	}
 	for _, a := range m.Agents {
-		el("agent", "methodology@Agent", a.Name, map[string]any{"actions": a.Actions})
+		var uses []graph.LinkEdit
+		for i, x := range a.Actions {
+			uses = append(uses, graph.LinkEdit{Type: methodology.LinkUses, ToKey: observe.ElementKey(m.Name, m.Version, "action", x), Props: map[string]any{"position": float64(i)}})
+		}
+		el("agent", "methodology@Agent", a.Name, map[string]any{}, uses...)
 	}
 	return g.Commit(ctx, graph.Commit{ProjectID: "PROJ-ROOT", Namespace: "methodology", Title: "Methodology " + m.Name, Baseline: base, By: "test", Edits: append(edits, head)})
 }
@@ -206,6 +211,32 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		}
 		decisions = append(decisions, engine.ItemInput{Kind: "changeImpact", ChangeImpact: &dsl.NodeOp{Op: "review", Node: n.Key, Accept: true, Comment: "worth it"}})
 	}
+	// the specialization proposed is a link to the action it specializes, not a name in its properties (ADR 0119)
+	specialized := ""
+	for _, n := range c.Nodes {
+		if !strings.HasSuffix(n.Key, "/action/identify_impacts_script") {
+			continue
+		}
+		v, err := g.ChangeNodeView(ctx, c.ID, "", *n.Post)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, named := v.Properties["specializes"]; named {
+			t.Fatalf("the specialization is a link, not a property: %+v", v.Properties)
+		}
+		for _, l := range v.Out {
+			if l.Type == methodology.LinkSpecializes {
+				to, err := g.Node(ctx, l.To)
+				if err != nil {
+					t.Fatal(err)
+				}
+				specialized = to.Key
+			}
+		}
+	}
+	if !strings.HasSuffix(specialized, "/action/identify_impacts") {
+		t.Fatalf("specializes link of the proposed script: %q", specialized)
+	}
 	findings, _ := report["findings"].([]any)
 	if len(findings) < 2 || report["methodology"] != "impact-analysis" {
 		t.Fatalf("report: %+v", report)
@@ -243,5 +274,24 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 	recs, _ := journal.Read(ctx, g, journal.Filter{ChangeID: op.ChangeID})
 	if len(recs) == 0 || recs[len(recs)-1].Kind != journal.KindProcessEnded {
 		t.Fatalf("observer journal: %+v", recs)
+	}
+}
+
+// A proposal names the elements of the methodology; written on the graph, the names are links and the links of the
+// fields it sets replace those of the node (ADR 0119).
+func TestGraphWriteTurnsNamesIntoLinks(t *testing.T) {
+	m := &methodology.Methodology{Name: "m", Version: "1", Actions: []methodology.Action{{Name: "a"}, {Name: "b"}, {Name: "c"}}, Agents: []methodology.Agent{{Name: "ag"}}}
+	hkey := observe.ElementKey("m", "1", "methodology", "")
+	uses := func(id, to string, pos float64) storedLink {
+		return storedLink{domain.Link{ID: domain.LinkID(id), Type: methodology.LinkUses, Properties: map[string]any{"position": pos}}, hkey + "/action/" + to}
+	}
+	stored := []storedLink{uses("L1", "a", 0), uses("L2", "b", 1), uses("L3", "c", 2),
+		{domain.Link{ID: "L4", Type: methodology.LinkPursues, Properties: map[string]any{"position": float64(0)}}, hkey + "/goal/g"}}
+	w := graphWrite(observe.Proposal{Op: "update_node", Key: hkey + "/agent/ag", Props: map[string]any{"actions": []any{"a", "c"}}}, methodology.RefIndexOf(m), hkey, stored)
+	if !slices.Equal(w.RemoveLinks, []string{"L2", "L3"}) || len(w.Links) != 1 || w.Links[0].To != hkey+"/action/c" || w.Links[0].Props["position"] != float64(1) {
+		t.Fatalf("links of the write: remove %v, add %+v", w.RemoveLinks, w.Links)
+	}
+	if v, ok := w.Props["actions"]; !ok || v != nil {
+		t.Fatalf("the names are links, the property is cleared: %+v", w.Props)
 	}
 }

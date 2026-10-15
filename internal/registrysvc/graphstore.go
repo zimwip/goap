@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/zimwip/goap/pkg/domain"
 	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/graphsnap"
+	"github.com/zimwip/goap/pkg/methodology"
 )
 
 // TypeMethodologyVersion is the type of the header node of a methodology version (built-in meta-domain, ADR 0023): its
@@ -77,8 +79,42 @@ func (s *GraphStore) aliasStubGraph() StoreGraph { return s.Graph }
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
 func NewGraphStore(g StoreGraph) *GraphStore {
 	s := &GraphStore{Graph: g}
-	s.cache = graphsnap.Cache[*defs]{Graph: g, Namespace: NamespaceMethodology, Build: buildDefs}
+	s.cache = graphsnap.Cache[*defs]{Graph: withSuspects{g}, Namespace: NamespaceMethodology, Build: buildDefs}
 	return s
+}
+
+// suspectReader is a graph that gives the suspect links of a baseline (*graph.Graph, the graph service client).
+type suspectReader interface {
+	SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error)
+}
+
+// withSuspects reads a baseline with its suspect links too: a link to an element is a link to the version the element
+// had when the reference was written (ADR 0003), and editing the element (a new version of its node) leaves the
+// references to it in place, suspect. They are references all the same (ADR 0119).
+type withSuspects struct{ StoreGraph }
+
+// withSuspectsReader reads both at once (the graph service client: one call).
+type withSuspectsReader interface {
+	BaselineGraphWithSuspects(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, []domain.Link, error)
+}
+
+func (w withSuspects) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+	if r, ok := w.StoreGraph.(withSuspectsReader); ok {
+		nodes, links, sus, err := r.BaselineGraphWithSuspects(ctx, id)
+		return nodes, append(links, sus...), err
+	}
+	nodes, links, err := w.StoreGraph.BaselineGraph(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sr, ok := w.StoreGraph.(suspectReader); ok {
+		sus, err := sr.SuspectLinks(ctx, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		links = append(links, sus...)
+	}
+	return nodes, links, nil
 }
 
 // defs is the versions of a baseline, decoded once per head of main.
@@ -88,11 +124,19 @@ type defs struct {
 }
 
 // stored is a decoded version with the nodes it comes from: the header and every element node (removed ones too, so that
-// an element deleted from a draft and added again is revived, not created twice).
+// an element deleted from a draft and added again is revived, not created twice), and the outgoing links of each, with
+// the key of their target.
 type stored[T any] struct {
 	node     domain.Node
 	rec      T
 	children map[string]domain.Node // by key
+	out      map[domain.NodeID][]keyedLink
+}
+
+// keyedLink is a link with the key of its target.
+type keyedLink struct {
+	domain.Link
+	toKey string
 }
 
 var metaKeys = []string{"status", "createdAt", "updatedAt", "publishedAt", "updatedBy"}
@@ -106,11 +150,16 @@ func kindOfType(t string) string {
 	return ""
 }
 
-func buildDefs(_ domain.BaselineID, nodes []domain.Node, _ []domain.Link) *defs {
+func buildDefs(_ domain.BaselineID, nodes []domain.Node, links []domain.Link) *defs {
 	d := &defs{methodologies: map[string]stored[Record]{}}
 	type owner struct{ ns, key string }
 	children := map[owner]map[string]domain.Node{} // header -> element nodes
+	byID := map[domain.NodeID]domain.Node{}
 	for _, n := range nodes {
+		if n.Namespace != NamespaceMethodology {
+			continue
+		}
+		byID[n.ID] = n
 		if kindOfType(n.Type) == "" {
 			continue
 		}
@@ -121,22 +170,40 @@ func buildDefs(_ domain.BaselineID, nodes []domain.Node, _ []domain.Link) *defs 
 		}
 		children[o][n.Key] = n
 	}
+	out := map[domain.NodeID][]keyedLink{}
+	for _, l := range links {
+		from, ok := byID[l.From.ID]
+		to, ok2 := byID[l.To.ID]
+		if !ok || !ok2 || from.Version != l.From.Version {
+			continue
+		}
+		out[l.From.ID] = append(out[l.From.ID], keyedLink{l, to.Key})
+	}
+	for _, ls := range out {
+		sort.SliceStable(ls, func(i, j int) bool { return ls[i].ID < ls[j].ID })
+	}
 	for _, n := range nodes {
 		if n.Namespace != NamespaceMethodology || n.Type != TypeMethodologyVersion {
 			continue
 		}
 		var r Record
-		if err := decodeVersion(n, children[owner{n.Namespace, n.Key}], &r.Methodology, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
+		els := children[owner{n.Namespace, n.Key}]
+		if err := decodeVersion(n, els, out, byID, &r.Methodology, &r.Status, &r.CreatedAt, &r.UpdatedAt, &r.PublishedAt, &r.UpdatedBy); err != nil {
 			d.problems = append(d.problems, fmt.Sprintf("%s: %v", n.Key, err))
 			continue
 		}
-		d.methodologies[key(r.Methodology.Name, r.Methodology.Version)] = stored[Record]{n, r, children[owner{n.Namespace, n.Key}]}
+		mine := map[domain.NodeID][]keyedLink{n.ID: out[n.ID]}
+		for _, e := range els {
+			mine[e.ID] = out[e.ID]
+		}
+		d.methodologies[key(r.Methodology.Name, r.Methodology.Version)] = stored[Record]{n, r, els, mine}
 	}
 	return d
 }
 
-// decodeVersion assembles a definition from its header node and its live element nodes.
-func decodeVersion(n domain.Node, elements map[string]domain.Node, def any, status *Status, created, updated, published *time.Time, by *string) error {
+// decodeVersion assembles a definition from its header node, its live element nodes and their links: the references
+// back in the properties (methodology.DecodeRefs), the steps of a process or a method from its sub_activity links.
+func decodeVersion(n domain.Node, elements map[string]domain.Node, out map[domain.NodeID][]keyedLink, byID map[domain.NodeID]domain.Node, def any, status *Status, created, updated, published *time.Time, by *string) error {
 	props := maps.Clone(n.Properties)
 	s, _ := props["status"].(string)
 	*status = Status(s)
@@ -153,15 +220,60 @@ func decodeVersion(n domain.Node, elements map[string]domain.Node, def any, stat
 	for _, k := range metaKeys {
 		delete(props, k)
 	}
+	refs := func(id domain.NodeID) []methodology.RefTarget {
+		var ls []methodology.RefTarget
+		for _, l := range out[id] {
+			to := byID[l.To.ID]
+			name, _ := to.Properties["name"].(string)
+			ls = append(ls, methodology.RefTarget{Type: l.Type, Props: l.Properties, Kind: kindOfType(to.Type), Name: name})
+		}
+		return ls
+	}
+	props = methodology.DecodeRefs(methodology.ElementVersion, props, refs(n.ID))
+	var stepsOf func(id domain.NodeID) []any
+	stepsOf = func(id domain.NodeID) []any {
+		var kids []domain.Node
+		for _, l := range out[id] {
+			if l.Type != linkSubActivity {
+				continue
+			}
+			if c, ok := byID[l.To.ID]; ok {
+				if removed, _ := c.Properties["removed"].(bool); !removed {
+					kids = append(kids, c)
+				}
+			}
+		}
+		sort.SliceStable(kids, func(i, j int) bool {
+			a, _ := kids[i].Properties["position"].(float64)
+			b, _ := kids[j].Properties["position"].(float64)
+			return a < b
+		})
+		var steps []any
+		for _, c := range kids {
+			p := stepJSON(methodology.DecodeRefs(kindOfType(c.Type), c.Properties, refs(c.ID)))
+			if sub := stepsOf(c.ID); len(sub) > 0 {
+				p["steps"] = sub
+			}
+			steps = append(steps, p)
+		}
+		return steps
+	}
 	var els []map[string]any
 	var kinds []string
 	for _, k := range slices.Sorted(maps.Keys(elements)) {
 		e := elements[k]
-		if removed, _ := e.Properties["removed"].(bool); removed {
-			continue
+		kind := kindOfType(e.Type)
+		if removed, _ := e.Properties["removed"].(bool); removed || kind == kindStep || kind == kindMethodStep {
+			continue // a step is read through its process or method
 		}
-		els = append(els, e.Properties)
-		kinds = append(kinds, kindOfType(e.Type))
+		p := methodology.DecodeRefs(kind, e.Properties, refs(e.ID))
+		if kind == kindProcess || kind == kindMethod {
+			if steps := stepsOf(e.ID); len(steps) > 0 {
+				p["steps"] = steps
+			}
+		}
+		els = append(els, p)
+		kinds = append(kinds, kind)
 	}
 	return decodeInto(props, els, kinds, def)
 }
@@ -213,48 +325,77 @@ func patch(have, want map[string]any) map[string]any {
 	return out
 }
 
-// versionEdits reconciles the nodes of a version with a definition: it creates or updates the header, creates, updates
-// and, for the elements that left the definition, marks removed the element nodes, and ties new elements to the
-// header. subActivity names, by an element's own relative key ("<kind>/<name>"), the relative keys of the
-// sub-activities (steps) it composes (architecture plan "Activity concept"): each gets a sub_activity link to them,
-// in addition to the header's defines link to every element.
-func versionEdits(hkey, hType string, header map[string]any, els []defEl, old *domain.Node, oldChildren map[string]domain.Node, subActivity map[string][]string) []graph.NodeEdit {
+// versionEdits reconciles the nodes of a version with a definition (an elementGraph): it creates or updates the
+// header, creates, updates and, for the elements that left the definition, marks removed the element nodes (their
+// links dropped), ties new elements to the header (defines) and brings the links of every node to the references of
+// the definition (ADR 0119): a link the definition no longer makes is removed, one it makes is added, one whose
+// attributes changed is replaced. old, oldChildren and oldOut are the stored version, nil for a new one.
+func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChildren map[string]domain.Node, oldOut map[domain.NodeID][]keyedLink) []graph.NodeEdit {
+	// linkEdits diffs the links of a stored node (only the types managed counts) with the wanted ones
+	linkEdits := func(id domain.NodeID, want []methodology.RefLink, managed func(string) bool) (add []graph.LinkEdit, remove []domain.LinkID) {
+		used := make([]bool, len(want))
+		for _, l := range oldOut[id] {
+			if !managed(l.Type) {
+				continue
+			}
+			to := strings.TrimPrefix(l.toKey, hkey+"/")
+			kept := false
+			for i, w := range want {
+				if !used[i] && sameRef(w, l.Type, to, l.Properties) {
+					used[i], kept = true, true
+					break
+				}
+			}
+			if !kept {
+				remove = append(remove, l.ID)
+			}
+		}
+		for i, w := range want {
+			if !used[i] {
+				add = append(add, graph.LinkEdit{Type: w.Type, ToKey: hkey + "/" + w.To, Props: normProps(w.Props)})
+			}
+		}
+		return add, remove
+	}
+	all := func(string) bool { return true }
 	var head graph.NodeEdit
 	if old != nil {
 		ref := old.Ref()
-		head = graph.NodeEdit{Pre: &ref, Props: patch(old.Properties, header)}
+		head = graph.NodeEdit{Pre: &ref, Props: patch(old.Properties, eg.header)}
+		head.Links, head.RemoveLinks = linkEdits(old.ID, eg.headerLinks, func(t string) bool { return t != linkDefines })
 	} else {
-		head = graph.NodeEdit{Key: hkey, Type: hType, Props: header}
+		head = graph.NodeEdit{Key: hkey, Type: hType, Props: eg.header}
+		head.Links, _ = linkEdits("", eg.headerLinks, all)
 	}
 	var edits []graph.NodeEdit
 	want := map[string]bool{}
-	for _, e := range els {
+	for _, e := range eg.els {
 		rel := e.kind + "/" + e.name
 		k := hkey + "/" + rel
 		want[k] = true
-		var links []graph.LinkEdit
-		for _, child := range subActivity[rel] {
-			links = append(links, graph.LinkEdit{Type: linkSubActivity, ToKey: hkey + "/" + child})
-		}
 		if n, ok := oldChildren[k]; ok {
 			p := patch(n.Properties, e.props)
-			if p != nil || len(links) > 0 {
+			add, remove := linkEdits(n.ID, eg.links[rel], all)
+			if p != nil || len(add) > 0 || len(remove) > 0 {
 				ref := n.Ref()
-				edits = append(edits, graph.NodeEdit{Pre: &ref, Props: p, Links: links})
+				edits = append(edits, graph.NodeEdit{Pre: &ref, Props: p, Links: add, RemoveLinks: remove})
 			}
 			continue
 		}
-		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeTypeOf(e.kind), Props: e.props, Links: links})
+		add, _ := linkEdits("", eg.links[rel], all)
+		edits = append(edits, graph.NodeEdit{Key: k, Type: nodeTypeOf(e.kind), Props: e.props, Links: add})
 		head.Links = append(head.Links, graph.LinkEdit{Type: linkDefines, ToKey: k})
 	}
 	for _, k := range slices.Sorted(maps.Keys(oldChildren)) {
 		if n := oldChildren[k]; !want[k] {
 			if removed, _ := n.Properties["removed"].(bool); !removed {
-				edits = append(edits, update(n, map[string]any{"removed": true}))
+				ed := update(n, map[string]any{"removed": true})
+				_, ed.RemoveLinks = linkEdits(n.ID, nil, all)
+				edits = append(edits, ed)
 			}
 		}
 	}
-	if head.Pre != nil && len(head.Props) == 0 && len(head.Links) == 0 {
+	if head.Pre != nil && len(head.Props) == 0 && len(head.Links) == 0 && len(head.RemoveLinks) == 0 {
 		return edits
 	}
 	return append([]graph.NodeEdit{head}, edits...)
@@ -320,6 +461,18 @@ func markDeleted(n domain.Node) graph.NodeEdit {
 
 // ---- methodologies ---------------------------------------------------------
 
+// encodeVersion is a definition as the graph holds it: the header, an element per declared element and per step, and
+// the links of their references (ADR 0119).
+func encodeVersion(m methodology.Methodology, st Status, created, updated, published time.Time, by string) (elementGraph, error) {
+	header, els, err := encodeMethodology(m)
+	if err != nil {
+		return elementGraph{}, err
+	}
+	stepEls, subActivity := stepChildren(els)
+	els = append(els, stepEls...)
+	return buildElementGraph(headerProps(header, st, created, updated, published, by), els, subActivity), nil
+}
+
 func (s *GraphStore) Save(ctx context.Context, r Record) error {
 	m := r.Methodology
 	k := key(m.Name, m.Version)
@@ -333,20 +486,18 @@ func (s *GraphStore) Save(ctx context.Context, r Record) error {
 		if exists && !revive {
 			created = old.rec.CreatedAt
 		}
-		header, els, err := encodeMethodology(m)
+		eg, err := encodeVersion(m, r.Status, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
 		if err != nil {
 			return nil, err
 		}
-		stepEls, subActivity := stepChildren(els)
-		els = append(els, stepEls...)
-		props := headerProps(header, r.Status, created, r.UpdatedAt, r.PublishedAt, r.UpdatedBy)
 		var oldNode *domain.Node
 		var oldChildren map[string]domain.Node
+		var oldOut map[domain.NodeID][]keyedLink
 		if exists {
 			n := old.node
-			oldNode, oldChildren = &n, old.children
+			oldNode, oldChildren, oldOut = &n, old.children, old.out
 		}
-		return versionEdits(MethodologyVersionKey(m.Name, m.Version), TypeMethodologyVersion, props, els, oldNode, oldChildren, subActivity), nil
+		return versionEdits(MethodologyVersionKey(m.Name, m.Version), TypeMethodologyVersion, eg, oldNode, oldChildren, oldOut), nil
 	})
 }
 

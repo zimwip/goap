@@ -1,33 +1,44 @@
 package registrysvc
 
-import "maps"
+import (
+	"maps"
+	"strconv"
+)
 
-// stepChildren walks the steps of every process and method element recursively, one step and sub-step deep, and
-// returns one defEl per step (methodology@Step for a process, methodology@MethodStep for a method), keyed by its
-// full path ("<process>/<step>/<sub-step>"), plus the sub_activity children each parent (a process, method or step
-// element, named "<kind>/<name-or-path>") needs linked. Steps stay authored inline in the owning process/method's own
-// JSON for decode fidelity (encodeMethodology/decodeInto never look at these); this additionally gives each step a
-// real, versioned graph identity of its own (architecture plan "Activity concept").
+// stepChildren takes the steps of every process and method element out of its properties and returns one defEl per
+// step and sub-step (methodology@Step for a process, methodology@MethodStep for a method), keyed by its full path
+// ("<process>/<step>/<sub-step>"), plus the sub_activity children each parent (a process, method or step element,
+// named "<kind>/<name-or-path>") is composed of, in their order. A step is a node of its own and nothing else holds it
+// (ADR 0119): the definition reads the steps of a process back from its sub_activity links (stepsOf), each step at
+// its position among its siblings.
 func stepChildren(els []defEl) (stepEls []defEl, children map[string][]string) {
 	children = map[string][]string{}
 	var walk func(parentRel, path, kind string, raw []any)
 	walk = func(parentRel, path, kind string, raw []any) {
-		for _, item := range raw {
+		seen := map[string]bool{}
+		for i, item := range raw {
 			sm, _ := item.(map[string]any)
 			name, _ := sm["name"].(string)
 			if sm == nil || name == "" {
 				continue
 			}
-			p := path + "/" + name
+			seg := name
+			if seen[seg] { // names that repeat are told apart by position, as the elements are (split)
+				seg += "~" + strconv.Itoa(i)
+			}
+			seen[seg] = true
+			p := path + "/" + seg
 			rel := kind + "/" + p
 			children[parentRel] = append(children[parentRel], rel)
-			stepEls = append(stepEls, defEl{kind: kind, name: p, props: stepNodeProps(sm)})
+			props := stepNodeProps(sm)
+			props["position"] = float64(i)
+			stepEls = append(stepEls, defEl{kind: kind, name: p, props: props})
 			if sub, _ := sm["steps"].([]any); len(sub) > 0 {
 				walk(rel, p, kind, sub)
 			}
 		}
 	}
-	for _, e := range els {
+	for i, e := range els {
 		var kind string
 		switch e.kind {
 		case kindProcess:
@@ -37,7 +48,11 @@ func stepChildren(els []defEl) (stepEls []defEl, children map[string][]string) {
 		default:
 			continue
 		}
-		if raw, _ := e.props["steps"].([]any); len(raw) > 0 {
+		raw, _ := e.props["steps"].([]any)
+		props := maps.Clone(e.props)
+		delete(props, "steps")
+		els[i].props = props
+		if len(raw) > 0 {
 			walk(e.kind+"/"+e.name, e.name, kind, raw)
 		}
 	}
@@ -45,8 +60,8 @@ func stepChildren(els []defEl) (stepEls []defEl, children map[string][]string) {
 }
 
 // stepNodeProps is a step's own node properties: its JSON, with pre/done renamed to the Activity shape's
-// input/output (architecture plan: Process/Step/Method/MethodStep share one input/goals/output definition), and its
-// nested steps dropped (they are separate nodes of their own, reached through sub_activity, not duplicated here).
+// input/output (Process/Step/Method/MethodStep share one input/output definition), and its nested steps dropped (they
+// are nodes of their own, reached through sub_activity).
 func stepNodeProps(raw map[string]any) map[string]any {
 	p := maps.Clone(raw)
 	if v, ok := p["pre"]; ok {
@@ -58,5 +73,22 @@ func stepNodeProps(raw map[string]any) map[string]any {
 	}
 	delete(p, "done")
 	delete(p, "steps")
+	return p
+}
+
+// stepJSON is the JSON of a step in its process or method, from the properties of its node (references put back):
+// input/output named pre/done again, its position and removed mark dropped.
+func stepJSON(props map[string]any) map[string]any {
+	p := maps.Clone(props)
+	if v, ok := p["input"]; ok {
+		p["pre"] = v
+	}
+	delete(p, "input")
+	if v, ok := p["output"]; ok {
+		p["done"] = v
+	}
+	delete(p, "output")
+	delete(p, "position")
+	delete(p, "removed")
 	return p
 }

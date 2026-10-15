@@ -1424,7 +1424,12 @@ tool panel, console and status bar, and gives way to the field helper (they are 
 Methodologies are **graph data** ([ADR 0023](adr/0023-definitions-in-the-graph.md)), edited from the frontend: a
 version is a node `methodology@MethodologyVersion` (key `MV:<name>@<version>`, namespace `methodology`: scalar fields,
 status) and one node per element typed by the built-in meta-domain (`methodology@Agent`, `@Action`, `@Condition`,
-`@Goal`, `@Process`), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. Every save, publication or deletion is
+`@Goal`, `@Process`, `@Method`, `@Role`, one `@Step` / `@MethodStep` per step), keyed `<version key>/<kind>/<name>` and tied by `methodology@defines`. The references between elements are links
+([ADR 0119](adr/0119-methodology-references-are-links.md)): a condition is the output of the activities that
+`produces` it and the input of those that `requires` it (`uses`, `pursues`, `performed_by`, `nests`, `assigns`,
+`aggregates`, `specializes`, `main_goal`; derived `mentions`, `carried_out_by`), a name the version does not declare (a
+library's or a generated condition, another methodology's element) stays a property, the steps of a process are nodes
+reached through `sub_activity` only; no element stands alone (an isolated one is an issue refusing the publication). Every save, publication or deletion is
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its

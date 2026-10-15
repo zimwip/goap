@@ -1,5 +1,5 @@
 name: release-based
-version: 0.1.0
+version: 0.1.1
 description: >
   Release-based delivery of a project (ADR 0106): a release is a change of this methodology, the parent of the sdlc
   changes it integrates. It screens the open changes of its project for candidates, attaches the selected ones as its
@@ -31,9 +31,6 @@ roles:
   - {name: integrator, description: Integrates the selected changes into the release}
 
 conditions:
-  - name: in_planning
-    description: The release is being planned
-    expr: change.state == "planning"
   - name: scoped
     description: The scope and the target of the release are written down
     expr: artifacts.exists(a, a.type == "release_scope")

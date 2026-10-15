@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.8.1
+version: 0.8.2
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -87,10 +87,6 @@ conditions:
   - {name: in_applications, scope: impact, description: An element of the logical layer,
      expr: '["alm@Application", "alm@Solution", "alm@Interface", "alm@Flow", "alm@Data"].exists(t, t in self.types)'}
   - {name: in_components, scope: impact, description: An element of the physical layer, expr: '["alm@Component", "alm@BuildArtifact"].exists(t, t in self.types)'}
-  - name: qualified
-    scope: impact
-    description: The impact has a rating of whether the change really concerns it (the change then works on the node, the rating stands)
-    expr: 'assessments.exists(a, a.key == "impact:" + self.key)'
   - name: confirmed
     scope: impact
     description: The rating confirms the change concerns the node (one it does not concern is withdrawn)
