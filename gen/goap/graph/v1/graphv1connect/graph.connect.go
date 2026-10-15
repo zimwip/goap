@@ -211,6 +211,18 @@ const (
 	// GraphServiceDeleteChangeProcedure is the fully-qualified name of the GraphService's DeleteChange
 	// RPC.
 	GraphServiceDeleteChangeProcedure = "/goap.graph.v1.GraphService/DeleteChange"
+	// GraphServiceGetPendingSettingsProcedure is the fully-qualified name of the GraphService's
+	// GetPendingSettings RPC.
+	GraphServiceGetPendingSettingsProcedure = "/goap.graph.v1.GraphService/GetPendingSettings"
+	// GraphServiceStageSettingsProcedure is the fully-qualified name of the GraphService's
+	// StageSettings RPC.
+	GraphServiceStageSettingsProcedure = "/goap.graph.v1.GraphService/StageSettings"
+	// GraphServiceSaveSettingsProcedure is the fully-qualified name of the GraphService's SaveSettings
+	// RPC.
+	GraphServiceSaveSettingsProcedure = "/goap.graph.v1.GraphService/SaveSettings"
+	// GraphServiceDiscardSettingsProcedure is the fully-qualified name of the GraphService's
+	// DiscardSettings RPC.
+	GraphServiceDiscardSettingsProcedure = "/goap.graph.v1.GraphService/DiscardSettings"
 	// GraphServiceCreateBranchProcedure is the fully-qualified name of the GraphService's CreateBranch
 	// RPC.
 	GraphServiceCreateBranchProcedure = "/goap.graph.v1.GraphService/CreateBranch"
@@ -433,6 +445,18 @@ type GraphServiceClient interface {
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
+	// Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
+	// (one per namespace). Each call does on the server what the dialog did call by call, and answers the whole pending
+	// state of the caller.
+	GetPendingSettings(context.Context, *connect.Request[v1.GetPendingSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
+	// Stage edits in order: the creation or new properties of a node (props), or its retirement (retire). The personal
+	// change of a namespace is opened on the first edit; a node created by it and retired again is given up.
+	StageSettings(context.Context, *connect.Request[v1.StageSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
+	// Save: the edits that modify something are accepted (one review per change) and their changes applied; the others are
+	// withdrawn, and a change left with nothing is removed.
+	SaveSettings(context.Context, *connect.Request[v1.SaveSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
+	// Discard: the personal changes holding the edits are removed.
+	DiscardSettings(context.Context, *connect.Request[v1.DiscardSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
 	// Version branches (ADR 0009)
 	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
@@ -879,6 +903,30 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("DeleteChange")),
 			connect.WithClientOptions(opts...),
 		),
+		getPendingSettings: connect.NewClient[v1.GetPendingSettingsRequest, v1.PendingSettingsResponse](
+			httpClient,
+			baseURL+GraphServiceGetPendingSettingsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetPendingSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		stageSettings: connect.NewClient[v1.StageSettingsRequest, v1.PendingSettingsResponse](
+			httpClient,
+			baseURL+GraphServiceStageSettingsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("StageSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		saveSettings: connect.NewClient[v1.SaveSettingsRequest, v1.PendingSettingsResponse](
+			httpClient,
+			baseURL+GraphServiceSaveSettingsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("SaveSettings")),
+			connect.WithClientOptions(opts...),
+		),
+		discardSettings: connect.NewClient[v1.DiscardSettingsRequest, v1.PendingSettingsResponse](
+			httpClient,
+			baseURL+GraphServiceDiscardSettingsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("DiscardSettings")),
+			connect.WithClientOptions(opts...),
+		),
 		createBranch: connect.NewClient[v1.CreateBranchRequest, v1.CreateBranchResponse](
 			httpClient,
 			baseURL+GraphServiceCreateBranchProcedure,
@@ -1168,6 +1216,10 @@ type graphServiceClient struct {
 	commitChange           *connect.Client[v1.CommitChangeRequest, v1.CommitChangeResponse]
 	transitionChange       *connect.Client[v1.TransitionChangeRequest, v1.TransitionChangeResponse]
 	deleteChange           *connect.Client[v1.DeleteChangeRequest, v1.DeleteChangeResponse]
+	getPendingSettings     *connect.Client[v1.GetPendingSettingsRequest, v1.PendingSettingsResponse]
+	stageSettings          *connect.Client[v1.StageSettingsRequest, v1.PendingSettingsResponse]
+	saveSettings           *connect.Client[v1.SaveSettingsRequest, v1.PendingSettingsResponse]
+	discardSettings        *connect.Client[v1.DiscardSettingsRequest, v1.PendingSettingsResponse]
 	createBranch           *connect.Client[v1.CreateBranchRequest, v1.CreateBranchResponse]
 	listBranches           *connect.Client[v1.ListBranchesRequest, v1.ListBranchesResponse]
 	getBranch              *connect.Client[v1.GetBranchRequest, v1.GetBranchResponse]
@@ -1517,6 +1569,26 @@ func (c *graphServiceClient) DeleteChange(ctx context.Context, req *connect.Requ
 	return c.deleteChange.CallUnary(ctx, req)
 }
 
+// GetPendingSettings calls goap.graph.v1.GraphService.GetPendingSettings.
+func (c *graphServiceClient) GetPendingSettings(ctx context.Context, req *connect.Request[v1.GetPendingSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return c.getPendingSettings.CallUnary(ctx, req)
+}
+
+// StageSettings calls goap.graph.v1.GraphService.StageSettings.
+func (c *graphServiceClient) StageSettings(ctx context.Context, req *connect.Request[v1.StageSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return c.stageSettings.CallUnary(ctx, req)
+}
+
+// SaveSettings calls goap.graph.v1.GraphService.SaveSettings.
+func (c *graphServiceClient) SaveSettings(ctx context.Context, req *connect.Request[v1.SaveSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return c.saveSettings.CallUnary(ctx, req)
+}
+
+// DiscardSettings calls goap.graph.v1.GraphService.DiscardSettings.
+func (c *graphServiceClient) DiscardSettings(ctx context.Context, req *connect.Request[v1.DiscardSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return c.discardSettings.CallUnary(ctx, req)
+}
+
 // CreateBranch calls goap.graph.v1.GraphService.CreateBranch.
 func (c *graphServiceClient) CreateBranch(ctx context.Context, req *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {
 	return c.createBranch.CallUnary(ctx, req)
@@ -1819,6 +1891,18 @@ type GraphServiceHandler interface {
 	TransitionChange(context.Context, *connect.Request[v1.TransitionChangeRequest]) (*connect.Response[v1.TransitionChangeResponse], error)
 	// Remove a change that landed nothing, with its log (ADR 0037). Refused once anything of it is applied or used.
 	DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error)
+	// Staged settings (ADR 0037, ADR 0122): the edits of the settings dialog, held by the personal changes of the caller
+	// (one per namespace). Each call does on the server what the dialog did call by call, and answers the whole pending
+	// state of the caller.
+	GetPendingSettings(context.Context, *connect.Request[v1.GetPendingSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
+	// Stage edits in order: the creation or new properties of a node (props), or its retirement (retire). The personal
+	// change of a namespace is opened on the first edit; a node created by it and retired again is given up.
+	StageSettings(context.Context, *connect.Request[v1.StageSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
+	// Save: the edits that modify something are accepted (one review per change) and their changes applied; the others are
+	// withdrawn, and a change left with nothing is removed.
+	SaveSettings(context.Context, *connect.Request[v1.SaveSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
+	// Discard: the personal changes holding the edits are removed.
+	DiscardSettings(context.Context, *connect.Request[v1.DiscardSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error)
 	// Version branches (ADR 0009)
 	CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error)
 	ListBranches(context.Context, *connect.Request[v1.ListBranchesRequest]) (*connect.Response[v1.ListBranchesResponse], error)
@@ -2261,6 +2345,30 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("DeleteChange")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceGetPendingSettingsHandler := connect.NewUnaryHandler(
+		GraphServiceGetPendingSettingsProcedure,
+		svc.GetPendingSettings,
+		connect.WithSchema(graphServiceMethods.ByName("GetPendingSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceStageSettingsHandler := connect.NewUnaryHandler(
+		GraphServiceStageSettingsProcedure,
+		svc.StageSettings,
+		connect.WithSchema(graphServiceMethods.ByName("StageSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceSaveSettingsHandler := connect.NewUnaryHandler(
+		GraphServiceSaveSettingsProcedure,
+		svc.SaveSettings,
+		connect.WithSchema(graphServiceMethods.ByName("SaveSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceDiscardSettingsHandler := connect.NewUnaryHandler(
+		GraphServiceDiscardSettingsProcedure,
+		svc.DiscardSettings,
+		connect.WithSchema(graphServiceMethods.ByName("DiscardSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceCreateBranchHandler := connect.NewUnaryHandler(
 		GraphServiceCreateBranchProcedure,
 		svc.CreateBranch,
@@ -2609,6 +2717,14 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceTransitionChangeHandler.ServeHTTP(w, r)
 		case GraphServiceDeleteChangeProcedure:
 			graphServiceDeleteChangeHandler.ServeHTTP(w, r)
+		case GraphServiceGetPendingSettingsProcedure:
+			graphServiceGetPendingSettingsHandler.ServeHTTP(w, r)
+		case GraphServiceStageSettingsProcedure:
+			graphServiceStageSettingsHandler.ServeHTTP(w, r)
+		case GraphServiceSaveSettingsProcedure:
+			graphServiceSaveSettingsHandler.ServeHTTP(w, r)
+		case GraphServiceDiscardSettingsProcedure:
+			graphServiceDiscardSettingsHandler.ServeHTTP(w, r)
 		case GraphServiceCreateBranchProcedure:
 			graphServiceCreateBranchHandler.ServeHTTP(w, r)
 		case GraphServiceListBranchesProcedure:
@@ -2938,6 +3054,22 @@ func (UnimplementedGraphServiceHandler) TransitionChange(context.Context, *conne
 
 func (UnimplementedGraphServiceHandler) DeleteChange(context.Context, *connect.Request[v1.DeleteChangeRequest]) (*connect.Response[v1.DeleteChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DeleteChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetPendingSettings(context.Context, *connect.Request[v1.GetPendingSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetPendingSettings is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) StageSettings(context.Context, *connect.Request[v1.StageSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.StageSettings is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) SaveSettings(context.Context, *connect.Request[v1.SaveSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SaveSettings is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) DiscardSettings(context.Context, *connect.Request[v1.DiscardSettingsRequest]) (*connect.Response[v1.PendingSettingsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DiscardSettings is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CreateBranch(context.Context, *connect.Request[v1.CreateBranchRequest]) (*connect.Response[v1.CreateBranchResponse], error) {

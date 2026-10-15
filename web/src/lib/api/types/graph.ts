@@ -593,3 +593,31 @@ export interface GraphImportResult {
   unchanged?: number;
   warnings?: string[];
 }
+
+/** One edit of the settings dialog (ADR 0122): the creation or new properties of a node, or its retirement. */
+export interface SettingEdit {
+  namespace: string;
+  type: string;
+  key: string;
+  props?: Struct;
+  retire?: boolean;
+}
+
+/** A node the user touched in the settings dialog, not saved yet (ADR 0037, 0122). */
+export interface StagedSetting {
+  key: string;
+  type: string;
+  /** the properties of its draft */
+  props?: Struct;
+  retire?: boolean;
+  /** the node does not exist on main yet */
+  created?: boolean;
+  changeImpactId?: string;
+  /** a draft was written for it */
+  written?: boolean;
+}
+
+/** The pending edits of the user, one personal change per namespace. */
+export interface PendingSettings {
+  changes?: { namespace: string; changeId: string; nodes?: StagedSetting[] }[];
+}
