@@ -1149,6 +1149,17 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   recorded); two scoped actions of one scope chain in a plan (`chainScoped`).
   The connector `workspace-docker` (`workspace.NewDocker`) keeps the files and git on its host and runs the commands
   of each workspace in a container of its own (the unit's `image`, no network by default, hardened, limits).
+- **Claude coding agent** ([ADR 0123](adr/0123-claude-coding-agent.md)): the MCP `claude-coding-agent` (`run`,
+  `answer`, `status`, `cancel`; `pkg/mcpbuiltin/claudeagent.go`) hands a coding task to a Claude Code session run by
+  the Claude Agent SDK in the workspace of the change (`<root>/<change>`, `workspace.DirName`), held by no unit by
+  default like `workspace`. Its connector (`internal/connectors/claudeagent`, in `goap-dev`, standalone
+  `cmd/connector-claude-coding-agent`) starts a Node runner per turn (`runner/runner.mjs`, embedded, written into
+  `GOAP_CLAUDE_AGENT_DIR` where `make claude-agent-runner` installs the pinned SDK): one JSON request in, JSON lines
+  out. A question (`AskUserQuestion`) or a tool the permissions do not settle ends the turn (`needs_input` /
+  `needs_approval`, through `canUseTool`); `answer` resumes the session (`resume`) with the person's decision. The
+  environment is cleaned (the unit's `api_key`, `baseURL`, `env`, `passEnv`), the repository's settings load
+  (`settingSources: [project]`), one session per change at a time. The model calls of a session do not go through
+  the gateway yet (only its `costUsd` / `usage` come back).
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a

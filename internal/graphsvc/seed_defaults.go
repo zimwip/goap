@@ -286,6 +286,10 @@ func SeedBuiltins(ctx context.Context, g *graph.Graph) (bool, error) {
 	for _, d := range mcpbuiltin.WorkspaceAdapterDefs() {
 		sync(adapter.DefKey(d.Name), domain.TypeAdapterDef, d.Props())
 	}
+	// so is the Claude coding agent (ADR 0123)
+	ca := mcpbuiltin.ClaudeAgentDef()
+	sync(mcp.MCPKey(ca.Name), mcp.NodeTypeMCP, ca.Props())
+	sync(adapter.DefKey(mcpbuiltin.ClaudeAgent), domain.TypeAdapterDef, mcpbuiltin.ClaudeAgentAdapterDef().Props())
 	for _, r := range access.BuiltinRoles() {
 		sync(access.RoleKey(r.Name), access.NodeTypeRole, r.Props())
 	}

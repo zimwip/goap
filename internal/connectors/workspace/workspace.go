@@ -261,12 +261,13 @@ func (c Connector) space(ctx context.Context, config map[string]any, secrets map
 			return space{}, fmt.Errorf("root %q is not allowed on this connector", root)
 		}
 	}
-	id := safeName(change)
+	id := DirName(change)
 	return space{id: id, dir: filepath.Join(root, id), change: change, config: config, secrets: secrets}, nil
 }
 
-// safeName turns a change id into a directory name.
-func safeName(s string) string {
+// DirName is the name of the directory of the workspace of a change under the root of its unit: another connector
+// working in the workspace of a change (ADR 0123) finds it there.
+func DirName(s string) string {
 	b := []byte(s)
 	for i, ch := range b {
 		ok := ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '-' || ch == '_' || ch == '.'

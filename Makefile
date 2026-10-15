@@ -1,8 +1,8 @@
-SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace goap-dev goap-runner goap-eval
+SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace connector-claude-coding-agent goap-dev goap-runner goap-eval
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: all build test web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image
+.PHONY: all build test web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
 
 all: generate build test
 
@@ -74,6 +74,9 @@ web: devlocal-web
 
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
+
+claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
+	go run ./cmd/connector-claude-coding-agent install
 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)

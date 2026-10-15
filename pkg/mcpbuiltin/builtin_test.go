@@ -61,3 +61,21 @@ func TestWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The Claude coding agent MCP is defined with its adapter, held by no unit by default (ADR 0123).
+func TestClaudeAgent(t *testing.T) {
+	d := ClaudeAgentDef()
+	if err := d.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if Is(ClaudeAgent) {
+		t.Fatal("the Claude coding agent MCP is held by no unit by default")
+	}
+	a := ClaudeAgentAdapterDef()
+	if err := a.Validate(); err != nil || a.MCP != ClaudeAgent || a.Connector != ClaudeAgent {
+		t.Fatalf("adapter %s: %v", a.Name, err)
+	}
+	if err := ClaudeAgentAdapter("ORG-DEFAULT", "/tmp/ws").Validate(d); err != nil {
+		t.Fatal(err)
+	}
+}
