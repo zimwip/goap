@@ -141,7 +141,8 @@ func connectivityIssue(e defEl) (path, msg string) {
 }
 
 // connectivityIssues reports the elements of a definition connected to nothing (ADR 0120): by default no element of a
-// methodology stands alone, it is linked to the rest of the version.
+// methodology stands alone, it is linked to the rest of the version. It is a principle, not a constraint: the issues are
+// warnings, which never refuse a save or a publication (a methodology of one element works).
 func connectivityIssues(m methodology.Methodology) def.Issues {
 	eg, err := encodeVersion(m, "", time.Time{}, time.Time{}, time.Time{}, "")
 	if err != nil {
@@ -150,7 +151,7 @@ func connectivityIssues(m methodology.Methodology) def.Issues {
 	var out def.Issues
 	for _, e := range eg.isolated() {
 		path, msg := connectivityIssue(e)
-		out = append(out, def.Issue{Path: path, Message: msg})
+		out = append(out, def.Issue{Path: path, Message: msg, Severity: def.SeverityWarning})
 	}
 	return out
 }

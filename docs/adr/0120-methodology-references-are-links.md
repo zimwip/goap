@@ -73,8 +73,9 @@ definition drops its links.
 
 By default no element of a methodology exists alone: each is linked to another element of the version (a link of its
 own, or one reaching it), or names something outside it (a library condition, another methodology). The registry
-reports an isolated element as an issue at the path of its name (`conditions[3].name`), which refuses the publication
-and is shown by the editor while the draft is saved (`connectivityIssues`, in `Service.validate`). The version's
+reports an isolated element as a warning (ADR 0097) at the path of its name (`conditions[3].name`), shown by the editor
+(`connectivityIssues`, in `Service.validate`). It is a principle, not a constraint: the graph enforces nothing, the
+warning never refuses a save or a publication, and a methodology of a single element works. The version's
 `defines` does not count: it holds every element. An agent naming no action or no goal plans over all of them and is
 not isolated. The shipped methodologies had three dead conditions (`release-based` 0.1.1, `methodology-improvement`
 1.5.1, `sdlc` 0.8.2 drop them).

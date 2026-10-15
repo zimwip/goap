@@ -1429,7 +1429,7 @@ status) and one node per element typed by the built-in meta-domain (`methodology
 `produces` it and the input of those that `requires` it (`uses`, `pursues`, `performed_by`, `nests`, `assigns`,
 `aggregates`, `specializes`, `main_goal`; derived `mentions`, `carried_out_by`), a name the version does not declare (a
 library's or a generated condition, another methodology's element) stays a property, the steps of a process are nodes
-reached through `sub_activity` only; no element stands alone (an isolated one is an issue refusing the publication). Every save, publication or deletion is
+reached through `sub_activity` only; no element stands alone (a principle: an isolated one is a warning, never a refusal). Every save, publication or deletion is
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its

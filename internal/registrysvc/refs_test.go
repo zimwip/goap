@@ -156,7 +156,7 @@ func TestReferencesAreLinks(t *testing.T) {
 }
 
 // By default no element of a methodology stands alone (ADR 0120): one nothing refers to and that refers to nothing is
-// an issue, which refuses the publication.
+// a warning, never an error.
 func TestIsolatedElementsAreIssues(t *testing.T) {
 	m, err := methodology.Parse([]byte(refsYAML + `
   - {name: unused, steps: [{name: alone}]}
@@ -172,6 +172,9 @@ func TestIsolatedElementsAreIssues(t *testing.T) {
 	m.Agents = append(m.Agents, methodology.Agent{Name: "all", Planner: "goap"})
 	var got []string
 	for _, i := range connectivityIssues(*m) {
+		if !i.IsWarning() {
+			t.Fatalf("an isolated element is a warning, not an error: %v", i)
+		}
 		got = append(got, i.Path)
 	}
 	if want := []string{"conditions[4].name", "roles[1].name"}; !slices.Equal(got, want) {
