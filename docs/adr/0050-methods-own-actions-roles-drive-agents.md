@@ -32,7 +32,7 @@ is generated per method, of the method's name; it is run as a sub-agent on the s
 (`process.step`, ADR 0034), so it is a new instance per step.
 
 An instance starts **fresh**: it has no conversation from earlier steps. Its system prompt (`StepContext.section`)
-says its role and that what matters is on the change, to be read through the brief (`pkg/brief`,
+says its role and that what matters is on the change, to be read through the brief (`lib/brief`,
 `goap-change/brief`, `trace`), and that what it produces is recorded on the change as items. Anything only said in
 chat is lost, which makes every step restartable (retry, unblock) and auditable (ADR 0011).
 

@@ -88,7 +88,7 @@ those primitives for producers that do it all in one call (seeds, the settings d
   its history, ADR 0024) and checked by the transition's guard, which sees the change impacts of the change: a guard
   such as "the impact of this node is accepted" refuses the transition until the review is there. Which transitions
   require it is the domain's lifecycle, not the platform's.
-- A node guard saw the node, its children and the change header only (`pkg/graph/lifecycle.go`, `dsl.GuardCtx`). It
+- A node guard saw the node, its children and the change header only (`graph/graph/lifecycle.go`, `dsl.GuardCtx`). It
   gains the impact of the node in the change: CEL `impact` (`{intent, review, reviews, pre, post}`) and
   `GuardCtx.Impact()` for guard algorithms (ADR 0079 adds `draft`).
 - The typical sequence: `ImpactNodeCheckout` → `ImpactNodeUpdate`… → `ImpactNodeTransition` → review → landing.
@@ -182,7 +182,7 @@ operation on the impact inherits the check.
   that wrote it.
 - The history of a node has one version per change that landed it (ADR 0079), instead of one per edit; a reviewer
   reviews what lands.
-- `pkg/graph`: `NodeWrite` split into the checkout, update, link and transition operations; `CreateObject` and the
+- `graph/graph`: `NodeWrite` split into the checkout, update, link and transition operations; `CreateObject` and the
   `graph.import` commit went; `Commit` is rebuilt on the primitives.
-- Callers migrated: `internal/graphsvc` (handler, client), `pkg/dsl` / `pkg/engine` node operations, the `goap-change`
+- Callers migrated: `graph/graphsvc` (handler, client), `lib/dsl` / `engine/engine` node operations, the `goap-change`
   built-in MCP tools, the web, the seeds and the tests that created nodes directly.

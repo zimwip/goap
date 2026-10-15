@@ -1,0 +1,74 @@
+package registrysvc
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"connectrpc.com/connect"
+
+	"github.com/zimwip/goap/contracts/authz"
+	registryv1 "github.com/zimwip/goap/contracts/gen/goap/registry/v1"
+	"github.com/zimwip/goap/engine/methodology"
+	"github.com/zimwip/goap/engine/selfimprove"
+	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/identity"
+)
+
+// Drafts adapts an in-process registry to selfimprove.MethodologyDrafts (the
+// self-observation agent saves improved versions as drafts).
+type Drafts struct{ Service *Service }
+
+var _ selfimprove.MethodologyDrafts = Drafts{}
+
+// Definition implements selfimprove.MethodologyDrafts.
+func (d Drafts) Definition(ctx context.Context, name, version string) (methodology.Methodology, bool, error) {
+	r, err := d.Service.Store.Get(ctx, name, version)
+	if errors.Is(err, ErrNotFound) {
+		return methodology.Methodology{}, false, nil
+	}
+	return r.Methodology, err == nil, err
+}
+
+// SaveDraft implements selfimprove.MethodologyDrafts.
+func (d Drafts) SaveDraft(ctx context.Context, m methodology.Methodology) (def.Issues, error) {
+	_, issues, err := d.Service.Save(ctx, m)
+	return issues, err
+}
+
+var _ selfimprove.MethodologyDrafts = (*Client)(nil)
+
+// withIdentity forwards the principal of ctx to the registry (service to
+// service calls inside the platform network, as the gateway does).
+func withIdentity[T any](ctx context.Context, req *connect.Request[T]) *connect.Request[T] {
+	p := authz.From(ctx)
+	req.Header().Set(identity.HeaderSubject, p.Subject)
+	req.Header().Set(identity.HeaderOrg, p.Org)
+	req.Header().Set(identity.HeaderRoles, strings.Join(p.Roles, ","))
+	return req
+}
+
+// Definition implements selfimprove.MethodologyDrafts.
+func (c *Client) Definition(ctx context.Context, name, version string) (methodology.Methodology, bool, error) {
+	r, err := c.rpc.GetMethodology(ctx, withIdentity(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name, Version: version})))
+	if connect.CodeOf(err) == connect.CodeNotFound {
+		return methodology.Methodology{}, false, nil
+	}
+	if err != nil {
+		return methodology.Methodology{}, false, err
+	}
+	return FromPB(r.Msg.Methodology), true, nil
+}
+
+// SaveDraft implements selfimprove.MethodologyDrafts.
+func (c *Client) SaveDraft(ctx context.Context, m methodology.Methodology) (def.Issues, error) {
+	r, err := c.rpc.SaveMethodology(ctx, withIdentity(ctx, connect.NewRequest(&registryv1.SaveMethodologyRequest{Methodology: ToPB(Record{Methodology: m, Status: StatusDraft})})))
+	if err != nil {
+		return nil, err
+	}
+	var out def.Issues
+	for _, i := range r.Msg.Issues {
+		out = append(out, def.Issue{Path: i.Path, Message: i.Message})
+	}
+	return out, nil
+}

@@ -15,8 +15,8 @@ and by semantic proximity**, and **changes by proximity**, without leaking what 
 ### Who, why, how, what
 
 A read model on the *what* (nodes) and the *why* (changes): it changes nothing. It stays a read model fed by events; the
-authorization uses the *who* (organisation, projects) through one seam; no concept gains a dependency (`pkg/index` still
-imports neither `pkg/access` nor `pkg/authz`).
+authorization uses the *who* (organisation, projects) through one seam; no concept gains a dependency (`graph/index` still
+imports neither `lib/access` nor `contracts/authz`).
 
 ### A change is a document
 
@@ -41,7 +41,7 @@ imports neither `pkg/access` nor `pkg/authz`).
   private. The hash of the text skips the embedding call when only the status, state or project moved.
 - **Fields**: id, title, namespace, status, lifecycle state, project (key), holding unit (`ownerOrg`), parent, branch,
   `personalTo` (the subject of a personal unit, derived by the indexer service with `access.PersonalSubject`; the graph
-  and `pkg/index` do not know personal units), creation time; `main` is always true (`main: true` includes changes,
+  and `graph/index` do not know personal units), creation time; `main` is always true (`main: true` includes changes,
   `false` excludes them).
 - **Feed**: `indexersvc.Subjects` adds `goap.changeindex.>`; the in-process `Sink` of `goap-dev` accepts it;
   `Graph.Republish` publishes the document of every change after reading them, so `Reindex` rebuilds both kinds
@@ -89,7 +89,7 @@ set only (`indexersvc.readFilter`).
 | caller without identity | everything: an internal service (the gateway always identifies its callers; the index port is not public) |
 
 The caller-dependent logic is behind the existing `authz.Authorizer` plus a small `indexersvc.Access` interface
-(`MayAccessProject`, `SubProjects`), implemented by `access.Directory` and set by `cmd/indexer` and `cmd/goap-dev`. A
+(`MayAccessProject`, `SubProjects`), implemented by `access.Directory` and set by `platform/cmd/indexer` and `platform/cmd/goap-dev`. A
 service with no `Access` skips the project checks (tests only). Consequence to know: a user holding no assignment and no
 platform role sees no node that has a project, which is the intent. The authorization is a post-filter on at most
 `PoolSize` (500) candidates, so a caller who may see little of a large pool can get fewer hits than exist; pushing the
@@ -97,7 +97,7 @@ personal-unit and project conditions into the stores' queries is a later optimis
 
 ### Meta types are searchable
 
-`domains/builtin/methodology.yaml` (1.8.0) declares `search` on `MethodologyVersion`, `Agent`, `Action`, `Condition`,
+`lib/domains/builtin/methodology.yaml` (1.8.0) declares `search` on `MethodologyVersion`, `Agent`, `Action`, `Condition`,
 `Goal`, `Role`, `Activity` (so `Method`, `Process`, `Step`, `MethodStep` inherit name and description), `Method`
 (`for`, `guidance`), `Process` (`examples`), `Step` / `MethodStep` (`instructions`, `guidance`), `ToolRequest`;
 `organisation.yaml` (1.14.0) on `OrgUnit` and `ProjectUnit` (`name`, `description`). Users are not declared; `User`
@@ -111,5 +111,5 @@ existing nodes.
 Index-backed tools for the assistant and `goap-change` (`similar_changes`; the assistant's `search_changes` of ADR
 0106 is a word match over the changes it lists from the graph, not a search of the index), the web UI (the search
 overlay asks for nodes only: no kind selector, no similar changes panel), methodology integration (a methodology asking for similar past changes), pushing the authorization
-conditions into the queries, a `TestSchemasAligned` for `pkg/index` (`sqlschematest` does not understand pgvector or
+conditions into the queries, a `TestSchemasAligned` for `graph/index` (`sqlschematest` does not understand pgvector or
 FTS5; the two migrations are aligned by hand), highlighting.

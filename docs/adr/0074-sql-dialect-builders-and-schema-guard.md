@@ -13,7 +13,7 @@ are those of five other services. Nothing said when a twin drifted, and the Post
 
 ## Decision
 
-- **Shared statements, separate executors.** `pkg/graph/sqlbuild.go` builds the text and the arguments of the queries
+- **Shared statements, separate executors.** `graph/graph/sqlbuild.go` builds the text and the arguments of the queries
   both repositories run from a `dialect` value (`dialectPG`, `dialectSQLite`): the placeholder (`$n` / `?n`, both bind
   by number, so a value used twice is one argument), `id` / `idOr` (a uuid column read as text), `differs` (`IS
   DISTINCT FROM` or the explicit null test), `where1`, `orderBy`. Built: node by version / latest on a branch /
@@ -26,14 +26,14 @@ are those of five other services. Nothing said when a twin drifted, and the Post
   their repository: they do not share text. The driver does not change and there is no code generation.
 - **A golden test per query and dialect** (`sqlbuild_test.go`): the text the repositories ran before the builders,
   whitespace collapsed; SQLite placeholders are compared after normalising `?` / `?n`, since the builders number them.
-- **A guard on the schemas** (`internal/sqlschematest`, test-only): it reads the migrations of a dialect in file order
+- **A guard on the schemas** (`lib/sqlschematest`, test-only): it reads the migrations of a dialect in file order
   (`CREATE TABLE`, `CREATE INDEX`, `ALTER TABLE ... ADD FOREIGN KEY` / `RENAME` / `DROP`, `DROP TABLE`), reduces them
   to a common vocabulary (uuid / timestamptz / jsonb / `integer[]` are text, boolean and serial types are integers, a
   boolean default is 0 / 1, `DEFAULT now()` is ignored because the repositories write the time, a serial that is not a
   primary key is not compared as generated, `WHERE NOT flag` is `flag = 0`, an inline and an `ALTER` foreign key are
   one) and lists every difference of tables, columns, nullability, defaults, primary keys, unique and check
   constraints, foreign keys and indexes. `TestSchemasAligned` runs it for the graph, `credsvc`, `mcpsvc`, `modelgw`,
-  `prefssvc` and `registrysvc` (and `convsvc` since ADR 0085); `pkg/index` is not covered (pgvector, `tsvector` and
+  `prefssvc` and `registrysvc` (and `convsvc` since ADR 0085); `graph/index` is not covered (pgvector, `tsvector` and
   generated columns on one side, FTS5 virtual tables on the other). The other schema is not generated from the first:
   the guard is the deliverable.
 - **`make test-pg`** runs every test against PostgreSQL: `GOAP_TEST_PG_DSN` when set, else a throw-away

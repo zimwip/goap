@@ -1,9 +1,9 @@
 # ADR 0125 — Source components: a contract, the graph, the engine, the MCP hub, the gateway, the platform
 
-**Status**: accepted; steps 1 to 5 implemented (the contract of the graph, `pkg/graphapi`; the engine and the graph
-service no longer import each other; the gateway, the hub and the connectors off the graph and the engine; the two
-registries; the engine's tests without the graph; the web's types generated and checked; every package placed in a
-component and the rules between components checked, tests included), the `go.work` not yet · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
+**Status**: accepted and implemented: the contract of the graph (`graphapi`), the engine and the graph service off each
+other, the gateway, the hub and the connectors off the graph and the engine, the two registries, the engine's tests
+without the graph, the web's types generated and checked, the rules between components, and the `go.work` of seven
+modules (§8) · **Date**: 2026-10 · Builds on ADR 0061 (`pkg/layering`), ADR
 0063 (the engine's scope port), ADR 0066 (the hooks of the graph), ADR 0113 (pinned domains)
 
 ## Context
@@ -41,8 +41,8 @@ which define the graph, and the methodologies, compiled by the engine's compiler
   that need several components together (`internal/e2e/*`).
 - **web**: the generated TypeScript only.
 
-Each rule is first a `pkg/layering` rule in the one module; the components become Go modules of a `go.work` once
-every rule holds.
+Each rule was first a `pkg/layering` rule in the one module; once every rule held, the components became the Go
+modules of a `go.work` (§8). The sections below name the packages by their path before the move; §8 gives the map.
 
 ### 2. The graph's contract
 
@@ -120,11 +120,32 @@ command interceptor every service installs moved from the event stream to `inter
 registry stays in the platform until it moves to the engine (it still names the graph's service in its tests); every
 `cmd/*` is the platform's composition of the components it serves.
 
+### 8. The go.work
+
+Each component is a Go module, one directory at the root of the repository: `contracts`, `lib`, `graph`, `engine`,
+`mcp`, `gateway`, `platform`, joined by `go.work`. A module's path is `github.com/zimwip/goap/<component>` and its
+packages sit directly under it (no `pkg/`, no `internal/`: a package another module imports cannot be internal):
+`pkg/graph` is `graph/graph`, `internal/graphsvc` `graph/graphsvc`, `pkg/domain` `contracts/domain`, `pkg/domain/def`
+`lib/def`, `domains/builtin` `lib/domains/builtin`, `internal/telemetry/enginetel` `engine/enginetel`, `gen`
+`contracts/gen` (buf's `go_package_prefix`), `cmd/*` `platform/cmd/*`, `internal/e2e/*` `platform/e2e/*`,
+`pkg/layering` `platform/layering`. The protos stay in `proto/`, the data (`domains/alm.yaml`, `methodologies/`,
+`evals/`) and the web at the root.
+
+Each `go.mod` requires the modules its component may depend on, with a `replace` to the sibling directory, so a module
+builds alone (`GOWORK=off`), and the images keep building from the root (`Dockerfile`: the go.mod files first, then
+`./platform/cmd/<service>`). The workspace lets a package import any of its modules whatever its `go.mod` says, so
+`platform/layering` checks the imports, tests included (`TestComponents`), and the requirements of each `go.mod`
+(`TestModuleRequirements`); `make lint` refuses a `go.mod` that is not tidy. `./...` at the root matches no package:
+`make` and `make.ps1` name the modules (`PKGS`). The Go scripts of the methodologies and domains keep importing the DSL
+as `github.com/zimwip/goap/pkg/dsl`: it is the name `lib/dsl` exports to the interpreter, data that outlives the
+layout. `devlocal` is unchanged (one `goap-dev`, rebuilt by air from `./platform/cmd/goap-dev`).
+
 ## Consequences
 
-- `go list -deps ./pkg/engine` holds neither `pkg/graph` nor a database driver; `internal/graphsvc` no engine type.
-- `go list -test -deps ./pkg/engine` holds no graph either (`pkg/layering`, `TestTestLayering`); `engine.Internals`
+- `go list -deps ./engine/engine` holds neither `graph/graph` nor a database driver; `graph/graphsvc` no engine type.
+- `go list -test -deps ./engine/engine` holds no graph either (`platform/layering`, `TestTestLayering`); `engine.Internals`
   is used by tests only (`TestEngineInternalsOnlyInTests`).
-- `TestComponents` holds: once each component becomes a module of a `go.work`, its `go.mod` needs no other component
-  than those of `dependsOn`.
-- Next step: the `go.work` (the move of the sources into the module directories).
+- Each component is a module with its own `go.mod`: `engine` requires neither `graph` nor `mcp`, `mcp` and `gateway`
+  neither `graph` nor `engine`; only `platform` requires them all.
+- The methodology registry still lives in the platform (its tests use the graph's service); moving it to the engine is
+  the next step of §3.

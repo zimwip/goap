@@ -17,7 +17,7 @@ code in the web.
 
 ### 1. A human action declares a form
 
-`Action.Form` (`form:` in YAML, `methodology.Action.Form`, a `form.Form` of the leaf package `pkg/form`; proto
+`Action.Form` (`form:` in YAML, `methodology.Action.Form`, a `form.Form` of the leaf package `contracts/form`; proto
 `registry.v1.Action.form` and `engine.v1.HumanTask.form`, both a `google.protobuf.Struct`; attribute `form` of
 `methodology@Action`): what the person sees and fills in.
 
@@ -45,7 +45,7 @@ declares). The form is data of the methodology: versioned with it, compiled with
 
 A **widget** is a name, a value kind (`string`, `number`, `boolean`, `list`, `node`, `links`, `none` for a display
 widget) and the **constraints** it accepts, each with a type (`string`, `number`, `boolean`, `strings`, `field`: the
-name of another field of the form). `pkg/form` holds the registry (`form.Register`, `Lookup`, `All`; a duplicate
+name of another field of the form). `contracts/form` holds the registry (`form.Register`, `Lookup`, `All`; a duplicate
 name panics), with the built-in widgets:
 
 | Widget | Value | Constraints |
@@ -120,7 +120,7 @@ form when the task has one and keeps the former heuristics otherwise. The render
 
 The methodology editor builds the form of a human action with a designer (`web/src/lib/forms/designer/`, model in
 `web/src/lib/forms/design.ts`, pure and tested): a palette of the widgets of the server's registry (copied to
-`widgetCatalog.gen.ts` by `pkg/form`'s `TestWebCatalogIsCurrent`, `GOAP_UPDATE_WEB=1 go test ./pkg/form/` rewrites it)
+`widgetCatalog.gen.ts` by `contracts/form`'s `TestWebCatalogIsCurrent`, `GOAP_UPDATE_WEB=1 go test ./contracts/form/` rewrites it)
 and of **patterns** (ready-made sets of fields: pick and link, create and link, qualify a node, decide, checklist), dragged onto the
 canvas or clicked; the fields are reordered by dragging (or the arrows) and edited in a properties panel (identity,
 required, default, then the constraints the widget declares, with suggestions from the type catalogue: node types,

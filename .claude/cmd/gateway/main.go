@@ -5,9 +5,9 @@ import (
 	"context"
 	"strings"
 
-	"github.com/zimwip/goap/internal/gateway"
-	"github.com/zimwip/goap/internal/platform"
-	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/gateway/gateway"
+	"github.com/zimwip/goap/lib/platform"
+	"github.com/zimwip/goap/lib/telemetry"
 )
 
 func main() {

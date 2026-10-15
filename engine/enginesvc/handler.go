@@ -1,0 +1,849 @@
+// Package enginesvc exposes the process engine over Connect.
+package enginesvc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"sort"
+
+	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/domain"
+	enginev1 "github.com/zimwip/goap/contracts/gen/goap/engine/v1"
+	"github.com/zimwip/goap/contracts/gen/goap/engine/v1/enginev1connect"
+	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/engine/condition"
+	"github.com/zimwip/goap/engine/engine"
+	"github.com/zimwip/goap/engine/methodology"
+	"github.com/zimwip/goap/lib/access"
+	"github.com/zimwip/goap/lib/identity"
+	"github.com/zimwip/goap/lib/pbconv"
+	"github.com/zimwip/goap/lib/rpcerr"
+)
+
+// Handler implements enginev1connect.EngineServiceHandler. Processes run in
+// background goroutines; clients poll GetProcess or listen to NATS events.
+type Handler struct {
+	Engine *engine.Engine
+	Log    *slog.Logger
+	// Run executes a process in the background (defaults to a goroutine).
+	Run func(id string)
+	// DefaultPrincipal is used when the request carries no identity headers
+	// (single-process dev without gateway). Nil keeps such callers anonymous.
+	DefaultPrincipal *authz.Principal
+	// Authz authorizes process operations (resource "process"; actions
+	// start, submit, read). Nil grants everything.
+	Authz authz.Authorizer
+	// Broker streams live events (WatchEvents).
+	Broker *engine.Broker
+	// Triggers runs agents automatically (nil: triggers disabled).
+	Triggers *engine.TriggerManager
+}
+
+// authorize checks an operation on a process (p nil for start, on the caller's active project): on the
+// project of the process, where the caller's roles are held (ADR 0043).
+func (h *Handler) authorize(ctx context.Context, action, methodology string, p *engine.Process) error {
+	who := authz.From(ctx)
+	res := authz.Resource{Type: "process", Name: methodology, Org: who.Org, Owner: who.Subject, ProjectID: who.Project}
+	if p != nil {
+		res = authz.Resource{Type: "process", ID: p.ID, Name: p.Methodology, Org: p.Initiator.Org, Owner: p.Initiator.Subject, ProjectID: p.Project}
+	}
+	return authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: action, Resource: res})
+}
+
+// loadAuthorized loads a process and checks the operation on it.
+func (h *Handler) loadAuthorized(ctx context.Context, id, action string) error {
+	p, err := h.Engine.Store.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	return h.authorize(ctx, action, "", p)
+}
+
+func (h *Handler) principal(ctx context.Context, hdr http.Header) context.Context {
+	return identity.Extractor{Default: h.DefaultPrincipal}.Context(ctx, hdr)
+}
+
+var _ enginev1connect.EngineServiceHandler = (*Handler)(nil)
+
+func (h *Handler) run(p *engine.Process) {
+	if p.Status != engine.StatusRunning {
+		return
+	}
+	if h.Run != nil {
+		h.Run(p.ID)
+		return
+	}
+	go func() {
+		if _, err := h.Engine.Run(context.Background(), p.ID); err != nil {
+			h.Log.Error("run", "process", p.ID, "err", err)
+		}
+	}()
+}
+
+func toConnect(err error) error {
+	var unknown engine.ErrUnknownMethodology
+	switch {
+	case errors.Is(err, engine.ErrNotFound), errors.As(err, &unknown):
+		return connect.NewError(connect.CodeNotFound, err)
+	case errors.Is(err, authz.ErrForbidden):
+		return connect.NewError(connect.CodePermissionDenied, err)
+	case errors.Is(err, engine.ErrInvalidState):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return rpcerr.ToConnect(err)
+}
+
+func (h *Handler) StartProcess(ctx context.Context, r *connect.Request[enginev1.StartProcessRequest]) (*connect.Response[enginev1.StartProcessResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	projectID := r.Msg.ProjectId
+	if projectID == "" && r.Msg.ChangeId != "" {
+		// a run on an existing change works where the change does (ADR 0091), not where the caller's token points
+		if c, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); err == nil {
+			projectID = c.ProjectID
+		}
+	}
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
+	// starting is checked on the project the process will work on, where the caller's roles are held
+	who := authz.From(ctx)
+	who.Project = projectID
+	if err := h.authorize(authz.With(ctx, who), "start", r.Msg.Methodology, nil); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Start(ctx, engine.StartRequest{
+		Methodology: r.Msg.Methodology, ChangeID: domain.ChangeID(r.Msg.ChangeId), BaselineID: domain.BaselineID(r.Msg.BaselineId),
+		Title: r.Msg.Title, Intent: r.Msg.Intent, Goal: r.Msg.Goal, Agent: r.Msg.Agent, OwnerOrg: r.Msg.OwnerOrg, ProjectID: projectID, Vars: pbconv.Map(r.Msg.Vars),
+	})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.StartProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
+// CheckAgents answers, without starting anything, whether the caller may start a process of a methodology on a project
+// and which of its agents they may run there (ADR 0090): the checks of StartProcess and Engine.Start.
+func (h *Handler) CheckAgents(ctx context.Context, r *connect.Request[enginev1.CheckAgentsRequest]) (*connect.Response[enginev1.CheckAgentsResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
+	who := authz.From(ctx)
+	who.Project = projectID
+	ctx = authz.With(ctx, who)
+	out := &enginev1.CheckAgentsResponse{}
+	if h.authorize(ctx, "start", r.Msg.Methodology, nil) != nil {
+		return connect.NewResponse(out), nil
+	}
+	out.MayStart = true
+	m, err := h.Engine.Methodologies.Methodology(ctx, r.Msg.Methodology)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	names := r.Msg.Agents
+	if len(names) == 0 {
+		for _, ag := range m.AgentList() {
+			names = append(names, ag.Name)
+		}
+	}
+	for _, n := range names {
+		ok, roles, err := h.Engine.MayRunAgent(ctx, r.Msg.Methodology, n, projectID)
+		if err != nil {
+			return nil, toConnect(err)
+		}
+		out.Agents = append(out.Agents, &enginev1.AgentCheck{Agent: n, MayRun: ok, Roles: roles})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// ListStartingPoints serves the steps of the methodology of a change that are possible now towards its goal (ADR 0097):
+// the checks of StartProcess (the "start" permission on the project of the change, the roles of the agent that would
+// run each point, reported per point as may_run) and the read of the change (a personal change is its subject's only).
+func (h *Handler) ListStartingPoints(ctx context.Context, r *connect.Request[enginev1.ListStartingPointsRequest]) (*connect.Response[enginev1.ListStartingPointsResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = ch.ProjectID
+	}
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
+	who := authz.From(ctx)
+	who.Project = projectID
+	ctx = authz.With(ctx, who)
+	name := r.Msg.Methodology
+	if name == "" {
+		name = ch.Methodology
+	}
+	if name != "" {
+		if err := h.authorize(ctx, "start", name, nil); err != nil {
+			return nil, toConnect(err)
+		}
+	}
+	sp, err := h.Engine.StartingPoints(ctx, ch.ID, engine.StartingPointsOptions{Methodology: r.Msg.Methodology, Project: projectID})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(startingPointsToPB(sp)), nil
+}
+
+func startingPointsToPB(sp *engine.StartingPoints) *enginev1.ListStartingPointsResponse {
+	out := &enginev1.ListStartingPointsResponse{Methodology: sp.Methodology, Goal: sp.Goal, Reason: sp.Reason, BlockedCount: int32(sp.BlockedCount)}
+	for _, p := range sp.Points {
+		out.Points = append(out.Points, &enginev1.StartingPoint{Id: p.ID, Kind: p.Kind, Process: p.Process, Parent: p.Parent, Name: p.Name, Method: p.Method,
+			Capability: p.Capability, Description: p.Description, Guidance: p.Guidance, Why: p.Why, Produces: p.Produces, Responsible: p.Responsible,
+			Accountable: p.Accountable, MayRun: p.MayRun, NeedRoles: p.NeedRoles, Running: p.Running,
+			Launch: &enginev1.StartLaunch{Methodology: p.Launch.Methodology, Agent: p.Launch.Agent, Goal: p.Launch.Goal, ChangeId: string(p.Launch.ChangeID)}})
+	}
+	for _, b := range sp.Blocked {
+		out.Blocked = append(out.Blocked, &enginev1.BlockedStep{Id: b.ID, Name: b.Name, Missing: b.Missing})
+	}
+	return out
+}
+
+func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[enginev1.AttachChangeRequest]) (*connect.Response[enginev1.AttachChangeResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "attach"); err != nil {
+		return nil, toConnect(err)
+	}
+	projectID := r.Msg.ProjectId
+	if projectID == "" {
+		projectID = authz.From(ctx).Project
+	}
+	if err := h.Engine.AttachChange(ctx, r.Msg.ProcessId, engine.AttachRequest{
+		ChangeID: domain.ChangeID(r.Msg.ChangeId), Title: r.Msg.Title, Intent: r.Msg.Intent,
+		Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg, ProjectID: projectID, BaselineID: domain.BaselineID(r.Msg.BaselineId),
+	}); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Store.Get(ctx, r.Msg.ProcessId)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.AttachChangeResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) GetProcessLog(ctx context.Context, r *connect.Request[enginev1.GetProcessLogRequest]) (*connect.Response[enginev1.GetProcessLogResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "read"); err != nil {
+		return nil, toConnect(err)
+	}
+	entries, err := h.Engine.Store.ListProcessLog(ctx, r.Msg.ProcessId)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetProcessLogResponse{}
+	for _, e := range entries {
+		payload, err := json.Marshal(e.Payload)
+		if err != nil {
+			return nil, toConnect(err)
+		}
+		out.Entries = append(out.Entries, &enginev1.ProcessLogEntry{
+			Seq: e.Seq, ProcessId: e.ProcessID, Type: e.Type, Payload: string(payload), At: pbconv.Time(e.At),
+		})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) AnswerIntent(ctx context.Context, r *connect.Request[enginev1.AnswerIntentRequest]) (*connect.Response[enginev1.AnswerIntentResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Answer(ctx, r.Msg.ProcessId, r.Msg.Answer)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.AnswerIntentResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) SubmitHumanInput(ctx context.Context, r *connect.Request[enginev1.SubmitHumanInputRequest]) (*connect.Response[enginev1.SubmitHumanInputResponse], error) {
+	items := make([]engine.ItemInput, 0, len(r.Msg.Items))
+	for _, s := range r.Msg.Items {
+		raw, err := json.Marshal(s.AsMap())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		var it engine.ItemInput
+		if err := json.Unmarshal(raw, &it); err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		}
+		items = append(items, it)
+	}
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	var p *engine.Process
+	var err error
+	if r.Msg.Form != nil {
+		if len(items) > 0 {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("send the values of the form or items, not both"))
+		}
+		p, err = h.Engine.SubmitForm(ctx, r.Msg.ProcessId, r.Msg.Form.AsMap())
+	} else {
+		p, err = h.Engine.Submit(ctx, r.Msg.ProcessId, items)
+	}
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.SubmitHumanInputResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) ApproveAction(ctx context.Context, r *connect.Request[enginev1.ApproveActionRequest]) (*connect.Response[enginev1.ApproveActionResponse], error) {
+	p, err := h.Engine.Approve(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Approve, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.ApproveActionResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) UnblockProcess(ctx context.Context, r *connect.Request[enginev1.UnblockProcessRequest]) (*connect.Response[enginev1.UnblockProcessResponse], error) {
+	p, err := h.Engine.Unblock(h.principal(ctx, r.Header()), r.Msg.ProcessId,
+		engine.UnblockRequest{Decision: r.Msg.Decision, Reason: r.Msg.Reason})
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.UnblockProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) CancelProcess(ctx context.Context, r *connect.Request[enginev1.CancelProcessRequest]) (*connect.Response[enginev1.CancelProcessResponse], error) {
+	p, err := h.Engine.Cancel(h.principal(ctx, r.Header()), r.Msg.ProcessId, r.Msg.Reason)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.CancelProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) RelaunchStep(ctx context.Context, r *connect.Request[enginev1.RelaunchStepRequest]) (*connect.Response[enginev1.RelaunchStepResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "relaunch"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.Relaunch(ctx, r.Msg.ProcessId, int(r.Msg.Step), r.Msg.Reason, r.Msg.Guidance)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.RelaunchStepResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) DecideFlow(ctx context.Context, r *connect.Request[enginev1.DecideFlowRequest]) (*connect.Response[enginev1.DecideFlowResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "decide_flow"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.DecideFlow(ctx, r.Msg.ProcessId, r.Msg.Adopt, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.DecideFlowResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) ResolveBoard(ctx context.Context, r *connect.Request[enginev1.ResolveBoardRequest]) (*connect.Response[enginev1.ResolveBoardResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "relaunch"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, np, err := h.Engine.ResolveBoard(ctx, r.Msg.ProcessId, r.Msg.Relaunch, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.ResolveBoardResponse{Process: ProcessToPB(p)}
+	if np != nil {
+		out.Relaunched = ProcessToPB(np)
+		h.run(np)
+	}
+	h.run(p)
+	return connect.NewResponse(out), nil
+}
+
+func (h *Handler) ResolveMerge(ctx context.Context, r *connect.Request[enginev1.ResolveMergeRequest]) (*connect.Response[enginev1.ResolveMergeResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	resolutions := map[domain.NodeID]graphapi.Resolution{}
+	for id, rs := range r.Msg.Resolutions {
+		resolutions[domain.NodeID(id)] = graphapi.Resolution{Props: pbconv.Map(rs.GetProps()), Skip: rs.GetSkip()}
+	}
+	p, err := h.Engine.ResolveMerge(ctx, r.Msg.ProcessId, resolutions, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.ResolveMergeResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) ResolveRebase(ctx context.Context, r *connect.Request[enginev1.ResolveRebaseRequest]) (*connect.Response[enginev1.ResolveRebaseResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	if err := h.loadAuthorized(ctx, r.Msg.ProcessId, "submit"); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Engine.ResolveRebase(ctx, r.Msg.ProcessId, r.Msg.Comment)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	h.run(p)
+	return connect.NewResponse(&enginev1.ResolveRebaseResponse{Process: ProcessToPB(p)}), nil
+}
+
+func (h *Handler) GetProcess(ctx context.Context, r *connect.Request[enginev1.GetProcessRequest]) (*connect.Response[enginev1.GetProcessResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if err := h.authorize(ctx, "read", "", p); err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.GetProcessResponse{Process: ProcessToPB(p)}), nil
+}
+
+// GetProcessProgress serves where a run stands in the steps of its process (ADR 0035 §3).
+func (h *Handler) GetProcessProgress(ctx context.Context, r *connect.Request[enginev1.GetProcessProgressRequest]) (*connect.Response[enginev1.GetProcessProgressResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	p, err := h.Engine.Store.Get(ctx, r.Msg.Id)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if err := h.authorize(ctx, "read", "", p); err != nil {
+		return nil, toConnect(err)
+	}
+	pr, err := h.Engine.Progress(ctx, p.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	return connect.NewResponse(&enginev1.GetProcessProgressResponse{Progress: &enginev1.ProcessProgress{ProcessId: pr.ProcessID,
+		Methodology: pr.Methodology, Process: pr.Process, Description: pr.Description, Status: string(pr.Status), Error: pr.Error,
+		Steps: stepProgressToPB(pr.Steps), Done: int32(pr.Done), Total: int32(pr.Total)}}), nil
+}
+
+// GetChangeState serves where each process of the methodology of a change stands now (ADR 0112): read like the
+// change itself (a personal change is its subject's only).
+func (h *Handler) GetChangeState(ctx context.Context, r *connect.Request[enginev1.GetChangeStateRequest]) (*connect.Response[enginev1.GetChangeStateResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	st, err := h.Engine.ChangeState(ctx, ch.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetChangeStateResponse{ChangeId: string(st.ChangeID), Methodology: st.Methodology, Goal: st.Goal, GoalReached: st.GoalReached}
+	for _, p := range st.Processes {
+		out.Processes = append(out.Processes, &enginev1.ProcessState{Process: p.Process, Description: p.Description, State: p.State, Reactive: p.Reactive,
+			Runs: int32(p.Runs), Current: p.Current, Status: string(p.Status), Error: p.Error, Steps: stepProgressToPB(p.Steps), Done: int32(p.Done), Total: int32(p.Total)})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// GetChangeAsks serves what a change waits for from people (ADR 0117): read like the change itself (a personal change
+// is its subject's only). Whether the caller may answer an ask of a run also asks the permission the call answering it
+// checks on the run (submit, decide_flow, relaunch).
+func (h *Handler) GetChangeAsks(ctx context.Context, r *connect.Request[enginev1.GetChangeAsksRequest]) (*connect.Response[enginev1.GetChangeAsksResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	asks, err := h.Engine.ChangeAsks(ctx, ch.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetChangeAsksResponse{}
+	for _, a := range asks {
+		if a.MayAnswer && a.ProcessID != "" {
+			if act := answerPermission(a.Kind); act != "" {
+				a.MayAnswer = h.loadAuthorized(ctx, a.ProcessID, act) == nil
+			}
+		}
+		out.Asks = append(out.Asks, &enginev1.ChangeAsk{Id: a.ID, Kind: a.Kind, Title: a.Title, Detail: a.Detail, ProcessId: a.ProcessID,
+			Agent: a.Agent, Step: a.Step, Action: a.Action, Roles: a.Roles, Owner: a.Owner, Since: pbconv.Time(a.Since),
+			MayAnswer: a.MayAnswer, Point: a.Point, Question: a.Question})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// answerPermission is the permission on the run the call answering an ask of that kind checks ("" for none: the
+// engine's own rules, already applied).
+func answerPermission(kind string) string {
+	switch kind {
+	case engine.TaskInput, engine.TaskMerge, engine.TaskRebase, engine.AskClarification:
+		return "submit"
+	case engine.TaskFlow:
+		return "decide_flow"
+	case engine.TaskBoard:
+		return "relaunch"
+	}
+	return ""
+}
+
+// GetAssessmentStates serves how the assessment of each subject of a change reads now (ADR 0116): read like the
+// change itself (a personal change is its subject's only).
+func (h *Handler) GetAssessmentStates(ctx context.Context, r *connect.Request[enginev1.GetAssessmentStatesRequest]) (*connect.Response[enginev1.GetAssessmentStatesResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	ch, err := h.Engine.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if access.IsPersonal(ch) && !access.IsPersonalTo(ch, authz.From(ctx).Subject) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("change %s not found", r.Msg.ChangeId))
+	}
+	states, err := h.Engine.AssessmentStates(ctx, ch.ID)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.GetAssessmentStatesResponse{}
+	for _, s := range states {
+		out.States = append(out.States, &enginev1.AssessmentState{Subject: s.Subject, Score: int32(s.Score), Verdict: s.Verdict, Current: s.Current,
+			Answered: s.Answered, Tone: s.Tone, Label: s.Label, Open: s.Open, Errors: s.Errors})
+	}
+	return connect.NewResponse(out), nil
+}
+
+func needsToPB(needs []engine.Need) []*enginev1.Need {
+	var out []*enginev1.Need
+	for _, n := range needs {
+		out = append(out, &enginev1.Need{Condition: n.Condition, Want: n.Want, Description: n.Description, ProducedBy: n.ProducedBy, Requires: needsToPB(n.Requires), Facts: factsToPB(n.Facts)})
+	}
+	return out
+}
+
+func factsToPB(facts []engine.Fact) []*enginev1.Fact {
+	var out []*enginev1.Fact
+	for _, f := range facts {
+		out = append(out, &enginev1.Fact{Text: f.Text, Holds: f.Holds, Error: f.Error, Over: f.Over, Parts: factsToPB(f.Parts), Missing: f.Missing, ProducedBy: f.ProducedBy})
+	}
+	return out
+}
+
+// ExplainCondition serves how a condition of a run's world state got its value (formula, parts, inputs).
+func (h *Handler) ExplainCondition(ctx context.Context, r *connect.Request[enginev1.ExplainConditionRequest]) (*connect.Response[enginev1.ExplainConditionResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	p, err := h.Engine.Store.Get(ctx, r.Msg.ProcessId)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if err := h.authorize(ctx, "read", "", p); err != nil {
+		return nil, toConnect(err)
+	}
+	ex, ok, err := h.Engine.ExplainCondition(ctx, p.ID, r.Msg.Condition)
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("condition %q is not defined by the methodology", r.Msg.Condition))
+	}
+	out := &enginev1.ExplainConditionResponse{Condition: ex.Name, Expr: ex.Expr, Value: ex.Value, Error: ex.Error,
+		Inputs: ex.Inputs, Root: termToPB(ex.Root)}
+	return connect.NewResponse(out), nil
+}
+
+func termToPB(t condition.Term) *enginev1.ConditionTerm {
+	out := &enginev1.ConditionTerm{Text: t.Text, Value: t.Value, Skipped: t.Skipped, Error: t.Error}
+	for _, k := range t.Terms {
+		out.Terms = append(out.Terms, termToPB(k))
+	}
+	return out
+}
+
+func stepProgressToPB(steps []engine.StepProgress) []*enginev1.StepProgress {
+	out := make([]*enginev1.StepProgress, 0, len(steps))
+	for _, s := range steps {
+		out = append(out, &enginev1.StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method, Target: s.Target,
+			State: s.State, Missing: s.Missing, Runs: int32(s.Runs), ChildProcessIds: s.ChildProcessIDs, Waiting: s.Waiting, Permission: s.Permission,
+			Guidance: s.Guidance, Checklist: s.Checklist, References: docRefsToPB(s.References), Steps: stepProgressToPB(s.Steps), Chosen: s.Chosen, Roles: respToPB(s.Roles), Lanes: lanesToPB(s.Lanes), Needs: needsToPB(s.Needs)})
+	}
+	return out
+}
+
+func lanesToPB(lanes []engine.Lane) []*enginev1.Lane {
+	var out []*enginev1.Lane
+	for _, l := range lanes {
+		out = append(out, &enginev1.Lane{Item: l.Item, Method: l.Method, ProcessId: l.ProcessID, Status: string(l.Status)})
+	}
+	return out
+}
+
+func stepContextToPB(c *engine.StepContext) *enginev1.StepContext {
+	if c == nil {
+		return nil
+	}
+	return &enginev1.StepContext{Process: c.Process, Path: c.Path, Name: c.Name, Description: c.Description, Guidance: c.Guidance,
+		Checklist: c.Checklist, Deliverables: c.Deliverables, References: docRefsToPB(c.References), Method: c.Method, Roles: respToPB(c.Roles)}
+}
+
+func respToPB(r *methodology.Responsibilities) *enginev1.Responsibilities {
+	if r == nil {
+		return nil
+	}
+	return &enginev1.Responsibilities{Responsible: r.Responsible, Accountable: r.Accountable, Consulted: r.Consulted, Informed: r.Informed}
+}
+
+func docRefsToPB(refs []methodology.Reference) []*enginev1.DocumentReference {
+	var out []*enginev1.DocumentReference
+	for _, r := range refs {
+		out = append(out, &enginev1.DocumentReference{Title: r.Title, Ref: r.Ref, Section: r.Section})
+	}
+	return out
+}
+
+func (h *Handler) ListProcesses(ctx context.Context, r *connect.Request[enginev1.ListProcessesRequest]) (*connect.Response[enginev1.ListProcessesResponse], error) {
+	ctx = h.principal(ctx, r.Header())
+	me := authz.From(ctx)
+	all, err := h.Engine.Store.List(ctx)
+	statuses := map[string]bool{}
+	for _, s := range r.Msg.Statuses {
+		statuses[s] = true
+	}
+	// only the processes the caller may read, filtered
+	var ps []*engine.Process
+	for _, p := range all {
+		switch {
+		case r.Msg.Mine && p.Initiator.Subject != me.Subject && p.Initiator.EndUser() != me.Subject, // or run on their behalf (ADR 0114)
+			len(statuses) > 0 && !statuses[string(p.Status)],
+			r.Msg.RootsOnly && p.ParentID != "":
+			continue
+		}
+		if h.authorize(ctx, "read", "", p) == nil {
+			ps = append(ps, p)
+		}
+	}
+	if err != nil {
+		return nil, toConnect(err)
+	}
+	out := &enginev1.ListProcessesResponse{}
+	for _, p := range ps {
+		out.Processes = append(out.Processes, ProcessToPB(p))
+	}
+	return connect.NewResponse(out), nil
+}
+
+// WatchEvents streams live process events and logs.
+func (h *Handler) WatchEvents(ctx context.Context, r *connect.Request[enginev1.WatchEventsRequest], stream *connect.ServerStream[enginev1.WatchEventsResponse]) error {
+	if h.Broker == nil {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("event streaming is not configured"))
+	}
+	ctx = h.principal(ctx, r.Header())
+	if id := r.Msg.ProcessId; id != "" {
+		if err := h.loadAuthorized(ctx, id, "read"); err != nil {
+			return toConnect(err)
+		}
+	}
+	events, cancel := h.Broker.Subscribe(256)
+	defer cancel()
+	allowed := map[string]bool{} // read decision per process
+	canRead := func(p *engine.Process) bool {
+		ok, seen := allowed[p.ID]
+		if !seen {
+			ok = h.authorize(ctx, "read", "", p) == nil
+			allowed[p.ID] = ok
+		}
+		return ok
+	}
+	related := func(id string) bool {
+		return r.Msg.ProcessId == "" || id == r.Msg.ProcessId
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case ev, ok := <-events:
+			if !ok {
+				return nil
+			}
+			out := &enginev1.WatchEventsResponse{Type: ev.Event, Time: pbconv.Time(ev.Time)}
+			switch {
+			case ev.Process != nil:
+				p := ev.Process
+				if !(related(p.ID) || related(p.ParentID)) || !canRead(p) {
+					continue
+				}
+				out.Process = ProcessToPB(p)
+			case ev.Log != nil:
+				if !related(ev.Log.ProcessID) {
+					continue
+				}
+				if ok, seen := allowed[ev.Log.ProcessID]; seen && !ok {
+					continue
+				}
+				if _, seen := allowed[ev.Log.ProcessID]; !seen {
+					p, err := h.Engine.Store.Get(ctx, ev.Log.ProcessID)
+					if err != nil || !canRead(p) {
+						continue
+					}
+				}
+				out.Log = logToPB(*ev.Log)
+			default:
+				continue
+			}
+			if err := stream.Send(out); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// ListTriggers lists the triggers of the published agents.
+func (h *Handler) ListTriggers(ctx context.Context, r *connect.Request[enginev1.ListTriggersRequest]) (*connect.Response[enginev1.ListTriggersResponse], error) {
+	out := &enginev1.ListTriggersResponse{}
+	if h.Triggers == nil {
+		return connect.NewResponse(out), nil
+	}
+	ctx = h.principal(ctx, r.Header())
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: authz.From(ctx), Action: "read", Resource: authz.Resource{Type: "trigger"}}); err != nil {
+		return nil, toConnect(err)
+	}
+	for _, s := range h.Triggers.States() {
+		out.Triggers = append(out.Triggers, &enginev1.TriggerState{Methodology: s.Methodology, Agent: s.Agent, Name: s.Name, Description: s.Description,
+			Type: s.Type, Event: s.Event, Schedule: s.Schedule, Enabled: s.Enabled, Fires: int32(s.Fires), LastFired: pbconv.Time(s.LastFired),
+			NextFire: pbconv.Time(s.NextFire), LastProcessId: s.LastProcessID, LastError: s.LastError})
+	}
+	return connect.NewResponse(out), nil
+}
+
+// FireTrigger fires a trigger now.
+func (h *Handler) FireTrigger(ctx context.Context, r *connect.Request[enginev1.FireTriggerRequest]) (*connect.Response[enginev1.FireTriggerResponse], error) {
+	if h.Triggers == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("triggers are disabled"))
+	}
+	ctx = h.principal(ctx, r.Header())
+	who := authz.From(ctx)
+	if err := authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "fire",
+		Resource: authz.Resource{Type: "trigger", ID: r.Msg.Methodology + "/" + r.Msg.Agent + "/" + r.Msg.Trigger, Name: r.Msg.Methodology, Org: who.Org}}); err != nil {
+		return nil, toConnect(err)
+	}
+	p, err := h.Triggers.Fire(ctx, r.Msg.Methodology, r.Msg.Agent, r.Msg.Trigger)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	}
+	return connect.NewResponse(&enginev1.FireTriggerResponse{Process: ProcessToPB(p)}), nil
+}
+
+// LogToPB converts a log line of a process.
+func LogToPB(l engine.LogLine) *enginev1.LogLine { return logToPB(l) }
+
+func logToPB(l engine.LogLine) *enginev1.LogLine {
+	return &enginev1.LogLine{Time: pbconv.Time(l.Time), Level: l.Level, Message: l.Message, ProcessId: l.ProcessID, Action: l.Action, Step: int32(l.Step)}
+}
+
+func usageToPB(u engine.Usage) *enginev1.Usage {
+	return &enginev1.Usage{InputTokens: u.InputTokens, OutputTokens: u.OutputTokens, LlmCalls: int32(u.LLMCalls), ToolCalls: int32(u.ToolCalls)}
+}
+
+// ProcessToPB converts a process.
+func ProcessToPB(p *engine.Process) *enginev1.Process {
+	out := &enginev1.Process{
+		Id: p.ID, Methodology: p.Methodology, ChangeId: string(p.ChangeID), Status: string(p.Status), Goal: p.Goal,
+		Question: p.Question, Plan: p.Plan, World: p.World, Unknown: p.Unknown, Error: p.Error,
+		CreatedAt: pbconv.Time(p.CreatedAt), UpdatedAt: pbconv.Time(p.UpdatedAt),
+		Initiator: &enginev1.Principal{Subject: p.Initiator.Subject, Org: p.Initiator.Org, Roles: p.Initiator.Roles, OnBehalfOf: p.Initiator.OnBehalfOf},
+		Agent:     p.Agent, Planner: p.Planner, ParentId: p.ParentID, Usage: usageToPB(p.Usage),
+		BaselineId: string(p.BaselineID), Title: p.Title, TraceId: p.TraceID, Trigger: p.Trigger, Cause: p.Cause, Flow: p.Flow, RelaunchOf: p.RelaunchOf, FromStep: int32(p.FromStep),
+		Instance: p.Instance, Closed: p.Closed, Runs: int32(p.Runs), MemoryTurns: int32(len(p.Memory)),
+	}
+	for _, t := range p.Intent.Turns {
+		out.Turns = append(out.Turns, &enginev1.Turn{Role: t.Role, Text: t.Text})
+	}
+	for _, c := range p.Candidates {
+		out.Candidates = append(out.Candidates, &enginev1.Candidate{Goal: c.Goal, Confidence: c.Confidence, Reason: c.Reason, Agent: c.Agent, Methodology: c.Methodology})
+	}
+	if t := p.Pending; t != nil {
+		out.Pending = &enginev1.HumanTask{Kind: t.Kind, Permission: t.Permission, Action: t.Action, Description: t.Description,
+			Instructions: t.Instructions, NodeTypes: t.NodeTypes, Step: int32(t.Step), ChildProcessId: t.ChildProcessID, FlowId: t.FlowID,
+			Context: stepContextToPB(t.Context), Conditions: t.Conditions, Form: pbconv.FormToPB(t.Form)}
+		for _, i := range t.Issues {
+			out.Pending.Issues = append(out.Pending.Issues, &enginev1.BoardIssue{Item: string(i.Item), Culprit: string(i.Culprit), Code: i.Code, Message: i.Message, Severity: i.Severity})
+		}
+		if m := t.Merge; m != nil {
+			out.Pending.Merge = mergeTaskToPB(m)
+		}
+		if rb := t.Rebase; rb != nil {
+			out.Pending.Rebase = &enginev1.RebaseTask{Branch: rb.Branch, Onto: rb.Onto}
+			for _, c := range rb.Impacts {
+				out.Pending.Rebase.Impacts = append(out.Pending.Rebase.Impacts, &enginev1.RebaseConflict{Impact: c.Impact, Key: c.Key, Conflicts: c.Conflicts})
+			}
+		}
+		if pr := t.Proposal; pr != nil {
+			rp := &enginev1.RelaunchProposal{Process: pr.Process, Step: int32(pr.Step), Action: pr.Action, Reason: pr.Reason}
+			for _, c := range pr.Culprits {
+				rp.Culprits = append(rp.Culprits, string(c))
+			}
+			out.Pending.Proposal = rp
+		}
+	}
+	for a := range p.Disabled {
+		out.Disabled = append(out.Disabled, a)
+	}
+	sort.Strings(out.Disabled)
+	for _, s := range p.Steps {
+		ps := &enginev1.Step{Index: int32(s.Index), Action: s.Action, Plan: s.Plan, Before: s.Before, After: s.After,
+			EffectsMet: s.EffectsMet, ApprovedBy: s.ApprovedBy, Output: s.Output, Error: s.Error, StartedAt: pbconv.Time(s.StartedAt), EndedAt: pbconv.Time(s.EndedAt)}
+		for _, id := range s.Items {
+			ps.Items = append(ps.Items, string(id))
+		}
+		ps.Usage, ps.ChildProcessIds, ps.Sandbox = usageToPB(s.Usage), s.Children, s.Sandbox
+		for _, c := range s.LLMCalls {
+			ps.LlmCalls = append(ps.LlmCalls, &enginev1.LlmCall{Provider: c.Provider, Model: c.Model, InputTokens: c.InputTokens,
+				OutputTokens: c.OutputTokens, DurationMs: c.DurationMs, Error: c.Error})
+		}
+		for _, c := range s.ToolCalls {
+			ps.ToolCalls = append(ps.ToolCalls, &enginev1.ToolCall{Name: c.Name, DurationMs: c.DurationMs, Error: c.Error})
+		}
+		for _, l := range s.Logs {
+			ps.Logs = append(ps.Logs, logToPB(l))
+		}
+		out.Steps = append(out.Steps, ps)
+	}
+	return out
+}
+
+func mergeTaskToPB(m *engine.MergeTask) *enginev1.MergeTask {
+	out := &enginev1.MergeTask{Namespace: m.Namespace, From: m.From, Into: m.Into}
+	for _, c := range m.Conflicts {
+		mc := &enginev1.MergeConflict{Node: c.Node, Key: c.Key, Deleted: c.Deleted}
+		for _, p := range c.Properties {
+			mc.Properties = append(mc.Properties, &enginev1.MergeProperty{Name: p.Name, Base: value(p.Base), Ours: value(p.Ours), Theirs: value(p.Theirs), Proposed: value(p.Proposed)})
+		}
+		out.Conflicts = append(out.Conflicts, mc)
+	}
+	return out
+}
+
+// value converts a property value; an unrepresentable one is shown as null.
+func value(v any) *structpb.Value {
+	pv, err := structpb.NewValue(v)
+	if err != nil {
+		return structpb.NewNullValue()
+	}
+	return pv
+}

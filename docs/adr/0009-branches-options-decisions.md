@@ -145,7 +145,7 @@ one discards its flow, whose drafts stay in the log for the audit.
   the finalization (§5): the selected option's flow is adopted (its drafts become the main flow's), the others are
   rejected and their flows discarded.
 - **Done (§4, complementary decision 3)**: decision points `{question, options, criteria, decider, threshold,
-  maxRounds, deadline}` replayed from facts of the main flow (`KindDecisionPoint`, `pkg/domain/decision.go`), with
+  maxRounds, deadline}` replayed from facts of the main flow (`KindDecisionPoint`, `contracts/domain/decision.go`), with
   the statuses `open | blocked | ratifying | escalated | decided` (the ADR's `blocked` is kept; `ratifying` and
   `escalated` are the confidence threshold and the safeguards). A ruling is *decided* (option, confidence,
   justification) or *undecidable* (the why, and the questions: open `question`s that block the point); an answer
@@ -161,7 +161,7 @@ one discards its flow, whose drafts stay in the log for the audit.
   question, identified among every methodology (the multi-methodology axis); its outcome answers the question.
   Actions rule through items of kind `decisionPoint`; a human task's ruling is a person's.
   **Amended by ADR 0067**: `threshold`, `maxRounds`, `decider`, the deadline and the rounds are the values of a
-  *policy* (`pkg/decision`), kept by the point as opaque `Policy` values and interpreted by `Graph.DecisionPolicy`;
+  *policy* (`contracts/decision`), kept by the point as opaque `Policy` values and interpreted by `Graph.DecisionPolicy`;
   the graph keeps only the mechanism.
 - **Not done**: the planned part of §2; the change budget (complementary decision 4: `budget` in conditions, and the
   token budget of a decision point: its safeguards are the rounds and the deadline); `runAgent` of a sub-agent of

@@ -15,7 +15,7 @@ tool call mixed with the answer, a truncated object).
 
 ## Decision
 
-### The contract (`pkg/llm`)
+### The contract (`contracts/llm`)
 
 - `Request.Tools []ToolSpec` (`name`, `description`, `inputSchema`): the tools the model may call.
 - `Response.ToolCalls []ToolCall` (`id`, `name`, `arguments`); `Response.Text` is then what the model said with them;
@@ -26,7 +26,7 @@ tool call mixed with the answer, a truncated object).
   `llm_call_exchange`), so neither schema changed.
 - The RPC carries them (`ToolSpec`, `ToolCall`, `ToolResult`; arguments and schemas as JSON text).
 
-### The gateway does the provider work (`internal/modelgw/tools.go`)
+### The gateway does the provider work (`platform/modelgw/tools.go`)
 
 - **Native**: a provider implementing `NativeTools` gets the tools through its API: Anthropic `tools` + `tool_use` /
   `tool_result` blocks (results first in their user turn, the cache breakpoint on the last block of any kind); OpenAI
@@ -44,7 +44,7 @@ tool call mixed with the answer, a truncated object).
   provider model (`textToolsOnly`, for the life of the process). The caller sees the same `Response` either way.
 - The retries of a transient failure, the instrumentation and the ledger wrap all of it (one span, one ledger row).
 
-### The engine (`pkg/engine/executors.go`)
+### The engine (`engine/engine/executors.go`)
 
 `LLMExecutor` passes the tools of the action (`toolSpecs`) and a short note on how to use them (`toolsNote`) instead
 of the protocol and the list. A native call is run like before (`runTools`: concurrent, journaled, guidance on failure,
@@ -53,7 +53,7 @@ capped at its share of `maxToolResult`. The final answer is still `{"items": [..
 that writes `{"tool_calls": [...]}` in its text is still honoured, its results then go back as text: some models do it
 even with native tools, and the scripted clients of the tests rely on it.
 
-### The assistant (`internal/assistantsvc/toolspecs.go`, `turn.go`)
+### The assistant (`platform/assistantsvc/toolspecs.go`, `turn.go`)
 
 The assistant declares its server tools (`serverTools`: seven then, eight since `search_changes`, ADR 0106, each turn
 declaring those of its frame; what each does and the JSON schema of its arguments, moved out of the system text, which

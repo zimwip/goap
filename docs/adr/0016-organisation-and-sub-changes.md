@@ -11,10 +11,10 @@ The organisation is hierarchical and is not part of the delivery domain: it need
 namespace, and nodes of other namespaces must be able to reference it (a component is owned by a unit).
 
 ## Decision
-1. **Organisation namespace** (`organisation`, a built-in domain, `domains/builtin/organisation.yaml`, ADR 0012 §4): `organisation@OrgUnit` nodes
+1. **Organisation namespace** (`organisation`, a built-in domain, `lib/domains/builtin/organisation.yaml`, ADR 0012 §4): `organisation@OrgUnit` nodes
    (name, kind: company, direction, department, team). The hierarchy is the `organisation@part_of` link, **child to
    parent**: outgoing links belong to the source version (ADR 0003), so reorganising a unit only
-   versions that unit. The demo data (`internal/devseed`) loads a small hierarchy.
+   versions that unit. The demo data (`platform/devseed`) loads a small hierarchy.
 2. **Ownership** was a cross-namespace link `organisation@owner` from any node to an `organisation@OrgUnit` (it
    replaced the free-text `owner` properties of the ALM domain). Since ADR 0054 there is no such link: every version
    has an owner unit (`Node.Owner`), stamped from the previous version, else the change's unit.

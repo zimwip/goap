@@ -1,8 +1,11 @@
 SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace connector-claude-coding-agent goap-dev goap-runner goap-eval
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
+# the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
+MODULES  := contracts lib graph engine mcp gateway platform
+PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: all build test web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
+.PHONY: all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
 
 all: generate build test
 
@@ -12,18 +15,21 @@ tools: ## install code generators
 	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
 	go install github.com/air-verse/air@latest
 
-generate: ## regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/, and the catalogue of operations (pkg/operations)
+generate: ## regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/, and the catalogue of operations (contracts/operations)
 	@test -x web/node_modules/.bin/protoc-gen-es || (cd web && npm ci --ignore-scripts)
 	buf lint
 	buf generate
-	go generate ./pkg/operations/
+	go generate ./contracts/operations/
 
 build:
 	@mkdir -p bin
-	@for s in $(SERVICES); do go build -o bin/$$s ./cmd/$$s || exit 1; done
+	@for s in $(SERVICES); do go build -o bin/$$s ./platform/cmd/$$s || exit 1; done
 
 test:
-	go test ./...
+	go test $(PKGS)
+
+tidy: ## go mod tidy in every module
+	@for m in $(MODULES); do (cd $$m && go mod tidy) || exit 1; done
 
 web-test: ## unit tests of the web (needs npm install in web/)
 	cd web && npm test
@@ -32,24 +38,25 @@ PGTEST_IMAGE ?= pgvector/pgvector:pg17
 PGTEST_PORT  ?= 55432
 
 test-pg: ## every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away pgvector container on $(PGTEST_PORT))
-	@if [ -n "$$GOAP_TEST_PG_DSN" ]; then go test -count=1 ./...; else \
+	@if [ -n "$$GOAP_TEST_PG_DSN" ]; then go test -count=1 $(PKGS); else \
 	  c=$$(docker run -d --rm -e POSTGRES_USER=goap -e POSTGRES_PASSWORD=goap -e POSTGRES_DB=goap -p $(PGTEST_PORT):5432 $(PGTEST_IMAGE)) || exit 1; \
 	  trap "docker stop $$c >/dev/null" EXIT; \
 	  until [ "$$(docker logs $$c 2>&1 | grep -c 'ready to accept connections')" -ge 2 ]; do sleep 1; done; \
-	  GOAP_TEST_PG_DSN="postgres://goap:goap@localhost:$(PGTEST_PORT)/goap?sslmode=disable" go test -count=1 ./...; fi
+	  GOAP_TEST_PG_DSN="postgres://goap:goap@localhost:$(PGTEST_PORT)/goap?sslmode=disable" go test -count=1 $(PKGS); fi
 
 # offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
 EVAL ?= evals
 eval:
-	go run ./cmd/goap-eval $(EVAL)
+	go run ./platform/cmd/goap-eval $(EVAL)
 
 lint:
-	go vet ./...
-	gofmt -l . | (! grep -v node_modules | grep .)
+	go vet $(PKGS)
+	gofmt -l $(MODULES) | (! grep .)
+	@for m in $(MODULES); do (cd $$m && go mod tidy -diff >/dev/null) || { echo "$$m/go.mod is not tidy: make tidy"; exit 1; }; done
 	@cmp -s docs/dsl.md web/src/lib/help/dsl.md || (echo 'web/src/lib/help/dsl.md is out of sync with docs/dsl.md' && exit 1)
 
 dev: ## single process, in-memory, demo data: http://localhost:8080
-	go run ./cmd/goap-dev
+	go run ./platform/cmd/goap-dev
 
 devlocal: ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
 	@command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@latest
@@ -77,7 +84,7 @@ runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
 
 claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
-	go run ./cmd/connector-claude-coding-agent install
+	go run ./platform/cmd/connector-claude-coding-agent install
 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)

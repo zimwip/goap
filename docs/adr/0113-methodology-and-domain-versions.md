@@ -21,7 +21,7 @@ the start: the database had to be reset to take the new embedded versions.
 (`NewChange.MethodologyVersion`, `CreateChangeRequest.methodology_version`), else the parent's for a sub-change of the
 same methodology, else the latest published one, resolved by `ChangeLifecycles.MethodologyVersion` (the registry: a
 named version must be published or archived, a draft is refused; "" for a methodology the registry does not know, and
-without a registry, as in `cmd/graph`). The change keeps it whatever is published later.
+without a registry, as in `platform/cmd/graph`). The change keeps it whatever is published later.
 
 Every reader of the methodology of a change takes a **reference** `<name>@<version>` (`domain.MethodologyRef`,
 `SplitMethodologyRef`, `Change.MethodologyRef()`; a bare name is the latest published version): the methods of
@@ -66,7 +66,7 @@ the data.
 
 ### 5. New shipped versions load at start
 
-Each start of `goap-dev` (and the bootstrap of `cmd/registry`) publishes the domain and methodology files whose
+Each start of `goap-dev` (and the bootstrap of `platform/cmd/registry`) publishes the domain and methodology files whose
 version is not stored yet (`SeedDomains`, then `Seed`), and logs them. With §1-4 nothing stops it any more: the open
 changes stay on their versions, the new changes take the new ones. A reset of the database is needed only when its
 schema changes.

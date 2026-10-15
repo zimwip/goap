@@ -60,7 +60,7 @@ the IDE search defaults to the heads of main.
 - No embedding model configured: the index is text-only; `Search` reports `semantic: false`.
 
 ### 5. The index service
-`cmd/indexer` / `internal/indexersvc`, own database (schema per service), **durable JetStream consumer** on
+`platform/cmd/indexer` / `graph/indexersvc`, own database (schema per service), **durable JetStream consumer** on
 `goap.node.>` and `goap.baseline.>` (at-least-once; upserts idempotent on `(node_id, version)`).
 
 - Table `node_index`: identity, `namespace`, `type`, `key`, `state`, `branch`, `main`, `facets jsonb`, `doc text`,
@@ -74,7 +74,7 @@ the IDE search defaults to the heads of main.
   counted or quoted (`indexersvc.readFilter`, ADR 0095: `read` on the type and access to the node's project), so the
   page stays full and the facet counts cover the authorized set only.
 
-### 6. Two stores behind one interface (`pkg/index`)
+### 6. Two stores behind one interface (`graph/index`)
 | | PostgreSQL | SQLite (devlocal) |
 |---|---|---|
 | Full text | `tsvector` generated column + GIN | FTS5 virtual table |
@@ -82,7 +82,7 @@ the IDE search defaults to the heads of main.
 | Facets | `jsonb` (GIN `jsonb_path_ops`), `GROUP BY` | `json_extract`, `GROUP BY` |
 
 The exact scan is fine at development scale (tens of thousands of nodes). Schema changes go to both
-(`pkg/index/migrations/`, `migrations_sqlite/`, kept aligned by hand). Deployment images move to `pgvector/pgvector` (`CREATE EXTENSION vector` in
+(`graph/index/migrations/`, `migrations_sqlite/`, kept aligned by hand). Deployment images move to `pgvector/pgvector` (`CREATE EXTENSION vector` in
 `deploy/postgres/init.sql`).
 
 `goap-dev` runs the indexer in process, fed by an in-process sink (`indexersvc.NewSink`, through `Graph.Observe`),

@@ -8,10 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/zimwip/goap/gen/goap/runtime/v1/runtimev1connect"
-	"github.com/zimwip/goap/internal/platform"
-	"github.com/zimwip/goap/internal/sandbox"
-	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/contracts/gen/goap/runtime/v1/runtimev1connect"
+	"github.com/zimwip/goap/lib/platform"
+	"github.com/zimwip/goap/engine/sandbox"
+	"github.com/zimwip/goap/lib/telemetry"
 )
 
 func main() {

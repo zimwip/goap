@@ -31,7 +31,7 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 - Link types are referenced the same way, with the prefix of the domain that declares them (`alm@satisfies`,
   `organisation@part_of`).
 - Inside a domain definition, a bare name is a type of that domain (`extends: Requirement` in `alm`), a qualified one
-  a type of another (`extends: base@Item`). `domain.TypeRef` parses and qualifies references; `pkg/typecat` is the
+  a type of another (`extends: base@Item`). `domain.TypeRef` parses and qualifies references; `lib/typecat` is the
   catalogue.
 - At run time, the engine qualifies a bare type or link type written by an action (a script's `createNode`, an item,
   a link) with the namespace of the change, which is the domain the methodology targets (ADR 0013 §3).
@@ -61,7 +61,7 @@ Question answered (CLAUDE.md, rule 8): **WHAT** is being changed — how a node 
 
 ### 4. Built-in domains: shipped with the code, frozen
 - The domains the platform writes or reads before anything is loaded ship with the code (embedded YAML,
-  `domains/builtin/`, `def.BuiltinDomains`):
+  `lib/domains/builtin/`, `def.BuiltinDomains`):
   - the **meta-domain** `methodology` (`MethodologyVersion`, `Agent`, `Action`, `Condition`, `Goal`, `ToolRequest`;
     later `Role`, `Activity`, `Method`, `Process`, `Step`, `MethodStep`), which types the definition nodes of the
     methodologies (ADR 0023);

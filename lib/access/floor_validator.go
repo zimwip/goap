@@ -1,0 +1,59 @@
+package access
+
+import (
+	"context"
+	"fmt"
+	"slices"
+
+	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/lib/typecat"
+)
+
+// AdminFloorValidator refuses a change that would leave the graph with no active administrator (ADR 0020's
+// floor policy, enforced by ADR 0048's NodeValidator mechanism): "administrator" is a User holding the
+// platform RoleAdmin as Snapshot.Enrich grants it (ADR 0047: an Assignment of the user or of a unit above it); "active" is the user lifecycle's active state (ADR 0048). Wired onto Graph.Validators (see cmd/goap-dev, cmd/graph).
+type AdminFloorValidator struct{}
+
+// Types runs this validator whenever a change touches a User or an Assignment (not derived from `adminOnly`: that
+// flag says who may write a type, this is the pair of types that decides who administers): either can remove the last
+// administrator (deactivating the User, or retiring/narrowing their platform Assignment).
+func (AdminFloorValidator) Types() []string {
+	return []string{NodeTypeUser, NodeTypeAssignment}
+}
+
+// Validate counts the active administrators the way Snapshot.Enrich grants the role, on the state the change
+// leaves: the snapshot of that state is built and each active user enriched, so a
+// platform Assignment held by a unit the user belongs to (or one of its ancestors) count as much as one held by the
+// User node itself. Counting less would refuse a change that leaves an administrator; counting more, accept one
+// that locks everybody out.
+func (AdminFloorValidator) Validate(ctx context.Context, q graphapi.ValidatorQuery, impacted []graphapi.ValidatedNode) error {
+	var nodes []domain.Node
+	var links []domain.Link
+	st := typecat.Builtin().Structures()
+	for _, typ := range []string{NodeTypeUser, NodeTypeAssignment, st.Organisation().Type} {
+		ns, err := q.NodesOfType(ctx, st.Organisation().Namespace, typ)
+		if err != nil {
+			return err
+		}
+		for _, n := range ns {
+			ls, err := q.OutLinksOf(ctx, n.Ref())
+			if err != nil {
+				return err
+			}
+			nodes, links = append(nodes, n), append(links, ls...)
+		}
+	}
+	snap := BuildSnapshot(st, "", nodes, links)
+	for _, n := range nodes {
+		if n.Type != NodeTypeUser || n.State != "active" {
+			continue
+		}
+		u, err := UserFromProps(n.Properties)
+		if err == nil && slices.Contains(snap.Enrich(authz.Principal{Subject: u.Subject}).Roles, RoleAdmin) {
+			return nil // at least one active administrator remains
+		}
+	}
+	return fmt.Errorf("this change would leave no active administrator: %w", graphapi.ErrInvalid)
+}

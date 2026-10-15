@@ -21,7 +21,7 @@ cheap as `Enrich`):
   `GetStructures`.
 - `names`: the namespaces (`organisation`, `platform`, `meta`), the node and link types, the key prefixes
   (`user`, `assignment`, `platformScope`, `policy`), the admin role name, the waiting property. Units and projects
-  come from the structures; the rest are the constants of `pkg/access`, `pkg/domain`, `pkg/mcp` (`access.NamesOf`).
+  come from the structures; the rest are the constants of `lib/access`, `contracts/domain`, `contracts/mcp` (`access.NamesOf`).
 - `platformRoles`: `access.BuiltinRoles`.
 - `can`: hints for the UI, derived by the authorizer (never from a role name), the server still enforces every call.
   `administer`: the compiled-in floor allows the caller everything: it shows the controls only administrators use
@@ -38,7 +38,7 @@ The web holds the payload in `stores/session.svelte.ts` (the store of the identi
 at every token change: refresh, project switch; a sign-in or out reloads the page, ADR 0052) and reads it through
 accessors: `types`, `links`, `ns`, `isMeta`, `userKey` / `isUserKey` / `subjectOfKey`, `assignmentKey(org, project?)`,
 `defaultOrg`, `rootProject`, `newUserUnit`, `platformRoles`, `adminRole`, `can`. `orgTypes.ts` is gone,
-`access.ts` and `projectRoles.ts` keep logic only. `pkg/access/session_guard_test.go` fails when web code builds a
+`access.ts` and `projectRoles.ts` keep logic only. `lib/access/session_guard_test.go` fails when web code builds a
 `USR:` / `ASG:` / `POL:` key, names a root, a `organisation@` type, a `const NS = '...'`, or gates on `hasAnyRole('...')`.
 
 Policy keys: the editor still gives a new policy a random suffix after the server's prefix. The server's own key (a

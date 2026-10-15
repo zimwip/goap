@@ -53,7 +53,7 @@ branches), and a version only joins a branch where its ancestor was, so "highest
   the baseline, `version` is the one it had).
 - A new baseline is a checkpoint when it has no parent or when its parent is `checkpointEvery` (50) deltas away from
   its own checkpoint; otherwise a delta. The store computes the delta from the parent at `PutBaseline`
-  (`pkg/graph/baselinedelta.go`); callers keep passing the whole map, nothing else in the graph changes.
+  (`graph/graph/baselinedelta.go`); callers keep passing the whole map, nothing else in the graph changes.
 - A baseline is read from its checkpoint, then the deltas down to it: one query (recursive CTE over `parent_id` + the
   nearest entry per node), the same for `Baseline` and `NodesIn`, in PostgreSQL and SQLite. The memory store keeps
   whole maps.

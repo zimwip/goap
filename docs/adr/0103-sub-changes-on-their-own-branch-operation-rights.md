@@ -40,7 +40,7 @@ change) and ADR 0043 (a methodology's roles also say which operations on a chang
 
 ### 2. The operations on a change are a catalogue generated from the code
 
-- An operation is a method of `pkg/graph` that a person performs on a change, annotated with its code and its kind:
+- An operation is a method of `graph/graph` that a person performs on a change, annotated with its code and its kind:
 
   ```go
   // ImpactNodeUpdate edits the draft of a change impact ...
@@ -55,12 +55,12 @@ change) and ADR 0043 (a methodology's roles also say which operations on a chang
   The kinds are `doer` (changes the work: checkout, create, update, transition, links, cancel, withdraw, merge / split,
   resolve, propose, commit, rebase, merge of the change) and `reviewer` (judges it: `impact.review`, also asked by the
   review batch, which declares nothing of its own).
-- `cmd/goap-opgen` (logic in `internal/opgen`) reads the annotations and writes `pkg/operations/operations_gen.go`
+- `platform/cmd/goap-opgen` (logic in `platform/opgen`) reads the annotations and writes `contracts/operations/operations_gen.go`
   (constants and the catalogue: code, kind, method, first sentence of its doc). It refuses a malformed annotation, an
   unknown kind, a **code declared twice** or two codes giving the same constant, an annotation on anything but an
   exported method of `*Graph`, an annotated method that does not call `g.allow` with its own operation, and a `g.allow`
-  naming an operation no annotation declares. `go generate ./pkg/operations/` (`make generate`) runs it;
-  `internal/opgen.TestCatalogueIsCurrent` fails when the file is out of date. `pkg/operations` is a leaf package
+  naming an operation no annotation declares. `go generate ./contracts/operations/` (`make generate`) runs it;
+  `internal/opgen.TestCatalogueIsCurrent` fails when the file is out of date. `contracts/operations` is a leaf package
   (`All`, `Lookup`, `Known`, `Expand`, `Allows`).
 - The list is fixed by the code: a methodology names operations, it never defines one.
 
@@ -76,7 +76,7 @@ change) and ADR 0043 (a methodology's roles also say which operations on a chang
   (`g.allow`). `graphsvc.OperationAuthorizer(authorizer, roles)` checks `operation:perform` on the change's project with
   the allowed roles (`authz.Resource.Roles`, the default policy `mayRun(r.sub, r.obj)`: one of them held there, through
   an Assignment, ADR 0043); an operation no role allows is an administrator's; a platform service acting by itself
-  (`authz.Principal.System`) is not asked. `goap-dev` wires it from the registry in process; `cmd/graph`, which has no
+  (`authz.Principal.System`) is not asked. `goap-dev` wires it from the registry in process; `platform/cmd/graph`, which has no
   registry, does not (nothing restricted).
 - Proto `registry.v1.Role.operations`, attribute `operations` of `methodology@Role`, web: the Roles pane of the
   methodology editor edits them (comma separated).

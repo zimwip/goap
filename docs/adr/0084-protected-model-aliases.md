@@ -15,9 +15,9 @@ holding no provider, so an existing install would not have them.
 - **`protected` attribute** on `platform@LlmAlias` (`llmcfg.Alias.Protected`, `ModelAlias.protected` of the model proto):
   an alias the platform uses itself. It may be retargeted, never retired, renamed or unflagged. Names:
   `llmcfg.AssistantAlias` (`assistant`), `llmcfg.HelperAlias` (`helper`).
-- **Guard**: `llmcfg.ProtectedAliasValidator`, a `graph.NodeValidator` wired in `cmd/graph` and `cmd/goap-dev` next to the
+- **Guard**: `llmcfg.ProtectedAliasValidator`, a `graph.NodeValidator` wired in `platform/cmd/graph` and `platform/cmd/goap-dev` next to the
   admin floor. It compares each alias version a change writes with the one it replaces (retired state, flag, `alias`
-  name) and requires the platform's names to be created protected. `pkg/graph` names no alias; the refusal is
+  name) and requires the platform's names to be created protected. `graph/graph` names no alias; the refusal is
   `graph.ErrInvalid`.
 - **Seed**: `graphsvc.SeedProtectedAliases`, one step of `Boot` after `SeedModels`, idempotent: a missing alias is created in
   one change with the target of `default` (the helper: of `fast` when present); a node of that name without the flag or

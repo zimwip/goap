@@ -16,6 +16,9 @@ $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
 $Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'goap-dev', 'goap-runner', 'goap-eval'
+# the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
+$Modules = 'contracts', 'lib', 'graph', 'engine', 'mcp', 'gateway', 'platform'
+$Pkgs = $Modules | ForEach-Object { "./$_/..." }
 $Compose = @('compose', '-f', 'deploy/compose/docker-compose.yml')
 $Exe = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
 
@@ -49,21 +52,23 @@ function Generate {
     if (-not (Test-Path web/node_modules/@bufbuild/protoc-gen-es)) { InDir web { Run npm ci --ignore-scripts } }
     Run buf lint
     Run buf generate
-    Run go generate ./pkg/operations/
+    Run go generate ./contracts/operations/
 }
 
 function Build {
     New-Item -ItemType Directory -Force bin | Out-Null
-    foreach ($s in $Services) { Run go build -o "bin/$s$Exe" "./cmd/$s" }
+    foreach ($s in $Services) { Run go build -o "bin/$s$Exe" "./platform/cmd/$s" }
 }
 
-function Test { Run go test ./... }
+function Test { Run go test @Pkgs }
+
+function Tidy { foreach ($m in $Modules) { InDir $m { Run go mod tidy } } }
 
 function WebTest { InDir web { Run npm test } }
 
 # every test, the PostgreSQL ones included: GOAP_TEST_PG_DSN, else a throw-away pgvector container on PGTEST_PORT
 function TestPg {
-    if ($env:GOAP_TEST_PG_DSN) { Run go test -count=1 ./...; return }
+    if ($env:GOAP_TEST_PG_DSN) { Run go test -count=1 @Pkgs; return }
     $image = if ($env:PGTEST_IMAGE) { $env:PGTEST_IMAGE } else { 'pgvector/pgvector:pg17' }
     $port = if ($env:PGTEST_PORT) { $env:PGTEST_PORT } else { '55432' }
     $c = & docker run -d --rm -e POSTGRES_USER=goap -e POSTGRES_PASSWORD=goap -e POSTGRES_DB=goap -p "${port}:5432" $image
@@ -74,7 +79,7 @@ function TestPg {
             Start-Sleep -Seconds 1
         }
         $env:GOAP_TEST_PG_DSN = "postgres://goap:goap@localhost:$port/goap?sslmode=disable"
-        try { Run go test -count=1 ./... }
+        try { Run go test -count=1 @Pkgs }
         finally { Remove-Item Env:GOAP_TEST_PG_DSN -ErrorAction SilentlyContinue }
     }
     finally { & docker stop $c | Out-Null }
@@ -83,12 +88,12 @@ function TestPg {
 # offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
 function Eval {
     $cases = if ($env:EVAL) { $env:EVAL } else { 'evals' }
-    Run go run ./cmd/goap-eval $cases
+    Run go run ./platform/cmd/goap-eval $cases
 }
 
 function Lint {
-    Run go vet ./...
-    $unformatted = & gofmt -l . | Where-Object { $_ -and $_ -notmatch 'node_modules' }
+    Run go vet @Pkgs
+    $unformatted = & gofmt -l @Modules | Where-Object { $_ }
     if ($unformatted) {
         $unformatted | ForEach-Object { Write-Host $_ }
         throw 'gofmt: files above are not formatted'
@@ -96,9 +101,12 @@ function Lint {
     $a = (Get-FileHash docs/dsl.md).Hash
     $b = (Get-FileHash web/src/lib/help/dsl.md).Hash
     if ($a -ne $b) { throw 'web/src/lib/help/dsl.md is out of sync with docs/dsl.md' }
+    foreach ($m in $Modules) {
+        InDir $m { & go mod tidy -diff *> $null; if ($LASTEXITCODE -ne 0) { throw "$m/go.mod is not tidy: .\make.ps1 tidy" } }
+    }
 }
 
-function Dev { Run go run ./cmd/goap-dev }
+function Dev { Run go run ./platform/cmd/goap-dev }
 
 # SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080. .air.toml is written for a
 # POSIX shell (an environment prefix, a binary with no extension): its build settings are given on the command line here.
@@ -107,7 +115,7 @@ function DevLocalBackend {
     $bin = ".air/goap-dev$Exe"
     $old = $env:GOAP_STORE
     $env:GOAP_STORE = 'sqlite'
-    try { Run air -c .air.toml --build.cmd "go build -o $bin ./cmd/goap-dev" --build.entrypoint $bin --build.full_bin $bin }
+    try { Run air -c .air.toml --build.cmd "go build -o $bin ./platform/cmd/goap-dev" --build.entrypoint $bin --build.full_bin $bin }
     finally { $env:GOAP_STORE = $old }
 }
 
@@ -136,7 +144,7 @@ function DevLocalReset { Remove-Item -Recurse -Force .goap -ErrorAction Silently
 
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
-function ClaudeAgentRunner { Run go run ./cmd/connector-claude-coding-agent install }
+function ClaudeAgentRunner { Run go run ./platform/cmd/connector-claude-coding-agent install }
 
 # Engine socket for the docker-proxy service: Docker Desktop keeps it in its VM, at the default path
 function DockerSock { if (-not $env:GOAP_DOCKER_SOCK) { $env:GOAP_DOCKER_SOCK = '/var/run/docker.sock' } }
@@ -159,11 +167,12 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   generate          regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/,
                     and the catalogue of operations
   build             build all services into bin\
-  test              go test ./...
+  test              go test of every module of the go.work
+  tidy              go mod tidy in every module
   web-test          unit tests of the web (needs npm install in web\)
   test-pg           every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away
                     pgvector container on PGTEST_PORT, 55432)
-  lint              go vet + gofmt + dsl.md sync check
+  lint              go vet + gofmt + dsl.md sync check + go.mod files tidy
   eval              offline evaluation cases of evals\ (or $env:EVAL) against a running gateway, as GOAP_TOKEN
   dev               single process, in-memory, demo data: http://localhost:8080
   devlocal          no docker: SQLite (.goap\goap.db), backend + IDE both reload on code change:
@@ -185,6 +194,7 @@ switch ($Target) {
     'generate'         { Generate }
     'build'            { Build }
     'test'             { Test }
+    'tidy'             { Tidy }
     'web-test'         { WebTest }
     'test-pg'          { TestPg }
     'lint'             { Lint }

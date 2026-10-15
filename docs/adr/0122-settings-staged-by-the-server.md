@@ -15,7 +15,7 @@ created, restored, given up) lived in the web only.
 
 ## Decision
 
-The graph service does the staging (`internal/graphsvc/settings.go`), four RPCs of `GraphService`, each answering the
+The graph service does the staging (`graph/graphsvc/settings.go`), four RPCs of `GraphService`, each answering the
 whole pending state of the caller (`PendingSettingsResponse`: one `PendingSettings` per namespace, its change and its
 `StagedSetting` nodes: key, type, draft properties, `retire`, `created`, `change_impact_id`, `written`):
 

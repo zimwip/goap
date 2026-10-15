@@ -102,11 +102,11 @@ depends only on the subject as it is: it needs no memory, and memory made it wro
 
 - `sdlc` 0.7.3: `description_rating` is no longer persistent; every edit gets an independent run.
 - **What was rated is the engine's, not the model's**: the assessments a model answers are stamped with the
-  fingerprint of their subject as the action read it (`stampRated`, `pkg/engine/executors.go`), whatever the model
+  fingerprint of their subject as the action read it (`stampRated`, `engine/engine/executors.go`), whatever the model
   wrote; the prompt no longer asks for it.
 - **The continuity is the discussion of a topic**, not a process: the subject of a rating (`description`,
   `impact:<key>`, ...) has a thread made of its ratings and the persons' comments, however many unrelated runs wrote
-  them. The brief gives it to every run (`THREAD <topic>`, `pkg/brief`), now as soon as a topic was rated twice or
+  them. The brief gives it to every run (`THREAD <topic>`, `lib/brief`), now as soon as a topic was rated twice or
   commented, so the next rater goes on from what was said.
 
 Persistence stays for work that is one piece over several runs (the improvement cycle, until its draft).
@@ -116,7 +116,7 @@ Persistence stays for work that is one piece over several runs (the improvement 
 A derived condition may be a refinement of another: `description_accepted` (a current rating scoring 3 or more) cannot
 hold without `description_rated` (a current rating), which the rating action produces through `description_reviewed`.
 Reaching the second is a prerequisite of the first, whatever action states it. `condition.Set.Implied` reads it from
-the expressions (`pkg/condition/implies.go`, `Implies`): an expression is a conjunction of atoms, and B implies A when
+the expressions (`engine/condition/implies.go`, `Implies`): an expression is a conjunction of atoms, and B implies A when
 every atom of A is implied by one of B (the same term, or `R.exists(v, P)` implied by `R.exists(w, Q)` over the same
 range when Q has every conjunct of P, the variables renamed; `==`, `&&`, `||` read as commutative). It is structural
 and conservative: what it finds holds, what it misses is not shown. Two equivalent conditions are not each other's
@@ -130,7 +130,7 @@ prerequisite.
   been rated (by rate_description)" (`needDetail`, `web/src/lib/changeState.ts`).
 
 **The facts of a condition.** A condition is a CEL expression over the variables of the context, so what it really
-asks of the change is known from it, and so is what fails. `condition.Set.Facts(name, bb)` (`pkg/condition/facts.go`)
+asks of the change is known from it, and so is what fails. `condition.Set.Facts(name, bb)` (`engine/condition/facts.go`)
 reads it as its `&&` terms, each evaluated on the blackboard; a term `R.exists(v, P1 && ... && Pn)` is read part by
 part, part i holding when an element of R meets P1 to Pi. `condition.Missing` is the first part (or term) that does not
 hold, and `Set.Establishes(effect, fact)` says whether an effect condition asks for the same facts (an exists over the

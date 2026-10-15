@@ -20,7 +20,7 @@ Question answered (CLAUDE.md, rule 8): **WITH WHAT** (the tools of a workspace, 
 ## Decision
 
 ### 1. One MCP, `workspace`, with the tools of a coding agent
-`pkg/mcpbuiltin/workspace.go` defines the MCP `workspace` (scope both), with the contracts coding models already
+`lib/mcpbuiltin/workspace.go` defines the MCP `workspace` (scope both), with the contracts coding models already
 know:
 
 | Tool | readOnly | Contract |
@@ -57,8 +57,8 @@ context); `connectorkit` puts them back in the context of `Connector.Invoke` (`m
 a remote connector read the same `mcp.CallFrom(ctx)`. A connector still knows no MCP and no organisation.
 
 ### 3. The local connector: a directory per change
-`internal/connectors/workspace` (connector `workspace-local`; served in process by `goap-dev`, standalone by
-`cmd/connector-workspace`, `GOAP_WORKSPACE_ROOTS` restricting the roots a unit may configure) keeps one directory
+`mcp/connectors/workspace` (connector `workspace-local`; served in process by `goap-dev`, standalone by
+`platform/cmd/connector-workspace`, `GOAP_WORKSPACE_ROOTS` restricting the roots a unit may configure) keeps one directory
 per change, `<root>/<change id>`. Its adapter definition `workspace-local` (pass-through) takes `root`, `passEnv`,
 `env` (`NAME=value`), `gitName`, `gitEmail`, `branchPrefix` and the secret `git_token`.
 
@@ -88,7 +88,7 @@ branch of the change; the graph keeps its trace (`code_change`, `build_report` a
 reviewed and merged like any change.
 
 ### 5. The loop budget of an llm action
-`Action.Loop` (`loop:` on an llm action, `pkg/methodology/loop.go`; proto `registry.v1.ActionLoop`, attribute `loop`
+`Action.Loop` (`loop:` on an llm action, `engine/methodology/loop.go`; proto `registry.v1.ActionLoop`, attribute `loop`
 of `methodology@Action`, the *Tool loop budget* fields of the action editor) bounds its tool loop:
 
 ```yaml
@@ -145,11 +145,11 @@ true on its subject is what another of the same scope needs, the first is planne
 second (`pending:<second>` among its effects, lifted: never checked once it ran). Without it no plan reached past
 the first action of a flat agent (`delivery`). `publish_build` needs `build_checked` and `built`: the first chains it
 after the build, the second holds it to a success. Tested end to end on a local git repository
-(`internal/e2e/engine/sdlc_workspace_test.go`).
+(`platform/e2e/engine/sdlc_workspace_test.go`).
 
 ### 7. The docker connector: the commands in a container per workspace
 
-`workspace-docker` (`workspace.NewDocker(host)`, same package and same tools as the local one; `cmd/connector-workspace`
+`workspace-docker` (`workspace.NewDocker(host)`, same package and same tools as the local one; `platform/cmd/connector-workspace`
 with `GOAP_WORKSPACE_DOCKER` set to the Docker Engine API, `goap-dev` always, at `GOAP_DOCKER_HOST`) keeps the
 workspace of a change in a directory of its host as the local connector does, and runs its commands in a container
 of its own (`goap-ws-<change>`, created at the first command): the image the unit configures (`image`, required: the
@@ -161,9 +161,9 @@ commands write stay the connector's). A command is an exec (its outputs demultip
 a timeout or `bash_kill` kills it and its children through the pid it recorded; `close` removes the container.
 The host environment never enters the container (no `passEnv`), the files are read, written and searched by the
 connector on the host (`os.Root`), and git with the token runs on the host too: the token never reaches a command.
-The provisioners of `internal/sandbox` are not reused: they start a runner per script action, not a long-lived
+The provisioners of `engine/sandbox` are not reused: they start a runner per script action, not a long-lived
 container driven by execs. Not done: one image per technology (one image per unit adapter for now), Kubernetes,
-the egress filter itself. Tests: `internal/connectors/workspace/docker_test.go`, over a fake Docker API running the
+the egress filter itself. Tests: `mcp/connectors/workspace/docker_test.go`, over a fake Docker API running the
 execs on the host.
 
 ## Plan

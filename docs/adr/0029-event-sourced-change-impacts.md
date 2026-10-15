@@ -103,11 +103,11 @@ context in distributed mode.
 
 ## Consequences
 - **Storage**: the log of the change (ADR 0030). The projection is unchanged.
-- **Code**: `pkg/domain/impactevent.go` (events, folds), `pkg/domain/draft.go` (drafts, ADR 0079),
-  `pkg/graph/impactevents.go` (`emit`), the write paths of `changeimpact.go`, `changeimpact_apply.go`, `checkout.go`,
+- **Code**: `contracts/domain/impactevent.go` (events, folds), `contracts/domain/draft.go` (drafts, ADR 0079),
+  `graph/graph/impactevents.go` (`emit`), the write paths of `changeimpact.go`, `changeimpact_apply.go`, `checkout.go`,
   `flownodes.go`, `merge.go`, `restructure.go`, `rebase_committed.go`, `subchange.go` emit events instead of writing
   rows; the flow view (`flowNodes.nodes`) folds the log. `Graph.Caller` gives the caller of an operation (set by the
-  graph service from the principal; `pkg/graph` does not depend on `pkg/authz`).
+  graph service from the principal; `graph/graph` does not depend on `contracts/authz`).
 - **Tests**: the graph tests replay the log of every change after each test, on every repository, and compare it with
   the projection (`checkImpactLogs`); parallel and nested flows on change impacts have a test of their own; the SDLC
   engine test checks that every declaration and write of a run is linked to its action run.

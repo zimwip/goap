@@ -27,7 +27,7 @@ already stored; an abandoned change (ErrConflict: it never lands). Dependencies 
 ### 2. Satisfied: the work reached the branch the change merges into
 
 A dependency is **satisfied** when its work has reached the branch the dependent change merges into
-(`dependencyOf`, `pkg/graph/dependency.go`): the work of an applied change is on its parent's branch, that of an
+(`dependencyOf`, `graph/graph/dependency.go`): the work of an applied change is on its parent's branch, that of an
 applied parent on its own parent's, and so on, so the dependency is satisfied when that walk reaches main (every change
 of its chain applied) or the dependent's parent (both candidates of one release, the first merged into it). A
 dependency merged into a release that has not landed does not satisfy a change outside that release
@@ -35,7 +35,7 @@ dependency merged into a release that has not landed does not satisfy a change o
 
 ### 3. The merge waits for its dependencies
 
-`checkMerge` (ADR 0102, `pkg/graph/mergecheck.go`) refuses, before asking the guardians, a change with a dependency not
+`checkMerge` (ADR 0102, `graph/graph/mergecheck.go`) refuses, before asking the guardians, a change with a dependency not
 satisfied (ErrConflict naming each one and what it waits for). The rule holds for every merge, a root change into
 main as a sub-change into its parent, whoever asks (`IntegrateChange`, `Apply`, `MergeChange`).
 
@@ -53,7 +53,7 @@ main as a sub-change into its parent, whoever asks (`IntegrateChange`, `Apply`, 
   `dependencies_met` and `dependencies_pending`. No action produces `dependencies_met`, so a step needing it **waits**
   (ADR 0036 §3, `awaiting.go`) rather than failing at the merge. `sdlc` (0.5.6) imports it and its `application` step
   needs it.
-- **Woken when a dependency moves.** `Engine.relay` (`pkg/engine/companion.go`) carries the events of a change to the
+- **Woken when a dependency moves.** `Engine.relay` (`engine/engine/companion.go`) carries the events of a change to the
   open changes depending on it, as it does to its parent and sub-changes: their waiting runs are tried again, and their
   methodologies may subscribe with `on: [{event, from: dependency}]` (`methodology.FromDependency`,
   `vars.event.relation` `dependency`). The composition checks of the registry leave `from: dependency` alone: any

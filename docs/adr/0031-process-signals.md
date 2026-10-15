@@ -36,23 +36,23 @@ A walkthrough of the engine surfaced several related gaps:
 
 ### 1. `KindSignal` — one primitive for parent/child messaging and custom trigger events
 The first two gaps above are the same gap seen from two callers: both want a named,
-payload-carrying fact that something else reacts to. `pkg/domain/change.go` gains
+payload-carrying fact that something else reacts to. `contracts/domain/change.go` gains
 `KindSignal ItemKind = "signal"` and `ChangeItem.Target string` (a process id the signal
 addresses; `""` = broadcast) — no storage migration, `ChangeItem` is already the JSON payload of
-a `change_log` row (ADR 0030). `Ctx.Signal(name, data, target)` (`pkg/dsl/dsl.go`) and a new
-`goap-change/signal` tool (`internal/connectors/builtin/change.go`, `pkg/mcpbuiltin/builtin.go`) both
+a `change_log` row (ADR 0030). `Ctx.Signal(name, data, target)` (`lib/dsl/dsl.go`) and a new
+`goap-change/signal` tool (`mcp/connectors/builtin/change.go`, `lib/mcpbuiltin/builtin.go`) both
 write it, mirroring the existing `AddArtifact`/`note` paths.
 
 On the read side, `"change.signal"` was added to the trigger events (`methodology.TriggerEvents`,
-now `events.All` of `pkg/events`, the one place naming them); `EventingGraph.AddItems`
-(`pkg/engine/eventing.go`) emits it whenever a written batch includes a `KindSignal` item, and `TriggerEvent` gained an
+now `events.All` of `contracts/events`, the one place naming them); `EventingGraph.AddItems`
+(`engine/engine/eventing.go`) emits it whenever a written batch includes a `KindSignal` item, and `TriggerEvent` gained an
 `Items []domain.ChangeItem` field so a trigger's CEL `Filter` can match on payload content
 (`event.type == "change.signal" && event.items.exists(i, i.target == 'review_needed')`), not just
 the event type.
 
 ### 2. `WakeOn` — a live parent can be woken early, without a second suspend mechanism
-`dsl.Result`, `ActionResult` and `HumanTask` gained `WakeOn []string` (`pkg/dsl/dsl.go`,
-`pkg/engine/process.go`). A script suspending on `ctx.RunAgent` can declare which signal names,
+`dsl.Result`, `ActionResult` and `HumanTask` gained `WakeOn []string` (`lib/dsl/dsl.go`,
+`engine/engine/process.go`). A script suspending on `ctx.RunAgent` can declare which signal names,
 if the child emits one addressed to it, should wake it early instead of only at child
 termination. When a `KindSignal` item lands targeting a live parent whose `Pending.WakeOn`
 matches, the engine reuses the exact same `resumeParent` path already used at termination — the
@@ -72,7 +72,7 @@ synchronous suspend contract (a poor fit for a model mid tool-loop); the idiom t
 
 ### 3. Private `Vars`
 `Process.Vars` is now cloned (`maps.Clone`), not aliased, at `Start` and at sub-agent spawn
-(`pkg/engine/engine.go`). `Ctx.SetVar(name, v)` (`pkg/dsl/dsl.go`) lets a script set a
+(`engine/engine/engine.go`). `Ctx.SetVar(name, v)` (`lib/dsl/dsl.go`) lets a script set a
 process-private variable, buffered like `Signal`/`AddArtifact` and merged into the owning
 process's `Vars` (copy-on-write) after the step runs. `Vars` stays engine-owned execution state,
 not a graph write — it is not routed through a Change (same category as `Plan`/`World`/`Steps`,
@@ -83,14 +83,14 @@ private fact crosses into a parent's or sibling's view — every such crossing i
 change item.
 
 ### 4. Trigger leadership across engine replicas
-`cmd/engine/main.go` replaced two plain NATS core `events.Subscribe` calls (fan-out — every
+`platform/cmd/engine/main.go` replaced two plain NATS core `events.Subscribe` calls (fan-out — every
 replica received every message) with one `events.ConsumeDurable(ctx, log, "trigger-manager", …)`
 call: a JetStream durable pull consumer under the same durable name on every replica gives
 competing-consumer semantics for event triggers with no new dependency. Cron has no equivalent
 per-message semantics, so a small JetStream-KV-backed lease was added
-(`internal/platform/lease.go`, `Events.NewLease`/`Lease.Acquire` — create-if-absent,
+(`lib/platform/lease.go`, `Events.NewLease`/`Lease.Acquire` — create-if-absent,
 renew-if-own, steal-if-stale-past-ttl via KV `Create`/`Get`/`Update` with revision-based CAS).
-`TriggerManager` gained a `Leader func() bool` (`pkg/engine/triggers.go`); only the `cron.AddFunc`
+`TriggerManager` gained a `Leader func() bool` (`engine/engine/triggers.go`); only the `cron.AddFunc`
 callback (`cronFire`) is gated by it — `Reload`, `States()` and manual `fire` stay available on
 every replica regardless of leadership. `Leader == nil` defaults to always-leader, so every
 existing single-process deployment and test is unaffected. This resolves the "milestone M1"
@@ -104,10 +104,10 @@ writes*, not a process's existence or goal completion. A process is free to run 
 gathering context, asking questions, doing pure reads — for as long as it likes, and its goal can
 be satisfied having never attached to any Change, if it never needed to write. The actual
 enforcement of rule 2 already existed and is correctly scoped: `Host.permitted`/`Host.CallTool`
-(`pkg/engine/host.go`) rejects any `goap-change` write op or change-scoped `goap-graph` call when
+(`engine/engine/host.go`) rejects any `goap-change` write op or change-scoped `goap-graph` call when
 `p.ChangeID == ""`, with no duplication needed at the planning layer.
 
-So `change_bound = (p.ChangeID != "")` (`pkg/engine/engine.go`, set on `p.World` inside
+So `change_bound = (p.ChangeID != "")` (`engine/engine/engine.go`, set on `p.World` inside
 `observe`) is ordinary condition data a methodology *can* reference in its own `Pre`/`Effects`,
 never a universally-injected requirement. `observe` also skips `Graph.BlackboardIn` (which
 hard-errors on an empty id) when unbound, returning `domain.Blackboard{Vars: p.Vars}` instead.
@@ -138,12 +138,12 @@ and why, if the action chooses to emit one). Neither replaces the other.
 An early design for attributing concurrent processes' facts proposed defaulting each process's
 `Flow` to its own process id, skipping `Graph.OpenFlow`. This was **investigated and dropped**: a
 flow name that was never opened via `Graph.OpenFlow` returns a completely empty view from
-`Change.View(flow)` (`pkg/domain/flow.go`) — defaulting a child's `Flow` without opening it would
+`Change.View(flow)` (`contracts/domain/flow.go`) — defaulting a child's `Flow` without opening it would
 have made every concurrent child's blackboard read empty, breaking every sub-agent scenario that
 reads shared facts. `Flow` in this codebase is a content-branch precedence/visibility axis (ADR
 0017), a different thing from "who wrote this." Attribution turns out to already exist and need
 no new mechanism: every `journal.*` row already carries `Process = r.ProcessID`
-(`pkg/domain/changelog.go`), and `execution` (already a column on journal and fact rows) links
+(`contracts/domain/changelog.go`), and `execution` (already a column on journal and fact rows) links
 any fact back to the process/action-run that produced it — exactly what the Audit UI's process
 grouping already uses.
 
@@ -153,10 +153,10 @@ branch," below, needs). Impacts (actual proposed graph/node mutations) intention
 follow any per-process isolation — they land on the change's own branch exactly as before,
 regardless of which process produced them. A bounded retry (3 attempts) on `graph.ErrConflict`
 was added around `applyNodeOps`'s graph-mutating calls (`retryOnConflict`,
-`pkg/engine/nodeops.go`), wrapped individually rather than
+`engine/engine/nodeops.go`), wrapped individually rather than
 retrying the whole function (a partial retry must not re-declare an already-declared change
 impact). Caveat: `graph.ErrConflict` is one sentinel shared by roughly ten different conditions
-in `pkg/graph`, only some of them transient version races — the retry cannot yet tell them
+in `graph/graph`, only some of them transient version races — the retry cannot yet tell them
 apart, so a non-transient cause just fails identically three times instead of once (harmless,
 mildly wasteful, not incorrect).
 
@@ -167,7 +167,7 @@ flow (ADR 0017, unchanged) for an alternative proposal that might conflict and n
 merge later; several concurrent processes could even share one solution branch. For that path,
 today's existing reject-on-divergence behavior (`adoptNodes` → `ErrConflict`) is the interim
 outcome. A real per-property merge already exists as working code, but for a different
-mechanism — merging two separate Changes' branches (ADR 0024 §5, `pkg/graph/merge.go`'s
+mechanism — merging two separate Changes' branches (ADR 0024 §5, `graph/graph/merge.go`'s
 `MergeProps`/`Resolution`) — porting it into `AdoptFlow` is left for a later pass.
 
 ### 7. `process_log` — a process's own append-only history, independent of a Change
@@ -182,12 +182,12 @@ independent of a Change was the `StatusClarifying` identification dialogue
 binding (§5) makes this worse: an unbound process can now run a whole multi-turn `llm`-driven
 intake conversation before ever attaching, and every turn paid that cost.
 
-A new `process_log` table (`internal/enginesvc/migrations_sqlite/0002_process_log.sql`; no
+A new `process_log` table (`engine/enginesvc/migrations_sqlite/0002_process_log.sql`; no
 PostgreSQL migration yet, see Consequences) holds it instead: `seq, process_id, type, payload,
 at`, indexed on `(process_id, seq)`, append-only, mirroring `change_log`'s shape and spirit (ADR
 0030) but scoped to a process regardless of whether it has a Change. `Engine.Store` gained
 `AppendProcessLog`/`ListProcessLog` (both the SQLite-backed store and the in-memory `MemoryStore`
-used by tests and `goap-dev`). `resolveIntent`/`Answer` (`pkg/engine/engine.go`) now append one
+used by tests and `goap-dev`). `resolveIntent`/`Answer` (`engine/engine/engine.go`) now append one
 `process_log` entry per turn; the SQLite store's `Put` strips `Intent.Turns` before marshaling
 the row body and its `Get`/`List` fold the turns back in from `process_log`
 (`fillIntentTurns`) — the `Process.Intent`/`Question`/`Candidates` fields themselves were kept as
@@ -232,7 +232,7 @@ attach; both are simply readable side by side for the same process id from that 
 - A distinguishable error for genuine version-race `ErrConflict`s, separate from the sentinel's
   other, non-transient causes (§6).
 - A PostgreSQL `process_log` migration — no PostgreSQL-backed process store exists yet
-  (`cmd/engine/main.go` still uses `NewMemoryStore`, itself a "milestone M1" item); `process_log`
+  (`platform/cmd/engine/main.go` still uses `NewMemoryStore`, itself a "milestone M1" item); `process_log`
   today only ships for the SQLite local-dev store and the in-memory one.
 - A `SetVar`/`goap-change signal`-style DSL convenience wrapper over `process_log` for a fully
   deferred `llm`-action's own turn-by-turn state (§7) — the intake agent migration in

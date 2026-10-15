@@ -33,13 +33,13 @@ context.
 
 | Point | Today | Where |
 |---|---|---|
-| Conditions derived | Yes: CEL over the blackboard, re-evaluated at each observation (`Engine.observe` → `Set.Evaluate`), the world `p.World` is that result. | `pkg/condition/condition.go`, `pkg/engine/engine.go` `observe` |
-| Effects declared, checked | Yes: the planner simulates with `Action.Effects`; `finishStep` re-observes and sets `Step.EffectsMet`; failures count and disable the action. | `pkg/engine/engine.go` `finishStep`, `recordFailure` |
-| Values not derived | `change_bound` is injected by the engine; a **waiver** overrides the world (`risk.Waivers` → `res.State[k] = v`). | `observe`, `pkg/engine/unblock.go` |
-| Data written to stand for "it ran" | A step without `done` gets `step:<path>` = "a `step_done` artifact exists", written by the engine when the step ends; by hand, `artifacts.exists(a, a.target == "design")` means "the design action ran". | `pkg/methodology/process.go`, `pkg/engine/steps.go`, `methodologies/sdlc.yaml` |
+| Conditions derived | Yes: CEL over the blackboard, re-evaluated at each observation (`Engine.observe` → `Set.Evaluate`), the world `p.World` is that result. | `engine/condition/condition.go`, `engine/engine/engine.go` `observe` |
+| Effects declared, checked | Yes: the planner simulates with `Action.Effects`; `finishStep` re-observes and sets `Step.EffectsMet`; failures count and disable the action. | `engine/engine/engine.go` `finishStep`, `recordFailure` |
+| Values not derived | `change_bound` is injected by the engine; a **waiver** overrides the world (`risk.Waivers` → `res.State[k] = v`). | `observe`, `engine/engine/unblock.go` |
+| Data written to stand for "it ran" | A step without `done` gets `step:<path>` = "a `step_done` artifact exists", written by the engine when the step ends; by hand, `artifacts.exists(a, a.target == "design")` means "the design action ran". | `engine/methodology/process.go`, `engine/engine/steps.go`, `methodologies/sdlc.yaml` |
 | Facts set on subjects | ADR 0107: an `effect` item sets named values on an impact or an item; written facts that look like effects. | `domain.KindEffect`, `Change.Effects()` |
-| Scope | Only the change: per-subject reasoning is inline `filter(...).all(...)`, repeated (`sdlc`), with the vacuous truth patched by hand (the `NB` of `sdlc.yaml`). Lifecycle guards have their own subject scope (`node`, `impact`, `draft`). | `methodologies/sdlc.yaml`, `pkg/guard` |
-| History | The journal (`journal.*` entries: runs, actions with `effectsMet` / `error`, `Reads`) is in the change log but **not on the blackboard**; the `step_done` artifact says neither the outcome nor what the step started from. A rebase records a `rebased` event per impact, which no condition can relate to the steps done before it. | `pkg/journal`, `pkg/graph/changelog.go`, `pkg/graph/rebase.go` |
+| Scope | Only the change: per-subject reasoning is inline `filter(...).all(...)`, repeated (`sdlc`), with the vacuous truth patched by hand (the `NB` of `sdlc.yaml`). Lifecycle guards have their own subject scope (`node`, `impact`, `draft`). | `methodologies/sdlc.yaml`, `lib/guard` |
+| History | The journal (`journal.*` entries: runs, actions with `effectsMet` / `error`, `Reads`) is in the change log but **not on the blackboard**; the `step_done` artifact says neither the outcome nor what the step started from. A rebase records a `rebased` event per impact, which no condition can relate to the steps done before it. | `contracts/journal`, `graph/graph/changelog.go`, `graph/graph/rebase.go` |
 
 ## Decision
 
@@ -113,7 +113,7 @@ conditions:
 3. **Aggregates.** `all:` / `any:` / `none:` over one scoped condition (+ `where:`, `empty:`) declare a change-level
    condition. The compiler records the link, so the explanation, the Progress and the UI list **the subjects that do
    not hold**. On an empty set `all` is `false` unless `empty: true`, `any` is `false`, `none` is `true`.
-4. **The planner's world** is the change level only (declared change-scope conditions and aggregates): `pkg/goap` is
+4. **The planner's world** is the change level only (declared change-scope conditions and aggregates): `engine/goap` is
    unchanged. The per-subject tables live beside it (`Process.Subjects`).
 5. **Scoped actions.** An action (or a step) may declare `scope: impact` (+ `where`): its `pre` and `effects` name
    conditions of that scope, and it runs **once per pending subject** (its `pre` holds, its `effects` do not). The
@@ -122,13 +122,13 @@ conditions:
    it per pending subject in parallel lanes, as a `foreach` step (ADR 0035, `vars.item` = the subject), and checks
    the effects per subject. The history records the subject of each run (§4), so a per-subject condition can read
    "the step that formulates it succeeded on it" where ADR 0107 wrote a mark.
-6. **Guards** of a node lifecycle (`pkg/guard`) see `impact.conditions`: gates, guardians and conditions share one
+6. **Guards** of a node lifecycle (`lib/guard`) see `impact.conditions`: gates, guardians and conditions share one
    vocabulary.
 
 ### 4. The history is part of the context
 
 A pure fold of the change log, `journal.History(entries)`, gives a facet of the blackboard, `domain.FacetHistory`
-(filled through `Graph.Facets`, like the dependencies of ADR 0108; `pkg/graph` and `pkg/domain` still name no journal),
+(filled through `Graph.Facets`, like the dependencies of ADR 0108; `graph/graph` and `contracts/domain` still name no journal),
 read lazily by CEL:
 
 ```text
@@ -178,7 +178,7 @@ again too, and so on down the chain. Each condition only looks at the one before
 ### 6. Unblocking a run
 
 With no override, `Engine.Unblock` keeps `retry` and `abandon`; `waive` is removed (the `waiver` item kind of
-`pkg/risk`, `risk.Waivers`). A person who wants a stuck run to go on changes the context: a manual step or action whose
+`contracts/risk`, `risk.Waivers`). A person who wants a stuck run to go on changes the context: a manual step or action whose
 effects are the missing conditions (its success, recorded in the history, is what the conditions read), or an edit of
 the change. The record of who unblocked and why is in the log like any other activity.
 
@@ -202,21 +202,21 @@ the change. The record of who unblocked and why is in the log like any other act
 
 ## Gaps with the code
 
-1. `pkg/condition`: `Definition.Scope / Where / All / Any / None / Empty`; evaluation per scope (`Result.Subjects`);
+1. `engine/condition`: `Definition.Scope / Where / All / Any / None / Empty`; evaluation per scope (`Result.Subjects`);
    `conditions` and `seq` on the scoped entries; `history` (lazy); `Explain` of an aggregate and of a stale success;
    `CheckGuard` binds `impact.conditions`; `effects` removed from the entries.
-2. `pkg/methodology`: YAML / proto / `methodology@Condition` attributes; compile checks (scope known, `self` only in a
+2. `engine/methodology`: YAML / proto / `methodology@Condition` attributes; compile checks (scope known, `self` only in a
    scoped condition, no cycle, aggregate of the same scope); scoped actions and steps lifted to `pending:<action>` +
    aggregates; the predecessors of each step (from entry / exit); default `done` from the history; `ArtifactStepDone`
    removed.
-3. `pkg/journal`: `History(entries)` (outcomes, `seq`, `inputsSeq`, `current`, `staleBy`), the facet provider; the
-   action record carries the subject of a scoped run. `pkg/graph`: `FacetHistory` through `Graph.Facets`,
+3. `contracts/journal`: `History(entries)` (outcomes, `seq`, `inputsSeq`, `current`, `staleBy`), the facet provider; the
+   action record carries the subject of a scoped run. `graph/graph`: `FacetHistory` through `Graph.Facets`,
    `BlackboardAt(change, seq)`.
-4. `pkg/engine`: `observe` without `change_bound` nor waivers; `Process.Subjects`; scoped actions per pending subject
+4. `engine/engine`: `observe` without `change_bound` nor waivers; `Process.Subjects`; scoped actions per pending subject
    (the `foreach` lanes), `EffectsMet` per subject; `RunStep` / `foreach` stop writing `step_done`; `Unblock` without
    `waive`; `Progress` / `StartingPoints` read the failing subjects and the stale steps.
-5. Removal of ADR 0107 (`pkg/domain` effect kind and index, `pkg/brief`, `goap-change/effect`, `pkg/prov`) and of the
-   `waiver` kind (`pkg/risk`, web Unblock dialog).
+5. Removal of ADR 0107 (`contracts/domain` effect kind and index, `lib/brief`, `goap-change/effect`, `graph/prov`) and of the
+   `waiver` kind (`contracts/risk`, web Unblock dialog).
 6. Web: conditions editor (scope, where, aggregate), per-subject column on the change's impacts, explanation of an
    aggregate and of a stale step.
 7. Methodologies and tests rewritten; `docs/architecture.md` and `CLAUDE.md` updated.
@@ -230,7 +230,7 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
   without error (`ActivityRef` the step path, `data.execution` its run, `data.children` its sub-agents) **before** it
   observes the change again, so that observation's conditions see it; the action record follows with the effects
   found. A manual step's submission is its run (`Step.Execution` = the record of the submission).
-- `journal.Fold(entries, relies)` (`pkg/journal/history.go`, read types `journal.HistoryTypes`) is the history:
+- `journal.Fold(entries, relies)` (`contracts/journal/history.go`, read types `journal.HistoryTypes`) is the history:
   `Runs`, `Steps` (`Outcome` succeeded / failed / running; `skipped`, `waived` and the `subject` of a scoped run come
   with the later steps), `Current`, `StaleBy`, `Last()`. A write that makes a success stale is an impact event that moves
   content (`updated`, `transitioned`, `cancelled`, `withdrawn`, `rebased`) or a new version of a keyed item, on a subject
@@ -240,12 +240,12 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
 - The graph gives it with the blackboard: `Graph.LogFacets` (`graph.LogFacet{Types, Fold}`: the entries of those types
   are read in the transaction of `BlackboardIn` and of the merge's blackboard, the fold runs after it, since it may ask
   the registry), plugged by `graphsvc.LogFacets(deps)` as `domain.FacetHistory` (`journal.FoldWith`): `goap-dev` with
-  the step dependencies of the registry's compiled methodologies, `cmd/graph` with none (no registry: a success stands
+  the step dependencies of the registry's compiled methodologies, `platform/cmd/graph` with none (no registry: a success stands
   while nothing it started from moved, rule 2 is not applied there). So the lifecycle guards, the gates, the guardians
   and the merge read it (`history` in the guard environment, `guard.Facts.History`), and the world the registry
   evaluates for them holds the `step:<path>` conditions. The engine folds it itself when the blackboard comes without it
   (a graph reached over RPC carries no facet): `Engine.withHistory` / `Engine.blackboard` (`observe`, the explanation
-  of a condition, `StartingPoints`); CEL `history` (`pkg/condition`).
+  of a condition, `StartingPoints`); CEL `history` (`engine/condition`).
 - The generated `step:<path>` is `"<path>" in history.last && history.last["<path>"].current`; the `step_done` artifact
   (`methodology.ArtifactStepDone`) is gone.
 
@@ -264,7 +264,7 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
 
 ## Step (c), as implemented
 
-- `condition.Definition` gains `Scope`, `Where`, `All` / `Any` / `None` and `Empty` (`pkg/condition/scope.go`; scopes
+- `condition.Definition` gains `Scope`, `Where`, `All` / `Any` / `None` and `Empty` (`engine/condition/scope.go`; scopes
   `change` (default), `impact`, `item`, `risk`, `action`, `step`, `condition.Scopes`). `CheckDefinition` checks one
   definition alone (known scope, `self` only in a scoped condition or a where, an aggregate names one condition and no
   expression, a plain condition no where); `Set.Compile` orders the scoped conditions so that one comes after those it
@@ -279,7 +279,7 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
   condition its value per subject.
 - Methodologies: `methodology.Condition` carries the same fields (YAML, proto `Condition` fields 4 to 9, attributes of
   `methodology@Condition`); the compiler refuses a scoped condition in a goal, in a step's entry or exit (name an
-  aggregate of it) and in an unscoped action. The planner's world is the change level only: `pkg/goap` is unchanged.
+  aggregate of it) and in an unscoped action. The planner's world is the change level only: `engine/goap` is unchanged.
 - Not done: `impact.conditions` in the guard environment (§3.6), the failing subjects in `Progress` / `StartingPoints`.
 
 ## Step (d), as implemented
@@ -296,7 +296,7 @@ ADR 0107 and of the waiver; (c) scoped conditions and aggregates; (d) scoped act
   `methodology@Step` / `MethodStep`): its own where is the action's `&&` the step's, its generated conditions are named
   after the step (`Action.Narrowed`), it lifts to the aggregates over its subjects, and it states its exit criteria.
   So several steps run one action, each over its part: the passes of an analysis, layer by layer.
-- The engine (`pkg/engine/scoped.go`, `cycle.go`) runs a scoped action for one pending subject per step, the first
+- The engine (`engine/engine/scoped.go`, `cycle.go`) runs a scoped action for one pending subject per step, the first
   in the order of its scope, giving it `vars.item` (the entry) and `vars.subject` (its id); the step records `Subject`
   and `SubjectRef` (the impact id or `<kind>:<key>`, also on the action record of the journal and on
   `journal.step.ended`). Its effects are met when its scoped effects hold on the subject (a subject gone, an impact

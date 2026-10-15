@@ -8,7 +8,7 @@ change)
 ADR 0080 introduced the review object: a `review` item a reviewer builds up, then submits, the submission applying its
 entries as verdicts in one transaction. It kept the verdict on a single impact (`ImpactNodeReview` /
 `ImpactNodeReviewOn`) as an operation of its own, with no review object behind it. Every path that is not a person
-submitting a review used it: the actions of the engine (`pkg/engine/nodeops.go`), `Graph.Commit` (seeds, `EnsureUser`,
+submitting a review used it: the actions of the engine (`engine/engine/nodeops.go`), `Graph.Commit` (seeds, `EnsureUser`,
 the registry store, `CommitEdits`), the single-verdict RPC behind the Accept / Reject buttons of the web, the DSL
 `impactNodeReview`; the merges (`recordInParent`, the three-way merge) wrote `reviewed` events of their own. So the
 reviews of automatic changes had no review object, and nothing in the log said which review decided a change impact
@@ -21,8 +21,8 @@ the submission.
 ## Decision
 
 1. **The review record is built in.** The kind `review` and its record (`domain.KindReview`, `domain.ReviewRecord`,
-   `ReviewEntry`, the statuses and outcomes, the validation) move to `pkg/domain`; `ChangeItem.Validate` knows it
-   without a registration (`review.Register()` is gone). `pkg/review` keeps the use case (build a review up, submit,
+   `ReviewEntry`, the statuses and outcomes, the validation) move to `contracts/domain`; `ChangeItem.Validate` knows it
+   without a registration (`review.Register()` is gone). `contracts/review` keeps the use case (build a review up, submit,
    discard, the fold `Reviews`), its names now aliases of the domain's.
 2. **Every verdict is made by a submitted review.** `ImpactNodeReviewBatch` is the one path to a verdict:
    `ImpactNodeReviewOn` is a batch of one verdict. The batch writes the record of the submitted review **first** (the

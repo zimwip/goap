@@ -25,7 +25,7 @@ Question answered (CLAUDE.md, rule 8): **HOW** (the methodology, as graph data).
 The definition (YAML, the registry API, the web editor) keeps naming its elements. The registry's store
 (`registrysvc.GraphStore`) cuts every name that resolves to an element of the version out of the properties and
 writes it as a link of the built-in meta-domain `methodology` (1.11.0); reading the version puts the names back. One
-table drives both directions (`pkg/methodology/refs.go`, `refFields`: `EncodeRefs` / `DecodeRefs`):
+table drives both directions (`engine/methodology/refs.go`, `refFields`: `EncodeRefs` / `DecodeRefs`):
 
 | Link | From → to | Fields (definition) | Attributes |
 |---|---|---|---|
@@ -79,7 +79,7 @@ of a single element saves, publishes and runs. The shipped methodologies had thr
 
 ### 5. The self-observation writes links
 
-The proposals of the self-observation (`pkg/observe`) stay in the terms of the definition; `selfimprove` writes them
+The proposals of the self-observation (`engine/observe`) stay in the terms of the definition; `selfimprove` writes them
 on the definition nodes in the terms of the graph (`graphWrite`: the names of elements are links, the links of the
 fields a proposal sets replace those of the node) and reads the accepted ones back the same way (`definitionProps`),
 so a proposed specialization is a `specializes` link and removing an action from an agent removes its `uses` link.

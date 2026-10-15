@@ -8,7 +8,7 @@ Builds on ADR 0012, 0039, 0054, 0065, 0068.
 ADR 0054 made the two structures of the graph (the organisation and the projects) node types a domain tags, but the
 core still carried their names: the root keys (`domain.DefaultOrg`, `domain.DefaultProject`, `OrgOf`, `ProjectOf`),
 the property flagging the default project (`PropDefaultProject`), the properties of the two roots (written in
-`pkg/graph`'s bootstrap, with English product strings), the fixed list of kinds (`StructureKinds`), and a parallel
+`graph/graph`'s bootstrap, with English product strings), the fixed list of kinds (`StructureKinds`), and a parallel
 hand-written copy of the built-in domain for the untyped graph (`BuiltinStructures`, `BuiltinRequires`,
 `BuiltinAdminOnly`, the `Type*` / `Link*` constants).
 
@@ -28,10 +28,10 @@ comes from the domain.
    `typecat.Builtin()`, the catalogue of the built-in domains (`Structure`, `Structures`, `Requires`, `AdminOnly`,
    `IsA`), so the yaml of the organisation domain is the one definition. `domain.BuiltinStructures`,
    `BuiltinStructureSet`, `BuiltinRequires`, `BuiltinAdminOnly` are gone.
-3. **Roots are not constants of the core.** `DefaultOrg`, `DefaultProject`, `OrgOf`, `ProjectOf` leave `pkg/domain`.
+3. **Roots are not constants of the core.** `DefaultOrg`, `DefaultProject`, `OrgOf`, `ProjectOf` leave `contracts/domain`.
    Code that needs the root asks the structures (`Graph.Structure(kind).Root`, `domain.Structures`); the constants of
    the built-in organisation (`access.DefaultOrg`, `access.DefaultProject`, the namespace, node types and links
-   `access.NamespaceOrganisation`, `NodeTypeOrgUnit`, `LinkPartOf`...) live in `pkg/access`, for the seeds and tests
+   `access.NamespaceOrganisation`, `NodeTypeOrgUnit`, `LinkPartOf`...) live in `lib/access`, for the seeds and tests
    of that organisation. The engine no longer defaults `ProcessRef.Org` / `Project` (a stored change always has both);
    the services behind the scope (`mcpsvc.Snapshot.Unit`, the access snapshot) resolve an empty one to the root.
 4. **`domain.Structures` is a list** of `StructureSet{Structure, Types}`, one per kind declared, with the typed helpers
@@ -42,8 +42,8 @@ comes from the domain.
    every structure and one platform constraint, stated there: the organisation and the projects share a namespace,
    because the services reading them read one head (an Assignment links a unit and a project). The built-in domain
    tags both, so a catalogue always has them.
-6. **A guard rail.** `pkg/layering` (`TestCoreNamesNoStructure`) fails when a non-test file of `pkg/graph` or
-   `pkg/domain` contains `ORG-DEFAULT`, `PROJ-ROOT`, `OrgUnit`, `ProjectUnit`, `part_of` or `project_part_of`.
+6. **A guard rail.** `platform/layering` (`TestCoreNamesNoStructure`) fails when a non-test file of `graph/graph` or
+   `contracts/domain` contains `ORG-DEFAULT`, `PROJ-ROOT`, `OrgUnit`, `ProjectUnit`, `part_of` or `project_part_of`.
 
 ## Consequences
 

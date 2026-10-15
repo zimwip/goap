@@ -40,8 +40,8 @@ drown the context and the budget of the turn. The result of a tool has to be as 
   q / parent, to project with `fields`, or to paginate. `detail: full` returns at most 3 items (`MaxFullItems`): more
   is clamped, `truncated` and a hint say so. With `fields`, the count cap does not apply but the byte cap does. A first
   item over the cap alone returns none and a hint to project.
-- **Code**: the engine is pure and unit-tested (`internal/assistantsvc/methodquery.go`, `RunQuery(Query,
-  []*methodology.Methodology)`): the valid fields come from the struct tags of `pkg/methodology`, nothing is parsed or
+- **Code**: the engine is pure and unit-tested (`platform/assistantsvc/methodquery.go`, `RunQuery(Query,
+  []*methodology.Methodology)`): the valid fields come from the struct tags of `engine/methodology`, nothing is parsed or
   compiled again; the tool glue (arguments, scope, registry port) is `methodtool.go`.
 - **Prompt**: start narrow (kind / name / q), prefer `names` / `summary`, project with `fields`, paginate instead of
   asking for full lists, explain a methodology from the results only.
@@ -52,7 +52,7 @@ drown the context and the budget of the turn. The result of a tool has to be as 
   several small calls rather than one big one, within the 4 rounds of a turn.
 - No secret or other tenant's data is exposed: only definitions of methodologies the project applies, which carry no
   secret by design (secrets are references, adapters are not part of them), read with the caller's rights.
-- The field names are the JSON names of `pkg/methodology`: a new field of a definition is queryable with no change here
+- The field names are the JSON names of `engine/methodology`: a new field of a definition is queryable with no change here
   (its `summary` stays the list of defining fields in `summaryFields`).
 
 ## Not done

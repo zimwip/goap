@@ -7,12 +7,12 @@
 An action of kind `builtin` names a Go function. Nothing checked the name before run time (`unknown builtin` when the
 action was scheduled), so a typo in a methodology was published and failed late. The names were string literals
 spread over the engine, the compiler and the YAML. The engine package also implemented the self-observation
-builtins (`observe.analyze`, `observe.propose`, `methodology.draft`) and so imported `pkg/observe`, which hardcodes
+builtins (`observe.analyze`, `observe.propose`, `methodology.draft`) and so imported `engine/observe`, which hardcodes
 `methodology@...` node types: the engine was coupled to one methodology.
 
 ## Decision
 
-1. `pkg/builtins` is a leaf package (no project import) holding the builtin names (`GraphPropagate`, `GraphApply`,
+1. `contracts/builtins` is a leaf package (no project import) holding the builtin names (`GraphPropagate`, `GraphApply`,
    `DecisionInvestigate`, `ProcessStep`, `ObserveAnalyze`, `ObservePropose`, `MethodologyDraft`; `DerogationExpire`
    since ADR 0075), `All()` and `Known`, the static set of those names.
 2. `methodology.BuiltinSet` (`HasBuiltin(name)`) and `Methodology.Builtins`, set by `WithBuiltins` like `Types` by
@@ -24,13 +24,13 @@ builtins (`observe.analyze`, `observe.propose`, `methodology.draft`) and so impo
 4. `engine.BuiltinExecutor` is the engine's table: `Register(name, f)` panics on a duplicate, `HasBuiltin`
    implements `BuiltinSet`. `DefaultBuiltins()` registers the generic builtins (`graph.propagate`, `graph.apply`,
    `decision.investigate`, `process.step`, and `derogation.expire` since ADR 0075).
-5. The self-observation builtins moved to `pkg/selfimprove` (`Register(b, e, Config)`, with `TraceSource`,
-   `MethodologyDrafts`, `Config`), called by `cmd/engine` and `cmd/goap-dev` after the engine is built. `pkg/engine`
-   no longer imports `pkg/observe` (`pkg/layering` tests it).
+5. The self-observation builtins moved to `engine/selfimprove` (`Register(b, e, Config)`, with `TraceSource`,
+   `MethodologyDrafts`, `Config`), called by `platform/cmd/engine` and `platform/cmd/goap-dev` after the engine is built. `engine/engine`
+   no longer imports `engine/observe` (`platform/layering` tests it).
 
 ## Consequences
 
-- A new builtin is a constant in `pkg/builtins` plus a `Register` call; a name missing from the list is refused by the
+- A new builtin is a constant in `contracts/builtins` plus a `Register` call; a name missing from the list is refused by the
   registry even if an engine would register it.
 - A deployment that registers extra builtins in the engine only still runs them, but the registry refuses the
-  methodologies naming them until they are added to `pkg/builtins`.
+  methodologies naming them until they are added to `contracts/builtins`.

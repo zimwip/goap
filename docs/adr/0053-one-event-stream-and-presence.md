@@ -11,7 +11,7 @@ invisible until a manual refresh, and nothing said who else was looking.
 
 ## Decision
 
-- **One stream.** `goap.events.v1.EventService/Watch` (`internal/eventsvc`, `cmd/events`; in `goap-dev` the hub is fed
+- **One stream.** `goap.events.v1.EventService/Watch` (`platform/eventsvc`, `platform/cmd/events`; in `goap-dev` the hub is fed
   in process) carries every fact the services publish as a thin, ordered `Event{epoch, seq, type, kind, id, namespace,
   branch, project, change_id, version, label, actor, command_id}`: `process.*` (with the process / log line),
   `change.*`, `node.written|deleted`, `baseline.advanced`, `methodology.*`, `domain.*`. The graph publishes
@@ -25,7 +25,7 @@ invisible until a manual refresh, and nothing said who else was looking.
 - **Commands.** Every request carries `X-Goap-Command` (`web/src/lib/flux/commands.ts`); `eventsvc.CommandInterceptor`
   stamps the events a request causes with it and its caller (`actor`), so a client knows the echo of its own writes.
   Over the bus the stamp rides NATS message headers (`platform.Stamp`, `X-Goap-Actor` / `X-Goap-Command`), set by
-  `Events.Publish` from the request context and read back by `cmd/events`; the graph and registry services mount the
+  `Events.Publish` from the request context and read back by `platform/cmd/events`; the graph and registry services mount the
   interceptor. A draft also ignores events for 3 s after its own write.
 - **Front** (`web/src/lib/flux/`): `events.svelte.ts` owns the stream (reconnect, resume, resync); `reducers.svelte.ts`
   turns events into invalidation signals (`signals.svelte.ts`: `stamp(key)` read in the `$effect` that loads, `touch`)

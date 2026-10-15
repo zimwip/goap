@@ -19,11 +19,11 @@ thing:
 1. **A methodology is nodes of the meta-domain `methodology`.** A version is a node `methodology@MethodologyVersion`
    (key `MV:<name>@<version>`, namespace `methodology`) holding the scalar fields, the `status` and the timestamps,
    and one node per element: `Agent` (with its triggers), `Action`, `Condition`, `Goal`, and since ADR 0034, 0035, 0039
-   and 0050 `Process`, `Method`, `Role`, `Step`, `MethodStep` (`defKinds` of `internal/registrysvc/defs.go`). Elements are
+   and 0050 `Process`, `Method`, `Role`, `Step`, `MethodStep` (`defKinds` of `platform/registrysvc/defs.go`). Elements are
    keyed `<version key>/<kind>/<name>`, ordered by a `position` property and tied to their version by
    `methodology@defines` links (an activity to its steps by `methodology@sub_activity`). The meta-domain is built in (ADR 0012 §4); there is no second representation of a published version.
 2. **A domain is kept in the registry's database.** A version is a row of `domain_version` (name, version, status,
-   the definition as JSON, timestamps), in PostgreSQL (`internal/registrysvc/migrations`, `GOAP_DB_DSN`) or SQLite in
+   the definition as JSON, timestamps), in PostgreSQL (`platform/registrysvc/migrations`, `GOAP_DB_DSN`) or SQLite in
    the local mode (`migrations_sqlite`, ADR 0010); without a database the registry keeps them in memory
    (`registrysvc.SQLDomainStore`, `MemoryStore`). There is no `domain` namespace, no `DV:` node and no `domain`
    meta-domain. The graph gets the domains from the registry (the type catalogue and its events), never from its own
@@ -34,7 +34,7 @@ thing:
    force.
 4. **The registry keeps the rules.** `registrysvc.GraphStore` implements the methodology store on the graph: every
    save, status change and deletion is a change applied on `main` (rebuilt and retried up to three times when `main` moved), reads come from a
-   snapshot of the head of `main` (`pkg/graphsnap`). The registry validates (a list of anomalies with field paths,
+   snapshot of the head of `main` (`lib/graphsnap`). The registry validates (a list of anomalies with field paths,
    used by the editor), compiles, publishes and emits the `goap.registry.*` events.
 5. **Nothing of a methodology is deleted**: a node key is never freed on a versioned graph. A deleted draft keeps its
    version node marked `deleted`; an element that leaves a draft is marked `removed`; saving it again revives the

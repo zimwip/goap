@@ -54,7 +54,7 @@ different applicable roles depending on which project the work belongs to.
   interceptor (deduplicated per process: a subject already seen costs one map lookup, not a graph read).
 - **Role** (the RACI role a methodology's processes and methods assign, ADR 0035 §2) **is a node type**,
   `methodology@Role`, materialized the same generic way as `Agent`/`Action`/`Goal`/`Process`/`Method`
-  (ADR 0023): `internal/registrysvc/defs.go`'s `defKinds` table gained one entry
+  (ADR 0023): `platform/registrysvc/defs.go`'s `defKinds` table gained one entry
   (`{kindRole, "roles", "methodology@Role"}`) — the split/join/key logic is fully generic over that table,
   so no other registry code changed. This is additive only: `Assignment.roles` still stores role *names*
   (strings), validated against a methodology's declared roles the way `Pre`/`Effects` already validate
@@ -66,11 +66,11 @@ different applicable roles depending on which project the work belongs to.
   project chain from it and merges the matching `ProjectRoles` into the subject's roles before evaluating
   the request — unscoped (the org/project membership test already happened), so it rides the existing
   `hasRoleIn`/default step policy (`hasRoleIn(r.sub, r.obj.Role, r.obj)`) with no new Casbin function.
-  `pkg/engine` threads a project through `Process.Project` (mirroring `Process.Org`) from
+  `engine/engine` threads a project through `Process.Project` (mirroring `Process.Org`) from
   `StartRequest`/`AttachRequest` through `resolveChange` to `stepAllowed`'s `Resource.ProjectID`.
 - **Token / API propagation.** The gateway JWT (`internal/gateway.Claims`) gained a `project` claim,
   propagated as `X-Goap-Project` alongside the existing `X-Goap-Subject/Org/Roles`
-  (`internal/identity`). `POST /auth/dev-token/project` reissues the caller's token with the same
+  (`lib/identity`). `POST /auth/dev-token/project` reissues the caller's token with the same
   subject/org/roles and a new project — "a token regenerated each time the user changes project" — first
   gated behind `DevTokens` in `hs256` mode, served in `local` mode too since ADR 0040 / 0042 (it checks the
   session and `access.Directory.MayAccessProject`). `graphsvc.CreateChange` and `enginesvc.StartProcess`/
