@@ -7,14 +7,14 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
-	"github.com/zimwip/goap/graph/graphsvc"
+	"github.com/zimwip/goap/gen/goap/graph/v1/graphv1connect"
+	"github.com/zimwip/goap/internal/graphsvc"
 	"github.com/zimwip/goap/internal/iamsvc"
-	"github.com/zimwip/goap/lib/platform"
-	"github.com/zimwip/goap/platform/registrysvc"
-	"github.com/zimwip/goap/lib/telemetry"
-	"github.com/zimwip/goap/engine/engine"
-	"github.com/zimwip/goap/graph/graph"
+	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/registrysvc"
+	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/graph"
 	"github.com/zimwip/goap/pkg/metamodel"
 )
 

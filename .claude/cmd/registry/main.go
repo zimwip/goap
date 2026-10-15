@@ -4,12 +4,12 @@ package main
 import (
 	"context"
 
-	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
+	"github.com/zimwip/goap/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/internal/iamsvc"
-	"github.com/zimwip/goap/lib/platform"
-	"github.com/zimwip/goap/platform/registrysvc"
-	"github.com/zimwip/goap/lib/telemetry"
-	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/registrysvc"
+	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/authz"
 )
 
 func main() {

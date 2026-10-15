@@ -14,13 +14,13 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
-	"github.com/zimwip/goap/engine/enginesvc"
+	"github.com/zimwip/goap/internal/enginesvc"
 	"github.com/zimwip/goap/internal/iamsvc"
-	"github.com/zimwip/goap/platform/modelgw"
-	"github.com/zimwip/goap/lib/platform"
-	"github.com/zimwip/goap/platform/registrysvc"
-	"github.com/zimwip/goap/engine/engine"
-	"github.com/zimwip/goap/graph/graph"
+	"github.com/zimwip/goap/internal/modelgw"
+	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/registrysvc"
+	"github.com/zimwip/goap/pkg/engine"
+	"github.com/zimwip/goap/pkg/graph"
 )
 
 // stores are the storage backends of the single-process platform.

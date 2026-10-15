@@ -8,11 +8,11 @@ import (
 
 	"github.com/casbin/casbin/v2/persist"
 
-	"github.com/zimwip/goap/contracts/gen/goap/iam/v1/iamv1connect"
+	"github.com/zimwip/goap/gen/goap/iam/v1/iamv1connect"
 	"github.com/zimwip/goap/internal/iamsvc"
-	"github.com/zimwip/goap/lib/platform"
-	"github.com/zimwip/goap/lib/telemetry"
-	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/telemetry"
+	"github.com/zimwip/goap/pkg/authz"
 )
 
 func main() {

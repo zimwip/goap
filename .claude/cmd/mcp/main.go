@@ -4,9 +4,9 @@ package main
 
 import (
 	"context"
-	"github.com/zimwip/goap/contracts/gen/goap/mcp/v1/mcpv1connect"
-	"github.com/zimwip/goap/lib/platform"
-	"github.com/zimwip/goap/lib/telemetry"
+	"github.com/zimwip/goap/gen/goap/mcp/v1/mcpv1connect"
+	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/telemetry"
 )
 
 func main() {

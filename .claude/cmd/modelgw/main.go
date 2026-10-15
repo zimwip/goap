@@ -6,11 +6,11 @@ import (
 
 	"github.com/jackc/pgx/v5/stdlib"
 
-	"github.com/zimwip/goap/contracts/gen/goap/model/v1/modelv1connect"
+	"github.com/zimwip/goap/gen/goap/model/v1/modelv1connect"
 	"github.com/zimwip/goap/internal/iamsvc"
-	"github.com/zimwip/goap/platform/modelgw"
-	"github.com/zimwip/goap/lib/platform"
-	"github.com/zimwip/goap/lib/telemetry"
+	"github.com/zimwip/goap/internal/modelgw"
+	"github.com/zimwip/goap/internal/platform"
+	"github.com/zimwip/goap/internal/telemetry"
 )
 
 func main() {
