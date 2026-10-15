@@ -353,7 +353,7 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 				if err != nil {
 					return declared, fail(err)
 				}
-				if _, err := e.Graph.ImpactLinkCreate(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to}, p.Flow, execution); err != nil {
+				if _, err := e.Graph.ImpactLinkCreate(ctx, p.ChangeID, id, graph.LinkWrite{Type: qualify(l.Type), To: to, Properties: l.Props}, p.Flow, execution); err != nil {
 					return declared, fail(err)
 				}
 			}

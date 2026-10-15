@@ -178,9 +178,9 @@ func TestGraphStoreMaterializesRoles(t *testing.T) {
 	}
 }
 
-// A process's steps and sub-steps materialize as their own methodology@Step nodes, in addition to staying inline in
-// the process's own JSON (decode ignores the step nodes: the round-trip is unaffected). Each parent (the process, or
-// a step with sub-steps) links to its direct children by sub_activity.
+// A process's steps and sub-steps materialize as their own methodology@Step nodes, and only there (ADR 0120): each
+// parent (the process, or a step with sub-steps) links to its direct children by sub_activity, and the definition
+// reads its steps back from those links.
 func TestGraphStoreMaterializesSteps(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
@@ -250,7 +250,7 @@ func TestGraphStoreMaterializesSteps(t *testing.T) {
 	if !hasSubActivity(hk+"/step/deliver/analysis", hk+"/step/deliver/analysis/scope") {
 		t.Fatal("step -> sub-step sub_activity link missing")
 	}
-	// decode ignores the step nodes: the methodology still round-trips to exactly what was saved
+	// the steps read back from their nodes: the methodology round-trips to exactly what was saved
 	got, err := s.Get(ctx, m.Name, m.Version)
 	if err != nil || canon(t, got.Methodology.Processes) != canon(t, m.Processes) {
 		t.Fatalf("processes must round-trip unaffected: %+v, %v", got.Methodology.Processes, err)
@@ -306,7 +306,7 @@ func TestGraphStoreMaterializesMethodSteps(t *testing.T) {
 	if !found {
 		t.Fatal("method -> method step sub_activity link missing")
 	}
-	// decode ignores the method step nodes: the methodology still round-trips to exactly what was saved
+	// the method steps read back from their nodes: the methodology round-trips to exactly what was saved
 	got, err := s.Get(ctx, m.Name, m.Version)
 	if err != nil || canon(t, got.Methodology.Methods) != canon(t, m.Methods) {
 		t.Fatalf("methods must round-trip unaffected: %+v, %v", got.Methodology.Methods, err)

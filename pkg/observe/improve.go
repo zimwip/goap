@@ -12,7 +12,9 @@ import (
 )
 
 // Proposal is an improvement of the methodology model, expressed on its
-// definition nodes (so that it is reviewed like any other change). A proposed
+// definition nodes (so that it is reviewed like any other change), in the terms
+// of the definition: the self-observation writes the names of its elements as
+// links (ADR 0120, methodology.EncodeRefs). A proposed
 // MCP tool (TypeToolRequest) is not part of the definition: it is requested
 // from the platform team and referenced by tool actions once available.
 type Proposal struct {
@@ -25,9 +27,6 @@ type Proposal struct {
 	Props     map[string]any `json:"props"`
 	Title     string         `json:"title"`
 	Rationale string         `json:"rationale"`
-	// LinkType / LinkTo link a created node to an existing element.
-	LinkType string `json:"linkType,omitempty"`
-	LinkTo   string `json:"linkTo,omitempty"`
 }
 
 // Propose derives improvement proposals from the findings of a report for
@@ -62,8 +61,7 @@ func Propose(r Report, m *methodology.Methodology) (props []Proposal, notes []st
 					"specializes": a.Name, "priority": 10, "description": "Systematized version of " + a.Name + " (no LLM call).",
 					"code": scriptTemplate(a, stats[a.Name])},
 				Title:     "Specialize " + a.Name + " with a script",
-				Rationale: f.Evidence + ". The script takes priority; add a `when` guard to keep the LLM for atypical cases.",
-				LinkType:  LinkSpecializes, LinkTo: ElementKey(m.Name, m.Version, "action", a.Name)})
+				Rationale: f.Evidence + ". The script takes priority; add a `when` guard to keep the LLM for atypical cases."})
 		case FindLLMHeavy:
 			if !known || a.Kind != methodology.KindLLM || a.Model == "fast" || !once("model:"+a.Name) {
 				continue

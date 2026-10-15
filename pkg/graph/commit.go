@@ -2,8 +2,10 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/zimwip/goap/pkg/domain"
 )
@@ -160,8 +162,9 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 				return res, fmt.Errorf("link of %s needs a target: %w", nodeName(e), ErrInvalid)
 			}
 			if e.Pre != nil {
-				// a link is part of its source version: the one the version already carries is not added again
-				if has, err := g.linksTo(ctx, *e.Pre, l.Type, to.ID); err != nil {
+				// a link is part of its source version: the one the version already carries (same attributes, not removed
+				// by the edit) is not added again
+				if has, err := g.linksTo(ctx, *e.Pre, l.Type, to.ID, l.Props, e.RemoveLinks); err != nil {
 					return res, err
 				} else if has {
 					continue
@@ -195,14 +198,14 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 					return res, fmt.Errorf("%s: %w", nodeName(e), err)
 				}
 			}
-			for _, l := range links {
-				if _, err := g.ImpactLinkCreate(ctx, c.ID, cn.ID, l, "", ""); err != nil {
-					return res, fmt.Errorf("%s: %w", nodeName(e), err)
-				}
-			}
 			for _, id := range e.RemoveLinks {
 				// the draft holds a copy of the link of the version it was checked out from: ImpactLinkDelete finds it
 				if err := g.ImpactLinkDelete(ctx, c.ID, id, "", ""); err != nil {
+					return res, fmt.Errorf("%s: %w", nodeName(e), err)
+				}
+			}
+			for _, l := range links {
+				if _, err := g.ImpactLinkCreate(ctx, c.ID, cn.ID, l, "", ""); err != nil {
 					return res, fmt.Errorf("%s: %w", nodeName(e), err)
 				}
 			}
@@ -283,16 +286,27 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	return res, nil
 }
 
-// linksTo reports whether a version already has an outgoing link of the type to the node.
-func (g *Graph) linksTo(ctx context.Context, from domain.NodeRef, typ string, to domain.NodeID) (has bool, err error) {
+// linksTo reports whether a version already has an outgoing link of the type to the node with these attributes, other
+// than the ones the edit removes.
+func (g *Graph) linksTo(ctx context.Context, from domain.NodeRef, typ string, to domain.NodeID, props map[string]any, removed []domain.LinkID) (has bool, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		out, err := tx.OutLinks(ctx, from)
 		for _, l := range out {
-			has = has || l.Type == typ && l.To.ID == to
+			has = has || l.Type == typ && l.To.ID == to && !slices.Contains(removed, l.ID) && sameLinkProps(l.Properties, props)
 		}
 		return err
 	})
 	return
+}
+
+// sameLinkProps compares the attributes of two links, no attribute and an empty set alike.
+func sameLinkProps(a, b map[string]any) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return len(a) == len(b)
+	}
+	ja, _ := json.Marshal(a)
+	jb, _ := json.Marshal(b)
+	return string(ja) == string(jb)
 }
 
 func nodeName(e NodeEdit) string {
