@@ -129,15 +129,15 @@ func TestMethodsRankBySpecificity(t *testing.T) {
 	c, issues := compileProcess(t, `
 methods:
   - {name: generic, for: f, actions: [do_c], done: {c: true}}
-  - {name: one, for: f, actions: [do_c], done: {c: true}, when: 'artifacts.exists(x, x.type == "u")'}
-  - {name: two, for: f, actions: [do_c], done: {c: true}, when: 'artifacts.exists(x, x.type == "u") && artifacts.exists(x, x.type == "v")'}
-  - {name: forced, for: f, actions: [do_c], done: {c: true}, priority: 1, when: 'artifacts.exists(x, x.type == "u")'}
+  - {name: one, for: f, actions: [do_c], done: {c: true}, when: 'artifacts.exists(x, x.target == "u")'}
+  - {name: two, for: f, actions: [do_c], done: {c: true}, when: 'artifacts.exists(x, x.target == "u") && artifacts.exists(x, x.target == "v")'}
+  - {name: forced, for: f, actions: [do_c], done: {c: true}, priority: 1, when: 'artifacts.exists(x, x.target == "u")'}
 `)
 	if issues.HasErrors() {
 		t.Fatal(issues)
 	}
 	var bb domain.Blackboard
-	bb.Change.Items = []domain.ChangeItem{{ID: "1", Kind: domain.KindArtifact, Type: "u"}, {ID: "2", Kind: domain.KindArtifact, Type: "v"}}
+	bb.Change.Items = []domain.ChangeItem{{ID: "1", Type: domain.TypeArtifact, Target: "u"}, {ID: "2", Type: domain.TypeArtifact, Target: "v"}}
 	var names []string
 	for _, m := range c.MethodsFor("f", bb) {
 		names = append(names, m.Name)

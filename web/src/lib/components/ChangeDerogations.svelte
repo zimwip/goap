@@ -23,7 +23,7 @@
     busy = true;
     error = '';
     try {
-      await graph.addItems(change.id, [{ kind: 'derogation', type: 'derogation', data }]);
+      await graph.addItems(change.id, [{ type: 'derogation', target: 'derogation', data }]);
       onchange?.();
     } catch (e) {
       error = errorMessage(e);

@@ -428,10 +428,10 @@ func TestChangeSignal(t *testing.T) {
 	id := created["id"].(string)
 	ctx = mcp.WithCall(ctx, mcp.CallContext{Change: id, Process: "P1"})
 
-	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/signal", map[string]any{"type": "review_needed",
-		"data": map[string]any{"reason": "voucher policy"}, "target": "P0"})
+	out := p.call(t, ctx, "ORG-CHECKOUT", "goap-change/signal", map[string]any{"target": "review_needed",
+		"data": map[string]any{"reason": "voucher policy"}, "recipient": "P0"})
 	item := out["item"].(map[string]any)
-	if item["kind"] != "signal" || item["type"] != "review_needed" || item["target"] != "P0" || item["producedBy"] != "P1" {
+	if item["type"] != "signal" || item["target"] != "review_needed" || item["recipient"] != "P0" || item["producedBy"] != "P1" {
 		t.Fatalf("item = %v", item)
 	}
 	if data := item["data"].(map[string]any); data["reason"] != "voucher policy" {
@@ -525,7 +525,7 @@ func TestChangeReformulate(t *testing.T) {
 	var intents []map[string]any
 	for _, it := range items {
 		it := it.(map[string]any)
-		if it["type"] == "intent" {
+		if it["target"] == "intent" {
 			intents = append(intents, it)
 		}
 	}

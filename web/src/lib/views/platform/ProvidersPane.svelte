@@ -43,7 +43,7 @@
   const picked = new SvelteSet<string>();
   let filter = $state('');
 
-  const kindOf = (id: string) => kinds.find((k) => k.id === id);
+  const typeOf = (id: string) => kinds.find((k) => k.id === id);
   const modelCount = (p: string) => catalog.filter((m) => m.provider === p).length;
 
   function reset() {
@@ -89,7 +89,7 @@
     reset();
   }
 
-  const keyRequired = $derived(form ? !!kindOf(form.kind)?.keyRequired : false);
+  const keyRequired = $derived(form ? !!typeOf(form.kind)?.keyRequired : false);
   const canFetch = $derived(!!form && !!form.name && (!!form.testKey || !!form.apiKeyRef.trim() || !keyRequired));
   const valid = $derived(!!form && /^[a-z0-9][a-z0-9_-]{0,39}$/.test(form.name) && !!form.protocol);
 
@@ -206,7 +206,7 @@
 
   function onKind(id: string) {
     if (!form) return;
-    const k = kindOf(id);
+    const k = typeOf(id);
     form.kind = id;
     if (k) {
       form.protocol = k.protocol ?? form.protocol;
@@ -233,7 +233,7 @@
         <tbody>
           {#each providers as p (p.name)}
             <tr class:sel={form?.name === p.name}>
-              <td><strong>{p.name}</strong> <span class="hint">{kindOf(p.kind)?.label ?? p.kind}</span></td>
+              <td><strong>{p.name}</strong> <span class="hint">{typeOf(p.kind)?.label ?? p.kind}</span></td>
               <td><code>{p.protocol}</code></td>
               <td class="url"><code>{p.baseUrl || 'default'}</code></td>
               <td>{#if p.apiKeyRef}<code>{p.apiKeyRef}</code>{:else}<span class="hint">none</span>{/if}</td>
@@ -280,7 +280,7 @@
       void save();
     }}
   >
-    <h3>{form.isNew ? 'New provider' : `Edit ${form.name}`} <span class="hint">{kindOf(form.kind)?.label ?? form.kind}</span></h3>
+    <h3>{form.isNew ? 'New provider' : `Edit ${form.name}`} <span class="hint">{typeOf(form.kind)?.label ?? form.kind}</span></h3>
     <div class="grid">
       <div class="field">
         <label for="pv-name">Name</label>

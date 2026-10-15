@@ -25,7 +25,7 @@ version: 1.0.0
 namespace: alm
 conditions:
   - name: documented
-    expr: artifacts.exists(a, a.type == "doc")
+    expr: artifacts.exists(a, a.target == "doc")
 actions:
   - name: fetch_doc
     kind: tool
@@ -166,7 +166,7 @@ func TestToolActionOnlyWhereTheOrganizationBindsTheMCP(t *testing.T) {
 	if c.OwnerOrg != "acme" || p.Org != "acme" {
 		t.Fatalf("org: change %q process %q", c.OwnerOrg, p.Org)
 	}
-	if arts := c.ItemsOfKind(domain.KindArtifact); len(arts) != 1 || arts[0].Type != "doc" || arts[0].Data["tool"] != "document-repository/read" {
+	if arts := c.ItemsOfType(domain.TypeArtifact); len(arts) != 1 || arts[0].Target != "doc" || arts[0].Data["tool"] != "document-repository/read" {
 		t.Fatalf("artifacts = %+v", arts)
 	}
 
@@ -257,7 +257,7 @@ func TestLLMActionCallsToolsThenAnswers(t *testing.T) {
 		if len(r.Messages) == 1 {
 			return llm.Response{Text: `{"tool_calls":[{"name":"document-repository/read","arguments":{"path":"spec.txt"}},{"name":"ticketing/create","arguments":{"path":"x"}}]}`}, nil
 		}
-		return llm.Response{Text: `{"items":[{"kind":"artifact","type":"doc","data":{"seen":"ok"}}]}`}, nil
+		return llm.Response{Text: `{"items":[{"type":"artifact","target":"doc","data":{"seen":"ok"}}]}`}, nil
 	})
 	e, base := mcpEngine(t, hub, client)
 	// the fetch action becomes an LLM action declaring the MCP it uses

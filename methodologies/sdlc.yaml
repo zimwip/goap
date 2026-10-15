@@ -46,7 +46,7 @@ conditions:
   # --- intake
   - name: formulated
     description: The request has been attached to a change (an open one it continues, or this new one, now well-defined)
-    expr: artifacts.exists(a, a.type == "change_formulated")
+    expr: artifacts.exists(a, a.target == "change_formulated")
   # --- impact analysis (ADR 0109): four passes, from the need down to what is built, one layer each:
   # requirements (needs and requirements), functions (the functional layer), applications (the logical layer:
   # applications, solutions, interfaces, flows, data) and components (the physical layer: components, build artifacts).
@@ -55,28 +55,28 @@ conditions:
   # concern is rejected with its reason, then withdrawn (the rejection stays in the log of the change).
   - name: requirements_identified
     description: The pass on the requirements named the needs and requirements the change directly concerns
-    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "requirements")
+    expr: artifacts.exists(a, a.target == "impact_pass" && a.data.layer == "requirements")
   - name: requirements_propagated
     description: The impacts are propagated to the requirements (needs, refinements)
-    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "requirements")
+    expr: artifacts.exists(a, a.target == "propagation" && a.data.layer == "requirements")
   - name: functions_identified
     description: The pass on the functional layer named the functions the change directly concerns
-    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "functions")
+    expr: artifacts.exists(a, a.target == "impact_pass" && a.data.layer == "functions")
   - name: functions_propagated
     description: The impacts are propagated to the functions realizing the impacted requirements
-    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "functions")
+    expr: artifacts.exists(a, a.target == "propagation" && a.data.layer == "functions")
   - name: applications_identified
     description: The pass on the logical layer named the applications, interfaces, flows and data the change directly concerns
-    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "applications")
+    expr: artifacts.exists(a, a.target == "impact_pass" && a.data.layer == "applications")
   - name: applications_propagated
     description: The impacts are propagated to the logical layer (applications, solutions, interfaces, flows, data)
-    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "applications")
+    expr: artifacts.exists(a, a.target == "propagation" && a.data.layer == "applications")
   - name: components_identified
     description: The pass on the physical layer named the components and artifacts the change directly concerns
-    expr: artifacts.exists(a, a.type == "impact_pass" && a.data.layer == "components")
+    expr: artifacts.exists(a, a.target == "impact_pass" && a.data.layer == "components")
   - name: components_propagated
     description: The impacts are propagated to the physical layer (components, build artifacts)
-    expr: artifacts.exists(a, a.type == "propagation" && a.data.layer == "components")
+    expr: artifacts.exists(a, a.target == "propagation" && a.data.layer == "components")
   # one impact
   - name: suspected
     scope: impact
@@ -108,7 +108,7 @@ conditions:
      description: Every suspected element of the physical layer is confirmed}
   - name: impact_analysis_validated
     description: A person validated the impact analysis, the four passes done
-    expr: artifacts.exists(a, a.type == "impact_validation" && a.data.accepted == true)
+    expr: artifacts.exists(a, a.target == "impact_validation" && a.data.accepted == true)
   # --- specification
   - name: requirements_specified
     description: Requirements are created or revised
@@ -135,10 +135,10 @@ conditions:
         changeImpacts.exists(f, f.hasPost && f.post.out.exists(l, l.type == "alm@realizes" && l.to.id == r.post.id)))
   - name: design_done
     description: The design (components, interfaces, flows, data) is described
-    expr: artifacts.exists(a, a.type == "design")
+    expr: artifacts.exists(a, a.target == "design")
   - name: design_checked
     description: The consistency of the design is checked
-    expr: artifacts.exists(a, a.type == "design_check")
+    expr: artifacts.exists(a, a.target == "design_check")
   # --- build
   - name: components_in_scope
     description: Components are impacted or created
@@ -147,7 +147,7 @@ conditions:
     description: Each impacted or created component has a build artifact
     expr: >
       changeImpacts.filter(n, "alm@Component" in n.types).all(n,
-        artifacts.exists(a, a.type == "build" && a.data.component == n.key))
+        artifacts.exists(a, a.target == "build" && a.data.component == n.key))
   # --- build from the sources, in the workspace of the change (ADR 0118): a component whose repository is known is
   # implemented by an agent in its sources, built and tested there, then published (its branch pushed, a build
   # artifact); a failed build sends it back to the agent, three attempts at most. The build checks, the agent does not
@@ -158,33 +158,33 @@ conditions:
     expr: '"alm@Component" in self.types && has(self.props.repository) && self.props.repository != ""'
   - name: workspace_ready
     description: The workspace of the change holds the sources of the components built from their sources
-    expr: artifacts.exists(a, a.type == "workspace")
+    expr: artifacts.exists(a, a.target == "workspace")
   - name: implemented
     scope: impact
     description: >
       The agent changed the sources of the component (a code change), and no build failed since; after three
       attempts the component stays implemented as it is, for a person to take over
     expr: >
-      artifacts.exists(k, k.type == "code_change" && k.data.component == self.key) &&
-      (artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size() >= 3 ||
-       !artifacts.exists(b, b.type == "build_report" && b.data.component == self.key && b.data.ok != true &&
-         b.data.revision == artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size()))
+      artifacts.exists(k, k.target == "code_change" && k.data.component == self.key) &&
+      (artifacts.filter(k, k.target == "code_change" && k.data.component == self.key).size() >= 3 ||
+       !artifacts.exists(b, b.target == "build_report" && b.data.component == self.key && b.data.ok != true &&
+         b.data.revision == artifacts.filter(k, k.target == "code_change" && k.data.component == self.key).size()))
   - name: build_checked
     scope: impact
     description: The latest code change of the component was built and tested in the workspace (whatever the outcome)
     expr: >
-      artifacts.exists(b, b.type == "build_report" && b.data.component == self.key &&
-        b.data.revision == artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size())
+      artifacts.exists(b, b.target == "build_report" && b.data.component == self.key &&
+        b.data.revision == artifacts.filter(k, k.target == "code_change" && k.data.component == self.key).size())
   - name: built
     scope: impact
     description: The latest code change of the component builds and passes its tests
     expr: >
-      artifacts.exists(b, b.type == "build_report" && b.data.component == self.key && b.data.ok == true &&
-        b.data.revision == artifacts.filter(k, k.type == "code_change" && k.data.component == self.key).size())
+      artifacts.exists(b, b.target == "build_report" && b.data.component == self.key && b.data.ok == true &&
+        b.data.revision == artifacts.filter(k, k.target == "code_change" && k.data.component == self.key).size())
   - name: published
     scope: impact
     description: The component has its build artifact (its branch pushed)
-    expr: artifacts.exists(a, a.type == "build" && a.data.component == self.key)
+    expr: artifacts.exists(a, a.target == "build" && a.data.component == self.key)
   - name: sources_published
     description: Every component built from its sources is published (true when there is none)
     all: published
@@ -197,10 +197,10 @@ conditions:
   # --- delivery
   - name: release_planned
     description: The releases of the affected applications are built (artifacts, version, environment chain)
-    expr: artifacts.exists(a, a.type == "release_plan")
+    expr: artifacts.exists(a, a.target == "release_plan")
   - name: release_noted
     description: The release note is written
-    expr: artifacts.exists(a, a.type == "release_note")
+    expr: artifacts.exists(a, a.target == "release_note")
   - name: reviewed
     description: >
       All the change impacts have received a decision (the deployments are
@@ -208,12 +208,12 @@ conditions:
     expr: size(changeImpacts) > 0 && changeImpacts.all(n, n.review != "proposed")
   - name: requirements_approved
     description: The requirements the review accepted are approved (ADR 0076, 0077)
-    expr: artifacts.exists(a, a.type == "requirements_approval")
+    expr: artifacts.exists(a, a.target == "requirements_approval")
   - name: rolled_out
     description: Each release is deployed to every environment in the chain (or there is nothing to deploy)
     expr: >
-      artifacts.exists(p, p.type == "release_plan" && (size(p.data.releases) == 0
-        || size(artifacts.filter(w, w.type == "deployment_wave")) >= size(p.data.pipeline)))
+      artifacts.exists(p, p.target == "release_plan" && (size(p.data.releases) == 0
+        || size(artifacts.filter(w, w.target == "deployment_wave")) >= size(p.data.pipeline)))
   - name: applied
     description: The change is applied to the ALM repository (new baseline)
     expr: change.status == "applied"
@@ -243,15 +243,15 @@ actions:
          goap-scheduler/attach with change=<its id> (binds this same process to it directly, in
          place of the change opened for this request — no second process, no change left unused),
          then finish with
-         {"kind":"artifact","type":"change_formulated","data":{"continued":true,"changeId":"<its id>"}}.
+         {"type":"artifact","target":"change_formulated","data":{"continued":true,"changeId":"<its id>"}}.
       3. Otherwise this change is the right one, but only once its definition is clear: a concrete
          outcome, its scope (what it touches), and why it is needed. If that is still missing or
          ambiguous, ask ONE clarifying question and finish with
-         {"kind":"artifact","type":"question","data":{"text":"<question>"}} (do not set change_formulated:
+         {"type":"artifact","target":"question","data":{"text":"<question>"}} (do not set change_formulated:
          the requester's next note is read back in on the next round).
       4. Once it is clear, call goap-change/reformulate with the clarified title, a one-paragraph
          intent (concrete outcome and scope) and a rationale, then finish with
-         {"kind":"artifact","type":"change_formulated","data":{"continued":false,"changeId":"{{ .Change.ID }}"}}.
+         {"type":"artifact","target":"change_formulated","data":{"continued":false,"changeId":"{{ .Change.ID }}"}}.
 
   - name: rate_description
     kind: llm
@@ -270,7 +270,7 @@ actions:
       topic "description": the earlier ratings and the requester's remarks. When they answered a rating, take their
       answer into account and go on from the discussion rather than start over.
       Finish with exactly one item:
-      {"kind":"assessment","data":{"key":"description","score":<0 to 5>,"verdict":"clear|unclear|insufficient",
+      {"type":"assessment","data":{"key":"description","score":<0 to 5>,"verdict":"clear|unclear|insufficient",
        "findings":[{"text":"<what is missing or ambiguous>","severity":"major|minor"}],
        "suggestion":"<a rewritten description, same language as the original, only if it can be improved>",
        "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>"}}
@@ -310,13 +310,13 @@ actions:
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns DIRECTLY; the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
-      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      {"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
       What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
       this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
       repository; the specification or the design writes it under that key (types: alm@Need, alm@FunctionalRequirement, alm@NonFunctionalRequirement, alm@SecurityRequirement):
-      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      {"type":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
       Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"requirements","summary":"<what changes at this layer, what is new, and why>"}}
+      {"type":"artifact","target":"impact_pass","data":{"layer":"requirements","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_requirements
     kind: builtin
@@ -350,13 +350,13 @@ actions:
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns (a new behaviour of an existing function, beyond what the impacted requirements carry); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
-      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      {"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
       What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
       this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
       repository; the specification or the design writes it under that key (types: alm@Function):
-      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      {"type":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
       Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"functions","summary":"<what changes at this layer, what is new, and why>"}}
+      {"type":"artifact","target":"impact_pass","data":{"layer":"functions","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_functions
     kind: builtin
@@ -390,13 +390,13 @@ actions:
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns (a contract, a flow or a data structure to change); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
-      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      {"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
       What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
       this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
       repository; the specification or the design writes it under that key (types: alm@Application, alm@Solution, alm@Interface, alm@Flow, alm@Data):
-      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      {"type":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
       Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"applications","summary":"<what changes at this layer, what is new, and why>"}}
+      {"type":"artifact","target":"impact_pass","data":{"layer":"applications","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_applications
     kind: builtin
@@ -430,13 +430,13 @@ actions:
       {{ end }}{{ end }}
       Name only the elements of this layer the change itself concerns (a technical change no function or application carries); the propagation along the ALM links
       follows, and qualifies what it finds. For each one, declare a change impact:
-      {"kind":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
+      {"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"<key>","rationale":"why it is concerned"}}
       What this layer will need that does not exist yet (on a green field, where the repository holds nothing of
       this layer, that is all of it), plan its creation without writing it, under a new key in the style of the
       repository; the specification or the design writes it under that key (types: alm@Component, alm@BuildArtifact):
-      {"kind":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
+      {"type":"changeImpact","changeImpact":{"op":"plan","type":"<type>","key":"<new key>","rationale":"what it will be, and why the change needs it"}}
       Finish with the summary of the pass (also when the layer is not concerned, or holds nothing yet):
-      {"kind":"artifact","type":"impact_pass","data":{"layer":"components","summary":"<what changes at this layer, what is new, and why>"}}
+      {"type":"artifact","target":"impact_pass","data":{"layer":"components","summary":"<what changes at this layer, what is new, and why>"}}
 
   - name: propagate_components
     kind: builtin
@@ -480,12 +480,12 @@ actions:
       Suspected impact: {{ .Subject.key }} ({{ .Subject.type }}), {{ .Subject.rationale }}
       Its properties: {{ json .Subject.props }}
       The brief lists the other impacts of the change and the passes of the analysis. Finish with your rating:
-      {"kind":"assessment","data":{"key":"impact:{{ .Subject.key }}","score":<0 to 5, how sure you are>,
+      {"type":"assessment","data":{"key":"impact:{{ .Subject.key }}","score":<0 to 5, how sure you are>,
        "verdict":"confirmed|refuted","findings":[{"text":"<why>","severity":"major|minor"}],
        "rated":"{{ fingerprint (printf "impact:%s" .Subject.key) }}"}}
       When the change does not concern it, also reject it with the reason, then withdraw it, in this order:
-      {"kind":"changeImpact","changeImpact":{"op":"review","node":"{{ .Subject.key }}","accept":false,"comment":"not impacted: <the reason>"}}
-      {"kind":"changeImpact","changeImpact":{"op":"remove","node":"{{ .Subject.key }}"}}
+      {"type":"changeImpact","changeImpact":{"op":"review","node":"{{ .Subject.key }}","accept":false,"comment":"not impacted: <the reason>"}}
+      {"type":"changeImpact","changeImpact":{"op":"remove","node":"{{ .Subject.key }}"}}
 
   - name: validate_impact_analysis
     kind: human
@@ -516,17 +516,17 @@ actions:
       {{ range .ChangeImpacts }}- {{ .Key }} ({{ .Type }}, {{ .Intent }}{{ if .Planned }}, planned{{ end }}) {{ if .Pre.ID }}{{ json .Pre.Properties }} {{ end }}: {{ .Rationale }}
       {{ end }}
       Write the needs and requirements the analysis planned under their key (a write creates them; withdraw one the
-      change does not need after all: {"kind":"changeImpact","changeImpact":{"op":"remove","node":"<planned key>"}}).
+      change does not need after all: {"type":"changeImpact","changeImpact":{"op":"remove","node":"<planned key>"}}).
       Revise the impacted requirements and create new requirements (types:
       FunctionalRequirement, NonFunctionalRequirement, SecurityRequirement), each one
       linked to the need it satisfies. A revised requirement is an impacted change impact: move it to draft
       first (a transition: start from proposed, reopen from approved), then write it; a new requirement is
       declared then written with its link. The review of the change approves them afterwards:
-      {"kind":"changeImpact","changeImpact":{"op":"transition","node":"<impacted key>","state":"draft"}}
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<impacted key>","props":{...}}}
-      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"alm@FunctionalRequirement","key":"REQ-...","rationale":"why"}}
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"...","priority":"high"},"links":[{"type":"alm@satisfies","to":"<need key>"}]}}
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<planned key>","props":{"title":"...","priority":"high"},"links":[{"type":"alm@satisfies","to":"<need key>"}]}}
+      {"type":"changeImpact","changeImpact":{"op":"transition","node":"<impacted key>","state":"draft"}}
+      {"type":"changeImpact","changeImpact":{"op":"write","node":"<impacted key>","props":{...}}}
+      {"type":"changeImpact","changeImpact":{"op":"declare","ref":"#r1","intent":"created","type":"alm@FunctionalRequirement","key":"REQ-...","rationale":"why"}}
+      {"type":"changeImpact","changeImpact":{"op":"write","node":"#r1","props":{"title":"...","priority":"high"},"links":[{"type":"alm@satisfies","to":"<need key>"}]}}
+      {"type":"changeImpact","changeImpact":{"op":"write","node":"<planned key>","props":{"title":"...","priority":"high"},"links":[{"type":"alm@satisfies","to":"<need key>"}]}}
 
   - name: write_requirements
     kind: human
@@ -657,13 +657,13 @@ actions:
       version / technology props) or to create (type Component, technology java|c|shell|…, an
       implements link to the function), interfaces (exposed_by, exchanges), flows
       (source, target, through, carries) and data, as change impacts:
-      {"kind":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"alm@Component","key":"CMP-...","rationale":"why"}}
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{...},"links":[{"type":"alm@implements","to":"<function key>"}]}}
+      {"type":"changeImpact","changeImpact":{"op":"declare","ref":"#c1","intent":"created","type":"alm@Component","key":"CMP-...","rationale":"why"}}
+      {"type":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{...},"links":[{"type":"alm@implements","to":"<function key>"}]}}
       Write the components, interfaces, flows and data the analysis planned under their key (or remove the ones the
       design does not need):
-      {"kind":"changeImpact","changeImpact":{"op":"write","node":"<planned key>","props":{...},"links":[...]}}
+      {"type":"changeImpact","changeImpact":{"op":"write","node":"<planned key>","props":{...},"links":[...]}}
       End with
-      {"kind":"artifact","type":"design","data":{"summary":"...","decisions":["..."]}}
+      {"type":"artifact","target":"design","data":{"summary":"...","decisions":["..."]}}
 
   - name: write_design
     kind: human
@@ -727,7 +727,7 @@ actions:
     when: >
       changeImpacts.exists(n, "alm@Component" in n.types && has(n.props.technology) && n.props.technology == "java"
         && !(has(n.props.repository) && n.props.repository != "")
-        && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
+        && !artifacts.exists(a, a.target == "build" && a.data.component == n.key))
     code: &build |
       const RULES = {
         java:  { format: "jar", toolchain: "maven 3.9 / JDK 21", checks: ["mvn -B verify", "OWASP dependency-check", "JaCoCo ≥ 80 %"],
@@ -747,7 +747,7 @@ actions:
       }
       // components in scope without a build artifact
       function pending(ctx) {
-        const built = new Set(ctx.items("artifact").filter(a => a.type === "build").map(a => a.data.component));
+        const built = new Set(ctx.items("artifact").filter(a => a.target === "build").map(a => a.data.component));
         const out = [];
         for (const n of ctx.changeImpacts()) {
           if (n.type !== "alm@Component" || built.has(n.key)) continue;
@@ -794,7 +794,7 @@ actions:
     when: >
       changeImpacts.exists(n, "alm@Component" in n.types && has(n.props.technology) && n.props.technology == "c"
         && !(has(n.props.repository) && n.props.repository != "")
-        && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
+        && !artifacts.exists(a, a.target == "build" && a.data.component == n.key))
     code: *build
 
   - name: build_shell
@@ -807,7 +807,7 @@ actions:
     when: >
       changeImpacts.exists(n, "alm@Component" in n.types && has(n.props.technology) && n.props.technology == "shell"
         && !(has(n.props.repository) && n.props.repository != "")
-        && !artifacts.exists(a, a.type == "build" && a.data.component == n.key))
+        && !artifacts.exists(a, a.target == "build" && a.data.component == n.key))
     code: *build
 
   - name: build_generic
@@ -859,13 +859,13 @@ actions:
       Its sources are in the directory {{ .Subject.key }} of the workspace, on the branch of the change.
       The brief lists the requirements, functions and design of the change: read the nodes you need with goap-graph
       (the functions the component implements, the requirements they realize, the test cases verifying them).
-      {{ range .Artifacts }}{{ if and (eq .Type "build_report") (eq (index .Data "component") $.Subject.key) }}A build of this component {{ if index .Data "ok" }}succeeded{{ else }}FAILED{{ end }} (`{{ index .Data "command" }}`, after code change {{ index .Data "revision" }}):
+      {{ range .Artifacts }}{{ if and (eq .Target "build_report") (eq (index .Data "component") $.Subject.key) }}A build of this component {{ if index .Data "ok" }}succeeded{{ else }}FAILED{{ end }} (`{{ index .Data "command" }}`, after code change {{ index .Data "revision" }}):
       {{ index .Data "output" }}
       {{ end }}{{ end }}
       Work with the workspace tools: read and search the code, edit it, run the build and the tests with bash (cwd
       {{ .Subject.key }}) until they pass, then commit your work there (git add -A && git commit -m "<what and why>").
       Change only what the change needs. Finish with:
-      {"items":[{"kind":"artifact","type":"code_change","data":{"component":"{{ .Subject.key }}","summary":"<what you changed and why>","files":["<paths>"],"tests":"<what you ran, the result>"}}]}
+      {"items":[{"type":"artifact","target":"code_change","data":{"component":"{{ .Subject.key }}","summary":"<what you changed and why>","files":["<paths>"],"tests":"<what you ran, the result>"}}]}
 
   - name: build_component
     kind: script
@@ -883,7 +883,7 @@ actions:
         const c = ctx.var("item");
         const props = c.props || {};
         const command = props.buildCommand || COMMANDS[props.technology] || "git diff --quiet HEAD";
-        const revision = ctx.items("artifact").filter(a => a.type === "code_change" && a.data.component === c.key).length;
+        const revision = ctx.items("artifact").filter(a => a.target === "code_change" && a.data.component === c.key).length;
         const r = ctx.callTool("workspace/bash", { command: command, cwd: c.key, timeout: 600 });
         const out = String(r.stdout || "") + String(r.stderr || "");
         const ok = r.exitCode === 0 && !r.timedOut;
@@ -912,7 +912,7 @@ actions:
       function run(ctx) {
         const c = ctx.var("item");
         const props = c.props || {};
-        const reports = ctx.items("artifact").filter(a => a.type === "build_report" && a.data.component === c.key && a.data.ok);
+        const reports = ctx.items("artifact").filter(a => a.target === "build_report" && a.data.component === c.key && a.data.ok);
         const report = reports[reports.length - 1].data;
         const pushed = ctx.callTool("workspace/push", { path: c.key });
         const v = bump(props.version);
@@ -999,11 +999,11 @@ actions:
       {{ range .ChangeImpacts }}- {{ .Intent }} {{ .Type }} {{ .Key }}: {{ .Rationale }}
       {{ end }}
       Artifacts:
-      {{ range .Artifacts }}- {{ .Type }} {{ json .Data }}
+      {{ range .Artifacts }}- {{ .Target }} {{ json .Data }}
       {{ end }}
       Write the release note (requirements, components, artifacts, releases,
       affected applications, tests, deployment chain):
-      {"kind":"artifact","type":"release_note","data":{"markdown":"..."}}
+      {"type":"artifact","target":"release_note","data":{"markdown":"..."}}
 
   - name: assemble_release_note
     kind: script
@@ -1020,10 +1020,10 @@ actions:
         const verb = n => (n.intent === "created" ? "create " : "update ");
         section("Requirements", nodes.filter(n => n.type.endsWith("Requirement")).map(n => verb(n) + n.key));
         section("Design", nodes.filter(n => ["alm@Function", "alm@Component", "alm@Interface", "alm@Flow", "alm@Data"].includes(n.type)).map(n => verb(n) + n.type + " " + n.key));
-        section("Build artifacts", ctx.items("artifact").filter(a => a.type === "build").map(a => a.data.artifact + " (" + a.data.toolchain + ")"));
+        section("Build artifacts", ctx.items("artifact").filter(a => a.target === "build").map(a => a.data.artifact + " (" + a.data.toolchain + ")"));
         section("Tests", nodes.filter(n => n.type === "alm@TestCase").map(n => n.key));
         section("Releases", nodes.filter(n => n.type === "alm@Release").map(n => n.key + " " + ((n.post && n.post.props.title) || "")));
-        const plan = ctx.items("artifact").filter(a => a.type === "release_plan").pop();
+        const plan = ctx.items("artifact").filter(a => a.target === "release_plan").pop();
         if (plan) section("Deployment", [plan.data.pipeline.map(e => e.name + " (" + e.stage + ")").join(" → ")]);
         section("Affected applications", ctx.changeImpacts().filter(n => n.intent === "modified" && n.type === "alm@Application" && n.pre).map(n => n.key + " " + (n.pre.props.title || "")));
         ctx.addArtifact("release_note", { markdown: lines.join("\n") });
@@ -1091,8 +1091,8 @@ actions:
     params: {checks: [unit tests, smoke tests]}
     code: &deploy |
       function run(ctx) {
-        const plan = ctx.items("artifact").filter(a => a.type === "release_plan").pop();
-        const waves = ctx.items("artifact").filter(a => a.type === "deployment_wave");
+        const plan = ctx.items("artifact").filter(a => a.target === "release_plan").pop();
+        const waves = ctx.items("artifact").filter(a => a.target === "deployment_wave");
         const env = plan.data.pipeline[waves.length];
         if (!env) throw new Error("all waves are deployed");
         const checks = ctx.param("checks") || [];
@@ -1118,8 +1118,8 @@ actions:
     priority: 10
     description: "Staging deployment: regression, performance, security (test case campaign)"
     when: >
-      artifacts.exists(p, p.type == "release_plan"
-        && p.data.pipeline[size(artifacts.filter(w, w.type == "deployment_wave"))].stage == "staging")
+      artifacts.exists(p, p.target == "release_plan"
+        && p.data.pipeline[size(artifacts.filter(w, w.target == "deployment_wave"))].stage == "staging")
     params: {checks: [regression tests, performance tests, security tests (DAST), business acceptance testing]}
     code: *deploy
 
@@ -1131,8 +1131,8 @@ actions:
     permission: release:deploy
     description: "Production deployment: change window, rollback plan, release manager approval"
     when: >
-      artifacts.exists(p, p.type == "release_plan"
-        && p.data.pipeline[size(artifacts.filter(w, w.type == "deployment_wave"))].stage == "prod")
+      artifacts.exists(p, p.target == "release_plan"
+        && p.data.pipeline[size(artifacts.filter(w, w.target == "deployment_wave"))].stage == "prod")
     params: {checks: [change window, rollback plan, post-deployment monitoring]}
     code: *deploy
 
@@ -1434,7 +1434,7 @@ processes:
           - {event: change.created}
           # an edit while the rating runs stops it and rates the new text (supersede, ADR 0110)
           - {event: change.edited, filter: '"intent" in event.fields || "title" in event.fields', supersede: true}
-          - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "comment" && i.data.about == "description")'}
+          - {event: change.item_added, filter: 'event.items.exists(i, i.type == "comment" && i.data.about == "description")'}
 
   - name: release_train
     description: Release — plan the releases, write the release note, review, deploy environment by environment

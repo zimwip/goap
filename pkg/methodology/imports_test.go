@@ -13,7 +13,7 @@ version: 1.0.0
 namespace: alm
 ` + imports + `
 conditions:
-  - {name: done, expr: 'artifacts.exists(a, a.type == "x")'}
+  - {name: done, expr: 'artifacts.exists(a, a.target == "x")'}
 ` + extra + `
 actions:
   - {name: do, kind: human, effects: {done: true}}

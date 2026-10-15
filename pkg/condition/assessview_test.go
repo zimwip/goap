@@ -16,9 +16,9 @@ func assessedBoard(score int) domain.Blackboard {
 			{ID: "i2", Key: "REQ-2", Type: "alm@Requirement", Intent: domain.IntentModified, Review: domain.ReviewProposed},
 		},
 		Items: []domain.ChangeItem{
-			{ID: "a1", Kind: assess.KindAssessment, Data: map[string]any{"key": assess.SubjectDescription, "score": score, "rated": desc}},
-			{ID: "a2", Kind: assess.KindAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-1", "score": 4, "verdict": "confirmed"}},
-			{ID: "a3", Kind: assess.KindAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-2", "score": 1, "verdict": "refuted"}},
+			{ID: "a1", Type: assess.TypeAssessment, Data: map[string]any{"key": assess.SubjectDescription, "score": score, "rated": desc}},
+			{ID: "a2", Type: assess.TypeAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-1", "score": 4, "verdict": "confirmed"}},
+			{ID: "a3", Type: assess.TypeAssessment, Data: map[string]any{"key": assess.ImpactPrefix + "REQ-2", "score": 1, "verdict": "refuted"}},
 		}}}
 }
 

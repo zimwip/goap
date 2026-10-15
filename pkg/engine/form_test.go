@@ -18,7 +18,7 @@ version: 1.0.0
 namespace: alm
 conditions:
   - name: linked
-    expr: artifacts.exists(a, a.type == "link_request") || changeImpacts.exists(n, n.key == "REQ-1")
+    expr: artifacts.exists(a, a.target == "link_request") || changeImpacts.exists(n, n.key == "REQ-1")
 goals:
   - name: link
     examples: [link the requirement]
@@ -93,7 +93,7 @@ func TestSubmitFormWithoutCode(t *testing.T) {
 	c, _ := g.Change(ctx, p.ChangeID)
 	var art *domain.ChangeItem
 	for i, it := range c.Items {
-		if it.Type == "link_request" {
+		if it.Target == "link_request" {
 			art = &c.Items[i]
 		}
 	}
@@ -142,7 +142,7 @@ ctx.addArtifact("link_request", {about: f.requirement, reason: f.why.toUpperCase
 	}
 	c, _ := g.Change(ctx, p.ChangeID)
 	for _, it := range c.Items {
-		if it.Type == "link_request" && it.Data["reason"] == "COVERED" && it.Data["about"] == "REQ-1" {
+		if it.Target == "link_request" && it.Data["reason"] == "COVERED" && it.Data["about"] == "REQ-1" {
 			return
 		}
 	}

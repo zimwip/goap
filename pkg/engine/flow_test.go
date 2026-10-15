@@ -120,7 +120,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 	c, _ = g.Change(ctx, old.ChangeID)
 	candidates := 0
 	for _, it := range c.Items {
-		if it.Flow == np.Flow && it.Kind != domain.KindFlow {
+		if it.Flow == np.Flow && it.Type != domain.TypeFlow {
 			candidates++
 			if st := c.EffectiveStatus(it.ID); st != domain.ItemCandidate {
 				t.Fatalf("candidate %s = %s", it.ID, st)
@@ -179,7 +179,7 @@ func TestRelaunchStepAdoptFlow(t *testing.T) {
 		t.Fatalf("REQ-1, TST-1 and CMP-1 are the change's change impacts, got %d", live)
 	}
 	for _, it := range c.Items {
-		if it.Flow == np.Flow && it.Kind != domain.KindFlow {
+		if it.Flow == np.Flow && it.Type != domain.TypeFlow {
 			if st := c.EffectiveStatus(it.ID); st == domain.ItemCandidate || st == domain.ItemSuperseded || st == domain.ItemRejected {
 				t.Fatalf("adopted item %s = %s", it.ID, st)
 			}
@@ -277,7 +277,7 @@ func TestRelaunchStepDiscardFlow(t *testing.T) {
 		}
 	}
 	for _, it := range c.Items {
-		if it.Flow == np.Flow && it.Kind != domain.KindFlow {
+		if it.Flow == np.Flow && it.Type != domain.TypeFlow {
 			if st := c.EffectiveStatus(it.ID); st != domain.ItemRejected {
 				t.Fatalf("discarded candidate %s = %s", it.ID, st)
 			}
@@ -311,7 +311,7 @@ func corruptedBoard(t *testing.T) (e *Engine, ctx context.Context, a, b *Process
 	e, ctx, a, _ = completedRun(t)
 	var ids []string
 	e.Schedule = func(id string) { ids = append(ids, id) }
-	bad := domain.ChangeItem{Kind: domain.KindArtifact, Type: "note", Execution: a.Steps[1].Execution, DerivedFrom: []domain.ItemID{"ghost"}, ProducedBy: "test"}
+	bad := domain.ChangeItem{Type: domain.TypeArtifact, Target: "note", Execution: a.Steps[1].Execution, DerivedFrom: []domain.ItemID{"ghost"}, ProducedBy: "test"}
 	if _, err := e.Graph.AddItems(ctx, a.ChangeID, []domain.ChangeItem{bad}); err != nil {
 		t.Fatal(err)
 	}

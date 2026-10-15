@@ -96,7 +96,7 @@ func testChangeLifecycle(t *testing.T, repo Repo) {
 	if c.Lifecycle != "maturity" || c.State != "proposed" {
 		t.Fatalf("a change starts in the initial state: %q %q", c.Lifecycle, c.State)
 	}
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindTransition, Data: map[string]any{"to": "done"}}}); !errors.Is(err, ErrInvalid) {
+	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeTransition, Data: map[string]any{"to": "done"}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("a transition is written by TransitionChange only: %v", err)
 	}
 	move := func(name, decision string) error {
@@ -230,7 +230,7 @@ func testGateVetosAndObjectives(t *testing.T, repo Repo) {
 		t.Fatalf("an objective not met blocks: %v", err)
 	}
 	drg := func(rule string) domain.ChangeItem {
-		return domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"key": "DRG-1", "rule": rule, "target": string(c.ID), "reason": "deadline", "signatory": "alice",
+		return domain.ChangeItem{Type: risk.TypeDerogation, Data: map[string]any{"key": "DRG-1", "rule": rule, "target": string(c.ID), "reason": "deadline", "signatory": "alice",
 			"expires": time.Now().Add(time.Hour).UTC().Format(time.RFC3339)}}
 	}
 	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{drg("something else")}); err != nil {
@@ -252,7 +252,7 @@ func testGateVetosAndObjectives(t *testing.T, repo Repo) {
 		t.Fatalf("covered objective: %v", err)
 	}
 	got, _ := g.Change(ctx, c.ID)
-	moves := got.ItemsOfKind(domain.KindTransition)
+	moves := got.ItemsOfType(domain.TypeTransition)
 	if got.State != "done" || len(moves) != 1 {
 		t.Fatalf("state %q, moves %d", got.State, len(moves))
 	}

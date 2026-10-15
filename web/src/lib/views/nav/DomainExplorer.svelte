@@ -18,7 +18,7 @@
   import { confirmDialog } from '../../shell/confirmState.svelte';
   import { itemTypes, refreshItemTypes } from '../../stores/itemTypes.svelte';
   import { filterItemTypes, itemTypeShownIn, originLabel } from '../../itemTypes';
-  import type { ItemKindInfo } from '../../api';
+  import type { ItemTypeInfo } from '../../api';
 
   let filter = $state('');
 
@@ -31,15 +31,15 @@
 
   const shownItemTypes = $derived(filterItemTypes(itemTypes.items, filter));
 
-  function selectItemType(k: ItemKindInfo, pin = false) {
-    openTab({ kind: 'itemtype', params: { kind: k.kind ?? '' } }, { pin });
+  function selectItemType(k: ItemTypeInfo, pin = false) {
+    openTab({ kind: 'itemtype', params: { type: k.type ?? '' } }, { pin });
     select({
-      title: k.kind ?? '',
+      title: k.type ?? '',
       subtitle: 'Item type',
       rows: [
         ['Origin', originLabel(k)],
         ['Description', k.description ?? ''],
-        ['Shown in', itemTypeShownIn(k.kind ?? '')],
+        ['Shown in', itemTypeShownIn(k.type ?? '')],
         ['Permission', k.permission ?? ''],
       ],
     });
@@ -720,7 +720,7 @@
         icon="list"
         label="Item types"
         detail={itemTypes.loaded ? String(itemTypes.items.length) : ''}
-        title="The kinds of item a change holds next to its impacts (risk, assessment, artifact…): they change with the platform code"
+        title="The types of item a change holds next to its impacts (risk, assessment, artifact…): they change with the platform code"
         expanded={isOpen('it:all') || !!filter.trim()}
         ontoggle={() => toggle('it:all')}
       />
@@ -730,14 +730,14 @@
         {:else if !itemTypes.loaded}
           <p class="empty pad2">Loading…</p>
         {/if}
-        {#each shownItemTypes as k (k.kind)}
+        {#each shownItemTypes as k (k.type)}
           <TreeRow
             depth={1}
             icon="tag"
-            label={k.kind ?? ''}
+            label={k.type ?? ''}
             detail={k.origin === 'core' ? 'built-in' : k.origin}
-            title={k.description || k.kind}
-            active={tabsState.active === tabId({ kind: 'itemtype', params: { kind: k.kind ?? '' } })}
+            title={k.description || k.type}
+            active={tabsState.active === tabId({ kind: 'itemtype', params: { type: k.type ?? '' } })}
             onselect={() => selectItemType(k)}
             onopen={() => selectItemType(k, true)}
           />

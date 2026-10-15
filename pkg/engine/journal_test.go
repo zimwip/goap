@@ -163,7 +163,7 @@ func TestJournalRecordsActivityRef(t *testing.T) {
 		t.Fatalf("expected the note step, got %s %+v", p.Status, p.Pending)
 	}
 	writer := authz.With(ctx, authz.Principal{Subject: "w", Roles: []string{"writer@ORG-DEFAULT"}})
-	if _, err := e.Submit(writer, p.ID, []ItemInput{{Kind: "artifact", Type: "note"}}); err != nil {
+	if _, err := e.Submit(writer, p.ID, []ItemInput{{Type: "artifact", Target: "note"}}); err != nil {
 		t.Fatal(err)
 	}
 	recs, err := journal.Read(ctx, g, journal.Filter{ChangeID: p.ChangeID})

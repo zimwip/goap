@@ -1,4 +1,4 @@
-// Verification and derogations of a change (ADR 0075): items of kind verification (a state per effect of an action run,
+// Verification and derogations of a change (ADR 0075): items of type verification (a state per effect of an action run,
 // folded like the server's verify.Subjects) and derogation (a waiver with a rule, a signatory and an expiry, each a
 // version of the record of its key like a risk).
 import type { ChangeItem, Struct } from './api';
@@ -29,7 +29,7 @@ export function verifications(items: ChangeItem[]): VerificationRecord[] {
   const out: VerificationRecord[] = [];
   const byImpact = new Map<string, number>();
   for (const it of items) {
-    if (it.kind !== 'verification' || !inEffect(it, superseded)) continue;
+    if (it.type !== 'verification' || !inEffect(it, superseded)) continue;
     const d = (it.data ?? {}) as Record<string, unknown>;
     const state = str(d.state);
     if (state === 'produced') {
@@ -89,7 +89,7 @@ export function derogationRegister(items: ChangeItem[]): DerogationRecord[] {
   const order: string[] = [];
   const last = new Map<string, { d: Record<string, unknown>; versions: number }>();
   for (const it of items) {
-    if (it.kind !== 'derogation' || !inEffect(it, superseded)) continue;
+    if (it.type !== 'derogation' || !inEffect(it, superseded)) continue;
     const d = (it.data ?? {}) as Record<string, unknown>;
     const key = str(d.key).trim();
     if (!key) continue;

@@ -154,10 +154,10 @@ const (
 )
 
 func outputKey(it domain.ChangeItem) string {
-	if it.Type != "" {
-		return string(it.Kind) + "/" + it.Type
+	if it.Target != "" {
+		return string(it.Type) + "/" + it.Target
 	}
-	return string(it.Kind)
+	return string(it.Type)
 }
 
 // Analyze computes the cost report of a run from its journal records, the

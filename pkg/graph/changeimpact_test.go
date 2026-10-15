@@ -479,8 +479,8 @@ func testReopenImpacts(t *testing.T, repo Repo) {
 
 // ItemAuthorizer is asked about the items of a kind that asks a permission of its writer, and only those (ADR 0075).
 func TestItemAuthorizer(t *testing.T) {
-	const kind domain.ItemKind = "test-signed"
-	domain.RegisterItemKind(kind, nil)
+	const kind domain.ItemType = "test-signed"
+	domain.RegisterItemType(kind, nil)
 	domain.RequireItemPermission(kind, domain.ItemPermission{Permission: "thing:sign", SubjectField: "who"})
 	forEachRepo(t, func(t *testing.T, repo Repo) {
 		ctx := context.Background()
@@ -501,16 +501,16 @@ func TestItemAuthorizer(t *testing.T) {
 			}
 			return nil
 		}
-		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "note", Data: map[string]any{"text": "x"}}}); err != nil || len(asked) != 0 {
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "note", Data: map[string]any{"text": "x"}}}); err != nil || len(asked) != 0 {
 			t.Fatalf("an ordinary item asks nothing: %v %v", asked, err)
 		}
-		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: kind, Data: map[string]any{"who": "mallory"}}}); err == nil || err.Error() != "refused" {
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: kind, Data: map[string]any{"who": "mallory"}}}); err == nil || err.Error() != "refused" {
 			t.Fatalf("refused: %v", err)
 		}
-		if ch, _ := g.Change(ctx, c.ID); len(ch.ItemsOfKind(kind)) != 0 {
+		if ch, _ := g.Change(ctx, c.ID); len(ch.ItemsOfType(kind)) != 0 {
 			t.Fatal("a refused item is not stored")
 		}
-		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: kind, Data: map[string]any{"who": "alice"}}}); err != nil || len(asked) != 2 || asked[1] != "thing:sign/who" {
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: kind, Data: map[string]any{"who": "alice"}}}); err != nil || len(asked) != 2 || asked[1] != "thing:sign/who" {
 			t.Fatalf("authorized: %v %v", asked, err)
 		}
 	})
@@ -533,7 +533,7 @@ func TestItemPolicy(t *testing.T) {
 			return nil
 		}
 		item := func(text string) domain.ChangeItem {
-			return domain.ChangeItem{Kind: domain.KindArtifact, Type: "note", Data: map[string]any{"text": text}}
+			return domain.ChangeItem{Type: domain.TypeArtifact, Target: "note", Data: map[string]any{"text": text}}
 		}
 		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{item("yes")}); err != nil {
 			t.Fatal(err)

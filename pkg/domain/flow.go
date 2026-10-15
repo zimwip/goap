@@ -194,7 +194,7 @@ func (c *Change) flows() *flowIndex {
 	openAt, decidedAt := map[string]int{}, map[string]int{}
 	for pos, it := range c.Items {
 		e := it.FlowEvent
-		if it.Kind != KindFlow || e == nil {
+		if it.Type != TypeFlow || e == nil {
 			continue
 		}
 		switch e.Op {
@@ -324,13 +324,13 @@ func (c Change) View(flow string) Change {
 	}
 	base := c.View(f.Parent)
 	for _, it := range base.Items {
-		if it.Kind == KindFlow || slices.Contains(f.Stale, it.ID) {
+		if it.Type == TypeFlow || slices.Contains(f.Stale, it.ID) {
 			continue
 		}
 		out.Items = append(out.Items, it)
 	}
 	for _, it := range c.Items {
-		if it.Flow == flow && it.Kind != KindFlow {
+		if it.Flow == flow && it.Type != TypeFlow {
 			it.Flow = "" // the view carries no flow events: its items are plain
 			out.Items = append(out.Items, it)
 		}
@@ -349,7 +349,7 @@ func StaleClosure(items []ChangeItem, seeds []ItemID) []ItemID {
 	for changed := true; changed; {
 		changed = false
 		for _, it := range items {
-			if stale[it.ID] || it.Kind == KindFlow {
+			if stale[it.ID] || it.Type == TypeFlow {
 				continue
 			}
 			dep := slices.ContainsFunc(it.DerivedFrom, func(d ItemID) bool { return stale[d] })

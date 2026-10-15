@@ -15,8 +15,8 @@ import (
 // identified by its key; the register is the last version of each key among the items in effect, and the change log
 // keeps every version with who wrote it.
 const (
-	KindRisk   domain.ItemKind = "risk"
-	KindAction domain.ItemKind = "action"
+	TypeRisk   domain.ItemType = "risk"
+	TypeAction domain.ItemType = "action"
 )
 
 // Risk statuses.
@@ -115,11 +115,11 @@ func dataStrings(d map[string]any, k string) []string {
 func validateRecord(it domain.ChangeItem) error {
 	d := it.Data
 	if dataString(d, "key") == "" || dataString(d, "title") == "" {
-		return fmt.Errorf("%s item requires data.key and data.title", it.Kind)
+		return fmt.Errorf("%s item requires data.key and data.title", it.Type)
 	}
 	status := dataString(d, "status")
-	switch it.Kind {
-	case KindRisk:
+	switch it.Type {
+	case TypeRisk:
 		if status != "" && !slices.Contains(RiskStatuses, status) {
 			return fmt.Errorf("risk status must be one of %s", strings.Join(RiskStatuses, ", "))
 		}
@@ -131,7 +131,7 @@ func validateRecord(it domain.ChangeItem) error {
 				}
 			}
 		}
-	case KindAction:
+	case TypeAction:
 		if status != "" && !slices.Contains(ActionStatuses, status) {
 			return fmt.Errorf("action status must be one of %s", strings.Join(ActionStatuses, ", "))
 		}
@@ -140,10 +140,10 @@ func validateRecord(it domain.ChangeItem) error {
 }
 
 // registerOf folds the items of a kind in effect into the last version of each key, in the order the keys appeared.
-func registerOf(c *domain.Change, kind domain.ItemKind) (order []string, last map[string]domain.ChangeItem, versions map[string]int) {
+func registerOf(c *domain.Change, kind domain.ItemType) (order []string, last map[string]domain.ChangeItem, versions map[string]int) {
 	last, versions = map[string]domain.ChangeItem{}, map[string]int{}
 	for _, it := range c.Items {
-		if it.Kind != kind || !c.Active(it.ID) || it.Status == domain.ItemRejected {
+		if it.Type != kind || !c.Active(it.ID) || it.Status == domain.ItemRejected {
 			continue
 		}
 		key := dataString(it.Data, "key")
@@ -171,7 +171,7 @@ func registerOf(c *domain.Change, kind domain.ItemKind) (order []string, last ma
 
 // Risks returns the risk register of the change: the current version of each risk, in the order they were raised.
 func Risks(c domain.Change) []Risk {
-	order, last, versions := registerOf(&c, KindRisk)
+	order, last, versions := registerOf(&c, TypeRisk)
 	out := make([]Risk, 0, len(order))
 	for _, key := range order {
 		it := last[key]
@@ -189,7 +189,7 @@ func Risks(c domain.Change) []Risk {
 
 // Actions returns the actions of the change: the current version of each, in the order they were created.
 func Actions(c domain.Change) []ActionItem {
-	order, last, versions := registerOf(&c, KindAction)
+	order, last, versions := registerOf(&c, TypeAction)
 	out := make([]ActionItem, 0, len(order))
 	for _, key := range order {
 		it := last[key]

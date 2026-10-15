@@ -38,7 +38,7 @@ assessments:
 		t.Helper()
 		bb, _ := e.Graph.Blackboard(ctx, ch.ID)
 		text, _ := assess.Text(bb, assess.SubjectDescription)
-		if _, err := e.Graph.AddItems(ctx, ch.ID, []domain.ChangeItem{{Kind: assess.KindAssessment, Data: map[string]any{"key": "description", "score": score, "rated": text}}}); err != nil {
+		if _, err := e.Graph.AddItems(ctx, ch.ID, []domain.ChangeItem{{Type: assess.TypeAssessment, Data: map[string]any{"key": "description", "score": score, "rated": text}}}); err != nil {
 			t.Fatal(err)
 		}
 		states, err := e.AssessmentStates(ctx, ch.ID)

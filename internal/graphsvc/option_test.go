@@ -138,7 +138,7 @@ func TestDecisionsThroughTheService(t *testing.T) {
 	}
 	n := 0
 	for _, it := range ch.Items {
-		if it.Kind == domain.KindDecisionPoint && it.DecisionEvent != nil {
+		if it.Type == domain.TypeDecisionPoint && it.DecisionEvent != nil {
 			n++
 		}
 	}

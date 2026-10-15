@@ -186,7 +186,7 @@
     if (mode === 'select') {
       const r = reason.trim() || 'impacted';
       return selectedKeys.map((key) => ({
-        kind: 'changeImpact',
+        type: 'changeImpact',
         changeImpact: { op: 'declare', intent: 'modified', key, rationale: r },
       }));
     }
@@ -195,7 +195,7 @@
       return [
         ...pendingNodes.map(
           (n): ItemInput => ({
-            kind: 'changeImpact',
+            type: 'changeImpact',
             changeImpact: { op: 'review', node: n.key, accept: nodeDecisions[n.id ?? ''] ?? true, comment: why },
           }),
         ),
@@ -402,7 +402,7 @@
         class="mono"
         rows="8"
         bind:value={raw}
-        placeholder={'[\n  {"kind": "changeImpact", "changeImpact": {"op": "declare", "intent": "modified", "key": "REQ-1", "rationale": "…"}}\n]'}
+        placeholder={'[\n  {"type": "changeImpact", "changeImpact": {"op": "declare", "intent": "modified", "key": "REQ-1", "rationale": "…"}}\n]'}
       ></textarea>
       <div class="row" style="margin-top: 0.5rem">
         <button class="primary" type="button" onclick={submitRaw} disabled={submitting}>

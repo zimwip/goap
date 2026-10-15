@@ -32,7 +32,7 @@ const OPEN_PREFIX = 'open:';
 export const isOpenHead = (id: string) => id.startsWith(OPEN_PREFIX);
 
 /** How a baseline came to be: the kind the server records, else read from its shape (a commit sits on a change's lane). */
-export function kindOf(b: Baseline): BaselineKind {
+export function typeOf(b: Baseline): BaselineKind {
   if (b.kind === 'commit' || b.kind === 'fast-forward' || b.kind === 'merge' || b.kind === 'rebase' || b.kind === OPEN_KIND) return b.kind;
   if (b.mergedFrom) return 'merge';
   if (isChangeLane(branchOf(b))) return 'commit';
@@ -52,7 +52,7 @@ export interface HistoryBadges {
 
 export function badgesOf(b: Baseline, baselines: Baseline[]): HistoryBadges {
   const byId = new Map(baselines.map((x) => [x.id ?? '', x]));
-  const out: HistoryBadges = { kind: kindOf(b) };
+  const out: HistoryBadges = { kind: typeOf(b) };
   // the rebase of a committed branch (ADR 0102) names the head it moved onto as its second parent
   const onto = out.kind === 'rebase' ? b.mergedFrom : b.parentId;
   if (b.rebasedFrom) out.rebased = `rebased onto ${nameOf(byId.get(onto ?? ''), onto)}, was ${nameOf(byId.get(b.rebasedFrom), b.rebasedFrom)}`;
@@ -85,7 +85,7 @@ export function historyEntries(
 
   const edges = (b: Baseline, joined: Baseline | undefined): LaneEdge[] => {
     const seen = new Set<string>();
-    const kind = kindOf(b);
+    const kind = typeOf(b);
     const tag = (what: string) => [what, labelOf(b)].filter(Boolean).join(' · ') || undefined;
     const commitParent = kind === 'commit' && branchOf(byId.get(b.parentId ?? '') ?? {}) === branchOf(b) ? 'commit' : 'fork';
     return [

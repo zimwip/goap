@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ItemKindInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SharedNode, Tag, TypeCount } from './types/graph';
 
 const GRAPH = 'goap.graph.v1.GraphService';
 
@@ -82,8 +82,8 @@ export const graph = {
       { changeId },
       signal,
     ),
-  /** The kinds of item a change may hold, described (the item types, ADR 0119). */
-  listItemKinds: (signal?: AbortSignal) => rpc<Empty, { kinds?: ItemKindInfo[] }>(GRAPH, 'ListItemKinds', {}, signal),
+  /** The item types a change may hold, described (ADR 0119). */
+  listItemTypes: (signal?: AbortSignal) => rpc<Empty, { types?: ItemTypeInfo[] }>(GRAPH, 'ListItemTypes', {}, signal),
   /** The namespaces holding at least one node. */
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   listChanges: (signal?: AbortSignal) =>

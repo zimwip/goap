@@ -13,10 +13,10 @@ name: p
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: a, expr: 'artifacts.exists(x, x.type == "a")'}
-  - {name: b, expr: 'artifacts.exists(x, x.type == "b")'}
-  - {name: c, expr: 'artifacts.exists(x, x.type == "c")'}
-  - {name: d, expr: 'artifacts.exists(x, x.type == "d")'}
+  - {name: a, expr: 'artifacts.exists(x, x.target == "a")'}
+  - {name: b, expr: 'artifacts.exists(x, x.target == "b")'}
+  - {name: c, expr: 'artifacts.exists(x, x.target == "c")'}
+  - {name: d, expr: 'artifacts.exists(x, x.target == "d")'}
 actions:
   - {name: do_a, kind: human, effects: {a: true}}
   - {name: do_b, kind: human, pre: {a: true}, effects: {b: true}}
@@ -257,7 +257,7 @@ methods:
     actions: [do_c]
     done: {c: true}
     priority: 5
-    when: 'artifacts.exists(x, x.type == "urgent")'
+    when: 'artifacts.exists(x, x.target == "urgent")'
     guidance: Do it quickly
     references: [{ref: "doc:QUICK"}]
   - {name: thorough, for: finishing, actions: [do_c], done: {c: true}, description: Do it well}
@@ -277,7 +277,7 @@ processes:
 	if got := c.MethodsFor("finishing", bb); len(got) != 1 || got[0].Name != "thorough" || got[0].AgentGoal != "thorough" {
 		t.Fatalf("outside its context a method does not apply: %+v", got)
 	}
-	bb.Change.Items = []domain.ChangeItem{{ID: "i1", Kind: domain.KindArtifact, Type: "urgent"}}
+	bb.Change.Items = []domain.ChangeItem{{ID: "i1", Type: domain.TypeArtifact, Target: "urgent"}}
 	if got := c.MethodsFor("finishing", bb); len(got) != 2 || got[0].Name != "quick" {
 		t.Fatalf("the highest priority applicable method comes first: %+v", got)
 	}

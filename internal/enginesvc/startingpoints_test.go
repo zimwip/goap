@@ -22,8 +22,8 @@ version: 1.0.0
 namespace: alm
 goal: ship
 conditions:
-  - {name: drafted, expr: 'artifacts.exists(a, a.type == "draft")'}
-  - {name: shipped, expr: 'artifacts.exists(a, a.type == "ship")'}
+  - {name: drafted, expr: 'artifacts.exists(a, a.target == "draft")'}
+  - {name: shipped, expr: 'artifacts.exists(a, a.target == "ship")'}
 actions:
   - {name: write, kind: human, effects: {drafted: true}}
   - {name: send, kind: human, pre: {drafted: true}, effects: {shipped: true}}

@@ -350,12 +350,12 @@ func (b *builder) header(c domain.Change, e domain.LogEntry) {
 func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem) {
 	n := b.node(itemIRI(it.ID), "prov:Entity", "goap:Item")
 	entry(n, e)
-	set(n, "goap:kind", string(it.Kind))
-	set(n, "goap:type", it.Type)
+	set(n, "goap:kind", string(it.Type))
+	set(n, "goap:type", it.Target)
 	set(n, "goap:status", string(it.Status))
-	label := string(it.Kind)
-	if it.Type != "" {
-		label += " " + it.Type
+	label := string(it.Type)
+	if it.Target != "" {
+		label += " " + it.Target
 	}
 	set(n, "label", label)
 	setTime(n, "prov:generatedAtTime", it.CreatedAt)
@@ -374,19 +374,19 @@ func (b *builder) fact(c domain.Change, e domain.LogEntry, it domain.ChangeItem)
 		n["goap:accept"] = d.Accept
 		set(n, "rdfs:comment", d.Comment)
 	}
-	if it.Kind == domain.KindTransition {
+	if it.Type == domain.TypeTransition {
 		// a move of the lifecycle of the change (ADR 0058), influenced by the decision point that gated it
 		if d, _ := it.Data["decision"].(string); d != "" {
 			add(n, "prov:wasInfluencedBy", ref(itemIRI(domain.ItemID(d))))
 		}
 	}
-	if it.Kind == verify.KindVerification {
+	if it.Type == verify.TypeVerification {
 		b.verification(n, it)
 	}
-	if it.Kind == risk.KindDerogation {
+	if it.Type == risk.TypeDerogation {
 		b.derogation(n, it)
 	}
-	if it.Kind == review.KindReview {
+	if it.Type == review.KindReview {
 		b.review(c, n, it)
 	}
 	if len(it.Data) > 0 {

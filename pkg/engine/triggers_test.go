@@ -143,7 +143,7 @@ name: noted
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: noted, expr: 'artifacts.exists(a, a.type == "note")'}
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note")'}
 actions:
   - {name: note, kind: llm, model: default, prompt: Write the note, effects: {noted: true}}
 goals:
@@ -194,7 +194,7 @@ func TestSupersedingTriggerCancelsTheRunAtWork(t *testing.T) {
 				return llm.Response{}, errors.New("never interrupted")
 			}
 		}
-		return llm.Response{Text: `{"items":[{"kind":"artifact","type":"note","data":{"text":"done"}}]}`}, nil
+		return llm.Response{Text: `{"items":[{"type":"artifact","target":"note","data":{"text":"done"}}]}`}, nil
 	})}
 	edited := func() {
 		bb, _ := e.Graph.Blackboard(ctx, ch.ID)

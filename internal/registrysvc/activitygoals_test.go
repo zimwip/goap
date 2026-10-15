@@ -23,7 +23,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 
 	m := methodology.Methodology{
 		Name: "shipping", Version: "1", Namespace: "alm",
-		Conditions: []methodology.Condition{{Name: "signed", Expr: `artifacts.exists(a, a.type == "signoff")`}},
+		Conditions: []methodology.Condition{{Name: "signed", Expr: `artifacts.exists(a, a.target == "signoff")`}},
 		Processes: []methodology.Process{{Name: "ship", Steps: []methodology.Step{
 			{Name: "confirm", Done: map[string]bool{"signed": true}},
 		}}},
@@ -59,7 +59,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	}
 
 	// an unrelated artifact still doesn't satisfy it
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "note", Status: domain.ItemAccepted}}); err != nil {
+	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "note", Status: domain.ItemAccepted}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); !errors.Is(err, graph.ErrInvalid) || !strings.Contains(err.Error(), "does not satisfy the goal") {
@@ -67,7 +67,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	}
 
 	// the signoff artifact satisfies the process's goal: Apply succeeds
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindArtifact, Type: "signoff", Status: domain.ItemAccepted}}); err != nil {
+	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "signoff", Status: domain.ItemAccepted}}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := g.Apply(ctx, c.ID, ""); err != nil {

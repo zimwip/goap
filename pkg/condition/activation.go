@@ -20,14 +20,14 @@ func Activation(bb domain.Blackboard) map[string]any {
 	c := bb.Change
 	h := hydrator{bb: bb}
 	items := make([]any, 0, len(c.Items))
-	byKind := map[domain.ItemKind][]any{}
+	byKind := map[domain.ItemType][]any{}
 	for _, it := range c.Items {
 		if !c.Active(it.ID) {
 			continue // superseded by a rebase or a merge
 		}
 		m := h.item(it)
 		items = append(items, m)
-		byKind[it.Kind] = append(byKind[it.Kind], m)
+		byKind[it.Type] = append(byKind[it.Type], m)
 	}
 	vars := bb.Vars
 	if vars == nil {
@@ -53,8 +53,8 @@ func Activation(bb domain.Blackboard) map[string]any {
 		},
 		"items":          items,
 		"changeImpacts":  h.changeImpacts(),
-		"decisions":      orEmptyList(byKind[domain.KindDecision]),
-		"artifacts":      orEmptyList(byKind[domain.KindArtifact]),
+		"decisions":      orEmptyList(byKind[domain.TypeDecision]),
+		"artifacts":      orEmptyList(byKind[domain.TypeArtifact]),
 		"vars":           vars,
 		"options":        func() any { return opts() },
 		"activeOption":   domain.ActiveOptionOf(bb),
@@ -143,7 +143,7 @@ func actionItems(c *domain.Change) []any {
 func verifications(c *domain.Change) []any {
 	var items []domain.ChangeItem
 	for _, it := range c.Items {
-		if it.Kind == verify.KindVerification && c.Active(it.ID) {
+		if it.Type == verify.TypeVerification && c.Active(it.ID) {
 			items = append(items, it)
 		}
 	}
@@ -251,7 +251,7 @@ func (h hydrator) item(it domain.ChangeItem) map[string]any {
 		derived = append(derived, string(d))
 	}
 	m := map[string]any{
-		"id": string(it.ID), "kind": string(it.Kind), "type": it.Type,
+		"id": string(it.ID), "type": string(it.Type), "target": it.Target,
 		"status":     string(h.bb.Change.EffectiveStatus(it.ID)),
 		"producedBy": it.ProducedBy, "derivedFrom": derived, "data": orEmpty(it.Data), "decision": nil,
 		// when it was written, in milliseconds since the epoch: compared with vars.event.at (ADR 0036 §3)

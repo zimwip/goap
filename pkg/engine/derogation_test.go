@@ -52,7 +52,7 @@ func TestDerogationReserveAndExpiry(t *testing.T) {
 	// a derogation on another target does not cover it
 	sign := func(key, target, expires string) {
 		t.Helper()
-		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: risk.KindDerogation, Data: map[string]any{"key": key, "rule": "tests pass", "target": target,
+		if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: risk.TypeDerogation, Data: map[string]any{"key": key, "rule": "tests pass", "target": target,
 			"reason": "deadline", "signatory": "alice", "expires": expires}}}); err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +117,7 @@ func TestDerogationExpireBuiltin(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: risk.KindDerogation, Data: map[string]any{"key": "DRG-1", "rule": "r", "target": "REQ-1",
+	if _, err := g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: risk.TypeDerogation, Data: map[string]any{"key": "DRG-1", "rule": "r", "target": "REQ-1",
 		"reason": "x", "signatory": "alice", "expires": time.Now().Add(150 * time.Millisecond).UTC().Format(time.RFC3339Nano)}}}); err != nil {
 		t.Fatal(err)
 	}

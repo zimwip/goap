@@ -8,7 +8,7 @@ import (
 )
 
 func item(id string, d map[string]any, mod ...func(*domain.ChangeItem)) domain.ChangeItem {
-	it := domain.ChangeItem{ID: domain.ItemID(id), Kind: KindReview, Status: domain.ItemProposed, Data: d, ProducedBy: "alice"}
+	it := domain.ChangeItem{ID: domain.ItemID(id), Type: KindReview, Status: domain.ItemProposed, Data: d, ProducedBy: "alice"}
 	for _, m := range mod {
 		m(&it)
 	}
@@ -29,7 +29,7 @@ func TestReviewsFoldKeepsTheLastVersionOfEachKey(t *testing.T) {
 		item("1", map[string]any{"key": "R1", "status": Open, "comment": "first", "entries": entries()}),
 		item("2", map[string]any{"key": "R2", "status": Open}),
 		item("3", map[string]any{"key": "R1", "status": Open, "comment": "second", "entries": entries(map[string]any{"impact": "i1", "outcome": "accept", "comment": "c"})}),
-		{ID: "x", Kind: domain.KindArtifact},
+		{ID: "x", Type: domain.TypeArtifact},
 	}
 	got := Reviews(items)
 	if len(got) != 2 || got[0].Key != "R1" || got[1].Key != "R2" {

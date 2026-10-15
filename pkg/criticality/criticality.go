@@ -108,8 +108,8 @@ func ItemPolicy(resolve Resolver) func(ctx context.Context, c domain.Change, it 
 		resolve = DefaultResolver
 	}
 	return func(ctx context.Context, c domain.Change, it domain.ChangeItem) error {
-		switch it.Kind {
-		case verify.KindVerification:
+		switch it.Type {
+		case verify.TypeVerification:
 			if state, _ := it.Data[verify.KeyState].(string); state != verify.Produced {
 				return nil
 			}
@@ -121,7 +121,7 @@ func ItemPolicy(resolve Resolver) func(ctx context.Context, c domain.Change, it 
 			if p := resolve(ctx, c, lvl); !p.Accepts(oracle) {
 				return fmt.Errorf("a %s oracle cannot verify the effects of a %s change (accepted: %v)", oracle, lvl, p.Oracles)
 			}
-		case risk.KindDerogation:
+		case risk.TypeDerogation:
 			if st, _ := it.Data["status"].(string); st == risk.DerogationClosed {
 				return nil
 			}

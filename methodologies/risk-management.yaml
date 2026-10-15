@@ -17,7 +17,7 @@ imports: [risks]
 on:
   - {event: process.attached}
   - {event: step.completed, filter: 'event.step.process == "software_delivery" || event.step.process == "release_train"'}
-  - {event: change.item_added, filter: 'event.items.exists(i, i.kind == "risk" || i.kind == "action")'}
+  - {event: change.item_added, filter: 'event.items.exists(i, i.type == "risk" || i.type == "action")'}
 
 roles:
   - {name: risk_manager, description: Identifies and assesses the risks of the changes and follows their mitigation}
@@ -28,7 +28,7 @@ conditions:
   - name: risks_reviewed
     description: The risks were reviewed since the change last moved (the step that completed, the risk that was raised)
     expr: >
-      artifacts.exists(a, a.type == "risk_review" && has(vars.event) && double(a.at) >= double(vars.event.at))
+      artifacts.exists(a, a.target == "risk_review" && has(vars.event) && double(a.at) >= double(vars.event.at))
 
 actions:
   - name: identify_risks
@@ -44,10 +44,10 @@ actions:
       be late, break what exists, or harm its users (delivery, technical, security, compliance, operation).
       For each NEW risk (not already in the RISKS of the brief), and for each existing one whose probability or impact
       changed, answer an item of kind "risk":
-        {"kind":"risk","data":{"key":"<RSK-n: the next free number, or the key of the risk you update>","title":"<the risk>",
+        {"type":"risk","data":{"key":"<RSK-n: the next free number, or the key of the risk you update>","title":"<the risk>",
          "description":"<cause and consequence>","probability":<1-5>,"impact":<1-5>,"owner":"<the role that owns it>","status":"open"}}
-      Close the risks the change no longer runs ({"kind":"risk","data":{"key":"RSK-n","title":"<its title>","status":"closed"}}).
-      Finish with {"kind":"artifact","type":"risk_review","data":{"summary":"<one sentence>"}}.
+      Close the risks the change no longer runs ({"type":"risk","data":{"key":"RSK-n","title":"<its title>","status":"closed"}}).
+      Finish with {"type":"artifact","target":"risk_review","data":{"summary":"<one sentence>"}}.
       Answer {"items":[...]}.
 
   - name: review_risks
@@ -70,9 +70,9 @@ actions:
     prompt: |
       Among the RISKS of the brief, take the live ones (open or mitigating) with a score of 9 or more that no action
       answers yet. For each, answer an action that reduces its probability or its impact, and the new version of the risk:
-        {"kind":"action","data":{"key":"<ACT-n: the next free number>","title":"<what to do>","owner":"<the role that does it>","for":"<RSK-n>","status":"open"}}
-        {"kind":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"mitigating","actions":["<ACT-n>"]}}
-      If a risk is better accepted than mitigated, say so: {"kind":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"accepted"}}.
+        {"type":"action","data":{"key":"<ACT-n: the next free number>","title":"<what to do>","owner":"<the role that does it>","for":"<RSK-n>","status":"open"}}
+        {"type":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"mitigating","actions":["<ACT-n>"]}}
+      If a risk is better accepted than mitigated, say so: {"type":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"accepted"}}.
       Answer {"items":[...]}.
 
   - name: mitigate_by_hand

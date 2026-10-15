@@ -9,18 +9,18 @@ describe('item types', () => {
   });
 
   it('reads the origin', () => {
-    expect(originLabel({ kind: 'artifact', origin: 'core' })).toBe('built-in');
-    expect(originLabel({ kind: 'risk', origin: 'risk' })).toBe('use case risk');
-    expect(originLabel({ kind: 'x' })).toBe('registered');
+    expect(originLabel({ type: 'artifact', origin: 'core' })).toBe('built-in');
+    expect(originLabel({ type: 'risk', origin: 'risk' })).toBe('use case risk');
+    expect(originLabel({ type: 'x' })).toBe('registered');
   });
 
   it('filters by kind, origin and description', () => {
     const all = [
-      { kind: 'artifact', origin: 'core', description: 'A product of an action' },
-      { kind: 'risk', origin: 'risk', description: 'A risk of the change' },
+      { type: 'artifact', origin: 'core', description: 'A product of an action' },
+      { type: 'risk', origin: 'risk', description: 'A risk of the change' },
     ];
     expect(filterItemTypes(all, '').length).toBe(2);
-    expect(filterItemTypes(all, 'product').map((k) => k.kind)).toEqual(['artifact']);
-    expect(filterItemTypes(all, 'RISK').map((k) => k.kind)).toEqual(['risk']);
+    expect(filterItemTypes(all, 'product').map((k) => k.type)).toEqual(['artifact']);
+    expect(filterItemTypes(all, 'RISK').map((k) => k.type)).toEqual(['risk']);
   });
 });

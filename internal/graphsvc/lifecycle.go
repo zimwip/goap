@@ -82,7 +82,7 @@ func ItemAuthorizer(a authz.Authorizer, resolve criticality.Resolver) graph.Item
 				return fmt.Errorf("%s %q must be the one who writes it (%s): %w", p.SubjectField, s, who.Subject, authz.ErrForbidden)
 			}
 		}
-		if it.Kind == risk.KindDerogation {
+		if it.Type == risk.TypeDerogation {
 			if st, _ := it.Data["status"].(string); st != risk.DerogationClosed {
 				if resolve == nil {
 					resolve = criticality.DefaultResolver

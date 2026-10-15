@@ -25,11 +25,11 @@ roles:
   - {name: developer}
   - {name: release_manager}
 conditions:
-  - {name: built, expr: 'artifacts.exists(a, a.type == "build")'}
-  - {name: released, expr: 'artifacts.exists(a, a.type == "release")'}
+  - {name: built, expr: 'artifacts.exists(a, a.target == "build")'}
+  - {name: released, expr: 'artifacts.exists(a, a.target == "release")'}
 actions:
-  - {name: build, kind: builtin, builtin: test.emit, effects: {built: true}, params: {kind: artifact, type: build}}
-  - {name: release, kind: builtin, builtin: test.emit, pre: {built: true}, effects: {released: true}, params: {kind: artifact, type: release}}
+  - {name: build, kind: builtin, builtin: test.emit, effects: {built: true}, params: {type: artifact, target: build}}
+  - {name: release, kind: builtin, builtin: test.emit, pre: {built: true}, effects: {released: true}, params: {type: artifact, target: release}}
 goals:
   - {name: built, description: The build exists, pre: {built: true}}
   - {name: ship, description: Released, pre: {released: true}}
@@ -44,9 +44,9 @@ name: other
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: built, expr: 'artifacts.exists(a, a.type == "build")'}
+  - {name: built, expr: 'artifacts.exists(a, a.target == "build")'}
 actions:
-  - {name: build, kind: builtin, builtin: test.emit, effects: {built: true}, params: {kind: artifact, type: build}}
+  - {name: build, kind: builtin, builtin: test.emit, effects: {built: true}, params: {type: artifact, target: build}}
 goals:
   - {name: built, pre: {built: true}}
 agents:

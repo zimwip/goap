@@ -86,8 +86,8 @@ func (ev TriggerEvent) activation() map[string]any {
 			if data == nil {
 				data = map[string]any{}
 			}
-			items[i] = map[string]any{"kind": string(it.Kind), "type": it.Type, "data": data,
-				"producedBy": it.ProducedBy, "target": it.Target}
+			items[i] = map[string]any{"type": string(it.Type), "target": it.Target, "data": data,
+				"producedBy": it.ProducedBy, "recipient": it.Recipient}
 		}
 		out["items"] = items
 	}
@@ -287,13 +287,13 @@ func DeclaredEvents(ev TriggerEvent) []TriggerEvent {
 	var out []TriggerEvent
 	at := map[string]int{}
 	for _, it := range ev.Items {
-		if it.Kind != domain.KindSignal || it.Type == "" || methodology.StandardEvent(it.Type) || !methodology.EventNameRE.MatchString(it.Type) {
+		if it.Type != domain.TypeSignal || it.Target == "" || methodology.StandardEvent(it.Target) || !methodology.EventNameRE.MatchString(it.Target) {
 			continue
 		}
-		i, ok := at[it.Type]
+		i, ok := at[it.Target]
 		if !ok {
-			i, at[it.Type] = len(out), len(out)
-			out = append(out, TriggerEvent{Type: it.Type, Change: ev.Change, Process: ev.Process, EndUser: ev.EndUser})
+			i, at[it.Target] = len(out), len(out)
+			out = append(out, TriggerEvent{Type: it.Target, Change: ev.Change, Process: ev.Process, EndUser: ev.EndUser})
 		}
 		out[i].Items = append(out[i].Items, it)
 	}

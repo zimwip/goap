@@ -22,9 +22,9 @@ func TestItemAuthorizer(t *testing.T) {
 		t.Fatal(err)
 	}
 	check := authz.Authorizer(c)
-	perm, _ := domain.ItemPermissionOf(risk.KindDerogation)
+	perm, _ := domain.ItemPermissionOf(risk.TypeDerogation)
 	item := func(signatory string) domain.ChangeItem {
-		return domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"signatory": signatory}}
+		return domain.ChangeItem{Type: risk.TypeDerogation, Data: map[string]any{"signatory": signatory}}
 	}
 	for name, tc := range map[string]struct {
 		who       authz.Principal
@@ -56,7 +56,7 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	perm, _ := domain.ItemPermissionOf(risk.KindDerogation)
+	perm, _ := domain.ItemPermissionOf(risk.TypeDerogation)
 	resolve := func(_ context.Context, _ domain.Change, l criticality.Level) criticality.Policy {
 		return criticality.Policy{SignatoryRole: map[criticality.Level]string{criticality.C3: "ciso"}[l]}
 	}
@@ -64,8 +64,8 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 		return domain.Change{ID: "c", Data: map[string]any{domain.DataCriticality: l}}
 	}
 	signer := authz.Principal{Subject: "bob", Roles: []string{"derogation_signatory"}}
-	item := domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"signatory": "bob"}}
-	closing := domain.ChangeItem{Kind: risk.KindDerogation, Data: map[string]any{"signatory": "bob", "status": "closed"}}
+	item := domain.ChangeItem{Type: risk.TypeDerogation, Data: map[string]any{"signatory": "bob"}}
+	closing := domain.ChangeItem{Type: risk.TypeDerogation, Data: map[string]any{"signatory": "bob", "status": "closed"}}
 	for name, tc := range map[string]struct {
 		who    authz.Principal
 		change domain.Change
@@ -85,17 +85,17 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 	}
 }
 
-// The item kinds of the process are listed with their origin and the permission they ask (ADR 0119).
-func TestListItemKinds(t *testing.T) {
+// The item types of the process are listed with their origin and the permission they ask (ADR 0119).
+func TestListItemTypes(t *testing.T) {
 	risk.Register()
 	h := &Handler{}
-	r, err := h.ListItemKinds(context.Background(), connect.NewRequest(&graphv1.ListItemKindsRequest{}))
+	r, err := h.ListItemTypes(context.Background(), connect.NewRequest(&graphv1.ListItemTypesRequest{}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := map[string]*graphv1.ItemKindInfo{}
-	for _, k := range r.Msg.Kinds {
-		got[k.Kind] = k
+	got := map[string]*graphv1.ItemTypeInfo{}
+	for _, k := range r.Msg.Types {
+		got[k.Type] = k
 	}
 	if k := got["artifact"]; k == nil || k.Origin != "core" {
 		t.Errorf("artifact: %v", k)

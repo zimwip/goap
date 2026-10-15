@@ -213,10 +213,10 @@ func testAddItemsValidation(t *testing.T, repo Repo) {
 	if _, err := f.g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &bad, Rationale: "x"}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("expected a conflict (the version is not in the baseline), got %v", err)
 	}
-	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: "impact"}}); !errors.Is(err, ErrInvalid) {
+	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: "impact"}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("the impact kind is gone, got %v", err)
 	}
-	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Kind: domain.KindDecision, Decision: &domain.Decision{Item: "nope"}}}); !errors.Is(err, ErrInvalid) {
+	if _, err := f.g.AddItems(ctx, c.ID, []domain.ChangeItem{{Type: domain.TypeDecision, Decision: &domain.Decision{Item: "nope"}}}); !errors.Is(err, ErrInvalid) {
 		t.Fatalf("expected invalid, got %v", err)
 	}
 }

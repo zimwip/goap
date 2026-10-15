@@ -249,12 +249,12 @@ export interface Decision {
   comment?: string;
 }
 
-export type ItemKind = 'decision' | 'artifact' | 'flow';
+export type ItemType = 'decision' | 'artifact' | 'flow';
 
-/** A kind of item a change may hold, shown as an "item type" (ADR 0119): `origin` is `core` for the kinds the graph
+/** An item type a change may hold (ADR 0119): `origin` is `core` for the types the graph
  * knows itself, else the use case registering it; `permission` / `subjectField` what writing one asks of its writer. */
-export interface ItemKindInfo {
-  kind?: string;
+export interface ItemTypeInfo {
+  type?: string;
   origin?: string;
   description?: string;
   permission?: string;
@@ -266,13 +266,13 @@ export const ITEM_SUPERSEDED = 'superseded';
 
 export interface ChangeItem {
   id?: string;
-  kind?: ItemKind | string;
-  type?: string;
+  type?: ItemType | string;
+  target?: string;
   status?: string;
-  /** flow branch that produced the item (empty: the main flow); flowEvent on kind 'flow' */
+  /** flow branch that produced the item (empty: the main flow); flowEvent on type 'flow' */
   flow?: string;
   flowEvent?: FlowEvent;
-  /** event of a decision point on kind 'decision_point' (ADR 0009 §4) */
+  /** event of a decision point on type 'decision_point' (ADR 0009 §4) */
   decisionEvent?: { op?: string; point?: string; outcome?: string; confidence?: number; policy?: DecisionPolicy; human?: boolean; accept?: boolean };
   decision?: Decision;
   data?: Struct;
@@ -527,7 +527,7 @@ export interface FlowOrigin {
   reason?: string;
 }
 
-/** Event of the action flow, carried by change items of kind "flow". */
+/** Event of the action flow, carried by change items of type "flow". */
 export interface FlowEvent {
   op?: 'open' | 'adopt' | 'discard' | string;
   flow?: string;

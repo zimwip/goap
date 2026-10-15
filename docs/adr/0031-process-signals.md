@@ -47,7 +47,7 @@ On the read side, `"change.signal"` was added to the trigger events (`methodolog
 now `events.All` of `pkg/events`, the one place naming them); `EventingGraph.AddItems`
 (`pkg/engine/eventing.go`) emits it whenever a written batch includes a `KindSignal` item, and `TriggerEvent` gained an
 `Items []domain.ChangeItem` field so a trigger's CEL `Filter` can match on payload content
-(`event.type == "change.signal" && event.items.exists(i, i.type == 'review_needed')`), not just
+(`event.type == "change.signal" && event.items.exists(i, i.target == 'review_needed')`), not just
 the event type.
 
 ### 2. `WakeOn` — a live parent can be woken early, without a second suspend mechanism

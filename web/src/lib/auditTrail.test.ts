@@ -43,7 +43,7 @@ describe('review objects in the trail', () => {
   const item = (seq: number, data: Record<string, unknown>): LogEntry => ({
     seq: String(seq),
     type: 'fact.review',
-    payload: JSON.stringify({ id: `it${seq}`, kind: 'review', status: 'proposed', producedBy: 'alice', createdAt: '2026-01-01T00:00:00Z', data }),
+    payload: JSON.stringify({ id: `it${seq}`, type: 'review', status: 'proposed', producedBy: 'alice', createdAt: '2026-01-01T00:00:00Z', data }),
   });
   const reviewed = (seq: number, impactId: string, status: string, reviewId?: string): LogEntry => ({
     seq: String(seq),

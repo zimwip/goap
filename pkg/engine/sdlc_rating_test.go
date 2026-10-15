@@ -43,7 +43,7 @@ func ratedOnce(t *testing.T, key string) {
 		mu.Lock()
 		defer mu.Unlock()
 		prompts = append(prompts, r.Messages[len(r.Messages)-1].Content)
-		return llm.Response{Text: `{"items":[{"kind":"assessment","data":{"key":"` + key + `","score":2,"verdict":"unclear","findings":[{"text":"no scope","severity":"major"}],"suggestion":"Allow payment in 3 installments with no fees, for card payments of the web shop","reply":"say the scope"}}]}`}, nil
+		return llm.Response{Text: `{"items":[{"type":"assessment","data":{"key":"` + key + `","score":2,"verdict":"unclear","findings":[{"text":"no scope","severity":"major"}],"suggestion":"Allow payment in 3 installments with no fees, for card payments of the web shop","reply":"say the scope"}}]}`}, nil
 	})}
 	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Installments", Intent: "Allow payment in 3 installments", Methodology: "sdlc", Namespace: "alm", BaselineID: base, ProjectID: testProject})
 	if err != nil {
@@ -131,7 +131,7 @@ func TestSDLCEditDuringRatingRestartsIt(t *testing.T) {
 			mu.Unlock()
 			return llm.Response{}, ctx.Err()
 		}
-		return llm.Response{Text: `{"items":[{"kind":"assessment","data":{"key":"description","score":4,"verdict":"clear","reply":"fine"}}]}`}, nil
+		return llm.Response{Text: `{"items":[{"type":"assessment","data":{"key":"description","score":4,"verdict":"clear","reply":"fine"}}]}`}, nil
 	})}
 	c, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Installments", Intent: "Allow payment in 3 installments", Methodology: "sdlc", Namespace: "alm", BaselineID: base, ProjectID: testProject})
 	if err != nil {
@@ -173,7 +173,7 @@ func TestSDLCEditDuringRatingRestartsIt(t *testing.T) {
 	}
 	cur := 0
 	for _, it := range bb.Change.Items {
-		if it.Kind == "assessment" && it.Data["key"] == "description" {
+		if it.Type == "assessment" && it.Data["key"] == "description" {
 			cur++
 			if it.Data["rated"] != assess.FingerprintOf(bb, "description") {
 				t.Fatalf("the rating is of another text: %v", it.Data["rated"])

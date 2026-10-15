@@ -15,7 +15,7 @@ name: forked
 version: 1.0.0
 namespace: alm
 conditions:
-  - {name: built, expr: 'artifacts.exists(a, a.type == "build" && a.data.component == vars.item.key)'}
+  - {name: built, expr: 'artifacts.exists(a, a.target == "build" && a.data.component == vars.item.key)'}
 actions:
   - {name: build_java, kind: human, description: Build with maven, effects: {built: true}}
   - {name: build_go, kind: human, description: Build with go, effects: {built: true}}
@@ -81,7 +81,7 @@ func finishStreams(t *testing.T, e *Engine, p *Process, components ...string) {
 		if c == nil || c.Pending == nil {
 			t.Fatalf("no stream waiting for %s: %+v", el, c)
 		}
-		if _, err := e.Submit(ctx, c.ID, []ItemInput{{Kind: "artifact", Type: "build", Data: map[string]any{"component": el}}}); err != nil {
+		if _, err := e.Submit(ctx, c.ID, []ItemInput{{Type: "artifact", Target: "build", Data: map[string]any{"component": el}}}); err != nil {
 			t.Fatal(err)
 		}
 		e.schedule(c.ID)

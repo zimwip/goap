@@ -9,25 +9,30 @@ A change holds facts next to its impacts: change items, each of a kind (`artifac
 are code: the graph knows the core ones (`ChangeItem.Validate`), a use case registers its own
 (`domain.RegisterItemKind`, ADR 0065). Nothing showed them: a person designing a methodology saw node types, link
 types, enums and lifecycles in the domain explorer, but had no place to read which kinds of item a change may hold,
-what they are, and what writing one asks. The word "kind" also stood apart from the "types" of the explorer.
+what they are, and what writing one asks. The word "kind" also stood apart from the "types" of the explorer, and an item's `type` named something else (what an artifact is).
 
 ## Decision
 
-1. **The catalogue.** `domain.ItemKinds()` lists the kinds the process accepts: the core kinds (described in
-   `pkg/domain/itemkinds.go`) and the registered ones, with their origin (`core`, else the use case: `risk`, `assess`,
-   `verify`), a description (`domain.DescribeItemKind`, called by the use case next to `RegisterItemKind`) and the
-   permission they ask of their writer (`RequireItemPermission`). RPC `GraphService.ListItemKinds` serves it to any
+1. **The catalogue.** `domain.ItemTypes()` lists the item types the process accepts: the core types (described in
+   `pkg/domain/itemtypes.go`) and the registered ones, with their origin (`core`, else the use case: `risk`, `assess`,
+   `verify`), a description (`domain.DescribeItemType`, called by the use case next to `RegisterItemType`) and the
+   permission they ask of their writer (`RequireItemPermission`). RPC `GraphService.ListItemTypes` serves it to any
    identified caller (static metadata of the process).
 2. **The explorer.** The domain explorer ends with an *Item types* group (filtered with the domains); an entry opens a
    read-only `itemtype` tab: name, origin, description, where the change tab shows its items, the permission it asks.
    Item types are not domain data: they change with the platform code, not through a domain version.
-3. **The name.** People read **item type**, the word the explorer uses for node and link types. The code, the proto
-   and the YAML keep `kind` (`ChangeItem.Kind`, `ItemKind`, `kind:` of an item): `ChangeItem.Type` already holds the
-   sub-type of an item (the type of an artifact, the name of a signal), so renaming the field would merge two notions
-   and break every stored item and methodology for a word.
+3. **One name everywhere.** What was the item's `kind` is its **type**, in the code, the proto, the JSON, CEL, the
+   DSL and the web (`ChangeItem.Type`, `domain.ItemType`, `domain.TypeArtifact`, `risk.TypeRisk`, `RegisterItemType`;
+   proto `ChangeItem.type`). What was its `type`, what the item is about within its type (what an artifact is, the
+   name of a signal), is its **target** (`ChangeItem.Target`, `target` in JSON and proto). The process a signal is
+   addressed to, formerly `target`, is its **recipient** (`ChangeItem.Recipient`, `recipient`; the `signal` tool of
+   `goap-change` takes `target` and `recipient`, its `note` tool `target`). An item a model or a script writes is
+   `{"type":"artifact","target":"design","data":{...}}`, a change impact operation `{"type":"changeImpact",...}`;
+   in CEL, `artifacts.exists(a, a.target == "design")` and `event.items.exists(i, i.type == "risk")`. The database
+   starts from zero (no stored item to migrate) and the shipped methodologies, evals and prompts are rewritten.
 
 ## Consequences
 
-- A use case registering a kind describes it, or it shows with no description.
-- In the web, "type" of an item still names its sub-type where an item is shown (an artifact's type); the explorer is
-  the only place naming the kind, as its item type.
+- A use case registering an item type describes it, or it shows with no description.
+- A methodology written for the former names (`"kind"` in an item, `a.type` on an artifact in CEL or a script) must
+  be rewritten: `kind` → `type`, the item's `type` → `target`.

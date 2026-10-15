@@ -310,19 +310,19 @@ registerView({
   title: 'Item type',
   icon: 'tag',
   component: ItemTypeTab,
-  key: (p) => p.kind ?? '',
-  tabTitle: (t) => t.params.kind || 'Item type',
-  tooltip: (t) => `Item type ${t.params.kind ?? ''}`,
+  key: (p) => p.type ?? '',
+  tabTitle: (t) => t.params.type || 'Item type',
+  tooltip: (t) => `Item type ${t.params.type ?? ''}`,
   properties: (t) => {
-    const x = itemTypeOf(t.params.kind ?? '');
+    const x = itemTypeOf(t.params.type ?? '');
     if (!x) return undefined;
     return {
-      title: x.kind ?? '',
+      title: x.type ?? '',
       subtitle: 'Item type',
       rows: [
         ['Origin', originLabel(x)],
         ['Description', x.description ?? ''],
-        ['Shown in', itemTypeShownIn(x.kind ?? '')],
+        ['Shown in', itemTypeShownIn(x.type ?? '')],
         ['Permission', x.permission ?? ''],
       ] as [string, string][],
     };

@@ -167,7 +167,7 @@ func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
 			}
 		case domain.LogFact:
 			var it struct {
-				Kind string         `json:"kind"`
+				Type string         `json:"type"`
 				Data map[string]any `json:"data"`
 			}
 			if json.Unmarshal(e.Payload, &it) != nil {
@@ -177,7 +177,7 @@ func Fold(entries []domain.LogEntry, relies Relies) (History, error) {
 			if key == "" {
 				continue // an item without key is never rewritten: a new one moves nothing a step saw
 			}
-			subject := it.Kind + ":" + key
+			subject := it.Type + ":" + key
 			if _, ok := born[subject]; !ok {
 				born[subject] = e.Seq
 				continue
