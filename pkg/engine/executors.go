@@ -335,7 +335,7 @@ func runTools(ctx context.Context, h *Host, calls []toolCall, tools []mcp.ToolIn
 		}
 		switch {
 		case r.err == nil:
-			out["result"] = r.result
+			out["result"] = tidy(r.result)
 			if consecutive {
 				delete(failures, r.call.Name)
 			}
@@ -585,10 +585,12 @@ const keptWhole = 8
 // elided replaces a part of the conversation compaction cut.
 const elided = " … (elided to keep the conversation short: call the tool again if you need it)"
 
-// compact elides the older tool results and long texts of a conversation once it is larger than limit: the first
+// compact first replaces the tool results the conversation holds again later (dedupResults), then elides the older
+// tool results and long texts of a conversation once it is larger than limit: the first
 // message (the task) and the latest keptWhole stay whole, the structure (calls and their results) is kept so that a
 // provider still pairs them.
 func compact(msgs []llm.Message, limit int) []llm.Message {
+	msgs = dedupResults(msgs)
 	size := 0
 	for _, m := range msgs {
 		size += len(m.Content)

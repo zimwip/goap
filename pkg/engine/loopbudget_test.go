@@ -95,11 +95,12 @@ func TestNoLoopKeepsTheDefault(t *testing.T) {
 func TestCompact(t *testing.T) {
 	big := strings.Repeat("x", 5000)
 	msgs := []llm.Message{{Role: "user", Content: "the task " + big}}
-	for range 20 {
+	for i := range 20 {
+		// distinct results: identical ones are deduplicated (TestDedupResults)
 		msgs = append(msgs, llm.Message{Role: "assistant", Content: "calling"},
-			llm.Message{Role: "user", ToolResults: []llm.ToolResult{{CallID: "c", Content: big}}})
+			llm.Message{Role: "user", ToolResults: []llm.ToolResult{{CallID: "c", Content: big[i:]}}})
 	}
-	if got := compact(msgs, 1<<20); len(got[2].ToolResults[0].Content) != len(big) {
+	if got := compact(msgs, 1<<20); got[2].ToolResults[0].Content != big {
 		t.Fatal("a conversation under the limit is compacted")
 	}
 	got := compact(msgs, 50_000)
@@ -109,7 +110,7 @@ func TestCompact(t *testing.T) {
 	if c := got[2].ToolResults[0].Content; !strings.HasSuffix(c, elided) || len(c) > 300 {
 		t.Fatalf("old result: %d bytes", len(c))
 	}
-	if c := got[len(got)-1].ToolResults[0].Content; c != big {
+	if c := got[len(got)-1].ToolResults[0].Content; c != big[19:] {
 		t.Fatal("a latest result was elided")
 	}
 	if msgs[2].ToolResults[0].Content != big {
