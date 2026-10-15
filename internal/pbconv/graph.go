@@ -398,6 +398,19 @@ func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
 }
 
 // StructuresToPB converts the structures of the graph (ADR 0054).
+// ItemKindsToPB converts the catalogue of item kinds (domain.ItemKinds).
+func ItemKindsToPB(kinds []domain.ItemKindInfo) *graphv1.ListItemKindsResponse {
+	out := &graphv1.ListItemKindsResponse{}
+	for _, k := range kinds {
+		pb := &graphv1.ItemKindInfo{Kind: string(k.Kind), Origin: k.Origin, Description: k.Description}
+		if k.Permission != nil {
+			pb.Permission, pb.SubjectField = k.Permission.Permission, k.Permission.SubjectField
+		}
+		out.Kinds = append(out.Kinds, pb)
+	}
+	return out
+}
+
 func StructuresToPB(s domain.Structures) *graphv1.GetStructuresResponse {
 	out := &graphv1.GetStructuresResponse{}
 	for _, x := range s {

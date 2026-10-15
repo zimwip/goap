@@ -89,6 +89,8 @@ type Message struct {
 func Register() {
 	domain.RegisterItemKind(KindAssessment, validateAssessment)
 	domain.RegisterItemKind(KindComment, validateComment)
+	domain.DescribeItemKind(KindAssessment, "assess", "A rating of a subject of the change (score, verdict, findings, suggestion): each item is the whole record of its key (ADR 0110).")
+	domain.DescribeItemKind(KindComment, "assess", "A message of a person about a subject, in the thread of its assessment (ADR 0110).")
 }
 
 func validateAssessment(it domain.ChangeItem) error {
