@@ -14,7 +14,7 @@ type ImpactOp string
 
 const (
 	// ImpactProposed adds a change impact to the change (State: as proposed): the modification of an existing node, or a
-	// planned creation (intent created, no draft, ADR 0120), which the checkedOut event of its creation fulfils. A new
+	// planned creation (intent created, no draft, ADR 0121), which the checkedOut event of its creation fulfils. A new
 	// node is otherwise created, not proposed (ADR 0077).
 	ImpactProposed ImpactOp = "proposed"
 	// ImpactCreated is the creation of a node: one event adds the change impact (State, intent created) and the draft of

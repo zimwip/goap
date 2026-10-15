@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.8.2
+version: 0.8.3
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →

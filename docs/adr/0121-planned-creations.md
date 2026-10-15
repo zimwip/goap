@@ -1,4 +1,4 @@
-# ADR 0120 — Planned creations
+# ADR 0121 — Planned creations
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0024 (change impacts), ADR 0077 (impact node
 operations), ADR 0079 (drafts and versions at landing), ADR 0109 (impact analysis in passes)
@@ -25,7 +25,7 @@ node its draft at once, with content the analysis does not have yet.
 4. **Actions plan with `op: plan`.** The engine applies `{"op":"plan","type","key","rationale"}` (DSL
    `ctx.impactNodePlan(type, key, rationale)`); a later `write` of the key checks it out (the draft), a link to it
    creates it bare.
-5. **`sdlc` 0.8.2.** Each pass of the impact analysis plans what its layer needs that does not exist yet; the
+5. **`sdlc` 0.8.3.** Each pass of the impact analysis plans what its layer needs that does not exist yet; the
    specification, `allocate_functions` and the design write the planned keys (or withdraw them), `check_design` flags a
    planned element still unwritten; the validation of the analysis accepts an analysis made of planned creations only,
    or of none when the summaries of the passes say why.
