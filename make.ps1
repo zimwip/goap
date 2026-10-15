@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'goap-dev', 'goap-runner', 'goap-eval'
+$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'goap-dev', 'goap-runner', 'goap-eval'
 $Compose = @('compose', '-f', 'deploy/compose/docker-compose.yml')
 $Exe = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
 
@@ -134,6 +134,8 @@ function DevLocalReset { Remove-Item -Recurse -Force .goap -ErrorAction Silently
 
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
+function ClaudeAgentRunner { Run go run ./cmd/connector-claude-coding-agent install }
+
 # Engine socket for the docker-proxy service: Docker Desktop keeps it in its VM, at the default path
 function DockerSock { if (-not $env:GOAP_DOCKER_SOCK) { $env:GOAP_DOCKER_SOCK = '/var/run/docker.sock' } }
 
@@ -168,6 +170,8 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   devlocal-reset    drop the local SQLite database
   web               same as devlocal-web
   runner-image      image of the script sandboxes (goap-runner)
+  claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
+                    (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
   up | down | logs  docker compose stack
 '@ | Write-Host
 }
@@ -189,6 +193,7 @@ switch ($Target) {
     'devlocal-reset'   { DevLocalReset }
     'web'              { DevLocalWeb }
     'runner-image'     { RunnerImage }
+    'claude-agent-runner' { ClaudeAgentRunner }
     'up'               { Up }
     'down'             { Down }
     'logs'             { Logs }

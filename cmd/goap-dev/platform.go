@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/internal/connectorkit"
+	"github.com/zimwip/goap/internal/connectors/claudeagent"
 	"github.com/zimwip/goap/internal/connectors/localfs"
 	"github.com/zimwip/goap/internal/connectors/workspace"
 	"github.com/zimwip/goap/internal/indexersvc"
@@ -60,11 +61,11 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 			e.log.Info("node index: graph published", "versions", n)
 		}
 	}()
-	// MCP hub in-process; the local file system and workspace connectors (ADR 0118) and the built-in connectors (ADR 0028,
-	// added once the engine exists) run inside too, other connectors register over HTTP like in
-	// the distributed platform
+	// MCP hub in-process; the local file system, workspace (ADR 0118) and Claude coding agent (ADR 0123) connectors and
+	// the built-in connectors (ADR 0028, added once the engine exists) run inside too, other connectors register over
+	// HTTP like in the distributed platform
 	connectors := map[string]connectorkit.Connector{"localfs": localfs.Connector{}, workspace.ID: workspace.New(),
-		workspace.DockerID: workspace.NewDocker(e.cfg.DockerHost)}
+		workspace.DockerID: workspace.NewDocker(e.cfg.DockerHost), claudeagent.ID: claudeagent.New(e.cfg.ClaudeAgentDir)}
 	// connectors register with a shared token (a service without one cannot register): generated like the JWT
 	// secret when none is configured, and shown so that a connector started by hand can use it
 	connectorToken := e.cfg.ConnectorToken

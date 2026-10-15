@@ -36,6 +36,7 @@ type config struct {
 	WorkspaceRoot    string // GOAP_DEV_WORKSPACE_ROOT
 	WorkspaceImage   string // GOAP_DEV_WORKSPACE_IMAGE: the commands of the workspaces in containers of this image
 	DockerHost       string // GOAP_DOCKER_HOST
+	ClaudeAgentDir   string // GOAP_CLAUDE_AGENT_DIR: the runner of the claude-coding-agent connector (ADR 0123)
 	ConnectorToken   string // GOAP_CONNECTOR_TOKEN (generated when empty)
 	Dev              authz.Principal
 }
@@ -52,6 +53,7 @@ func loadConfig() config {
 		WorkspaceRoot:    platform.Env("GOAP_DEV_WORKSPACE_ROOT", ""),
 		WorkspaceImage:   platform.Env("GOAP_DEV_WORKSPACE_IMAGE", ""),
 		DockerHost:       platform.Env("GOAP_DOCKER_HOST", "unix:///var/run/docker.sock"),
+		ClaudeAgentDir:   platform.Env("GOAP_CLAUDE_AGENT_DIR", ".goap/claude-agent"),
 		ConnectorToken:   platform.Env("GOAP_CONNECTOR_TOKEN", ""),
 		Dev: authz.Principal{
 			Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),

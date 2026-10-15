@@ -30,8 +30,8 @@ const (
 	JobTimeout = 2 * time.Hour
 )
 
-// hostEnv are the variables of the host every command gets: what a shell and a toolchain need to start.
-var hostEnv = []string{"PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TMPDIR", "TZ", "SHELL",
+// HostEnv are the variables of the host every command gets: what a shell and a toolchain need to start.
+var HostEnv = []string{"PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TMPDIR", "TZ", "SHELL",
 	// Windows
 	"SystemRoot", "SystemDrive", "ComSpec", "PATHEXT", "TEMP", "TMP", "USERPROFILE", "APPDATA", "LOCALAPPDATA", "ProgramFiles", "ProgramData", "WINDIR"}
 
@@ -39,7 +39,7 @@ var hostEnv = []string{"PATH", "HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TMP
 // unit passes, its own values, the identity of the commits, the workspace. Never a secret of the adapter.
 func environment(s space) []string {
 	vars := map[string]string{}
-	pass := append([]string{}, hostEnv...)
+	pass := append([]string{}, HostEnv...)
 	if list, ok := s.config["passEnv"].([]any); ok {
 		for _, v := range list {
 			if name, ok := v.(string); ok {
