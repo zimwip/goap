@@ -118,6 +118,9 @@ func (e *Engine) runScoped(ctx context.Context, p *Process, m *methodology.Compi
 		p.Steps = append(p.Steps, step)
 		jobs = append(jobs, job{i: len(p.Steps) - 1, bb: sbb, impl: impl, specErr: specErr})
 	}
+	if err := e.checkpoint(ctx, p); err != nil {
+		return err
+	}
 	var wg sync.WaitGroup
 	for k := range jobs {
 		if jobs[k].specErr != nil {

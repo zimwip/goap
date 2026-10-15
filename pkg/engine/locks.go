@@ -76,17 +76,10 @@ func (e *Engine) hold(key string) func() {
 		}
 		time.Sleep(wait)
 	}
+	h := &held{e: e, key: key}
+	e.held.Store(key, h)
+	h.interrupt(interrupt)
 	stop, done := make(chan struct{}), make(chan struct{})
-	interrupted := false
-	onInterrupt := func(by string) {
-		if by == "" || interrupted {
-			return
-		}
-		interrupted = true
-		e.cancelling.Store(key, by)
-		e.cancelRun(key)
-	}
-	onInterrupt(interrupt)
 	go func() {
 		defer close(done)
 		tick := time.NewTicker(max(ttl/10, 10*time.Millisecond))
@@ -96,16 +89,16 @@ func (e *Engine) hold(key string) func() {
 			case <-stop:
 				return
 			case <-tick.C:
-				held, by, err := e.Locks.Acquire(ctx, key, ttl)
+				ok, by, err := e.Locks.Acquire(ctx, key, ttl)
 				switch {
 				case err != nil:
 					e.log().Warn("lock renewal", "key", key, "err", err)
-				case !held:
+				case !ok:
 					e.log().Error("lock lost: another replica took over", "key", key)
 					e.cancelRun(key)
 					return
 				default:
-					onInterrupt(by)
+					h.interrupt(by)
 				}
 			}
 		}
@@ -113,13 +106,44 @@ func (e *Engine) hold(key string) func() {
 	return func() {
 		close(stop)
 		<-done
-		if interrupted {
+		e.held.CompareAndDelete(key, h)
+		if h.done() {
 			e.cancelling.Delete(key)
 		}
 		if err := e.Locks.Release(ctx, key); err != nil {
 			e.log().Warn("lock release", "key", key, "err", err)
 		}
 	}
+}
+
+// held is a shared lock this replica holds, and whether another replica asked it to let go.
+type held struct {
+	e           *Engine
+	key         string
+	mu          sync.Mutex
+	interrupted bool
+}
+
+// interrupt handles an interruption asked by another replica (by: who asked; "" for none), once: the run in
+// flight on the key is cancelled and lets go without failing, as for a local cancellation.
+func (h *held) interrupt(by string) {
+	if by == "" {
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.interrupted {
+		return
+	}
+	h.interrupted = true
+	h.e.cancelling.Store(h.key, by)
+	h.e.cancelRun(h.key)
+}
+
+func (h *held) done() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.interrupted
 }
 
 // cancelRun cancels the run in flight on id in this replica, if any.
@@ -130,21 +154,91 @@ func (e *Engine) cancelRun(id string) {
 }
 
 // interrupt asks the run in flight on id to let go, wherever it runs: this replica's run is cancelled, another
-// replica's is asked through the shared lock (it lets go at its next renewal).
+// replica's is asked through the shared lock (it lets go at its next renewal, at once when Signals carries the ask).
 func (e *Engine) interrupt(ctx context.Context, id, by string) {
 	e.cancelRun(id)
 	if e.Locks == nil {
 		return
 	}
-	if _, err := e.Locks.Interrupt(ctx, id, by); err != nil {
+	asked, err := e.Locks.Interrupt(ctx, id, by)
+	if err != nil {
 		e.log().Warn("interrupt", "process", id, "err", err)
+		return
+	}
+	if asked && e.Signals != nil {
+		if err := e.Signals.Interrupt(ctx, id, by); err != nil {
+			e.log().Warn("interrupt signal", "process", id, "err", err)
+		}
+	}
+}
+
+// Interrupted handles the signal of another replica asking the holder of the lock of id to let go (Signals): when
+// this replica holds it, its run in flight is cancelled at once rather than at the next renewal.
+func (e *Engine) Interrupted(id, by string) {
+	if h, ok := e.held.Load(id); ok {
+		h.(*held).interrupt(by)
+	}
+}
+
+// Signals carries hints between the replicas (ADR 0123): best effort, a lost signal only delays the work, the
+// shared locks stay the arbiter. The receiving side calls Engine.Woken and Engine.Interrupted.
+type Signals interface {
+	// Wake tells the replicas that a process is runnable and no replica runs it (this one is at capacity).
+	Wake(ctx context.Context) error
+	// Interrupt tells the holder of the lock of id that another replica asked it to let go.
+	Interrupt(ctx context.Context, id, by string) error
+}
+
+// Woken handles the signal of a replica that left a runnable process to the pool: Recover looks for it at once.
+func (e *Engine) Woken() {
+	select {
+	case e.wakeCh() <- struct{}{}:
+	default:
+	}
+}
+
+func (e *Engine) wakeCh() chan struct{} {
+	e.wakeOnce.Do(func() { e.wake = make(chan struct{}, 1) })
+	return e.wake
+}
+
+// atCapacity reports whether this replica runs as many processes as it may (Engine.MaxRuns).
+func (e *Engine) atCapacity() bool {
+	return e.MaxRuns > 0 && e.inflight.Load() >= int64(e.MaxRuns)
+}
+
+// leave leaves a runnable process to the pool (this replica is at capacity): Recover takes it on a replica with room,
+// told by Signals, this one included once a run of its own ends.
+func (e *Engine) leave(id string) {
+	e.log().Info("process left to the pool: this replica is at capacity", "process", id, "maxRuns", e.MaxRuns)
+	if e.Signals != nil {
+		if err := e.Signals.Wake(context.Background()); err != nil {
+			e.log().Warn("wake signal", "err", err)
+		}
+	}
+}
+
+// runCounted runs a process as one of the runs this replica holds (Engine.MaxRuns); when it ends, the replica looks
+// for work left to the pool.
+func (e *Engine) runCounted(id string) {
+	e.inflight.Add(1)
+	defer func() {
+		e.inflight.Add(-1)
+		if e.Locks != nil && e.MaxRuns > 0 {
+			e.Woken()
+		}
+	}()
+	if _, err := e.Run(context.Background(), id); err != nil {
+		e.log().Error("run", "process", id, "err", err)
 	}
 }
 
 // Recover resumes the processes no replica works on (ADR 0123): the running processes whose lock nobody holds,
-// left by a replica that stopped or crashed. At once for the processes written before the call (a restart), then
-// every interval for those idle for a lease (a run is written at every step, and holds its lock while it works).
-// It returns when ctx is done; a store that cannot tell the orphans makes it return at once.
+// left by a replica that stopped or crashed, or left to the pool by a replica at capacity. At once for the
+// processes written before the call (a restart), then every interval for those idle for a lease (a run is written
+// at every step, and holds its lock while it works), and at once for every process when woken (Woken: a replica
+// left one to the pool). It takes no more than this replica's room (Engine.MaxRuns). It returns when ctx is done; a
+// store that cannot tell the orphans makes it return at once.
 func (e *Engine) Recover(ctx context.Context, every time.Duration) {
 	finder, ok := e.Store.(OrphanFinder)
 	if !ok {
@@ -160,8 +254,10 @@ func (e *Engine) Recover(ctx context.Context, every time.Duration) {
 		case <-ctx.Done():
 			return
 		case <-time.After(every):
+			before = e.clock().Add(-e.lockTTL())
+		case <-e.wakeCh():
+			before = e.clock().Add(time.Millisecond)
 		}
-		before = e.clock().Add(-e.lockTTL())
 	}
 }
 
@@ -175,6 +271,9 @@ func (e *Engine) recover(ctx context.Context, finder OrphanFinder, before time.T
 		return
 	}
 	for _, id := range ids {
+		if e.atCapacity() {
+			return
+		}
 		if _, busy := e.recovering.LoadOrStore(id, true); busy {
 			continue
 		}
@@ -188,12 +287,12 @@ func (e *Engine) recover(ctx context.Context, finder OrphanFinder, before time.T
 			e.failOrphan(ctx, id)
 			continue
 		}
-		e.log().Info("resuming a process left by a stopped replica", "process", id)
+		e.log().Info("resuming a process no replica runs", "process", id)
+		e.inflight.Add(1) // counted now: the next orphan sees this replica's room
 		e.background(func() {
 			defer e.recovering.Delete(id)
-			if _, err := e.Run(context.Background(), id); err != nil {
-				e.log().Error("run", "process", id, "err", err)
-			}
+			e.inflight.Add(-1)
+			e.runCounted(id)
 		})
 	}
 }

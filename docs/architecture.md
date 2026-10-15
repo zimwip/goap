@@ -888,9 +888,10 @@ in the local mode). The work on a process is serialized across them by a shared 
 in table `engine_lock`, renewed while held, `Engine.LockTTL`): the process, its supersede, the companions of a change,
 the instance of a persistent agent. The store refuses the write of a replica that lost the lock of a process
 (`engine.ErrFenced`); `Cancel` and a supersede reach the holder through the lock; `Engine.Recover` resumes the running
-processes whose lock nobody holds (a replica stopped). A replica runs what it was asked to run; the others take over
-what is left. Not yet: idempotency keys on the writes of a step replayed after a recovery, a work queue spreading the
-runs by capacity.
+processes whose lock nobody holds (a replica stopped, or one at capacity, `MaxRuns`, left it to the pool). A step is
+recorded before it runs; a run resumed after a stop closes it from what its execution wrote on the change (ended,
+cut halfway: failed, nothing: run again), so a step never writes twice. Core NATS carries the hints (`engine.wake`,
+`engine.interrupt`); the locks stay the arbiter.
 
 ### 3.3 Persistence
 
@@ -1682,7 +1683,7 @@ docs/                        architecture, ADRs
 | Step | Content |
 |---|---|
 | **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
-| **M1 — engine persistence** 🟡 | ✅ PostgreSQL / SQLite process store shared by the replicas, locks with fencing, crash recovery (ADR 0123) · remaining: idempotency keys on replayed steps, work queue |
+| **M1 — engine persistence** ✅ | PostgreSQL / SQLite process store shared by the replicas, locks with fencing, crash recovery, steps never written twice, capacity per replica (ADR 0123) |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
 | **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapter instances as graph nodes, adapter definitions as platform nodes, resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |

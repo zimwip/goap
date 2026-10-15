@@ -120,6 +120,7 @@ func main() {
 		Store:       store,
 		Locks:       locks,
 		LockTTL:     platform.EnvDuration("GOAP_ENGINE_LOCK_TTL", engine.DefaultLockTTL),
+		MaxRuns:     platform.EnvInt("GOAP_ENGINE_MAX_RUNS", 0),
 		Events:      publisher,
 		Scope:       engine.AuthzScope{Authz: authorizer, Hub: mcpsvc.NewClient(hc, platform.Env("GOAP_MCP_URL", "http://localhost:8085"), copts...)},
 		LLM:         models,
@@ -131,6 +132,14 @@ func main() {
 		Types:       func() def.TypeSet { return types.Get() },
 	}
 	if locks != nil {
+		if events != nil {
+			// wake-ups and interruptions reach the other replicas at once (ADR 0123)
+			signals := enginesvc.NATSSignals{Bus: events}
+			if err := signals.Listen(e); err != nil {
+				platform.Fatal(log, "subscribe", err)
+			}
+			e.Signals = signals
+		}
 		go e.Recover(ctx, 0)
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts

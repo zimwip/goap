@@ -2,12 +2,15 @@ package engine
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/zimwip/goap/pkg/authz"
+	"github.com/zimwip/goap/pkg/domain"
+	"github.com/zimwip/goap/pkg/journal"
 	"github.com/zimwip/goap/pkg/llm"
 )
 
@@ -195,4 +198,131 @@ func TestRecoverResumesTheRunOfAStoppedReplica(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	b.Drain()
+}
+
+func TestAStepLeftInFlightIsNotWrittenTwice(t *testing.T) {
+	artifact := func(t *testing.T, e *Engine, p *Process, exec string) {
+		if _, err := e.Graph.AddItems(alice(), p.ChangeID, []domain.ChangeItem{{Type: domain.TypeArtifact, Target: "doc",
+			Data: map[string]any{"seen": "ok"}, ProducedBy: "fetch_doc", Execution: exec}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	record := func(t *testing.T, e *Engine, p *Process, exec string) {
+		if err := journal.Append(alice(), e.Graph, []journal.Record{{ID: exec, ChangeID: p.ChangeID, ProcessID: p.ID,
+			Kind: journal.KindAction, Action: "fetch_doc", StartedAt: time.Now()}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, tc := range []struct {
+		name  string
+		wrote []func(*testing.T, *Engine, *Process, string)
+		calls int32
+		check func(*testing.T, *Process)
+	}{
+		{"nothing written: run again", nil, 1, func(t *testing.T, p *Process) {
+			if p.Status != StatusCompleted || len(p.Steps) != 1 || p.Steps[0].Error != "" {
+				t.Fatalf("%s %+v", p.Status, p.Steps)
+			}
+		}},
+		{"ended: closed as it is", []func(*testing.T, *Engine, *Process, string){artifact, record}, 0, func(t *testing.T, p *Process) {
+			if p.Status != StatusCompleted || len(p.Steps) != 1 || p.Steps[0].Error != "" || p.Steps[0].EndedAt.IsZero() {
+				t.Fatalf("%s %+v", p.Status, p.Steps)
+			}
+		}},
+		{"cut halfway: failed, not run again", []func(*testing.T, *Engine, *Process, string){artifact}, 0, func(t *testing.T, p *Process) {
+			if len(p.Steps) == 0 || !strings.Contains(p.Steps[0].Error, "interrupted after writing part") || !p.Disabled["fetch_doc"] {
+				t.Fatalf("%s %+v", p.Status, p.Steps)
+			}
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var calls atomic.Int32
+			client := llm.ClientFunc(func(ctx context.Context, r llm.Request) (llm.Response, error) {
+				calls.Add(1)
+				return llm.Response{Text: docItems}, nil
+			})
+			_, b, start, _ := twoReplicas(t, client)
+			p := start()
+			// a replica checkpointed the step and stopped while it ran
+			const exec = "exec-1"
+			p.Steps = append(p.Steps, Step{Action: "fetch_doc", Execution: exec, StartedAt: time.Now()})
+			if err := b.Store.Put(alice(), p); err != nil {
+				t.Fatal(err)
+			}
+			for _, w := range tc.wrote {
+				w(t, b, p, exec)
+			}
+			got, err := b.Run(alice(), p.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if n := calls.Load(); n != tc.calls {
+				t.Fatalf("%d model calls, want %d", n, tc.calls)
+			}
+			tc.check(t, got)
+		})
+	}
+}
+
+func TestAReplicaAtCapacityLeavesTheRunToThePool(t *testing.T) {
+	client := llm.ClientFunc(func(ctx context.Context, r llm.Request) (llm.Response, error) {
+		return llm.Response{Text: docItems}, nil
+	})
+	a, b, start, _ := twoReplicas(t, client)
+	// a is full; b has room and is woken by a's signal
+	a.MaxRuns, b.MaxRuns = 1, 1
+	a.inflight.Store(1)
+	a.Signals = wakeOnly{b}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go b.Recover(ctx, time.Hour)
+	p := start()
+	a.schedule(p.ID)
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		got, _ := b.Store.Get(alice(), p.ID)
+		if got.Status == StatusCompleted {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("not run by the replica with room: %s", got.Status)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	b.Drain()
+}
+
+// wakeOnly delivers the signals of a replica to another, in process.
+type wakeOnly struct{ to *Engine }
+
+func (w wakeOnly) Wake(context.Context) error { w.to.Woken(); return nil }
+func (w wakeOnly) Interrupt(_ context.Context, id, by string) error {
+	w.to.Interrupted(id, by)
+	return nil
+}
+
+func TestAnInterruptSignalStopsTheRunAtOnce(t *testing.T) {
+	called := make(chan struct{})
+	client := llm.ClientFunc(func(ctx context.Context, r llm.Request) (llm.Response, error) {
+		close(called)
+		<-ctx.Done()
+		return llm.Response{}, ctx.Err()
+	})
+	a, b, start, _ := twoReplicas(t, client)
+	a.LockTTL, b.LockTTL = time.Minute, time.Minute // renewals too rare to carry the ask in time
+	b.Signals = wakeOnly{a}
+	p := start()
+	done := make(chan struct{})
+	go func() { _, _ = a.Run(alice(), p.ID); close(done) }()
+	<-called
+	began := time.Now()
+	c, err := b.Cancel(alice(), p.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-done
+	if c.Status != StatusCancelled || time.Since(began) > 3*time.Second {
+		t.Fatalf("cancelled %s after %s", c.Status, time.Since(began))
+	}
 }

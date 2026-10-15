@@ -1,6 +1,6 @@
 # ADR 0123 — Engine replicas sharing the processes
 
-**Status**: accepted, implemented (steps 1 to 3) · **Date**: 2026-10 · Builds on ADR 0010 (local SQLite mode), ADR 0031
+**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0010 (local SQLite mode), ADR 0031
 (trigger leadership across replicas); replaces the "engine clustering" target of `docs/architecture.md` §3.2
 
 ## Context
@@ -48,26 +48,37 @@ executor that lost its turn refused, and a run left by a stopped replica resumed
    previous start left (`ReleaseAll`, the local mode being the one process on its file), so its runs left running are
    resumed at once instead of failed.
 7. **Pub/sub is a signal, not the arbiter.** JetStream delivers at least once: who executes is decided by the lock,
-   never by the reception of a message. The event triggers keep their competing consumers (ADR 0031).
+   never by the reception of a message. The event triggers keep their competing consumers (ADR 0031). Two hints go
+   over core NATS (`engine.Signals`, `enginesvc.NATSSignals`, subjects `engine.wake` and `engine.interrupt`, outside
+   the GOAP stream, wired by `cmd/engine` when `GOAP_NATS_URL` is set): an interruption reaches the holder at once
+   (`Engine.Interrupted`) instead of at its next renewal, a wake-up makes the replicas look for work at once
+   (`Engine.Woken`). A lost signal only delays: the renewal and the recovery pass catch up.
+8. **A step is never written twice.** With shared locks, the engine records a step on the process before running it
+   (`checkpoint`: its execution id, no end). A run that finds such a step, left by a replica that stopped, asks the
+   change what that execution wrote (`ChangeLog` filtered on the execution, `settleInterrupted`): its action record
+   means it ended and only the process missed it (closed as it is); other entries only (items, impacts, model calls)
+   mean it was cut halfway (failed and not run again: the planner takes another way, else a person decides,
+   `MaxFailures`); nothing means it wrote nothing (dropped, the planner runs it again). The entries of a step carry
+   its execution id already (ADR 0011, 0030): no new key in the graph.
+9. **Capacity.** `Engine.MaxRuns` (`GOAP_ENGINE_MAX_RUNS`, 0: no bound) bounds the runs a replica holds. A process made
+   runnable beyond it is left to the pool (saved running, unlocked; a wake-up sent); `Recover` takes the processes
+   nobody holds up to the replica's room, at once when woken, and a replica whose run ends looks for work left to the
+   pool. The database is the queue: a running process no lock covers is runnable.
 
 ## Consequences
 
-- A run is resumed from its last saved state: the step in flight when a replica stopped runs again. Conditions being
-  derived from the change (ADR 0109), a step whose effects landed is not repeated by the planner; one cut halfway runs
-  again (its model calls are paid twice, the ledger shows both). Idempotency keys on the graph writes and the tool
-  calls of a step are the next step (below).
-- A replica runs what it was asked to run (an RPC, an event it consumed, a schedule); the others take over only what
-  is left. The load is spread by the load balancer and the competing consumers, not by a work queue.
+- A run is resumed from its last saved state; a step in flight runs again only when it wrote nothing on the change.
+  A step that wrote nothing on the change but called a tool with an effect outside goap (a push) may call it again:
+  the connectors get the change and the process of a call (ADR 0118), not yet a key per call.
+- A replica runs what it was asked to run (an RPC, an event it consumed, a schedule) while it has room; beyond
+  `MaxRuns` the run goes to a replica with room.
 - Every lock is a database write (and a renewal every few seconds while held): cheap at the scale of runs whose steps
   take seconds; the in-process mutex stays the fast path within a replica.
 - `Store.Put` outside the lock of a process from another replica than its holder is refused where it used to race.
 
-## Not done (next steps)
+## Not done
 
-- **Idempotency keys** `(process, execution, step)` on the change operations of a step and in `InvokeRequest` for the
-  connectors that can honour them, so that a step replayed after a recovery does not write twice.
-- **A work queue** (`SKIP LOCKED` on runnable processes, a NATS wake-up signal) to spread the runs by capacity rather
-  than by where they were asked.
-- **Immediate interruption** through a NATS message (`goap.engine.cancel.<id>`) instead of the renewal tick.
+- A key per tool call in `InvokeRequest` (proto), for the connectors that can deduplicate a call replayed by a step
+  that wrote nothing on the change.
 - Virtual actors (protoactor-go) only if the latency of the database locks becomes the limit: they would replace the
   locks' placement, not the fencing nor the persistence.
