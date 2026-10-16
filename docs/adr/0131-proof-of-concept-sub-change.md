@@ -59,10 +59,8 @@ Anyone may propose one: a person from the *Risks & actions* pane (*Propose a POC
 feasibility, integration or performance (the kinds of risk running code settles). A proposal is only an `open` action;
 **nothing is built until a person opens it** (§3).
 
-The `risks` library gains two conditions:
-
-- `pocs_pending`: an open action of kind `poc` (proposed or running);
-- `pocs_concluded`: `!pocs_pending` (true when the change has none: the POC is optional).
+The `risks` library changes how an action covers a risk, and gains the conditions of the POCs (§6bis gives the whole
+chain).
 
 ### 2. A methodology of its own: `poc`
 
@@ -179,13 +177,85 @@ assessments) and writes, on the parent:
 
 Each change writes only its own blackboard; the POC never writes on its parent.
 
+### 6bis. Conditions and effects, end to end
+
+The orchestration is the usual one (ADR 0109): every condition is derived from the blackboard, an effect is a
+declaration the engine checks afterwards, and a run whose missing condition no action of its agent produces **waits**
+for it (ADR 0036 §3) and is tried again when the change moves. No condition is both an input and an output of an
+action (ADR 0051): the per-POC work is scoped (ADR 0109 §3), each action producing a scoped condition of its subject.
+
+**What `risks_under_control` means.** It is not "every risk remediated": it is "every live high risk (score >= 9) is
+covered by an action". Today `a.for == r.key && a.status != "cancelled"`. A POC changes it in two ways:
+
+```
+covers(a, r)  = (a.for == r.key || r.key in a.risks) && a.status != "cancelled"
+                && !(a.kind == "poc" && a.status == "done")      # a concluded POC mitigates nothing any more
+unmitigated_risks   = risks.exists(r, r.live && r.score >= 9 && !actions.exists(a, covers(a, r)))
+risks_under_control = !unmitigated_risks                         # the release gate, unchanged in meaning
+```
+
+So a running POC covers its risks (the change may go on), and once it is concluded each risk is settled by its
+verdict: **refuted** → the risk is closed, no longer live, the gate holds; **confirmed** → the risk stays live and the
+done POC no longer covers it, so `unmitigated_risks` is true again, `risk-management` (`plan_mitigation`, effect
+`risks_under_control`) is planned again on its next event and asks for a real mitigation or an acceptance. A POC can
+never leave a confirmed risk silently "under control".
+
+**The parent change (`sdlc` + `risk-management`).** Scope `action` restricted to `self.kind == "poc"`:
+
+| Condition | Scope | Expression (sketch) |
+|---|---|---|
+| `poc_opened` | action | `self.change != ""` |
+| `poc_concluded_now` | action | `has(vars.event) && vars.event.type == "poc.concluded" && vars.event.change.id == self.change` |
+| `poc_settled` | action | `self.status != "open"` |
+| `pocs_opened` | aggregate | all `poc_opened`, open POCs, empty: true |
+| `pocs_concluded` | aggregate | all `poc_settled`, empty: true (no POC: holds, the POC is optional) |
+
+| Action | Kind | Pre | Effects | Who runs it |
+|---|---|---|---|---|
+| `plan_mitigation` (risk-management) | llm | `risks_reviewed` | `risks_under_control` | may write a `poc` action (proposal) |
+| `open_poc` (`derisking/open_poc`) | human, scoped per POC action not opened | — | `poc_opened` | its reaction to `change.item_added` of a `poc` action; a person fills the form |
+| `conclude_poc` (`derisking/conclude`) | script, scoped per opened POC | `poc_opened`, `poc_concluded_now` | `poc_settled` | its reaction to `poc.concluded` from the integrated POC |
+| `build` step | — | adds `pocs_concluded` | — | the delivery run |
+
+The delivery run reaching the build with a POC open misses `pocs_concluded`; the only producer is `conclude_poc`, whose
+`poc_concluded_now` exists only in the run of the reaction (it reads the event): the delivery run cannot establish it,
+so it **waits** (a `condition` task on `pocs_concluded`, shown in *Waiting for others*), and is tried again when the
+change moves, which `conclude_poc` does by writing the done action.
+
+**The POC sub-change (`poc`).** Its copied risks are the subjects (scope `risk`):
+
+| Condition | Scope | Expression (sketch) |
+|---|---|---|
+| `probed` | risk | an artifact `probe` with `data.risk == self.key` |
+| `probe_implemented` | risk | a `probe_change` (code change) for the risk, no failed run since, three attempts at most |
+| `probe_run` | risk | a `probe_report` of the latest revision, or the timebox is over (an unfinished probe counts: verdict *not shown*) |
+| `judged` | risk | an assessment `item:<key>` with a verdict `confirmed` / `refuted` |
+| `all_probed`, `all_probe_run`, `all_judged` | aggregates | over the copied risks |
+| `conclusion_confirmed` | change | an artifact `poc_conclusion` written by a person |
+
+| Step / action | Pre | Effects |
+|---|---|---|
+| framing: `propose_probes` (llm), `write_probes` (human fallback) | — | `all_probed` |
+| confirmation (manual) | `all_probed` | the step's own exit (history) |
+| build: `prepare_workspace` | `step:…/confirmation` | `workspace_ready` |
+| build: `implement_probe` (llm, scoped per risk) | `workspace_ready` | `probe_implemented` |
+| build: `run_probe` (script, scoped per risk) | `probe_implemented` | `probe_run` |
+| conclusion: `draft_verdicts` (llm), `conclude_by_hand` (human) | `all_probe_run` | `all_judged` |
+| closing: `confirm_conclusion` (human, `emits: [poc.concluded]`) | `all_judged` | `conclusion_confirmed` |
+
+The goal `conclude` is `{conclusion_confirmed: true}`. `confirm_conclusion` raises `poc.concluded` once its effect
+holds (ADR 0110, `Action.Emits`); the relay of the engine carries it to the parent (`from: integrated`, the reason
+`sdlc` declares `integrates: [poc]`), where `conclude_poc` runs. A failed probe never blocks: after three attempts the
+risk is still `probe_run` (with a failed report), and the person who concludes reads a *confirmed* verdict from it.
+
 ### 7. Platform changes
 
 Small, and generic:
 
 1. `goap-change/create` takes `parent` (the RPC has `parent_id` already) and `data` (the free-form `Change.Data`).
 2. `goap-change/close`: abandon an open change with a reason (`change:abandon`, its own sub-changes only for an agent).
-3. `contracts/risk`: `kind`, `risks`, `change` on actions; `pocs_pending` / `pocs_concluded` in the `risks` library;
+3. `contracts/risk`: `kind`, `risks`, `change` on actions; the coverage of a risk by an action (§6bis) in the `risks`
+   library, the scoped conditions of the POCs in `sdlc`;
    the brief; `goap-change/risk`'s twin `goap-change/action` (an action is written today only as an item).
 4. The criticality of a sub-change: today the default of the methodology is written only when the engine creates the
    change itself (`engine/engine/engine.go`); `goap-change/create` applies it too. A sub-change of another methodology
