@@ -746,7 +746,7 @@ escalated or reserved points, rulings to ratify), each with whom it is addressed
 and the responsible role of the step for an input, the roles and the accountable role for an approval, the accountable
 role for a stuck run, else the person the run works for) and `mayAnswer`, computed with the checks of the calls that
 answer it (`Engine.maySubmit`, `mayApprove`, `mayUnblock`, plus the run permission the handler asks). The change tab
-shows them in a column beside every pane (`ChangeAsks.svelte`: *Waiting for you*, answered in place with the panel of the run's task,
+shows them in a column beside every pane, resized by its edge (`ChangeAsks.svelte`: *Waiting for you*, answered in place with the panel of the run's task,
 `PendingTask.svelte`, shared with the run tab; *Waiting for others*, with whom; the impacts awaiting their review join
 the list; folded, the column shows the count of the asks for the person).
 

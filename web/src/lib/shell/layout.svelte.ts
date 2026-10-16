@@ -16,6 +16,8 @@ interface LayoutState {
   bottom: string;
   bottomOpen: boolean;
   bottomHeight: number;
+  /** width of the column of what a change waits for (ADR 0117) */
+  asksWidth: number;
   theme: Theme;
 }
 
@@ -29,6 +31,7 @@ const DEFAULTS: LayoutState = {
   bottom: 'events',
   bottomOpen: true,
   bottomHeight: 220,
+  asksWidth: 480,
   theme: 'auto',
 };
 
@@ -40,6 +43,7 @@ const kept = (l: LayoutState) => ({
   rightWidth: l.rightWidth,
   bottomOpen: l.bottomOpen,
   bottomHeight: l.bottomHeight,
+  asksWidth: l.asksWidth,
   theme: l.theme,
 });
 
@@ -48,6 +52,7 @@ export const layout: LayoutState = $state({ ...DEFAULTS, ...kept(load(KEY, DEFAU
 export const LIMITS = {
   side: { min: 180, max: 640 },
   bottom: { min: 100, max: 800 },
+  asks: { min: 300, max: 960 },
 };
 
 $effect.root(() => {

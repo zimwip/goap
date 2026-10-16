@@ -52,7 +52,7 @@ on the run (`submit` for an input, a merge, a rebase or a clarification, `decide
 
 ### 3. The change tab opens on what is asked
 
-`ChangeAsks.svelte`, in a column on the right of the change tab, beside every pane (the change and what it waits for are seen together; the column folds to a strip carrying the count of the asks for the person, and goes above the panes when the tab is narrow):
+`ChangeAsks.svelte`, in a column on the right of the change tab, beside every pane (the change and what it waits for are seen together; the column is resized by its edge, its width kept with the layout of the workbench (`layout.asksWidth`, 480px by default), folds to a strip carrying the count of the asks for the person, and goes above the panes when the tab is narrow):
 
 - **Waiting for you**: each ask the person may answer, with its kind, its title, its step, whom it is addressed to and
   for how long the change waits, answered in place: the panel of the run's task (`PendingTask.svelte`, the switch
