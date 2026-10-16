@@ -1,6 +1,6 @@
 <script lang="ts">
-  // Explorer of domains (one per namespace): domain → version → node types / link types; then the item types of the
-  // platform (ADR 0119), read-only.
+  // Explorer of domains (one per namespace): domain → version → node types, link types, enums, lifecycles, item types
+  // (ADR 0128) and algorithms.
   import Icon from '../../shell/Icon.svelte';
   import TreeRow from '../TreeRow.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
@@ -9,42 +9,20 @@
   import { openTab, tabsState, tabId, closeWhere } from '../../shell/tabs.svelte';
   import { select, notify } from '../../shell/workbench.svelte';
   import { formatDate, type DomainSummary } from '../../api';
-  import { domainSpec, openDomain, revealDomainPath, algorithmSpec, instanceSpec, openAlgorithm, openInstance, openEnum, openLifecycle, nodeTypeSpec, linkTypeSpec, enumSpec } from '../editors/domainTabs';
+  import { domainSpec, openDomain, revealDomainPath, algorithmSpec, instanceSpec, openAlgorithm, openInstance, openEnum, openLifecycle, nodeTypeSpec, linkTypeSpec, enumSpec, openItemType, itemTypeSpec } from '../editors/domainTabs';
   import { ALGORITHM_USAGES, emptyAlgorithm, emptyInstance, freeName } from '../../algorithmForm';
   import type { AlgorithmUsage } from '../../dsl';
   import type { DomainDraft } from '../../stores/domains.svelte';
   import { emptyNodeType, emptyLinkType, emptyAttribute, emptyEnum, defaultLifecycle } from '../../methodologyForm';
   import { openContextMenu } from '../../shell/contextMenuState.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { itemTypes, refreshItemTypes } from '../../stores/itemTypes.svelte';
-  import { filterItemTypes, itemTypeShownIn, originLabel } from '../../itemTypes';
-  import type { ItemTypeInfo } from '../../api';
+  import { emptyItemType } from '../../domainForm';
 
   let filter = $state('');
 
   $effect(() => {
     if (!domains.loaded) void refreshDomains();
   });
-  $effect(() => {
-    if (!itemTypes.loaded && !itemTypes.loading) void refreshItemTypes();
-  });
-
-  const shownItemTypes = $derived(filterItemTypes(itemTypes.items, filter));
-
-  function selectItemType(k: ItemTypeInfo, pin = false) {
-    openTab({ kind: 'itemtype', params: { type: k.type ?? '' } }, { pin });
-    select({
-      title: k.type ?? '',
-      subtitle: 'Item type',
-      rows: [
-        ['Origin', originLabel(k)],
-        ['Description', k.description ?? ''],
-        ['Shown in', itemTypeShownIn(k.type ?? '')],
-        ['Permission', k.permission ?? ''],
-      ],
-    });
-  }
-
   const groups = $derived.by(() => {
     const q = filter.trim().toLowerCase();
     const all = groupedDomains();
@@ -75,6 +53,7 @@
         ['Description', v.description ?? ''],
         ['Node types', String(v.nodeTypeCount ?? 0)],
         ['Link types', String(v.linkTypeCount ?? 0)],
+        ['Item types', String(v.itemTypeCount ?? 0)],
         ['Modified', formatDate(v.updatedAt)],
         ['Published', formatDate(v.publishedAt)],
       ],
@@ -114,6 +93,20 @@
     if (!(await confirmDialog({ message: `Remove the enum "${e.name || 'unnamed'}" from the draft?`, danger: true }))) return;
     closeWhere((t) => t.kind === 'enum' && t.params.uid === e.uid);
     d.form.enums.splice(i, 1);
+  }
+
+  // item types (ADR 0128): the types of change item the domain declares
+  function addItemType(d: DomainDraft) {
+    if (d.readonly) return;
+    d.form.itemTypes.push(emptyItemType(freeName('itemType', d.form.itemTypes.map((x) => x.name))));
+    openItemType(d, d.form.itemTypes.length - 1);
+  }
+
+  async function removeItemType(d: DomainDraft, i: number) {
+    const x = d.form.itemTypes[i];
+    if (!(await confirmDialog({ message: `Remove the item type "${x.name || 'unnamed'}" from the draft?`, danger: true }))) return;
+    closeWhere((t) => t.kind === 'itemtype' && t.params.uid === x.uid);
+    d.form.itemTypes.splice(i, 1);
   }
 
   /** opens the instance an attribute, node type or transition plugs, by name */
@@ -203,7 +196,7 @@
     <button type="button" class="ghost small" title="Import a domain (YAML or JSON)" aria-label="Import a domain"
       onclick={() => openTab({ kind: 'import', params: { what: 'domain' } }, { pin: true })}><Icon name="upload" size={14} /></button
     >
-    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={domains.loading} onclick={() => { void refreshDomains(); void refreshItemTypes(); }}
+    <button type="button" class="ghost small" title="Refresh" aria-label="Refresh" disabled={domains.loading} onclick={() => void refreshDomains()}
       ><Icon name="refresh" size={14} /></button
     >
   </div>
@@ -481,6 +474,47 @@
                   <p class="empty pad3">No enums.</p>
                 {/each}
               {/if}
+              {@const itK = `dit:${k}`}
+              <TreeRow
+                depth={2}
+                icon="tag"
+                label="Item types"
+                detail={String(d.form.itemTypes.length)}
+                title="The types of item a change holds next to its impacts (an artifact, a risk, an assessment…)"
+                expanded={isOpen(itK, true)}
+                badge={d.count('itemTypes') || undefined}
+                badgeTone="danger"
+                ontoggle={() => toggle(itK, true)}
+                oncontextmenu={(e) => openContextMenu(e, [{ label: 'New item type', icon: 'plus', disabled: d.readonly, run: () => addItemType(d) }])}
+              >
+                {#snippet actions()}
+                  {#if !d.readonly}
+                    <button type="button" title="Add" aria-label="Add: Item type" onclick={(e) => { e.stopPropagation(); addItemType(d); }}
+                      ><Icon name="plus" size={13} /></button
+                    >
+                  {/if}
+                {/snippet}
+              </TreeRow>
+              {#if isOpen(itK, true)}
+                {#each d.form.itemTypes as x, i (x.uid)}
+                  <TreeRow
+                    depth={3}
+                    icon="tag"
+                    label={x.name || '(unnamed)'}
+                    italic={!x.name}
+                    detail={x.attributes.length ? `${x.attributes.length} keys` : ''}
+                    title={x.description || x.name}
+                    active={tabsState.active === tabId(itemTypeSpec(d.name, d.version, x.uid, x.name))}
+                    badge={d.count(`itemTypes[${i}]`) || undefined}
+                    badgeTone="danger"
+                    onselect={() => openItemType(d, i, false)}
+                    onopen={() => openItemType(d, i, true)}
+                    oncontextmenu={(e) => openContextMenu(e, [{ label: 'Remove item type', icon: 'trash', disabled: d.readonly, run: () => removeItemType(d, i) }])}
+                  />
+                {:else}
+                  <p class="empty pad3">No item types.</p>
+                {/each}
+              {/if}
               {@const lcK = `dc:${k}`}
               <TreeRow
                 depth={2}
@@ -712,38 +746,6 @@
         {/each}
       {/if}
     {/each}
-  </div>
-
-  <div role="tree" aria-label="Item types">
-    {#if !filter.trim() || shownItemTypes.length}
-      <TreeRow
-        icon="list"
-        label="Item types"
-        detail={itemTypes.loaded ? String(itemTypes.items.length) : ''}
-        title="The types of item a change holds next to its impacts (risk, assessment, artifact…): they change with the platform code"
-        expanded={isOpen('it:all') || !!filter.trim()}
-        ontoggle={() => toggle('it:all')}
-      />
-      {#if isOpen('it:all') || filter.trim()}
-        {#if itemTypes.error}
-          <div class="alert small">{itemTypes.error}</div>
-        {:else if !itemTypes.loaded}
-          <p class="empty pad2">Loading…</p>
-        {/if}
-        {#each shownItemTypes as k (k.type)}
-          <TreeRow
-            depth={1}
-            icon="tag"
-            label={k.type ?? ''}
-            detail={k.origin === 'core' ? 'built-in' : k.origin}
-            title={k.description || k.type}
-            active={tabsState.active === tabId({ kind: 'itemtype', params: { type: k.type ?? '' } })}
-            onselect={() => selectItemType(k)}
-            onopen={() => selectItemType(k, true)}
-          />
-        {/each}
-      {/if}
-    {/if}
   </div>
 </div>
 

@@ -84,13 +84,11 @@ type Message struct {
 	Score int `json:"score,omitempty"`
 }
 
-// Register makes the kinds known to the graph (domain.RegisterItemKind); the services writing or reading such items
-// call it at start, and so does a test building them. It may be called any number of times.
+// Register gives the types their validation (domain.RegisterItemType; the built-in methodology domain declares them,
+// ADR 0128); the services writing or reading such items call it at start, and so does a test building them. It may be called any number of times.
 func Register() {
 	domain.RegisterItemType(TypeAssessment, validateAssessment)
 	domain.RegisterItemType(TypeComment, validateComment)
-	domain.DescribeItemType(TypeAssessment, "assess", "A rating of a subject of the change (score, verdict, findings, suggestion): each item is the whole record of its key (ADR 0110).")
-	domain.DescribeItemType(TypeComment, "assess", "A message of a person about a subject, in the thread of its assessment (ADR 0110).")
 }
 
 func validateAssessment(it domain.ChangeItem) error {

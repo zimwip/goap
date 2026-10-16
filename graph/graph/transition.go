@@ -147,7 +147,7 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 		}
 		it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Type: domain.TypeTransition, Target: "transition." + t.Name, Status: domain.ItemAccepted,
 			ProducedBy: firstNonEmpty(in.By, g.caller(ctx), "graph.transition"), Data: data, CreatedAt: g.now()}
-		if err := it.Validate(); err != nil {
+		if err := g.checkItem(it); err != nil {
 			return fmt.Errorf("%w: %w", err, ErrInvalid)
 		}
 		if err := putItem(ctx, tx, id, it); err != nil {

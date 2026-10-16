@@ -58,7 +58,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		if it.Type == domain.TypeFlow || !v.InEffect(it.ID) {
 			continue
 		}
-		if err := it.Validate(); err != nil {
+		if err := g.checkItem(it); err != nil {
 			add(it.ID, "", "structure", err.Error())
 		}
 		// provenance and structure references

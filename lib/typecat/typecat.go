@@ -114,6 +114,18 @@ type Catalog struct {
 	domains map[string]string // namespace -> version
 	// structures are the hierarchies tagged by the domains (ADR 0054), by kind.
 	structures map[string]domain.Structure
+	// items are the types of change item the domains declare (ADR 0128), by name.
+	items map[string]*ItemType
+}
+
+// ItemType is the resolved model of a type of change item a domain declares (ADR 0128).
+type ItemType struct {
+	Name        string
+	Description string
+	// Domain is the namespace of the domain declaring it, Version its version.
+	Domain, Version string
+	// Attributes describe the keys of the data of its items, their enums resolved.
+	Attributes []Attribute
 }
 
 // ErrUnknown marks a reference the catalogue does not resolve.
@@ -152,7 +164,7 @@ func Builtin() *Catalog {
 func New(ds ...*def.Domain) (*Catalog, error) {
 	all := append(slices.Clone(Builtins()), ds...)
 	nb := len(Builtins())
-	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}, structures: map[string]domain.Structure{}}
+	c := &Catalog{types: map[domain.TypeRef]*Type{}, links: map[domain.TypeRef]*LinkType{}, domains: map[string]string{}, structures: map[string]domain.Structure{}, items: map[string]*ItemType{}}
 	decl := map[domain.TypeRef]declared{}
 	for i, d := range all {
 		if d == nil {
@@ -165,6 +177,16 @@ func New(ds ...*def.Domain) (*Catalog, error) {
 			return nil, fmt.Errorf("domain %s given twice: %w", d.Name, ErrInvalid)
 		}
 		c.domains[d.Name] = d.Version
+		for _, it := range d.ItemTypes {
+			if prev, dup := c.items[it.Name]; dup {
+				return nil, fmt.Errorf("item type %s of %s: already declared by %s (one name across the domains): %w", it.Name, d.Name, prev.Domain, ErrInvalid)
+			}
+			x := &ItemType{Name: it.Name, Description: it.Description, Domain: d.Name, Version: d.Version}
+			for _, a := range it.Attributes {
+				x.Attributes = append(x.Attributes, withEnum(d, a))
+			}
+			c.items[it.Name] = x
+		}
 		for _, n := range d.NodeTypes {
 			ref := domain.TypeRef{Namespace: d.Name, Name: n.Name}
 			decl[ref] = declared{d: d, t: n}
@@ -489,6 +511,42 @@ func (c *Catalog) LinkTypeValidators(typ string) []algo.Bound {
 		return l.Validators
 	}
 	return nil
+}
+
+// withEnum resolves the values of the enum of an attribute of a domain.
+func withEnum(d *def.Domain, a def.Attribute) Attribute {
+	ra := Attribute{Attribute: a}
+	if a.Enum != "" {
+		for _, e := range d.Enums {
+			if e.Name == a.Enum {
+				ra.Values = e.Values
+			}
+		}
+	}
+	return ra
+}
+
+// ItemType returns the type of change item of the given name (ADR 0128).
+func (c *Catalog) ItemType(name string) (*ItemType, bool) {
+	x, ok := c.items[name]
+	return x, ok
+}
+
+// ItemTypes lists the types of change item the domains declare, by name.
+func (c *Catalog) ItemTypes() []*ItemType {
+	out := slices.Collect(maps.Values(c.items))
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// ItemAttributeChecks are what the graph checks of the data of the items of a type, and whether a domain declares the
+// type (graph.TypeCatalog).
+func (c *Catalog) ItemAttributeChecks(name string) ([]domain.AttributeCheck, bool) {
+	x, ok := c.items[name]
+	if !ok {
+		return nil, false
+	}
+	return attributeChecks(x.Attributes), true
 }
 
 func attributeChecks(as []Attribute) []domain.AttributeCheck {

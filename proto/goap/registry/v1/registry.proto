@@ -161,6 +161,14 @@ message Enum {
   repeated EnumValue values = 3;
 }
 
+// ItemType is a type of change item a domain declares (ADR 0128): its items name it in their `type`; a name is one
+// across the domains in force. The attributes describe the keys of the data of its items.
+message ItemType {
+  string name = 1;
+  string description = 2;
+  repeated Attribute attributes = 3;
+}
+
 // AttributeInfo is a resolved attribute of a node type or link type.
 message AttributeInfo {
   Attribute attribute = 1;
@@ -790,6 +798,7 @@ message Domain {
   repeated Enum enums = 16;
   repeated Algorithm algorithms = 12;
   repeated AlgorithmInstance algorithm_instances = 13;
+  repeated ItemType item_types = 17;
   google.protobuf.Timestamp created_at = 7;
   google.protobuf.Timestamp updated_at = 8;
   google.protobuf.Timestamp published_at = 9;
@@ -809,6 +818,7 @@ message DomainSummary {
   google.protobuf.Timestamp published_at = 8;
   // built into the platform: published and frozen
   bool builtin = 9;
+  int32 item_type_count = 10;
 }
 
 message ListDomainsRequest {

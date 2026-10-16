@@ -18,18 +18,20 @@ export function openDomain(name: string, version: string, pin = false): Tab {
  * a node type, link type or lifecycle has its own tab, anything else is a field of the domain tab.
  */
 export function revealDomainPath(name: string, version: string, path: string, pin = false): void {
-  const m = /^(nodeTypes|linkTypes|lifecycles|enums)\[(\d+)\]/.exec(path);
+  const m = /^(nodeTypes|linkTypes|lifecycles|enums|itemTypes)\[(\d+)\]/.exec(path);
   const d = m ? getDomainDraft(name, version) : undefined;
   const i = m ? Number(m[2]) : -1;
   const tab =
-    m && d && i < d.form[m[1] as 'nodeTypes' | 'linkTypes' | 'lifecycles' | 'enums'].length
+    m && d && i < d.form[m[1] as 'nodeTypes' | 'linkTypes' | 'lifecycles' | 'enums' | 'itemTypes'].length
       ? m[1] === 'nodeTypes'
         ? openNodeType(d, i, pin)
         : m[1] === 'linkTypes'
           ? openLinkType(d, i, pin)
           : m[1] === 'enums'
             ? openEnum(d, i, pin)
-            : openLifecycle(d, i, pin)
+            : m[1] === 'itemTypes'
+              ? openItemType(d, i, pin)
+              : openLifecycle(d, i, pin)
       : openDomain(name, version, pin);
   requestReveal(tab.id, path);
 }
@@ -194,6 +196,15 @@ export function openEnum(d: DomainDraft, index: number, pin = true): Tab {
   return openTab(enumSpec(d.name, d.version, e.uid, e.name), { pin });
 }
 
+export function itemTypeSpec(name: string, version: string, uid: string, it = ''): TabSpec {
+  return { kind: 'itemtype', params: { name, version, uid, it } };
+}
+
+export function openItemType(d: DomainDraft, index: number, pin = true): Tab {
+  const x = d.form.itemTypes[index];
+  return openTab(itemTypeSpec(d.name, d.version, x.uid, x.name), { pin });
+}
+
 export function openNodeType(d: DomainDraft, index: number, pin = true): Tab {
   const n = d.form.nodeTypes[index];
   return openTab(nodeTypeSpec(d.name, d.version, n.uid, n.name), { pin });
@@ -219,3 +230,4 @@ export const nodeTypeIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.nodeTy
 export const linkTypeIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.linkTypes, tab, 'lt');
 export const lifecycleIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.lifecycles, tab, 'lc');
 export const enumIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.enums, tab, 'en');
+export const itemTypeIndex = (d: DomainDraft, tab: Tab) => indexIn(d.form.itemTypes, tab, 'it');

@@ -1,8 +1,10 @@
 // Editing model of a domain (node types and link types). It reuses the
 // row models of the methodology form.
-import type { Domain } from './api';
+import type { Domain, ItemTypeDef } from './api';
 import { algorithmFromForm, algorithmToForm, instanceFromForm, instanceToForm, type AlgorithmForm, type InstanceForm } from './algorithmForm';
 import {
+  attributeFromForm,
+  attributeToForm,
   enumFromForm,
   enumToForm,
   lifecycleFromForm,
@@ -11,6 +13,8 @@ import {
   linkTypeToForm,
   nodeTypeFromForm,
   nodeTypeToForm,
+  newUid,
+  type AttributeForm,
   type EnumForm,
   type LifecycleForm,
   type LinkTypeForm,
@@ -27,10 +31,34 @@ export interface DomainForm {
   lifecycles: LifecycleForm[];
   algorithms: AlgorithmForm[];
   instances: InstanceForm[];
+  /** the types of change item the domain declares (ADR 0128) */
+  itemTypes: ItemTypeForm[];
+}
+
+export interface ItemTypeForm {
+  /** local id, never sent: the tab survives renames */
+  uid: string;
+  name: string;
+  description: string;
+  /** the keys of the data of its items */
+  attributes: AttributeForm[];
+}
+
+export const emptyItemType = (name = ''): ItemTypeForm => ({ uid: newUid(), name, description: '', attributes: [] });
+
+export function itemTypeToForm(t: ItemTypeDef): ItemTypeForm {
+  return { uid: newUid(), name: t.name ?? '', description: t.description ?? '', attributes: (t.attributes ?? []).map(attributeToForm) };
+}
+
+export function itemTypeFromForm(f: ItemTypeForm): ItemTypeDef {
+  const o: ItemTypeDef = { name: f.name.trim() };
+  if (f.description.trim()) o.description = f.description.trim();
+  if (f.attributes.length) o.attributes = f.attributes.map(attributeFromForm);
+  return o;
 }
 
 export function emptyDomainForm(): DomainForm {
-  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [], enums: [], lifecycles: [], algorithms: [], instances: [] };
+  return { name: '', version: '0.1.0', description: '', nodeTypes: [], linkTypes: [], enums: [], lifecycles: [], algorithms: [], instances: [], itemTypes: [] };
 }
 
 export function toDomainForm(d: Domain): DomainForm {
@@ -44,6 +72,7 @@ export function toDomainForm(d: Domain): DomainForm {
     lifecycles: (d.lifecycles ?? []).map(lifecycleToForm),
     algorithms: (d.algorithms ?? []).map(algorithmToForm),
     instances: (d.algorithmInstances ?? []).map(instanceToForm),
+    itemTypes: (d.itemTypes ?? []).map(itemTypeToForm),
   };
 }
 
@@ -56,6 +85,7 @@ export function fromDomainForm(f: DomainForm): Domain {
   if (f.lifecycles.length) d.lifecycles = f.lifecycles.map(lifecycleFromForm);
   if (f.algorithms.length) d.algorithms = f.algorithms.map(algorithmFromForm);
   if (f.instances.length) d.algorithmInstances = f.instances.map(instanceFromForm);
+  if (f.itemTypes.length) d.itemTypes = f.itemTypes.map(itemTypeFromForm);
   return d;
 }
 

@@ -167,6 +167,10 @@ func (ts testTypes) LinkAttributeChecks(string) []domain.AttributeCheck { return
 func (ts testTypes) LinkAttributeValidators(string) []algo.Bound        { return nil }
 func (ts testTypes) LinkTypeValidators(string) []algo.Bound             { return nil }
 func (ts testTypes) AttributeNames(string) ([]string, bool)             { return nil, true }
+func (ts testTypes) ItemAttributeChecks(t string) ([]domain.AttributeCheck, bool) {
+	return typecat.Builtin().ItemAttributeChecks(t)
+}
+func (ts testTypes) ItemTypes() []*typecat.ItemType { return typecat.Builtin().ItemTypes() }
 
 func (ts testTypes) CheckNode(_, typ string) error {
 	if _, ok := ts[typ]; !ok {

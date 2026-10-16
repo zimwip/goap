@@ -1,6 +1,6 @@
 # ADR 0119 — Item types in the domain explorer
 
-**Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0036 (risks and actions), ADR 0065 (item kinds
+**Status**: accepted, implemented; decisions 1 and 2 superseded by [ADR 0128](0128-item-types-declared-by-domains.md) · **Date**: 2026-10 · Builds on ADR 0036 (risks and actions), ADR 0065 (item kinds
 registry), ADR 0110 (assessments)
 
 ## Context

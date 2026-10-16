@@ -55,7 +55,7 @@ func DomainToPB(r def.Record) *registryv1.Domain {
 	d := r.Domain
 	return &registryv1.Domain{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
 		NodeTypes: nodeTypesToPB(d.NodeTypes), LinkTypes: linkTypesToPB(d.LinkTypes), Enums: enumsToPB(d.Enums), Lifecycles: LifecyclesToPB(d.Lifecycles),
-		Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances),
+		Algorithms: algorithmsToPB(d.Algorithms), AlgorithmInstances: instancesToPB(d.Instances), ItemTypes: itemTypesToPB(d.ItemTypes),
 		CreatedAt: pbconv.Time(r.CreatedAt), UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), UpdatedBy: r.UpdatedBy, Builtin: r.Builtin}
 }
 
@@ -63,7 +63,7 @@ func DomainToPB(r def.Record) *registryv1.Domain {
 func DomainSummaryToPB(r def.Record) *registryv1.DomainSummary {
 	d := r.Domain
 	return &registryv1.DomainSummary{Name: d.Name, Version: d.Version, Description: d.Description, Status: string(r.Status),
-		NodeTypeCount: int32(len(d.NodeTypes)), LinkTypeCount: int32(len(d.LinkTypes)),
+		NodeTypeCount: int32(len(d.NodeTypes)), LinkTypeCount: int32(len(d.LinkTypes)), ItemTypeCount: int32(len(d.ItemTypes)),
 		UpdatedAt: pbconv.Time(r.UpdatedAt), PublishedAt: pbconv.Time(r.PublishedAt), Builtin: r.Builtin}
 }
 
@@ -83,7 +83,24 @@ func DomainFromPB(p *registryv1.Domain) def.Domain {
 	d.Enums = enumsFromPB(p.Enums)
 	d.Lifecycles = lifecyclesFromPB(p.Lifecycles)
 	d.Algorithms, d.Instances = AlgorithmsFromPB(p.Algorithms), instancesFromPB(p.AlgorithmInstances)
+	d.ItemTypes = itemTypesFromPB(p.ItemTypes)
 	return d
+}
+
+func itemTypesToPB(ts []def.ItemType) []*registryv1.ItemType {
+	out := make([]*registryv1.ItemType, 0, len(ts))
+	for _, t := range ts {
+		out = append(out, &registryv1.ItemType{Name: t.Name, Description: t.Description, Attributes: attributesToPB(t.Attributes)})
+	}
+	return out
+}
+
+func itemTypesFromPB(ts []*registryv1.ItemType) []def.ItemType {
+	var out []def.ItemType
+	for _, t := range ts {
+		out = append(out, def.ItemType{Name: t.Name, Description: t.Description, Attributes: attributesFromPB(t.Attributes)})
+	}
+	return out
 }
 
 func nodeTypeToPB(n def.NodeType) *registryv1.NodeType {

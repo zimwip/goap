@@ -395,10 +395,10 @@ func (h *Handler) IsAdminOnlyType(ctx context.Context, r *connect.Request[graphv
 	return res(&graphv1.IsAdminOnlyTypeResponse{AdminOnly: adminOnly}, err)
 }
 
-// ListItemTypes lists the item types this service accepts on a change, described (ADR 0119): static metadata of the
-// process, open to any identified caller.
+// ListItemTypes lists the item types a change may hold: the ones the domains in force declare (ADR 0128), open to any
+// identified caller like the types of the catalogue.
 func (h *Handler) ListItemTypes(context.Context, *connect.Request[graphv1.ListItemTypesRequest]) (*connect.Response[graphv1.ListItemTypesResponse], error) {
-	return connect.NewResponse(pbconv.ItemTypesToPB(domain.ItemTypes())), nil
+	return connect.NewResponse(pbconv.ItemTypesToPB(h.Graph.ItemTypes())), nil
 }
 
 func (h *Handler) GetStructures(ctx context.Context, _ *connect.Request[graphv1.GetStructuresRequest]) (*connect.Response[graphv1.GetStructuresResponse], error) {

@@ -3927,17 +3927,20 @@ func (*ListItemTypesRequest) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{51}
 }
 
-// An item type a change may hold (domain.ItemTypeInfo).
+// An item type a change may hold, declared by a domain in force (ADR 0128).
 type ItemTypeInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Type  string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// "core" for the types the graph knows itself, else the use case registering it (risk, assess, verify…)
-	Origin      string `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
-	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// the namespace of the domain declaring it, and its version
+	Domain        string `protobuf:"bytes,2,opt,name=domain,proto3" json:"domain,omitempty"`
+	DomainVersion string `protobuf:"bytes,7,opt,name=domain_version,json=domainVersion,proto3" json:"domain_version,omitempty"`
+	Description   string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
 	// permission asked of the writer of such an item ("<resource>:<action>"), empty when none
 	Permission string `protobuf:"bytes,4,opt,name=permission,proto3" json:"permission,omitempty"`
 	// data field naming the principal who answers for the item, when the permission asks one
-	SubjectField  string `protobuf:"bytes,5,opt,name=subject_field,json=subjectField,proto3" json:"subject_field,omitempty"`
+	SubjectField string `protobuf:"bytes,5,opt,name=subject_field,json=subjectField,proto3" json:"subject_field,omitempty"`
+	// the platform code gives its items a meaning beyond their data (the change mechanism, a use case's validation)
+	Code          bool `protobuf:"varint,6,opt,name=code,proto3" json:"code,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3979,9 +3982,16 @@ func (x *ItemTypeInfo) GetType() string {
 	return ""
 }
 
-func (x *ItemTypeInfo) GetOrigin() string {
+func (x *ItemTypeInfo) GetDomain() string {
 	if x != nil {
-		return x.Origin
+		return x.Domain
+	}
+	return ""
+}
+
+func (x *ItemTypeInfo) GetDomainVersion() string {
+	if x != nil {
+		return x.DomainVersion
 	}
 	return ""
 }
@@ -4005,6 +4015,13 @@ func (x *ItemTypeInfo) GetSubjectField() string {
 		return x.SubjectField
 	}
 	return ""
+}
+
+func (x *ItemTypeInfo) GetCode() bool {
+	if x != nil {
+		return x.Code
+	}
+	return false
 }
 
 type ListItemTypesResponse struct {
@@ -17063,15 +17080,17 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"namespaces\x18\x01 \x03(\tR\n" +
 	"namespaces\"\x16\n" +
 	"\x14GetStructuresRequest\"\x16\n" +
-	"\x14ListItemTypesRequest\"\xa1\x01\n" +
+	"\x14ListItemTypesRequest\"\xdc\x01\n" +
 	"\fItemTypeInfo\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x16\n" +
-	"\x06origin\x18\x02 \x01(\tR\x06origin\x12 \n" +
+	"\x06domain\x18\x02 \x01(\tR\x06domain\x12%\n" +
+	"\x0edomain_version\x18\a \x01(\tR\rdomainVersion\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x1e\n" +
 	"\n" +
 	"permission\x18\x04 \x01(\tR\n" +
 	"permission\x12#\n" +
-	"\rsubject_field\x18\x05 \x01(\tR\fsubjectField\"J\n" +
+	"\rsubject_field\x18\x05 \x01(\tR\fsubjectField\x12\x12\n" +
+	"\x04code\x18\x06 \x01(\bR\x04code\"J\n" +
 	"\x15ListItemTypesResponse\x121\n" +
 	"\x05types\x18\x01 \x03(\v2\x1b.goap.graph.v1.ItemTypeInfoR\x05types\",\n" +
 	"\x16IsAdminOnlyTypeRequest\x12\x12\n" +

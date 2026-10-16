@@ -705,16 +705,19 @@ message GetStructuresRequest {}
 
 message ListItemTypesRequest {}
 
-// An item type a change may hold (domain.ItemTypeInfo).
+// An item type a change may hold, declared by a domain in force (ADR 0128).
 message ItemTypeInfo {
   string type = 1;
-  // "core" for the types the graph knows itself, else the use case registering it (risk, assess, verify…)
-  string origin = 2;
+  // the namespace of the domain declaring it, and its version
+  string domain = 2;
+  string domain_version = 7;
   string description = 3;
   // permission asked of the writer of such an item ("<resource>:<action>"), empty when none
   string permission = 4;
   // data field naming the principal who answers for the item, when the permission asks one
   string subject_field = 5;
+  // the platform code gives its items a meaning beyond their data (the change mechanism, a use case's validation)
+  bool code = 6;
 }
 
 message ListItemTypesResponse {

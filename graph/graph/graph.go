@@ -14,6 +14,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/algo"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/typecat"
 )
 
 // TypeCatalog is what the graph needs of the type catalogue (implemented by pkg/typecat.Catalog). The types are
@@ -50,6 +51,10 @@ type TypeCatalog interface {
 	// Composes reports a composition link type (`compose: true`): its target is a part of its source, so its source is
 	// the parent of its target (ADR 0077, merge and split work from the parent side).
 	Composes(linkType string) bool
+	// ItemAttributeChecks are the attributes a type of change item declares for the data of its items, and whether a
+	// domain declares the type (ADR 0128); ItemTypes lists the declared types.
+	ItemAttributeChecks(itemType string) ([]domain.AttributeCheck, bool)
+	ItemTypes() []*typecat.ItemType
 }
 
 // Graph exposes the domain and change axes.
@@ -592,7 +597,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 				it.Status = domain.ItemProposed
 			}
 			it.CreatedAt = g.now()
-			if err := it.Validate(); err != nil {
+			if err := g.checkItem(it); err != nil {
 				return fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
 			}
 			if it.Decision != nil && !known[it.Decision.Item] {

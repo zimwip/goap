@@ -39,8 +39,7 @@ import LinkTypeTab from './editors/LinkTypeTab.svelte';
 import LifecycleTab from './editors/LifecycleTab.svelte';
 import EnumTab from './editors/EnumTab.svelte';
 import ItemTypeTab from './editors/ItemTypeTab.svelte';
-import { itemTypeOf } from '../stores/itemTypes.svelte';
-import { itemTypeShownIn, originLabel } from '../itemTypes';
+import { itemTypeShownIn } from '../itemTypes';
 import AdapterTab from './editors/AdapterTab.svelte';
 import InstanceTab from './editors/InstanceTab.svelte';
 import AgentTab from './editors/AgentTab.svelte';
@@ -209,6 +208,7 @@ registerView({
         ['Node types', String(d.form.nodeTypes.length)],
         ['Link types', String(d.form.linkTypes.length)],
         ['Enums', String(d.form.enums.length)],
+        ['Item types', String(d.form.itemTypes.length)],
         ['Lifecycles', String(d.form.lifecycles.length)],
         ['Algorithms', `${d.form.algorithms.length} (${d.form.instances.length} instances)`],
         ['Used by', String(d.usage.length)],
@@ -221,7 +221,7 @@ registerView({
 });
 
 // node types, link types and lifecycles: one tab each, on the draft of their domain
-const domainPartProps = (kind: 'nodetype' | 'linktype' | 'lifecycle' | 'enum') => (t: Tab) => {
+const domainPartProps = (kind: 'nodetype' | 'linktype' | 'lifecycle' | 'enum' | 'itemtype') => (t: Tab) => {
   const d = peekDomainDraft(domainGroup(t));
   if (!d || d.isNew) return undefined;
   if (kind === 'nodetype') {
@@ -266,6 +266,20 @@ const domainPartProps = (kind: 'nodetype' | 'linktype' | 'lifecycle' | 'enum') =
       ] as [string, string][],
     };
   }
+  if (kind === 'itemtype') {
+    const x = d.form.itemTypes.find((y) => y.uid === t.params.uid);
+    if (!x) return undefined;
+    return {
+      title: x.name || '(unnamed)',
+      subtitle: 'Item type',
+      rows: [
+        ['Domain', d.label],
+        ['Description', x.description],
+        ['Data', x.attributes.map((a) => a.name).join(', ')],
+        ['Shown in', itemTypeShownIn(x.name.trim())],
+      ] as [string, string][],
+    };
+  }
   const l = d.form.lifecycles.find((x) => x.uid === t.params.uid);
   if (!l) return undefined;
   return {
@@ -285,6 +299,7 @@ for (const v of [
   { id: 'linktype', title: 'Link type', icon: 'trace', component: LinkTypeTab, param: 'lt', short: 'lt' },
   { id: 'lifecycle', title: 'Lifecycle', icon: 'runs', component: LifecycleTab, param: 'lc', short: 'lc' },
   { id: 'enum', title: 'Enum', icon: 'tag', component: EnumTab, param: 'en', short: 'en' },
+  { id: 'itemtype', title: 'Item type', icon: 'tag', component: ItemTypeTab, param: 'it', short: 'it' },
 ] as const) {
   registerView({
     id: v.id,
@@ -302,32 +317,6 @@ for (const v of [
     properties: domainPartProps(v.id),
   });
 }
-
-// item types (ADR 0119): read-only, they change with the platform code
-registerView({
-  id: 'itemtype',
-  zone: 'editor',
-  title: 'Item type',
-  icon: 'tag',
-  component: ItemTypeTab,
-  key: (p) => p.type ?? '',
-  tabTitle: (t) => t.params.type || 'Item type',
-  tooltip: (t) => `Item type ${t.params.type ?? ''}`,
-  properties: (t) => {
-    const x = itemTypeOf(t.params.type ?? '');
-    if (!x) return undefined;
-    return {
-      title: x.type ?? '',
-      subtitle: 'Item type',
-      rows: [
-        ['Origin', originLabel(x)],
-        ['Description', x.description ?? ''],
-        ['Shown in', itemTypeShownIn(x.type ?? '')],
-        ['Permission', x.permission ?? ''],
-      ] as [string, string][],
-    };
-  },
-});
 
 const algorithmProps = (kind: 'algorithm' | 'instance') => (t: Tab) => {
   const d = peekDomainDraft(domainGroup(t));

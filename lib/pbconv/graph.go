@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/lib/typecat"
 )
 
 // Struct converts a map to a protobuf Struct (nil for an empty map).
@@ -397,13 +398,15 @@ func ImpactEventToPB(e domain.ImpactEvent) *graphv1.ImpactEvent {
 	return out
 }
 
-// ItemTypesToPB converts the catalogue of item types (domain.ItemTypes).
-func ItemTypesToPB(types []domain.ItemTypeInfo) *graphv1.ListItemTypesResponse {
+// ItemTypesToPB converts the item types the domains in force declare (ADR 0128), with what the code of this process
+// adds to them (the permission asked of their writer, whether a meaning is coded).
+func ItemTypesToPB(types []*typecat.ItemType) *graphv1.ListItemTypesResponse {
 	out := &graphv1.ListItemTypesResponse{}
-	for _, k := range types {
-		pb := &graphv1.ItemTypeInfo{Type: string(k.Type), Origin: k.Origin, Description: k.Description}
-		if k.Permission != nil {
-			pb.Permission, pb.SubjectField = k.Permission.Permission, k.Permission.SubjectField
+	for _, x := range types {
+		t := domain.ItemType(x.Name)
+		pb := &graphv1.ItemTypeInfo{Type: x.Name, Domain: x.Domain, DomainVersion: x.Version, Description: x.Description, Code: domain.HasItemCode(t)}
+		if p, ok := domain.ItemPermissionOf(t); ok {
+			pb.Permission, pb.SubjectField = p.Permission, p.SubjectField
 		}
 		out.Types = append(out.Types, pb)
 	}

@@ -65,7 +65,7 @@ func (g *Graph) OpenFlow(ctx context.Context, id domain.ChangeID, in OpenFlowReq
 			if it.Status == "" {
 				it.Status = domain.ItemAccepted
 			}
-			if err := it.Validate(); err != nil {
+			if err := g.checkItem(it); err != nil {
 				return fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
 			}
 			if err := putItem(ctx, tx, id, it); err != nil {

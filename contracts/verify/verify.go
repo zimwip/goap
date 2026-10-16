@@ -47,11 +47,11 @@ const (
 	KeyDerogation = "derogation"
 )
 
-// Register makes the verification item kind known to the graph (domain.RegisterItemKind). The services that write or
+// Register gives the verification item type its validation (domain.RegisterItemType; the built-in methodology domain
+// declares it, ADR 0128). The services that write or
 // read such items call it at start, and so does a test that builds them; it may be called any number of times.
 func Register() {
 	domain.RegisterItemType(TypeVerification, validate)
-	domain.DescribeItemType(TypeVerification, "verify", "A state of verification of a produced effect: produced, verified, accepted (with reserve) or rejected (ADR 0075).")
 }
 
 // ValidState reports whether s is a state of verification.

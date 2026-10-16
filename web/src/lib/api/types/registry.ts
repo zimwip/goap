@@ -749,6 +749,14 @@ export interface MethodologyGuardian {
   transitions?: Record<string, string>;
 }
 
+/** A type of change item a domain declares (ADR 0128): its items name it in their `type`. */
+export interface ItemTypeDef {
+  name?: string;
+  description?: string;
+  /** the keys of the data of its items */
+  attributes?: Attribute[];
+}
+
 /** Shared object part of the model: node types and link types, versioned on its own. */
 export interface Domain {
   name?: string;
@@ -761,6 +769,7 @@ export interface Domain {
   lifecycles?: Lifecycle[];
   algorithms?: Algorithm[];
   algorithmInstances?: AlgorithmInstance[];
+  itemTypes?: ItemTypeDef[];
   createdAt?: string;
   updatedAt?: string;
   publishedAt?: string;
@@ -776,6 +785,7 @@ export interface DomainSummary {
   status?: string;
   nodeTypeCount?: number;
   linkTypeCount?: number;
+  itemTypeCount?: number;
   updatedAt?: string;
   publishedAt?: string;
   /** built into the platform: published and frozen */

@@ -479,13 +479,13 @@ func testReopenImpacts(t *testing.T, repo Repo) {
 
 // ItemAuthorizer is asked about the items of a kind that asks a permission of its writer, and only those (ADR 0075).
 func TestItemAuthorizer(t *testing.T) {
-	const kind domain.ItemType = "test-signed"
-	domain.RegisterItemType(kind, nil)
+	const kind domain.ItemType = "testSigned"
 	domain.RequireItemPermission(kind, domain.ItemPermission{Permission: "thing:sign", SubjectField: "who"})
 	forEachRepo(t, func(t *testing.T, repo Repo) {
 		ctx := context.Background()
 		f := newFixture(t, repo)
 		g := f.g
+		declareItemTypes(t, g, string(kind))
 		c, err := g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "t", BaselineID: f.base.ID})
 		if err != nil {
 			t.Fatal(err)

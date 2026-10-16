@@ -445,7 +445,7 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 func (g *Graph) putReviewRecord(ctx context.Context, tx Tx, change domain.ChangeID, by, comment string, entries []domain.ReviewEntry) (key, cause string, err error) {
 	rec := domain.ReviewRecord{Key: "REV-" + g.newID(), Comment: comment, Status: domain.ReviewStatusSubmitted, Entries: entries, By: by, SubmittedAt: g.now()}
 	it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Type: domain.TypeReview, Status: domain.ItemProposed, Data: rec.Data(), ProducedBy: by, CreatedAt: g.now()}
-	if err := it.Validate(); err != nil {
+	if err := g.checkItem(it); err != nil {
 		return "", "", fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
 	}
 	return rec.Key, string(it.ID), putItem(ctx, tx, change, it)
@@ -491,7 +491,7 @@ func (g *Graph) reviewRecord(b domain.ReviewBatch) (domain.ChangeItem, error) {
 		it.Status = domain.ItemProposed
 	}
 	it.CreatedAt = g.now()
-	if err := it.Validate(); err != nil {
+	if err := g.checkItem(it); err != nil {
 		return it, fmt.Errorf("item %s: %v: %w", it.ID, err, ErrInvalid)
 	}
 	return it, nil

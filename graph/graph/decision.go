@@ -33,7 +33,7 @@ func (g *Graph) decisionEvent(ctx context.Context, tx Tx, id domain.ChangeID, e 
 func (g *Graph) putDecisionEvent(ctx context.Context, tx Tx, id domain.ChangeID, e domain.DecisionEvent) (domain.ItemID, error) {
 	it := domain.ChangeItem{ID: domain.ItemID(g.newID()), Type: domain.TypeDecisionPoint, Target: "decision." + e.Op, Status: domain.ItemAccepted,
 		ProducedBy: firstNonEmpty(e.By, "graph.decision"), DecisionEvent: &e, CreatedAt: g.now()}
-	if err := it.Validate(); err != nil {
+	if err := g.checkItem(it); err != nil {
 		return "", fmt.Errorf("%w: %w", err, ErrInvalid)
 	}
 	return it.ID, putItem(ctx, tx, id, it)

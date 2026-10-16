@@ -1,5 +1,5 @@
 name: methodology
-version: 1.11.0
+version: 1.12.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -337,3 +337,94 @@ linkTypes:
     to: Condition
     label: mentions
     inverseLabel: "mentioned by"
+# The types of change item (ADR 0128): what the actions of a methodology write on a change and its conditions read.
+# Each change item names its type (`type`) and, within it, what it is about (`target`: what an artifact is, the name
+# of a signal). The graph refuses an item of a type no domain in force declares, and checks the keys of its data an
+# item type declares as attributes (type, enum); the rest of the data stays free. The use cases add the meaning in
+# code (domain.RegisterItemType: risk, assess, verify).
+itemTypes:
+  # the change mechanism
+  - name: artifact
+    description: "A product of an action (a document, a report, a plan…); its target names what it is."
+  - name: decision
+    description: "Accepts or rejects another item of the change."
+  - name: decision_point
+    description: "An event of a decision point (open, rule, answer, ratify), replayed into the decision points of the change (ADR 0009)."
+  - name: flow
+    description: "An event of the action flow: a step relaunched on a new flow, which is then adopted or discarded."
+  - name: review
+    description: "The record of a review of the change impacts; every verdict is made by a submitted review (ADR 0080, 0105)."
+    attributes:
+      - {name: key, label: Key, description: "The review the item is a version of", type: string}
+      - {name: comment, label: Comment, description: "The comment of the reviewer", type: string, widget: textarea}
+      - {name: status, label: Status, description: "open, submitted or discarded", type: string}
+      - {name: entries, label: Entries, description: "The verdicts: impact, comment, outcome accept | reject", type: json}
+      - {name: by, label: By, description: "The reviewer", type: string}
+      - {name: submittedAt, label: Submitted, description: "When the review was submitted", type: date}
+  - name: signal
+    description: "A named notification other agents or a live parent may react to; its target is the name of the signal, its recipient the process it addresses."
+  - name: transition
+    description: "A move of the lifecycle of the change, written only by a transition (ADR 0058)."
+  # the risk register (pkg/risk, ADR 0036, 0075)
+  - name: risk
+    description: "A risk of the change: each item is a version of the record of its key (ADR 0036)."
+    attributes:
+      - {name: key, label: Key, description: "The risk the item is a version of", type: string}
+      - {name: title, label: Title, description: "What could go wrong", type: string}
+      - {name: description, label: Description, description: "The risk in detail", type: string, widget: textarea}
+      - {name: probability, label: Probability, description: "1 (rare) to 5 (almost certain)", type: number}
+      - {name: impact, label: Impact, description: "1 (minor) to 5 (severe)", type: number}
+      - {name: status, label: Status, description: "open, mitigating, accepted, closed", type: string}
+      - {name: owner, label: Owner, description: "Who answers for the risk", type: string}
+      - {name: actions, label: Actions, description: "Keys of the actions mitigating it", type: json}
+      - {name: step, label: Step, description: "The step that raised it", type: string}
+  - name: action
+    description: "An action mitigating a risk or answering a decision point: each item is a version of the record of its key (ADR 0036)."
+    attributes:
+      - {name: key, label: Key, description: "The action the item is a version of", type: string}
+      - {name: title, label: Title, description: "What is to be done", type: string}
+      - {name: status, label: Status, description: "open, done, cancelled", type: string}
+      - {name: owner, label: Owner, description: "Who does it", type: string}
+      - {name: due, label: Due, description: "When it is due", type: string}
+      - {name: for, label: For, description: "The risk key or the decision point it answers", type: string}
+      - {name: result, label: Result, description: "What came of it", type: string, widget: textarea}
+  - name: derogation
+    description: "A signed waiver of a rule on a target of the change, until it expires (ADR 0075)."
+    attributes:
+      - {name: key, label: Key, description: "The derogation the item is a version of", type: string}
+      - {name: rule, label: Rule, description: "The rule waived", type: string}
+      - {name: target, label: Target, description: "What the rule is waived on", type: string}
+      - {name: reason, label: Reason, description: "Why it is waived", type: string, widget: textarea}
+      - {name: signatory, label: Signatory, description: "Who signed it (the writer of the item)", type: string}
+      - {name: expires, label: Expires, description: "Until when it holds", type: string}
+      - {name: status, label: Status, description: "active, expired, closed", type: string}
+  # assessments (pkg/assess, ADR 0110)
+  - name: assessment
+    description: "A rating of a subject of the change (score, verdict, findings, suggestion): each item is the whole record of its key (ADR 0110)."
+    attributes:
+      - {name: key, label: Subject, description: "The subject rated: description, title, intent, impact:<key>, item:<key>", type: string}
+      - {name: score, label: Score, description: "0 to 5", type: number}
+      - {name: verdict, label: Verdict, description: "clear, unclear, insufficient, confirmed or refuted", type: string}
+      - {name: findings, label: Findings, description: "The remarks: text, severity", type: json}
+      - {name: suggestion, label: Suggestion, description: "A wording the rater proposes", type: string, widget: textarea}
+      - {name: reply, label: Reply, description: "What the rater says to the person", type: string, widget: textarea}
+      - {name: rated, label: Rated, description: "The text rated or its fingerprint", type: string}
+  - name: comment
+    description: "A message of a person about a subject, in the thread of its assessment (ADR 0110)."
+    attributes:
+      - {name: about, label: About, description: "The subject of the thread", type: string}
+      - {name: text, label: Text, description: "The message", type: string, widget: textarea}
+      - {name: by, label: By, description: "Who wrote it", type: string}
+  # verification (pkg/verify, ADR 0075)
+  - name: verification
+    description: "A state of verification of a produced effect: produced, verified, accepted (with reserve) or rejected (ADR 0075)."
+    attributes:
+      - {name: state, label: State, description: "produced, verified, accepted, accepted_with_reserve, rejected", type: string}
+      - {name: action, label: Action, description: "The action whose effect is verified", type: string}
+      - {name: impact, label: Impact, description: "The impact verified", type: string}
+      - {name: impacts, label: Impacts, description: "The impacts verified", type: json}
+      - {name: oracle, label: Oracle, description: "How it was verified", type: string}
+      - {name: independent, label: Independent, description: "The verifier is not the producer", type: boolean}
+      - {name: model, label: Model, description: "The model that verified it", type: string}
+      - {name: by, label: By, description: "Who verified it", type: string}
+      - {name: derogation, label: Derogation, description: "The derogation an acceptance with reserve stands on", type: string}

@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -179,7 +180,11 @@ func (s *Service) validateDomain(ctx context.Context, d *def.Domain) def.Issues 
 	}
 	if len(issues) == 0 {
 		if _, err := s.Types(ctx, d); err != nil {
-			issues = append(issues, def.Issue{Path: "nodeTypes", Message: err.Error()})
+			path := "nodeTypes"
+			if strings.HasPrefix(err.Error(), "item type") {
+				path = "itemTypes"
+			}
+			issues = append(issues, def.Issue{Path: path, Message: err.Error()})
 		}
 	}
 	return issues

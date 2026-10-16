@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/risk"
+	"github.com/zimwip/goap/graph/graph"
 )
 
 // Writing a derogation asks derogation:sign and that the signatory is the writer (ADR 0075 §2).
@@ -85,10 +86,11 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 	}
 }
 
-// The item types of the process are listed with their origin and the permission they ask (ADR 0119).
+// The item types are the ones the domains in force declare, listed with their domain and the permission they ask
+// (ADR 0128).
 func TestListItemTypes(t *testing.T) {
 	risk.Register()
-	h := &Handler{}
+	h := &Handler{Graph: graph.New(graph.NewMemory())}
 	r, err := h.ListItemTypes(context.Background(), connect.NewRequest(&graphv1.ListItemTypesRequest{}))
 	if err != nil {
 		t.Fatal(err)
@@ -97,10 +99,10 @@ func TestListItemTypes(t *testing.T) {
 	for _, k := range r.Msg.Types {
 		got[k.Type] = k
 	}
-	if k := got["artifact"]; k == nil || k.Origin != "core" {
+	if k := got["artifact"]; k == nil || k.Domain != "methodology" || !k.Code || k.Description == "" {
 		t.Errorf("artifact: %v", k)
 	}
-	if k := got["derogation"]; k == nil || k.Origin != risk.Origin || k.Permission != risk.PermissionSign || k.SubjectField != "signatory" {
+	if k := got["derogation"]; k == nil || k.Domain != "methodology" || k.Permission != risk.PermissionSign || k.SubjectField != "signatory" {
 		t.Errorf("derogation: %v", k)
 	}
 }

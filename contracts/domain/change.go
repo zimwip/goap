@@ -236,7 +236,8 @@ type Decision struct {
 	Comment string `json:"comment,omitempty"`
 }
 
-// Validate checks the structural consistency of an item.
+// Validate checks the structural consistency of an item and runs the validator its use case registered for its type
+// (RegisterItemType). Whether a domain declares the type is the graph's question (ADR 0128): it knows the domains.
 func (it ChangeItem) Validate() error {
 	switch it.Type {
 	case TypeFlow:
@@ -254,7 +255,7 @@ func (it ChangeItem) Validate() error {
 	case TypeArtifact:
 	case TypeSignal:
 		if it.Target == "" {
-			return fmt.Errorf("signal item requires type")
+			return fmt.Errorf("signal item requires target, the name of the signal")
 		}
 	case TypeTransition:
 		if s, _ := it.Data["to"].(string); s == "" {
@@ -263,16 +264,14 @@ func (it ChangeItem) Validate() error {
 	case TypeReview:
 		return validateReview(it)
 	default:
-		validate := itemTypes.get(it.Type)
-		if validate == nil {
-			return fmt.Errorf("unknown item kind %q", it.Type)
+		if validate := itemTypes.get(it.Type); validate != nil {
+			return validate(it)
 		}
-		return validate(it)
 	}
 	return nil
 }
 
-// itemTypes holds the kinds of item the use cases add to the built-in ones (RegisterItemKind).
+// itemTypes holds the validators the use cases give their types of item (RegisterItemType).
 var itemTypes registry
 
 type registry struct {
@@ -280,8 +279,6 @@ type registry struct {
 	m  map[ItemType]func(ChangeItem) error
 	// perms are the permissions a kind of item asks of its writer (RequireItemPermission).
 	perms map[ItemType]ItemPermission
-	// desc describes the kinds for the catalogue (DescribeItemKind).
-	desc map[ItemType]ItemTypeInfo
 }
 
 func (r *registry) get(k ItemType) func(ChangeItem) error {
@@ -290,8 +287,9 @@ func (r *registry) get(k ItemType) func(ChangeItem) error {
 	return r.m[k]
 }
 
-// RegisterItemType makes a kind of item known to ChangeItem.Validate: a use case adds the facts it writes to a
-// change (pkg/risk: risks, actions, waivers) without the core naming them. Registration is explicit, done by the
+// RegisterItemType gives the items of a type the validation of its use case, run by ChangeItem.Validate: a use case adds
+// the meaning of the facts it writes to a change (pkg/risk: risks, actions, derogations) without the core naming them.
+// The type itself is declared by a domain (ADR 0128). Registration is explicit, done by the
 // composition root (the cmd/* mains) or by a test, never by init; it is idempotent (the last validation of a kind
 // wins) and safe for concurrent use. A nil validate accepts every item of the kind.
 func RegisterItemType(kind ItemType, validate func(ChangeItem) error) {
@@ -317,7 +315,7 @@ type ItemPermission struct {
 
 // RequireItemPermission makes the write of the items of a kind subject to a permission (ADR 0075): the graph asks its
 // ItemAuthorizer before it stores them and knows nothing of what the kind means. Registration is explicit and
-// idempotent, like RegisterItemKind.
+// idempotent, like RegisterItemType.
 func RequireItemPermission(kind ItemType, p ItemPermission) {
 	itemTypes.mu.Lock()
 	defer itemTypes.mu.Unlock()

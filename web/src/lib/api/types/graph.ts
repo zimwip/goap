@@ -251,14 +251,18 @@ export interface Decision {
 
 export type ItemType = 'decision' | 'artifact' | 'flow';
 
-/** An item type a change may hold (ADR 0119): `origin` is `core` for the types the graph
- * knows itself, else the use case registering it; `permission` / `subjectField` what writing one asks of its writer. */
+/** An item type a change may hold, declared by a domain in force (ADR 0128); `permission` / `subjectField` what writing
+ * one asks of its writer. */
 export interface ItemTypeInfo {
   type?: string;
-  origin?: string;
+  /** the namespace of the domain declaring it, and its version */
+  domain?: string;
+  domainVersion?: string;
   description?: string;
   permission?: string;
   subjectField?: string;
+  /** the platform code gives its items a meaning beyond their data */
+  code?: boolean;
 }
 
 /** Status of a superseded item (rebase, merge): see its replacement's `supersedes`. */

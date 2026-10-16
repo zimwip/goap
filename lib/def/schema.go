@@ -24,6 +24,8 @@ type Schema struct {
 	// parameterized uses; node types and lifecycle transitions plug instances.
 	Algorithms []algo.Algorithm `yaml:"algorithms,omitempty" json:"algorithms,omitempty"`
 	Instances  []algo.Instance  `yaml:"algorithmInstances,omitempty" json:"algorithmInstances,omitempty"`
+	// ItemTypes are the types of change item the domain declares (ADR 0128).
+	ItemTypes []ItemType `yaml:"itemTypes,omitempty" json:"itemTypes,omitempty"`
 }
 
 // algorithms returns the algorithm set of the schema.
@@ -125,6 +127,7 @@ func (s Schema) check(prefix string, add func(path, format string, args ...any))
 	s.checkStructures(prefix, add)
 	s.checkRequires(prefix, add)
 	s.checkForms(prefix, add)
+	s.checkItemTypes(prefix, add)
 	return nodeTypes, linkTypes
 }
 
@@ -452,6 +455,9 @@ func (s Schema) checkAttributes(prefix string, add func(path, format string, arg
 	}
 	for i, l := range s.LinkTypes {
 		check(fmt.Sprintf(prefix+"linkTypes[%d]", i), l.Attributes, false)
+	}
+	for i, t := range s.ItemTypes {
+		check(fmt.Sprintf(prefix+"itemTypes[%d]", i), t.Attributes, false)
 	}
 }
 
