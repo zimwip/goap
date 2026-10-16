@@ -974,8 +974,11 @@ message LinkTypeInfo {
 }
 
 message GetProcessGraphRequest {
+  // the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
   Methodology methodology = 1;
   string process = 2;
+  string name = 3;
+  string version = 4;
 }
 
 message GetProcessGraphResponse {
@@ -985,7 +988,10 @@ message GetProcessGraphResponse {
 }
 
 message GetMethodologyViewRequest {
+  // the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
   Methodology methodology = 1;
+  string name = 2;
+  string version = 3;
 }
 
 message GetMethodologyViewResponse {
@@ -1060,9 +1066,12 @@ message ViewCondition {
 }
 
 message CheckLevelsRequest {
+  // the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
   Methodology methodology = 1;
   // a process, or a method composing its own steps
   string root = 2;
+  string name = 3;
+  string version = 4;
 }
 
 message CheckLevelsResponse {

@@ -455,12 +455,25 @@ func (h *Handler) GetChangeState(ctx context.Context, r *connect.Request[enginev
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &enginev1.GetChangeStateResponse{ChangeId: string(st.ChangeID), Methodology: st.Methodology, Goal: st.Goal, GoalReached: st.GoalReached}
+	out := &enginev1.GetChangeStateResponse{ChangeId: string(st.ChangeID), Methodology: st.Methodology, Version: st.Version, Goal: st.Goal, GoalReached: st.GoalReached}
 	for _, p := range st.Processes {
-		out.Processes = append(out.Processes, &enginev1.ProcessState{Process: p.Process, Description: p.Description, State: p.State, Reactive: p.Reactive,
-			Runs: int32(p.Runs), Current: p.Current, Status: string(p.Status), Error: p.Error, Steps: stepProgressToPB(p.Steps), Done: int32(p.Done), Total: int32(p.Total)})
+		out.Processes = append(out.Processes, &enginev1.ProcessState{Process: p.Process, State: p.State,
+			Runs: int32(p.Runs), Current: p.Current, Status: string(p.Status), Error: p.Error, Steps: stepStatesToPB(p.Steps), Done: int32(p.Done), Total: int32(p.Total)})
 	}
 	return connect.NewResponse(out), nil
+}
+
+func stepStatesToPB(steps []engine.StepState) []*enginev1.StepState {
+	out := make([]*enginev1.StepState, 0, len(steps))
+	for _, s := range steps {
+		st := &enginev1.StepState{Path: s.Path, State: s.State, Missing: s.Missing, Runs: int32(s.Runs), ChildProcessIds: s.ChildProcessIDs,
+			Lanes: lanesToPB(s.Lanes), Waiting: s.Waiting, Permission: s.Permission, Chosen: s.Chosen, Steps: stepStatesToPB(s.Steps)}
+		for _, n := range s.Needs {
+			st.Needs = append(st.Needs, &enginev1.NeedState{Condition: n.Condition, Want: n.Want, Requires: n.Requires, Facts: factsToPB(n.Facts)})
+		}
+		out = append(out, st)
+	}
+	return out
 }
 
 // GetChangeAsks serves what a change waits for from people (ADR 0117): read like the change itself (a personal change

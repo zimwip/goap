@@ -6883,9 +6883,12 @@ func (x *LinkTypeInfo) GetInverseLabel() string {
 }
 
 type GetProcessGraphRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	Process       string                 `protobuf:"bytes,2,opt,name=process,proto3" json:"process,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
+	Methodology   *Methodology `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Process       string       `protobuf:"bytes,2,opt,name=process,proto3" json:"process,omitempty"`
+	Name          string       `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string       `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6930,6 +6933,20 @@ func (x *GetProcessGraphRequest) GetMethodology() *Methodology {
 func (x *GetProcessGraphRequest) GetProcess() string {
 	if x != nil {
 		return x.Process
+	}
+	return ""
+}
+
+func (x *GetProcessGraphRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetProcessGraphRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
 	}
 	return ""
 }
@@ -6988,8 +7005,11 @@ func (x *GetProcessGraphResponse) GetIssues() []*Issue {
 }
 
 type GetMethodologyViewRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Methodology   *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
+	Methodology   *Methodology `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Name          string       `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string       `protobuf:"bytes,3,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7029,6 +7049,20 @@ func (x *GetMethodologyViewRequest) GetMethodology() *Methodology {
 		return x.Methodology
 	}
 	return nil
+}
+
+func (x *GetMethodologyViewRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *GetMethodologyViewRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
 }
 
 type GetMethodologyViewResponse struct {
@@ -7541,10 +7575,13 @@ func (x *ViewCondition) GetRequires() []string {
 }
 
 type CheckLevelsRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Methodology *Methodology           `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
+	Methodology *Methodology `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
 	// a process, or a method composing its own steps
 	Root          string `protobuf:"bytes,2,opt,name=root,proto3" json:"root,omitempty"`
+	Name          string `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	Version       string `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7589,6 +7626,20 @@ func (x *CheckLevelsRequest) GetMethodology() *Methodology {
 func (x *CheckLevelsRequest) GetRoot() string {
 	if x != nil {
 		return x.Root
+	}
+	return ""
+}
+
+func (x *CheckLevelsRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *CheckLevelsRequest) GetVersion() string {
+	if x != nil {
+		return x.Version
 	}
 	return ""
 }
@@ -9443,15 +9494,19 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"attributes\x18\x05 \x03(\v2\x1f.goap.registry.v1.AttributeInfoR\n" +
 	"attributes\x12\x14\n" +
 	"\x05label\x18\x06 \x01(\tR\x05label\x12#\n" +
-	"\rinverse_label\x18\a \x01(\tR\finverseLabel\"s\n" +
+	"\rinverse_label\x18\a \x01(\tR\finverseLabel\"\xa1\x01\n" +
 	"\x16GetProcessGraphRequest\x12?\n" +
 	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\x12\x18\n" +
-	"\aprocess\x18\x02 \x01(\tR\aprocess\"\x80\x01\n" +
+	"\aprocess\x18\x02 \x01(\tR\aprocess\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"\x80\x01\n" +
 	"\x17GetProcessGraphResponse\x124\n" +
 	"\x05graph\x18\x01 \x01(\v2\x1e.goap.registry.v1.ProcessGraphR\x05graph\x12/\n" +
-	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"\\\n" +
+	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"\x8a\x01\n" +
 	"\x19GetMethodologyViewRequest\x12?\n" +
-	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\"\x84\x01\n" +
+	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x03 \x01(\tR\aversion\"\x84\x01\n" +
 	"\x1aGetMethodologyViewResponse\x125\n" +
 	"\x04view\x18\x01 \x01(\v2!.goap.registry.v1.MethodologyViewR\x04view\x12/\n" +
 	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\"\x8c\x03\n" +
@@ -9517,10 +9572,12 @@ const file_goap_registry_v1_registry_proto_rawDesc = "" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x1f\n" +
 	"\vproduced_by\x18\x02 \x03(\tR\n" +
 	"producedBy\x12\x1a\n" +
-	"\brequires\x18\x03 \x03(\tR\brequires\"i\n" +
+	"\brequires\x18\x03 \x03(\tR\brequires\"\x97\x01\n" +
 	"\x12CheckLevelsRequest\x12?\n" +
 	"\vmethodology\x18\x01 \x01(\v2\x1d.goap.registry.v1.MethodologyR\vmethodology\x12\x12\n" +
-	"\x04root\x18\x02 \x01(\tR\x04root\"\x92\x02\n" +
+	"\x04root\x18\x02 \x01(\tR\x04root\x12\x12\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12\x18\n" +
+	"\aversion\x18\x04 \x01(\tR\aversion\"\x92\x02\n" +
 	"\x13CheckLevelsResponse\x124\n" +
 	"\x06levels\x18\x01 \x03(\v2\x1c.goap.registry.v1.LevelCheckR\x06levels\x12/\n" +
 	"\x06issues\x18\x02 \x03(\v2\x17.goap.registry.v1.IssueR\x06issues\x12U\n" +

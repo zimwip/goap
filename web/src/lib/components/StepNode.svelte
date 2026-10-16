@@ -39,6 +39,10 @@
     /** a step naming a capability: the methods that specialize it, each with a graph of its own */
     variants?: string[];
     onvariant?: (method: string) => void;
+    /** where the step stands on a change (done, active, waiting, ready, todo, blocked, skipped) */
+    state?: string;
+    /** simplified display: no port per condition, one link in and one out */
+    simple?: boolean;
   }
 </script>
 
@@ -53,6 +57,7 @@
     update(id);
   });
   const label = (c: string, v: boolean) => (v ? c : `¬ ${c}`);
+  const STATE_LABEL: Record<string, string> = { done: 'done', skipped: 'not needed', active: 'in progress', waiting: 'waiting', ready: 'ready', todo: 'to do', blocked: 'blocked' };
   function portMenu(e: MouseEvent, c: string) {
     if (!data.onportmenu) return;
     e.preventDefault();
@@ -82,7 +87,12 @@
   <div class="head">
     <span class="title">{data.name}</span>
     {#if data.kind === 'step'}<span class="kind">{data.method}</span>{/if}
+    {#if data.state}<span class="st st-{data.state}" title="Where the step stands on the change">{STATE_LABEL[data.state] ?? data.state}</span>{/if}
   </div>
+  {#if data.simple}
+    <Handle type="target" position={Position.Left} id="t" isConnectable={false} />
+    <Handle type="source" position={Position.Right} id="s" isConnectable={false} />
+  {/if}
   {#if data.method === 'variant'}
     <div class="zoom">
       <button type="button" class="chip" title="Open the method: its steps are drawn in a graph of their own" onclick={(e) => (e.stopPropagation(), data.onvariant?.(data.name))}>open method</button>
@@ -114,6 +124,7 @@
       {/each}
     </div>
   {/if}
+  {#if !data.simple}
   <div class="ports">
     <div class="col-in">
       {#each data.inputs as [c, v] (c)}
@@ -136,9 +147,41 @@
       {/each}
     </div>
   </div>
+  {/if}
 </div>
 
 <style>
+  .st {
+    margin-left: auto;
+    font-size: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0 5px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+  .st-done {
+    color: var(--ok);
+    border-color: var(--ok);
+  }
+  .st-active {
+    color: var(--info);
+    border-color: var(--info);
+  }
+  .st-waiting {
+    color: var(--warn);
+    border-color: var(--warn);
+    background: var(--warn-soft);
+  }
+  .st-ready {
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+  .st-blocked {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: var(--danger-soft);
+  }
   .node {
     min-width: 180px;
     max-width: 260px;

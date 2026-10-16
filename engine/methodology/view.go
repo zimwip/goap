@@ -6,17 +6,19 @@ import (
 )
 
 // View is the compiled shape of the activities of a methodology as they are shown (ADR 0126 step 3): the processes
-// and the methods composing steps, their step trees with entry and exit conditions, roles and guidance, and what each
-// condition named there means, which actions produce it and which conditions it cannot hold without. It holds no value
-// of a change: the engine binds it to a change (the conditions evaluated, the runs laid over it, the rights of the
-// caller) and the editors can show it as it is. It is computed once per compiled methodology.
+// and the methods, their step trees with entry and exit conditions, roles and guidance, and what each condition named
+// there means, which actions produce it and which conditions it cannot hold without. It holds no value of a change:
+// the engine binds it to a change (the conditions evaluated, the runs laid over it, the rights of the caller) and the
+// editors show it as it is. It is computed once per compiled methodology, and the flow of an activity (ProcessGraph)
+// is a projection of it.
 type View struct {
 	Methodology string `json:"methodology"`
 	Version     string `json:"version,omitempty"`
 	// Goal is the main goal of the methodology (ADR 0096).
 	Goal      string         `json:"goal,omitempty"`
 	Processes []ActivityView `json:"processes"`
-	// Methods are the valid methods (ADR 0050), with their steps when they compose some.
+	// Methods are the methods (ADR 0050), with their steps when they compose some; a method the compiler refused has
+	// no goal and is never chosen.
 	Methods []ActivityView `json:"methods,omitempty"`
 	// Conditions describes every condition an entry, an exit or a goal of the view names, and their prerequisites.
 	Conditions map[string]ConditionView `json:"conditions,omitempty"`
@@ -41,10 +43,13 @@ type ActivityView struct {
 	// its steps runs again on events (ADR 0110).
 	Nested   bool `json:"nested,omitempty"`
 	Reactive bool `json:"reactive,omitempty"`
-	// For is the capability a method provides, Roles the roles it assigns.
-	For   string            `json:"for,omitempty"`
-	Roles *Responsibilities `json:"roles,omitempty"`
-	Steps []StepView        `json:"steps,omitempty"`
+	// For is the capability a method provides, Roles the roles it assigns, Actions the pool of actions it owns.
+	For     string            `json:"for,omitempty"`
+	Roles   *Responsibilities `json:"roles,omitempty"`
+	Actions []string          `json:"actions,omitempty"`
+	// References are the reference documents describing the activity.
+	References []Reference `json:"references,omitempty"`
+	Steps      []StepView  `json:"steps,omitempty"`
 }
 
 // StepView is a step of an activity of the view, with its sub-steps.
@@ -54,10 +59,14 @@ type StepView struct {
 	Owner string `json:"owner"`
 	// Method: steps, action, agent, process, capability or manual; Target what it runs (action names, the nested
 	// process, the capability).
-	Method      string      `json:"method"`
-	Target      string      `json:"target,omitempty"`
-	Capability  string      `json:"capability,omitempty"`
+	Method     string `json:"method"`
+	Target     string `json:"target,omitempty"`
+	Capability string `json:"capability,omitempty"`
+	// Process is the process a step nests ("<process>" or "<methodology>/<process>").
+	Process string `json:"process,omitempty"`
+	// Foreach and GroupBy: the step runs once per element (or group) of the list (ADR 0050).
 	Foreach     string      `json:"foreach,omitempty"`
+	GroupBy     string      `json:"groupBy,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Guidance    string      `json:"guidance,omitempty"`
 	Checklist   []string    `json:"checklist,omitempty"`
@@ -101,7 +110,7 @@ func (v *View) Method(name string) (ActivityView, bool) {
 	return ActivityView{}, false
 }
 
-// Condition is what the view says of a condition (its name alone when it names none).
+// Condition is what the view says of a condition (nothing when it names none).
 func (v *View) Condition(name string) ConditionView { return v.Conditions[name] }
 
 // View is the view of the activities of the methodology (computed at compilation).
@@ -129,18 +138,21 @@ func (c *Compiled) buildView() *View {
 	for _, p := range c.Processes() {
 		a := ActivityView{Name: p.Name, Kind: ActivityProcess, Description: p.Description, Agent: agents[p.Name], Nested: p.Nested,
 			Reactive: reactive[p.Name], Steps: c.stepViews(c.ProcessSteps(p.Name))}
+		if def, ok := c.definition.ProcessByName(p.Name); ok {
+			a.References = def.References
+		}
 		if g, ok := c.Goal(p.Name); ok {
 			a.Goal, a.Done = g.Name, g.Pre
 		}
 		v.Processes = append(v.Processes, a)
 	}
 	for _, me := range c.definition.Methods {
-		g, ok := c.methods.goals[me.Name]
-		if !ok {
-			continue // not valid: never chosen
+		a := ActivityView{Name: me.Name, Kind: ActivityMethod, Description: me.Description, Agent: me.ActorAgent(), Reactive: reactive[me.Name],
+			For: me.For, Roles: me.Roles, Actions: me.Actions, References: me.References, Steps: c.stepViews(c.MethodSteps(me.Name))}
+		if g, ok := c.methods.goals[me.Name]; ok {
+			a.Goal, a.Done = g.Name, g.Pre
 		}
-		v.Methods = append(v.Methods, ActivityView{Name: me.Name, Kind: ActivityMethod, Description: me.Description, Agent: me.ActorAgent(),
-			Goal: g.Name, Done: g.Pre, Reactive: reactive[me.Name], For: me.For, Roles: me.Roles, Steps: c.stepViews(c.MethodSteps(me.Name))})
+		v.Methods = append(v.Methods, a)
 	}
 	// the conditions named, and their prerequisites
 	var todo []string
@@ -183,9 +195,9 @@ func (c *Compiled) stepViews(steps []StepInfo) []StepView {
 	}
 	out := make([]StepView, 0, len(steps))
 	for _, s := range steps {
-		sv := StepView{Path: s.Path, Name: s.Name, Owner: s.Owner, Method: s.Method(), Capability: s.Capability, Foreach: s.Foreach,
-			Description: s.Description, Guidance: s.Guidance, Checklist: s.Checklist, References: s.References, Roles: s.Effective,
-			Entry: s.Entry, Exit: s.Exit, Planned: slices.Clone(s.Planned), Steps: c.stepViews(s.Steps)}
+		sv := StepView{Path: s.Path, Name: s.Name, Owner: s.Owner, Method: s.Method(), Capability: s.Capability, Process: s.Process,
+			Foreach: s.Foreach, GroupBy: s.GroupBy, Description: s.Description, Guidance: s.Guidance, Checklist: s.Checklist,
+			References: s.References, Roles: s.Effective, Entry: s.Entry, Exit: s.Exit, Planned: slices.Clone(s.Planned), Steps: c.stepViews(s.Steps)}
 		switch sv.Method {
 		case MethodAction:
 			sv.Target = s.Action

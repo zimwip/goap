@@ -2,7 +2,8 @@
 
 **Status**: accepted; step 1 implemented (the call of a step, the owner of a step and of a reaction, the descriptions
 of the generated conditions), step 2 implemented (`Compiled` the activable form, the planner conversion in the engine),
-step 3 implemented (the compiled view, bound by the engine) · **Date**: 2026-10 · Builds on
+step 3 implemented (the compiled view, bound by the engine), step 4 implemented (the change screen
+draws the view, the engine answers the binding) · **Date**: 2026-10 · Builds on
 ADR 0034 (processes), ADR 0035 / 0050 (methods), ADR 0062 (builtins), ADR 0109 (conditions), ADR 0125 (components)
 
 ## Context
@@ -84,11 +85,31 @@ and its binding to a change (the conditions evaluated, the live runs laid over t
     drawn as far as it compiles, with its issues; messages `MethodologyView`, `ViewActivity`, `ViewStep`,
     `ViewCondition`), web `registry.methodologyView`, type `MethodologyView` (`MethodologyViewJson`).
 
+## Step 4: one view, drawn by the change screen
+
+11. One compiled shape. The flow of a process or method (`Compiled.ProcessGraph`, the flow view of the editors) is a
+    projection of the compiled view (its step tree flattened, the edges its conditions draw, the methods of the
+    capabilities it names and their agents), no longer a second walk of the definition. The view carries what the flow
+    needs (`StepView.Process`, `GroupBy`, `ActivityView.References`, `Actions`; every method of the definition, a
+    method the compiler refused having no goal).
+12. A stored version is read by name: `GetMethodologyView`, `GetProcessGraph` and `CheckLevels` take `name` /
+    `version` when no methodology is sent (`Handler.compiledFor`: the compiled methodology of the registry, the version
+    a change follows; unknown: NotFound, suspended: FailedPrecondition).
+13. `engine.v1.GetChangeState` answers the binding only: per process its state, runs, current run and counts, per
+    step (`StepState`, by path) its state, missing conditions, needs (`NeedState`: the value wanted, the prerequisites
+    not holding yet, the facts), runs, sub-agents, lanes, waiting and chosen method, and the `version` of the
+    methodology. Names, guidance, roles, what a condition means and the actions producing it are the view's.
+14. The web composes them (`web/src/lib/changeState.ts`: `composeProcess`, `stepOf`, `needOf`, `statesByPath`):
+    `ChangeState.svelte` reads the view of the version once, lays the binding over its steps for the list
+    (`ProcessProgress`) and shows a process *as a flow* on demand: the methodology's own `ProcessFlowView` with the
+    state of each step on its node. The flow has two displays, switched by the reader: **Detailed** (every condition
+    as a port, the blocks of what the level is given and cannot reach: the editor's default) and **Simplified** (the
+    steps, one link per pair labelled with its conditions, their states: the change's default).
+
 ## Next step
 
-The views of the web over a change (`ChangeState.svelte`, `PossibleSteps.svelte`) can draw the compiled view and take
-from the engine only the binding (states, runs, rights), and the methodology editor can show it for a draft;
-`MethodologyPort` over RPC still recompiles the definition it fetched.
+`PossibleSteps.svelte` and the assistant still read self-contained starting points (the MCP tool
+`goap-scheduler/starting_points` needs them so); `MethodologyPort` over RPC still recompiles the definition it fetched.
 
 ## Consequences
 

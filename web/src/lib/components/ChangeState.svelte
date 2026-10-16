@@ -3,16 +3,53 @@
   // number of runs it took (a reactive process, such as the review of the description, may run at every edit). The
   // steps are judged against the change as it is, then what the live runs do is laid over them; a step that cannot
   // start says which conditions it still needs. The runs themselves stay one click away.
-  import { engine, type ChangeStateResponse, type ProcessState } from '../api';
+  // What the steps are is the compiled view of the version the change follows (registry, ADR 0126 step 4); where they
+  // stand is the engine's binding, laid over it here. A process reads as a list or as its flow (the methodology's own
+  // flow view, simplified by default, with the state of each step).
+  import { engine, registry, type ChangeStateResponse, type LevelCheck, type MethodologyView, type ProcessGraph, type ProcessState } from '../api';
   import { processes } from '../stores/live.svelte';
   import { stamp, keyOf } from '../flux/signals.svelte';
-  import { blockers, needDetail, needsOf, ordered, runsText } from '../changeState';
+  import { blockers, composeProcess, needDetail, needsOf, ordered, runsText, statesByPath } from '../changeState';
   import ProcessProgress from './ProcessProgress.svelte';
+  import ProcessFlowView from './ProcessFlowView.svelte';
 
   let { changeId, onopen }: { changeId: string; onopen?: (id: string) => void } = $props();
 
   let cs = $state<ChangeStateResponse | undefined>();
   let error = $state('');
+  // the compiled view of the version the change follows: fixed for a version, read once
+  let view = $state<MethodologyView | undefined>();
+  let viewOf = '';
+  $effect(() => {
+    const name = cs?.methodology ?? '';
+    const ref = `${name}@${cs?.version ?? ''}`;
+    if (!name || ref === viewOf) return;
+    viewOf = ref;
+    registry
+      .storedMethodologyView(name, cs?.version ?? '')
+      .then((r) => (view = r.view))
+      .catch((e: unknown) => (error = e instanceof Error ? e.message : String(e)));
+  });
+  const composed = $derived(
+    (cs?.processes ?? []).map((p) => {
+      const c = composeProcess(view, p);
+      return { state: p, activity: c.activity, steps: c.steps };
+    }),
+  );
+  // the flow of a process, read when the reader asks for it
+  let shown = $state<Record<string, 'list' | 'flow'>>({});
+  let flows = $state<Record<string, { graph?: ProcessGraph; levels?: LevelCheck[]; conditions?: { name: string; expr: string }[]; error?: string }>>({});
+  function showFlow(process: string) {
+    shown = { ...shown, [process]: shown[process] === 'flow' ? 'list' : 'flow' };
+    if (shown[process] !== 'flow' || flows[process] || !cs?.methodology) return;
+    const name = cs.methodology;
+    const version = cs.version ?? '';
+    Promise.all([registry.storedProcessGraph(name, version, process), registry.storedLevels(name, version, process)])
+      .then(([g, l]) => {
+        flows = { ...flows, [process]: { graph: g.graph, levels: l.levels ?? [], conditions: Object.entries(l.conditions ?? {}).map(([n, expr]) => ({ name: n, expr })) } };
+      })
+      .catch((e: unknown) => (flows = { ...flows, [process]: { error: e instanceof Error ? e.message : String(e) } }));
+  }
   // the runs of the change move (live stream) or the change itself does: read the state again
   const version = $derived(
     [...processes.values()]
@@ -45,7 +82,7 @@
     todo: 'to do',
     blocked: 'blocked',
   };
-  const progressOf = (p: ProcessState) => ({ process: p.process, steps: p.steps, done: p.done, total: p.total, status: p.status, error: p.error });
+  const progressOf = (p: ProcessState, steps: ReturnType<typeof composeProcess>['steps']) => ({ process: p.process, steps, done: p.done, total: p.total, status: p.status, error: p.error });
   const pct = (p: ProcessState) => (p.total ? Math.round(((p.done ?? 0) * 100) / p.total) : 0);
 </script>
 
@@ -58,14 +95,18 @@
       {#if cs.goalReached}<span class="chip done">goal reached</span>{/if}
     </h3>
     {#each ordered(cs.processes) as p (p.process)}
-      {@const stuck = blockers(p.steps)}
+      {@const c = composed.find((x) => x.state.process === p.process)}
+      {@const steps = c?.steps ?? []}
+      {@const stuck = blockers(steps)}
+      {@const flow = flows[p.process ?? '']}
       <details class="proc" open={p.state !== 'done' && p.state !== 'skipped'}>
         <summary>
           <span class="chip {p.state}">{LABEL[p.state ?? ''] ?? p.state}</span>
           <strong>{p.process}</strong>
-          {#if p.reactive}<span class="hint" title="Runs again on the events of the change, in the same run">reacts to the change</span>{/if}
+          {#if c?.activity?.reactive}<span class="hint" title="Runs again on the events of the change, in the same run">reacts to the change</span>{/if}
           <span class="hint">{p.done ?? 0}/{p.total ?? 0} steps · {runsText(p)}</span>
           {#if p.current}<button type="button" class="link" onclick={(e) => { e.preventDefault(); onopen?.(p.current ?? ''); }}>open run</button>{/if}
+          <button type="button" class="link" aria-pressed={shown[p.process ?? ''] === 'flow'} onclick={(e) => { e.preventDefault(); showFlow(p.process ?? ''); }}>{shown[p.process ?? ''] === 'flow' ? 'as a list' : 'as a flow'}</button>
         </summary>
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct(p)}><span style="width: {pct(p)}%"></span></div>
         {#if p.error && p.state !== 'done'}<p class="hint">{p.error}</p>{/if}
@@ -79,7 +120,14 @@
             </ul>
           </div>
         {/if}
-        <ProcessProgress given={progressOf(p)} {onopen} bare />
+        {#if shown[p.process ?? ''] === 'flow'}
+          {#if flow?.error}<p class="hint">Flow unavailable: {flow.error}</p>
+          {:else if flow?.graph}
+            <div class="flow"><ProcessFlowView graph={flow.graph} levels={flow.levels} conditions={flow.conditions} states={statesByPath(steps)} mode="simple" /></div>
+          {:else}<p class="hint">Drawing the flow…</p>{/if}
+        {:else if view}
+          <ProcessProgress given={progressOf(p, steps)} {onopen} bare />
+        {:else}<p class="hint">Reading the steps…</p>{/if}
       </details>
     {/each}
   </section>
@@ -94,6 +142,9 @@
   }
   .proc {
     margin: 6px 0;
+  }
+  .flow {
+    margin: 4px 0;
   }
   .proc summary {
     display: flex;

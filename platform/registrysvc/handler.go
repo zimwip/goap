@@ -12,6 +12,7 @@ import (
 	registryv1 "github.com/zimwip/goap/contracts/gen/goap/registry/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/engine/engine"
+	"github.com/zimwip/goap/engine/methodology"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/domainpb"
 	"github.com/zimwip/goap/lib/identity"
@@ -82,8 +83,10 @@ func (h *Handler) ValidateMethodology(ctx context.Context, r *connect.Request[re
 // GetProcessGraph builds the graph of a process of a methodology as edited (ADR 0036 §4), with the issues of the
 // methodology: a draft that does not compile still has its graph drawn as far as it stands.
 func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[registryv1.GetProcessGraphRequest]) (*connect.Response[registryv1.GetProcessGraphResponse], error) {
-	m := FromPB(r.Msg.Methodology)
-	c, issues := m.CompileLenient()
+	c, issues, err := h.compiledFor(ctx, r.Msg.Methodology, r.Msg.Name, r.Msg.Version)
+	if err != nil {
+		return nil, err
+	}
 	if c == nil {
 		return connect.NewResponse(&registryv1.GetProcessGraphResponse{Issues: domainpb.IssuesToPB(issues)}), nil
 	}
@@ -92,16 +95,37 @@ func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[regist
 		if issues.HasErrors() {
 			return connect.NewResponse(&registryv1.GetProcessGraphResponse{Issues: domainpb.IssuesToPB(issues)}), nil
 		}
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process %q in %s", r.Msg.Process, m.Name))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process %q in %s", r.Msg.Process, c.Name()))
 	}
 	return connect.NewResponse(&registryv1.GetProcessGraphResponse{Graph: ProcessGraphToPB(g), Issues: domainpb.IssuesToPB(issues)}), nil
 }
 
-// GetMethodologyView is the compiled view of the activities of a methodology as edited (ADR 0126 step 3), with its
-// issues: drawn as far as it stands.
+// compiledFor is the methodology a read of its shape is about: the one given as edited, compiled leniently with its
+// issues (a draft is drawn as far as it stands), else the stored version name / version names, compiled against its
+// domains (ADR 0113; the version a change follows).
+func (h *Handler) compiledFor(ctx context.Context, edited *registryv1.Methodology, name, version string) (*methodology.Compiled, def.Issues, error) {
+	if edited != nil || name == "" {
+		m := FromPB(edited)
+		c, issues := m.CompileLenient()
+		return c, issues, nil
+	}
+	c, err := h.Service.Methodology(ctx, domain.MethodologyRef(name, version))
+	switch {
+	case errors.Is(err, ErrSuspended):
+		return nil, nil, connect.NewError(connect.CodeFailedPrecondition, err)
+	case err != nil:
+		return nil, nil, connect.NewError(connect.CodeNotFound, err)
+	}
+	return c, nil, nil
+}
+
+// GetMethodologyView is the compiled view of the activities of a methodology (ADR 0126 step 3): as edited, with its
+// issues, drawn as far as it stands; else the stored version named.
 func (h *Handler) GetMethodologyView(ctx context.Context, r *connect.Request[registryv1.GetMethodologyViewRequest]) (*connect.Response[registryv1.GetMethodologyViewResponse], error) {
-	m := FromPB(r.Msg.Methodology)
-	c, issues := m.CompileLenient()
+	c, issues, err := h.compiledFor(ctx, r.Msg.Methodology, r.Msg.Name, r.Msg.Version)
+	if err != nil {
+		return nil, err
+	}
 	out := &registryv1.GetMethodologyViewResponse{Issues: domainpb.IssuesToPB(issues)}
 	if c != nil {
 		out.View = MethodologyViewToPB(c.View())
@@ -112,8 +136,10 @@ func (h *Handler) GetMethodologyView(ctx context.Context, r *connect.Request[reg
 // CheckLevels checks the coherence of a process or method, level by level, as edited, with the issues of the
 // methodology.
 func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1.CheckLevelsRequest]) (*connect.Response[registryv1.CheckLevelsResponse], error) {
-	m := FromPB(r.Msg.Methodology)
-	c, issues := m.CompileLenient()
+	c, issues, err := h.compiledFor(ctx, r.Msg.Methodology, r.Msg.Name, r.Msg.Version)
+	if err != nil {
+		return nil, err
+	}
 	if c == nil {
 		return connect.NewResponse(&registryv1.CheckLevelsResponse{Issues: domainpb.IssuesToPB(issues)}), nil
 	}
@@ -122,7 +148,7 @@ func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1
 		if issues.HasErrors() {
 			return connect.NewResponse(&registryv1.CheckLevelsResponse{Issues: domainpb.IssuesToPB(issues)}), nil
 		}
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process or method with steps %q in %s", r.Msg.Root, m.Name))
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no process or method with steps %q in %s", r.Msg.Root, c.Name()))
 	}
 	return connect.NewResponse(&registryv1.CheckLevelsResponse{Levels: LevelsToPB(ls), Conditions: c.Conditions.Exprs(), Issues: domainpb.IssuesToPB(issues)}), nil
 }
