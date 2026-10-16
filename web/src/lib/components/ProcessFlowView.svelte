@@ -15,6 +15,7 @@
   import StepNode, { type StepNodeData } from './StepNode.svelte';
   import { layered, nodeHeight, NODE_W } from '../flowLayout';
   import FlowInspector from './FlowInspector.svelte';
+  import FitOnLayout from './FitOnLayout.svelte';
   import Icon, { type IconName } from '../shell/Icon.svelte';
   import { exprOf, inspectBoundary, inspectCondition, inspectLevel, inspectStep, type FlowFacts, type Inspection } from '../flowInspect';
   import type { Issue, LevelCheck, PlanPreview, ProcessGraph } from '../api';
@@ -84,6 +85,8 @@
   let edges = $state.raw<Edge[]>([]);
   let moved = new Map<string, { x: number; y: number }>();
   let layoutKey = '';
+  // counts the layouts: the view is fitted again after each (FitOnLayout)
+  let laidOut = $state(0);
 
   const colorMode = $derived(
     document.documentElement.dataset.theme === 'light' ? 'light' : document.documentElement.dataset.theme === 'dark' ? 'dark' : 'system',
@@ -231,6 +234,7 @@
       if (key !== layoutKey) {
         layoutKey = key;
         moved = new Map();
+        laidOut++;
       }
       place(ns, es);
       nodes = ns;
@@ -272,6 +276,7 @@
     if (key !== layoutKey) {
       layoutKey = key;
       moved = new Map();
+      laidOut++;
     }
     place(ns, es);
     nodes = ns;
@@ -315,6 +320,7 @@
   function relayout() {
     moved = new Map();
     build();
+    laidOut++;
   }
 
   // the context menu (local, not the shell's: it must show in full screen) and the inspections it opens, kept as what
@@ -451,6 +457,7 @@
     <Background gap={20} />
     <Controls showLock={false} />
     <MiniMap pannable zoomable height={90} width={140} />
+    <FitOnLayout layout={laidOut} />
   </SvelteFlow>
   <div class="tools">
   <div class="modes" role="group" aria-label="Display">

@@ -40,8 +40,16 @@
   let shown = $state<Record<string, 'list' | 'flow'>>({});
   let flows = $state<Record<string, { graph?: ProcessGraph; levels?: LevelCheck[]; conditions?: { name: string; expr: string }[]; error?: string }>>({});
   function showFlow(process: string) {
-    shown = { ...shown, [process]: shown[process] === 'flow' ? 'list' : 'flow' };
-    if (shown[process] !== 'flow' || flows[process] || !cs?.methodology) return;
+    show(process, shown[process] === 'flow' ? 'list' : 'flow');
+  }
+  // every process at once: the display the reader picks in the header
+  const allShown = $derived((cs?.processes ?? []).length > 0 && (cs?.processes ?? []).every((p) => shown[p.process ?? ''] === 'flow') ? 'flow' : 'list');
+  function showAll(as: 'list' | 'flow') {
+    for (const p of cs?.processes ?? []) show(p.process ?? '', as);
+  }
+  function show(process: string, as: 'list' | 'flow') {
+    shown = { ...shown, [process]: as };
+    if (as !== 'flow' || flows[process] || !cs?.methodology) return;
     const name = cs.methodology;
     const version = cs.version ?? '';
     Promise.all([registry.storedProcessGraph(name, version, process), registry.storedLevels(name, version, process)])
@@ -93,6 +101,10 @@
     <h3>
       Current state
       {#if cs.goalReached}<span class="chip done">goal reached</span>{/if}
+      <span class="as" role="group" aria-label="Show the processes">
+        <button type="button" class="small" aria-pressed={allShown === 'list'} title="Each process as a list of its steps" onclick={() => showAll('list')}>List</button>
+        <button type="button" class="small" aria-pressed={allShown === 'flow'} title="Each process as its flow, with where each step stands (Simplified or Detailed in the flow)" onclick={() => showAll('flow')}>Flow</button>
+      </span>
     </h3>
     {#each ordered(cs.processes) as p (p.process)}
       {@const c = composed.find((x) => x.state.process === p.process)}
@@ -139,6 +151,16 @@
     gap: 8px;
     align-items: center;
     margin: 0 0 6px;
+  }
+  .as {
+    margin-left: auto;
+    display: inline-flex;
+    gap: 2px;
+    font-weight: normal;
+  }
+  .as button[aria-pressed='true'] {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .proc {
     margin: 6px 0;
