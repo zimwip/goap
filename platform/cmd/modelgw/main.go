@@ -53,6 +53,13 @@ func main() {
 	go svc.KeepCalls(ctx, platform.EnvInt("GOAP_LLM_CALL_RETENTION_DAYS", modelgw.DefaultCallRetentionDays))                                     // the ledger of calls (ADR 0089)
 	svc.Authz = iam                                                                                                                              // the roles a model requires are held on the caller's project (ADR 0043)
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: svc, Authz: iam}, telemetry.HandlerOptions()...))
+	// the Anthropic endpoint where the Claude coding agent's sessions call the model, each call a row of the ledger
+	// (ADR 0123 §6); its tokens are minted by the MCP hub with the same secret
+	if secret := platform.Env("GOAP_MODEL_PROXY_SECRET", ""); secret != "" {
+		srv.Mount((&modelgw.AnthropicProxy{Service: svc, Secret: []byte(secret)}).Route())
+	} else {
+		log.Info("GOAP_MODEL_PROXY_SECRET not set: no Anthropic endpoint, a connector calling a model by itself stays outside the ledger")
+	}
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

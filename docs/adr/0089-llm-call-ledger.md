@@ -35,7 +35,7 @@ wrong by construction.
   of the step their plan opens, then the host's: the numbering of the journal, so that `(change_id, process_id, step,
   call)` finds the exchange of ADR 0059, the `model.call` entry of the change log, which **stays there**), the assistant
   (`assistant`, conversation id), the helper (`helper`, inside `Suggest`), the indexer's embeddings (`indexer`), the
-  intent ranker (`intent`); later `eval` (offline evaluation, ADR 0099) and the gateway's own `calibration` calls (ADR 0093). `platform/cmd/engine` now forwards the caller's identity to the gateway (`identity.Forward`), as the
+  intent ranker (`intent`); later `eval` (offline evaluation, ADR 0099), the gateway's own `calibration` calls (ADR 0093) and `connector:<id>` for a connector calling a model by itself through the gateway's Anthropic endpoint (ADR 0123 §6). `platform/cmd/engine` now forwards the caller's identity to the gateway (`identity.Forward`), as the
   in-process composition always did, so the engine's calls carry the initiator as subject.
 - **Quota**: `llm_usage` stays, updated in the same step (one code path: `recordUsage` next to the ledger write). Deriving
   the quota from `SUM(llm_call)` was rejected: the retention purge would shrink the `total` and `month` periods, and the

@@ -85,7 +85,8 @@ func (s service) Invoke(ctx context.Context, r *connect.Request[connectorv1.Invo
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s: %w", r.Msg.Operation, ErrUnknownOperation))
 	}
 	// what the call runs for, as an in-process connector reads it from its context (ADR 0118)
-	ctx = mcp.WithCall(ctx, mcp.CallContext{Unit: r.Msg.OrgId, Change: r.Msg.ChangeId, Process: r.Msg.ProcessId})
+	ctx = mcp.WithCall(ctx, mcp.CallContext{Unit: r.Msg.OrgId, Change: r.Msg.ChangeId, Process: r.Msg.ProcessId,
+		ModelURL: r.Msg.ModelUrl, ModelToken: r.Msg.ModelToken})
 	res, err := s.c.Invoke(ctx, r.Msg.Operation, pbconv.Map(r.Msg.Arguments), pbconv.Map(r.Msg.Config), r.Msg.Secrets)
 	if err != nil {
 		return connect.NewResponse(&connectorv1.InvokeResponse{IsError: true, Error: err.Error()}), nil

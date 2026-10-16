@@ -11,12 +11,16 @@ const SOURCES: Record<string, string> = {
   intent: 'Intent',
   embed: 'Embeddings',
   calibration: 'Calibration',
+  'connector:claude-coding-agent': 'Claude coding agent',
   other: 'Other',
 };
 
-/** Readable name of the `source` of a call; an unknown or empty source reads as "Other". */
+/** Readable name of the `source` of a call; a connector calling a model by itself (ADR 0123 §6) reads as its id, an unknown or empty source as "Other". */
 export function sourceLabel(source: string | undefined): string {
-  return SOURCES[source ?? ''] ?? 'Other';
+  const known = SOURCES[source ?? ''];
+  if (known) return known;
+  const connector = source?.startsWith('connector:') ? source.slice('connector:'.length) : '';
+  return connector ? `Connector ${connector}` : 'Other';
 }
 
 /** The sources the console filters by. */

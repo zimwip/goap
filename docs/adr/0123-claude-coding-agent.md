@@ -1,7 +1,7 @@
 # ADR 0123 — The Claude coding agent: a Claude Code session driven by a methodology
 
-**Status**: accepted; phase 1 implemented (the `claude-coding-agent` MCP, its adapter and its connector over the
-Claude Agent SDK), the gateway endpoint and the `sdlc` method not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP,
+**Status**: accepted; phases 1 and 2 implemented (the `claude-coding-agent` MCP, its adapter and its connector over the
+Claude Agent SDK; the gateway endpoint, §6), the `sdlc` method not yet · **Date**: 2026-10 · Builds on ADR 0019 (MCP,
 connectors, adapters), ADR 0061 (adapter secrets), ADR 0089 (one ledger of the model calls), ADR 0112 (persistent
 agents, the discussion of a topic), ADR 0115 (forms of human actions), ADR 0118 (the workspace of a change)
 
@@ -98,18 +98,35 @@ branch is reviewed like any change.
 
 ### 6. The model calls and the ledger
 
-Claude Code calls the model itself, outside `modelgw`: these calls are not in `llm_call`, the quotas and the
-behaviours do not apply, only the session's totals come back (`costUsd`, `usage`). The way back into the ledger is
-`baseURL`: the gateway exposes an Anthropic Messages compatible endpoint, the connector points `ANTHROPIC_BASE_URL`
-at it with a token of the change, and every call of the session is a ledger row (phase 2). Until then the adapter
-holds an API key of its own and its unit pays outside the platform's accounting, which the administrator who gives
-it accepts.
+Claude Code calls the model itself. Its calls come back into the ledger through the gateway's Anthropic Messages
+endpoint (phase 2, done):
+
+- **Who mints the token.** The connector declares `ConnectorInfo.calls_models`; for each of its calls the MCP hub,
+  which knows the caller, mints a token of the call (`lib/modeltoken`: HMAC-SHA256 with `GOAP_MODEL_PROXY_SECRET`,
+  shared by the hub and the gateway, valid five hours) and sends it with the endpoint (`InvokeRequest.model_url` /
+  `model_token`, `mcp.CallContext.ModelURL` / `ModelToken` in process). The token names a system subject of the
+  connector (`system:connector:claude-coding-agent`) acting for the caller's end user (ADR 0114), the unit, the
+  project, the change, the process and the source (`connector:claude-coding-agent`). The connector holds no secret and
+  can name no one else.
+- **The session.** It takes the endpoint as `ANTHROPIC_BASE_URL` and the token as `ANTHROPIC_API_KEY`, over the
+  adapter's `baseURL` and `api_key`.
+- **The endpoint.** `modelgw.AnthropicProxy` serves `POST /anthropic/v1/messages` (and `count_tokens`, passed on with
+  no row). It checks the token, resolves the model to a model of the platform catalog served by a provider of the
+  `anthropic` protocol (an alias, `provider/model`, or the model's name: the catalog must hold the models the sessions
+  ask for, the small one included), admits it like any call (enabled, the roles of the end user, the quota), and
+  passes the request as it is with the provider's key: streaming, tools and caching untouched, no global behaviour
+  added (ADR 0093; the session's instructions are its own). It writes one `llm_call` row per call, the tokens read
+  from the answer (input counting the cached tokens) and the exchange (each call carries the whole conversation, cut
+  at `journal.MaxExchangeText`).
+- **Without the secret** (no `GOAP_MODEL_PROXY_SECRET`, or the hub without `GOAP_MODEL_PROXY_URL`), the sessions call
+  the model with the adapter's key, outside the ledger, as in phase 1. `goap-dev` generates the secret
+  (`.goap/model_proxy_secret`) and serves the endpoint at its own address.
 
 ## Plan
 1. ✅ The `claude-coding-agent` MCP and adapter definition, the connector and its runner, `goap-dev`
    (`GOAP_CLAUDE_AGENT_DIR`), the standalone command, `make claude-agent-runner`.
-2. An Anthropic Messages compatible endpoint of the gateway (`/v1/messages`, streaming, native tools, ADR 0098)
-   taking a change-scoped token, so the sessions' calls are ledger rows.
+2. ✅ An Anthropic Messages compatible endpoint of the gateway (`/anthropic/v1/messages`, streaming, native tools)
+   taking a token of the call minted by the hub, so the sessions' calls are ledger rows (§6).
 3. A second method of the `build` capability in `sdlc` (`claude_code_build`, when the unit holds the MCP): run,
    questions and approvals as human actions, the session as an artifact.
 4. The tool uses of a session as entries of the change log (the runner's events), shown on the change tab.
@@ -119,4 +136,6 @@ it accepts.
   model, permissions and budget.
 - A session runs with the rights of the connector's host, in the workspace of the change; like `workspace-local`,
   it is given by an administrator, on purpose.
-- Until phase 2, the cost of the sessions is reported per call, not accounted by the gateway.
+- With the gateway's endpoint configured, every model call of a session is a ledger row of the person who ran it,
+  under the catalog's quotas and roles; a deployment that leaves the secret unset keeps the sessions outside the
+  ledger, paid with the unit's key.

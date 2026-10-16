@@ -164,3 +164,11 @@ func (f registryEvents) Publish(ctx context.Context, subject string, v any) erro
 	}
 	return nil
 }
+
+// localURL is the base URL of this process for a listening address (":8080" is http://localhost:8080).
+func localURL(addr string) string {
+	if strings.HasPrefix(addr, ":") {
+		return "http://localhost" + addr
+	}
+	return "http://" + addr
+}

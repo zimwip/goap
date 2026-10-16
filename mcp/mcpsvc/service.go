@@ -8,10 +8,12 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/algo"
+	"github.com/zimwip/goap/contracts/authz"
 	connectorv1 "github.com/zimwip/goap/contracts/gen/goap/connector/v1"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/lib/adapter"
 	"github.com/zimwip/goap/lib/dsl"
+	"github.com/zimwip/goap/lib/modeltoken"
 	"github.com/zimwip/goap/lib/pbconv"
 )
 
@@ -34,6 +36,35 @@ type Service struct {
 	// Lease is the validity of a registration (default DefaultLease).
 	Lease time.Duration
 	Now   func() time.Time
+	// Models, when set, gives each call of a connector that calls a model by itself (ConnectorInfo.calls_models, the
+	// Claude coding agent) the gateway's Anthropic endpoint and a token of the call, so its model calls are rows of the
+	// ledger (ADR 0123 §6); nil: such a connector calls the model with the adapter's key, outside the ledger.
+	Models *ModelEndpoint
+}
+
+// ModelEndpoint is the model gateway as the hub hands it to a connector (ADR 0123 §6).
+type ModelEndpoint struct {
+	// URL is the base URL of the gateway's Anthropic endpoint (<gateway>/anthropic), as the connector's host reaches it.
+	URL string
+	// Secret signs the tokens (lib/modeltoken), shared with the gateway (GOAP_MODEL_PROXY_SECRET).
+	Secret []byte
+	// TTL is the validity of a token (default DefaultModelTokenTTL).
+	TTL time.Duration
+}
+
+// DefaultModelTokenTTL outlasts the longest run of a coding session (four hours, ADR 0123 §2).
+const DefaultModelTokenTTL = 5 * time.Hour
+
+// token mints the token of a call of connector for unit: a system subject of the connector acting for the caller's end
+// user, on the caller's project, for the change and the process of the call.
+func (m *ModelEndpoint) token(ctx context.Context, connector, unit string, cc mcp.CallContext, now time.Time) (string, error) {
+	p := authz.From(ctx)
+	ttl := m.TTL
+	if ttl <= 0 {
+		ttl = DefaultModelTokenTTL
+	}
+	return modeltoken.Sign(m.Secret, modeltoken.Claims{Subject: authz.System("connector:" + connector).Subject, EndUser: p.EndUser(),
+		Org: unit, Project: p.Project, Change: cc.Change, Process: cc.Process, Source: "connector:" + connector}, now, ttl)
 }
 
 func (s *Service) lease() time.Duration {
@@ -292,9 +323,18 @@ func (s *Service) Call(ctx context.Context, org, name string, args map[string]an
 	}
 	var transport error
 	cc := mcp.CallFrom(ctx)
+	if reg.Info.CallsModels && s.Models != nil {
+		tok, err := s.Models.token(ctx, alg.Connector, a.Unit, cc, s.now())
+		if err != nil {
+			return nil, err
+		}
+		cc.ModelURL, cc.ModelToken = s.Models.URL, tok
+		ctx = mcp.WithCall(ctx, cc) // an in-process connector reads it from the context
+	}
 	call := func(ctx context.Context, op string, args map[string]any) (map[string]any, error) {
 		resp, err := s.Invoker.Invoke(ctx, reg.Endpoint, &connectorv1.InvokeRequest{Operation: op, Arguments: pbconv.Struct(args),
-			Config: pbconv.Struct(config), Secrets: secrets, OrgId: a.Unit, ChangeId: cc.Change, ProcessId: cc.Process})
+			Config: pbconv.Struct(config), Secrets: secrets, OrgId: a.Unit, ChangeId: cc.Change, ProcessId: cc.Process,
+			ModelUrl: cc.ModelURL, ModelToken: cc.ModelToken})
 		if err != nil {
 			transport = fmt.Errorf("connector %s: %w: %w", alg.Connector, ErrUnavailable, err)
 			return nil, transport

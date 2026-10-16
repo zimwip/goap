@@ -221,6 +221,9 @@ footer { font-size: 13px; color: var(--muted); }
         <path class="w" d="M670 276V326" marker-end="url(#a)"/>
         <path class="w" d="M885 330V280" marker-end="url(#a)"/>
         <text class="lbl" x="845" y="322" text-anchor="end">embed</text>
+        <!-- a connector calling a model by itself: the Claude coding agent's sessions, with a token the hub minted (ADR 0123 §6) -->
+        <path class="w" d="M750 376H762V290H805V280" marker-end="url(#a)"/>
+        <text class="lbl" x="766" y="312">/anthropic</text>
         <path class="w" d="M180 358H260V280" marker-end="url(#a)"/>
         <text class="lbl" x="186" y="350">as the caller</text>
 
@@ -268,7 +271,7 @@ footer { font-size: 13px; color: var(--muted); }
         <tr data-binary="conversations" data-service="conversations"><td><code>conversations</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8090</td><td>conversations and the assistant; PostgreSQL</td></tr>
         <tr data-binary="connector-localfs" data-service="connector-localfs"><td><code>connector-localfs</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>file connector; registers with the hub</td></tr>
         <tr data-binary="connector-workspace"><td><code>connector-workspace</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>workspace of a change (git, commands); standalone, not in compose</td></tr>
-        <tr data-binary="connector-claude-coding-agent"><td><code>connector-claude-coding-agent</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>Claude Code sessions; standalone, not in compose</td></tr>
+        <tr data-binary="connector-claude-coding-agent"><td><code>connector-claude-coding-agent</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>Claude Code sessions; their model calls go to modelgw <code>/anthropic</code> with a token the hub mints; standalone, not in compose</td></tr>
         <tr data-binary="goap-runner"><td><code>goap-runner</code></td><td><span class="chip m-engine">engine</span></td><td class="num">—</td><td>sandbox image the engine runs scripts in (make runner-image)</td></tr>
         <tr data-binary="goap-dev"><td><code>goap-dev</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>every service in one process on SQLite: make dev, make devlocal</td></tr>
         <tr data-binary="goap-eval"><td><code>goap-eval</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>offline evaluation CLI (make eval)</td></tr>
@@ -283,7 +286,7 @@ footer { font-size: 13px; color: var(--muted); }
       <li><div><b>The person starts a step.</b> The IDE calls <code>StartProcess</code>; the gateway checks the token and the active project, then forwards. <div class="who"><span class="chip m-gateway">gateway</span> → <span class="chip m-engine">engine</span></div></div></li>
       <li><div><b>The engine loads how.</b> It asks the registry for the methodology version the change follows, compiled against the domains in force (refused if suspended). <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-platform">registry</span></div></div></li>
       <li><div><b>It reads the blackboard.</b> Change, nodes, items, decision points and history come from the graph through <code>graphapi.Port</code>; conditions are evaluated on it and the planner picks the next action. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-graph">graph</span></div></div></li>
-      <li><div><b>The action runs.</b> An <code>llm</code> action goes through the model gateway (one ledger row per call); a <code>tool</code> action through the MCP hub, which resolves the unit's adapter and calls the connector; a <code>script</code> in the sandbox. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-platform">modelgw</span> · <span class="chip m-mcp">mcp hub</span> → connector</div></div></li>
+      <li><div><b>The action runs.</b> An <code>llm</code> action goes through the model gateway (one ledger row per call); a <code>tool</code> action through the MCP hub, which resolves the unit's adapter and calls the connector (the Claude coding agent's sessions calling the model back through the gateway's <code>/anthropic</code> endpoint, a ledger row per call); a <code>script</code> in the sandbox. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-platform">modelgw</span> · <span class="chip m-mcp">mcp hub</span> → connector</div></div></li>
       <li><div><b>The result lands on the change.</b> Impacts become drafts and items on the change log; nothing is a version until review, commit and merge. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-graph">graph</span></div></div></li>
       <li><div><b>Everyone sees it.</b> The graph publishes <code>change.updated</code>; the event stream pushes it to every open IDE, the indexer reindexes, and companion runs react. <div class="who"><span class="chip m-graph">graph</span> ⇢ NATS ⇢ <span class="chip m-platform">events</span> · <span class="chip m-graph">indexer</span> · <span class="chip m-engine">engine</span></div></div></li>
     </ol>

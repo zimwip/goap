@@ -186,6 +186,7 @@ func (c Connector) Info() *connectorv1.ConnectorInfo {
 			"passEnv":         strs("variables of the host environment given to the sessions"),
 		}}),
 		SecretNames: []string{SecretAPIKey},
+		CallsModels: true,
 		Operations: []*connectorv1.Operation{
 			op(OpRun, "Run a coding task with Claude Code in the workspace of the change", obj(map[string]any{
 				"task": str("instructions of this turn"), "sessionId": str("session to resume"), "path": str("directory of the workspace to work in"),
@@ -314,7 +315,7 @@ func (c Connector) run(ctx context.Context, op, change string, args, config map[
 		delete(c.st.running, change)
 		c.st.mu.Unlock()
 	}()
-	out, err := c.exec(runCtx, req, c.environment(change, dir, config, secrets), func(id string) {
+	out, err := c.exec(runCtx, req, c.environment(mcp.CallFrom(ctx), dir, config, secrets), func(id string) {
 		c.st.mu.Lock()
 		s.id = id
 		c.st.mu.Unlock()
@@ -467,8 +468,10 @@ func (c Connector) workspace(change string, config map[string]any, sub string) (
 }
 
 // environment is the cleaned environment of a session: the host variables a toolchain needs and the ones the unit
-// passes, its own values, the API key and endpoint. Nothing else of the host.
-func (c Connector) environment(change, dir string, config map[string]any, secrets map[string]string) []string {
+// passes, its own values, the API key and endpoint. Nothing else of the host. When the hub gives the call an endpoint of
+// the model gateway (ADR 0123 §6), the session calls the model there with the token of the call, whatever the adapter
+// says: every call of the session is then a row of the ledger, attributed to the person, the change and the process.
+func (c Connector) environment(cc mcp.CallContext, dir string, config map[string]any, secrets map[string]string) []string {
 	vars := map[string]string{}
 	for _, name := range append(append([]string{}, workspace.HostEnv...), strings1(config, "passEnv")...) {
 		if v, ok := os.LookupEnv(name); ok {
@@ -486,10 +489,14 @@ func (c Connector) environment(change, dir string, config map[string]any, secret
 	if u := stringArg(config, "baseURL"); u != "" {
 		vars["ANTHROPIC_BASE_URL"] = u
 	}
+	if cc.ModelURL != "" && cc.ModelToken != "" {
+		vars["ANTHROPIC_BASE_URL"], vars["ANTHROPIC_API_KEY"] = cc.ModelURL, cc.ModelToken
+		delete(vars, "ANTHROPIC_AUTH_TOKEN")
+	}
 	if c.sdkModule != "" {
 		vars["GOAP_CLAUDE_AGENT_SDK_MODULE"] = c.sdkModule
 	}
-	vars["GOAP_WORKSPACE"], vars["GOAP_CHANGE"] = dir, change
+	vars["GOAP_WORKSPACE"], vars["GOAP_CHANGE"] = dir, cc.Change
 	vars["CLAUDE_AGENT_SDK_CLIENT_APP"] = "goap/" + ID
 	out := make([]string, 0, len(vars))
 	for k, v := range vars {

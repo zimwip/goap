@@ -89,6 +89,8 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://modelgw:modelgw@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
+      # the Anthropic endpoint of a connector calling a model by itself (ADR 0123 §6), tokens minted by the hub
+      GOAP_MODEL_PROXY_SECRET: ${GOAP_MODEL_PROXY_SECRET:-dev-model-proxy-secret}
     ports: ["8084:8080"]
 
   preferences:
@@ -211,6 +213,8 @@ services:
       GOAP_ENGINE_URL: http://engine:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_CONNECTOR_TOKEN: ${GOAP_CONNECTOR_TOKEN:-dev-connector-token}
+      GOAP_MODEL_PROXY_SECRET: ${GOAP_MODEL_PROXY_SECRET:-dev-model-proxy-secret}
+      GOAP_MODEL_PROXY_URL: http://modelgw:8080/anthropic
     ports: ["8085:8080"]
 
   # A connector is a service of its own that registers itself with the hub (GOAP_MCP_URL);

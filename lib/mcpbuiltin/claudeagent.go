@@ -40,10 +40,10 @@ func ClaudeAgentDef() mcp.Def {
 func ClaudeAgentAdapterDef() adapter.Def {
 	return adapter.Def{Name: ClaudeAgent, MCP: ClaudeAgent, Connector: ClaudeAgent, Language: algo.JavaScript,
 		Code:        "return ctx.call(ctx.tool(), ctx.args());\n",
-		Description: "Claude Code sessions (Claude Agent SDK) in the workspaces of the changes, on the connector's host: the sessions run with its rights and call the model with the unit's key",
+		Description: "Claude Code sessions (Claude Agent SDK) in the workspaces of the changes, on the connector's host: the sessions run with its rights and call the model through the model gateway (a row of the ledger per call), else with the unit's key",
 		Params: []algo.Param{
 			{Name: "root", Type: algo.ParamString, Required: true, Description: "Directory holding one workspace per change (the root of the unit's workspace adapter)"},
-			{Name: "model", Type: algo.ParamString, Description: "Model of the sessions (default: Claude Code's)"},
+			{Name: "model", Type: algo.ParamString, Description: "Model of the sessions (default: Claude Code's; through the gateway, a model of the platform catalog, alias or name)"},
 			{Name: "permissionMode", Type: algo.ParamEnum, Values: []string{"default", "acceptEdits", "plan", "dontAsk", "auto"}, Description: "Permission mode of the sessions (default acceptEdits); a call it does not settle ends the turn as needs_approval"},
 			{Name: "allowedTools", Type: algo.ParamStrings, Description: "Tools allowed without asking (Claude Code permission rules: Read, Edit, Bash(go test:*))"},
 			{Name: "disallowedTools", Type: algo.ParamStrings, Description: "Tools removed from the sessions (WebFetch, WebSearch)"},
@@ -51,10 +51,10 @@ func ClaudeAgentAdapterDef() adapter.Def {
 			{Name: "maxBudgetUsd", Type: algo.ParamNumber, Description: "Budget of a run in USD (default none)"},
 			{Name: "timeoutMinutes", Type: algo.ParamNumber, Description: "Time of a run in minutes (default 60, at most 240)"},
 			{Name: "settingSources", Type: algo.ParamStrings, Description: "Claude Code settings loaded: project (the repository's CLAUDE.md and settings, the default), user, local"},
-			{Name: "baseURL", Type: algo.ParamString, Description: "Anthropic API endpoint the sessions call (ANTHROPIC_BASE_URL; default Anthropic's)"},
+			{Name: "baseURL", Type: algo.ParamString, Description: "Anthropic API endpoint the sessions call (ANTHROPIC_BASE_URL; default Anthropic's); ignored when the hub knows the model gateway, whose endpoint the sessions then call (ADR 0123 §6)"},
 			{Name: "env", Type: algo.ParamStrings, Description: "Variables set for the sessions (NAME=value)"},
 			{Name: "passEnv", Type: algo.ParamStrings, Description: "Variables of the host environment given to the sessions"},
-			{Name: "api_key", Type: adapter.ParamSecret, Description: "Anthropic API key of the sessions (ANTHROPIC_API_KEY)"},
+			{Name: "api_key", Type: adapter.ParamSecret, Description: "Anthropic API key of the sessions (ANTHROPIC_API_KEY); not used when the sessions call the model gateway"},
 		}}
 }
 

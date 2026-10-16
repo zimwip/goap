@@ -4,11 +4,14 @@ import "context"
 
 // CallContext is what a tool call runs for: the unit holding the change, the change and the
 // process. Built-in connectors read it (the change a goap-change tool edits by default); the engine
-// sets Change and Process, the hub sets Unit.
+// sets Change and Process, the hub sets Unit, and ModelURL / ModelToken for a connector that calls a model by itself
+// (ADR 0123 §6: the gateway endpoint its calls go to, so they are rows of the ledger).
 type CallContext struct {
-	Unit    string `json:"unit,omitempty"`
-	Change  string `json:"change,omitempty"`
-	Process string `json:"process,omitempty"`
+	Unit       string `json:"unit,omitempty"`
+	Change     string `json:"change,omitempty"`
+	Process    string `json:"process,omitempty"`
+	ModelURL   string `json:"-"`
+	ModelToken string `json:"-"`
 }
 
 type callKey struct{}
@@ -24,6 +27,9 @@ func WithCall(ctx context.Context, c CallContext) context.Context {
 	}
 	if c.Process == "" {
 		c.Process = cur.Process
+	}
+	if c.ModelURL == "" {
+		c.ModelURL, c.ModelToken = cur.ModelURL, cur.ModelToken
 	}
 	return context.WithValue(ctx, callKey{}, c)
 }

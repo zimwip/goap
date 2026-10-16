@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/zimwip/goap/engine/engine"
@@ -26,6 +27,8 @@ type platformPart struct {
 	hub        *mcpsvc.Service
 	connectors map[string]connectorkit.Connector
 	connToken  string
+	// models is the gateway's Anthropic endpoint, where the Claude coding agent's sessions call the model (ADR 0123 §6)
+	models *modelgw.AnthropicProxy
 }
 
 // buildPlatform creates the model gateway, the node index following the graph and the MCP hub. The built-in
@@ -83,5 +86,20 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 		Secrets:   mcpsvc.ResolveSecret(e.secrets),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
-	return &platformPart{gw: gw, indexer: indexer, indexSink: indexSink, hub: hub, connectors: connectors, connToken: connectorToken}, nil
+	// the sessions of the Claude coding agent call the model through the gateway, each call a row of the ledger (ADR
+	// 0123 §6): the hub gives each call a token the gateway checks, signed with a secret generated like the others
+	proxySecret := e.cfg.ModelProxySecret
+	if proxySecret == "" {
+		var err error
+		if proxySecret, err = localSecret(st.dir, "model_proxy_secret"); err != nil {
+			return nil, wrap("model proxy secret", err)
+		}
+	}
+	proxyURL := e.cfg.ModelProxyURL
+	if proxyURL == "" {
+		proxyURL = localURL(e.cfg.Addr) + strings.TrimSuffix(modelgw.AnthropicPath, "/")
+	}
+	hub.Models = &mcpsvc.ModelEndpoint{URL: proxyURL, Secret: []byte(proxySecret)}
+	models := &modelgw.AnthropicProxy{Service: gw, Secret: []byte(proxySecret)}
+	return &platformPart{gw: gw, indexer: indexer, indexSink: indexSink, hub: hub, connectors: connectors, connToken: connectorToken, models: models}, nil
 }

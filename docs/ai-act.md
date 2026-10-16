@@ -59,6 +59,10 @@ of a change carries the whole story. Keep that mark when you publish content goa
 - The ledger of model calls (`llm_call`, ADR 0089) records every call with its caller and end user. Keep
   `GOAP_LLM_CALL_RETENTION_DAYS` at 183 or more (the default) and `GOAP_LLM_CALL_PROMPTS` on (the default); the gateway
   warns at start otherwise.
+- If you give units the Claude coding agent (ADR 0123), set `GOAP_MODEL_PROXY_SECRET` on the gateway and the MCP hub,
+  and `GOAP_MODEL_PROXY_URL` on the hub (`goap-dev` does both): its sessions then call the model through the gateway and
+  each call is a ledger row. Without them the sessions use the adapter's own key and their calls are logged nowhere in
+  goap.
 - Export a change's provenance (Audit pane, *Export PROV-O*) to keep it outside goap.
 - These logs hold personal data (who asked what): give them a GDPR basis and a retention schedule.
 
@@ -79,7 +83,7 @@ agents do, their limits and the settings above.
 | Logic of the system and its decisions | the methodologies (`methodologies/`, versioned graph nodes, ADR 0023), planners (`engine/goap`), conditions (ADR 0002, 0109) |
 | Models used | the model entries of the platform namespace (`platform@LlmModel`), the ledger per call |
 | Human oversight measures | ADR 0058, 0067, 0075, 0090, 0105, 0106, 0115, 0117, 0129 |
-| Logging | ADR 0011, 0030, 0057, 0059, 0089, 0114 |
+| Logging | ADR 0011, 0030, 0057, 0059, 0089, 0114, 0123 §6 |
 | Accuracy, robustness, cybersecurity | ADR 0007 (sandbox), 0099 (evaluation), 0118 (workspace), 0020 / 0045 (access, sessions) |
 | Changes over the lifecycle | `git log`, the ADRs, the versions of methodologies and domains |
 

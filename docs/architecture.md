@@ -1218,8 +1218,19 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   out. A question (`AskUserQuestion`) or a tool the permissions do not settle ends the turn (`needs_input` /
   `needs_approval`, through `canUseTool`); `answer` resumes the session (`resume`) with the person's decision. The
   environment is cleaned (the unit's `api_key`, `baseURL`, `env`, `passEnv`), the repository's settings load
-  (`settingSources: [project]`), one session per change at a time. The model calls of a session do not go through
-  the gateway yet (only its `costUsd` / `usage` come back).
+  (`settingSources: [project]`), one session per change at a time. The model calls of a session go through the
+  gateway (ADR 0123 §6): the connector declares `ConnectorInfo.calls_models`, so the hub (`mcpsvc.Service.Models`,
+  `ModelEndpoint`) gives each of its calls the gateway's Anthropic endpoint and a token of the call
+  (`InvokeRequest.model_url` / `model_token`, `mcp.CallContext.ModelURL` / `ModelToken`; `lib/modeltoken`, HMAC with
+  `GOAP_MODEL_PROXY_SECRET`, shared by the hub and the gateway: subject `system:connector:<id>` acting for the caller's
+  end user, the unit, the project, the change, the process, source `connector:<id>`), which the session takes as
+  `ANTHROPIC_BASE_URL` / `ANTHROPIC_API_KEY` over the adapter's. `modelgw.AnthropicProxy` (`/anthropic/v1/messages`,
+  `count_tokens` passed on with no row; `goap-dev` at its own address, `platform/cmd/modelgw` with the secret, the hub
+  with `GOAP_MODEL_PROXY_URL` too) checks the token, resolves the model to a catalog model of an `anthropic`-protocol
+  provider (alias, `provider/model` or name), admits it (enabled, the roles of the end user, the quota), passes the
+  request as it is with the provider's key (streaming included; no global behaviour added) and writes one `llm_call` row
+  per call with the tokens read from the answer (input with the cached ones) and the exchange. Without the secret the
+  sessions call the model with the adapter's key, outside the ledger.
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
   (`Describe`, `Invoke`); `mcp/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
