@@ -4,7 +4,8 @@
   // new version of the record, kept in the change log with who made it.
   import { graph, errorMessage, type Change, type Struct } from '../api';
   import AssessmentBubble from './AssessmentBubble.svelte';
-  import { riskRegister, actionList, liveRisk, unmitigated, nextKey, RISK_STATUSES, ACTION_STATUSES, HIGH_RISK } from '../risks';
+  import { openTab } from '../shell/tabs.svelte';
+  import { riskRegister, actionList, liveRisk, unmitigated, covers, nextKey, pocData, RISK_STATUSES, ACTION_STATUSES, HIGH_RISK, KIND_POC, PURPOSE_DERISK, PURPOSE_EXPLORE } from '../risks';
 
   let { change, closed = false, onchange }: { change: Change; closed?: boolean; onchange?: () => void } = $props();
 
@@ -23,6 +24,14 @@
   let aOwner = $state('');
   let aDue = $state('');
   let aFor = $state('');
+  // the kind of the new action: a mitigation, a proof of concept of risks, a prototype of the need (ADR 0131)
+  let aKind = $state<'mitigation' | 'poc' | 'prototype'>('mitigation');
+  let aRisks = $state<string[]>([]);
+  let aStatements = $state('');
+  const statements = (s: string) => s.split(/[\n;]/).map((x) => x.trim()).filter((x) => x);
+  const canAdd = $derived(
+    !!aTitle.trim() && (aKind === 'mitigation' || (aKind === 'poc' ? aRisks.length > 0 : statements(aStatements).length > 0)),
+  );
 
   async function add(kind: 'risk' | 'action', data: Struct) {
     if (!change.id) return;
@@ -45,10 +54,22 @@
   }
 
   async function newAction() {
-    if (!aTitle.trim()) return;
-    await add('action', { key: nextKey('ACT-', actions.map((a) => a.key)), title: aTitle.trim(), owner: aOwner.trim(), due: aDue, for: aFor, status: 'open' });
-    aTitle = aOwner = aDue = aFor = '';
+    if (!canAdd) return;
+    const key = nextKey('ACT-', actions.map((a) => a.key));
+    if (aKind === 'mitigation') {
+      await add('action', { key, title: aTitle.trim(), owner: aOwner.trim(), due: aDue, for: aFor, status: 'open' });
+    } else {
+      // only proposed: a person opens it as a sub-change from the proofs step of the change
+      const purpose = aKind === 'poc' ? PURPOSE_DERISK : PURPOSE_EXPLORE;
+      await add('action', { ...pocData(key, aTitle.trim(), purpose, aKind === 'poc' ? aRisks : [], statements(aStatements), aOwner.trim()), due: aDue });
+    }
+    aTitle = aOwner = aDue = aFor = aStatements = '';
+    aRisks = [];
   }
+
+  /** what a proof of concept checks, in words */
+  const pocWhat = (a: { purpose: string; risks: string[]; hypotheses: string[] }) =>
+    a.purpose === PURPOSE_EXPLORE ? `prototype: ${a.hypotheses.join('; ')}` : `POC of ${a.risks.join(', ')}`;
 
   // heat map: live risks by probability (rows, 5 on top) and impact (columns)
   const cell = (p: number, i: number) => live.filter((r) => r.probability === p && r.impact === i);
@@ -90,7 +111,7 @@
                 </td>
                 <td>{r.owner || '—'}</td>
                 <td>
-                  {actions.filter((a) => a.for === r.key).map((a) => `${a.key} (${a.status})`).join(', ') || (unmitigated(r, actions) ? 'none — needs one' : '—')}
+                  {actions.filter((a) => a.for === r.key || a.risks.includes(r.key)).map((a) => `${a.key}${a.kind === KIND_POC ? ' POC' : ''} (${a.status}${covers(a, r.key) ? '' : ', covers no more'})`).join(', ') || (unmitigated(r, actions) ? 'none — needs one' : '—')}
                 </td>
               </tr>
             {/each}
@@ -122,8 +143,17 @@
         {#each actions as a (a.key)}
           <tr class:dim={a.status !== 'open'}>
             <td class="mono">{a.key} <AssessmentBubble {change} subject={`item:${a.key}`} label="the action {a.key}" compact {closed} {onchange} /></td>
-            <td>{a.title}{#if a.result}<div class="hint">{a.result}</div>{/if}</td>
-            <td class="mono">{a.for || '—'}</td>
+            <td>
+              {#if a.kind === KIND_POC}<span class="kind" title={pocWhat(a)}>{a.purpose === PURPOSE_EXPLORE ? 'prototype' : 'POC'}</span>{/if}
+              {a.title}
+              {#if a.kind === KIND_POC}
+                <div class="hint">
+                  {pocWhat(a)}{#if a.change} · <button type="button" class="link" onclick={() => openTab({ kind: 'change', params: { id: a.change } })}>its sub-change</button>{:else if a.status === 'open'} · to open from the Proofs step{/if}
+                </div>
+              {/if}
+              {#if a.result}<div class="hint">{a.result}</div>{/if}
+            </td>
+            <td class="mono">{a.kind === KIND_POC && a.risks.length ? a.risks.join(', ') : a.for || '—'}</td>
             <td>{a.owner || '—'}</td>
             <td>{a.due || '—'}</td>
             <td>
@@ -140,14 +170,27 @@
   {/if}
   {#if !closed}
     <form class="row add" onsubmit={(e) => (e.preventDefault(), newAction())}>
-      <input type="text" placeholder="New action" bind:value={aTitle} aria-label="Action title" />
-      <select bind:value={aFor} aria-label="For">
-        <option value="">— for —</option>
-        {#each risks as r (r.key)}<option value={r.key}>{r.key} {r.title}</option>{/each}
+      <select bind:value={aKind} aria-label="Kind of action" title="A proof of concept checks risks by building the least that shows them; a prototype checks the need (ADR 0131)">
+        <option value="mitigation">Mitigation</option>
+        <option value="poc">Proof of concept</option>
+        <option value="prototype">Prototype</option>
       </select>
+      <input type="text" placeholder={aKind === 'mitigation' ? 'New action' : aKind === 'poc' ? 'What the POC shows' : 'What the prototype explores'} bind:value={aTitle} aria-label="Action title" />
+      {#if aKind === 'mitigation'}
+        <select bind:value={aFor} aria-label="For">
+          <option value="">— for —</option>
+          {#each risks as r (r.key)}<option value={r.key}>{r.key} {r.title}</option>{/each}
+        </select>
+      {:else if aKind === 'poc'}
+        <select multiple bind:value={aRisks} aria-label="Risks the POC checks" size={Math.min(4, Math.max(2, live.length))}>
+          {#each live as r (r.key)}<option value={r.key}>{r.key} {r.title}</option>{/each}
+        </select>
+      {:else}
+        <input type="text" placeholder="Statements to check, separated by ;" bind:value={aStatements} aria-label="Statements the prototype checks" />
+      {/if}
       <input type="text" placeholder="Owner role" bind:value={aOwner} aria-label="Action owner" />
       <input type="date" bind:value={aDue} aria-label="Due" />
-      <button type="submit" class="small primary" disabled={busy || !aTitle.trim()}>Add</button>
+      <button type="submit" class="small primary" disabled={busy || !canAdd}>{aKind === 'mitigation' ? 'Add' : 'Propose'}</button>
     </form>
   {/if}
 </section>
@@ -214,6 +257,14 @@
     padding: 3px 6px;
     border-bottom: 1px solid var(--border);
     vertical-align: top;
+  }
+  .kind {
+    font-size: 0.75em;
+    padding: 0 5px;
+    margin-right: 4px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--muted);
   }
   tr.dim {
     opacity: 0.6;

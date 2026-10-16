@@ -24,12 +24,23 @@ export interface ActionRecord {
   due: string;
   for: string;
   result: string;
+  /** mitigation (default) or poc: a proof of concept or a prototype built in a sub-change (ADR 0131) */
+  kind: string;
+  /** of a poc: derisk (the risks it checks) or explore (a prototype of the need, its hypotheses) */
+  purpose: string;
+  risks: string[];
+  hypotheses: string[];
+  /** the sub-change carrying a poc, once opened */
+  change: string;
   versions: number;
   by: string;
 }
 
 export const RISK_STATUSES = ['open', 'mitigating', 'accepted', 'occurred', 'closed'] as const;
 export const ACTION_STATUSES = ['open', 'done', 'cancelled'] as const;
+export const KIND_POC = 'poc';
+export const PURPOSE_DERISK = 'derisk';
+export const PURPOSE_EXPLORE = 'explore';
 /** from this score an open risk needs a mitigation action */
 export const HIGH_RISK = 9;
 
@@ -51,6 +62,7 @@ function fold(items: ChangeItem[], kind: string): { key: string; data: Record<st
 }
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
+const strs = (v: unknown) => (Array.isArray(v) ? v.map(String).filter((x) => x) : []);
 const num = (v: unknown) => (typeof v === 'number' ? v : Number(v) || 0);
 
 export function riskRegister(items: ChangeItem[]): RiskRecord[] {
@@ -74,24 +86,50 @@ export function riskRegister(items: ChangeItem[]): RiskRecord[] {
 }
 
 export function actionList(items: ChangeItem[]): ActionRecord[] {
-  return fold(items, 'action').map(({ key, data, versions, by }) => ({
-    key,
-    title: str(data.title),
-    status: str(data.status) || 'open',
-    owner: str(data.owner),
-    due: str(data.due),
-    for: str(data.for),
-    result: str(data.result),
-    versions,
-    by,
-  }));
+  return fold(items, 'action').map(({ key, data, versions, by }) => {
+    const kind = str(data.kind) || 'mitigation';
+    return {
+      key,
+      title: str(data.title),
+      status: str(data.status) || 'open',
+      owner: str(data.owner),
+      due: str(data.due),
+      for: str(data.for),
+      result: str(data.result),
+      kind,
+      purpose: str(data.purpose) || (kind === KIND_POC ? PURPOSE_DERISK : ''),
+      risks: strs(data.risks),
+      hypotheses: strs(data.hypotheses),
+      change: str(data.change),
+      versions,
+      by,
+    };
+  });
+}
+
+/** Whether an action covers a risk (the server's ActionItem.Covers, ADR 0131): it answers it and is not cancelled; a
+ *  concluded proof of concept covers nothing any more, its verdict settled the risk or asks for another mitigation. */
+export function covers(a: ActionRecord, riskKey: string): boolean {
+  if (a.for !== riskKey && !a.risks.includes(riskKey)) return false;
+  return a.status !== 'cancelled' && !(a.kind === KIND_POC && a.status === 'done');
+}
+
+/** The data of a new proof of concept (purpose derisk, the risks it checks) or prototype (explore, its statements). */
+export function pocData(key: string, title: string, purpose: string, risks: string[], hypotheses: string[], owner = ''): Record<string, string | string[]> {
+  const d: Record<string, string | string[]> = { key, title, kind: KIND_POC, purpose, owner, status: 'open' };
+  if (risks.length) {
+    d.for = risks[0];
+    d.risks = risks;
+  }
+  if (hypotheses.length) d.hypotheses = hypotheses;
+  return d;
 }
 
 export const liveRisk = (r: RiskRecord) => r.status === 'open' || r.status === 'mitigating';
 
 /** A live high risk with no action answering it. */
 export function unmitigated(r: RiskRecord, actions: ActionRecord[]): boolean {
-  return liveRisk(r) && r.score >= HIGH_RISK && !actions.some((a) => a.for === r.key && a.status !== 'cancelled');
+  return liveRisk(r) && r.score >= HIGH_RISK && !actions.some((a) => covers(a, r.key));
 }
 
 /** Next free key of a kind ("RSK-3"). */

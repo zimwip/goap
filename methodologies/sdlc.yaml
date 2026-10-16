@@ -296,8 +296,11 @@ actions:
       {"type":"assessment","data":{"key":"description","score":<0 to 5>,"verdict":"clear|unclear|insufficient",
        "findings":[{"text":"<what is missing or ambiguous>","severity":"major|minor"}],
        "suggestion":"<a rewritten description, same language as the original, only if it can be improved>",
-       "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>"}}
-      (what you rated is recorded for you: the description as it is in this prompt.)
+       "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>",
+       "prototype":["<only when the text cannot settle it: a statement about the need a prototype would confirm or refute>"]}}
+      (what you rated is recorded for you: the description as it is in this prompt.) Leave "prototype" out unless
+      something only trying it would settle (is this flow what they want, can the data be shown that way): a person
+      decides whether to build one (ADR 0131), never you.
       A score of 3 or more means the change can be worked on as described.
 
   - name: rate_description_by_hand
@@ -884,6 +887,8 @@ actions:
       (the functions the component implements, the requirements they realize, the test cases verifying them).
       {{ range .Artifacts }}{{ if and (eq .Target "build_report") (eq (index .Data "component") $.Subject.key) }}A build of this component {{ if index .Data "ok" }}succeeded{{ else }}FAILED{{ end }} (`{{ index .Data "command" }}`, after code change {{ index .Data "revision" }}):
       {{ index .Data "output" }}
+      {{ end }}{{ if eq .Target "poc_findings" }}A proof of concept of this change ({{ index .Data "change" }}) concluded: {{ index .Data "summary" }}
+      Its verdicts: {{ json (index .Data "verdicts") }}; its code (a reference only, never copied as is): {{ json (index .Data "branches") }}; it was built without the rules of the delivery: learn from it, build again here.
       {{ end }}{{ end }}
       Work with the workspace tools: read and search the code, edit it, run the build and the tests with bash (cwd
       {{ .Subject.key }}) until they pass, then commit your work there (git add -A && git commit -m "<what and why>").
@@ -1256,10 +1261,13 @@ actions:
               rationale: "the proof of concept " + a.key + " confirmed it (" + a.change + "): another mitigation is needed" });
           }
         }
+        const findings = { action: a.key, purpose: a.purpose, change: a.change, verdicts: verdicts,
+          summary: conclusion ? conclusion.data.summary || "" : "", branches: kept ? kept.data.branches || [] : [] };
+        // for the delivery: what the POC learnt and where its code is, a reference, never reused as is (ADR 0131 §5)
+        ctx.addArtifact("poc_findings", findings);
         if (a.purpose === "explore") {
           // for the person confirming the framing: never applied to the description by itself (ADR 0110 §4)
-          ctx.addArtifact("prototype_findings", { action: a.key, change: a.change, verdicts: verdicts,
-            summary: conclusion ? conclusion.data.summary || "" : "", branches: kept ? kept.data.branches || [] : [] });
+          ctx.addArtifact("prototype_findings", findings);
         }
         const result = verdicts.map(v => v.hypothesis + " " + v.verdict + ": " + v.statement).join("; ");
         ctx.addItem("action", { key: a.key, title: a.title, status: "done", result: result });
