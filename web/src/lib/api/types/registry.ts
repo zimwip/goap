@@ -499,6 +499,16 @@ export interface ProcessStep {
   on?: Subscription[];
   /** CEL condition of the scope (self): the subjects of the scoped action the step runs it for (ADR 0109) */
   where?: string;
+  /** the step reviews a subject of the change; an automatic one starts by itself (ADR 0130) */
+  review?: StepReview;
+}
+
+/** A step that reviews a subject of the change (ADR 0130): its verdict is an assessment, which advises. */
+export interface StepReview {
+  /** description | title | intent | impact:<node key> | item:<record key or id> */
+  subject?: string;
+  /** it starts by itself on the events of its subject (created, edited, a remark about it), without a person */
+  automatic?: boolean;
 }
 
 /** Process (ADR 0034): the steps that reach an objective, run by an agent of its name towards a goal of its name. */
@@ -594,6 +604,7 @@ export interface LevelNode {
   /** that level, or one below it, is not resolved */
   broken?: boolean;
   subSteps?: number;
+  review?: StepReview;
 }
 
 export interface LevelGap {
@@ -622,6 +633,7 @@ export interface GraphStep {
   capability?: string;
   foreach?: string;
   groupBy?: string;
+  review?: StepReview;
 }
 
 /** The exit criteria of from meet the entry of to, on these conditions. */

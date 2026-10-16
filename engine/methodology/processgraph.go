@@ -34,6 +34,8 @@ type GraphStep struct {
 	Process, Capability string
 	// Foreach and GroupBy: the step runs once per element (or group) of the list (ADR 0050).
 	Foreach, GroupBy string
+	// Review: the step is a review of a subject, automatic when it starts by itself (ADR 0130).
+	Review *Review
 }
 
 // GraphEdge says that the exit criteria of From meet the entry of To, on the given conditions.
@@ -82,7 +84,7 @@ func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 		for _, s := range steps {
 			g.Steps = append(g.Steps, GraphStep{Path: s.Path, Name: s.Name, Description: s.Description, Parent: parent, Depth: depth, Leaf: len(s.Steps) == 0,
 				Method: s.Method, Target: s.Target, Entry: s.Entry, Exit: s.Exit, Roles: s.Roles, Guidance: s.Guidance, References: s.References,
-				Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy})
+				Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Review: s.Review})
 			if s.Method == MethodCapability {
 				capabilities[s.Capability] = true
 			}

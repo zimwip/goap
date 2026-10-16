@@ -656,6 +656,16 @@ message Step {
   repeated Subscription on = 22;
   // CEL condition of the scope (self): the subjects of the scoped action the step runs it for (ADR 0109 §3.5)
   string where = 23;
+  // the step is a review of a subject of the change; an automatic one starts by itself (ADR 0130)
+  StepReview review = 24;
+}
+
+// A step that reviews a subject of the change (ADR 0130): its verdict is an assessment, which advises and never decides.
+message StepReview {
+  // description | title | intent | impact:<node key> | item:<record key or id>
+  string subject = 1;
+  // it starts by itself on the events of its subject (created, edited, a remark about it), without a person
+  bool automatic = 2;
 }
 
 message GoalSummary {
@@ -1072,6 +1082,8 @@ message ViewStep {
   // for a step naming a capability: the context conditions of the methods providing it
   repeated string unavailable = 16;
   repeated ViewStep steps = 17;
+  // the step is a review of a subject; automatic: it starts by itself (ADR 0130)
+  StepReview review = 18;
 }
 
 // What a condition means, the actions making it hold and the conditions it cannot hold without.
@@ -1136,6 +1148,8 @@ message LevelNode {
   // the step runs once per element (or group) of a CEL list, in parallel streams (ADR 0050)
   string foreach = 11;
   string group_by = 12;
+  // the step reviews a subject; automatic: it starts by itself (ADR 0130)
+  StepReview review = 13;
 }
 
 message LevelStep {
@@ -1187,6 +1201,8 @@ message GraphStep {
   // the step runs once per element (or group) of a CEL list, in parallel streams (ADR 0050)
   string foreach = 16;
   string group_by = 17;
+  // the step is a review of a subject; automatic: it starts by itself (ADR 0130)
+  StepReview review = 18;
 }
 
 // The exit criteria of from meet the entry of to, on these conditions.

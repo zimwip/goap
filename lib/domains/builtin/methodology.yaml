@@ -1,5 +1,5 @@
 name: methodology
-version: 1.12.0
+version: 1.13.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -202,6 +202,7 @@ nodeTypes:
       - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
       - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
       - {name: where, label: "Where", description: "CEL condition of the scope (self): the subjects of the scoped action the step runs it for", type: string, section: Execution, order: 14}
+      - {name: review, label: "Review", description: "The step reviews a subject of the change (subject: description, title, intent, impact:<key>, item:<key>); automatic: it starts by itself on the events of its subject (ADR 0130)", type: json, widget: textarea, section: Reactions, order: 15}
   - name: MethodStep
     description: "Step of a Method: its own input/goals/output, done by an action, an agent, a nested process or a person"
     extends: Activity
@@ -222,6 +223,7 @@ nodeTypes:
       - {name: foreach, label: "For each", description: "CEL list: the step runs once per element, in parallel", type: string, section: Execution, order: 12}
       - {name: groupBy, label: "Group by", description: "CEL key: one run per group instead of per element", type: string, section: Execution, order: 13}
       - {name: where, label: "Where", description: "CEL condition of the scope (self): the subjects of the scoped action the step runs it for", type: string, section: Execution, order: 14}
+      - {name: review, label: "Review", description: "The step reviews a subject of the change (subject: description, title, intent, impact:<key>, item:<key>); automatic: it starts by itself on the events of its subject (ADR 0130)", type: json, widget: textarea, section: Reactions, order: 15}
   # an MCP tool the self-observation asks the platform for (ADR 0011): not part of a definition
   - name: ToolRequest
     description: "MCP tool requested by the self-observation of a methodology"

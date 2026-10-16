@@ -114,12 +114,26 @@ func (e *Engine) admissible(ctx context.Context, p *Process, m *methodology.Comp
 		}
 	}
 	var actions []goap.Action
-	for _, a := range m.AgentActions(ag) {
+	for _, a := range carried(m, p, m.AgentActions(ag)) {
 		if !p.Disabled[a.Name] && e.schedulable(m, a.Name, bound) {
 			actions = append(actions, operator(a))
 		}
 	}
 	return ag, actions, nil
+}
+
+// carried leaves out the actions of the automatic review steps (ADR 0130) the run does not carry out: an automatic
+// review is run by its reaction, or by a run asking for the step itself; any other run of its process waits for its
+// exit (awaited: established outside the run) instead of rating the subject a second time.
+func carried(m *methodology.Compiled, p *Process, all []methodology.Action) []methodology.Action {
+	out := all[:0:0]
+	for _, a := range all {
+		if step, ok := m.AutomaticReview(a.Name); ok && !methodology.Carries(p.Goal, step) {
+			continue
+		}
+		out = append(out, a)
+	}
+	return out
 }
 
 // planned is the outcome of a planning phase that found a plan: the action to run first and the model calls the
@@ -165,7 +179,7 @@ func (e *Engine) planStep(ctx context.Context, p *Process, m *methodology.Compil
 func (e *Engine) settleNoPlan(ctx context.Context, p *Process, m *methodology.Compiled, ag methodology.Agent, goal methodology.Goal,
 	actions []goap.Action, tickStart time.Time, calls []LLMCall) {
 	p.Plan = nil
-	if awaited := e.awaited(p.World, operators(m.AgentActions(ag)), actions, planningGoal(goal)); len(awaited) > 0 {
+	if awaited := e.awaited(p.World, operators(carried(m, p, m.AgentActions(ag))), actions, planningGoal(goal)); len(awaited) > 0 {
 		p.Status = StatusWaiting
 		p.Pending = &HumanTask{Kind: TaskCondition, Step: len(p.Steps), Conditions: awaited,
 			Description: "Waiting for " + strings.Join(awaited, ", ") + ": conditions this agent's actions do not establish"}

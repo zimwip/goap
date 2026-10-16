@@ -329,7 +329,8 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 		edges[e.From+" -> "+e.To] = strings.Join(e.Conditions, ",")
 	}
 	for from, to := range map[string]string{
-		"software_delivery/framing":                             "software_delivery/analysis/impacts",
+		"software_delivery/framing/review":                      "software_delivery/framing/confirmation",
+		"software_delivery/framing/confirmation":                "software_delivery/analysis/impacts",
 		"software_delivery/analysis/impacts":                    "software_delivery/analysis/specification/requirements",
 		"software_delivery/analysis/specification/traceability": "software_delivery/design",
 		"software_delivery/release":                             "software_delivery/application",
@@ -339,11 +340,12 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 		}
 	}
 	// transitive reduction: framing does not point at the application directly
-	if _, ok := edges["software_delivery/framing -> software_delivery/application"]; ok {
+	if _, ok := edges["software_delivery/framing/confirmation -> software_delivery/application"]; ok {
 		t.Error("implied edge kept")
 	}
-	// the methods of the capabilities of the process: the impact analysis, the two of the design, the two of the build
-	if len(g.Methods) != 5 || g.Methods[0].AgentGoal != "impact_analysis" || g.Methods[1].AgentGoal != "solution_design" {
+	// the methods of the capabilities of the process: the rating of the framing's review, the impact analysis, the two
+	// of the design, the two of the build
+	if len(g.Methods) != 6 || g.Methods[0].AgentGoal != "description_rating" || g.Methods[1].AgentGoal != "impact_analysis" || g.Methods[2].AgentGoal != "solution_design" {
 		t.Fatalf("methods of the capabilities: %+v", g.Methods)
 	}
 	var architect *GraphAgent

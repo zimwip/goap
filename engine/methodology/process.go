@@ -102,6 +102,9 @@ type Step struct {
 	Where string `yaml:"where,omitempty" json:"where,omitempty"`
 	// On makes the step reactive (ADR 0110): it runs again on a change of its methodology for each matching event.
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
+	// Review declares the step a review of a subject of the change (ADR 0130); an automatic one starts by itself on
+	// the events of its subject.
+	Review *Review `yaml:"review,omitempty" json:"review,omitempty"`
 }
 
 // Step methods.

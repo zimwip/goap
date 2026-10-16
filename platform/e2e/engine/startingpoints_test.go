@@ -170,8 +170,8 @@ func TestStartingPointsOfSDLC(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// the rating of the description is a prerequisite of its acceptance, the gate of the analysis (ADR 0110)
-	if got := pointIDs(sp); !slices.Equal(got, []string{"software_delivery/framing", "description_review/rate"}) {
+	// the framing, whose automatic review rates the description (ADR 0110, 0130), is where the change starts
+	if got := pointIDs(sp); !slices.Equal(got, []string{"software_delivery/framing"}) {
 		t.Fatalf("points %v (%s) blocked %+v", got, sp.Reason, sp.Blocked)
 	}
 	if sp.BlockedCount == 0 {

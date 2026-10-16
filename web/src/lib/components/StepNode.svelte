@@ -19,6 +19,8 @@
     /** the step runs once per element (or group) of this CEL list, in parallel streams (ADR 0050) */
     foreach?: string;
     groupBy?: string;
+    /** the step reviews a subject of the change; automatic: it starts by itself (ADR 0130) */
+    review?: { subject?: string; automatic?: boolean };
     /** rules this step breaks (compilation issues), and how many are in the steps below it */
     issues?: string[];
     issuesInside?: number;
@@ -103,6 +105,15 @@
     <div class="zoom">
       {#if data.issues?.length}<span class="incomplete" title={data.issues.join('\n')}>⚠ {data.issues[0]}{data.issues.length > 1 ? ` (+${data.issues.length - 1})` : ''}</span>
       {:else}<span class="incomplete" title="Rules are broken in the steps below">⚠ {data.issuesInside} inside</span>{/if}
+    </div>
+  {/if}
+  {#if data.review?.subject}
+    <div class="zoom">
+      <span
+        class="chip"
+        title={data.review.automatic
+          ? `Reviews the ${data.review.subject} by itself, when the change is created, the ${data.review.subject} edited or a remark made about it; its rating advises, it decides nothing`
+          : `Reviews the ${data.review.subject}; its rating advises, it decides nothing`}>✓ reviews {data.review.subject}{data.review.automatic ? ' · automatic' : ''}</span>
     </div>
   {/if}
   {#if data.foreach}

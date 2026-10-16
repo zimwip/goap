@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.8.3
+version: 0.9.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -1232,9 +1232,10 @@ roles:
 # and has access to them, and to the tools their actions declare. A step names the capability (`method: design`); the
 # applicable method with the highest priority is chosen at execution, and its guidance and references reach its agent.
 methods:
-  # The rating of the description (ADR 0110): every activity is carried out by an agent, autonomous or human. The
-  # method is planned (goap): the llm action is the cheapest and comes first, the human one is the fallback the planner
-  # takes when the llm action cannot run or keeps failing.
+  # The reviewing method of the framing (ADR 0110, 0130): the rating of the description, every activity carried out by
+  # an agent, autonomous or human. The method is planned (goap): the llm action is the cheapest and comes first, the
+  # human one is the fallback the planner takes when the llm action cannot run or keeps failing. The step of the
+  # framing naming it is an automatic review: it starts by itself on the events of the description.
   - name: description_rating
     for: description_rating
     description: Rate the description of the change, by a model first, by a person when no model can
@@ -1366,26 +1367,41 @@ processes:
       - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md"}
     steps:
       - name: framing
-        description: Frame the change with its requester
+        description: Frame the change with its requester, its description reviewed as soon as it is written
         roles: {responsible: business_analyst, accountable: product_owner}
-        instructions: >
-          Check with the requester that the intent states a concrete outcome, its scope (what it touches) and why it
-          is needed; amend the intent of the change if it does not, then mark the step done.
-        guidance: >
-          A well-framed change can be analysed without going back to the requester: the outcome is observable, the
-          scope names the applications or requirements concerned, and the reason says what happens if nothing is done.
-        checklist:
-          - The outcome is concrete and observable
-          - The scope names what the change touches
-          - The reason for the change is stated
-        references:
-          - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
+        steps:
+          # the reviewing method of the framing (ADR 0130): an automatic review starts by itself, without anyone
+          # launching it, when the change is created, when its title or intent is edited (the rating in flight is
+          # superseded) and when the requester answers in the thread; the run of the process waits for its rating
+          # rather than rating the description a second time. The rating advises: a person confirms the framing.
+          - name: review
+            description: Rate the title and the description, propose a better wording, answer the requester's remarks
+            method: description_rating
+            review: {subject: description, automatic: true}
+          - name: confirmation
+            description: A person confirms the framing, in the light of the review of the description
+            pre: {description_rated: true}
+            instructions: >
+              Read the review of the description, check with the requester that the intent states a concrete outcome,
+              its scope (what it touches) and why it is needed; amend the intent of the change if it does not (the
+              review rates it again by itself), then mark the step done.
+            guidance: >
+              A well-framed change can be analysed without going back to the requester: the outcome is observable, the
+              scope names the applications or requirements concerned, and the reason says what happens if nothing is
+              done. The review is an advice: its findings and its proposed wording are for the requester to take or
+              leave.
+            checklist:
+              - The outcome is concrete and observable
+              - The scope names what the change touches
+              - The reason for the change is stated
+            references:
+              - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
       - name: analysis
         description: Impacts, requirements, traceability and test plan, once the change is framed and its description accepted
         roles: {responsible: business_analyst, accountable: product_owner, consulted: [solution_architect]}
         # the rating of the current description accepts it (ADR 0110): the requester edits the description, the
-        # description_review process rates it again by itself, and the run waiting here is tried again
-        pre: {"step:software_delivery/framing": true, description_accepted: true}
+        # automatic review of the framing rates it again by itself, and the run waiting here is tried again
+        pre: {"step:software_delivery/framing/confirmation": true, description_accepted: true}
         steps:
           - name: impacts
             description: The impact analysis, in four passes (the impact_analysis method)
@@ -1419,18 +1435,6 @@ processes:
         # when one of them moves
         pre: {dependencies_met: true}
         action: apply_change
-
-  - name: description_review
-    description: Rate the description of the change and discuss it with the requester, each time it changes or they answer (ADR 0110)
-    steps:
-      - name: rate
-        description: Rate the title and the description, propose a better wording, answer the requester's remarks
-        method: description_rating
-        on:
-          - {event: change.created}
-          # an edit while the rating runs stops it and rates the new text (supersede, ADR 0110)
-          - {event: change.edited, filter: '"intent" in event.fields || "title" in event.fields', supersede: true}
-          - {event: change.item_added, filter: 'event.items.exists(i, i.type == "comment" && i.data.about == "description")'}
 
   - name: release_train
     description: Release — plan the releases, write the release note, review, deploy environment by environment

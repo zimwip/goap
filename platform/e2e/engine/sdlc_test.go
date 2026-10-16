@@ -364,8 +364,9 @@ func TestSDLCProcess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// the analysis waits for the description to be accepted (ADR 0110): the description_review process rated it
-	if _, err := g.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Type: assess.TypeAssessment, Status: domain.ItemProposed, ProducedBy: "description_review/rate",
+	// the analysis waits for the description to be accepted (ADR 0110): the automatic review of the framing rated it
+	// (ADR 0130), so the run does not rate it itself
+	if _, err := g.AddItems(ctx, p.ChangeID, []domain.ChangeItem{{Type: assess.TypeAssessment, Status: domain.ItemProposed, ProducedBy: "rate_description",
 		Data: map[string]any{"key": assess.SubjectDescription, "score": 4, "verdict": assess.VerdictClear,
 			"rated": "Payment in 3 installments\n\nAllow payment in 3 installments with no fees"}}}); err != nil {
 		t.Fatal(err)
@@ -373,8 +374,8 @@ func TestSDLCProcess(t *testing.T) {
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
-	if p.Agent != "software_delivery" || p.Status != engine.StatusWaiting || p.Pending.Action != "software_delivery/framing" || p.Pending.Instructions == "" {
-		t.Fatalf("the process starts with its manual framing step: %s %s %+v %s", p.Agent, p.Status, p.Pending, p.Error)
+	if p.Agent != "software_delivery" || p.Status != engine.StatusWaiting || p.Pending.Action != "software_delivery/framing/confirmation" || p.Pending.Instructions == "" {
+		t.Fatalf("the process starts with the confirmation of the framing, its description reviewed: %s %s %+v %s", p.Agent, p.Status, p.Pending, p.Error)
 	}
 	if c := p.Pending.Context; c == nil || c.Guidance == "" || len(c.Checklist) != 3 || len(c.References) != 1 {
 		t.Fatalf("the framing task carries its guidance, checklist and references: %+v", c)
@@ -428,7 +429,7 @@ func TestSDLCProcess(t *testing.T) {
 			steps = append(steps, s.Action)
 		}
 	}
-	want := []string{"software_delivery/framing", "software_delivery/analysis/impacts",
+	want := []string{"software_delivery/framing/confirmation", "software_delivery/analysis/impacts",
 		// the traceability sub-step is skipped: its criteria hold (the new requirement satisfies a need)
 		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/design", "software_delivery/analysis/specification/test_plan", "software_delivery/build", "software_delivery/release"}
 	if !slices.Equal(steps, want) {
@@ -457,7 +458,7 @@ func TestSDLCProcess(t *testing.T) {
 			t.Fatalf("%s is %s, want %s (%v)", path, states[path], want, states)
 		}
 	}
-	if pr.Total != 9 || pr.Done != 7 {
+	if pr.Total != 10 || pr.Done != 8 { // the framing counts its review and its confirmation
 		t.Fatalf("progress %d/%d", pr.Done, pr.Total)
 	}
 	// the build step names a capability: no component has a repository, so the recorded_build method was chosen

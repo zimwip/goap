@@ -708,8 +708,17 @@ and runs it again on the change as it is now, instead of waiting in its inbox (`
 edited description so); an event trigger on the change of the event takes the same flag and cancels its runs still at
 work on that change before it starts the new one (`Engine.supersedeRuns`). The graph publishes
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
-`sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `contracts/assess`) and
-answers the requester's `comment` items; the analysis waits for `description_accepted`; the web shows every assessment
+A step may be declared a **review** ([ADR 0130](adr/0130-reviewing-steps.md)): `review: {subject, automatic}` names
+the subject it rates (`description`, `title`, `intent`, `impact:<key>`, `item:<key>`); an automatic review starts by
+itself, without anyone launching it, on the events of its subject (for a header subject: the change created, its fields
+edited, superseding the rating in flight, a remark about it; the step's own `on:` otherwise, `Step.ReactsTo`), and the
+other runs of its process leave its actions alone and wait for its exit (`Compiled.AutomaticReview`, `carried` in
+`engine/engine/cycle.go`); a run whose goal is the step carries it. Its verdict is an assessment, advice: it accepts no
+impact (the floor of ADR 0129 holds) and a person decides after it. `sdlc` (0.9.0) reviews the description in its
+framing: the step `software_delivery/framing/review` names the goap method `description_rating` (an llm action first,
+a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `contracts/assess`) and
+answers the requester's `comment` items, then a person confirms the framing (`framing/confirmation`, after the rating);
+the analysis waits for that confirmation and for `description_accepted`; the web shows every assessment
 by its subject as a comment bubble (`AssessmentBubble.svelte`, `web/src/lib/descriptionReview.ts`): the description wraps
 the intent, its badge coloured by the state of the rating and the bubble opened by a click (by itself only for a
 state the methodology declares `open`); the title, the intent, the impacts (rows of the
@@ -1611,11 +1620,17 @@ and sub-steps, each done by one method, with the precision the methodology has f
 processes:
   - name: software_delivery                  # also the agent that runs it and its goal
     steps:
-      - name: framing                        # by hand: a human task, done once submitted
-        instructions: Check the intent with the requester
-        references: [{title: Delivery guide, ref: "document-repository:sdlc/guide.md", section: Framing}]
+      - name: framing
+        steps:
+          - name: review                     # a review (ADR 0130): starts by itself on the events of its subject
+            method: description_rating
+            review: {subject: description, automatic: true}
+          - name: confirmation               # by hand: a human task, done once submitted
+            pre: {description_rated: true}
+            instructions: Check the intent with the requester
+            references: [{title: Delivery guide, ref: "document-repository:sdlc/guide.md", section: Framing}]
       - name: analysis                       # sub-steps; the phase's pre applies to them
-        pre: {"step:software_delivery/framing": true}
+        pre: {"step:software_delivery/framing/confirmation": true}
         steps:
           - {name: scope, actions: [identify_requirements, select_scope]}   # alternatives the planner chooses among
           - {name: impacts, method: impact_analysis}   # a capability, carried out by a method

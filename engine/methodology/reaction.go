@@ -92,8 +92,8 @@ func (s *compileState) forEachReactive(f func(path string, r Reaction)) {
 	steps = func(list []Step, path, owner, prefix, agent string) {
 		for i, st := range list {
 			sp, full := fmt.Sprintf("%s.steps[%d]", path, i), prefix+"/"+st.Name
-			if len(st.On) > 0 {
-				f(sp, Reaction{Activity: full, Owner: owner, Kind: ReactStep, Agent: agent, Goal: full, On: st.On})
+			if on := st.ReactsTo(); len(on) > 0 {
+				f(sp, Reaction{Activity: full, Owner: owner, Kind: ReactStep, Agent: agent, Goal: full, On: on})
 			}
 			steps(st.Steps, sp, owner, full, agent)
 		}

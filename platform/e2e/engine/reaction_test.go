@@ -2,6 +2,7 @@ package enginee2e
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -365,5 +366,109 @@ func TestDescriptionRatingFallsBackToAPerson(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// framedYAML reviews the description within its framing (ADR 0130): the review step is declared, automatic, and
+// rates the description by itself; the run of the process waits for its rating, then a person confirms the framing.
+const framedYAML = `
+name: framed
+version: 1.0.0
+namespace: alm
+imports: [assessments]
+actions:
+  - {name: rate, kind: llm, model: default, prompt: Rate the description, effects: {description_rated: true}, cost: 1}
+  - {name: write, kind: human, description: Write the note, effects: {noted: true}}
+conditions:
+  - {name: noted, expr: 'artifacts.exists(a, a.target == "note")'}
+methods:
+  - {name: rating, for: rating, planner: goap, actions: [rate], done: {description_rated: true}}
+processes:
+  - name: delivery
+    steps:
+      - name: framing
+        steps:
+          - {name: review, method: rating, review: {subject: description, automatic: true}}
+          - {name: confirmation, description: A person confirms the framing, pre: {description_rated: true}}
+      - {name: note, action: write, pre: {"step:delivery/framing/confirmation": true, description_accepted: true}}
+`
+
+func TestAutomaticReviewOfTheFraming(t *testing.T) {
+	ctx := context.Background()
+	e := stagedEngine(t)
+	m, err := methodology.Parse([]byte(framedYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := m.Compile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rs := c.Reactions()
+	if len(rs) != 1 || rs[0].Activity != "delivery/framing/review" || rs[0].Agent != "delivery" || len(rs[0].On) != 3 || !rs[0].On[1].Supersede || !rs[0].Owns("rate") {
+		t.Fatalf("the automatic review reacts to the events of its subject: %+v", rs)
+	}
+	if step, ok := c.AutomaticReview("delivery/framing/review"); !ok || step != "delivery/framing/review" {
+		t.Fatalf("the action of the review step: %q %v", step, ok)
+	}
+	if v, ok := c.View().Process("delivery"); !ok || v.Steps[0].Steps[0].Review == nil || !v.Steps[0].Steps[0].Review.Automatic {
+		t.Fatalf("the view shows the review: %+v", v)
+	}
+	e.Methodologies.(engine.StaticMethodologies)["framed"] = c
+	ch, err := e.Graph.CreateChange(ctx, graph.NewChange{Title: "Note", Intent: "write the release note of 1.2", Methodology: "framed", Namespace: "alm", ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	e.Executors[methodology.KindLLM] = engine.LLMExecutor{Client: llm.ClientFunc(func(_ context.Context, r llm.Request) (llm.Response, error) {
+		calls++
+		bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+		return llm.Response{Text: `{"items":[{"type":"assessment","data":{"key":"description","score":4,"verdict":"clear","rated":"` +
+			assess.FingerprintOf(bb, assess.SubjectDescription) + `"}}]}`}, nil
+	})}
+
+	// the delivery run does not rate the description itself: it waits for the review
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: "framed", Agent: "delivery", Goal: "delivery", ChangeID: ch.ID, ProjectID: testProject})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p, _ = e.Run(ctx, p.ID); p.Status != engine.StatusWaiting || p.Pending == nil || p.Pending.Kind != engine.TaskCondition ||
+		!slices.Contains(p.Pending.Conditions, "description_rated") || calls != 0 {
+		t.Fatalf("the run waits for the review: %s %+v, %d calls", p.Status, p.Pending, calls)
+	}
+
+	// the change created starts the review by itself, without anyone launching it
+	bb, _ := e.Graph.Blackboard(ctx, ch.ID)
+	e.Accompany(ctx, engine.TriggerEvent{Type: "change.created", Change: &bb.Change})
+	e.Drain()
+	cs := companionOf(t, e, ch.ID)
+	if len(cs) != 1 || cs[0].Trigger != "companion:framed/delivery/framing/review" || cs[0].Status != engine.StatusCompleted || calls != 1 {
+		t.Fatalf("the review ran by itself: %+v, %d calls", cs, calls)
+	}
+	bb, _ = e.Graph.Blackboard(ctx, ch.ID)
+	if a, ok := assess.Of(bb, assess.SubjectDescription); !ok || !a.Current || a.Score != 4 {
+		t.Fatalf("assessment %+v", a)
+	}
+
+	// the review completed, the delivery run goes on to the person's confirmation of the framing: the rating
+	// advises, a person decides
+	e.Accompany(ctx, engine.TriggerEvent{Type: "process.completed", Process: cs[0]})
+	e.Drain()
+	if p, _ = e.Store.Get(ctx, p.ID); p.Status != engine.StatusWaiting || p.Pending == nil || p.Pending.Action != "delivery/framing/confirmation" || calls != 1 {
+		t.Fatalf("a person confirms the framing: %s %+v, %d calls", p.Status, p.Pending, calls)
+	}
+
+	for name, src := range map[string]string{
+		"subject":   "name: bad\nversion: 1.0.0\nnamespace: alm\nconditions: [{name: x, expr: 'true'}]\nactions: [{name: a, kind: human, effects: {x: true}}]\nprocesses: [{name: p, steps: [{name: s, action: a, review: {subject: everything}}]}]\n",
+		"manual":    "name: bad\nversion: 1.0.0\nnamespace: alm\nprocesses: [{name: p, steps: [{name: s, review: {subject: description, automatic: true}}]}]\n",
+		"no events": "name: bad\nversion: 1.0.0\nnamespace: alm\nconditions: [{name: x, expr: 'true'}]\nactions: [{name: a, kind: human, effects: {x: true}}]\nprocesses: [{name: p, steps: [{name: s, action: a, done: {x: true}, review: {subject: 'impact:REQ-1', automatic: true}}]}]\n",
+	} {
+		m, err := methodology.Parse([]byte(src))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if issues := m.Validate(); !issues.HasErrors() {
+			t.Errorf("%s: refused expected", name)
+		}
 	}
 }

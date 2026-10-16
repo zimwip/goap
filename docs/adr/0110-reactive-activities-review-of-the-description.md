@@ -3,6 +3,10 @@
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0036 §3 (companion runs, `on:`), 0106 (`on.from`), 0109
 (conditions derived from the context, the history of runs)
 
+> Since ADR 0130 the rating of the description is no longer a process of its own in `sdlc`: it is the automatic review
+> step of the framing (`software_delivery/framing/review`, `review: {subject: description, automatic: true}`), whose
+> subscriptions are those of §2.
+
 ## Context
 
 A change is accepted only if its description (`Change.Intent`, with its title) says clearly what is wanted. Today

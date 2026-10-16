@@ -99,6 +99,8 @@ type compileState struct {
 	meths      compiledMethods
 	procs      compiledProcesses
 	reactions  []Reaction
+	// automaticReviews gives the automatic review step of each action generated for it (ADR 0130)
+	automaticReviews map[string]string
 	// assessments are the compiled assessment views (ADR 0116)
 	assessments *condition.AssessmentViews
 }
@@ -124,6 +126,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.mergeRolesMethodsProcesses()
 	s.checkStepScopes()
 	s.compileReactions()
+	s.compileAutomaticReviews()
 	s.checkMainGoal()
 	s.compileAssessments()
 	return s.finish(lenient)
@@ -867,7 +870,7 @@ func (s *compileState) finish(lenient bool) (*Compiled, def.Issues) {
 		return nil, def.Issues{{Message: err.Error()}}
 	}
 	c := &Compiled{definition: m, Conditions: set, actions: s.actions, utilities: uset, agents: s.agents, whens: wset, processes: s.procs,
-		methods: s.meths, methodGuards: mset, reactions: s.reactions, assessments: s.assessments}
+		methods: s.meths, methodGuards: mset, reactions: s.reactions, automaticReviews: s.automaticReviews, assessments: s.assessments}
 	c.view = c.buildView()
 	return c, s.issues
 }

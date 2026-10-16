@@ -346,6 +346,9 @@ export interface StepForm {
   on: SubscriptionForm[];
   /** CEL over `self`: the subjects of the scoped action the step runs it for (ADR 0109) */
   where: string;
+  /** the subject the step reviews (empty: not a review); automatic: it starts by itself on its events (ADR 0130) */
+  reviewSubject: string;
+  reviewAutomatic: boolean;
 }
 
 export interface ReferenceForm {
@@ -575,6 +578,8 @@ export const emptyStep = (name = ''): StepForm => ({
   foreach: '',
   groupBy: '',
   where: '',
+  reviewSubject: '',
+  reviewAutomatic: false,
   pre: [],
   done: [],
   references: [],
@@ -1072,6 +1077,8 @@ function stepToForm(s: ProcessStep): StepForm {
     foreach: s.foreach ?? '',
     groupBy: s.groupBy ?? '',
     where: s.where ?? '',
+    reviewSubject: s.review?.subject ?? '',
+    reviewAutomatic: s.review?.automatic ?? false,
     pre: rows(s.pre),
     done: rows(s.done),
     references: refsToForm(s.references),
@@ -1135,6 +1142,7 @@ export function stepFromForm(s: StepForm): ProcessStep {
   put(o, 'roles', respFromForm(s.roles));
   put(o, 'on', subsFromForm(s.on));
   if (s.method === 'action' || s.method === 'actions') put(o, 'where', s.where.trim());
+  if (s.reviewSubject.trim()) put(o, 'review', s.reviewAutomatic ? { subject: s.reviewSubject.trim(), automatic: true } : { subject: s.reviewSubject.trim() });
   switch (s.method) {
     case 'manual':
       put(o, 'instructions', s.instructions.trim());

@@ -6,7 +6,7 @@ const change = { id: 'C1', methodology: 'sdlc', title: 'Pay', intent: 'Pay in 3 
 const rating = (id: string, score: number, rated: string, reply = ''): ChangeItem => ({
   id,
   type: 'assessment',
-  producedBy: 'description_review/rate',
+  producedBy: 'rate_description',
   data: { key: 'description', score, verdict: 'unclear', rated, reply, findings: ['no scope', { text: 'why?', severity: 'major' }] },
 });
 const comment = (id: string, text: string): ChangeItem => ({ id, type: 'comment', data: { about: 'description', text } });
@@ -45,7 +45,7 @@ describe('descriptionReview', () => {
   it('finds the run of the rater and writes a comment', () => {
     // the agent of the method wrote the rating, under the companion run of the reaction
     const runs = [
-      { id: 'P1', changeId: 'C1', trigger: 'companion:sdlc/description_review/rate' },
+      { id: 'P1', changeId: 'C1', trigger: 'companion:sdlc/software_delivery/framing/review' },
       { id: 'P3', changeId: 'C1', parentId: 'P1', steps: [{ items: ['I1'] }] },
       { id: 'P2', changeId: 'C1', trigger: 'companion:risk/risk_watch' },
     ] as Process[];

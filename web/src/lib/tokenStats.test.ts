@@ -121,7 +121,7 @@ describe('usage periods', () => {
 describe('consumption on behalf of the end user (ADR 0114)', () => {
   it('names who acted', () => {
     expect(actorLabel('system:trigger:noted/writer/on_edit')).toBe('trigger noted/writer/on_edit');
-    expect(actorLabel('system:companion:sdlc/description_review')).toBe('companion sdlc/description_review');
+    expect(actorLabel('system:companion:sdlc/software_delivery/framing/review')).toBe('companion sdlc/software_delivery/framing/review');
     expect(actorLabel('system:indexer')).toBe('indexer');
     expect(actorLabel('alice', 'alice')).toBe('you, directly');
     expect(actorLabel('bob', 'alice')).toBe('bob');

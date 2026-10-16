@@ -197,6 +197,21 @@
         <StepIO {step} {path} draft={d} />
         <ReferencesEditor bind:refs={step.references} path="{path}.references" bad={d.bad} readonly={d.readonly} />
       </details>
+      <details class="more" open={!!step.reviewSubject}>
+        <summary>Review {#if step.reviewSubject}<span class="hint">{step.reviewSubject}{step.reviewAutomatic ? ', automatic' : ''}</span>{/if}</summary>
+        <div class="grid2">
+          <div class="field">
+            <label for="{step.key}-rsub">Reviews <span class="opt">(description, title, intent, impact:&lt;key&gt;, item:&lt;key&gt;; empty: not a review)</span></label>
+            <input id="{step.key}-rsub" type="text" class="mono" bind:value={step.reviewSubject} class:bad={d.bad(`${path}.review.subject`)} data-path="{path}.review.subject" placeholder="description" readonly={d.readonly} />
+          </div>
+          <div class="field">
+            <label class="check" class:bad={d.bad(`${path}.review.automatic`)} data-path="{path}.review.automatic">
+              <input type="checkbox" bind:checked={step.reviewAutomatic} disabled={d.readonly || !step.reviewSubject.trim()} />
+              Starts by itself <span class="opt">(on the events of its subject: the change created, the subject edited, a remark about it; other runs wait for it, ADR 0130)</span>
+            </label>
+          </div>
+        </div>
+      </details>
       <details class="more" open={step.on.length > 0}>
         <summary>Reacts to {#if step.on.length}<span class="hint">{step.on.length}</span>{/if}</summary>
         <SubscriptionsEditor bind:subs={step.on} draft={d} {path} label="Events" hint="the step runs again on a change of the methodology for each of them; its exit says whether there is work (ADR 0110)" />
@@ -217,6 +232,15 @@
 </div>
 
 <style>
+  .check {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin-top: 18px;
+  }
+  .check.bad {
+    color: var(--danger);
+  }
   .step {
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);

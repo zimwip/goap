@@ -42,6 +42,9 @@ of Art. 8 to 17 and 43:
   person only. Turning it off leaves oversight to each methodology.
 - Prefer methodologies whose gates and guardians (ADR 0058, 0106) need a decided decision point or a human step before
   a merge, and declare independent verification on actions whose output matters (`verify:`, ADR 0075).
+- An automatic review (`review: {automatic: true}` on a step, ADR 0130) runs a model without anyone launching it: its
+  rating is an assessment, advice that accepts nothing; follow it with a step a person does (`sdlc`'s framing is
+  confirmed by a person after the review of its description).
 - Everyone can stop a run (cancel, the assistant's *Stop*), unblock or abandon it (ADR 0109); the engine bounds every run
   (`GOAP_MAX_STEPS`, failures, loop budgets).
 - Review what an agent did before accepting it: the change tab shows each impact with its producer, the run's steps and
@@ -82,7 +85,7 @@ agents do, their limits and the settings above.
 | Design, architecture, components | `docs/architecture.md`, `docs/architecture-overview.html`, `docs/adr/` |
 | Logic of the system and its decisions | the methodologies (`methodologies/`, versioned graph nodes, ADR 0023), planners (`engine/goap`), conditions (ADR 0002, 0109) |
 | Models used | the model entries of the platform namespace (`platform@LlmModel`), the ledger per call |
-| Human oversight measures | ADR 0058, 0067, 0075, 0090, 0105, 0106, 0115, 0117, 0129 |
+| Human oversight measures | ADR 0058, 0067, 0075, 0090, 0105, 0106, 0115, 0117, 0129, 0130 |
 | Logging | ADR 0011, 0030, 0057, 0059, 0089, 0114, 0123 §6 |
 | Accuracy, robustness, cybersecurity | ADR 0007 (sandbox), 0099 (evaluation), 0118 (workspace), 0020 / 0045 (access, sessions) |
 | Changes over the lifecycle | `git log`, the ADRs, the versions of methodologies and domains |

@@ -202,6 +202,7 @@
         issues: issuesOf(p),
         issuesInside: issuesInside(p),
         groupBy: n.groupBy,
+        review: n.review,
         state: stateOf(p),
         simple,
         onzoom: () => (path = p),
