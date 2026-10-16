@@ -1,0 +1,313 @@
+name: poc
+version: 0.1.0
+description: >
+  Proof of concept or prototype (ADR 0131): a relaxed build, in a sub-change of the change it serves, to check that
+  something works as expected before the change invests in it. Its requirements are hypotheses: the risks of the
+  parent it checks (a POC, to derisk) or statements about the need (a prototype, during the framing). Each hypothesis
+  gets a probe (what to build, what to observe, the check that shows it), built and run in the workspace of the change
+  without the quality rules of the delivery, then a verdict (confirmed or refuted) a person confirms. It lands nothing:
+  its parent takes the verdicts back and closes it; its code stays on its branch, for reference only.
+
+namespace: alm
+# ADR 0075: the lowest level, the oracles accept a tool or a model; a POC lands nothing
+criticality: C1
+goal: conclude
+
+events:
+  - {name: poc.concluded, description: "A person confirmed the verdicts of the proof of concept on its hypotheses"}
+
+# how its assessments read (ADR 0116): a verdict per hypothesis
+assessments:
+  - subject: "item:*"
+    states:
+      - {when: "assessment.verdict == 'refuted'", tone: ok, label: "works as expected"}
+      - {when: "assessment.verdict == 'confirmed'", tone: danger, label: "does not work: the risk holds"}
+      - {tone: neutral, label: judged}
+
+conditions:
+  # what the parent asked the POC to check (an artifact poc_scope it writes when it opens the sub-change)
+  - name: poc_scoped
+    description: The change that opened the POC wrote what it checks (the hypotheses, the sources, the timebox)
+    expr: artifacts.exists(a, a.target == "poc_scope")
+  - name: hypotheses_stated
+    description: The hypotheses the POC checks are stated, its requirements
+    expr: items.exists(i, i.type == "hypothesis")
+  # one hypothesis (an item of type hypothesis, ADR 0109 §3)
+  - name: probed
+    scope: item
+    where: self.type == "hypothesis"
+    description: The hypothesis has its probe (what to build, what to observe, the check that shows it)
+    expr: artifacts.exists(a, a.target == "probe" && a.data.hypothesis == self.data.key)
+  - name: probe_implemented
+    scope: item
+    where: self.type == "hypothesis"
+    description: >
+      The probe of the hypothesis is built (a probe change), and no run failed since; after three attempts it stays as
+      it is, its last report says it does not show the hypothesis
+    expr: >
+      artifacts.exists(k, k.target == "probe_change" && k.data.hypothesis == self.data.key) &&
+      (artifacts.filter(k, k.target == "probe_change" && k.data.hypothesis == self.data.key).size() >= 3 ||
+       !artifacts.exists(r, r.target == "probe_report" && r.data.hypothesis == self.data.key && r.data.ok != true &&
+         r.data.revision == artifacts.filter(k, k.target == "probe_change" && k.data.hypothesis == self.data.key).size()))
+  - name: probe_run
+    scope: item
+    where: self.type == "hypothesis"
+    description: The check of the probe ran on its latest change (whatever the outcome)
+    expr: >
+      artifacts.exists(r, r.target == "probe_report" && r.data.hypothesis == self.data.key &&
+        r.data.revision == artifacts.filter(k, k.target == "probe_change" && k.data.hypothesis == self.data.key).size())
+  - name: judged
+    scope: item
+    where: self.type == "hypothesis"
+    description: The hypothesis has its verdict, confirmed (it does not work) or refuted (it works as expected)
+    expr: 'assessments.exists(a, a.key == "item:" + self.data.key && a.verdict in ["confirmed", "refuted"])'
+  - {name: hypotheses_probed, all: probed, where: self.type == "hypothesis", description: Every hypothesis has its probe}
+  - {name: probes_implemented, all: probe_implemented, where: self.type == "hypothesis", description: Every probe is built}
+  - {name: probes_run, all: probe_run, where: self.type == "hypothesis", description: The check of every probe ran}
+  - {name: hypotheses_judged, all: judged, where: self.type == "hypothesis", description: Every hypothesis has its verdict}
+  - name: workspace_ready
+    description: The workspace of the POC is open, with the sources it starts from
+    expr: artifacts.exists(a, a.target == "workspace")
+  - name: probes_kept
+    description: The code of the probes is pushed on the branch of the POC (for reference, never published)
+    expr: artifacts.exists(a, a.target == "probes_kept")
+  - name: conclusion_confirmed
+    description: A person confirmed the verdicts of the POC
+    expr: artifacts.exists(a, a.target == "poc_conclusion")
+
+actions:
+  # ======================= scope: the hypotheses, the requirements of the POC
+  - name: state_hypotheses
+    kind: script
+    language: javascript
+    description: State the hypotheses the POC checks, from what the change that opened it asked
+    pre: {poc_scoped: true}
+    effects: {hypotheses_stated: true}
+    code: |
+      function run(ctx) {
+        const scopes = ctx.items("artifact").filter(a => a.target === "poc_scope");
+        const scope = scopes[scopes.length - 1].data;
+        let n = 0;
+        for (const h of (scope.hypotheses || [])) {
+          n++;
+          ctx.addItem("hypothesis", { key: "HYP-" + n, statement: String(h.statement), source: String(h.source || "framing") });
+        }
+        if (n === 0) throw new Error("the POC was opened with nothing to check");
+        return n + " hypothesis(es) to check";
+      }
+
+  # ======================= framing: one probe per hypothesis
+  - name: propose_probe
+    kind: llm
+    scope: item
+    where: self.type == "hypothesis"
+    description: Propose the probe of a hypothesis, the smallest build that shows whether it holds
+    pre: {hypotheses_stated: true}
+    effects: {probed: true}
+    cost: 1
+    model: default
+    prompt: |
+      You prepare a proof of concept: the smallest code that shows whether a hypothesis holds. It is a throw-away
+      build, without the quality rules of a delivery (no coverage, no review), but its check must be honest: a command
+      whose exit code says whether what is observed is what is expected.
+      Proof of concept: "{{ .Change.Title }}" — {{ .Change.Intent }}
+      Hypothesis {{ .Subject.data.key }}: {{ .Subject.data.statement }}
+      The brief gives the scope (sources, timebox, notes) in its artifacts.
+      Answer {"items":[{"type":"artifact","target":"probe","data":{"hypothesis":"{{ .Subject.data.key }}",
+        "build":"<what to build, in a few lines>","observe":"<what to measure or observe>",
+        "refutes":"<the result that shows it works as expected>","dir":"<the directory of the workspace it is built in: a source, or probe-{{ .Subject.data.key }}>",
+        "check":"<the shell command, run in dir, whose exit code 0 shows it works>"}}]}
+
+  - name: write_probe
+    kind: human
+    scope: item
+    where: self.type == "hypothesis"
+    description: Write the probe of a hypothesis by hand
+    pre: {hypotheses_stated: true}
+    effects: {probed: true}
+    cost: 6
+    instructions: >
+      Say how the hypothesis will be checked: an artifact probe with data.hypothesis (its key), build, observe,
+      refutes, dir (the directory of the workspace) and check (the shell command whose exit code 0 shows it works).
+
+  # ======================= the relaxed build, in the workspace of the change (ADR 0118, 0131 §4)
+  - name: prepare_poc_workspace
+    kind: script
+    language: javascript
+    description: Open the workspace of the POC with the sources it starts from (none for a mock-up)
+    pre: {hypotheses_probed: true}
+    effects: {workspace_ready: true}
+    mcps: [workspace]
+    code: |
+      function run(ctx) {
+        const scopes = ctx.items("artifact").filter(a => a.target === "poc_scope");
+        const repos = (scopes[scopes.length - 1].data.repositories || []).filter(r => r);
+        const ws = ctx.callTool("workspace/open", { sources: repos.map(r => ({ repo: r })) });
+        ctx.addArtifact("workspace", { directory: ws.directory, sources: ws.sources });
+        return repos.length + " source(s) in the workspace";
+      }
+
+  - name: implement_probe
+    kind: llm
+    scope: item
+    where: self.type == "hypothesis"
+    description: Build the probe of a hypothesis in the workspace; again after a failed check
+    pre: {workspace_ready: true, probed: true}
+    effects: {probe_implemented: true}
+    cost: 1
+    model: default
+    mcps: [workspace]
+    parallel: 2
+    loop: {maxRounds: 60, maxTokens: 1000000, timeout: 30m, maxToolResultBytes: 40000}
+    prompt: |
+      You build a PROOF OF CONCEPT: the smallest code that shows whether a hypothesis holds. Relaxed rules: no
+      coverage, no lint, no review, shortcuts welcome; but do not fake the result, the check decides.
+      Proof of concept: "{{ .Change.Title }}" — {{ .Change.Intent }}
+      Hypothesis {{ .Subject.data.key }}: {{ .Subject.data.statement }}
+      {{ range .Artifacts }}{{ if and (eq .Target "probe") (eq (index .Data "hypothesis") $.Subject.data.key) }}Probe: build {{ index .Data "build" }}; observe {{ index .Data "observe" }}; it works when {{ index .Data "refutes" }}.
+      Build it in the directory {{ index .Data "dir" }} of the workspace; its check is `{{ index .Data "check" }}`, run there.
+      {{ end }}{{ if and (eq .Target "probe_report") (eq (index .Data "hypothesis") $.Subject.data.key) }}A run of the check {{ if index .Data "ok" }}succeeded{{ else }}FAILED{{ end }} (after change {{ index .Data "revision" }}):
+      {{ index .Data "output" }}
+      {{ end }}{{ end }}
+      Work with the workspace tools (create the directory if it does not exist, git init it if it is no source), run
+      the check yourself, then commit your work there (git add -A && git commit -m "<what>"). Finish with:
+      {"items":[{"type":"artifact","target":"probe_change","data":{"hypothesis":"{{ .Subject.data.key }}","summary":"<what you built>","files":["<paths>"]}}]}
+
+  - name: run_probe
+    kind: script
+    language: javascript
+    scope: item
+    where: self.type == "hypothesis"
+    description: Run the check of the probe of a hypothesis in the workspace and record the report
+    pre: {probe_implemented: true}
+    effects: {probe_run: true}
+    mcps: [workspace]
+    code: |
+      function run(ctx) {
+        const h = ctx.var("item").data.key;
+        const probes = ctx.items("artifact").filter(a => a.target === "probe" && a.data.hypothesis === h);
+        const probe = probes[probes.length - 1].data;
+        const revision = ctx.items("artifact").filter(a => a.target === "probe_change" && a.data.hypothesis === h).length;
+        const r = ctx.callTool("workspace/bash", { command: probe.check, cwd: probe.dir || ".", timeout: 600 });
+        const out = String(r.stdout || "") + String(r.stderr || "");
+        const ok = r.exitCode === 0 && !r.timedOut;
+        ctx.addArtifact("probe_report", { hypothesis: h, ok: ok, exitCode: r.exitCode, command: probe.check, dir: probe.dir || ".",
+          revision: revision, output: out.length > 4000 ? "..." + out.slice(out.length - 4000) : out });
+        return h + (ok ? ": works as expected" : ": does not show it works");
+      }
+
+  # ======================= conclusion: a verdict per hypothesis, a person confirms (ADR 0129)
+  - name: draft_verdict
+    kind: llm
+    scope: item
+    where: self.type == "hypothesis"
+    description: Draft the verdict on a hypothesis from the report of its probe
+    pre: {probe_run: true}
+    effects: {judged: true}
+    cost: 1
+    model: default
+    prompt: |
+      A proof of concept checked a hypothesis; judge it from the evidence only.
+      Hypothesis {{ .Subject.data.key }}: {{ .Subject.data.statement }}
+      {{ range .Artifacts }}{{ if and (eq .Target "probe") (eq (index .Data "hypothesis") $.Subject.data.key) }}Probe: {{ index .Data "build" }}; it works when {{ index .Data "refutes" }}.
+      {{ end }}{{ if and (eq .Target "probe_report") (eq (index .Data "hypothesis") $.Subject.data.key) }}Check `{{ index .Data "command" }}` after change {{ index .Data "revision" }}: {{ if index .Data "ok" }}succeeded{{ else }}FAILED{{ end }}
+      {{ index .Data "output" }}
+      {{ end }}{{ end }}
+      The verdict is "refuted" when the latest check shows it works as expected (a risk that does not hold, a need the
+      prototype answers), "confirmed" otherwise (the risk holds, or the probe could not show it works). The score is
+      your confidence, 0 to 5.
+      Answer {"items":[{"type":"assessment","data":{"key":"item:{{ .Subject.data.key }}","verdict":"<refuted|confirmed>","score":<0-5>,
+        "findings":[{"text":"<what the probe showed>","severity":"info"}],"suggestion":"<what the change should do with it>"}}]}
+
+  - name: judge_by_hand
+    kind: human
+    scope: item
+    where: self.type == "hypothesis"
+    description: Give the verdict on a hypothesis by hand
+    pre: {probe_run: true}
+    effects: {judged: true}
+    cost: 6
+    instructions: >
+      Read the report of the probe and answer an assessment of the subject item:<key of the hypothesis>: verdict
+      refuted (it works as expected) or confirmed (it does not), score 0-5, findings.
+
+  - name: keep_probes
+    kind: script
+    language: javascript
+    description: Push the code of the probes on the branch of the POC, for reference (never a build artifact)
+    pre: {hypotheses_judged: true, workspace_ready: true}
+    effects: {probes_kept: true}
+    mcps: [workspace]
+    code: |
+      function run(ctx) {
+        const st = ctx.callTool("workspace/status", {});
+        const kept = [];
+        for (const s of (st.sources || [])) {
+          if (!s.remote) continue; // a scratch directory of a mock-up has nowhere to go
+          const pushed = ctx.callTool("workspace/push", { path: s.path });
+          kept.push({ path: s.path, branch: pushed.branch, commit: pushed.head, remote: pushed.remote });
+        }
+        ctx.addArtifact("probes_kept", { branches: kept });
+        return kept.length + " branch(es) kept";
+      }
+
+  - name: confirm_conclusion
+    kind: human
+    description: Confirm the verdicts of the POC (or correct them first), for the change that opened it
+    pre: {hypotheses_judged: true, probes_kept: true}
+    effects: {conclusion_confirmed: true}
+    emits: [poc.concluded]
+    cost: 1
+    instructions: >
+      Read the verdict on each hypothesis and the report of its probe. A verdict you disagree with: answer another
+      assessment of the same subject before you confirm. Then confirm: the change that opened the POC takes the
+      verdicts back, and closes it.
+    form:
+      title: Conclude the proof of concept
+      artifact: poc_conclusion
+      fields:
+        - {name: summary, widget: textarea, required: true, label: What the POC showed, help: One paragraph for the change that opened it}
+
+processes:
+  - name: proof_of_concept
+    description: Check hypotheses by building the least that shows them, under relaxed rules, then conclude
+    examples: ["build a proof of concept", "prototype the need"]
+    # it starts by itself on the sub-change its parent opens, once the parent wrote what it checks
+    on:
+      - {event: change.created}
+      - {event: change.item_added, filter: 'event.items.exists(i, i.type == "artifact" && i.target == "poc_scope")'}
+    steps:
+      - name: scope
+        description: State the hypotheses, the requirements of the POC
+        action: state_hypotheses
+      - name: framing
+        description: A probe per hypothesis, by a model first, by a person when no model can
+        actions: [propose_probe, write_probe]
+      - name: confirmation
+        description: A person confirms the probes before anything is built
+        pre: {hypotheses_probed: true}
+        instructions: >
+          Read the probes: each must check its hypothesis with a command whose result can be trusted, and the whole
+          must fit the timebox. Write a probe again if needed, then mark the step done.
+      - name: build
+        description: Build and run the probes in the workspace, relaxed rules, the check decides
+        pre: {"step:proof_of_concept/confirmation": true}
+        steps:
+          - {name: workspace, action: prepare_poc_workspace}
+          - {name: implement, description: Build each probe (three attempts at most), action: implement_probe}
+          - {name: check, description: Run the check of each probe, action: run_probe}
+      - name: conclusion
+        description: A verdict per hypothesis, drafted by a model, a person as the fallback
+        actions: [draft_verdict, judge_by_hand]
+      - name: keep
+        description: Keep the code of the probes on the branch of the POC
+        action: keep_probes
+      - name: closing
+        description: A person confirms the verdicts; the change that opened the POC takes them back
+        action: confirm_conclusion
+
+goals:
+  - name: conclude
+    description: The verdicts of the POC are confirmed by a person
+    pre: {conclusion_confirmed: true}
+    value: 1

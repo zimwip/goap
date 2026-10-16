@@ -453,12 +453,14 @@ func TestSDLCProcess(t *testing.T) {
 		"software_delivery/framing": engine.StepDone, "software_delivery/analysis": engine.StepDone,
 		"software_delivery/analysis/specification/traceability": engine.StepSkipped, "software_delivery/design": engine.StepDone,
 		"software_delivery/build": engine.StepDone, "software_delivery/release": engine.StepActive, "software_delivery/application": engine.StepTodo,
+		// no proof of concept was proposed (ADR 0131): nothing to open, nothing to conclude
+		"software_delivery/proofs": engine.StepSkipped,
 	} {
 		if states[path] != want {
 			t.Fatalf("%s is %s, want %s (%v)", path, states[path], want, states)
 		}
 	}
-	if pr.Total != 10 || pr.Done != 8 { // the framing counts its review and its confirmation
+	if pr.Total != 12 || pr.Done != 8 { // the framing counts its review and its confirmation, the proofs their two steps
 		t.Fatalf("progress %d/%d", pr.Done, pr.Total)
 	}
 	// the build step names a capability: no component has a repository, so the recorded_build method was chosen
