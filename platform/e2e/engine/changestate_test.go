@@ -44,6 +44,8 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	// what the conditions mean and which actions produce them is the compiled view's; the state binds it (ADR 0126)
+	view := c.View()
 	// before any rating, the accepted description needs a rating first, which the rating action produces (ADR 0112 §5)
 	st, err := e.ChangeState(ctx, ch.ID)
 	if err != nil {
@@ -54,7 +56,7 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 			continue
 		}
 		n := p.Steps[0].Needs
-		if len(n) != 1 || len(n[0].Requires) != 1 || n[0].Requires[0].Condition != "description_rated" || !slices.Contains(n[0].Requires[0].ProducedBy, "rate") || len(n[0].ProducedBy) != 0 {
+		if len(n) != 1 || len(n[0].Requires) != 1 || n[0].Requires[0] != "description_rated" || !slices.Contains(view.Condition("description_rated").ProducedBy, "rate") || len(view.Condition(n[0].Condition).ProducedBy) != 0 {
 			t.Fatalf("an accepted description requires a rated one: %+v", n)
 		}
 		if f := n[0].Facts; len(f) != 1 || len(f[0].Parts) != 4 || !f[0].Parts[0].Missing || !slices.Contains(f[0].Parts[0].ProducedBy, "rate") {
@@ -79,11 +81,11 @@ func TestChangeStateShowsOneStatePerProcess(t *testing.T) {
 		byName[p.Process] = p
 	}
 	review, delivery := byName["review"], byName["delivery"]
-	if !review.Reactive || review.Runs != 2 || review.State != engine.StepDone || len(review.Steps) != 1 || review.Steps[0].State != engine.StepDone {
+	if rv, _ := view.Process("review"); !rv.Reactive || review.Runs != 2 || review.State != engine.StepDone || len(review.Steps) != 1 || review.Steps[0].State != engine.StepDone {
 		t.Fatalf("review: reactive, run twice, done once: %+v", review)
 	}
 	note := delivery.Steps[0]
-	if delivery.Runs != 0 || note.State != engine.StepTodo || len(note.Needs) != 1 || note.Needs[0].Condition != "description_accepted" || !note.Needs[0].Want || note.Needs[0].Description == "" || len(note.Needs[0].Requires) != 0 {
+	if delivery.Runs != 0 || note.State != engine.StepTodo || len(note.Needs) != 1 || note.Needs[0].Condition != "description_accepted" || !note.Needs[0].Want || view.Condition(note.Needs[0].Condition).Description == "" || len(note.Needs[0].Requires) != 0 {
 		t.Fatalf("delivery waits for an accepted description, and says so: %+v", note)
 	}
 	if f := note.Needs[0].Facts[0].Parts; !f[0].Holds || !f[1].Holds || !f[2].Holds || !f[3].Missing || f[3].Text != "a.score >= 3" || len(f[3].ProducedBy) != 0 {

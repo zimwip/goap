@@ -9,8 +9,10 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	enginev1 "github.com/zimwip/goap/contracts/gen/goap/engine/v1"
+	registryv1 "github.com/zimwip/goap/contracts/gen/goap/registry/v1"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/pbconv"
+	"github.com/zimwip/goap/lib/startingpoint"
 )
 
 // Engine is what the assistant asks of the engine, always as the caller (ADR 0090): which agents they may run on a
@@ -85,9 +87,19 @@ type EngineAPI interface {
 	ListStartingPoints(context.Context, *connect.Request[enginev1.ListStartingPointsRequest]) (*connect.Response[enginev1.ListStartingPointsResponse], error)
 }
 
+// ViewAPI is the part of the methodology registry the assistant reads the compiled view of a methodology version
+// through (ADR 0126 step 5): the registry handler (one process) and its Connect client both implement it.
+type ViewAPI interface {
+	GetMethodologyView(context.Context, *connect.Request[registryv1.GetMethodologyViewRequest]) (*connect.Response[registryv1.GetMethodologyViewResponse], error)
+}
+
 // EngineClient is the Engine over the engine service, with the identity of the caller of the context on every
-// request: the engine authorizes them.
-type EngineClient struct{ API EngineAPI }
+// request: the engine authorizes them. Views gives what the steps the engine binds are (nil: the points keep their
+// ids, launches and bindings only).
+type EngineClient struct {
+	API   EngineAPI
+	Views ViewAPI
+}
 
 var _ Engine = EngineClient{}
 
@@ -142,14 +154,24 @@ func (c EngineClient) StartingPoints(ctx context.Context, changeID string) (Poin
 	if err != nil {
 		return Points{}, err
 	}
-	out := Points{Goal: r.Msg.GetGoal(), Reason: r.Msg.GetReason(), BlockedCount: int(r.Msg.GetBlockedCount())}
-	for _, p := range r.Msg.GetPoints() {
-		out.Points = append(out.Points, Point{ID: p.GetId(), Kind: p.GetKind(), Name: p.GetName(), Description: p.GetDescription(), Method: p.GetMethod(),
-			Process: p.GetProcess(), Why: p.GetWhy(), Produces: p.GetProduces(), Responsible: p.GetResponsible(), Agent: p.GetLaunch().GetAgent(),
-			AgentGoal: p.GetLaunch().GetGoal(), MayRun: p.GetMayRun(), Running: p.GetRunning()})
+	// the engine binds the steps to the change, the view of the methodology version says what they are
+	var view *registryv1.MethodologyView
+	if b := r.Msg; c.Views != nil && len(b.GetPoints())+len(b.GetBlocked()) > 0 {
+		v, err := c.Views.GetMethodologyView(ctx, asCaller(ctx, &registryv1.GetMethodologyViewRequest{Name: b.GetMethodology(), Version: b.GetVersion()}))
+		if err != nil {
+			return Points{}, fmt.Errorf("the view of methodology %s %s cannot be read: %w", b.GetMethodology(), b.GetVersion(), err)
+		}
+		view = v.Msg.GetView()
 	}
-	for _, b := range r.Msg.GetBlocked() {
-		out.Blocked = append(out.Blocked, b.GetId()+": "+strings.Join(b.GetMissing(), ", "))
+	sp := startingpoint.Compose(view, r.Msg)
+	out := Points{Goal: sp.Goal, Reason: sp.Reason, BlockedCount: sp.BlockedCount}
+	for _, p := range sp.Points {
+		out.Points = append(out.Points, Point{ID: p.ID, Kind: p.Kind, Name: p.Name, Description: p.Description, Method: p.Method,
+			Process: p.Process, Why: p.Why, Produces: p.Produces, Responsible: p.Responsible, Agent: p.Launch.Agent,
+			AgentGoal: p.Launch.Goal, MayRun: p.MayRun, Running: p.Running})
+	}
+	for _, b := range sp.Blocked {
+		out.Blocked = append(out.Blocked, b.ID+": "+strings.Join(b.Missing, ", "))
 	}
 	return out, nil
 }

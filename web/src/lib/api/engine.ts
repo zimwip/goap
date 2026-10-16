@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty } from './types/common';
-import type { AssessmentState, AttachChangeRequest, ChangeAsk, ChangeStateResponse, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, Resolution, StartProcessRequest, StartingPointsResponse, TriggerState } from './types/engine';
+import type { AssessmentState, AttachChangeRequest, ChangeAsk, ChangeStateResponse, ConditionExplanation, ItemInput, ListProcessesRequest, Process, ProcessLogEntry, ProcessProgress, Resolution, StartProcessRequest, StartingPointsBinding, TriggerState } from './types/engine';
 
 const ENGINE = 'goap.engine.v1.EngineService';
 
@@ -85,7 +85,7 @@ export const engine = {
     rpc<{ changeId: string }, { states?: AssessmentState[] }>(ENGINE, 'GetAssessmentStates', { changeId }, signal),
   /** The steps of the methodology of a change that are possible now towards its goal (ADR 0097). */
   listStartingPoints: (changeId: string, signal?: AbortSignal, methodology = '') =>
-    rpc<{ changeId: string; methodology?: string }, StartingPointsResponse>(ENGINE, 'ListStartingPoints', { changeId, ...(methodology ? { methodology } : {}) }, signal),
+    rpc<{ changeId: string; methodology?: string }, StartingPointsBinding>(ENGINE, 'ListStartingPoints', { changeId, ...(methodology ? { methodology } : {}) }, signal),
   /** How a condition of the run's world state got its value against the run's change. */
   explainCondition: (processId: string, condition: string, signal?: AbortSignal) =>
     rpc<{ processId: string; condition: string }, ConditionExplanation>(ENGINE, 'ExplainCondition', { processId, condition }, signal),

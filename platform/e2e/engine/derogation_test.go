@@ -144,7 +144,7 @@ func TestChangeStartsWithTheCriticalityOfItsMethodology(t *testing.T) {
 	ctx := context.Background()
 	e, g, _ := setup(t)
 	for _, tc := range []struct{ crit, want string }{{"C3", "C3"}, {"", ""}} {
-		m := &methodology.Compiled{Methodology: &methodology.Methodology{Name: "m", Namespace: "alm", Criticality: tc.crit}}
+		m := (&methodology.Compiled{}).WithDefinition(&methodology.Methodology{Name: "m", Namespace: "alm", Criticality: tc.crit})
 		id, err := engine.InternalsOf(e).ResolveChange(ctx, &engine.Process{Goal: "g"}, m, engine.AttachRequest{})
 		if err != nil {
 			t.Fatal(err)

@@ -141,7 +141,7 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	}
 	e := &engine.Engine{
 		Graph:         g,
-		Methodologies: engine.StaticMethodologies{cm.Name: cm},
+		Methodologies: engine.StaticMethodologies{cm.Definition().Name: cm},
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: sdlcModel(t)},
 			methodology.KindHuman:   engine.HumanExecutor{},

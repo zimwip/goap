@@ -16,7 +16,7 @@ import (
 // change: when no step (or action, with no process) working towards the main goal has its entry conditions satisfied
 // there, the change could never take its first step and the hint, tied to the path `goal`, says what the first ones wait for.
 func (c *Compiled) Hints() def.Issues {
-	name := c.MainGoal()
+	name := c.definition.MainGoal()
 	g, ok := c.Goal(name)
 	if !ok || len(g.Pre) == 0 {
 		return nil
@@ -45,14 +45,14 @@ func (c *Compiled) Hints() def.Issues {
 	}
 	waits := map[string]bool{}
 	possible := false
-	if len(c.Processes) > 0 {
+	if len(c.definition.Processes) > 0 {
 		nested := map[string]bool{}
-		for _, p := range c.Processes {
+		for _, p := range c.definition.Processes {
 			var walk func([]StepInfo)
 			walk = func(steps []StepInfo) {
 				for _, s := range steps {
 					if s.Process != "" {
-						if other, proc := s.NestedProcess(); other == "" || other == c.Name {
+						if other, proc := s.NestedProcess(); other == "" || other == c.definition.Name {
 							nested[proc] = true
 						}
 					}
@@ -74,7 +74,7 @@ func (c *Compiled) Hints() def.Issues {
 			}
 			possible = true
 		}
-		for _, p := range c.Processes {
+		for _, p := range c.definition.Processes {
 			if nested[p.Name] {
 				continue
 			}

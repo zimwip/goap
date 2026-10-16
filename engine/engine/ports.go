@@ -45,7 +45,7 @@ type StaticMethodologies map[string]*methodology.Compiled
 func (s StaticMethodologies) Methodology(_ context.Context, ref string) (*methodology.Compiled, error) {
 	name, version := domain.SplitMethodologyRef(ref)
 	m, ok := s[name]
-	if !ok || version != "" && m.Version != version {
+	if !ok || version != "" && m.Version() != version {
 		return nil, ErrUnknownMethodology{Name: ref}
 	}
 	return m, nil
@@ -57,7 +57,7 @@ func (s StaticMethodologies) List(context.Context) ([]*methodology.Compiled, err
 	for _, m := range s {
 		out = append(out, m)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
 	return out, nil
 }
 

@@ -102,12 +102,12 @@ actions: [{name: a, kind: human, instructions: x, effects: {c: true, d: true}}]
 	}
 	compile := func(src string) (*Compiled, error) { return parse(src).Compile() }
 	c, err := compile("goals: [{name: g1, pre: {c: true}}, {name: g2, pre: {d: true}}]\ngoal: g2")
-	if err != nil || c.MainGoal() != "g2" {
-		t.Fatalf("declared: %v %v", c.MainGoal(), err)
+	if err != nil || c.definition.MainGoal() != "g2" {
+		t.Fatalf("declared: %v %v", c.definition.MainGoal(), err)
 	}
 	c, err = compile("goals: [{name: g1, pre: {c: true}}, {name: g2, pre: {d: true}}]")
-	if err != nil || c.MainGoal() != "g1" {
-		t.Fatalf("first goal: %v %v", c.MainGoal(), err)
+	if err != nil || c.definition.MainGoal() != "g1" {
+		t.Fatalf("first goal: %v %v", c.definition.MainGoal(), err)
 	}
 	if is := parse("goals: [{name: g1, pre: {c: true}}]\ngoal: nope").Validate(); len(is) != 1 || is[0].Path != "goal" {
 		t.Fatalf("unknown goal: %v", is)
@@ -119,7 +119,7 @@ actions: [{name: a, kind: human, instructions: x, effects: {c: true, d: true}}]
 	if (&Methodology{}).MainGoal() != "" {
 		t.Fatal("none")
 	}
-	if c, err := compile("processes: [{name: p1, steps: [{name: s, action: a}]}]\ngoal: p1"); err != nil || c.MainGoal() != "p1" {
+	if c, err := compile("processes: [{name: p1, steps: [{name: s, action: a}]}]\ngoal: p1"); err != nil || c.definition.MainGoal() != "p1" {
 		t.Fatalf("process goal: %v %v", c, err)
 	}
 }

@@ -63,13 +63,13 @@ func (t *turn) methodologyQuery(ctx context.Context, a args) (any, error) {
 	var ms []*methodology.Methodology
 	for _, n := range names {
 		c, err := t.s.Methodologies.Methodology(ctx, n)
-		if err != nil || c == nil || c.Methodology == nil {
+		if err != nil || c == nil || c.Definition() == nil {
 			if len(names) == 1 {
 				return nil, fmt.Errorf("methodology %q cannot be read", n)
 			}
 			continue
 		}
-		ms = append(ms, c.Methodology)
+		ms = append(ms, c.Definition())
 	}
 	return RunQuery(q, ms)
 }

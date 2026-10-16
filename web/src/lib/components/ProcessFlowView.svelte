@@ -30,6 +30,8 @@
     at = '',
     only = '',
     issues = [],
+    states,
+    mode: initialMode = 'detailed',
   }: {
     graph: ProcessGraph;
     plan?: PlanPreview;
@@ -49,7 +51,24 @@
     only?: string;
     /** the rules the draft breaks (compilation issues): drawn on the step each is about, listed in the panel */
     issues?: Issue[];
+    /** where each step stands on a change, by path (ADR 0126 step 4): drawn on the step */
+    states?: Record<string, string>;
+    /** detailed: every condition as a port, the boundary blocks and the gaps (the editor); simple: the steps, their
+     * links and their states (a change); the reader switches between them */
+    mode?: 'detailed' | 'simple';
   } = $props();
+
+  let mode = $state<'detailed' | 'simple'>('detailed');
+  let modeFor = '';
+  $effect(() => {
+    if (modeFor !== initialMode) {
+      modeFor = initialMode;
+      mode = initialMode;
+    }
+  });
+  const simple = $derived(mode === 'simple');
+  /** the state of a step, of the deepest step it holds that is not done when it is composite */
+  const stateOf = (p: string) => states?.[p];
 
   const STATE = '__state';
   const INPUTS = '__inputs';
@@ -180,6 +199,8 @@
         issues: issuesOf(p),
         issuesInside: issuesInside(p),
         groupBy: n.groupBy,
+        state: stateOf(p),
+        simple,
         onzoom: () => (path = p),
         ontrace: trace,
         onportmenu: conditionMenu,
@@ -199,6 +220,23 @@
         data: { name, method: '', inputs: io.inputsKV ?? allOut(io.inputs ?? []), outputs: allOut(io.outputs ?? []), hints: io.hints, bad: io.bad, colour, kind, flowRole: c && !all.includes(c) ? 'dim' : roleOf(fp), flowPorts: fp, ontrace: trace, onportmenu: conditionMenu } satisfies StepNodeData,
       });
     };
+    if (simple) {
+      // the steps and what links them: one edge per pair, labelled with the conditions it carries
+      const es: Edge[] = [];
+      for (const e of l?.edges ?? []) {
+        const on = e.conditions ?? [];
+        es.push({ id: `${e.from}->${e.to}`, source: e.from ?? '', sourceHandle: 's', target: e.to ?? '', targetHandle: 't', class: !c ? 'link' : on.includes(c) ? 'link flow-up' : 'link dim', label: on.join(', '), data: { c: on[0] ?? '' }, markerEnd: { type: MarkerType.ArrowClosed, width: 14, height: 14 } });
+      }
+      const key = JSON.stringify(['simple', l?.path, ns.map((n) => n.id), es.map((e) => e.id).sort()]);
+      if (key !== layoutKey) {
+        layoutKey = key;
+        moved = new Map();
+      }
+      place(ns, es);
+      nodes = ns;
+      edges = es;
+      return;
+    }
     if (given.length || parentNoop.size) boundary(INPUTS, l?.kind === 'step' ? `Inputs of ${(l.path ?? '').split('/').pop()}` : 'Inputs', 'inputs', 'var(--accent)', { outputs: [...new Set([...given, ...[...parentNoop].filter((k) => k in inputs)])].sort(), bad: [...parentNoop] });
     if (external.length) boundary(STATE, 'Change state', 'state', 'var(--info)', { outputs: external, hints: Object.fromEntries(external.map((k) => [k, exprOf.get(k) ?? ''])) });
     if (unresolved.length) boundary(UNRESOLVED, 'Unresolved inputs', 'unresolved', 'var(--warn)', { outputs: unresolved });
@@ -242,7 +280,7 @@
 
   function place(ns: Node[], es: Edge[]) {
     const pos = layered(
-      ns.map((n) => ({ id: n.id, h: nodeHeight(Math.max((n.data as StepNodeData).inputs.length, (n.data as StepNodeData).outputs.length) + ((n.data as StepNodeData).composite ? 1 : 0) + ((n.data as StepNodeData).foreach ? 1 : 0) + ((n.data as StepNodeData).issues?.length || (n.data as StepNodeData).issuesInside ? 1 : 0)), w: NODE_W })),
+      ns.map((n) => ({ id: n.id, h: simple ? nodeHeight(1) : nodeHeight(Math.max((n.data as StepNodeData).inputs.length, (n.data as StepNodeData).outputs.length) + ((n.data as StepNodeData).composite ? 1 : 0) + ((n.data as StepNodeData).foreach ? 1 : 0) + ((n.data as StepNodeData).issues?.length || (n.data as StepNodeData).issuesInside ? 1 : 0)), w: NODE_W })),
       es,
     );
     for (const n of ns) n.position = moved.get(n.id) ?? pos.get(n.id) ?? { x: 0, y: 0 };
@@ -261,6 +299,8 @@
     void focus;
     void path;
     void solo;
+    void mode;
+    void states;
     build();
   });
 
@@ -413,6 +453,10 @@
     <MiniMap pannable zoomable height={90} width={140} />
   </SvelteFlow>
   <div class="tools">
+  <div class="modes" role="group" aria-label="Display">
+    <button type="button" class="kh" aria-pressed={!simple} title="Detailed: every condition as a port, what the level is given and what it cannot reach" onclick={() => (mode = 'detailed')}>Detailed</button>
+    <button type="button" class="kh" aria-pressed={simple} title="Simplified: the steps, what links them and where they stand" onclick={() => (mode = 'simple')}>Simplified</button>
+  </div>
   <aside class="key" aria-label="Legend">
     <button type="button" class="kh" onclick={() => (legendOpen = !legendOpen)} aria-expanded={legendOpen} aria-label="Legend" title="Legend: what the shapes and colours mean">
       <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 11v6M12 7.5v.5" /></svg>
@@ -601,6 +645,19 @@
   .rules .hint {
     margin: 0;
     padding: 0 8px 6px;
+  }
+  .modes {
+    display: flex;
+    gap: 2px;
+  }
+  .modes .kh {
+    width: auto;
+    padding: 0 8px;
+    font-size: 0.85em;
+  }
+  .modes .kh[aria-pressed='true'] {
+    border-color: var(--accent);
+    color: var(--accent);
   }
   .tools {
     position: absolute;

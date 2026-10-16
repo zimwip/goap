@@ -14,36 +14,42 @@ import (
 	"github.com/zimwip/goap/lib/dsl"
 )
 
-// RunStep is the builtin process.step (ADR 0034): the action generated for a step of a process done by an agent or a
-// nested process. It starts that agent (towards the step's goal) or the agent of the nested process as a sub-agent on
-// the same change and waits for it; once it has completed, the step has run (its step.ended record, ADR 0109). A sub-agent that
-// fails (or is abandoned) fails the step; one that is stuck keeps the step waiting until a person unblocks it. Params: step (path), agent, goal, methodology (empty: this one).
-func RunStep(ctx context.Context, ac ActionContext) (ActionResult, error) {
+// RunCall runs an action of kind call (ADR 0034): the action the compiler generated for a step of a process done by
+// a nested process or by the method providing a capability. It starts the sub-agent its Call names (or the agent of
+// the method chosen for the capability, towards its goal) on the same change and waits for it; once it has completed,
+// the step has run (its step.ended record, ADR 0109). A sub-agent that fails (or is abandoned) fails the step; one
+// that is stuck keeps the step waiting until a person unblocks it. Calling a sub-agent is a primitive of the engine,
+// not an executor: Engine.Executors has no entry for it.
+func RunCall(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	h := ac.Host
-	if h == nil || ac.Process.ChangeID == "" {
-		return ActionResult{}, errors.New("process.step needs a process on a change")
+	call := ac.Action.Call
+	switch {
+	case h == nil || ac.Process.ChangeID == "":
+		return ActionResult{}, errors.New("a call needs a process on a change")
+	case call == nil:
+		return ActionResult{}, fmt.Errorf("action %s of kind %s states no call", ac.Action.Name, ac.Action.Kind)
 	}
-	step, _ := ac.Action.Params["step"].(string)
-	agent, _ := ac.Action.Params["agent"].(string)
-	goal, _ := ac.Action.Params["goal"].(string)
-	methodologyName, _ := ac.Action.Params["methodology"].(string)
+	step, agent, goal, methodologyName := ac.Action.Step, call.Agent, call.Goal, call.Methodology
+	if step == "" {
+		step = ac.Action.Name
+	}
 	if methodologyName == "" {
 		methodologyName = ac.Process.Methodology
 	}
 	sc := ac.Step
 	method := ""
-	if foreach, _ := ac.Action.Params["foreach"].(string); foreach != "" {
-		return runForeach(ctx, ac, foreach)
+	if call.Foreach != "" {
+		return runForeach(ctx, ac, step, *call)
 	}
-	if capability, _ := ac.Action.Params["capability"].(string); capability != "" {
-		me, err := h.e.chooseMethod(ctx, ac, capability, ac.Blackboard, true)
+	if call.Capability != "" {
+		me, err := h.e.chooseMethod(ctx, ac, call.Capability, ac.Blackboard, true)
 		if err != nil {
 			return ActionResult{}, fmt.Errorf("step %s: %w", step, err)
 		}
 		agent, goal, method, sc = me.ActorAgent(), me.AgentGoal, me.Name, sc.withMethod(me.Method)
 	}
-	if step == "" || agent == "" || goal == "" {
-		return ActionResult{}, fmt.Errorf("process.step %s: step, agent and goal are required", ac.Action.Name)
+	if agent == "" || goal == "" {
+		return ActionResult{}, fmt.Errorf("step %s: the call names no agent and goal, and no capability", step)
 	}
 	intent := ac.Action.Description
 	if intent == "" {
@@ -163,8 +169,7 @@ func stepContext(m *methodology.Compiled, p *Process, a methodology.Action) *Ste
 
 // contextOfStep is the context a run gets for a compiled step.
 func contextOfStep(s methodology.StepInfo) *StepContext {
-	process, _, _ := strings.Cut(s.Path, "/")
-	return &StepContext{Process: process, Path: s.Path, Name: s.Name, Description: s.Description, Guidance: s.Guidance,
+	return &StepContext{Process: s.Owner, Path: s.Path, Name: s.Name, Description: s.Description, Guidance: s.Guidance,
 		Checklist: s.Checklist, Deliverables: s.Deliverables, References: s.References, Roles: s.Effective}
 }
 
@@ -217,6 +222,13 @@ func (e *Engine) stepAllowed(ctx context.Context, p *Process, who authz.Principa
 		return true, nil
 	}
 	return e.scope().MayStep(ctx, e.ref(p), who, StepRef{Path: sc.Path, Responsible: sc.Roles.Responsible, Accountable: sc.Roles.Accountable}, act)
+}
+
+// callExecutor runs the actions of kind call (RunCall).
+type callExecutor struct{}
+
+func (callExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResult, error) {
+	return RunCall(ctx, ac)
 }
 
 // briefSection is the compact brief of the change an LLM action works on (ADR 0036 §2): the most information in the

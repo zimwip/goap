@@ -1,7 +1,6 @@
 package methodology
 
 import (
-	"fmt"
 	"maps"
 	"slices"
 	"sort"
@@ -62,48 +61,37 @@ type GraphAction struct {
 	Pre, Effects            map[string]bool
 }
 
-// ProcessGraph builds the graph of a process (false when the methodology has no such process).
+// ProcessGraph is the flow of a process, or of a method composing its own steps or actions (false when the
+// methodology has neither): a projection of the compiled view (ADR 0126 step 3), its step tree flattened, the edges its
+// conditions draw, the methods of the capabilities it names and their agents.
 func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
-	var g ProcessGraph
-	var top []StepInfo
-	if p, ok := c.ProcessByName(name); ok {
-		g = ProcessGraph{Process: p.Name, Description: p.Description, References: p.References}
-		top = c.ProcessSteps(name)
-	} else if me, ok := c.MethodByName(name); ok && (len(me.Steps) > 0 || len(me.Actions) > 0) {
+	v := c.View()
+	a, ok := v.Process(name)
+	if !ok {
 		// a method composing its own steps has a graph of its own, apart from the process of the step that names its
 		// capability: the method specializes that step, which cuts the traceability (it adds variability)
-		g = ProcessGraph{Process: me.Name, Description: me.Description, References: me.References}
-		top = c.MethodSteps(name)
-	} else {
-		return ProcessGraph{}, false
+		if a, ok = v.Method(name); !ok || len(a.Steps) == 0 && len(a.Actions) == 0 {
+			return ProcessGraph{}, false
+		}
 	}
-	var walk func(steps []StepInfo, parent string, depth int)
+	g := ProcessGraph{Process: a.Name, Description: a.Description, References: a.References}
 	agents := map[string]bool{}
 	capabilities := map[string]bool{}
-	walk = func(steps []StepInfo, parent string, depth int) {
+	var walk func(steps []StepView, parent string, depth int)
+	walk = func(steps []StepView, parent string, depth int) {
 		for _, s := range steps {
-			gs := GraphStep{Path: s.Path, Name: s.Name, Description: s.Description, Parent: parent, Depth: depth, Leaf: len(s.Steps) == 0,
-				Method: s.Method(), Entry: s.Entry, Exit: s.Exit, Roles: s.Effective, Guidance: s.Guidance, References: s.References,
-				Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy}
-			switch gs.Method {
-			case MethodAction:
-				gs.Target = s.Action
-				if gs.Target == "" {
-					gs.Target = fmt.Sprint(s.Actions)
-				}
-			case MethodProcess:
-				gs.Target = s.Process
-			case MethodCapability:
-				gs.Target = s.Capability
+			g.Steps = append(g.Steps, GraphStep{Path: s.Path, Name: s.Name, Description: s.Description, Parent: parent, Depth: depth, Leaf: len(s.Steps) == 0,
+				Method: s.Method, Target: s.Target, Entry: s.Entry, Exit: s.Exit, Roles: s.Roles, Guidance: s.Guidance, References: s.References,
+				Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy})
+			if s.Method == MethodCapability {
 				capabilities[s.Capability] = true
 			}
-			g.Steps = append(g.Steps, gs)
 			walk(s.Steps, s.Path, depth+1)
 		}
 	}
-	walk(top, "", 0)
+	walk(a.Steps, "", 0)
 	g.Edges = conditionEdges(g.Steps)
-	for _, me := range c.Methodology.Methods {
+	for _, me := range c.definition.Methods {
 		if capabilities[me.For] {
 			g.Methods = append(g.Methods, GraphMeth{Method: me, AgentGoal: c.MethodGoal(me.Name)})
 			agents[me.ActorAgent()] = true

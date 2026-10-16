@@ -59,14 +59,14 @@ func PreviewPlan(m *methodology.Compiled, bb domain.Blackboard, agent, goalName 
 	for k, v := range overrides {
 		world[k] = v
 	}
-	actions := m.AgentActions(ag)
-	planningGoal := goal.PlanningGoal()
+	actions := operators(m.AgentActions(ag))
+	target := planningGoal(goal)
 	plannerKind := ag.Planner
 	if plannerKind == "" {
 		plannerKind = methodology.PlannerGOAP
 	}
 	out := &PlanPreview{Agent: ag.Name, Goal: goal.Name, Planner: plannerKind}
-	if world.Satisfies(planningGoal.Pre) {
+	if world.Satisfies(target.Pre) {
 		out.Reached = true
 		return out, nil
 	}
@@ -74,18 +74,18 @@ func PreviewPlan(m *methodology.Compiled, bb domain.Blackboard, agent, goalName 
 	var err error
 	switch ag.Planner {
 	case "", methodology.PlannerGOAP:
-		plan, err = goap.Planner{}.Plan(world, actions, planningGoal)
+		plan, err = goap.Planner{}.Plan(world, actions, target)
 	case methodology.PlannerUtility:
-		plan, err = utilityPlan(world, actions, planningGoal, m.Utilities(bb))
+		plan, err = utilityPlan(world, actions, target, m.Utilities(bb))
 	case methodology.PlannerHybrid:
-		plan, err = reweightPlan(goap.Planner{}, world, actions, planningGoal, m.Utilities(bb))
+		plan, err = reweightPlan(goap.Planner{}, world, actions, target, m.Utilities(bb))
 	case methodology.PlannerLLM, methodology.PlannerLLMScoring:
 		return nil, ErrLivePlanner
 	default:
 		return nil, fmt.Errorf("unknown planner %q", ag.Planner)
 	}
 	if errors.Is(err, goap.ErrNoPlan) {
-		out.Awaiting = (&Engine{}).awaited(world, actions, actions, planningGoal)
+		out.Awaiting = (&Engine{}).awaited(world, actions, actions, target)
 		return out, nil
 	}
 	if err != nil {

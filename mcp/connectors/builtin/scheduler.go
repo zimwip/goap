@@ -15,9 +15,11 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	connectorv1 "github.com/zimwip/goap/contracts/gen/goap/connector/v1"
 	enginev1 "github.com/zimwip/goap/contracts/gen/goap/engine/v1"
+	registryv1 "github.com/zimwip/goap/contracts/gen/goap/registry/v1"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/lib/mcpbuiltin"
 	"github.com/zimwip/goap/lib/pbconv"
+	"github.com/zimwip/goap/lib/startingpoint"
 	"github.com/zimwip/goap/mcp/connectorkit"
 )
 
@@ -151,7 +153,7 @@ func (s Scheduler) Invoke(ctx context.Context, op string, raw, _ map[string]any,
 		if err != nil {
 			return nil, err
 		}
-		return protoResult("", r.Msg)
+		return s.startingPoints(ctx, who, r.Msg)
 	case "triggers":
 		r, err := s.p.Engine.ListTriggers(ctx, request(who, &enginev1.ListTriggersRequest{}))
 		if err != nil {
@@ -170,6 +172,20 @@ func (s Scheduler) Invoke(ctx context.Context, op string, raw, _ map[string]any,
 		return protoResult("process", processView(r.Msg.Process, false))
 	}
 	return nil, unknown(op)
+}
+
+// startingPoints composes the points the engine bound with the view of their methodology version (ADR 0126 step 5):
+// what each step is comes from the registry, what is possible now from the engine.
+func (s Scheduler) startingPoints(ctx context.Context, who authz.Principal, b *enginev1.ListStartingPointsResponse) (map[string]any, error) {
+	var view *registryv1.MethodologyView
+	if len(b.GetPoints())+len(b.GetBlocked()) > 0 && s.p.Methodologies != nil {
+		r, err := s.p.Methodologies.GetMethodologyView(ctx, request(who, &registryv1.GetMethodologyViewRequest{Name: b.GetMethodology(), Version: b.GetVersion()}))
+		if err != nil {
+			return nil, fmt.Errorf("the view of methodology %s %s cannot be read: %w", b.GetMethodology(), b.GetVersion(), err)
+		}
+		view = r.Msg.GetView()
+	}
+	return result(startingpoint.Compose(view, b))
 }
 
 // baseline is the head of main of the namespace a new process works on: the one the call names, else

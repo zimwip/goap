@@ -417,49 +417,45 @@ message StartLaunch {
   string change_id = 4;
 }
 
-// A step, or a step of a method, that is possible now.
+// A step, or a step of a method, that is possible now: the binding of a step of the compiled view of the methodology
+// (registry.v1.MethodologyView) to the change (ADR 0126 step 5). What the step is (name, description, guidance, exit,
+// roles) is read from the view by its path; lib/startingpoint composes the two.
 message StartingPoint {
   // the step path, unique in the methodology
   string id = 1;
   // step | method
   string kind = 2;
-  string process = 3;
   // for a step of a method: the step of the process that names the capability
-  string parent = 4;
-  string name = 5;
-  string method = 6;
-  string capability = 7;
-  string description = 8;
-  string guidance = 9;
+  string parent = 3;
+  // the method that applies (a step naming a capability, or the method a step belongs to)
+  string method = 4;
   // the entry conditions that hold ("name" / "!name")
-  repeated string why = 10;
-  // the exit criteria it reaches
-  repeated string produces = 11;
-  string responsible = 12;
-  string accountable = 13;
-  StartLaunch launch = 14;
+  repeated string why = 5;
+  StartLaunch launch = 6;
   // the caller may start it (the rule Start applies to its initiator)
-  bool may_run = 15;
-  repeated string need_roles = 16;
+  bool may_run = 7;
+  repeated string need_roles = 8;
   // a process already carries it out
-  bool running = 17;
+  bool running = 9;
 }
 
+// A step towards the goal that waits for conditions, by its path in the view.
 message BlockedStep {
   string id = 1;
-  string name = 2;
-  repeated string missing = 3;
+  repeated string missing = 2;
 }
 
 message ListStartingPointsResponse {
+  // the methodology version the points are of: the view to compose them with
   string methodology = 1;
-  string goal = 2;
+  string version = 2;
+  string goal = 3;
   // why there is nothing to start (no methodology, no goal, goal reached, change closed...)
-  string reason = 3;
-  repeated StartingPoint points = 4;
+  string reason = 4;
+  repeated StartingPoint points = 5;
   // the steps that wait for conditions (capped), not proposable
-  repeated BlockedStep blocked = 5;
-  int32 blocked_count = 6;
+  repeated BlockedStep blocked = 6;
+  int32 blocked_count = 7;
 }
 
 message CheckAgentsRequest {
@@ -654,32 +650,60 @@ message AssessmentState {
   repeated string errors = 9;
 }
 
+// The binding of the compiled view of a methodology (registry.v1.GetMethodologyView of methodology at version) to a
+// change (ADR 0126 step 4): what the steps are is the view's, where they stand is this answer's.
 message GetChangeStateResponse {
   string change_id = 1;
   string methodology = 2;
   string goal = 3;
   bool goal_reached = 4;
   repeated ProcessState processes = 5;
+  // the version of the methodology the change follows (ADR 0113)
+  string version = 6;
 }
 
 // Where one process of the methodology of a change stands now: its steps judged against the change, with what the
 // live runs are doing laid over them.
 message ProcessState {
   string process = 1;
-  string description = 2;
   // done | active | waiting | blocked | ready | todo
   string state = 3;
-  // it (or one of its steps) runs again on events of the change
-  bool reactive = 4;
   // executions of the process on the change
   int32 runs = 5;
   // the run at work now, else the latest, with its status and error
   string current = 6;
   string status = 7;
   string error = 8;
-  repeated StepProgress steps = 9;
+  repeated StepState steps = 9;
   int32 done = 10;
   int32 total = 11;
+}
+
+// Where a step of the compiled view stands on a change, by its path (ADR 0126 step 4).
+message StepState {
+  string path = 1;
+  // done | skipped | active | waiting | ready | todo | blocked
+  string state = 2;
+  // entry conditions that do not hold ("!name": expected false)
+  repeated string missing = 3;
+  repeated NeedState needs = 4;
+  int32 runs = 5;
+  repeated string child_process_ids = 6;
+  repeated Lane lanes = 7;
+  // waiting: the kind of the task and the permission an approval needs; chosen: the method chosen for a capability
+  string waiting = 8;
+  string permission = 9;
+  string chosen = 10;
+  repeated StepState steps = 11;
+}
+
+// A condition a step waits for, bound to the change: its prerequisites that do not hold yet and its facts (what it
+// means and the actions producing it are the view's).
+message NeedState {
+  string condition = 1;
+  bool want = 2;
+  repeated string requires = 3;
+  repeated Fact facts = 4;
 }
 
 // A condition a step waits for, the value it needs and what it means.

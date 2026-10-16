@@ -405,7 +405,7 @@ func TestBoardValidationDiscardedFlowResumes(t *testing.T) {
 func TestChangeOpensInTheNamespaceOfTheMethodology(t *testing.T) {
 	ctx := context.Background()
 	e, g, base := setup(t)
-	e.Methodologies.(engine.StaticMethodologies)["impact-analysis"].Namespace = "platform"
+	e.Methodologies.(engine.StaticMethodologies)["impact-analysis"].Definition().Namespace = "platform"
 	// a change's reference baseline must be of its own (here the methodology's target) namespace
 	platformBase, err := g.BranchHead(ctx, "platform", domain.MainBranch)
 	if err != nil {

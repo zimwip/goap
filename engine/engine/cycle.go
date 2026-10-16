@@ -116,7 +116,7 @@ func (e *Engine) admissible(ctx context.Context, p *Process, m *methodology.Comp
 	var actions []goap.Action
 	for _, a := range m.AgentActions(ag) {
 		if !p.Disabled[a.Name] && e.schedulable(m, a.Name, bound) {
-			actions = append(actions, a)
+			actions = append(actions, operator(a))
 		}
 	}
 	return ag, actions, nil
@@ -137,7 +137,7 @@ func (e *Engine) planStep(ctx context.Context, p *Process, m *methodology.Compil
 	tickStart := e.clock()
 	// the planning calls belong to the step this plan opens (ledger of the gateway, ADR 0089)
 	ctx = llm.WithMeta(ctx, llm.CallMeta{Source: llm.SourceEngine, ConversationID: conversationOf(p), ProcessID: p.ID, ChangeID: string(p.ChangeID), Step: len(p.Steps), Agent: p.Agent})
-	plan, calls, err := e.plan(ctx, m, ag, p.World, actions, goal.PlanningGoal(), m.Utilities(bb))
+	plan, calls, err := e.plan(ctx, m, ag, p.World, actions, planningGoal(goal), m.Utilities(bb))
 	if errors.Is(err, goap.ErrNoPlan) {
 		e.settleNoPlan(ctx, p, m, ag, goal, actions, tickStart, calls)
 		return nil, nil
@@ -165,7 +165,7 @@ func (e *Engine) planStep(ctx context.Context, p *Process, m *methodology.Compil
 func (e *Engine) settleNoPlan(ctx context.Context, p *Process, m *methodology.Compiled, ag methodology.Agent, goal methodology.Goal,
 	actions []goap.Action, tickStart time.Time, calls []LLMCall) {
 	p.Plan = nil
-	if awaited := e.awaited(p.World, m.AgentActions(ag), actions, goal.PlanningGoal()); len(awaited) > 0 {
+	if awaited := e.awaited(p.World, operators(m.AgentActions(ag)), actions, planningGoal(goal)); len(awaited) > 0 {
 		p.Status = StatusWaiting
 		p.Pending = &HumanTask{Kind: TaskCondition, Step: len(p.Steps), Conditions: awaited,
 			Description: "Waiting for " + strings.Join(awaited, ", ") + ": conditions this agent's actions do not establish"}
@@ -176,7 +176,7 @@ func (e *Engine) settleNoPlan(ctx context.Context, p *Process, m *methodology.Co
 	p.Status = StatusStuck
 	p.Error = fmt.Sprintf("no plan reaches goal %s from the current state", goal.Name)
 	// a person can always unblock it: what would, if they declare it established
-	p.Pending = &HumanTask{Kind: TaskUnblock, Step: len(p.Steps), Conditions: e.unblocking(p.World, actions, goal.PlanningGoal()),
+	p.Pending = &HumanTask{Kind: TaskUnblock, Step: len(p.Steps), Conditions: e.unblocking(p.World, actions, planningGoal(goal)),
 		Description: "Stuck: " + p.Error + ". Declare conditions established, retry the actions it gave up on, or abandon it."}
 	e.journal(ctx, p, tickRecordWithCalls(journal.Record{Kind: journal.KindTick, Step: len(p.Steps), Before: maps.Clone(p.World), Error: p.Error,
 		StartedAt: tickStart, EndedAt: e.clock()}, calls))

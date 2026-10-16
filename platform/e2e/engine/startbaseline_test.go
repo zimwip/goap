@@ -39,7 +39,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	g.Types = func() graph.TypeCatalog { return cat }
 	e := &engine.Engine{
 		Graph:         g,
-		Methodologies: engine.StaticMethodologies{cm.Name: cm},
+		Methodologies: engine.StaticMethodologies{cm.Definition().Name: cm},
 		Intent:        intent.Resolver{Ranker: intent.Lexical{}},
 		Store:         engine.NewMemoryStore(),
 		Types:         func() def.TypeSet { return cat },
@@ -52,9 +52,9 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if _, err := graphtest.Project(ctx, g, testProject, "Test"); err != nil {
 		t.Fatal(err)
 	}
-	bs, err := g.Baselines(ctx, cm.Namespace)
+	bs, err := g.Baselines(ctx, cm.Definition().Namespace)
 	if err != nil || len(bs) == 0 {
-		t.Fatalf("baselines of %s: %v, %v", cm.Namespace, bs, err)
+		t.Fatalf("baselines of %s: %v, %v", cm.Definition().Namespace, bs, err)
 	}
 	latest := bs[len(bs)-1]
 	p, err := e.Start(ctx, req)
@@ -65,7 +65,7 @@ func TestStartWithoutBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.BaselineID != latest.ID || c.BaselineID != latest.ID || c.Namespace != cm.Namespace {
-		t.Fatalf("process baseline %s, change baseline %s (%s), want %s (%s)", p.BaselineID, c.BaselineID, c.Namespace, latest.ID, cm.Namespace)
+	if p.BaselineID != latest.ID || c.BaselineID != latest.ID || c.Namespace != cm.Definition().Namespace {
+		t.Fatalf("process baseline %s, change baseline %s (%s), want %s (%s)", p.BaselineID, c.BaselineID, c.Namespace, latest.ID, cm.Definition().Namespace)
 	}
 }

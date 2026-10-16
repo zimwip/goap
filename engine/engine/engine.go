@@ -337,7 +337,7 @@ type target struct {
 	goal  methodology.Goal
 }
 
-func (t target) key() string { return t.m.Name + "/" + t.agent.Name + "/" + t.goal.Name }
+func (t target) key() string { return t.m.Name() + "/" + t.agent.Name + "/" + t.goal.Name }
 
 func (e *Engine) targets(ctx context.Context, p *Process) ([]target, error) {
 	var ms []*methodology.Compiled
@@ -382,7 +382,7 @@ func (e *Engine) resolveIntent(ctx context.Context, p *Process) error {
 	for _, t := range ts {
 		byKey[t.key()] = t
 		desc := t.goal.Description
-		if t.agent.Description != "" && t.agent.Description != t.m.Description {
+		if t.agent.Description != "" && t.agent.Description != t.m.Description() {
 			desc = t.agent.Description + " — " + desc
 		}
 		goals = append(goals, intent.GoalInfo{Name: t.key(), Description: desc, Examples: append(slices.Clone(t.agent.Examples), t.goal.Examples...)})
@@ -400,7 +400,7 @@ func (e *Engine) resolveIntent(ctx context.Context, p *Process) error {
 	p.Candidates = nil
 	for _, c := range res.Candidates {
 		if t, ok := byKey[c.Goal]; ok {
-			c.Methodology, c.Agent, c.Goal = t.m.Name, t.agent.Name, t.goal.Name
+			c.Methodology, c.Agent, c.Goal = t.m.Name(), t.agent.Name, t.goal.Name
 		}
 		p.Candidates = append(p.Candidates, c)
 	}
@@ -422,12 +422,12 @@ func (e *Engine) selectTarget(ctx context.Context, p *Process, m *methodology.Co
 	}
 	ag, ok := m.Agent(agentName)
 	if !ok {
-		return fmt.Errorf("unknown agent %q in %s: %w", agentName, m.Name, ErrInvalidState)
+		return fmt.Errorf("unknown agent %q in %s: %w", agentName, m.Name(), ErrInvalidState)
 	}
-	p.Methodology, p.Agent, p.Planner, p.Goal = m.Name, ag.Name, ag.Planner, goal
+	p.Methodology, p.Agent, p.Planner, p.Goal = m.Name(), ag.Name, ag.Planner, goal
 	// the version the process runs from now on (ADR 0113), set early so an eager bindChange's journal.attach record,
 	// journaled here before Run ever executes, carries it
-	p.MethodologyVersion = m.Version
+	p.MethodologyVersion = m.Version()
 	p.Question = ""
 	p.Status = StatusRunning
 	if p.ChangeID == "" && !agentBindsOwnChange(m, ag) {
@@ -518,7 +518,7 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 		title = truncate(firstUserTurn(p), 80)
 	}
 	if title == "" {
-		title = m.Name + " / " + p.Goal
+		title = m.Name() + " / " + p.Goal
 	}
 	p.Title = title
 	intent := firstNonEmpty(req.Intent, firstUserTurn(p))
@@ -538,18 +538,18 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	if p.Trigger != "" {
 		data["trigger"] = p.Trigger
 	}
-	if m.Administrative {
+	if m.Administrative() {
 		data[domain.DataAdministrative] = true
 	}
 	// the default criticality of the methodology (ADR 0075 §3): the requester raises it on the change header, lowering it
 	// there asks change:lower-criticality
-	if m.Criticality != "" {
-		data[domain.DataCriticality] = m.Criticality
+	if m.Criticality() != "" {
+		data[domain.DataCriticality] = m.Criticality()
 	}
 	if len(data) == 0 {
 		data = nil
 	}
-	ns := firstNonEmpty(req.Namespace, p.Namespace, m.Namespace)
+	ns := firstNonEmpty(req.Namespace, p.Namespace, m.Namespace())
 	baseline := req.BaselineID
 	if baseline == "" {
 		baseline = p.BaselineID
@@ -559,12 +559,12 @@ func (e *Engine) resolveChange(ctx context.Context, p *Process, m *methodology.C
 	if baseline == "" {
 		b, err := e.latestBaseline(ctx, domain.NamespaceOf(ns))
 		if err != nil {
-			return "", fmt.Errorf("methodology %s: %w", m.Name, err)
+			return "", fmt.Errorf("methodology %s: %w", m.Name(), err)
 		}
 		baseline = b
 	}
 	p.BaselineID = baseline
-	c, err := e.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: m.Name, OwnerOrg: ownerOrg, ProjectID: projectID,
+	c, err := e.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: m.Name(), OwnerOrg: ownerOrg, ProjectID: projectID,
 		Namespace: ns, OwnBranch: p.OwnBranch, BaselineID: baseline, Data: data})
 	if err != nil {
 		return "", err
@@ -687,7 +687,7 @@ func (e *Engine) Run(ctx context.Context, id string) (*Process, error) {
 	}
 	ctx, end := e.tracer().StartProcess(ctx, p)
 	defer func() { end(p) }()
-	p.MethodologyVersion = m.Version // the version it started with (ADR 0113), the latest for a run that named none
+	p.MethodologyVersion = m.Version() // the version it started with (ADR 0113), the latest for a run that named none
 	if e.Locks != nil {
 		// steps a stopped replica left in flight are closed before the run goes on (ADR 0124)
 		if err := e.settleInterrupted(ctx, p, m); err != nil {
@@ -855,13 +855,13 @@ func (e *Engine) specialize(ctx context.Context, p *Process, m *methodology.Comp
 	}
 	var candidates []candidate
 	consider := func(owner *methodology.Compiled) {
-		for _, s := range owner.SpecializationsOf(m.Name, action.Declared()) {
+		for _, s := range owner.SpecializationsOf(m.Name(), action.Declared()) {
 			if !owner.Applicable(s, bb) || !isBound(s) {
 				continue
 			}
 			name := s.Name
-			if owner.Name != m.Name {
-				name = owner.Name + "/" + s.Name
+			if owner.Name() != m.Name() {
+				name = owner.Name() + "/" + s.Name
 			}
 			candidates = append(candidates, candidate{a: s, name: name})
 		}
@@ -871,7 +871,7 @@ func (e *Engine) specialize(ctx context.Context, p *Process, m *methodology.Comp
 		e.log().Warn("specializations of other methodologies unavailable", "err", err)
 	} else {
 		for _, o := range others {
-			if o.Name != m.Name {
+			if o.Name() != m.Name() {
 				consider(o)
 			}
 		}
@@ -915,9 +915,12 @@ type ran struct {
 // step, so that the runs of a scoped action for several subjects go at once (runScoped); settleAction then records
 // what it did, one step after the other.
 func (e *Engine) runAction(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) (ran, error) {
-	exec, ok := e.Executors[action.Kind]
-	if !ok {
-		return ran{}, fmt.Errorf("no executor for action kind %q", action.Kind)
+	var exec Executor = callExecutor{}
+	if action.Kind != methodology.KindCall {
+		var ok bool
+		if exec, ok = e.Executors[action.Kind]; !ok {
+			return ran{}, fmt.Errorf("no executor for action kind %q", action.Kind)
+		}
 	}
 	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan, "subject", p.Steps[i].Subject)
 	ctx, end := e.tracer().StartAction(ctx, p, action.Name, action.Kind)
@@ -1322,7 +1325,7 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 		return err
 	}
 	if action.Step != "" && p.World.Satisfies(action.Effects) {
-		e.stepCompleted(ctx, p, action, step)
+		e.stepCompleted(ctx, p, m, action, step)
 	}
 	return nil
 }

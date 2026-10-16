@@ -67,7 +67,7 @@ func TestAPersonEstablishesWhatARunWaitsFor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.Methodologies.(engine.StaticMethodologies)[c.Name] = c
+	e.Methodologies.(engine.StaticMethodologies)[c.Definition().Name] = c
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "choreo", Goal: "flow", Intent: "deliver", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)

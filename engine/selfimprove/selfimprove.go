@@ -176,13 +176,13 @@ func observePropose(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 	if err != nil {
 		return engine.ActionResult{}, err
 	}
-	props, notes := observe.Propose(r, cm.Methodology)
+	props, notes := observe.Propose(r, cm.Definition())
 	stored, err := definitionLinks(ctx, e)
 	if err != nil {
 		return engine.ActionResult{}, err
 	}
-	ix := methodology.RefIndexOf(cm.Methodology)
-	hkey := observe.ElementKey(cm.Name, cm.Version, "methodology", "")
+	ix := methodology.RefIndexOf(cm.Definition())
+	hkey := observe.ElementKey(cm.Definition().Name, cm.Definition().Version, "methodology", "")
 	// an improvement is a change impact on an element of the methodology (ADR 0024): the rationale says what and
 	// why, the version written on the change branch holds the proposed properties and links
 	var ops []dsl.NodeOp
@@ -202,7 +202,7 @@ func observePropose(ctx context.Context, e *engine.Engine, ac engine.ActionConte
 		notes = []string{}
 	}
 	items := []engine.ItemInput{{Type: "artifact", Target: "improvement_plan", Data: map[string]any{
-		"methodology": r.Methodology, "process": r.Process, "observedVersion": r.Version, "currentVersion": cm.Version, "proposals": len(props), "notes": notes}}}
+		"methodology": r.Methodology, "process": r.Process, "observedVersion": r.Version, "currentVersion": cm.Definition().Version, "proposals": len(props), "notes": notes}}}
 	return engine.ActionResult{Items: items, Nodes: ops, Output: fmt.Sprintf("%d proposals, %d notes", len(props), len(notes))}, nil
 }
 

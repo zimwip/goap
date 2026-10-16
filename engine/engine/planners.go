@@ -253,3 +253,23 @@ func (e *Engine) llmUtilities(ctx context.Context, m *methodology.Compiled, ag m
 	}
 	return u, rec.calls, nil
 }
+
+// operator is an action as the planners see it (ADR 0126): the engine feeds them with the compiled methodology, and
+// a planner knows names, conditions and costs only.
+func operator(a methodology.Action) goap.Action {
+	return goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost}
+}
+
+// operators are the actions an agent may run, as its planner plans over them.
+func operators(actions []methodology.Action) []goap.Action {
+	out := make([]goap.Action, 0, len(actions))
+	for _, a := range actions {
+		out = append(out, operator(a))
+	}
+	return out
+}
+
+// planningGoal is a goal of the methodology as the planners reach it.
+func planningGoal(g methodology.Goal) goap.Goal {
+	return goap.Goal{Name: g.Name, Pre: g.Pre, Value: g.Value}
+}

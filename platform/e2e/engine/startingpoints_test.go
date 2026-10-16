@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/zimwip/goap/engine/engine"
+	"github.com/zimwip/goap/engine/enginesvc"
+	"github.com/zimwip/goap/lib/startingpoint"
+	"github.com/zimwip/goap/platform/registrysvc"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
@@ -19,6 +22,16 @@ func pointIDs(sp *engine.StartingPoints) []string {
 		ids = append(ids, p.ID)
 	}
 	return ids
+}
+
+// composed reads the points in the view of the methodology version they name, as their readers do.
+func composed(t *testing.T, e *engine.Engine, sp *engine.StartingPoints) startingpoint.Points {
+	t.Helper()
+	c, err := e.Methodologies.Methodology(context.Background(), domain.MethodologyRef(sp.Methodology, sp.Version))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return startingpoint.Compose(registrysvc.MethodologyViewToPB(c.View()), enginesvc.StartingPointsToPB(sp))
 }
 
 func pointChange(t *testing.T, e *engine.Engine, in graph.NewChange) domain.ChangeID {
@@ -49,8 +62,12 @@ func TestStartingPointsArePossibleStepsOnly(t *testing.T) {
 	}
 	pt := sp.Points[0]
 	if pt.Kind != engine.PointStep || pt.Launch.Agent != "delivery" || pt.Launch.Goal != "delivery/prepare" || pt.Launch.ChangeID != id ||
-		pt.Launch.Methodology != "staged" || !pt.MayRun || pt.Running || pt.Responsible != "writer" || pt.Accountable != "reviewer" {
+		pt.Launch.Methodology != "staged" || !pt.MayRun || pt.Running {
 		t.Fatalf("point %+v", pt)
+	}
+	// what the step is comes from the view of the methodology version the points name (ADR 0126 step 5)
+	if read := composed(t, e, sp).Points[0]; read.Name != "prepare" || read.Process != "delivery" || read.Responsible != "writer" || read.Accountable != "reviewer" {
+		t.Fatalf("composed point %+v", read)
 	}
 	if sp.BlockedCount != 2 {
 		t.Fatalf("blocked %+v", sp.Blocked)
@@ -87,9 +104,12 @@ func TestStartingPointsArePossibleStepsOnly(t *testing.T) {
 		t.Fatalf("points after the note %v (%s)", got, sp.Reason)
 	}
 	pt = sp.Points[0]
-	if pt.Kind != engine.PointMethod || pt.Method != "peer_check" || pt.Capability != "verification" || pt.Launch.Agent != "peer_check" || pt.Launch.Goal != "peer_check" ||
+	if pt.Kind != engine.PointMethod || pt.Method != "peer_check" || pt.Launch.Agent != "peer_check" || pt.Launch.Goal != "peer_check" ||
 		!slices.Equal(pt.Why, []string{"noted"}) {
 		t.Fatalf("method point %+v", pt)
+	}
+	if read := composed(t, e, sp); read.Points[0].Capability != "verification" || read.Blocked[0].Name != "approve" {
+		t.Fatalf("composed method point %+v", read)
 	}
 	// capped blocked list
 	if sp, _ = e.StartingPoints(ctx, id, engine.StartingPointsOptions{MaxBlocked: 0}); sp.BlockedCount != 1 || len(sp.Blocked) != 1 || sp.Blocked[0].ID != "delivery/approve" {

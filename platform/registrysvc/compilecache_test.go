@@ -4,6 +4,10 @@ import (
 	"sync"
 	"testing"
 
+	"connectrpc.com/connect"
+
+	registryv1 "github.com/zimwip/goap/contracts/gen/goap/registry/v1"
+
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/engine/methodology"
 )
@@ -56,7 +60,7 @@ func TestMethodologyCompileIsCached(t *testing.T) {
 		t.Fatal(err)
 	}
 	c3, err := s.Methodology(ctx, m.Name)
-	if err != nil || c3 == c1 || c3.Version != "2" {
+	if err != nil || c3 == c1 || c3.Definition().Version != "2" {
 		t.Fatalf("a published version is compiled afresh: %v", err)
 	}
 
@@ -107,5 +111,27 @@ func TestWarningsDoNotBlockPublish(t *testing.T) {
 	}
 	if _, err := s.Publish(as("admin"), m.Name, m.Version); err != nil {
 		t.Fatalf("a warning must not block the publish: %v", err)
+	}
+}
+
+// The view and the flow of a stored version are read by its name and version (the version a change follows, ADR 0126
+// step 4): the compiled methodology of the registry, with no draft sent.
+func TestStoredVersionViewAndFlow(t *testing.T) {
+	s := cachedService(t)
+	m := example(t)
+	h := &Handler{Service: s}
+	ctx := as("admin")
+	v, err := h.GetMethodologyView(ctx, connect.NewRequest(&registryv1.GetMethodologyViewRequest{Name: m.Name, Version: m.Version}))
+	if err != nil || v.Msg.View == nil || v.Msg.View.Methodology != m.Name || v.Msg.View.Version != m.Version {
+		t.Fatalf("view %+v %v", v, err)
+	}
+	if len(m.Processes) > 0 {
+		g, err := h.GetProcessGraph(ctx, connect.NewRequest(&registryv1.GetProcessGraphRequest{Name: m.Name, Version: m.Version, Process: m.Processes[0].Name}))
+		if err != nil || g.Msg.Graph == nil {
+			t.Fatalf("graph %+v %v", g, err)
+		}
+	}
+	if _, err := h.GetMethodologyView(ctx, connect.NewRequest(&registryv1.GetMethodologyViewRequest{Name: "nope", Version: "1"})); connect.CodeOf(err) != connect.CodeNotFound {
+		t.Fatalf("an unknown version is not found: %v", err)
 	}
 }

@@ -126,7 +126,7 @@ func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	client := scripted(t)
 	e := &engine.Engine{
 		Graph:         g,
-		Methodologies: engine.StaticMethodologies{cm.Name: cm},
+		Methodologies: engine.StaticMethodologies{cm.Definition().Name: cm},
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: client},
 			methodology.KindHuman:   engine.HumanExecutor{},
@@ -171,21 +171,21 @@ func TestSelfObservationProposesAndDrafts(t *testing.T) {
 		t.Fatal(err)
 	}
 	impact, _ := e.Methodologies.Methodology(ctx, "impact-analysis")
-	e.Methodologies = engine.StaticMethodologies{"impact-analysis": impact, obs.Name: obs}
+	e.Methodologies = engine.StaticMethodologies{"impact-analysis": impact, obs.Definition().Name: obs}
 	// the definition nodes live in the methodology namespace, not the observed run's (alm)
 	mbase, err := g.BranchHead(ctx, "methodology", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := storeDefinition(ctx, g, mbase.ID, impact.Methodology)
+	res, err := storeDefinition(ctx, g, mbase.ID, impact.Definition())
 	if err != nil {
 		t.Fatalf("definition nodes: %v", err)
 	}
-	drafts := &memDrafts{defs: map[string]methodology.Methodology{"impact-analysis@1.2.0": *impact.Methodology}}
+	drafts := &memDrafts{defs: map[string]methodology.Methodology{"impact-analysis@1.2.0": *impact.Definition()}}
 	builtins := e.Executors[methodology.KindBuiltin].(engine.BuiltinExecutor)
 	selfimprove.Register(builtins, e, selfimprove.Config{Drafts: drafts, Thresholds: observe.Thresholds{LLMCalls: 1, MinSystematized: 1}})
 
-	op, err := e.Start(ctx, engine.StartRequest{Methodology: obs.Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline.ID,
+	op, err := e.Start(ctx, engine.StartRequest{Methodology: obs.Definition().Name, Agent: "observer", Goal: "improve_methodology", BaselineID: res.Baseline.ID,
 		Intent: "observe", Vars: map[string]any{"event": map[string]any{"process": map[string]any{"id": p.ID}}}, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)

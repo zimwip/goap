@@ -13,10 +13,13 @@ import (
 	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/engine/methodology"
+	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/domainpb"
 )
 
-// Client adapts the registry to engine.MethodologyPort. Published versions
-// are immutable, so compiled methodologies are cached by name and version.
+// Client adapts the registry to engine.MethodologyPort. It builds the activable form of a version as the registry does
+// (Activate over the definition and the domains the registry says it compiles against); published versions are
+// immutable, so compiled methodologies are cached by name, version and those domains.
 type Client struct {
 	rpc   registryv1connect.RegistryServiceClient
 	mu    sync.Mutex
@@ -54,24 +57,30 @@ func (c *Client) List(ctx context.Context) ([]*methodology.Compiled, error) {
 // the latest published one.
 func (c *Client) Methodology(ctx context.Context, ref string) (*methodology.Compiled, error) {
 	name, version := domain.SplitMethodologyRef(ref)
-	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name, Version: version}))
+	r, err := c.rpc.GetMethodology(ctx, connect.NewRequest(&registryv1.GetMethodologyRequest{Name: name, Version: version, WithDomains: true}))
 	if connect.CodeOf(err) == connect.CodeNotFound {
 		return nil, engine.ErrUnknownMethodology{Name: ref}
 	}
 	if err != nil {
 		return nil, err
 	}
-	k := key(r.Msg.Methodology.Name, r.Msg.Methodology.Version)
+	ds := make([]*def.Domain, 0, len(r.Msg.Domains))
+	for _, p := range r.Msg.Domains {
+		d := domainpb.DomainFromPB(p)
+		ds = append(ds, &d)
+	}
+	// the version and the domains it compiles against: a version that pins none follows the domains in force
+	k := key(r.Msg.Methodology.Name, r.Msg.Methodology.Version) + "|" + typesStamp(ds)
 	if why := r.Msg.Methodology.Suspended; why != "" {
-		return nil, suspendedError{ref: k, cause: errors.New(why)}
+		return nil, suspendedError{ref: key(r.Msg.Methodology.Name, r.Msg.Methodology.Version), cause: errors.New(why)}
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if m, ok := c.cache[k]; ok {
 		return m, nil
 	}
-	m := FromPB(r.Msg.Methodology)
-	cm, err := m.Compile()
+	// the activable form the registry builds, by the same compilation of the same inputs (ADR 0126 step 6)
+	cm, err := Activate(FromPB(r.Msg.Methodology), ds)
 	if err != nil {
 		return nil, err
 	}

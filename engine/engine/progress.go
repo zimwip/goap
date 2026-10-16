@@ -95,9 +95,10 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 	if !ok || ag.ProcessOf() == "" {
 		return nil, ErrNotAProcess
 	}
-	proc, _ := m.ProcessByName(ag.ProcessOf())
+	v := m.View()
+	proc, _ := v.Process(ag.ProcessOf())
 	out := &ProcessProgress{ProcessID: p.ID, Methodology: p.Methodology, Process: proc.Name, Description: proc.Description, Status: p.Status, Error: p.Error}
-	for _, s := range m.ProcessSteps(proc.Name) {
+	for _, s := range proc.Steps {
 		out.Steps = append(out.Steps, stepProgress(p, s))
 	}
 	if err := e.addLanes(ctx, p, out.Steps); err != nil {
@@ -128,20 +129,10 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 	return out, nil
 }
 
-func stepProgress(p *Process, s methodology.StepInfo) StepProgress {
-	sp := StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method(), Guidance: s.Guidance,
-		Checklist: s.Checklist, References: s.References, Roles: s.Effective}
-	switch sp.Method {
-	case methodology.MethodAction:
-		sp.Target = s.Action
-		if sp.Target == "" {
-			sp.Target = strings.Join(s.Actions, " | ")
-		}
-	case methodology.MethodProcess:
-		sp.Target = s.Process
-	case methodology.MethodCapability:
-		sp.Target = s.Capability
-	}
+// stepProgress binds a step of the compiled view to a run: where the run stands in it.
+func stepProgress(p *Process, s methodology.StepView) StepProgress {
+	sp := StepProgress{Path: s.Path, Name: s.Name, Description: s.Description, Method: s.Method, Target: s.Target, Guidance: s.Guidance,
+		Checklist: s.Checklist, References: s.References, Roles: s.Roles}
 	sp.Missing = missing(p.World, s.Entry, s.Exit)
 	done := len(s.Exit) > 0 && p.World.Satisfies(s.Exit)
 	if len(s.Steps) > 0 {

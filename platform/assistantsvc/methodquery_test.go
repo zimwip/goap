@@ -56,7 +56,7 @@ processes:
 
 func shop(t *testing.T) *methodology.Methodology {
 	t.Helper()
-	return compiled(t, queryYAML).Methodology
+	return compiled(t, queryYAML).Definition()
 }
 
 func query(t *testing.T, q Query) QueryResult {

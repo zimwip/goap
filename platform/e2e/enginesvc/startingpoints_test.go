@@ -3,6 +3,7 @@ package enginesvce2e
 
 import (
 	"context"
+	"slices"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -16,6 +17,8 @@ import (
 	"github.com/zimwip/goap/graph/graph/graphtest"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/identity"
+	"github.com/zimwip/goap/lib/startingpoint"
+	"github.com/zimwip/goap/platform/registrysvc"
 )
 
 const pointsYAML = `
@@ -43,7 +46,8 @@ func (d denySome) Authorize(_ context.Context, r authz.Request) (bool, error) {
 	return !(r.Action == "start" && r.Resource.Name == d.deny), nil
 }
 
-func pointsHandler(t *testing.T, a authz.Authorizer) (*enginesvc.Handler, *graph.Graph) {
+// c compiles the methodology of the points.
+func c(t *testing.T) *methodology.Compiled {
 	t.Helper()
 	m, err := methodology.Parse([]byte(pointsYAML))
 	if err != nil {
@@ -53,6 +57,12 @@ func pointsHandler(t *testing.T, a authz.Authorizer) (*enginesvc.Handler, *graph
 	if err != nil {
 		t.Fatal(err)
 	}
+	return c
+}
+
+func pointsHandler(t *testing.T, a authz.Authorizer) (*enginesvc.Handler, *graph.Graph) {
+	t.Helper()
+	c := c(t)
 	g := graph.New(graph.NewMemory())
 	ctx := context.Background()
 	for _, k := range []string{"PROJ-A", "PROJ-B"} {
@@ -92,6 +102,11 @@ func TestListStartingPoints(t *testing.T) {
 	if len(out.Points) != 1 || out.Points[0].Id != "ship/draft" || !out.Points[0].MayRun || out.Points[0].Launch.ChangeId != string(ch.ID) ||
 		out.Points[0].Launch.Agent != "ship" || out.Points[0].Launch.Goal != "ship/draft" || out.BlockedCount != 1 || out.Goal != "ship" {
 		t.Fatalf("%+v", out)
+	}
+	// the binding names the version whose view says what the step is (ADR 0126 step 5)
+	if read := startingpoint.Compose(registrysvc.MethodologyViewToPB(c(t).View()), out); out.Version != "1.0.0" || read.Points[0].Name != "draft" ||
+		read.Points[0].Description != "Write the draft" || !slices.Equal(read.Points[0].Produces, []string{"drafted"}) || read.Points[0].Process != "ship" {
+		t.Fatalf("composed %+v", read)
 	}
 
 	// the "start" permission is checked on the methodology, on the project of the change

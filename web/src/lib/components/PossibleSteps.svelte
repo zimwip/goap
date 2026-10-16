@@ -2,7 +2,7 @@
   // The possible next steps of a change (ADR 0097): the steps of its methodology whose conditions all hold now,
   // towards the goal of the change (the end point of the process). Read-only list with one Start per step; the steps
   // that wait are only counted. A step is never described through its actions: the scheduler sequences them.
-  import type { StartingPointsResponse, StartingPoint } from '../api';
+  import type { PossibleStepList, PossibleStep } from '../api';
   import { emptyText, kindText, rolesText, startable, waitingLine, whyText } from '../startingPoints';
 
   let {
@@ -14,10 +14,10 @@
     chosen = '',
     onchoose,
   }: {
-    points: StartingPointsResponse | undefined;
+    points: PossibleStepList | undefined;
     error?: string;
     busy?: string;
-    onstart: (p: StartingPoint) => void;
+    onstart: (p: PossibleStep) => void;
     /** the methodologies of the project, offered when the change has none */
     choices?: string[];
     chosen?: string;

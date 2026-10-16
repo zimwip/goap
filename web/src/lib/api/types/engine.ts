@@ -4,6 +4,7 @@ import type { Int64, JsonValue, Struct } from './common';
 import type { ChangeImpact, DecisionPolicy, FlowOrigin, GraphNode, ItemType, NodeRef, OptionSpec } from './graph';
 import type { DocumentReference, PlannerKind, Responsibilities, TriggerType } from './registry';
 import type { FormDef } from '../../forms/types';
+import type { ListStartingPointsResponseJson, NeedStateJson, StartingPointJson, StepStateJson } from '../../../gen/goap/engine/v1/engine_pb';
 
 // --- engine -----------------------------------------------------------------
 
@@ -293,20 +294,24 @@ export interface Fact {
   producedBy?: string[];
 }
 
-/** Where one process of the methodology of a change stands now, whatever the number of runs (ADR 0112). */
+/** Where a step of the compiled view stands on a change, by its path (ADR 0126 step 4): the binding only; what the step
+ * is (name, guidance, roles, conditions and what they mean) is the view's (`MethodologyView`). */
+export type StepBinding = StepStateJson;
+/** A condition a step waits for, bound to the change: its prerequisites not holding yet and its facts. */
+export type NeedBinding = NeedStateJson;
+
+/** Where one process of the methodology of a change stands now, whatever the number of runs (ADR 0112): the binding of
+ * a process of the compiled view (its description and whether it reacts to events are the view's). */
 export interface ProcessState {
   process?: string;
-  description?: string;
   state?: StepState | string;
-  /** it (or one of its steps) runs again on events of the change */
-  reactive?: boolean;
   /** executions of the process on the change */
   runs?: number;
   /** the run at work now, else the latest */
   current?: string;
   status?: string;
   error?: string;
-  steps?: StepProgress[];
+  steps?: StepBinding[];
   done?: number;
   total?: number;
 }
@@ -352,6 +357,8 @@ export interface ChangeAsk {
 export interface ChangeStateResponse {
   changeId?: string;
   methodology?: string;
+  /** the version of the methodology the change follows: its compiled view is the one to bind */
+  version?: string;
   goal?: string;
   goalReached?: boolean;
   processes?: ProcessState[];
@@ -738,8 +745,13 @@ export interface StartLaunch {
   changeId: string;
 }
 
-/** A step, or a step of a method, that is possible now towards the goal of a change (ADR 0097). Never an action. */
-export interface StartingPoint {
+/** A step, or a step of a method, that is possible now, as the engine binds it to the change (ADR 0126 step 5): what the step is comes from the view of the methodology version. */
+export type StartingPointBinding = StartingPointJson;
+/** The answer of ListStartingPoints: the bindings, and the methodology version whose view says what they are. */
+export type StartingPointsBinding = ListStartingPointsResponseJson;
+
+/** A step, or a step of a method, that is possible now towards the goal of a change (ADR 0097), composed from its binding and the view (`composePoints`). Never an action. */
+export interface PossibleStep {
   /** the step path, unique in the methodology */
   id: string;
   kind: 'step' | 'method';
@@ -766,19 +778,21 @@ export interface StartingPoint {
 }
 
 /** A step towards the goal that waits for conditions: counted, never proposed. */
-export interface BlockedStep {
+export interface WaitingStep {
   id: string;
   name: string;
   missing?: string[];
 }
 
-export interface StartingPointsResponse {
+/** The possible steps of a change, composed. */
+export interface PossibleStepList {
   methodology?: string;
+  version?: string;
   goal?: string;
   /** why there is nothing to start */
   reason?: string;
-  points?: StartingPoint[];
-  blocked?: BlockedStep[];
+  points?: PossibleStep[];
+  blocked?: WaitingStep[];
   blockedCount?: number;
 }
 

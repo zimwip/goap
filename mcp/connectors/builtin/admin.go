@@ -30,10 +30,12 @@ type Domains interface {
 	Domains(ctx context.Context) ([]*def.Domain, error)
 }
 
-// Methodologies lists the methodologies of the methodology registry: its client (registryv1connect), or its handler in
-// process. The hub reads them through the contract, never compiled (ADR 0125 §4).
+// Methodologies lists the methodologies of the methodology registry and gives the compiled view of a version: its
+// client (registryv1connect), or its handler in process. The hub reads them through the contract, never compiled (ADR
+// 0125 §4, ADR 0126 step 5).
 type Methodologies interface {
 	ListMethodologies(ctx context.Context, r *connect.Request[registryv1.ListMethodologiesRequest]) (*connect.Response[registryv1.ListMethodologiesResponse], error)
+	GetMethodologyView(ctx context.Context, r *connect.Request[registryv1.GetMethodologyViewRequest]) (*connect.Response[registryv1.GetMethodologyViewResponse], error)
 }
 
 // inForce lists the published methodologies the registry does not suspend (ADR 0125 §3).

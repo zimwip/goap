@@ -200,19 +200,19 @@ func (h *Handler) ListStartingPoints(ctx context.Context, r *connect.Request[eng
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(startingPointsToPB(sp)), nil
+	return connect.NewResponse(StartingPointsToPB(sp)), nil
 }
 
-func startingPointsToPB(sp *engine.StartingPoints) *enginev1.ListStartingPointsResponse {
-	out := &enginev1.ListStartingPointsResponse{Methodology: sp.Methodology, Goal: sp.Goal, Reason: sp.Reason, BlockedCount: int32(sp.BlockedCount)}
+// StartingPointsToPB is the answer of ListStartingPoints: the steps the engine binds to the change.
+func StartingPointsToPB(sp *engine.StartingPoints) *enginev1.ListStartingPointsResponse {
+	out := &enginev1.ListStartingPointsResponse{Methodology: sp.Methodology, Version: sp.Version, Goal: sp.Goal, Reason: sp.Reason, BlockedCount: int32(sp.BlockedCount)}
 	for _, p := range sp.Points {
-		out.Points = append(out.Points, &enginev1.StartingPoint{Id: p.ID, Kind: p.Kind, Process: p.Process, Parent: p.Parent, Name: p.Name, Method: p.Method,
-			Capability: p.Capability, Description: p.Description, Guidance: p.Guidance, Why: p.Why, Produces: p.Produces, Responsible: p.Responsible,
-			Accountable: p.Accountable, MayRun: p.MayRun, NeedRoles: p.NeedRoles, Running: p.Running,
+		out.Points = append(out.Points, &enginev1.StartingPoint{Id: p.ID, Kind: p.Kind, Parent: p.Parent, Method: p.Method, Why: p.Why,
+			MayRun: p.MayRun, NeedRoles: p.NeedRoles, Running: p.Running,
 			Launch: &enginev1.StartLaunch{Methodology: p.Launch.Methodology, Agent: p.Launch.Agent, Goal: p.Launch.Goal, ChangeId: string(p.Launch.ChangeID)}})
 	}
 	for _, b := range sp.Blocked {
-		out.Blocked = append(out.Blocked, &enginev1.BlockedStep{Id: b.ID, Name: b.Name, Missing: b.Missing})
+		out.Blocked = append(out.Blocked, &enginev1.BlockedStep{Id: b.ID, Missing: b.Missing})
 	}
 	return out
 }
@@ -455,12 +455,25 @@ func (h *Handler) GetChangeState(ctx context.Context, r *connect.Request[enginev
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	out := &enginev1.GetChangeStateResponse{ChangeId: string(st.ChangeID), Methodology: st.Methodology, Goal: st.Goal, GoalReached: st.GoalReached}
+	out := &enginev1.GetChangeStateResponse{ChangeId: string(st.ChangeID), Methodology: st.Methodology, Version: st.Version, Goal: st.Goal, GoalReached: st.GoalReached}
 	for _, p := range st.Processes {
-		out.Processes = append(out.Processes, &enginev1.ProcessState{Process: p.Process, Description: p.Description, State: p.State, Reactive: p.Reactive,
-			Runs: int32(p.Runs), Current: p.Current, Status: string(p.Status), Error: p.Error, Steps: stepProgressToPB(p.Steps), Done: int32(p.Done), Total: int32(p.Total)})
+		out.Processes = append(out.Processes, &enginev1.ProcessState{Process: p.Process, State: p.State,
+			Runs: int32(p.Runs), Current: p.Current, Status: string(p.Status), Error: p.Error, Steps: stepStatesToPB(p.Steps), Done: int32(p.Done), Total: int32(p.Total)})
 	}
 	return connect.NewResponse(out), nil
+}
+
+func stepStatesToPB(steps []engine.StepState) []*enginev1.StepState {
+	out := make([]*enginev1.StepState, 0, len(steps))
+	for _, s := range steps {
+		st := &enginev1.StepState{Path: s.Path, State: s.State, Missing: s.Missing, Runs: int32(s.Runs), ChildProcessIds: s.ChildProcessIDs,
+			Lanes: lanesToPB(s.Lanes), Waiting: s.Waiting, Permission: s.Permission, Chosen: s.Chosen, Steps: stepStatesToPB(s.Steps)}
+		for _, n := range s.Needs {
+			st.Needs = append(st.Needs, &enginev1.NeedState{Condition: n.Condition, Want: n.Want, Requires: n.Requires, Facts: factsToPB(n.Facts)})
+		}
+		out = append(out, st)
+	}
+	return out
 }
 
 // GetChangeAsks serves what a change waits for from people (ADR 0117): read like the change itself (a personal change

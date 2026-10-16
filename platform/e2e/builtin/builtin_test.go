@@ -66,7 +66,7 @@ func (f *fakeEngine) FireTrigger(_ context.Context, r *connect.Request[enginev1.
 
 func (f *fakeEngine) ListStartingPoints(_ context.Context, r *connect.Request[enginev1.ListStartingPointsRequest]) (*connect.Response[enginev1.ListStartingPointsResponse], error) {
 	f.points, f.header = r.Msg, r.Header()
-	return connect.NewResponse(&enginev1.ListStartingPointsResponse{Goal: "deliver", BlockedCount: 2,
+	return connect.NewResponse(&enginev1.ListStartingPointsResponse{Methodology: "m", Version: "1.0.0", Goal: "deliver", BlockedCount: 2,
 		Points: []*enginev1.StartingPoint{{Id: "p/s", Kind: "step", Launch: &enginev1.StartLaunch{Agent: "p", Goal: "p/s", ChangeId: r.Msg.ChangeId}}}}), nil
 }
 
@@ -76,6 +76,17 @@ func (fakeRegistry) ListMethodologies(context.Context, *connect.Request[registry
 	return connect.NewResponse(&registryv1.ListMethodologiesResponse{Methodologies: []*registryv1.MethodologySummary{
 		{Name: "impact-analysis", Namespace: "alm", Status: "published"}}}), nil
 }
+
+// GetMethodologyView gives the step p/s of m 1.0.0 (the one fakeEngine binds).
+func (fakeRegistry) GetMethodologyView(_ context.Context, r *connect.Request[registryv1.GetMethodologyViewRequest]) (*connect.Response[registryv1.GetMethodologyViewResponse], error) {
+	if r.Msg.Name != "m" || r.Msg.Version != "1.0.0" {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("unknown methodology"))
+	}
+	return connect.NewResponse(&registryv1.GetMethodologyViewResponse{View: &registryv1.MethodologyView{Methodology: "m", Version: "1.0.0",
+		Processes: []*registryv1.ViewActivity{{Name: "p", Kind: "process", Steps: []*registryv1.ViewStep{{Path: "p/s", Name: "s", Owner: "p",
+			Description: "Do it", Exit: map[string]bool{"done": true}, Roles: &registryv1.Responsibilities{Responsible: "dev"}}}}}}}), nil
+}
+
 func (f fakeRegistry) Domains(context.Context) ([]*def.Domain, error) {
 	return f.domains, nil
 }
@@ -677,6 +688,11 @@ func TestSchedulerTools(t *testing.T) {
 	sp := p.call(t, ctx, "", "goap-scheduler/starting_points", nil)
 	if p.engine.points.ChangeId != "C1" || sp["goal"] != "deliver" || len(sp["points"].([]any)) != 1 || sp["blockedCount"] != float64(2) {
 		t.Fatalf("starting_points = %v %v", sp, p.engine.points)
+	}
+	// the engine binds the step, the view of its methodology version says what it is (ADR 0126 step 5)
+	if pt := sp["points"].([]any)[0].(map[string]any); pt["name"] != "s" || pt["process"] != "p" || pt["description"] != "Do it" ||
+		pt["responsible"] != "dev" || !slices.Equal(pt["produces"].([]any), []any{"done"}) || pt["launch"].(map[string]any)["agent"] != "p" {
+		t.Fatalf("composed point %v", pt)
 	}
 	if got := p.call(t, ctx, "", "goap-scheduler/fire", map[string]any{"methodology": "m", "agent": "a", "trigger": "t"}); got["process"].(map[string]any)["trigger"] != "m/a/t" {
 		t.Fatalf("fire = %v", got)

@@ -17,19 +17,18 @@ import (
 // foreachKey prefixes the call key of the stream of an element in the children of the process running the step.
 const foreachSuffix = "#step:"
 
-// runForeach is process.step for a step with foreach (ADR 0050): the step is carried out once per element of the
+// runForeach runs a call with foreach (ADR 0050): the step is carried out once per element of the
 // list its expression gives, in parallel streams. Each element is bound to `vars.item` and gets the most specific
 // method that applies to it (a method's `when` reads `vars.item`) and its own agent instance, a sub-agent on the same
 // change. The step waits for the first stream still at work and is retried when it ends, so every stream is in
 // flight at once; it is done when every stream completed, and fails when one failed. Streams already started stay
 // the streams of the step even when the list changes after they did their work.
-func runForeach(ctx context.Context, ac ActionContext, expr string) (ActionResult, error) {
+func runForeach(ctx context.Context, ac ActionContext, step string, call methodology.Call) (ActionResult, error) {
 	h := ac.Host
 	e := h.e
-	step, _ := ac.Action.Params["step"].(string)
-	capability, _ := ac.Action.Params["capability"].(string)
+	capability := call.Capability
 	methodologyName := ac.Process.Methodology
-	list, err := condition.CompileList(expr)
+	list, err := condition.CompileList(call.Foreach)
 	if err != nil {
 		return ActionResult{}, fmt.Errorf("step %s: foreach: %w", step, err)
 	}
@@ -37,8 +36,8 @@ func runForeach(ctx context.Context, ac ActionContext, expr string) (ActionResul
 	if err != nil {
 		return ActionResult{}, fmt.Errorf("step %s: foreach: %w", step, err)
 	}
-	if groupBy, _ := ac.Action.Params["groupBy"].(string); groupBy != "" {
-		if items, err = groupItems(ac.Blackboard, items, groupBy); err != nil {
+	if call.GroupBy != "" {
+		if items, err = groupItems(ac.Blackboard, items, call.GroupBy); err != nil {
 			return ActionResult{}, fmt.Errorf("step %s: groupBy: %w", step, err)
 		}
 	}

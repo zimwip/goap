@@ -18,7 +18,6 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/condition"
-	"github.com/zimwip/goap/engine/goap"
 )
 
 // Methodology is the declarative definition deployed in the registry.
@@ -195,7 +194,7 @@ type Condition struct {
 
 // Definition is the condition as the condition package compiles it.
 func (c Condition) Definition() condition.Definition {
-	return condition.Definition{Name: c.Name, Expr: c.Expr, Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty}
+	return condition.Definition{Name: c.Name, Description: c.Description, Expr: c.Expr, Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty}
 }
 
 // Action kinds.
@@ -208,7 +207,29 @@ const (
 	// KindAbstract declares a role without implementation: a specialization
 	// is chosen at execution (ADR 0009 §5).
 	KindAbstract = "abstract"
+	// KindCall is the kind of the actions the compiler generates for the steps done by a sub-agent (a nested
+	// process, a method): the action runs the sub-agent its Call describes and waits for it. A methodology does not
+	// declare it.
+	KindCall = "call"
 )
+
+// Call is what an action of kind KindCall runs (ADR 0034, ADR 0035 §1, ADR 0050): a sub-agent on the same change,
+// waited for. It is the execution element of a step of a process carried out by a nested process or by the method
+// providing a capability, stated by the compiler so that the engine reads it rather than decodes parameters.
+type Call struct {
+	// Methodology is the methodology of the agent (empty: the one of the action).
+	Methodology string `json:"methodology,omitempty"`
+	// Agent and Goal are the sub-agent and its goal, when the step names them (a nested process).
+	Agent string `json:"agent,omitempty"`
+	Goal  string `json:"goal,omitempty"`
+	// Capability makes the engine choose, when the step runs, the method providing it that applies there
+	// (Compiled.MethodsFor): its agent towards its goal.
+	Capability string `json:"capability,omitempty"`
+	// Foreach (CEL list) runs the call once per element, in parallel streams, each with `vars.item` bound; GroupBy
+	// (CEL value, `self` the element) runs it once per group of elements instead.
+	Foreach string `json:"foreach,omitempty"`
+	GroupBy string `json:"groupBy,omitempty"`
+}
 
 // Script languages.
 const (
@@ -282,11 +303,12 @@ type Action struct {
 	// Emits are the events of the methodology (Methodology.Events) the action raises when it reaches its effects
 	// (ADR 0110): the engine adds a signal item of each name to the change.
 	Emits []string `yaml:"emits,omitempty" json:"emits,omitempty"`
-	// Step is set on the actions generated for the steps of a process (ADR 0034): the step path
-	// "<process>/<step>/<sub-step>"; Implements names the declared action a step runs (its
-	// specializations apply).
+	// Step is set on the actions generated for the steps of a process (ADR 0034): the path of the step, read
+	// through Compiled.StepByPath; Implements names the declared action a step runs (its specializations apply).
 	Step       string `yaml:"-" json:"-"`
 	Implements string `yaml:"-" json:"-"`
+	// Call is the sub-agent a generated action of kind KindCall runs (compiled only).
+	Call *Call `yaml:"-" json:"-"`
 	// Scope makes the action scoped (ADR 0109 §3.5): it runs once per pending subject of that scope (within Where),
 	// its pre and effects naming conditions of that scope. The planner sees it lifted: its pre is "some subject is
 	// pending" (PendingCondition), its effects the aggregates of its scoped effects.
@@ -394,7 +416,9 @@ func Parse(data []byte) (*Methodology, error) {
 
 // Compiled is a validated methodology ready for planning.
 type Compiled struct {
-	*Methodology
+	// definition is the methodology compiled: Definition gives it to those who edit, store or show it; what runs it
+	// (the engine) reads the compiled elements through the methods of Compiled (ADR 0126).
+	definition *Methodology
 	Conditions *condition.Set
 	actions    map[string]Action
 	utilities  *condition.NumberSet
@@ -410,6 +434,20 @@ type Compiled struct {
 	reactions []Reaction
 	// assessments are the compiled assessment views (ADR 0116); nil: the defaults
 	assessments *condition.AssessmentViews
+	// view is the shape of the activities as they are shown (ADR 0126 step 3), computed once at compilation
+	view *View
+}
+
+// Definition is the methodology as written, compiled into c.
+func (c *Compiled) Definition() *Methodology { return c.definition }
+
+// WithDefinition is a copy of c holding m as its definition (another version of the same rules, a fake of a test);
+// c may be a zero Compiled.
+func (c *Compiled) WithDefinition(m *Methodology) *Compiled {
+	out := *c
+	out.definition = m
+	out.view = nil // computed again from m on demand
+	return &out
 }
 
 // Action returns an action by name.
@@ -420,7 +458,7 @@ func (c *Compiled) Action(name string) (Action, bool) {
 
 // Goal returns a goal by name (a declared goal, or the goal of a process).
 func (c *Compiled) Goal(name string) (Goal, bool) {
-	for _, g := range c.Goals {
+	for _, g := range c.definition.Goals {
 		if g.Name == name {
 			return g, true
 		}
@@ -569,15 +607,14 @@ func (c *Compiled) StepActions(process string) []Action {
 	return out
 }
 
-// PlanningActions returns the planner operators (every action).
-func (c *Compiled) PlanningActions() []goap.Action {
-	out := make([]goap.Action, 0, len(c.Actions))
-	for _, src := range c.Actions {
-		a := c.actions[src.Name]
-		if a.IsSpecialization() {
-			continue
+// PlannedActions returns the actions a planner plans over (every declared action but the specializations, which
+// replace the implementation of the action they specialize), in declaration order.
+func (c *Compiled) PlannedActions() []Action {
+	out := make([]Action, 0, len(c.definition.Actions))
+	for _, src := range c.definition.Actions {
+		if a := c.actions[src.Name]; !a.IsSpecialization() {
+			out = append(out, a)
 		}
-		out = append(out, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
 	}
 	return out
 }
@@ -604,16 +641,16 @@ func (a Action) SpecializedAction(self string) (string, bool) {
 // for the action "<methodology>/<action>", in declaration order.
 func (c *Compiled) SpecializationsOf(methodologyName, action string) []Action {
 	var out []Action
-	for _, src := range c.Actions {
+	for _, src := range c.definition.Actions {
 		a := c.actions[src.Name]
 		if !a.IsSpecialization() {
 			continue
 		}
-		target, local := a.SpecializedAction(c.Name)
+		target, local := a.SpecializedAction(c.definition.Name)
 		if target != action {
 			continue
 		}
-		if (local && methodologyName == c.Name) || (!local && strings.HasPrefix(a.Specializes, methodologyName+"/")) {
+		if (local && methodologyName == c.definition.Name) || (!local && strings.HasPrefix(a.Specializes, methodologyName+"/")) {
 			out = append(out, a)
 		}
 	}
@@ -640,12 +677,12 @@ func (c *Compiled) Agent(name string) (Agent, bool) {
 // AgentList returns the agents in declaration order, then the agents of the processes.
 func (c *Compiled) AgentList() []Agent {
 	var out []Agent
-	if len(c.Methodology.Agents) == 0 {
+	if len(c.definition.Agents) == 0 {
 		if ag, ok := c.agents[DefaultAgent]; ok {
 			out = append(out, ag)
 		}
 	}
-	for _, a := range c.Methodology.Agents {
+	for _, a := range c.definition.Agents {
 		out = append(out, c.agents[a.Name])
 	}
 	return append(out, c.processes.agents...)
@@ -661,27 +698,24 @@ func (c *Compiled) UsesMCPs() bool {
 	return false
 }
 
-// AgentActions returns the planner operators admissible for an agent: for the agent of a process, the actions of its
-// steps.
-func (c *Compiled) AgentActions(ag Agent) []goap.Action {
+// AgentActions returns the actions admissible for an agent, which its planner plans over: for the agent of a process,
+// the actions of its steps.
+func (c *Compiled) AgentActions(ag Agent) []Action {
 	if ag.process != "" {
-		var out []goap.Action
-		for _, a := range c.StepActions(ag.process) {
-			out = append(out, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
-		}
+		out := slices.Clone(c.StepActions(ag.process))
 		// the agent generated for a method plans over the actions of its pool too (ADR 0050)
-		for _, a := range c.PlanningActions() {
+		for _, a := range c.PlannedActions() {
 			if slices.Contains(ag.Actions, a.Name) {
 				out = append(out, a)
 			}
 		}
 		return out
 	}
-	all := c.PlanningActions()
+	all := c.PlannedActions()
 	if len(ag.Actions) == 0 {
 		return all
 	}
-	out := make([]goap.Action, 0, len(ag.Actions))
+	out := make([]Action, 0, len(ag.Actions))
 	for _, a := range all {
 		if slices.Contains(ag.Actions, a.Name) {
 			out = append(out, a)
@@ -693,10 +727,10 @@ func (c *Compiled) AgentActions(ag Agent) []goap.Action {
 // AgentGoals returns the goals of an agent.
 func (c *Compiled) AgentGoals(ag Agent) []Goal {
 	if len(ag.Goals) == 0 {
-		return c.Goals
+		return c.definition.Goals
 	}
 	var out []Goal
-	for _, g := range slices.Concat(c.Goals, c.processes.goals) {
+	for _, g := range slices.Concat(c.definition.Goals, c.processes.goals) {
 		if slices.Contains(ag.Goals, g.Name) {
 			out = append(out, g)
 		}
@@ -721,11 +755,6 @@ func (c *Compiled) Utilities(bb condition.Input) map[string]float64 {
 		out[name] = v
 	}
 	return out
-}
-
-// PlanningGoal returns the planner goal.
-func (g Goal) PlanningGoal() goap.Goal {
-	return goap.Goal{Name: g.Name, Pre: g.Pre, Value: g.Value}
 }
 
 // MarshalYAML-friendly export of the definition (import/export format).
@@ -755,4 +784,80 @@ func overlap(entry, exit map[string]bool) []string {
 
 func inputAndOutput(k, of string) string {
 	return fmt.Sprintf("condition %s is both an input and an output of %s: an activity does not take what it makes true (drop it from the entry; what is already true is not planned again)", k, of)
+}
+
+// What the engine reads of a compiled methodology to run it (ADR 0126): the identity of the rules and what a change
+// run under them is given; the definition itself stays behind Definition.
+
+// Name is the name of the methodology.
+func (c *Compiled) Name() string { return c.definition.Name }
+
+// Version is the version compiled.
+func (c *Compiled) Version() string { return c.definition.Version }
+
+// Description says what the methodology is for.
+func (c *Compiled) Description() string { return c.definition.Description }
+
+// Namespace is the namespace the changes of the methodology act on.
+func (c *Compiled) Namespace() string { return c.definition.Namespace }
+
+// Administrative reports whether the methodology manages the organisation, its projects, policies or adapters: the
+// engine marks the changes it creates so (domain.DataAdministrative).
+func (c *Compiled) Administrative() bool { return c.definition.Administrative }
+
+// Criticality is the criticality the changes of the methodology start with (domain.DataCriticality; empty: none).
+func (c *Compiled) Criticality() string { return c.definition.Criticality }
+
+// MainGoal is the goal a change of the methodology is driven towards (Methodology.MainGoal).
+func (c *Compiled) MainGoal() string { return c.definition.MainGoal() }
+
+// AppliesTo are the methodologies a transverse methodology runs alongside (ADR 0036 §3).
+func (c *Compiled) AppliesTo() []string { return c.definition.AppliesTo }
+
+// Subscriptions are the events the methodology follows at its own level (ADR 0036 §3, ADR 0106).
+func (c *Compiled) Subscriptions() []Subscription { return c.definition.Subscriptions() }
+
+// Supertypes maps the node types the methodology's domains declare to their ancestors.
+func (c *Compiled) Supertypes() map[string][]string { return c.definition.Supertypes() }
+
+// ProcessInfo is a process of a compiled methodology: its steps are ProcessSteps, its agent the one generated for it
+// (Agent.ProcessOf).
+type ProcessInfo struct {
+	Name, Description string
+	// Nested is set on a process a step of another process of the methodology carries out.
+	Nested bool
+}
+
+// Processes are the processes of the methodology, in declaration order.
+func (c *Compiled) Processes() []ProcessInfo {
+	nested := map[string]bool{}
+	var walk func([]Step)
+	walk = func(steps []Step) {
+		for _, s := range steps {
+			if s.Process != "" {
+				if other, proc := s.NestedProcess(); other == "" || other == c.definition.Name {
+					nested[proc] = true
+				}
+			}
+			walk(s.Steps)
+		}
+	}
+	for _, p := range c.definition.Processes {
+		walk(p.Steps)
+	}
+	out := make([]ProcessInfo, 0, len(c.definition.Processes))
+	for _, p := range c.definition.Processes {
+		out = append(out, ProcessInfo{Name: p.Name, Description: p.Description, Nested: nested[p.Name]})
+	}
+	return out
+}
+
+// Process is the process of that name.
+func (c *Compiled) Process(name string) (ProcessInfo, bool) {
+	for _, p := range c.Processes() {
+		if p.Name == name {
+			return p, true
+		}
+	}
+	return ProcessInfo{}, false
 }

@@ -51,18 +51,18 @@ const testProject = "PROJ-TEST"
 type mainGoals struct{ c *methodology.Compiled }
 
 func (m mainGoals) MethodologyVersion(_ context.Context, ref string) (string, error) {
-	if name, version := domain.SplitMethodologyRef(ref); name == m.c.Name {
+	if name, version := domain.SplitMethodologyRef(ref); name == m.c.Definition().Name {
 		if version != "" {
 			return version, nil
 		}
-		return m.c.Version, nil // the one published version (ADR 0113)
+		return m.c.Definition().Version, nil // the one published version (ADR 0113)
 	}
 	return "", nil
 }
 func (m mainGoals) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return nil, nil }
 func (m mainGoals) DefaultGoal(_ context.Context, ref string) (string, error) {
-	if name, _ := domain.SplitMethodologyRef(ref); name == m.c.Name {
-		return m.c.MainGoal(), nil
+	if name, _ := domain.SplitMethodologyRef(ref); name == m.c.Definition().Name {
+		return m.c.Definition().MainGoal(), nil
 	}
 	return "", nil
 }
@@ -113,7 +113,7 @@ func setup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	client := scripted(t)
 	e := &engine.Engine{
 		Graph:         g,
-		Methodologies: engine.StaticMethodologies{cm.Name: cm},
+		Methodologies: engine.StaticMethodologies{cm.Definition().Name: cm},
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: client},
 			methodology.KindHuman:   engine.HumanExecutor{},
@@ -395,28 +395,27 @@ func TestRunFollowsTheVersionOfItsChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.MethodologyVersion != cur.Version {
+	if c.MethodologyVersion != cur.Definition().Version {
 		t.Fatalf("the change follows the published version: %q", c.MethodologyVersion)
 	}
 	// a later version is published: the change, and the runs on it, stay on theirs
-	def := *cur.Methodology
-	def.Version = cur.Version + ".next"
-	next := *cur
-	next.Methodology = &def
-	versions := versionedPort{cur.Name + "@" + cur.Version: cur, cur.Name: &next}
+	def := *cur.Definition()
+	def.Version = cur.Definition().Version + ".next"
+	next := cur.WithDefinition(&def)
+	versions := versionedPort{cur.Definition().Name + "@" + cur.Definition().Version: cur, cur.Definition().Name: next}
 	e.Methodologies = versions
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", ChangeID: c.ID, Goal: "assess_impact", ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.MethodologyVersion != cur.Version {
+	if p.MethodologyVersion != cur.Definition().Version {
 		t.Fatalf("the run follows the change: %q", p.MethodologyVersion)
 	}
 	fresh, err := e.Start(ctx, engine.StartRequest{Methodology: "impact-analysis", Goal: "assess_impact", BaselineID: base, ProjectID: testProject})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fresh.MethodologyVersion != next.Version {
+	if fresh.MethodologyVersion != next.Definition().Version {
 		t.Fatalf("a run with no change takes the latest: %q", fresh.MethodologyVersion)
 	}
 }
@@ -428,7 +427,7 @@ func (v versionedPort) Methodology(_ context.Context, ref string) (*methodology.
 	if m, ok := v[ref]; ok {
 		return m, nil
 	}
-	if name, version := domain.SplitMethodologyRef(ref); v[name] != nil && v[name].Version == version {
+	if name, version := domain.SplitMethodologyRef(ref); v[name] != nil && v[name].Definition().Version == version {
 		return v[name], nil
 	}
 	return nil, engine.ErrUnknownMethodology{Name: ref}

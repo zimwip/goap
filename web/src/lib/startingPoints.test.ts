@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import type { StartingPoint, StartingPointsResponse } from './api';
-import { confirmText, emptyText, kindText, pointById, rolesText, showStartingPoints, startable, startableIds, startRequest, waitingLine, whyText } from './startingPoints';
+import type { MethodologyView, PossibleStep, PossibleStepList } from './api';
+import { composePoints, confirmText, emptyText, kindText, pointById, rolesText, showStartingPoints, startable, startableIds, startRequest, viewRef, waitingLine, whyText } from './startingPoints';
 
-const point = (over: Partial<StartingPoint> = {}): StartingPoint => ({
+const point = (over: Partial<PossibleStep> = {}): PossibleStep => ({
   id: 'p/s',
   kind: 'step',
   process: 'p',
@@ -30,7 +30,7 @@ describe('starting points', () => {
   });
 
   it('offers only what the caller may start and nothing carries out', () => {
-    const r: StartingPointsResponse = { points: [point(), point({ id: 'p/r', running: true }), point({ id: 'p/n', mayRun: false })] };
+    const r: PossibleStepList = { points: [point(), point({ id: 'p/r', running: true }), point({ id: 'p/n', mayRun: false })] };
     expect(startableIds(r)).toEqual(['p/s']);
     expect(startable(point({ mayRun: false }))).toBe(false);
     expect(pointById(r, 'p/r')?.running).toBe(true);
@@ -61,5 +61,45 @@ describe('starting points', () => {
     expect(confirmText(point({ kind: 'method', method: 'peer', name: 'verify' }), '')).toContain('the method peer for “verify”');
     expect(emptyText({ reason: 'the goal is reached' })).toBe('the goal is reached');
     expect(emptyText(undefined)).toBe('No step is possible now.');
+  });
+
+  it('reads the bindings of the engine in the view of their methodology version', () => {
+    const view: MethodologyView = {
+      methodology: 'm',
+      version: '1.0.0',
+      processes: [
+        {
+          name: 'delivery',
+          kind: 'process',
+          steps: [
+            { path: 'delivery/prepare', name: 'prepare', owner: 'delivery', description: 'Prepare', exit: { noted: true, stale: false }, roles: { responsible: 'writer', accountable: 'reviewer' } },
+            { path: 'delivery/verify', name: 'verify', owner: 'delivery', capability: 'verification' },
+            { path: 'delivery/approve', name: 'approve', owner: 'delivery' },
+          ],
+        },
+      ],
+      methods: [{ name: 'peer_check', kind: 'method', for: 'verification', roles: { responsible: 'peer' }, steps: [{ path: 'peer_check/read', name: 'read', owner: 'peer_check' }] }],
+    };
+    const binding = {
+      methodology: 'm',
+      version: '1.0.0',
+      goal: 'ship',
+      blockedCount: 1,
+      points: [
+        { id: 'delivery/prepare', kind: 'step', why: ['framed'], mayRun: true, launch: { methodology: 'm', agent: 'delivery', goal: 'delivery/prepare', changeId: 'C' } },
+        { id: 'delivery/verify', kind: 'method', method: 'peer_check', launch: { agent: 'peer_check', goal: 'peer_check' } },
+        { id: 'peer_check/read', kind: 'method', parent: 'delivery/verify', method: 'peer_check' },
+      ],
+      blocked: [{ id: 'delivery/approve', missing: ['checked'] }],
+    };
+    expect(viewRef(binding)).toBe('m@1.0.0');
+    expect(viewRef({ methodology: 'm', reason: 'the goal is reached' })).toBe('');
+    const r = composePoints(view, binding);
+    expect(r.points?.[0]).toMatchObject({ name: 'prepare', process: 'delivery', description: 'Prepare', produces: ['!stale', 'noted'], responsible: 'writer', accountable: 'reviewer' });
+    expect(r.points?.[1]).toMatchObject({ name: 'verify', capability: 'verification', responsible: 'peer', kind: 'method' });
+    expect(r.points?.[2]).toMatchObject({ process: 'peer_check', capability: 'verification', parent: 'delivery/verify' });
+    expect(r.blocked).toEqual([{ id: 'delivery/approve', name: 'approve', missing: ['checked'] }]);
+    // no view: the ids stand for the names
+    expect(composePoints(undefined, binding).points?.[0]).toMatchObject({ name: 'delivery/prepare', launch: { agent: 'delivery' } });
   });
 });

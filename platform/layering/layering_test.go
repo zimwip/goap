@@ -18,12 +18,16 @@ const mod = "github.com/zimwip/goap/"
 
 // forbidden lists, by package, the packages it must not depend on, directly or not.
 var forbidden = map[string][]string{
-	"contracts/mcp":         {"lib/adapter", "lib/mcpbuiltin", "lib/access", "contracts/algo", "contracts/domain", "graph/graph"},
-	"contracts/algo":        {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
-	"lib/dsl":               {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
-	"lib/def":               {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
-	"lib/access":            {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
-	"lib/llmcfg":            {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
+	"contracts/mcp":  {"lib/adapter", "lib/mcpbuiltin", "lib/access", "contracts/algo", "contracts/domain", "graph/graph"},
+	"contracts/algo": {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
+	"lib/dsl":        {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
+	"lib/def":        {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
+	"lib/access":     {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
+	"lib/llmcfg":     {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
+	// The methodology describes and compiles; the engine plans and runs (ADR 0126): neither the compiler nor the
+	// conditions know the planner.
+	"engine/methodology":    {"engine/goap", "engine/engine"},
+	"engine/condition":      {"engine/goap", "engine/engine"},
 	"engine/engine":         {"lib/adapter", "lib/mcpbuiltin", "engine/observe", "engine/selfimprove", "platform/assistantsvc", "graph/graph"},
 	"contracts/builtins":    {"engine/methodology", "engine/engine", "contracts/domain"},
 	"lib/adapter":           {"lib/mcpbuiltin", "lib/access"},
@@ -131,6 +135,47 @@ func TestCoreNamesNoStructure(t *testing.T) {
 				if strings.Contains(string(b), word) {
 					t.Errorf("%s names %q", f, word)
 				}
+			}
+		}
+	}
+}
+
+// TestEngineDecodesNoConvention keeps the engine reading the formal elements the compiler states (ADR 0126): the
+// call of a step (methodology.Call), the owner of a step, the description of a generated condition; it decodes no name
+// the compiler makes up (the prefixes of the generated conditions, the parameters of a former builtin), and it reads
+// the activable form only, never the definition behind it (Compiled.Definition, ADR 0126 step 2).
+func TestEngineDecodesNoConvention(t *testing.T) {
+	engineSourcesContain(t, []string{`"step:`, `"state:`, `"method:`, `"subject:`, `"pending:`, `"when:`, `"expect:`, "StatePrefix", "ReactionPrefix",
+		`Params["step"]`, `Params["capability"]`, `Params["foreach"]`, `Params["groupBy"]`, `Params["goal"]`, "process.step", ".Definition()"},
+		"decodes the convention %s: read the element the compiler states instead")
+}
+
+// The engine binds the compiled view of a methodology to a change (ADR 0126 step 3): the step trees, the meaning of
+// the conditions, their producers and prerequisites come from methodology.View, never walked or computed again by the
+// engine.
+func TestEngineBindsTheView(t *testing.T) {
+	engineSourcesContain(t, []string{"ProcessSteps(", "MethodSteps(", "CapabilityGuards(", "ConditionDescription(", ".Producers(", ".Prerequisites("},
+		"walks the definition with %s: bind the compiled view (Compiled.View) instead")
+}
+
+// engineSourcesContain fails for every non-test source of engine/engine holding one of words.
+func engineSourcesContain(t *testing.T, words []string, format string) {
+	t.Helper()
+	files, err := filepath.Glob("../../engine/engine/*.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("glob: %v, %d files", err, len(files))
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, word := range words {
+			if strings.Contains(string(b), word) {
+				t.Errorf("%s "+format, f, word)
 			}
 		}
 	}

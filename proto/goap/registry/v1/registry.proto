@@ -16,6 +16,10 @@ service RegistryService {
   rpc ValidateMethodology(ValidateMethodologyRequest) returns (ValidateMethodologyResponse);
   // A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
   rpc GetProcessGraph(GetProcessGraphRequest) returns (GetProcessGraphResponse);
+  // The compiled view of the activities of a methodology (as edited, saved or not): processes, methods, step trees
+  // with their entry and exit conditions, and what each condition means (ADR 0126 step 3). It holds no value of a
+  // change: the engine binds it to a change (GetChangeState, ListStartingPoints, GetProgress).
+  rpc GetMethodologyView(GetMethodologyViewRequest) returns (GetMethodologyViewResponse);
   // Level-by-level coherence of a process, or of a method composing its own steps (as edited): for the root and each
   // step with sub-steps, whether the entry conditions and exit criteria of the direct steps chain the parent's
   // inputs to its outputs.
@@ -696,10 +700,16 @@ message ListMethodologiesResponse {
 message GetMethodologyRequest {
   string name = 1;
   string version = 2;
+  // also answer the domains the version compiles against (ADR 0126 step 6): with them a client builds the activable
+  // form the registry builds, through the same compilation
+  bool with_domains = 3;
 }
 
 message GetMethodologyResponse {
   Methodology methodology = 1;
+  // with with_domains: the domain versions the methodology version compiles against (pinned, in force at its
+  // publication, else in force; the built-in domains left out)
+  repeated Domain domains = 2;
 }
 
 message SaveMethodologyRequest {
@@ -970,8 +980,11 @@ message LinkTypeInfo {
 }
 
 message GetProcessGraphRequest {
+  // the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
   Methodology methodology = 1;
   string process = 2;
+  string name = 3;
+  string version = 4;
 }
 
 message GetProcessGraphResponse {
@@ -980,10 +993,91 @@ message GetProcessGraphResponse {
   repeated Issue issues = 2;
 }
 
+message GetMethodologyViewRequest {
+  // the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
+  Methodology methodology = 1;
+  string name = 2;
+  string version = 3;
+}
+
+message GetMethodologyViewResponse {
+  MethodologyView view = 1;
+  // the issues of the methodology; no view when it does not compile at all
+  repeated Issue issues = 2;
+}
+
+// The compiled view of the activities of a methodology (ADR 0126 step 3).
+message MethodologyView {
+  string methodology = 1;
+  string version = 2;
+  // the main goal of the methodology (ADR 0096)
+  string goal = 3;
+  repeated ViewActivity processes = 4;
+  // the valid methods, with their steps when they compose some
+  repeated ViewActivity methods = 5;
+  // every condition an entry, an exit or a goal of the view names, and their prerequisites
+  map<string, ViewCondition> conditions = 6;
+}
+
+// A process or a method of a view.
+message ViewActivity {
+  string name = 1;
+  // process | method
+  string kind = 2;
+  string description = 3;
+  // the agent and the goal running it as a whole; done: what its goal asks
+  string agent = 4;
+  string goal = 5;
+  map<string, bool> done = 6;
+  // a process another step nests (shown in that step)
+  bool nested = 7;
+  // the activity or one of its steps runs again on events (ADR 0110)
+  bool reactive = 8;
+  // the capability a method provides, and the roles it assigns
+  string for = 9;
+  Responsibilities roles = 10;
+  repeated ViewStep steps = 11;
+}
+
+// A step of a view, with its sub-steps.
+message ViewStep {
+  string path = 1;
+  string name = 2;
+  // the process or method whose step tree holds it
+  string owner = 3;
+  // steps | action | agent | process | capability | manual, and what it runs
+  string method = 4;
+  string target = 5;
+  string capability = 6;
+  string foreach = 7;
+  string description = 8;
+  string guidance = 9;
+  repeated string checklist = 10;
+  repeated Reference references = 11;
+  Responsibilities roles = 12;
+  map<string, bool> entry = 13;
+  map<string, bool> exit = 14;
+  // the actions whose runs are the runs of the step
+  repeated string planned = 15;
+  // for a step naming a capability: the context conditions of the methods providing it
+  repeated string unavailable = 16;
+  repeated ViewStep steps = 17;
+}
+
+// What a condition means, the actions making it hold and the conditions it cannot hold without.
+message ViewCondition {
+  string description = 1;
+  repeated string produced_by = 2;
+  repeated string requires = 3;
+}
+
 message CheckLevelsRequest {
+  // the methodology as edited; none: the stored version name / version names (a change's, ADR 0113)
   Methodology methodology = 1;
   // a process, or a method composing its own steps
   string root = 2;
+  string name = 3;
+  string version = 4;
 }
 
 message CheckLevelsResponse {

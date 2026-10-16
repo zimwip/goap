@@ -15,7 +15,6 @@ import (
 	"cel.dev/cel-go/ext"
 
 	"github.com/zimwip/goap/contracts/domain"
-	"github.com/zimwip/goap/engine/goap"
 )
 
 // Definition is a named condition: an expression at the level of the change, an expression about one subject of a
@@ -45,6 +44,8 @@ type Set struct {
 	// aggregates the aggregates, each with the index of its scoped condition in scoped.
 	scoped     []scopedCond
 	aggregates []aggregate
+	// descriptions are the descriptions of the conditions that have one (Description).
+	descriptions map[string]string
 	// implies maps a condition to the ones it implies (Implied), computed once.
 	implyOnce sync.Once
 	implies   map[string][]string
@@ -111,6 +112,12 @@ func Compile(defs []Definition) (*Set, error) {
 			return nil, fmt.Errorf("duplicate condition %q", d.Name)
 		}
 		seen[d.Name] = true
+		if d.Description != "" {
+			if s.descriptions == nil {
+				s.descriptions = map[string]string{}
+			}
+			s.descriptions[d.Name] = d.Description
+		}
 		switch {
 		case d.IsAggregate():
 			aggs = append(aggs, d)
@@ -175,6 +182,10 @@ func (s *Set) Exprs() map[string]string {
 	return out
 }
 
+// Description says what a condition of the set means, as its definition does ("" when it says nothing): the
+// methodology's own words, a library's, or those of the compiler for a condition it generates.
+func (s *Set) Description(name string) string { return s.descriptions[name] }
+
 // Has reports whether a condition is defined (of any level).
 func (s *Set) Has(name string) bool {
 	for _, p := range s.progs {
@@ -187,7 +198,8 @@ func (s *Set) Has(name string) bool {
 
 // Result is the outcome of an evaluation.
 type Result struct {
-	State goap.WorldState
+	// State is the value of every condition of the level of the change: the world a planner plans from.
+	State map[string]bool
 	// Errors holds the conditions that could not be evaluated (unknown).
 	Errors map[string]string
 	// Subjects are the values of the scoped conditions, per scope, subject by subject in the order of the context
@@ -199,7 +211,7 @@ type Result struct {
 // are then visible as `conditions` on the entries of their scope), the conditions of the change, then the aggregates.
 func (s *Set) Evaluate(bb domain.Blackboard) Result {
 	act := Activation(bb)
-	res := Result{State: goap.WorldState{}, Errors: map[string]string{}}
+	res := Result{State: map[string]bool{}, Errors: map[string]string{}}
 	entries := s.evaluateScoped(act, &res)
 	for _, p := range s.progs {
 		out, _, err := p.prog.Eval(act)

@@ -186,9 +186,9 @@ func newEnv(t *testing.T, answers ...string) *env {
 	e.svc = &Service{
 		Convs: e.convs, Model: e.model, Graph: e.graph,
 		Methodologies: fakeMethodologies{
-			"sdlc": {Methodology: &methodology.Methodology{Name: "sdlc", Namespace: "alm", Description: "Software lifecycle",
-				Goals: []methodology.Goal{{Name: "release", Examples: []string{"ship v2"}}}}},
-			"risk":     {Methodology: &methodology.Methodology{Name: "risk", Namespace: "alm"}},
+			"sdlc": (&methodology.Compiled{}).WithDefinition(&methodology.Methodology{Name: "sdlc", Namespace: "alm", Description: "Software lifecycle",
+				Goals: []methodology.Goal{{Name: "release", Examples: []string{"ship v2"}}}}),
+			"risk":     (&methodology.Compiled{}).WithDefinition(&methodology.Methodology{Name: "risk", Namespace: "alm"}),
 			"delivery": compiled(t, deliveryYAML),
 			"other":    compiled(t, otherYAML),
 		},

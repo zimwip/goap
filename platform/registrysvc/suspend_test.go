@@ -75,7 +75,7 @@ func TestMethodologiesFollowTheDomainRegistry(t *testing.T) {
 	if _, err := s.Publish(ctx, "uses", "1"); err != nil {
 		t.Fatalf("publish methodology: %v", err)
 	}
-	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Types == nil || !c.Types.HasLinkType("alm@verifies") {
+	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Definition().Types == nil || !c.Definition().Types.HasLinkType("alm@verifies") {
 		t.Fatalf("the compiled methodology sees the types in force: %v", err)
 	}
 	if rec, err := s.Get(ctx, "uses", "1"); err != nil || rec.Methodology.Domains["alm"] != "1" {
@@ -92,7 +92,7 @@ func TestMethodologiesFollowTheDomainRegistry(t *testing.T) {
 	if _, _, err := domainsOf(s).ImportDomain(ctx, mustYAML(t, v2), true); err != nil {
 		t.Fatal(err)
 	}
-	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Types.HasNodeType("alm@Need") {
+	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Definition().Types.HasNodeType("alm@Need") {
 		t.Fatalf("the methodology compiles against its pinned version: %v", err)
 	}
 	// a new version of the methodology moves to the latest domains
@@ -102,14 +102,14 @@ func TestMethodologiesFollowTheDomainRegistry(t *testing.T) {
 	if _, err := s.Publish(ctx, "uses", "2"); err != nil {
 		t.Fatal(err)
 	}
-	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Version != "2" || !c.Types.HasNodeType("alm@Need") {
+	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Definition().Version != "2" || !c.Definition().Types.HasNodeType("alm@Need") {
 		t.Fatalf("version 2 is written against alm@2: %v", err)
 	}
 	// the version a methodology pins serves it once archived
 	if err := domainsOf(s).DeleteDomain(ctx, "alm", "1"); err != nil {
 		t.Fatal(err)
 	}
-	if c, err := s.Methodology(ctx, "uses@1"); err != nil || !c.Types.HasLinkType("alm@verifies") || c.Types.HasNodeType("alm@Need") {
+	if c, err := s.Methodology(ctx, "uses@1"); err != nil || !c.Definition().Types.HasLinkType("alm@verifies") || c.Definition().Types.HasNodeType("alm@Need") {
 		t.Fatalf("an archived pinned version still serves its methodology: %v", err)
 	}
 }
@@ -168,7 +168,7 @@ func TestADomainThatBreaksAMethodologySuspendsIt(t *testing.T) {
 	if v, err := s.MethodologyVersion(ctx, "uses"); err != nil || v != "2" {
 		t.Fatalf("new changes take the version in force: %q %v", v, err)
 	}
-	if cs, err := s.List(ctx); err != nil || len(cs) != 1 || cs[0].Version != "2" {
+	if cs, err := s.List(ctx); err != nil || len(cs) != 1 || cs[0].Definition().Version != "2" {
 		t.Fatalf("listed again: %v", err)
 	}
 

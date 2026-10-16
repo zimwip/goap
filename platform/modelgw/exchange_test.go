@@ -206,7 +206,7 @@ func TestEngineRowsFindTheirExchangeInTheChangeLog(t *testing.T) {
 	}
 	e := &engine.Engine{
 		Graph:         g,
-		Methodologies: engine.StaticMethodologies{cm.Name: cm},
+		Methodologies: engine.StaticMethodologies{cm.Definition().Name: cm},
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: llm.ClientFunc(svc.Complete)},
 			methodology.KindHuman:   engine.HumanExecutor{},
