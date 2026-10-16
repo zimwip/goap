@@ -457,7 +457,7 @@
     <Background gap={20} />
     <Controls showLock={false} />
     <MiniMap pannable zoomable height={90} width={140} />
-    <FitOnLayout layout={laidOut} />
+    <FitOnLayout layout={laidOut * 2 + (full ? 1 : 0)} />
   </SvelteFlow>
   <div class="tools">
   <div class="modes" role="group" aria-label="Display">

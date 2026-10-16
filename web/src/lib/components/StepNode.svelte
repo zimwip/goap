@@ -70,7 +70,7 @@
 <div
   role="presentation"
   ondblclick={() => data.composite && data.onzoom?.()}
-  class="node"
+  class="node {data.simple && data.state ? `s-${data.state}` : ''}"
   class:selected
   class:pre={data.kind === 'state' || data.kind === 'inputs'}
   class:out={data.kind === 'outputs'}
@@ -192,6 +192,35 @@
     box-shadow: var(--shadow);
     font-size: 12px;
     color: var(--text);
+  }
+  /* the simplified flow of a change: the step reads by where it stands, as in the list */
+  .node.s-done {
+    border-color: var(--ok);
+    background: var(--ok-soft);
+  }
+  .node.s-active {
+    border-color: var(--info);
+    background: var(--info-soft);
+    box-shadow: 0 0 0 2px var(--info-soft), var(--shadow);
+  }
+  .node.s-waiting {
+    border-color: var(--warn);
+    background: var(--warn-soft);
+  }
+  .node.s-ready {
+    border-color: var(--accent);
+  }
+  .node.s-blocked {
+    border-color: var(--danger);
+    background: var(--danger-soft);
+  }
+  .node.s-skipped {
+    opacity: 0.6;
+  }
+  .node[class*=' s-'] .st {
+    font-size: 12px;
+    padding: 1px 8px;
+    font-weight: 600;
   }
   .node.selected {
     outline: 2px solid var(--accent);
