@@ -28,10 +28,12 @@ func ReactionAgent(action string) string { return ReactionPrefix + action }
 type Reaction struct {
 	// Activity is the path of the activity: a process or method name, a step path, an action name.
 	Activity string
-	Kind     string
-	Agent    string
-	Goal     string
-	On       []Subscription
+	// Owner is the process or method the activity is or belongs to (empty for an action).
+	Owner string
+	Kind  string
+	Agent string
+	Goal  string
+	On    []Subscription
 	// own are the actions whose items are the reaction's own: they do not wake it again.
 	own map[string]bool
 }
@@ -86,29 +88,29 @@ func (s *compileState) compileReactions() {
 // forEachReactive calls f for each activity declaring on, with the path of its definition.
 func (s *compileState) forEachReactive(f func(path string, r Reaction)) {
 	m := s.m
-	var steps func(list []Step, path, prefix, agent string)
-	steps = func(list []Step, path, prefix, agent string) {
+	var steps func(list []Step, path, owner, prefix, agent string)
+	steps = func(list []Step, path, owner, prefix, agent string) {
 		for i, st := range list {
 			sp, full := fmt.Sprintf("%s.steps[%d]", path, i), prefix+"/"+st.Name
 			if len(st.On) > 0 {
-				f(sp, Reaction{Activity: full, Kind: ReactStep, Agent: agent, Goal: full, On: st.On})
+				f(sp, Reaction{Activity: full, Owner: owner, Kind: ReactStep, Agent: agent, Goal: full, On: st.On})
 			}
-			steps(st.Steps, sp, full, agent)
+			steps(st.Steps, sp, owner, full, agent)
 		}
 	}
 	for i, p := range m.Processes {
 		path := fmt.Sprintf("processes[%d]", i)
 		if len(p.On) > 0 {
-			f(path, Reaction{Activity: p.Name, Kind: ReactProcess, Agent: p.Name, Goal: p.Name, On: p.On})
+			f(path, Reaction{Activity: p.Name, Owner: p.Name, Kind: ReactProcess, Agent: p.Name, Goal: p.Name, On: p.On})
 		}
-		steps(p.Steps, path, p.Name, p.Name)
+		steps(p.Steps, path, p.Name, p.Name, p.Name)
 	}
 	for i, me := range m.Methods {
 		path := fmt.Sprintf("methods[%d]", i)
 		if len(me.On) > 0 {
-			f(path, Reaction{Activity: me.Name, Kind: ReactMethod, Agent: me.ActorAgent(), Goal: me.Name, On: me.On})
+			f(path, Reaction{Activity: me.Name, Owner: me.Name, Kind: ReactMethod, Agent: me.ActorAgent(), Goal: me.Name, On: me.On})
 		}
-		steps(me.Steps, path, me.Name, me.ActorAgent())
+		steps(me.Steps, path, me.Name, me.Name, me.ActorAgent())
 	}
 	for i, a := range m.Actions {
 		if len(a.On) > 0 {
@@ -148,9 +150,9 @@ func (s *compileState) ownActions(r Reaction) map[string]bool {
 				own[a.Implements] = true
 			}
 			// a step naming a capability runs the methods providing it: their actions are the reaction's too
-			if capability, _ := a.Params["capability"].(string); capability != "" {
+			if a.Call != nil && a.Call.Capability != "" {
 				for _, me := range s.m.Methods {
-					if me.For == capability {
+					if me.For == a.Call.Capability {
 						for _, x := range me.Actions {
 							own[x] = true
 						}

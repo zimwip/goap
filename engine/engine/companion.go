@@ -430,14 +430,15 @@ type StepEvent struct {
 }
 
 // stepCompleted publishes that a step of p's process completed (step.completed).
-func (e *Engine) stepCompleted(ctx context.Context, p *Process, a methodology.Action, st *Step) {
+func (e *Engine) stepCompleted(ctx context.Context, p *Process, m *methodology.Compiled, a methodology.Action, st *Step) {
 	if e.Events == nil {
 		return
 	}
-	process, _, _ := strings.Cut(a.Step, "/")
-	name := a.Step[strings.LastIndex(a.Step, "/")+1:]
-	ev := ProcessEvent{Event: events.BrokerStepCompleted, Process: p, Time: e.clock(),
-		Step: &StepEvent{Path: a.Step, Process: process, Name: name, Action: a.Name, Method: st.Specialization}}
+	step := &StepEvent{Path: a.Step, Action: a.Name, Method: st.Specialization}
+	if s, ok := m.StepByPath(a.Step); ok {
+		step.Process, step.Name = s.Owner, s.Name
+	}
+	ev := ProcessEvent{Event: events.BrokerStepCompleted, Process: p, Time: e.clock(), Step: step}
 	if err := e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.%s", p.ID, events.BrokerStepCompleted), ev); err != nil {
 		e.log().Warn("publish failed", "err", err)
 	}

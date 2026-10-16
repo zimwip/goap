@@ -45,6 +45,8 @@ type Set struct {
 	// aggregates the aggregates, each with the index of its scoped condition in scoped.
 	scoped     []scopedCond
 	aggregates []aggregate
+	// descriptions are the descriptions of the conditions that have one (Description).
+	descriptions map[string]string
 	// implies maps a condition to the ones it implies (Implied), computed once.
 	implyOnce sync.Once
 	implies   map[string][]string
@@ -111,6 +113,12 @@ func Compile(defs []Definition) (*Set, error) {
 			return nil, fmt.Errorf("duplicate condition %q", d.Name)
 		}
 		seen[d.Name] = true
+		if d.Description != "" {
+			if s.descriptions == nil {
+				s.descriptions = map[string]string{}
+			}
+			s.descriptions[d.Name] = d.Description
+		}
 		switch {
 		case d.IsAggregate():
 			aggs = append(aggs, d)
@@ -174,6 +182,10 @@ func (s *Set) Exprs() map[string]string {
 	}
 	return out
 }
+
+// Description says what a condition of the set means, as its definition does ("" when it says nothing): the
+// methodology's own words, a library's, or those of the compiler for a condition it generates.
+func (s *Set) Description(name string) string { return s.descriptions[name] }
 
 // Has reports whether a condition is defined (of any level).
 func (s *Set) Has(name string) bool {

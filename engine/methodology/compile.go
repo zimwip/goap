@@ -10,7 +10,6 @@ import (
 
 	"github.com/robfig/cron/v3"
 
-	"github.com/zimwip/goap/contracts/builtins"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/engine/condition"
@@ -295,7 +294,11 @@ func (s *compileState) compileScope(path string, a Action) Action {
 		expr = strings.Join(have, " && ") + " && " + expr
 	}
 	subject, pending := a.SubjectCondition(), a.PendingCondition()
-	gen := []condition.Definition{{Name: subject, Scope: a.Scope, Where: a.Where, Expr: expr}, {Name: pending, Any: subject}}
+	gen := []condition.Definition{
+		{Name: subject, Scope: a.Scope, Where: a.Where, Expr: expr,
+			Description: fmt.Sprintf("the action %s is still to be done for this %s", a.scopeName(), a.Scope)},
+		{Name: pending, Any: subject, Description: fmt.Sprintf("the action %s is still to be done for some %s", a.scopeName(), a.Scope)},
+	}
 	s.defs = append(s.defs, gen...)
 	s.known[subject], s.known[pending], s.scopes[subject] = true, true, a.Scope
 	a.ScopedPre, a.ScopedEffects = pre, eff
@@ -382,7 +385,10 @@ func (s *compileState) compileActions() {
 			s.add(path+".name", "duplicate action %s", a.Name)
 			continue
 		}
-		if !slices.Contains([]string{KindLLM, KindTool, KindHuman, KindBuiltin, KindScript, KindAbstract}, a.Kind) {
+		switch {
+		case a.Kind == KindCall:
+			s.add(path+".kind", "kind %q is generated for the steps of a process: declare a process step or a method instead", a.Kind)
+		case !slices.Contains([]string{KindLLM, KindTool, KindHuman, KindBuiltin, KindScript, KindAbstract}, a.Kind):
 			s.add(path+".kind", "unknown kind %q", a.Kind)
 		}
 		s.checkSpecialization(path, a)
@@ -450,7 +456,7 @@ func (s *compileState) checkSpecialization(path string, a Action) {
 		s.add(path+".specializes", "a specialization inherits pre, effects and expects from the action it specializes")
 	}
 	if a.When != "" {
-		d := condition.Definition{Name: a.WhenCondition(), Expr: a.When}
+		d := condition.Definition{Name: a.WhenCondition(), Expr: a.When, Description: fmt.Sprintf("the specialization %s applies here", a.Name)}
 		if _, err := condition.Compile([]condition.Definition{d}); err != nil {
 			s.add(path+".when", "%s", strings.TrimPrefix(err.Error(), fmt.Sprintf("condition %q: ", d.Name)))
 		} else {
@@ -484,7 +490,7 @@ func (s *compileState) checkImplementation(path string, a Action) {
 		}
 	case a.Kind == KindBuiltin && a.Builtin == "":
 		s.add(path+".builtin", "builtin action requires a builtin")
-	case a.Kind == KindBuiltin && s.m.Builtins != nil && a.Builtin != builtins.ProcessStep && !s.m.Builtins.HasBuiltin(a.Builtin):
+	case a.Kind == KindBuiltin && s.m.Builtins != nil && !s.m.Builtins.HasBuiltin(a.Builtin):
 		s.add(path+".builtin", "unknown builtin %q", a.Builtin)
 	}
 }
@@ -594,7 +600,7 @@ func (s *compileState) compileExpects(path string, a Action) Action {
 		s.add(path+".expects", "%v", err)
 		return a
 	}
-	d := condition.Definition{Name: a.ExpectCondition(), Expr: expr}
+	d := condition.Definition{Name: a.ExpectCondition(), Expr: expr, Description: fmt.Sprintf("what the action %s is expected to produce is there", a.Name)}
 	if _, err := condition.Compile([]condition.Definition{d}); err != nil {
 		s.add(path+".expects.where", "%v", err)
 		return a

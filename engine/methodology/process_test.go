@@ -1,7 +1,6 @@
 package methodology
 
 import (
-	"github.com/zimwip/goap/contracts/builtins"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/lib/def"
 	"strings"
@@ -83,7 +82,7 @@ processes:
 		t.Fatalf("a step may wait for a later step; each alternative reaches the step's criteria: %+v", other)
 	}
 	agentic, _ := c.Action("flow/agentic")
-	if agentic.Builtin != builtins.ProcessStep || agentic.Params["capability"] != "working" || len(agentic.Pre) != 1 || !agentic.Pre["b"] || !agentic.Effects["c"] {
+	if agentic.Kind != KindCall || agentic.Call == nil || agentic.Call.Capability != "working" || len(agentic.Pre) != 1 || !agentic.Pre["b"] || !agentic.Effects["c"] {
 		t.Fatalf("a capability step is entered by its own conditions and done by the goal of its method's agent: %+v", agentic)
 	}
 	manual, _ := c.Action("flow/manual")
@@ -196,7 +195,7 @@ processes:
 		t.Fatalf("a methodology of processes only has their agents: %+v", list)
 	}
 	two, _ := c.Action("checklist/two")
-	if two.Params["methodology"] != "other" || two.Params["agent"] != "flow" || !two.Pre[StepCondition("checklist/one")] {
+	if two.Kind != KindCall || two.Call == nil || two.Call.Methodology != "other" || two.Call.Agent != "flow" || two.Call.Goal != "flow" || !two.Pre[StepCondition("checklist/one")] {
 		t.Fatalf("nested process of another methodology: %+v", two)
 	}
 }
@@ -270,7 +269,7 @@ processes:
 		t.Fatal(issues)
 	}
 	a, _ := c.Action("flow/finish")
-	if a.Builtin != builtins.ProcessStep || a.Params["capability"] != "finishing" || !a.Effects["c"] || !a.Pre["a"] {
+	if a.Kind != KindCall || a.Call == nil || a.Call.Capability != "finishing" || !a.Effects["c"] || !a.Pre["a"] {
 		t.Fatalf("a method step runs the chosen method, done by what the methods' goals share: %+v", a)
 	}
 	var bb domain.Blackboard

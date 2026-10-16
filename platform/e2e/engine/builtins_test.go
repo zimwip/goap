@@ -16,7 +16,7 @@ import (
 
 func TestBuiltinRegister(t *testing.T) {
 	b := engine.DefaultBuiltins()
-	for _, n := range []string{builtins.GraphPropagate, builtins.GraphApply, builtins.DecisionInvestigate, builtins.ProcessStep} {
+	for _, n := range []string{builtins.GraphPropagate, builtins.GraphApply, builtins.DecisionInvestigate} {
 		if !b.HasBuiltin(n) {
 			t.Errorf("%s not registered", n)
 		}

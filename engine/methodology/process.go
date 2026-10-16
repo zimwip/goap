@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/zimwip/goap/contracts/builtins"
 	"github.com/zimwip/goap/engine/condition"
 )
 
@@ -214,7 +213,8 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 		if state, ok := strings.CutPrefix(r.cond, StatePrefix); ok && state != "" && !known[r.cond] {
 			// "state:<name>" is generated (ADR 0058): true while the change is in that state of its lifecycle
 			known[r.cond] = true
-			out.conditions = append(out.conditions, condition.Definition{Name: r.cond, Expr: fmt.Sprintf("change.state == %q", state)})
+			out.conditions = append(out.conditions, condition.Definition{Name: r.cond, Expr: fmt.Sprintf("change.state == %q", state),
+				Description: fmt.Sprintf("the change is in the state %s of its lifecycle", state)})
 		}
 		if !known[r.cond] {
 			add(r.path, "unknown condition %q", r.cond)
@@ -477,8 +477,7 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 				w.merge(sp+".pre", gen.Pre, c.needs)
 			}
 		}
-		gen.Kind, gen.Builtin = KindBuiltin, builtins.ProcessStep
-		gen.Params = map[string]any{"step": path, "methodology": other, "agent": proc, "goal": proc}
+		gen.Kind, gen.Call = KindCall, &Call{Methodology: other, Agent: proc, Goal: proc}
 	case MethodCapability:
 		candidates := w.m.methodsFor(s.Capability, w.methods.goals)
 		if len(candidates) == 0 {
@@ -490,13 +489,11 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 				w.add(sp+".foreach", "%s", err)
 				return nil
 			}
-			gen.Params = map[string]any{"step": path, "capability": s.Capability, "foreach": s.Foreach}
 			if s.GroupBy != "" {
 				if _, err := condition.CompileValue(s.GroupBy); err != nil {
 					w.add(sp+".groupBy", "%s", err)
 					return nil
 				}
-				gen.Params["groupBy"] = s.GroupBy
 			}
 		} else if done == nil {
 			if done = sharedCriteria(candidates, w.methods.goals); len(done) == 0 {
@@ -504,10 +501,7 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 				return nil
 			}
 		}
-		gen.Kind, gen.Builtin = KindBuiltin, builtins.ProcessStep
-		if gen.Params == nil {
-			gen.Params = map[string]any{"step": path, "capability": s.Capability}
-		}
+		gen.Kind, gen.Call = KindCall, &Call{Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy}
 	case MethodManual:
 		gen.Kind = KindHuman
 		gen.Instructions = s.Instructions
@@ -524,7 +518,8 @@ func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[str
 		if !w.known[name] {
 			w.known[name] = true
 			w.out.conditions = append(w.out.conditions, condition.Definition{Name: name,
-				Expr: fmt.Sprintf("%q in history.last && history.last[%q].current", path, path)})
+				Expr:        fmt.Sprintf("%q in history.last && history.last[%q].current", path, path),
+				Description: fmt.Sprintf("the step %s has run, and what it did still stands", path)})
 		}
 		done = map[string]bool{name: true}
 	}
@@ -596,11 +591,13 @@ type StepInfo struct {
 	Step
 	// Effective are the roles in force for the step: its own, else those of the steps containing it.
 	Effective *Responsibilities
-	Path      string
-	Entry     map[string]bool
-	Exit      map[string]bool
-	Planned   []string
-	Steps     []StepInfo
+	// Owner is the process or the method whose step tree holds the step; Path its path in that tree (ADR 0034).
+	Owner   string
+	Path    string
+	Entry   map[string]bool
+	Exit    map[string]bool
+	Planned []string
+	Steps   []StepInfo
 }
 
 // Leaves returns the steps that run something (no sub-steps), depth first.
@@ -634,8 +631,8 @@ func (c *Compiled) MethodSteps(name string) []StepInfo {
 	return nil
 }
 
-// stepTree builds the compiled step tree under prefix (the name of the process or method).
-func (c *Compiled) stepTree(top []Step, prefix string) []StepInfo {
+// stepTree builds the compiled step tree of owner (the name of the process or method).
+func (c *Compiled) stepTree(top []Step, owner string) []StepInfo {
 	planned := map[string][]Action{}
 	for _, a := range c.processes.actions {
 		planned[a.Step] = append(planned[a.Step], a)
@@ -650,7 +647,7 @@ func (c *Compiled) stepTree(top []Step, prefix string) []StepInfo {
 			if s.Roles != nil {
 				eff = s.Roles
 			}
-			info := StepInfo{Step: s, Effective: eff, Path: path, Entry: cr.entry, Exit: cr.done, Steps: build(s.Steps, path, eff)}
+			info := StepInfo{Step: s, Effective: eff, Owner: owner, Path: path, Entry: cr.entry, Exit: cr.done, Steps: build(s.Steps, path, eff)}
 			info.Step.Steps = nil
 			for i, a := range planned[path] {
 				info.Planned = append(info.Planned, a.Name)
@@ -662,7 +659,27 @@ func (c *Compiled) stepTree(top []Step, prefix string) []StepInfo {
 		}
 		return out
 	}
-	return build(top, prefix, nil)
+	return build(top, owner, nil)
+}
+
+// StepWithin reports whether the step of path is the step of ancestor or one of its sub-steps.
+func StepWithin(path, ancestor string) bool {
+	return path == ancestor || strings.HasPrefix(path, ancestor+"/")
+}
+
+// ConditionDescription says what a condition of the methodology means (Description of its definition): the
+// methodology's own words, those of a library it imports, or those the compiler gives the conditions it generates
+// (steps, states of the lifecycle, contexts of methods and specializations, subjects of scoped actions).
+func (c *Compiled) ConditionDescription(name string) string {
+	for _, set := range []*condition.Set{c.Conditions, c.methodGuards, c.whens} {
+		if set == nil {
+			continue
+		}
+		if d := set.Description(name); d != "" {
+			return d
+		}
+	}
+	return ""
 }
 
 // StepByPath returns the step of a path ("<process>/<step>/<sub-step>").

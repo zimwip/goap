@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"slices"
-	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/methodology"
@@ -261,7 +260,7 @@ func (w *pointWalker) visit(s methodology.StepInfo, agent, kind, parent string, 
 	if kind == PointStep && s.Method() == methodology.MethodCapability && s.Foreach == "" {
 		choices := w.m.MethodsFor(s.Capability, w.bb)
 		if len(choices) == 0 {
-			w.block(s, []string{"method:" + s.Capability})
+			w.block(s, w.m.CapabilityGuards(s.Capability))
 			return nil
 		}
 		choice := choices[0]
@@ -273,10 +272,10 @@ func (w *pointWalker) visit(s methodology.StepInfo, agent, kind, parent string, 
 			}
 			return nil
 		}
-		return w.add(s, StartingPoint{Kind: PointMethod, Process: processOfPath(s.Path), Method: choice.Name, Capability: s.Capability,
+		return w.add(s, StartingPoint{Kind: PointMethod, Process: s.Owner, Method: choice.Name, Capability: s.Capability,
 			Launch: Launch{Agent: choice.ActorAgent(), Goal: choice.AgentGoal}, Responsible: roleOf(s, &choice.Method, true), Accountable: roleOf(s, &choice.Method, false)})
 	}
-	pt := StartingPoint{Kind: kind, Process: processOfPath(s.Path), Parent: parent,
+	pt := StartingPoint{Kind: kind, Process: s.Owner, Parent: parent,
 		Launch: Launch{Agent: agent, Goal: s.Path}, Responsible: roleOf(s, me, true), Accountable: roleOf(s, me, false)}
 	if me != nil {
 		pt.Method, pt.Capability = me.Name, me.For
@@ -292,11 +291,6 @@ func (w *pointWalker) towardsGoal(s methodology.StepInfo) bool {
 		}
 	}
 	return false
-}
-
-func processOfPath(path string) string {
-	p, _, _ := strings.Cut(path, "/")
-	return p
 }
 
 func roleOf(s methodology.StepInfo, me *methodology.Method, responsible bool) string {
@@ -354,7 +348,7 @@ func (w *pointWalker) running(pt StartingPoint) bool {
 		switch {
 		case p.Goal == pt.ID, p.Agent == pt.Launch.Agent && p.Goal == pt.Launch.Goal && p.Methodology == pt.Launch.Methodology:
 			return true
-		case p.Step != nil && (p.Step.Path == pt.ID || strings.HasPrefix(p.Step.Path, pt.ID+"/") || strings.HasPrefix(pt.ID, p.Step.Path+"/")):
+		case p.Step != nil && (methodology.StepWithin(p.Step.Path, pt.ID) || methodology.StepWithin(pt.ID, p.Step.Path)):
 			return true
 		case p.Methodology == w.m.Name && p.Goal == pt.Process && p.Agent == pt.Process:
 			return true // the whole process is being run towards its goal: its planner sequences the step

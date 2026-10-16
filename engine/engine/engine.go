@@ -915,9 +915,12 @@ type ran struct {
 // step, so that the runs of a scoped action for several subjects go at once (runScoped); settleAction then records
 // what it did, one step after the other.
 func (e *Engine) runAction(ctx context.Context, p *Process, m *methodology.Compiled, bb domain.Blackboard, action methodology.Action, i int) (ran, error) {
-	exec, ok := e.Executors[action.Kind]
-	if !ok {
-		return ran{}, fmt.Errorf("no executor for action kind %q", action.Kind)
+	var exec Executor = callExecutor{}
+	if action.Kind != methodology.KindCall {
+		var ok bool
+		if exec, ok = e.Executors[action.Kind]; !ok {
+			return ran{}, fmt.Errorf("no executor for action kind %q", action.Kind)
+		}
 	}
 	e.log().Info("executing action", "process", p.ID, "agent", p.Agent, "action", action.Name, "plan", p.Plan, "subject", p.Steps[i].Subject)
 	ctx, end := e.tracer().StartAction(ctx, p, action.Name, action.Kind)
@@ -1322,7 +1325,7 @@ func (e *Engine) finishStep(ctx context.Context, p *Process, m *methodology.Comp
 		return err
 	}
 	if action.Step != "" && p.World.Satisfies(action.Effects) {
-		e.stepCompleted(ctx, p, action, step)
+		e.stepCompleted(ctx, p, m, action, step)
 	}
 	return nil
 }

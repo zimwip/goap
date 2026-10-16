@@ -110,7 +110,7 @@ func (e *Engine) ChangeState(ctx context.Context, changeID domain.ChangeID) (*Ch
 	sort.SliceStable(runs, func(i, j int) bool { return runs[i].CreatedAt.Before(runs[j].CreatedAt) })
 	reactive := map[string]bool{}
 	for _, r := range m.Reactions() {
-		reactive[processOfPath(r.Activity)] = true
+		reactive[r.Owner] = true
 	}
 	nested := nestedProcesses(m)
 	for _, proc := range m.Processes {
@@ -268,29 +268,8 @@ func factsOf(m *methodology.Compiled, name string, bb domain.Blackboard) []Fact 
 	return conv(cf)
 }
 
-// conditionMeaning says what a condition of the methodology means: its description, or what a generated one stands
-// for.
+// conditionMeaning says what a condition of the methodology means: the description its definition carries, given by
+// the methodology, a library or the compiler for a condition it generates.
 func conditionMeaning(m *methodology.Compiled, name string) string {
-	for _, c := range m.Methodology.Conditions {
-		if c.Name == name {
-			return c.Description
-		}
-	}
-	for _, lib := range m.Imports {
-		defs, _ := condition.Library(lib)
-		for _, d := range defs {
-			if d.Name == name {
-				return d.Description
-			}
-		}
-	}
-	switch {
-	case strings.HasPrefix(name, methodology.StatePrefix):
-		return "the change is in the state " + strings.TrimPrefix(name, methodology.StatePrefix) + " of its lifecycle"
-	case strings.HasPrefix(name, "step:"):
-		return "the step " + strings.TrimPrefix(name, "step:") + " has run, and what it did still stands"
-	case strings.HasPrefix(name, "method:"):
-		return "the method " + strings.TrimPrefix(name, "method:") + " applies here"
-	}
-	return ""
+	return m.ConditionDescription(name)
 }

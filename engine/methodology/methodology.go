@@ -195,7 +195,7 @@ type Condition struct {
 
 // Definition is the condition as the condition package compiles it.
 func (c Condition) Definition() condition.Definition {
-	return condition.Definition{Name: c.Name, Expr: c.Expr, Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty}
+	return condition.Definition{Name: c.Name, Description: c.Description, Expr: c.Expr, Scope: c.Scope, Where: c.Where, All: c.All, Any: c.Any, None: c.None, Empty: c.Empty}
 }
 
 // Action kinds.
@@ -208,7 +208,29 @@ const (
 	// KindAbstract declares a role without implementation: a specialization
 	// is chosen at execution (ADR 0009 §5).
 	KindAbstract = "abstract"
+	// KindCall is the kind of the actions the compiler generates for the steps done by a sub-agent (a nested
+	// process, a method): the action runs the sub-agent its Call describes and waits for it. A methodology does not
+	// declare it.
+	KindCall = "call"
 )
+
+// Call is what an action of kind KindCall runs (ADR 0034, ADR 0035 §1, ADR 0050): a sub-agent on the same change,
+// waited for. It is the execution element of a step of a process carried out by a nested process or by the method
+// providing a capability, stated by the compiler so that the engine reads it rather than decodes parameters.
+type Call struct {
+	// Methodology is the methodology of the agent (empty: the one of the action).
+	Methodology string `json:"methodology,omitempty"`
+	// Agent and Goal are the sub-agent and its goal, when the step names them (a nested process).
+	Agent string `json:"agent,omitempty"`
+	Goal  string `json:"goal,omitempty"`
+	// Capability makes the engine choose, when the step runs, the method providing it that applies there
+	// (Compiled.MethodsFor): its agent towards its goal.
+	Capability string `json:"capability,omitempty"`
+	// Foreach (CEL list) runs the call once per element, in parallel streams, each with `vars.item` bound; GroupBy
+	// (CEL value, `self` the element) runs it once per group of elements instead.
+	Foreach string `json:"foreach,omitempty"`
+	GroupBy string `json:"groupBy,omitempty"`
+}
 
 // Script languages.
 const (
@@ -282,11 +304,12 @@ type Action struct {
 	// Emits are the events of the methodology (Methodology.Events) the action raises when it reaches its effects
 	// (ADR 0110): the engine adds a signal item of each name to the change.
 	Emits []string `yaml:"emits,omitempty" json:"emits,omitempty"`
-	// Step is set on the actions generated for the steps of a process (ADR 0034): the step path
-	// "<process>/<step>/<sub-step>"; Implements names the declared action a step runs (its
-	// specializations apply).
+	// Step is set on the actions generated for the steps of a process (ADR 0034): the path of the step, read
+	// through Compiled.StepByPath; Implements names the declared action a step runs (its specializations apply).
 	Step       string `yaml:"-" json:"-"`
 	Implements string `yaml:"-" json:"-"`
+	// Call is the sub-agent a generated action of kind KindCall runs (compiled only).
+	Call *Call `yaml:"-" json:"-"`
 	// Scope makes the action scoped (ADR 0109 §3.5): it runs once per pending subject of that scope (within Where),
 	// its pre and effects naming conditions of that scope. The planner sees it lifted: its pre is "some subject is
 	// pending" (PendingCondition), its effects the aggregates of its scoped effects.

@@ -49,7 +49,7 @@ processes:
 		t.Fatalf("choices: %+v", choices)
 	}
 	a, _ := c.Action("flow/finish")
-	if a.Params["capability"] != "assembling" {
+	if a.Call == nil || a.Call.Capability != "assembling" {
 		t.Fatalf("flow step dispatches to the capability: %+v", a)
 	}
 }

@@ -118,7 +118,7 @@ func (m *Methodology) compileMethods(add func(path, format string, args ...any),
 		checkReferences(add, path+".references", me.References)
 		checkResponsibilities(add, path+".roles", me.Roles, roles)
 		if me.When != "" {
-			d := condition.Definition{Name: me.GuardCondition(), Expr: me.When}
+			d := condition.Definition{Name: me.GuardCondition(), Expr: me.When, Description: fmt.Sprintf("the method %s applies here", me.Name)}
 			if _, err := condition.Compile([]condition.Definition{d}); err != nil {
 				add(path+".when", "%s", strings.TrimPrefix(err.Error(), fmt.Sprintf("condition %q: ", d.Name)))
 			} else {
@@ -227,6 +227,18 @@ func (c *Compiled) MethodsFor(capability string, bb domain.Blackboard) []MethodC
 	out := make([]MethodChoice, 0, len(ranked))
 	for _, me := range ranked {
 		out = append(out, MethodChoice{Method: me, AgentGoal: c.methods.goals[me.Name].Name})
+	}
+	return out
+}
+
+// CapabilityGuards are the conditions of the contexts of the methods providing a capability (GuardCondition, the
+// methods applying everywhere left out): a step naming it is possible once one of them holds.
+func (c *Compiled) CapabilityGuards(capability string) []string {
+	var out []string
+	for _, me := range c.Methodology.methodsFor(capability, c.methods.goals) {
+		if me.When != "" {
+			out = append(out, me.GuardCondition())
+		}
 	}
 	return out
 }

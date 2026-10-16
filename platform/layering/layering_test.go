@@ -136,6 +136,31 @@ func TestCoreNamesNoStructure(t *testing.T) {
 	}
 }
 
+// TestEngineDecodesNoConvention keeps the engine reading the formal elements the compiler states (ADR 0126): the
+// call of a step (methodology.Call), the owner of a step, the description of a generated condition; it decodes no name
+// the compiler makes up (the prefixes of the generated conditions, the parameters of a former builtin).
+func TestEngineDecodesNoConvention(t *testing.T) {
+	files, err := filepath.Glob("../../engine/engine/*.go")
+	if err != nil || len(files) == 0 {
+		t.Fatalf("glob: %v, %d files", err, len(files))
+	}
+	for _, f := range files {
+		if strings.HasSuffix(f, "_test.go") {
+			continue
+		}
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, word := range []string{`"step:`, `"state:`, `"method:`, `"subject:`, `"pending:`, `"when:`, `"expect:`, "StatePrefix", "ReactionPrefix",
+			`Params["step"]`, `Params["capability"]`, `Params["foreach"]`, `Params["groupBy"]`, `Params["goal"]`, "process.step"} {
+			if strings.Contains(string(b), word) {
+				t.Errorf("%s decodes the convention %s: read the element the compiler states instead", f, word)
+			}
+		}
+	}
+}
+
 func TestLayering(t *testing.T) {
 	for pkg, banned := range forbidden {
 		out, err := exec.Command("go", "list", "-deps", "-f", "{{.ImportPath}}", mod+pkg).Output()

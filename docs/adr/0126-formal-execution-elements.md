@@ -1,0 +1,58 @@
+# ADR 0126 — Formal execution elements between the methodology and the engine
+
+**Status**: accepted; step 1 implemented (the call of a step, the owner of a step and of a reaction, the descriptions
+of the generated conditions). Step 2, the engine's own execution model, is to come · **Date**: 2026-10 · Builds on
+ADR 0034 (processes), ADR 0035 / 0050 (methods), ADR 0062 (builtins), ADR 0109 (conditions), ADR 0125 (components)
+
+## Context
+
+The engine executes, the methodology describes. The compiler turns a methodology into what the planners plan
+(agents, goals, actions with their pre and effects), but several things the engine needs were not stated, only
+encoded, and the engine decoded them:
+
+- a step done by a nested process or by a method compiled to a `builtin` action named `process.step` whose
+  `Params` map carried `step`, `agent`, `goal`, `methodology`, `capability`, `foreach` and `groupBy`; the builtin
+  table of the engine held an entry for it and the compiler a special case to let it through;
+- the process or method a step belongs to was the text before the first `/` of its path
+  (`strings.Cut(path, "/")` in `steps.go`, `companion.go`, `startingpoints.go`), and a reaction's process the same;
+- what a generated condition means was read from its name: `state:`, `step:` and `method:` prefixes parsed by
+  `changestate.go`, and a step with no applicable method reported as missing a made-up `method:<capability>`.
+
+A rename in the compiler broke the engine without a compile error, and the engine knew the naming scheme of the
+methodology.
+
+## Decision
+
+The methodology states, as typed elements, everything the engine executes; those elements are generic (they say
+what to run, not which methodology concept produced it). The engine reads them and decodes no name.
+
+1. **A call is an execution element.** `methodology.Call {Methodology, Agent, Goal, Capability, Foreach, GroupBy}` on
+   `Action.Call`, with the kind `call` (`methodology.KindCall`): run a sub-agent on the same change and wait for it,
+   the agent being named or chosen at run time among the methods providing the capability. The compiler generates it
+   for the steps done by a nested process or a method; a methodology does not declare it (the compiler refuses
+   `kind: call`). Calling a sub-agent is a primitive of the engine (`RunCall`), not an executor: `Engine.Executors`
+   has no entry for it, and the builtin `process.step` is gone (`contracts/builtins`).
+2. **A step knows its owner.** `StepInfo.Owner` is the process or method whose step tree holds it,
+   `Reaction.Owner` the process or method a reactive activity is or belongs to; `methodology.StepWithin` says
+   whether a step is inside another. The engine reads them instead of cutting paths.
+3. **A generated condition carries its meaning.** The compiler gives every condition it generates a description
+   (steps, lifecycle states, method contexts, specializations, expectations, the subjects of scoped actions); the
+   methodology's own conditions keep theirs; `condition.Set.Description` and `Compiled.ConditionDescription` answer
+   for all of them. A step whose capability has no applicable method reports the context conditions of the methods
+   providing it (`Compiled.CapabilityGuards`).
+4. `platform/layering` `TestEngineDecodesNoConvention` keeps the engine from naming the prefixes of the generated
+   conditions, the parameters of the former builtin or `process.step`.
+
+## Next step
+
+The engine builds in memory its own execution model from the compiled methodology (agents, actions, goals,
+reactions, triggers, conditions) and runs only that: `MethodologyPort` returns it, `Compiled` stops embedding the
+definition (`*Methodology`) so that the engine no longer reads `Processes`, `Imports`, `AppliesTo` directly, and the
+read models over the definition (starting points, current state, progress) move to the methodology side.
+
+## Consequences
+
+- The names of the generated conditions (`step:<path>`, `state:<name>`, `method:<name>`, `subject:` / `pending:`)
+  are the compiler's alone; it can change them without touching the engine.
+- `Params` stays what a methodology gives a builtin it declares (`graph.propagate`'s `layer`, ...).
+- No stored data changes: generated actions are compiled, never stored, and the process keeps the action names.
