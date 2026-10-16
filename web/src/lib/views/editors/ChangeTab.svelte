@@ -3,6 +3,7 @@
   import {
     graph,
     engine,
+    registry,
     errorMessage,
     isNotFound,
     formatDate,
@@ -21,9 +22,10 @@
     type LinkWrite,
     type Resolution,
     type UiTool,
-    type StartingPoint,
+    type PossibleStep,
     type AssessmentState,
-    type StartingPointsResponse,
+    type PossibleStepList,
+    type MethodologyView,
   } from '../../api';
   import { setContext, tick, untrack } from 'svelte';
   import { applicable, followChangeProject, loadApplicable } from '../../stores/project.svelte';
@@ -60,7 +62,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   import ChangeState from '../../components/ChangeState.svelte';
   import ChangeAsks from '../../components/ChangeAsks.svelte';
   import PossibleSteps from '../../components/PossibleSteps.svelte';
-  import { confirmText, pointById, showStartingPoints, startable, startableIds, startRequest } from '../../startingPoints';
+  import { composePoints, confirmText, pointById, showStartingPoints, startable, startableIds, startRequest, viewRef } from '../../startingPoints';
   import FlowGraph from '../../components/FlowGraph.svelte';
   import FlowActions from '../../components/FlowActions.svelte';
   import FlowBranchInfo from '../../components/FlowBranchInfo.svelte';
@@ -331,7 +333,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   // the steps possible now towards the goal of the change (ADR 0097): read again when the platform stream says the change
   // moved (a run journals many entries a second: at most once per second), no polling
-  let startPoints = $state<StartingPointsResponse | undefined>();
+  let startPoints = $state<PossibleStepList | undefined>();
   let pointsError = $state('');
   let startingId = $state('');
   const showSteps = $derived(showStartingPoints(change));
@@ -350,6 +352,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     pointsSoon.call();
   }
   let readingPoints: AbortController | undefined;
+  let pointsView: { ref: string; view?: MethodologyView } = { ref: '' };
   const pointsSoon = throttled(() => {
     const id = selected;
     if (!id) return;
@@ -357,9 +360,15 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     const ctrl = (readingPoints = new AbortController());
     engine
       .listStartingPoints(id, ctrl.signal, pointsMethodology)
-      .then((r) => {
+      .then(async (r) => {
+        // the engine binds the steps, the view of the methodology version says what they are (read once per version)
+        const ref = viewRef(r);
+        if (ref && ref !== pointsView.ref) {
+          const v = await registry.storedMethodologyView(r.methodology ?? '', r.version ?? '', ctrl.signal);
+          pointsView = { ref, view: v.view };
+        }
         if (ctrl.signal.aborted) return;
-        startPoints = r;
+        startPoints = composePoints(ref ? pointsView.view : undefined, r);
         pointsError = '';
       })
       .catch((e) => {
@@ -416,7 +425,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   });
 
   /** Starts a possible step with the launch the engine gave it; the scheduler plans its actions. `assisted`: the proposal card was the confirmation. */
-  async function startPoint(p: StartingPoint, assisted = false): Promise<string | undefined> {
+  async function startPoint(p: PossibleStep, assisted = false): Promise<string | undefined> {
     if (!startable(p)) return `The step ${p.id} cannot be started now.`;
     if (!assisted && !(await confirmDialog({ title: 'Start step', message: confirmText(p, change?.goal ?? ''), confirmLabel: 'Start' }))) return;
     startingId = p.id;

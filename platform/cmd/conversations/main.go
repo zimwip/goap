@@ -11,6 +11,7 @@ import (
 	"github.com/zimwip/goap/contracts/gen/goap/assistant/v1/assistantv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/conversations/v1/conversationsv1connect"
 	"github.com/zimwip/goap/contracts/gen/goap/engine/v1/enginev1connect"
+	"github.com/zimwip/goap/contracts/gen/goap/registry/v1/registryv1connect"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/graphclient"
 	"github.com/zimwip/goap/lib/identity"
@@ -40,14 +41,16 @@ func main() {
 	hc := platform.H2CClient()
 	copts := append(telemetry.ClientOptions(), identity.Forward())
 	graphClient := graphclient.NewClient(hc, platform.Env("GOAP_GRAPH_URL", "http://localhost:8081"), telemetry.ClientOptions()...)
+	registryURL := platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082")
 	assistant := &assistantsvc.Service{
 		Convs:         convs,
 		Model:         modelgw.NewClient(hc, platform.Env("GOAP_MODELGW_URL", "http://localhost:8084"), copts...),
 		Graph:         graphClient,
-		Methodologies: registrysvc.NewClient(hc, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), copts...),
+		Methodologies: registrysvc.NewClient(hc, registryURL, copts...),
 		Projects:      assistantsvc.Directory{Directory: &access.Directory{Graph: graphClient}},
-		Engine:        assistantsvc.EngineClient{API: enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...)},
-		Log:           log,
+		Engine: assistantsvc.EngineClient{API: enginev1connect.NewEngineServiceClient(hc, platform.Env("GOAP_ENGINE_URL", "http://localhost:8083"), copts...),
+			Views: registryv1connect.NewRegistryServiceClient(hc, registryURL, copts...)},
+		Log: log,
 	}
 	srv.Mount(assistantv1connect.NewAssistantServiceHandler(&assistantsvc.Handler{Service: assistant}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {

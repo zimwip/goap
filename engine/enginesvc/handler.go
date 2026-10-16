@@ -200,19 +200,19 @@ func (h *Handler) ListStartingPoints(ctx context.Context, r *connect.Request[eng
 	if err != nil {
 		return nil, toConnect(err)
 	}
-	return connect.NewResponse(startingPointsToPB(sp)), nil
+	return connect.NewResponse(StartingPointsToPB(sp)), nil
 }
 
-func startingPointsToPB(sp *engine.StartingPoints) *enginev1.ListStartingPointsResponse {
-	out := &enginev1.ListStartingPointsResponse{Methodology: sp.Methodology, Goal: sp.Goal, Reason: sp.Reason, BlockedCount: int32(sp.BlockedCount)}
+// StartingPointsToPB is the answer of ListStartingPoints: the steps the engine binds to the change.
+func StartingPointsToPB(sp *engine.StartingPoints) *enginev1.ListStartingPointsResponse {
+	out := &enginev1.ListStartingPointsResponse{Methodology: sp.Methodology, Version: sp.Version, Goal: sp.Goal, Reason: sp.Reason, BlockedCount: int32(sp.BlockedCount)}
 	for _, p := range sp.Points {
-		out.Points = append(out.Points, &enginev1.StartingPoint{Id: p.ID, Kind: p.Kind, Process: p.Process, Parent: p.Parent, Name: p.Name, Method: p.Method,
-			Capability: p.Capability, Description: p.Description, Guidance: p.Guidance, Why: p.Why, Produces: p.Produces, Responsible: p.Responsible,
-			Accountable: p.Accountable, MayRun: p.MayRun, NeedRoles: p.NeedRoles, Running: p.Running,
+		out.Points = append(out.Points, &enginev1.StartingPoint{Id: p.ID, Kind: p.Kind, Parent: p.Parent, Method: p.Method, Why: p.Why,
+			MayRun: p.MayRun, NeedRoles: p.NeedRoles, Running: p.Running,
 			Launch: &enginev1.StartLaunch{Methodology: p.Launch.Methodology, Agent: p.Launch.Agent, Goal: p.Launch.Goal, ChangeId: string(p.Launch.ChangeID)}})
 	}
 	for _, b := range sp.Blocked {
-		out.Blocked = append(out.Blocked, &enginev1.BlockedStep{Id: b.ID, Name: b.Name, Missing: b.Missing})
+		out.Blocked = append(out.Blocked, &enginev1.BlockedStep{Id: b.ID, Missing: b.Missing})
 	}
 	return out
 }

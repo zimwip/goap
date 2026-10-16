@@ -4,7 +4,7 @@ import type { Int64, JsonValue, Struct } from './common';
 import type { ChangeImpact, DecisionPolicy, FlowOrigin, GraphNode, ItemType, NodeRef, OptionSpec } from './graph';
 import type { DocumentReference, PlannerKind, Responsibilities, TriggerType } from './registry';
 import type { FormDef } from '../../forms/types';
-import type { NeedStateJson, StepStateJson } from '../../../gen/goap/engine/v1/engine_pb';
+import type { ListStartingPointsResponseJson, NeedStateJson, StartingPointJson, StepStateJson } from '../../../gen/goap/engine/v1/engine_pb';
 
 // --- engine -----------------------------------------------------------------
 
@@ -745,8 +745,13 @@ export interface StartLaunch {
   changeId: string;
 }
 
-/** A step, or a step of a method, that is possible now towards the goal of a change (ADR 0097). Never an action. */
-export interface StartingPoint {
+/** A step, or a step of a method, that is possible now, as the engine binds it to the change (ADR 0126 step 5): what the step is comes from the view of the methodology version. */
+export type StartingPointBinding = StartingPointJson;
+/** The answer of ListStartingPoints: the bindings, and the methodology version whose view says what they are. */
+export type StartingPointsBinding = ListStartingPointsResponseJson;
+
+/** A step, or a step of a method, that is possible now towards the goal of a change (ADR 0097), composed from its binding and the view (`composePoints`). Never an action. */
+export interface PossibleStep {
   /** the step path, unique in the methodology */
   id: string;
   kind: 'step' | 'method';
@@ -773,19 +778,21 @@ export interface StartingPoint {
 }
 
 /** A step towards the goal that waits for conditions: counted, never proposed. */
-export interface BlockedStep {
+export interface WaitingStep {
   id: string;
   name: string;
   missing?: string[];
 }
 
-export interface StartingPointsResponse {
+/** The possible steps of a change, composed. */
+export interface PossibleStepList {
   methodology?: string;
+  version?: string;
   goal?: string;
   /** why there is nothing to start */
   reason?: string;
-  points?: StartingPoint[];
-  blocked?: BlockedStep[];
+  points?: PossibleStep[];
+  blocked?: WaitingStep[];
   blockedCount?: number;
 }
 

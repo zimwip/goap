@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/methodology"
@@ -31,27 +30,19 @@ type Launch struct {
 	ChangeID    domain.ChangeID `json:"changeId"`
 }
 
-// StartingPoint is a step (or method step) that is possible now.
+// StartingPoint is a step (or method step) that is possible now, as the engine binds it to the change (ADR 0126 step
+// 5): what the step is (name, description, guidance, exit, roles) belongs to the compiled view of the methodology
+// (methodology.View) and is found there by ID; lib/startingpoint composes the two for the readers.
 type StartingPoint struct {
 	// ID is the path of the step ("<process-or-method>/<step>/..."), unique in the methodology.
 	ID   string `json:"id"`
 	Kind string `json:"kind"`
-	// Process is the process (or method) the step belongs to; Parent, for a step of a method, the step of the process
-	// that names the capability.
-	Process string `json:"process"`
-	Parent  string `json:"parent,omitempty"`
-	Name    string `json:"name"`
-	// Method and Capability: the method that applies (a step naming a capability) and the capability it provides.
-	Method      string `json:"method,omitempty"`
-	Capability  string `json:"capability,omitempty"`
-	Description string `json:"description,omitempty"`
-	Guidance    string `json:"guidance,omitempty"`
-	// Why are the entry conditions that hold ("name" / "!name"); Produces the exit criteria the step reaches.
-	Why      []string `json:"why,omitempty"`
-	Produces []string `json:"produces,omitempty"`
-	// Responsible and Accountable are the roles in force for the step (ADR 0035 §2).
-	Responsible string `json:"responsible,omitempty"`
-	Accountable string `json:"accountable,omitempty"`
+	// Parent, for a step of a method, is the step of the process that names the capability.
+	Parent string `json:"parent,omitempty"`
+	// Method is the method that applies (a step naming a capability) or the method the step belongs to.
+	Method string `json:"method,omitempty"`
+	// Why are the entry conditions that hold ("name" / "!name").
+	Why []string `json:"why,omitempty"`
 	// Launch starts it. MayRun says whether the caller may (the rule Start applies to its initiator, on the project
 	// of the change); NeedRoles the roles the agent declares. Running: a process already carries it out.
 	Launch    Launch   `json:"launch"`
@@ -60,16 +51,18 @@ type StartingPoint struct {
 	Running   bool     `json:"running,omitempty"`
 }
 
-// BlockedStep is a step towards the goal that is not possible yet: what its entry still misses. It is not proposed.
+// BlockedStep is a step towards the goal that is not possible yet, by its path: what its entry still misses. It is
+// not proposed.
 type BlockedStep struct {
 	ID      string   `json:"id"`
-	Name    string   `json:"name"`
 	Missing []string `json:"missing"`
 }
 
 // StartingPoints is the answer of Engine.StartingPoints.
 type StartingPoints struct {
+	// Methodology and Version name the methodology version the points are of: the view they compose with.
 	Methodology string `json:"methodology,omitempty"`
+	Version     string `json:"version,omitempty"`
 	Goal        string `json:"goal,omitempty"`
 	// Reason says why there is nothing to start, when there is nothing and it is not an error (no methodology, no
 	// goal, goal reached, change closed).
@@ -118,6 +111,7 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 	if err != nil {
 		return nil, err
 	}
+	out.Methodology, out.Version = m.Name(), m.Version()
 	// a change that predates the default goal (or a methodology chosen for a change that has none) is pulled by the end
 	// point of the methodology
 	if out.Goal == "" || opts.Methodology != "" && opts.Methodology != ch.Methodology {
@@ -243,13 +237,11 @@ func (w *pointWalker) visit(s methodology.StepView, agent, kind, parent string, 
 			}
 			return nil
 		}
-		return w.add(s, StartingPoint{Kind: PointMethod, Process: s.Owner, Method: choice.Name, Capability: s.Capability,
-			Launch: Launch{Agent: choice.Agent, Goal: choice.Goal}, Responsible: roleOf(s, &choice, true), Accountable: roleOf(s, &choice, false)})
+		return w.add(s, StartingPoint{Kind: PointMethod, Method: choice.Name, Launch: Launch{Agent: choice.Agent, Goal: choice.Goal}})
 	}
-	pt := StartingPoint{Kind: kind, Process: s.Owner, Parent: parent,
-		Launch: Launch{Agent: agent, Goal: s.Path}, Responsible: roleOf(s, me, true), Accountable: roleOf(s, me, false)}
+	pt := StartingPoint{Kind: kind, Parent: parent, Launch: Launch{Agent: agent, Goal: s.Path}}
 	if me != nil {
-		pt.Method, pt.Capability = me.Name, me.For
+		pt.Method = me.Name
 	}
 	return w.add(s, pt)
 }
@@ -264,24 +256,10 @@ func (w *pointWalker) towardsGoal(s methodology.StepView) bool {
 	return false
 }
 
-func roleOf(s methodology.StepView, me *methodology.ActivityView, responsible bool) string {
-	r := s.Roles
-	if me != nil && me.Roles != nil {
-		r = me.Roles
-	}
-	switch {
-	case r == nil:
-		return ""
-	case responsible:
-		return r.Responsible
-	}
-	return r.Accountable
-}
-
 func (w *pointWalker) block(s methodology.StepView, miss []string) {
 	w.out.BlockedCount++
 	if len(w.out.Blocked) < w.maxBlocked {
-		w.out.Blocked = append(w.out.Blocked, BlockedStep{ID: s.Path, Name: s.Name, Missing: miss})
+		w.out.Blocked = append(w.out.Blocked, BlockedStep{ID: s.Path, Missing: miss})
 	}
 }
 
@@ -290,18 +268,9 @@ func (w *pointWalker) add(s methodology.StepView, pt StartingPoint) error {
 	if len(w.out.Points) >= w.maxPoints {
 		return nil
 	}
-	pt.ID, pt.Name, pt.Description, pt.Guidance = s.Path, s.Name, s.Description, s.Guidance
-	pt.Why = satisfied(w.world, s.Entry, s.Exit)
-	for k, v := range s.Exit {
-		if v {
-			pt.Produces = append(pt.Produces, k)
-		} else {
-			pt.Produces = append(pt.Produces, "!"+k)
-		}
-	}
-	slices.Sort(pt.Produces)
+	pt.ID, pt.Why = s.Path, satisfied(w.world, s.Entry, s.Exit)
 	pt.Launch.Methodology, pt.Launch.ChangeID = w.m.Name(), w.change
-	pt.Running = w.running(pt)
+	pt.Running = w.running(pt, s.Owner)
 	ok, roles, err := w.e.MayRunAgent(w.ctx, w.m.Name(), pt.Launch.Agent, w.project)
 	if err != nil {
 		return err
@@ -312,16 +281,16 @@ func (w *pointWalker) add(s methodology.StepView, pt StartingPoint) error {
 }
 
 // running reports whether a live process of the change already carries the step out: it works towards the goal of the
-// step, runs the step for its parent, runs a step inside it or around it, or runs the whole process the step belongs
-// to.
-func (w *pointWalker) running(pt StartingPoint) bool {
+// step, runs the step for its parent, runs a step inside it or around it, or runs the whole process (owner) the step
+// belongs to.
+func (w *pointWalker) running(pt StartingPoint, owner string) bool {
 	for _, p := range w.active {
 		switch {
 		case p.Goal == pt.ID, p.Agent == pt.Launch.Agent && p.Goal == pt.Launch.Goal && p.Methodology == pt.Launch.Methodology:
 			return true
 		case p.Step != nil && (methodology.StepWithin(p.Step.Path, pt.ID) || methodology.StepWithin(pt.ID, p.Step.Path)):
 			return true
-		case p.Methodology == w.m.Name() && p.Goal == pt.Process && p.Agent == pt.Process:
+		case p.Methodology == w.m.Name() && p.Goal == owner && p.Agent == owner:
 			return true // the whole process is being run towards its goal: its planner sequences the step
 		}
 	}

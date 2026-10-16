@@ -106,10 +106,27 @@ and its binding to a change (the conditions evaluated, the live runs laid over t
     as a port, the blocks of what the level is given and cannot reach: the editor's default) and **Simplified** (the
     steps, one link per pair labelled with its conditions, their states: the change's default).
 
+## Step 5: starting points, a binding composed with the view
+
+15. `engine.v1.ListStartingPoints` answers the binding only: per point its path, kind, the step of the process naming
+    the capability (`parent`), the method that applies, the entry conditions that hold (`why`), the launch, `may_run`,
+    `need_roles` and `running`; per blocked step its path and what it misses; the `version` of the methodology. The
+    name, description, guidance, exit criteria (`produces`), process, capability and roles of a step are the view's.
+16. One pure composer, `lib/startingpoint` (`Compose(view, binding)`, over the generated types only, naming neither
+    the engine nor the registry), puts the two together by the path of the step: the roles of the method win over
+    those of the step, the capability is the step's for a step proposed through its method, else the method's. Its
+    readers fetch the view of the version the binding names (`registry.v1.GetMethodologyView` with `name` /
+    `version`): the `goap-scheduler/starting_points` tool (`builtin.Methodologies` gained `GetMethodologyView`) and
+    the assistant (`assistantsvc.EngineClient.Views`, the registry handler in `goap-dev`, its client in
+    `platform/cmd/conversations`); its result is the shape the tool always gave.
+17. The web does the same (`web/src/lib/startingPoints.ts` `composePoints`, `viewRef`): the change tab reads the view
+    once per version and composes the binding for `PossibleSteps.svelte`. The composed types are `PossibleStep`,
+    `WaitingStep`, `PossibleStepList`; the bindings are the generated `StartingPointBinding` /
+    `StartingPointsBinding`.
+
 ## Next step
 
-`PossibleSteps.svelte` and the assistant still read self-contained starting points (the MCP tool
-`goap-scheduler/starting_points` needs them so); `MethodologyPort` over RPC still recompiles the definition it fetched.
+`MethodologyPort` over RPC still recompiles the definition it fetched.
 
 ## Consequences
 

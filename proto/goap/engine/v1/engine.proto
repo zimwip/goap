@@ -417,49 +417,45 @@ message StartLaunch {
   string change_id = 4;
 }
 
-// A step, or a step of a method, that is possible now.
+// A step, or a step of a method, that is possible now: the binding of a step of the compiled view of the methodology
+// (registry.v1.MethodologyView) to the change (ADR 0126 step 5). What the step is (name, description, guidance, exit,
+// roles) is read from the view by its path; lib/startingpoint composes the two.
 message StartingPoint {
   // the step path, unique in the methodology
   string id = 1;
   // step | method
   string kind = 2;
-  string process = 3;
   // for a step of a method: the step of the process that names the capability
-  string parent = 4;
-  string name = 5;
-  string method = 6;
-  string capability = 7;
-  string description = 8;
-  string guidance = 9;
+  string parent = 3;
+  // the method that applies (a step naming a capability, or the method a step belongs to)
+  string method = 4;
   // the entry conditions that hold ("name" / "!name")
-  repeated string why = 10;
-  // the exit criteria it reaches
-  repeated string produces = 11;
-  string responsible = 12;
-  string accountable = 13;
-  StartLaunch launch = 14;
+  repeated string why = 5;
+  StartLaunch launch = 6;
   // the caller may start it (the rule Start applies to its initiator)
-  bool may_run = 15;
-  repeated string need_roles = 16;
+  bool may_run = 7;
+  repeated string need_roles = 8;
   // a process already carries it out
-  bool running = 17;
+  bool running = 9;
 }
 
+// A step towards the goal that waits for conditions, by its path in the view.
 message BlockedStep {
   string id = 1;
-  string name = 2;
-  repeated string missing = 3;
+  repeated string missing = 2;
 }
 
 message ListStartingPointsResponse {
+  // the methodology version the points are of: the view to compose them with
   string methodology = 1;
-  string goal = 2;
+  string version = 2;
+  string goal = 3;
   // why there is nothing to start (no methodology, no goal, goal reached, change closed...)
-  string reason = 3;
-  repeated StartingPoint points = 4;
+  string reason = 4;
+  repeated StartingPoint points = 5;
   // the steps that wait for conditions (capped), not proposable
-  repeated BlockedStep blocked = 5;
-  int32 blocked_count = 6;
+  repeated BlockedStep blocked = 6;
+  int32 blocked_count = 7;
 }
 
 message CheckAgentsRequest {

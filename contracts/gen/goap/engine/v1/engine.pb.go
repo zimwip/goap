@@ -2777,33 +2777,27 @@ func (x *StartLaunch) GetChangeId() string {
 	return ""
 }
 
-// A step, or a step of a method, that is possible now.
+// A step, or a step of a method, that is possible now: the binding of a step of the compiled view of the methodology
+// (registry.v1.MethodologyView) to the change (ADR 0126 step 5). What the step is (name, description, guidance, exit,
+// roles) is read from the view by its path; lib/startingpoint composes the two.
 type StartingPoint struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the step path, unique in the methodology
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// step | method
-	Kind    string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
-	Process string `protobuf:"bytes,3,opt,name=process,proto3" json:"process,omitempty"`
+	Kind string `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
 	// for a step of a method: the step of the process that names the capability
-	Parent      string `protobuf:"bytes,4,opt,name=parent,proto3" json:"parent,omitempty"`
-	Name        string `protobuf:"bytes,5,opt,name=name,proto3" json:"name,omitempty"`
-	Method      string `protobuf:"bytes,6,opt,name=method,proto3" json:"method,omitempty"`
-	Capability  string `protobuf:"bytes,7,opt,name=capability,proto3" json:"capability,omitempty"`
-	Description string `protobuf:"bytes,8,opt,name=description,proto3" json:"description,omitempty"`
-	Guidance    string `protobuf:"bytes,9,opt,name=guidance,proto3" json:"guidance,omitempty"`
+	Parent string `protobuf:"bytes,3,opt,name=parent,proto3" json:"parent,omitempty"`
+	// the method that applies (a step naming a capability, or the method a step belongs to)
+	Method string `protobuf:"bytes,4,opt,name=method,proto3" json:"method,omitempty"`
 	// the entry conditions that hold ("name" / "!name")
-	Why []string `protobuf:"bytes,10,rep,name=why,proto3" json:"why,omitempty"`
-	// the exit criteria it reaches
-	Produces    []string     `protobuf:"bytes,11,rep,name=produces,proto3" json:"produces,omitempty"`
-	Responsible string       `protobuf:"bytes,12,opt,name=responsible,proto3" json:"responsible,omitempty"`
-	Accountable string       `protobuf:"bytes,13,opt,name=accountable,proto3" json:"accountable,omitempty"`
-	Launch      *StartLaunch `protobuf:"bytes,14,opt,name=launch,proto3" json:"launch,omitempty"`
+	Why    []string     `protobuf:"bytes,5,rep,name=why,proto3" json:"why,omitempty"`
+	Launch *StartLaunch `protobuf:"bytes,6,opt,name=launch,proto3" json:"launch,omitempty"`
 	// the caller may start it (the rule Start applies to its initiator)
-	MayRun    bool     `protobuf:"varint,15,opt,name=may_run,json=mayRun,proto3" json:"may_run,omitempty"`
-	NeedRoles []string `protobuf:"bytes,16,rep,name=need_roles,json=needRoles,proto3" json:"need_roles,omitempty"`
+	MayRun    bool     `protobuf:"varint,7,opt,name=may_run,json=mayRun,proto3" json:"may_run,omitempty"`
+	NeedRoles []string `protobuf:"bytes,8,rep,name=need_roles,json=needRoles,proto3" json:"need_roles,omitempty"`
 	// a process already carries it out
-	Running       bool `protobuf:"varint,17,opt,name=running,proto3" json:"running,omitempty"`
+	Running       bool `protobuf:"varint,9,opt,name=running,proto3" json:"running,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2852,23 +2846,9 @@ func (x *StartingPoint) GetKind() string {
 	return ""
 }
 
-func (x *StartingPoint) GetProcess() string {
-	if x != nil {
-		return x.Process
-	}
-	return ""
-}
-
 func (x *StartingPoint) GetParent() string {
 	if x != nil {
 		return x.Parent
-	}
-	return ""
-}
-
-func (x *StartingPoint) GetName() string {
-	if x != nil {
-		return x.Name
 	}
 	return ""
 }
@@ -2880,53 +2860,11 @@ func (x *StartingPoint) GetMethod() string {
 	return ""
 }
 
-func (x *StartingPoint) GetCapability() string {
-	if x != nil {
-		return x.Capability
-	}
-	return ""
-}
-
-func (x *StartingPoint) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *StartingPoint) GetGuidance() string {
-	if x != nil {
-		return x.Guidance
-	}
-	return ""
-}
-
 func (x *StartingPoint) GetWhy() []string {
 	if x != nil {
 		return x.Why
 	}
 	return nil
-}
-
-func (x *StartingPoint) GetProduces() []string {
-	if x != nil {
-		return x.Produces
-	}
-	return nil
-}
-
-func (x *StartingPoint) GetResponsible() string {
-	if x != nil {
-		return x.Responsible
-	}
-	return ""
-}
-
-func (x *StartingPoint) GetAccountable() string {
-	if x != nil {
-		return x.Accountable
-	}
-	return ""
 }
 
 func (x *StartingPoint) GetLaunch() *StartLaunch {
@@ -2957,11 +2895,11 @@ func (x *StartingPoint) GetRunning() bool {
 	return false
 }
 
+// A step towards the goal that waits for conditions, by its path in the view.
 type BlockedStep struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Missing       []string               `protobuf:"bytes,3,rep,name=missing,proto3" json:"missing,omitempty"`
+	Missing       []string               `protobuf:"bytes,2,rep,name=missing,proto3" json:"missing,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3003,13 +2941,6 @@ func (x *BlockedStep) GetId() string {
 	return ""
 }
 
-func (x *BlockedStep) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
 func (x *BlockedStep) GetMissing() []string {
 	if x != nil {
 		return x.Missing
@@ -3018,15 +2949,17 @@ func (x *BlockedStep) GetMissing() []string {
 }
 
 type ListStartingPointsResponse struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	Methodology string                 `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
-	Goal        string                 `protobuf:"bytes,2,opt,name=goal,proto3" json:"goal,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the methodology version the points are of: the view to compose them with
+	Methodology string `protobuf:"bytes,1,opt,name=methodology,proto3" json:"methodology,omitempty"`
+	Version     string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	Goal        string `protobuf:"bytes,3,opt,name=goal,proto3" json:"goal,omitempty"`
 	// why there is nothing to start (no methodology, no goal, goal reached, change closed...)
-	Reason string           `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	Points []*StartingPoint `protobuf:"bytes,4,rep,name=points,proto3" json:"points,omitempty"`
+	Reason string           `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Points []*StartingPoint `protobuf:"bytes,5,rep,name=points,proto3" json:"points,omitempty"`
 	// the steps that wait for conditions (capped), not proposable
-	Blocked       []*BlockedStep `protobuf:"bytes,5,rep,name=blocked,proto3" json:"blocked,omitempty"`
-	BlockedCount  int32          `protobuf:"varint,6,opt,name=blocked_count,json=blockedCount,proto3" json:"blocked_count,omitempty"`
+	Blocked       []*BlockedStep `protobuf:"bytes,6,rep,name=blocked,proto3" json:"blocked,omitempty"`
+	BlockedCount  int32          `protobuf:"varint,7,opt,name=blocked_count,json=blockedCount,proto3" json:"blocked_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3064,6 +2997,13 @@ func (*ListStartingPointsResponse) Descriptor() ([]byte, []int) {
 func (x *ListStartingPointsResponse) GetMethodology() string {
 	if x != nil {
 		return x.Methodology
+	}
+	return ""
+}
+
+func (x *ListStartingPointsResponse) GetVersion() string {
+	if x != nil {
+		return x.Version
 	}
 	return ""
 }
@@ -6820,40 +6760,29 @@ const file_goap_engine_v1_engine_proto_rawDesc = "" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x14\n" +
 	"\x05agent\x18\x02 \x01(\tR\x05agent\x12\x12\n" +
 	"\x04goal\x18\x03 \x01(\tR\x04goal\x12\x1b\n" +
-	"\tchange_id\x18\x04 \x01(\tR\bchangeId\"\xe8\x03\n" +
+	"\tchange_id\x18\x04 \x01(\tR\bchangeId\"\xfc\x01\n" +
 	"\rStartingPoint\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x18\n" +
-	"\aprocess\x18\x03 \x01(\tR\aprocess\x12\x16\n" +
-	"\x06parent\x18\x04 \x01(\tR\x06parent\x12\x12\n" +
-	"\x04name\x18\x05 \x01(\tR\x04name\x12\x16\n" +
-	"\x06method\x18\x06 \x01(\tR\x06method\x12\x1e\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06parent\x18\x03 \x01(\tR\x06parent\x12\x16\n" +
+	"\x06method\x18\x04 \x01(\tR\x06method\x12\x10\n" +
+	"\x03why\x18\x05 \x03(\tR\x03why\x123\n" +
+	"\x06launch\x18\x06 \x01(\v2\x1b.goap.engine.v1.StartLaunchR\x06launch\x12\x17\n" +
+	"\amay_run\x18\a \x01(\bR\x06mayRun\x12\x1d\n" +
 	"\n" +
-	"capability\x18\a \x01(\tR\n" +
-	"capability\x12 \n" +
-	"\vdescription\x18\b \x01(\tR\vdescription\x12\x1a\n" +
-	"\bguidance\x18\t \x01(\tR\bguidance\x12\x10\n" +
-	"\x03why\x18\n" +
-	" \x03(\tR\x03why\x12\x1a\n" +
-	"\bproduces\x18\v \x03(\tR\bproduces\x12 \n" +
-	"\vresponsible\x18\f \x01(\tR\vresponsible\x12 \n" +
-	"\vaccountable\x18\r \x01(\tR\vaccountable\x123\n" +
-	"\x06launch\x18\x0e \x01(\v2\x1b.goap.engine.v1.StartLaunchR\x06launch\x12\x17\n" +
-	"\amay_run\x18\x0f \x01(\bR\x06mayRun\x12\x1d\n" +
-	"\n" +
-	"need_roles\x18\x10 \x03(\tR\tneedRoles\x12\x18\n" +
-	"\arunning\x18\x11 \x01(\bR\arunning\"K\n" +
+	"need_roles\x18\b \x03(\tR\tneedRoles\x12\x18\n" +
+	"\arunning\x18\t \x01(\bR\arunning\"7\n" +
 	"\vBlockedStep\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
-	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
-	"\amissing\x18\x03 \x03(\tR\amissing\"\xfd\x01\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
+	"\amissing\x18\x02 \x03(\tR\amissing\"\x97\x02\n" +
 	"\x1aListStartingPointsResponse\x12 \n" +
-	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x12\n" +
-	"\x04goal\x18\x02 \x01(\tR\x04goal\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\x125\n" +
-	"\x06points\x18\x04 \x03(\v2\x1d.goap.engine.v1.StartingPointR\x06points\x125\n" +
-	"\ablocked\x18\x05 \x03(\v2\x1b.goap.engine.v1.BlockedStepR\ablocked\x12#\n" +
-	"\rblocked_count\x18\x06 \x01(\x05R\fblockedCount\"m\n" +
+	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x12\n" +
+	"\x04goal\x18\x03 \x01(\tR\x04goal\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x125\n" +
+	"\x06points\x18\x05 \x03(\v2\x1d.goap.engine.v1.StartingPointR\x06points\x125\n" +
+	"\ablocked\x18\x06 \x03(\v2\x1b.goap.engine.v1.BlockedStepR\ablocked\x12#\n" +
+	"\rblocked_count\x18\a \x01(\x05R\fblockedCount\"m\n" +
 	"\x12CheckAgentsRequest\x12 \n" +
 	"\vmethodology\x18\x01 \x01(\tR\vmethodology\x12\x1d\n" +
 	"\n" +
