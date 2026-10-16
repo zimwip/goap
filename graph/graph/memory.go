@@ -181,6 +181,12 @@ func (t *memTx) Branches(_ context.Context, namespace string) ([]domain.Branch, 
 	return out, nil
 }
 
+// LockChange implements Tx: the transactions of the memory store are serialized.
+func (t *memTx) LockChange(context.Context, domain.ChangeID) error { return nil }
+
+// LockBranch implements Tx: the transactions of the memory store are serialized.
+func (t *memTx) LockBranch(context.Context, string, string) error { return nil }
+
 func (t *memTx) PutBranch(_ context.Context, b domain.Branch) error {
 	b.Namespace = domain.NamespaceOf(b.Namespace)
 	t.st.branches[branchKey(b.Namespace, b.Name)] = b

@@ -3,7 +3,12 @@
   import { objectDialog, closeObjectDialog } from './objectDialogState.svelte';
   import { notify } from './workbench.svelte';
   import { graph, errorMessage, type Struct } from '../api';
-  import { headGraph, createNodeItem } from '../graphEdit';
+  import { headGraph, createNodeItem, type HeadGraph } from '../graphEdit';
+  import { typeCatalog } from '../stores/types.svelte';
+  import FormRenderer from '../forms/FormRenderer.svelte';
+  import type { FormValues, NodeSource } from '../forms/types';
+  import { nodeWrite } from '../forms/nodeForm';
+  import { landableBirthStates } from '../lifecycle';
 
   let key = $state('');
   let values = $state<Record<string, string>>({});
@@ -20,28 +25,71 @@
     queueMicrotask(() => keyInput?.focus());
   });
 
-  async function create(e: SubmitEvent) {
+  // the dialog applies its change on main at once, so the node is born in a state it can land in (ADR 0078)
+  const lifecycle = $derived(objectDialog.open ? typeCatalog.cat.lifecycle(objectDialog.nodeType) : undefined);
+  const states = $derived(landableBirthStates(lifecycle));
+  let birth = $state('');
+  $effect(() => {
+    birth = states[0] ?? '';
+  });
+
+  const namespaceOf = (type: string) => (type.includes('@') ? type.slice(0, type.indexOf('@')) : '');
+  // the creation form of the type (ADR 0115 §10), its link fields offering the nodes at the head of the namespace
+  const typeForm = $derived(objectDialog.open ? typeCatalog.cat.type(objectDialog.nodeType)?.form : undefined);
+  let head = $state<HeadGraph | undefined>();
+  $effect(() => {
+    head = undefined;
+    if (!typeForm) return;
+    let gone = false;
+    headGraph(namespaceOf(objectDialog.nodeType))
+      .then((h) => !gone && (head = h))
+      .catch(() => undefined); // a namespace with no baseline yet: nothing to link to
+    return () => (gone = true);
+  });
+  const formSource = $derived.by((): NodeSource => {
+    const cat = typeCatalog.cat;
+    const t = objectDialog.nodeType;
+    return {
+      nodes: (head?.nodes ?? []).filter((n) => n.key).map((n) => ({ key: n.key!, type: n.type ?? '', state: n.state, namespace: n.namespace })),
+      isA: (x, a) => x === a || cat.typesOf(x).includes(a),
+      linkTypesFrom: () => cat.linksFrom(t).map((l) => l.ref ?? '').filter(Boolean),
+      linkLabel: (l) => cat.links.find((x) => x.ref === l)?.label ?? '',
+    };
+  });
+
+  async function createFromForm(v: FormValues) {
+    if (!typeForm) return;
+    const w = nodeWrite(typeForm, v);
+    await submit(w.props as Struct, w.links.map((l) => ({ type: l.type, toKey: l.to })));
+  }
+
+  function create(e: SubmitEvent) {
     e.preventDefault();
+    if (typeForm) return;
+    const props: Struct = {};
+    for (const [k, v] of Object.entries(values)) if (v.trim()) props[k] = v.trim();
+    void submit(props, []);
+  }
+
+  async function submit(props: Struct, links: { type: string; toKey: string }[]) {
     if (!key.trim()) {
       error = 'The key is required.';
       return;
     }
-    const props: Struct = {};
-    for (const [k, v] of Object.entries(values)) if (v.trim()) props[k] = v.trim();
     busy = true;
     error = '';
     try {
       // every node is created in a change (ADR 0076): one of the namespace of its type, applied on main
       const type = objectDialog.nodeType;
-      const namespace = type.includes('@') ? type.slice(0, type.indexOf('@')) : '';
-      const h = await headGraph(namespace);
+      const namespace = namespaceOf(type);
+      const h = head ?? (await headGraph(namespace));
       await graph.commitEdits({
         namespace,
         title: `Create ${key.trim()}`,
         intent: `Create the ${type} ${key.trim()}`,
         baselineId: h.baselineId,
         methodology: objectDialog.methodology,
-        edits: [createNodeItem(key.trim(), type, props)],
+        edits: [{ ...createNodeItem(key.trim(), type, props, links), ...(birth && birth !== lifecycle?.initial ? { state: birth } : {}) }],
       });
       notify(`${objectDialog.nodeType} ${key.trim()} created.`, 'ok');
       closeObjectDialog();
@@ -64,18 +112,36 @@
         <label for="obj-key">Key</label>
         <input id="obj-key" type="text" class="mono" bind:value={key} bind:this={keyInput} placeholder="REQ-10" />
       </div>
-      {#each objectDialog.properties as p (p)}
+      {#if states.length > 1 || (lifecycle && states[0] !== lifecycle.initial)}
         <div class="field">
-          <label for="obj-{p}">{p}</label>
-          <input id="obj-{p}" type="text" bind:value={values[p]} />
+          <label for="obj-state">State</label>
+          <select id="obj-state" bind:value={birth}>
+            {#each states as s (s)}<option value={s}>{s}</option>{/each}
+          </select>
         </div>
-      {/each}
-      {#if error}<div class="alert small">{error}</div>{/if}
-      <div class="row">
-        <button type="button" class="ghost" onclick={closeObjectDialog}>Cancel</button>
-        <button type="submit" class="primary" disabled={busy}>{busy ? 'Creating…' : 'Create'}</button>
-      </div>
+      {/if}
+      {#if !typeForm}
+        {#each objectDialog.properties as p (p)}
+          <div class="field">
+            <label for="obj-{p}">{p}</label>
+            <input id="obj-{p}" type="text" bind:value={values[p]} />
+          </div>
+        {/each}
+        {#if error}<div class="alert small">{error}</div>{/if}
+        <div class="row">
+          <button type="button" class="ghost" onclick={closeObjectDialog}>Cancel</button>
+          <button type="submit" class="primary" disabled={busy}>{busy ? 'Creating…' : 'Create'}</button>
+        </div>
+      {/if}
     </form>
+    {#if typeForm}
+      {#key objectDialog.nodeType}
+        <FormRenderer form={typeForm} source={formSource} {busy} serverError={error} submitLabel="Create" onsubmit={(v) => void createFromForm(v)}
+          assist={{ id: `create:${objectDialog.nodeType}`, label: `New ${objectDialog.nodeType}; the key is asked above the form` }}>
+          {#snippet actions()}<button type="button" class="ghost" onclick={closeObjectDialog}>Cancel</button>{/snippet}
+        </FormRenderer>
+      {/key}
+    {/if}
     </div>
   </div>
 {/if}

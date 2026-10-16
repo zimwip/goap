@@ -57,9 +57,62 @@ type guardTx struct {
 	// logged are the changes whose log the transaction appended to (the draft cache, ADR 0079, never publishes what a
 	// transaction that may roll back has seen of its own writes)
 	logged map[domain.ChangeID]bool
+	// locked are the changes and branches whose lock the transaction holds (ADR 0127)
+	locked map[string]bool
+}
+
+// LockChange takes the lock of the tree of a change once per transaction (ADR 0127). Every write naming a change takes
+// it (the log, the header, the projection of the impacts); an operation that reads before it writes takes it first,
+// so that what it checked still holds when it writes.
+func (t *guardTx) LockChange(ctx context.Context, id domain.ChangeID) error {
+	if id == "" || t.locked["change:"+string(id)] {
+		return nil
+	}
+	if err := t.Tx.LockChange(ctx, id); err != nil {
+		return err
+	}
+	t.lock("change:" + string(id))
+	return nil
+}
+
+// LockBranch takes the lock of a branch once per transaction (ADR 0127).
+func (t *guardTx) LockBranch(ctx context.Context, namespace, name string) error {
+	key := "branch:" + domain.NamespaceOf(namespace) + "/" + name
+	if t.locked[key] {
+		return nil
+	}
+	if err := t.Tx.LockBranch(ctx, namespace, name); err != nil {
+		return err
+	}
+	t.lock(key)
+	return nil
+}
+
+func (t *guardTx) lock(key string) {
+	if t.locked == nil {
+		t.locked = map[string]bool{}
+	}
+	t.locked[key] = true
+}
+
+func (t *guardTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, cn domain.ChangeImpact) error {
+	if err := t.LockChange(ctx, change); err != nil {
+		return err
+	}
+	return t.Tx.PutChangeImpact(ctx, change, cn)
+}
+
+func (t *guardTx) DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
+	if err := t.LockChange(ctx, change); err != nil {
+		return err
+	}
+	return t.Tx.DeleteChangeImpact(ctx, change, id)
 }
 
 func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
+	if err := t.LockChange(ctx, e.Change); err != nil {
+		return e, err
+	}
 	if t.logged == nil {
 		t.logged = map[domain.ChangeID]bool{}
 	}
@@ -207,6 +260,15 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 	if c.OwnerOrg == "" || c.ProjectID == "" {
 		return fmt.Errorf("change %s names no owner unit or no project (ADR 0054): %w", c.ID, ErrInvalid)
 	}
+	// a new sub-change is written with its parent's tree (it forks the parent's branch)
+	if c.ParentID != "" {
+		if err := t.LockChange(ctx, c.ParentID); err != nil {
+			return err
+		}
+	}
+	if err := t.LockChange(ctx, c.ID); err != nil {
+		return err
+	}
 	if err := t.Tx.PutChange(ctx, c); err != nil {
 		return err
 	}
@@ -231,6 +293,9 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 		if err := t.materialize(ctx, b.ID); err != nil {
 			return err
 		}
+	}
+	if err := t.LockChange(ctx, id); err != nil {
+		return err
 	}
 	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
 		return err

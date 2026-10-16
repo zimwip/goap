@@ -163,6 +163,13 @@ func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	return b, err
 }
 
+// LockChange implements Tx: SQLite runs one transaction at a time (one connection, internal/platform), so the writers
+// of a change are serialized already.
+func (t *sqliteTx) LockChange(context.Context, domain.ChangeID) error { return nil }
+
+// LockBranch implements Tx (see LockChange).
+func (t *sqliteTx) LockBranch(context.Context, string, string) error { return nil }
+
 func (t *sqliteTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {
 	q, args := dialectSQLite.sqlBranch(namespace, name)
 	b, err := sqliteScanBranch(t.tx.QueryRowContext(ctx, q, args...))

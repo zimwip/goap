@@ -110,7 +110,7 @@ func (g *Graph) bootstrap(ctx context.Context, tx Tx) error {
 		if err := tx.PutBaseline(ctx, res); err != nil {
 			return err
 		}
-		if err := g.advanceBranch(ctx, tx, ns, domain.MainBranch, res.ID); err != nil {
+		if err := g.advanceBranch(ctx, tx, ns, domain.MainBranch, res); err != nil {
 			return err
 		}
 		c.ResultBaselineID = res.ID

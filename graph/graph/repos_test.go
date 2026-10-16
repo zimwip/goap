@@ -266,7 +266,7 @@ func pinBaseline(t *testing.T, g *Graph, namespace string, refs ...domain.NodeRe
 		if err := tx.PutBaseline(ctx, out); err != nil {
 			return err
 		}
-		if err := g.advanceBranch(ctx, tx, namespace, domain.MainBranch, out.ID); err != nil {
+		if err := g.advanceBranch(ctx, tx, namespace, domain.MainBranch, out); err != nil {
 			return err
 		}
 		c.ResultBaselineID = out.ID

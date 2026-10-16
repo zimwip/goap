@@ -95,7 +95,7 @@ func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolut
 	case c.Status != domain.ChangeCommitted || c.ParentID != "":
 		return c, fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
@@ -108,6 +108,9 @@ func (g *Graph) IntegrateChange(ctx context.Context, id domain.ChangeID, resolut
 		}
 		if !ok {
 			return fmt.Errorf("change %s has no branch of its own: %w", id, ErrInvalid)
+		}
+		if err := tx.LockBranch(ctx, c.Namespace, domain.BranchOf(own.Parent)); err != nil {
+			return err
 		}
 		if plan, err := planMerge(ctx, tx, c.Namespace, own.Name, own.Parent); err != nil {
 			return err
@@ -253,7 +256,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	if err := tx.PutBaseline(ctx, res); err != nil {
 		return false, err
 	}
-	if err := g.advanceBranch(ctx, tx, c.Namespace, domain.BranchOf(own.Parent), res.ID); err != nil {
+	if err := g.advanceBranch(ctx, tx, c.Namespace, domain.BranchOf(own.Parent), res); err != nil {
 		return false, err
 	}
 	own.Status = domain.BranchMerged

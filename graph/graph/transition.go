@@ -128,7 +128,7 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 	if err := g.checkGuardians(ctx, bb, t.Name); err != nil {
 		return c, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		cur, err := changeOpen(ctx, tx, id)
 		if err != nil {
 			return err

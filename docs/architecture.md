@@ -868,6 +868,10 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 
 ### 3.0 Source components ([ADR 0125](adr/0125-source-components.md))
 
+The picture of this section and of the services is [architecture-overview.html](architecture-overview.html) (open
+it in a browser): the modules, the containers with their ports and calls, the deployment units and one step of a
+change end to end. It is kept in step with the code (CLAUDE.md, `TestArchitectureOverview`).
+
 The services are cut along components the sources follow too: a **contract** (protos, generated code, the pure
 model, `contracts/graphapi`: the requests, answers and errors of the graph's operations), the **graph**, the **engine**, the
 **MCP hub**, the **gateway** and the **platform** that composes them. The engine reaches the graph only through the
@@ -962,6 +966,12 @@ nullable test, order tie-break), `sqlbuild_test.go` holds the text each query ha
 `lib/sqlschematest` compares the two migration directories of a service (`TestSchemasAligned` in `graph/graph`,
 `credsvc`, `mcpsvc`, `modelgw`, `prefssvc`, `registrysvc`; `graph/index` differs by design: pgvector / FTS5). `make test-pg`
 runs every test against PostgreSQL (a throw-away `pgvector/pgvector:pg17` container unless `GOAP_TEST_PG_DSN` is set).
+
+**Concurrent writers** ([ADR 0127](adr/0127-writers-of-a-change-serialized.md)): the writers of one tree of changes (a
+root change and its sub-changes) are serialized by `Tx.LockChange` (a transaction-level advisory lock on the root in
+PostgreSQL; SQLite and the memory store run one transaction at a time), taken before an operation reads what it checks
+(`changeOpen`, `Graph.changeTx`) and by the guard at every write naming a change; a branch head moves under
+`Tx.LockBranch` and only from the parent of the new baseline (`advanceBranch`). Reads take no lock.
 
 Every `change_id`, `owner_id` and `project_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap
 needs it), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints

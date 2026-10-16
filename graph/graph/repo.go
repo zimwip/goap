@@ -105,4 +105,11 @@ type Tx interface {
 	// what the change wrote is used: a baseline holds one of its versions, a later version or a link of another
 	// change builds on one, or it produced a baseline.
 	DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error
+
+	// LockChange holds, until the transaction ends, the lock of the tree of changes id belongs to (its root change
+	// and every sub-change under it, ADR 0127): two transactions writing changes of one tree run one after the other.
+	// A change not stored yet is its own tree. LockBranch holds the lock of a branch the same way, taken before its
+	// head is read to be moved. A storage whose transactions are serialized already does nothing.
+	LockChange(ctx context.Context, id domain.ChangeID) error
+	LockBranch(ctx context.Context, namespace, name string) error
 }

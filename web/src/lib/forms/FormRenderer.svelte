@@ -19,6 +19,8 @@
     onsubmit,
     actions,
     assist,
+    initial,
+    submitLabel,
   }: {
     form: FormDef;
     source?: NodeSource;
@@ -30,11 +32,15 @@
     actions?: import('svelte').Snippet;
     /** offers the form to the assistant under this id and label (fill_form, submit_form) */
     assist?: { id: string; label: string };
+    /** values to start from over the defaults (an existing node edited through its type form) */
+    initial?: FormValues;
+    /** the label of the submit button, over the form's own */
+    submitLabel?: string;
   } = $props();
 
   const uid = Math.random().toString(36).slice(2, 8);
   // the values start from the defaults of the form it is given (a page gives another form a new renderer)
-  let values = $state<FormValues>(untrack(() => initialValues(form)));
+  let values = $state<FormValues>(untrack(() => ({ ...initialValues(form), ...initial })));
   let tried = $state(false);
   const issues = $derived(formIssues(form, values, source));
   const blocked = $derived(Object.keys(issues).length > 0);
@@ -101,7 +107,7 @@
     </fieldset>
   {/each}
   <div class="row">
-    <button class="primary" type="submit" disabled={busy || (tried && blocked)}>{busy ? 'Sending…' : form.submit || 'Submit'}</button>
+    <button class="primary" type="submit" disabled={busy || (tried && blocked)}>{busy ? 'Sending…' : submitLabel || form.submit || 'Submit'}</button>
     {@render actions?.()}
   </div>
   {#if serverError}<div class="alert" style="margin: 0.6rem 0 0">{serverError}</div>{/if}

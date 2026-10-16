@@ -15,7 +15,7 @@ import (
 // TagChange names the state change id leaves. The change must have landed (applied): a draft has no state yet. The
 // same name on the same change is not repeated: the tag already there is returned.
 func (g *Graph) TagChange(ctx context.Context, id domain.ChangeID, name, by string) (t domain.Tag, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err

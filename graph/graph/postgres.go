@@ -44,6 +44,8 @@ func mapErr(err error, what string) error {
 			return fmt.Errorf("%s: %s: %w", what, pgErr.Detail, ErrConflict)
 		case "23503", "22P02":
 			return fmt.Errorf("%s: %s: %w", what, pgErr.Message, ErrInvalid)
+		case "40P01", "40001": // a deadlock or a serialization failure: the caller tries again
+			return fmt.Errorf("%s: %s: %w", what, pgErr.Message, ErrConflict)
 		}
 	}
 	return err
@@ -233,6 +235,47 @@ func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, e
 		}
 	}
 	return out, rows.Err()
+}
+
+// LockChange implements Tx: a transaction-level advisory lock on the root of the change's tree. The root is read again
+// once the lock is held: an attach or a detach that committed meanwhile moved the change to another tree, whose lock
+// is taken in turn.
+func (t *pgTx) LockChange(ctx context.Context, id domain.ChangeID) error {
+	root, err := t.changeRoot(ctx, id)
+	for err == nil {
+		if err = t.advisoryLock(ctx, "goap.change:"+root); err != nil {
+			break
+		}
+		var again string
+		if again, err = t.changeRoot(ctx, id); err == nil && again == root {
+			return nil
+		}
+		root = again
+	}
+	return mapErr(err, "lock change "+string(id))
+}
+
+// LockBranch implements Tx: a transaction-level advisory lock on the branch.
+func (t *pgTx) LockBranch(ctx context.Context, namespace, name string) error {
+	return mapErr(t.advisoryLock(ctx, "goap.branch:"+domain.NamespaceOf(namespace)+"/"+name), "lock branch "+name)
+}
+
+func (t *pgTx) advisoryLock(ctx context.Context, key string) error {
+	_, err := t.tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, key)
+	return err
+}
+
+// changeRoot is the root change of the tree id belongs to, id itself when it is not stored yet.
+func (t *pgTx) changeRoot(ctx context.Context, id domain.ChangeID) (string, error) {
+	var root string
+	err := t.tx.QueryRow(ctx, `WITH RECURSIVE up (id, parent_id) AS (
+			SELECT id, parent_id FROM change WHERE id = $1
+			UNION ALL SELECT c.id, c.parent_id FROM change c JOIN up ON c.id = up.parent_id)
+		SELECT id::text FROM up WHERE parent_id IS NULL`, string(id)).Scan(&root)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return string(id), nil
+	}
+	return root, err
 }
 
 func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branch, error) {

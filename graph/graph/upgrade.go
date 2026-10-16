@@ -57,7 +57,7 @@ func (g *Graph) UpgradeChange(ctx context.Context, id domain.ChangeID, version s
 	if err := sameLifecycle(c, lc, target); err != nil {
 		return c, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}

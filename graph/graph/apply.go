@@ -64,7 +64,7 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return result, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err
@@ -163,7 +163,7 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	if err := tx.PutBaseline(ctx, result); err != nil {
 		return domain.Baseline{}, err
 	}
-	if err := g.advanceBranch(ctx, tx, c.Namespace, a.branch, result.ID); err != nil {
+	if err := g.advanceBranch(ctx, tx, c.Namespace, a.branch, result); err != nil {
 		return domain.Baseline{}, err
 	}
 	// each version the change applied has landed on its own branch; it lands again on the branch it is integrated into
@@ -196,9 +196,14 @@ func (a *applier) revertWithdrawn() (int, error) {
 	return len(ids), err
 }
 
-// advanceBranch moves the head of a branch (main is created on first use).
-func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string, head domain.BaselineID) error {
+// advanceBranch moves the head of a branch to a baseline built on it (main is created on first use). The head moves only
+// from the baseline the new one follows (ADR 0127): read under the lock of the branch, a head another transaction moved
+// meanwhile is a conflict, never a head silently replaced.
+func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string, head domain.Baseline) error {
 	namespace = domain.NamespaceOf(namespace)
+	if err := tx.LockBranch(ctx, namespace, name); err != nil {
+		return err
+	}
 	b, err := tx.Branch(ctx, namespace, name)
 	switch {
 	case errors.Is(err, ErrNotFound) && name == domain.MainBranch:
@@ -206,7 +211,10 @@ func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string
 	case err != nil:
 		return err
 	}
-	b.Head = head
+	if b.Head != head.ParentID {
+		return fmt.Errorf("branch %s moved to %s while baseline %s was built on %s: merge again: %w", name, b.Head, head.ID, head.ParentID, ErrConflict)
+	}
+	b.Head = head.ID
 	return tx.PutBranch(ctx, b)
 }
 

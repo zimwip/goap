@@ -45,7 +45,11 @@ func (g *Graph) AttachChange(ctx context.Context, id, parent domain.ChangeID) (d
 			return c, fmt.Errorf("methodology %q does not integrate the changes of %q: %w", p.Methodology, c.Methodology, ErrInvalid)
 		}
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
+		// the change joins the parent's tree: both locks
+		if err := tx.LockChange(ctx, parent); err != nil {
+			return err
+		}
 		cur, pc, err := g.attachableTx(ctx, tx, id, parent)
 		if err != nil {
 			return err
@@ -86,7 +90,7 @@ func (g *Graph) DetachChange(ctx context.Context, id domain.ChangeID) (domain.Ch
 	if err != nil {
 		return c, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		cur, err := tx.Change(ctx, id)
 		if err != nil {
 			return err

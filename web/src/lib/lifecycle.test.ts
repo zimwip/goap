@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { awaitingReview, holdsOwnDraft, lifecycleRows, loadPosts, postKey, writeNodeInChange } from './lifecycle';
+import { awaitingReview, holdsOwnDraft, landableBirthStates, lifecycleRows, loadPosts, postKey, writeNodeInChange } from './lifecycle';
 import { graph, isDraft, type ChangeImpact, type Lifecycle } from './api';
 import type { TypeCatalog } from './stores/types.svelte';
 
@@ -125,5 +125,16 @@ describe('the edit flow never reviews (ADR 0079)', () => {
     expect(holdsOwnDraft(drafted, 'opt-1')).toBe(false);
     expect(holdsOwnDraft({ ...drafted, flow: 'opt-1' }, 'opt-1')).toBe(true);
     expect(holdsOwnDraft(impact, 'main')).toBe(false);
+  });
+});
+
+describe('landableBirthStates', () => {
+  it('leaves out the birth states a change cannot land in', () => {
+    const lc: Lifecycle = {
+      initial: 'draft',
+      states: [{ name: 'draft', notLandable: true }, { name: 'proposed' }, { name: 'done', final: true }],
+      transitions: [{ from: 'draft', to: 'proposed' }, { from: 'proposed', to: 'done' }],
+    };
+    expect(landableBirthStates(lc)).toEqual(['proposed']);
   });
 });
