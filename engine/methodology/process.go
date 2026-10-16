@@ -614,7 +614,7 @@ func (s StepInfo) Leaves() []StepInfo {
 
 // ProcessSteps returns the compiled step tree of a process (nil when the methodology has no such process).
 func (c *Compiled) ProcessSteps(name string) []StepInfo {
-	p, ok := c.ProcessByName(name)
+	p, ok := c.definition.ProcessByName(name)
 	if !ok {
 		return nil
 	}
@@ -623,7 +623,7 @@ func (c *Compiled) ProcessSteps(name string) []StepInfo {
 
 // MethodSteps returns the compiled step tree of a method composing its own steps (nil when it has none).
 func (c *Compiled) MethodSteps(name string) []StepInfo {
-	for _, me := range c.Methods {
+	for _, me := range c.definition.Methods {
 		if me.Name == name && len(me.Steps) > 0 {
 			return c.stepTree(me.Steps, name)
 		}

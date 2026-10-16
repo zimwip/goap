@@ -95,7 +95,7 @@ func (e *Engine) Progress(ctx context.Context, id string) (*ProcessProgress, err
 	if !ok || ag.ProcessOf() == "" {
 		return nil, ErrNotAProcess
 	}
-	proc, _ := m.ProcessByName(ag.ProcessOf())
+	proc, _ := m.Process(ag.ProcessOf())
 	out := &ProcessProgress{ProcessID: p.ID, Methodology: p.Methodology, Process: proc.Name, Description: proc.Description, Status: p.Status, Error: p.Error}
 	for _, s := range m.ProcessSteps(proc.Name) {
 		out.Steps = append(out.Steps, stepProgress(p, s))

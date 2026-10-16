@@ -15,7 +15,6 @@ import (
 	"cel.dev/cel-go/ext"
 
 	"github.com/zimwip/goap/contracts/domain"
-	"github.com/zimwip/goap/engine/goap"
 )
 
 // Definition is a named condition: an expression at the level of the change, an expression about one subject of a
@@ -199,7 +198,8 @@ func (s *Set) Has(name string) bool {
 
 // Result is the outcome of an evaluation.
 type Result struct {
-	State goap.WorldState
+	// State is the value of every condition of the level of the change: the world a planner plans from.
+	State map[string]bool
 	// Errors holds the conditions that could not be evaluated (unknown).
 	Errors map[string]string
 	// Subjects are the values of the scoped conditions, per scope, subject by subject in the order of the context
@@ -211,7 +211,7 @@ type Result struct {
 // are then visible as `conditions` on the entries of their scope), the conditions of the change, then the aggregates.
 func (s *Set) Evaluate(bb domain.Blackboard) Result {
 	act := Activation(bb)
-	res := Result{State: goap.WorldState{}, Errors: map[string]string{}}
+	res := Result{State: map[string]bool{}, Errors: map[string]string{}}
 	entries := s.evaluateScoped(act, &res)
 	for _, p := range s.progs {
 		out, _, err := p.prog.Eval(act)

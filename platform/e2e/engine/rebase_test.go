@@ -53,7 +53,7 @@ func TestRunWaitsOnTheConflictsOfTheRebase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.Methodologies = engine.StaticMethodologies{cm.Name: cm}
+	e.Methodologies = engine.StaticMethodologies{cm.Definition().Name: cm}
 	req, err := g.NodeByKey(ctx, "alm", "REQ-1")
 	if err != nil {
 		t.Fatal(err)

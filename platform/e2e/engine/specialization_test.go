@@ -56,7 +56,7 @@ func compile(t *testing.T, src string) *methodology.Compiled {
 func TestSpecializationChosenAtExecution(t *testing.T) {
 	ctx := context.Background()
 	demo, golang := compile(t, buildMethodology), compile(t, goMethodology)
-	if acts := demo.PlanningActions(); len(acts) != 1 || acts[0].Name != "build" {
+	if acts := demo.PlannedActions(); len(acts) != 1 || acts[0].Name != "build" {
 		t.Fatalf("specializations must not be planned: %+v", acts)
 	}
 	builtin := func(tag string) engine.BuiltinFunc {

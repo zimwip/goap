@@ -1594,7 +1594,7 @@ the agent's goal, the sub-steps' criteria, the nested process's criteria, or a `
 `history.last["<path>"].current`, once it has run and while its run stands, which other steps can name; ADR 0109: the
 engine records the run of a step that ended without error, `journal.step.ended`, before it observes the change again). `references` link a process or a step to its
 reference documents (`doc:<key>`, `<mcp>:<path>`, URL). An agent or nested
-process step is an action of kind `call` (ADR 0126): a sub-agent on the same change, so processes nest. A step's `guidance`,
+process step is an action of kind `call` (ADR 0126): a sub-agent on the same change, so processes nest. The methodology is the description, `methodology.Compiled` the activable form, and the engine runs only the latter (ADR 0126 step 2): it reads its accessors (`Name`, `MainGoal`, `AppliesTo`, `Processes`, the agents, goals, actions, steps, reactions and conditions), never `Compiled.Definition()`, and turns its actions and goals into planner operators itself (`engine/engine/planners.go`; the compiler imports no planner). A step's `guidance`,
 `checklist`, `deliverables` and `references` reach whoever carries it out: its human tasks carry the step
 (`HumanTask.context`), its LLM actions get it in their system prompt (and `{{ .Step }}`), and the sub-agent of an agent
 or process step inherits it. A step can also name a **capability** (`method: design`): the methodology's **methods** ([ADR 0035](adr/0035-methods-roles-operations-documents.md))

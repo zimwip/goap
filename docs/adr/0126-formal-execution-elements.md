@@ -1,7 +1,8 @@
 # ADR 0126 — Formal execution elements between the methodology and the engine
 
 **Status**: accepted; step 1 implemented (the call of a step, the owner of a step and of a reaction, the descriptions
-of the generated conditions). Step 2, the engine's own execution model, is to come · **Date**: 2026-10 · Builds on
+of the generated conditions), step 2 implemented (`Compiled` the activable form, the planner conversion in the engine).
+The read models on the methodology side are to come · **Date**: 2026-10 · Builds on
 ADR 0034 (processes), ADR 0035 / 0050 (methods), ADR 0062 (builtins), ADR 0109 (conditions), ADR 0125 (components)
 
 ## Context
@@ -43,12 +44,28 @@ what to run, not which methodology concept produced it). The engine reads them a
 4. `platform/layering` `TestEngineDecodesNoConvention` keeps the engine from naming the prefixes of the generated
    conditions, the parameters of the former builtin or `process.step`.
 
+## Step 2: three stages
+
+The methodology is the **description**; `methodology.Compiled` is the **activable** form the compiler builds from it;
+the **engine executes** the compiled form, feeding its planners and orchestrator with it and binding the context of
+the change.
+
+5. `Compiled` holds the definition but no longer embeds it: `Compiled.Definition()` gives it to whoever works on the
+   description (the registry, the editors, the assistant's queries, the tests), `WithDefinition` builds a variant in a
+   test. The engine reads the accessors of the activable form only: `Name`, `Version`, `Description`, `Namespace`,
+   `Administrative`, `Criticality`, `MainGoal`, `AppliesTo`, `Subscriptions`, `Supertypes`, `Processes` /
+   `Process` (`ProcessInfo {Name, Description, Nested}`, the nesting computed by the compiler), besides the agents,
+   goals, actions, steps, reactions and conditions it already had.
+6. The compiler knows no planner: `Compiled.PlannedActions` / `AgentActions` return `methodology.Action`s, and the
+   engine turns them into planner operators (`operator`, `operators`, `planningGoal` in `engine/engine/planners.go`).
+   `engine/methodology` and `engine/condition` import no `engine/goap` (`condition.Result.State` is a plain map).
+7. `platform/layering`: the `forbidden` map keeps `engine/methodology` and `engine/condition` off `engine/goap` and
+   `engine/engine`; `TestEngineDecodesNoConvention` refuses `.Definition()` in the engine.
+
 ## Next step
 
-The engine builds in memory its own execution model from the compiled methodology (agents, actions, goals,
-reactions, triggers, conditions) and runs only that: `MethodologyPort` returns it, `Compiled` stops embedding the
-definition (`*Methodology`) so that the engine no longer reads `Processes`, `Imports`, `AppliesTo` directly, and the
-read models over the definition (starting points, current state, progress) move to the methodology side.
+The read models over the definition (starting points, current state, progress) move to the methodology side, so
+that the engine keeps only what runs; `MethodologyPort` over RPC stops recompiling the definition it fetched.
 
 ## Consequences
 

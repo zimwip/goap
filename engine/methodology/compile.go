@@ -866,6 +866,6 @@ func (s *compileState) finish(lenient bool) (*Compiled, def.Issues) {
 	if err != nil {
 		return nil, def.Issues{{Message: err.Error()}}
 	}
-	return &Compiled{Methodology: m, Conditions: set, actions: s.actions, utilities: uset, agents: s.agents, whens: wset, processes: s.procs,
+	return &Compiled{definition: m, Conditions: set, actions: s.actions, utilities: uset, agents: s.agents, whens: wset, processes: s.procs,
 		methods: s.meths, methodGuards: mset, reactions: s.reactions, assessments: s.assessments}, s.issues
 }

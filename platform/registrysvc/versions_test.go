@@ -60,10 +60,10 @@ func TestMethodologyVersionOfAChange(t *testing.T) {
 		t.Fatalf("unknown version: %v", err)
 	}
 	// the readers of a methodology take the reference
-	if c, err := s.Methodology(ctx, "uses@1"); err != nil || c.Version != "1" {
+	if c, err := s.Methodology(ctx, "uses@1"); err != nil || c.Definition().Version != "1" {
 		t.Fatalf("compiled at version 1: %v", err)
 	}
-	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Version != "2" {
+	if c, err := s.Methodology(ctx, "uses"); err != nil || c.Definition().Version != "2" {
 		t.Fatalf("compiled at the latest: %v", err)
 	}
 }
@@ -126,7 +126,7 @@ func TestSeedLoadsNewVersions(t *testing.T) {
 		t.Fatalf("no change starts on a suspended version: %v", err)
 	}
 	cur, err := s.Methodology(ctx, "uses")
-	if err != nil || !cur.Types.HasNodeType("alm@Need") {
+	if err != nil || !cur.Definition().Types.HasNodeType("alm@Need") {
 		t.Fatalf("version 2 is written against alm@2: %v", err)
 	}
 	if r, _ := s.Get(ctx, "uses", "2"); r.Methodology.Domains["alm"] != "2" {
@@ -151,7 +151,7 @@ func TestUnpinnedPublishedMethodologyFollowsItsTime(t *testing.T) {
 	if _, _, err := domainsOf(s).ImportDomain(ctx, mustYAML(t, v2), true); err != nil {
 		t.Fatal(err)
 	}
-	if c, err := s.Methodology(ctx, "legacy"); err != nil || !c.Types.HasLinkType("alm@verifies") || c.Types.HasNodeType("alm@Need") {
+	if c, err := s.Methodology(ctx, "legacy"); err != nil || !c.Definition().Types.HasLinkType("alm@verifies") || c.Definition().Types.HasNodeType("alm@Need") {
 		t.Fatalf("compiled against alm@1: %v", err)
 	}
 	v3 := almDomain("3")

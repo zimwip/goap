@@ -147,7 +147,7 @@ func TestLifecycle(t *testing.T) {
 			if r, err := s.Get(ctx, m.Name, ""); err != nil || r.Methodology.Version != "2.1.0" {
 				t.Fatalf("latest published: %v %v", r.Methodology.Version, err)
 			}
-			if c, err := s.Methodology(ctx, m.Name); err != nil || c.Version != "2.1.0" {
+			if c, err := s.Methodology(ctx, m.Name); err != nil || c.Definition().Version != "2.1.0" {
 				t.Fatalf("engine port: %v", err)
 			}
 		})

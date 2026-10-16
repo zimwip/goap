@@ -87,7 +87,7 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 	}
 	for _, m := range ms {
 		ok, supersede := match(m.Subscriptions(), ev, act, methodology.FromSelf)
-		if !slices.Contains(m.AppliesTo, of) || !ok {
+		if !slices.Contains(m.AppliesTo(), of) || !ok {
 			continue
 		}
 		if ev.Type == events.ChangeItemAdded && !slices.ContainsFunc(ev.Items, func(it domain.ChangeItem) bool { return !ownItem(m, it) }) {
@@ -95,9 +95,9 @@ func (e *Engine) Accompany(ctx context.Context, ev TriggerEvent) {
 		}
 		event := maps.Clone(act)
 		event["id"], event["at"] = uuid.NewString(), e.clock().UnixMilli()
-		for _, proc := range m.Processes {
+		for _, proc := range m.Processes() {
 			if err := e.accompany(ctx, m, proc.Name, changeID, event, supersede); err != nil {
-				e.log().Warn("companion", "methodology", m.Name, "process", proc.Name, "change", changeID, "err", err)
+				e.log().Warn("companion", "methodology", m.Name(), "process", proc.Name, "change", changeID, "err", err)
 			}
 		}
 	}
@@ -150,9 +150,9 @@ func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any,
 		}
 		event := maps.Clone(act)
 		event["id"], event["at"], event["relation"] = uuid.NewString(), e.clock().UnixMilli(), from[i]
-		for _, proc := range m.Processes {
+		for _, proc := range m.Processes() {
 			if err := e.accompany(ctx, m, proc.Name, t.ID, event, supersede); err != nil {
-				e.log().Warn("relay", "methodology", m.Name, "process", proc.Name, "change", t.ID, "err", err)
+				e.log().Warn("relay", "methodology", m.Name(), "process", proc.Name, "change", t.ID, "err", err)
 			}
 		}
 	}
@@ -173,10 +173,10 @@ func (e *Engine) react(ctx context.Context, m *methodology.Compiled, ev TriggerE
 		event := maps.Clone(act)
 		maps.Copy(event, extra)
 		event["id"], event["at"] = uuid.NewString(), e.clock().UnixMilli()
-		key := CompanionPrefix + m.Name + "/" + r.Activity
+		key := CompanionPrefix + m.Name() + "/" + r.Activity
 		intent := fmt.Sprintf("%s %s on %s", r.Kind, r.Activity, ev.Type)
 		if err := e.companionRun(ctx, m, key, r.Agent, r.Goal, intent, changeID, event, supersede); err != nil {
-			e.log().Warn("reaction", "methodology", m.Name, "activity", r.Activity, "change", changeID, "err", err)
+			e.log().Warn("reaction", "methodology", m.Name(), "activity", r.Activity, "change", changeID, "err", err)
 		}
 	}
 }
@@ -205,7 +205,7 @@ func ownItem(m *methodology.Compiled, it domain.ChangeItem) bool {
 // accompany runs the companion of a process on a change for an event: it starts it, runs it again when it has ended,
 // or puts the event in its inbox when it is at work.
 func (e *Engine) accompany(ctx context.Context, m *methodology.Compiled, process string, changeID domain.ChangeID, event map[string]any, supersede bool) error {
-	return e.companionRun(ctx, m, CompanionPrefix+m.Name+"/"+process, process, process, process+" alongside the change", changeID, event, supersede)
+	return e.companionRun(ctx, m, CompanionPrefix+m.Name()+"/"+process, process, process, process+" alongside the change", changeID, event, supersede)
 }
 
 // companionRun runs the companion of key on a change for an event, towards goal with agent: it starts it, runs it
@@ -248,7 +248,7 @@ func (e *Engine) companionRun(ctx context.Context, m *methodology.Compiled, key,
 	}
 	who := authz.System(key).For(eventUser(event)) // a consequence of what the end user did (ADR 0114)
 	who.Org = "system"
-	p, err := e.Start(authz.With(ctx, who), StartRequest{Methodology: m.Name, Agent: agent, Goal: goal, ChangeID: changeID,
+	p, err := e.Start(authz.With(ctx, who), StartRequest{Methodology: m.Name(), Agent: agent, Goal: goal, ChangeID: changeID,
 		OwnerOrg: bb.Change.OwnerOrg, Trigger: key, Title: bb.Change.Title, Vars: map[string]any{"event": event},
 		Intent: fmt.Sprintf("%s: %s", intent, bb.Change.Intent)})
 	if err != nil {

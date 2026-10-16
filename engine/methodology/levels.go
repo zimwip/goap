@@ -227,7 +227,7 @@ func (c *Compiled) capabilityLevel(s StepInfo) (LevelCheck, bool) {
 	if s.Method() != MethodCapability {
 		return LevelCheck{}, false
 	}
-	methods := c.Methodology.methodsFor(s.Capability, c.methods.goals)
+	methods := c.definition.methodsFor(s.Capability, c.methods.goals)
 	if len(methods) == 0 {
 		return LevelCheck{}, false
 	}

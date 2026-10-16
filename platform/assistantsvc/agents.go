@@ -579,7 +579,7 @@ func (s *Service) Confirm(ctx context.Context, in ConfirmInput) (convsvc.Message
 				return fail(err)
 			}
 		}
-		ch, err := s.Graph.CreateChange(ctx, graph.NewChange{Title: nc.str("title"), Intent: nc.str("intent"), Methodology: m.Name, Namespace: m.Namespace,
+		ch, err := s.Graph.CreateChange(ctx, graph.NewChange{Title: nc.str("title"), Intent: nc.str("intent"), Methodology: m.Definition().Name, Namespace: m.Definition().Namespace,
 			ProjectID: changeProject, Data: map[string]any{"createdBy": p.Subject, "via": "assistant", "conversation": in.ConversationID}})
 		if err != nil {
 			return fail(fmt.Errorf("the change was not created: %w", err))

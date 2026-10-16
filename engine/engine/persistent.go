@@ -63,7 +63,7 @@ func (e *Engine) instanceKey(ctx context.Context, req StartRequest) (string, *me
 	if scope == "" {
 		return "", nil, nil
 	}
-	return m.Name + "/" + ag.Name + "@" + scope, ag.Persistent, nil
+	return m.Name() + "/" + ag.Name + "@" + scope, ag.Persistent, nil
 }
 
 // openInstance is the open instance of key, the latest one (nil when there is none).
@@ -181,7 +181,7 @@ func (e *Engine) handOver(ctx context.Context, p *Process) error {
 		ProjectID: p.Project, Vars: vars, Intent: fmt.Sprintf("next cycle of %s after %s", p.Agent, p.ID)}
 	if ag.Persistent.ScopePath() == methodology.ScopeChange {
 		req.ChangeID = p.ChangeID
-	} else if req.BaselineID, err = e.latestBaseline(ctx, domain.NamespaceOf(m.Namespace)); err != nil {
+	} else if req.BaselineID, err = e.latestBaseline(ctx, domain.NamespaceOf(m.Namespace())); err != nil {
 		return err
 	}
 	unlock := e.lock(p.ID)

@@ -45,7 +45,7 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 	}
 	e := &engine.Engine{
 		Graph:         g,
-		Methodologies: engine.StaticMethodologies{cm.Name: cm},
+		Methodologies: engine.StaticMethodologies{cm.Definition().Name: cm},
 		Executors: map[string]engine.Executor{
 			methodology.KindScript:  engine.ScriptExecutor{Sandboxes: engine.InprocSandboxes{}},
 			methodology.KindBuiltin: engine.DefaultBuiltins(),
@@ -53,7 +53,7 @@ func TestDecisionLoopEndToEnd(t *testing.T) {
 		Intent: intent.Resolver{Ranker: intent.Lexical{}},
 		Store:  engine.NewMemoryStore(),
 	}
-	p, err := e.Start(ctx, engine.StartRequest{Methodology: cm.Name, Agent: "decider", Goal: "decide_option", ChangeID: c.ID})
+	p, err := e.Start(ctx, engine.StartRequest{Methodology: cm.Definition().Name, Agent: "decider", Goal: "decide_option", ChangeID: c.ID})
 	if err != nil {
 		t.Fatal(err)
 	}

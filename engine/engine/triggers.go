@@ -225,7 +225,7 @@ func (t *TriggerManager) Reload(ctx context.Context) error {
 	for _, m := range ms {
 		for _, ag := range m.AgentList() {
 			for _, def := range ag.Triggers {
-				e := &triggerEntry{def: def, state: TriggerState{Methodology: m.Name, Agent: ag.Name, Name: def.Name, Description: def.Description,
+				e := &triggerEntry{def: def, state: TriggerState{Methodology: m.Name(), Agent: ag.Name, Name: def.Name, Description: def.Description,
 					Type: def.Type, Event: def.Event, Schedule: def.Schedule, Enabled: def.Enabled}}
 				if prev, ok := old[e.state.Key()]; ok {
 					e.state.Fires, e.state.LastFired, e.state.LastProcessID, e.state.LastError = prev.state.Fires, prev.state.LastFired, prev.state.LastProcessID, prev.state.LastError
@@ -426,7 +426,7 @@ func (t *TriggerManager) start(ctx context.Context, key string, s TriggerState, 
 		if err != nil {
 			return nil, err
 		}
-		b, err := t.Engine.latestBaseline(ctx, domain.NamespaceOf(m.Namespace))
+		b, err := t.Engine.latestBaseline(ctx, domain.NamespaceOf(m.Namespace()))
 		if err != nil {
 			return nil, err
 		}

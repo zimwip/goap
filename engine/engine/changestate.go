@@ -103,7 +103,7 @@ func (e *Engine) ChangeState(ctx context.Context, changeID domain.ChangeID) (*Ch
 	}
 	var runs []*Process
 	for _, p := range all {
-		if p.ChangeID == changeID && p.Methodology == m.Name {
+		if p.ChangeID == changeID && p.Methodology == m.Name() {
 			runs = append(runs, p)
 		}
 	}
@@ -112,9 +112,8 @@ func (e *Engine) ChangeState(ctx context.Context, changeID domain.ChangeID) (*Ch
 	for _, r := range m.Reactions() {
 		reactive[r.Owner] = true
 	}
-	nested := nestedProcesses(m)
-	for _, proc := range m.Processes {
-		if nested[proc.Name] {
+	for _, proc := range m.Processes() {
+		if proc.Nested {
 			continue // shown in the step that nests it
 		}
 		out.Processes = append(out.Processes, e.processState(ctx, m, proc, &bb, world, runs, reactive[proc.Name]))
@@ -123,7 +122,7 @@ func (e *Engine) ChangeState(ctx context.Context, changeID domain.ChangeID) (*Ch
 }
 
 // processState lays the live runs of a process over its steps judged against the change.
-func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc methodology.Process, bb *domain.Blackboard, world map[string]bool, runs []*Process, reactive bool) ProcessState {
+func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc methodology.ProcessInfo, bb *domain.Blackboard, world map[string]bool, runs []*Process, reactive bool) ProcessState {
 	ps := ProcessState{Process: proc.Name, Description: proc.Description, Reactive: reactive, Steps: []StepProgress{}}
 	// the runs of the process (its agent; a nested process or a method has its own)
 	var mine []*Process

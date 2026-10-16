@@ -56,7 +56,7 @@ func TestMethodologyCompileIsCached(t *testing.T) {
 		t.Fatal(err)
 	}
 	c3, err := s.Methodology(ctx, m.Name)
-	if err != nil || c3 == c1 || c3.Version != "2" {
+	if err != nil || c3 == c1 || c3.Definition().Version != "2" {
 		t.Fatalf("a published version is compiled afresh: %v", err)
 	}
 

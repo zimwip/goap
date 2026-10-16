@@ -223,7 +223,7 @@ func sharedCriteria(methods []Method, goals map[string]Goal) map[string]bool {
 func (c *Compiled) MethodsFor(capability string, bb domain.Blackboard) []MethodChoice {
 	state := c.methodGuards.Evaluate(bb).State
 	applicable := func(me Method) bool { return me.When == "" || state[me.GuardCondition()] }
-	ranked := RankByPriority(c.Methodology.methodsFor(capability, c.methods.goals), applicable, func(me Method) int { return me.Priority*100 + min(me.Specificity(), 99) })
+	ranked := RankByPriority(c.definition.methodsFor(capability, c.methods.goals), applicable, func(me Method) int { return me.Priority*100 + min(me.Specificity(), 99) })
 	out := make([]MethodChoice, 0, len(ranked))
 	for _, me := range ranked {
 		out = append(out, MethodChoice{Method: me, AgentGoal: c.methods.goals[me.Name].Name})
@@ -235,7 +235,7 @@ func (c *Compiled) MethodsFor(capability string, bb domain.Blackboard) []MethodC
 // methods applying everywhere left out): a step naming it is possible once one of them holds.
 func (c *Compiled) CapabilityGuards(capability string) []string {
 	var out []string
-	for _, me := range c.Methodology.methodsFor(capability, c.methods.goals) {
+	for _, me := range c.definition.methodsFor(capability, c.methods.goals) {
 		if me.When != "" {
 			out = append(out, me.GuardCondition())
 		}
@@ -251,11 +251,11 @@ type MethodChoice struct {
 
 // MethodByName returns a method by name.
 func (c *Compiled) MethodByName(name string) (Method, bool) {
-	i := slices.IndexFunc(c.Methodology.Methods, func(me Method) bool { return me.Name == name })
+	i := slices.IndexFunc(c.definition.Methods, func(me Method) bool { return me.Name == name })
 	if i < 0 {
 		return Method{}, false
 	}
-	return c.Methodology.Methods[i], true
+	return c.definition.Methods[i], true
 }
 
 // MethodGoal is the goal the agent of a valid method reaches ("" for an unknown method).

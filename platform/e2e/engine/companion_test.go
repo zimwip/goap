@@ -187,7 +187,7 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		e.Methodologies.(engine.StaticMethodologies)[c.Name] = c
+		e.Methodologies.(engine.StaticMethodologies)[c.Definition().Name] = c
 	}
 	broker := engine.NewBroker()
 	e.Events = broker
@@ -277,7 +277,7 @@ func TestRunWaitsForTheChangesItDependsOn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.Methodologies.(engine.StaticMethodologies)[c.Name] = c
+	e.Methodologies.(engine.StaticMethodologies)[c.Definition().Name] = c
 	head, err := g.BranchHead(ctx, "alm", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)

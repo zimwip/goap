@@ -390,8 +390,8 @@ func (t *turn) listMethodologies(ctx context.Context) (any, error) {
 	for _, n := range names[:min(len(names), maxMethodologys)] {
 		e := entry{Name: n}
 		if m, err := t.s.Methodologies.Methodology(ctx, n); err == nil && m != nil {
-			e.Description = clip(m.Description, 300)
-			for _, g := range m.Goals[:min(len(m.Goals), 5)] {
+			e.Description = clip(m.Definition().Description, 300)
+			for _, g := range m.Definition().Goals[:min(len(m.Definition().Goals), 5)] {
 				ex := g.Examples[:min(len(g.Examples), 3)]
 				e.Goals = append(e.Goals, goal{Name: g.Name, Description: clip(g.Description, 200), Examples: ex})
 			}
@@ -451,7 +451,7 @@ func (t *turn) createChange(ctx context.Context, a args) (any, error) {
 		if err != nil || m == nil {
 			return nil, fmt.Errorf("methodology %q cannot be read", method)
 		}
-		namespace = m.Namespace
+		namespace = m.Definition().Namespace
 	}
 	// no active project means the root project (ADR 0091)
 	project := t.project

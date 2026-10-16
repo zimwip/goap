@@ -160,9 +160,8 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 	if w.maxBlocked <= 0 {
 		w.maxBlocked = 8
 	}
-	nested := nestedProcesses(m)
-	for _, proc := range m.Processes {
-		if nested[proc.Name] {
+	for _, proc := range m.Processes() {
+		if proc.Nested {
 			continue // reached through the step that nests it
 		}
 		agent, ok := processAgent(m, proc.Name)
@@ -204,27 +203,6 @@ func processAgent(m *methodology.Compiled, process string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-// nestedProcesses are the processes of the methodology that a step of one of them nests: their steps are carried out
-// through that step.
-func nestedProcesses(m *methodology.Compiled) map[string]bool {
-	out := map[string]bool{}
-	var walk func([]methodology.StepInfo)
-	walk = func(steps []methodology.StepInfo) {
-		for _, s := range steps {
-			if s.Process != "" {
-				if other, proc := s.NestedProcess(); other == "" || other == m.Name {
-					out[proc] = true
-				}
-			}
-			walk(s.Steps)
-		}
-	}
-	for _, p := range m.Processes {
-		walk(m.ProcessSteps(p.Name))
-	}
-	return out
 }
 
 type pointWalker struct {
@@ -329,9 +307,9 @@ func (w *pointWalker) add(s methodology.StepInfo, pt StartingPoint) error {
 		}
 	}
 	slices.Sort(pt.Produces)
-	pt.Launch.Methodology, pt.Launch.ChangeID = w.m.Name, w.change
+	pt.Launch.Methodology, pt.Launch.ChangeID = w.m.Name(), w.change
 	pt.Running = w.running(pt)
-	ok, roles, err := w.e.MayRunAgent(w.ctx, w.m.Name, pt.Launch.Agent, w.project)
+	ok, roles, err := w.e.MayRunAgent(w.ctx, w.m.Name(), pt.Launch.Agent, w.project)
 	if err != nil {
 		return err
 	}
@@ -350,7 +328,7 @@ func (w *pointWalker) running(pt StartingPoint) bool {
 			return true
 		case p.Step != nil && (methodology.StepWithin(p.Step.Path, pt.ID) || methodology.StepWithin(pt.ID, p.Step.Path)):
 			return true
-		case p.Methodology == w.m.Name && p.Goal == pt.Process && p.Agent == pt.Process:
+		case p.Methodology == w.m.Name() && p.Goal == pt.Process && p.Agent == pt.Process:
 			return true // the whole process is being run towards its goal: its planner sequences the step
 		}
 	}

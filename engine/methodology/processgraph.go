@@ -66,7 +66,7 @@ type GraphAction struct {
 func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 	var g ProcessGraph
 	var top []StepInfo
-	if p, ok := c.ProcessByName(name); ok {
+	if p, ok := c.definition.ProcessByName(name); ok {
 		g = ProcessGraph{Process: p.Name, Description: p.Description, References: p.References}
 		top = c.ProcessSteps(name)
 	} else if me, ok := c.MethodByName(name); ok && (len(me.Steps) > 0 || len(me.Actions) > 0) {
@@ -103,7 +103,7 @@ func (c *Compiled) ProcessGraph(name string) (ProcessGraph, bool) {
 	}
 	walk(top, "", 0)
 	g.Edges = conditionEdges(g.Steps)
-	for _, me := range c.Methodology.Methods {
+	for _, me := range c.definition.Methods {
 		if capabilities[me.For] {
 			g.Methods = append(g.Methods, GraphMeth{Method: me, AgentGoal: c.MethodGoal(me.Name)})
 			agents[me.ActorAgent()] = true

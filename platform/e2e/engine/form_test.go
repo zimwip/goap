@@ -55,7 +55,7 @@ func startForm(t *testing.T, code string) (*engine.Engine, *graph.Graph, *engine
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.Methodologies = engine.StaticMethodologies{cm.Name: cm}
+	e.Methodologies = engine.StaticMethodologies{cm.Definition().Name: cm}
 	e.Executors[methodology.KindScript] = engine.ScriptExecutor{Sandboxes: engine.InprocSandboxes{}}
 	p, err := e.Start(ctx, engine.StartRequest{Methodology: "linking", Goal: "link", BaselineID: base, ProjectID: testProject, Intent: "link the requirement"})
 	if err != nil {

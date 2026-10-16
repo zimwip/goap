@@ -30,7 +30,11 @@ func TestExampleCompilesAndPlans(t *testing.T) {
 		start[n] = false
 	}
 	g, _ := c.Goal("prepare_change")
-	p, err := goap.Planner{}.Plan(start, c.PlanningActions(), g.PlanningGoal())
+	var ops []goap.Action
+	for _, a := range c.PlannedActions() {
+		ops = append(ops, goap.Action{Name: a.Name, Pre: a.Pre, Effects: a.Effects, Cost: a.Cost})
+	}
+	p, err := goap.Planner{}.Plan(start, ops, goap.Goal{Name: g.Name, Pre: g.Pre, Value: g.Value})
 	if err != nil {
 		t.Fatal(err)
 	}

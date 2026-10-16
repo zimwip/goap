@@ -18,12 +18,16 @@ const mod = "github.com/zimwip/goap/"
 
 // forbidden lists, by package, the packages it must not depend on, directly or not.
 var forbidden = map[string][]string{
-	"contracts/mcp":         {"lib/adapter", "lib/mcpbuiltin", "lib/access", "contracts/algo", "contracts/domain", "graph/graph"},
-	"contracts/algo":        {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
-	"lib/dsl":               {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
-	"lib/def":               {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
-	"lib/access":            {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
-	"lib/llmcfg":            {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
+	"contracts/mcp":  {"lib/adapter", "lib/mcpbuiltin", "lib/access", "contracts/algo", "contracts/domain", "graph/graph"},
+	"contracts/algo": {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
+	"lib/dsl":        {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
+	"lib/def":        {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "lib/access"},
+	"lib/access":     {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
+	"lib/llmcfg":     {"contracts/mcp", "lib/adapter", "lib/mcpbuiltin", "graph/graph", "engine/engine"},
+	// The methodology describes and compiles; the engine plans and runs (ADR 0126): neither the compiler nor the
+	// conditions know the planner.
+	"engine/methodology":    {"engine/goap", "engine/engine"},
+	"engine/condition":      {"engine/goap", "engine/engine"},
 	"engine/engine":         {"lib/adapter", "lib/mcpbuiltin", "engine/observe", "engine/selfimprove", "platform/assistantsvc", "graph/graph"},
 	"contracts/builtins":    {"engine/methodology", "engine/engine", "contracts/domain"},
 	"lib/adapter":           {"lib/mcpbuiltin", "lib/access"},
@@ -138,7 +142,8 @@ func TestCoreNamesNoStructure(t *testing.T) {
 
 // TestEngineDecodesNoConvention keeps the engine reading the formal elements the compiler states (ADR 0126): the
 // call of a step (methodology.Call), the owner of a step, the description of a generated condition; it decodes no name
-// the compiler makes up (the prefixes of the generated conditions, the parameters of a former builtin).
+// the compiler makes up (the prefixes of the generated conditions, the parameters of a former builtin), and it reads
+// the activable form only, never the definition behind it (Compiled.Definition, ADR 0126 step 2).
 func TestEngineDecodesNoConvention(t *testing.T) {
 	files, err := filepath.Glob("../../engine/engine/*.go")
 	if err != nil || len(files) == 0 {
@@ -153,7 +158,7 @@ func TestEngineDecodesNoConvention(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, word := range []string{`"step:`, `"state:`, `"method:`, `"subject:`, `"pending:`, `"when:`, `"expect:`, "StatePrefix", "ReactionPrefix",
-			`Params["step"]`, `Params["capability"]`, `Params["foreach"]`, `Params["groupBy"]`, `Params["goal"]`, "process.step"} {
+			`Params["step"]`, `Params["capability"]`, `Params["foreach"]`, `Params["groupBy"]`, `Params["goal"]`, "process.step", ".Definition()"} {
 			if strings.Contains(string(b), word) {
 				t.Errorf("%s decodes the convention %s: read the element the compiler states instead", f, word)
 			}
