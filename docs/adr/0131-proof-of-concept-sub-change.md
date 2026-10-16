@@ -1,6 +1,6 @@
 # ADR 0131 — Proofs of concept and prototypes: a relaxed build in a sub-change, to derisk or to explore the need
 
-**Status**: accepted, implemented (first cut, see *As built*) · **Date**: 2026-10 · Builds on ADR 0036 (risks and actions, transverse risk management), 0075
+**Status**: accepted, implemented (see *As built*) · **Date**: 2026-10 · Builds on ADR 0036 (risks and actions, transverse risk management), 0075
 (criticality), 0103 (sub-changes on their own branch), 0106 (methodologies integrating methodologies), 0109 (scoped
 conditions, assessments as verdicts of a claim), 0110 (reactive activities, methodology events), 0115 (forms of human
 actions), 0118 (workspace of a change), 0129 (a person reviews model output)
@@ -355,8 +355,15 @@ Where the implementation differs from the sections above, it is what holds:
 - **Planning a process over scoped actions.** The steps of `poc` declare their `done`, since the pending conditions
   `chainScoped` adds to the effects would otherwise enter the goal of the process; `state_hypotheses` declares the
   pending conditions of the framing actions among its effects, the subjects it creates being what they work on.
-- **Not yet**: the prompt of `implement_component` showing the concluded POCs, the web (*Propose a POC* / *a
-  prototype*), the description review suggesting a prototype.
+- **The delivery learns from it.** `conclude_poc` writes an artifact `poc_findings` for every POC (its verdicts, the
+  person's summary, the branches of its code; `prototype_findings` too for a prototype), which
+  `implement_component`'s prompt shows as a reference, saying the component is built again under the rules of the
+  delivery.
+- **Web.** The Actions card of *Risks & actions* proposes a mitigation, a proof of concept (the live risks it checks)
+  or a prototype (its statements); a POC row shows what it checks and links its sub-change once opened, a risk row
+  says when a concluded POC covers it no more (`web/src/lib/risks.ts`: `covers`, `pocData`). The description rating
+  may answer `prototype: [statements]`, the questions only trying would settle; the bubble lists them with *Propose a
+  prototype*, which writes the `explore` action (a person, never the model; opened from the proofs step as any other).
 - **Test**: `platform/e2e/engine/sdlc_poc_test.go` (`TestSDLCDerisksByAProofOfConcept`): a 4x4 risk and its POC
   action, opened by a person through the form, the sub-change running by itself (probe, confirmation, build in a local
   workspace, check, verdict refuted, conclusion), `poc.concluded` carried to the parent, the risk closed, the action
@@ -372,9 +379,12 @@ Where the implementation differs from the sections above, it is what holds:
   serves other investigations (a spike, a benchmark, a migration rehearsal) with their own methodology.
 - A POC costs a person twice (opening, concluding): deliberate, a POC spends a budget and moves a risk.
 
-## Open questions
+## Settled questions
 
-1. Does the build wait for the open POCs (proposed: yes, `pocs_concluded`), or only the release, through
-   `risks_under_control`?
-2. May the delivery start from the POC's branch (rebuilt under full rules) rather than only read it?
-3. What else a person gives when opening a POC (budget in tokens, a target environment, the people consulted)?
+1. **The build waits for the open POCs** (`pocs_concluded` in its `pre`), not only the release: what a POC checks
+   decides what is built. A team that will not wait cancels the action, a decision recorded in the register.
+2. **The delivery never starts from a POC's branch.** It reads the findings and the branch as a reference
+   (`poc_findings`, §5); the code is built again under the rules of the delivery, so nothing that skipped them ships.
+3. **Opening a POC takes** the statements to check on top of the risks, the sources, a timebox and notes. The budget
+   is the loop budget of `implement_probe` (a methodology setting, not a field of the form); a target environment
+   belongs to the sources or the notes. More fields come when a use asks for them.

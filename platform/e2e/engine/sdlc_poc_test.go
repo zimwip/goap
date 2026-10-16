@@ -189,6 +189,15 @@ func TestSDLCDerisksByAProofOfConcept(t *testing.T) {
 	if rsk.Status != risk.RiskClosed {
 		t.Fatalf("the risk the POC refuted is closed: %+v", rsk)
 	}
+	findings := 0
+	for _, it := range parent.Items {
+		if it.Type == domain.TypeArtifact && it.Target == "poc_findings" && it.Data["change"] == string(sub.ID) {
+			findings++
+		}
+	}
+	if findings != 1 {
+		t.Fatalf("the delivery gets the findings of the POC once: %d", findings)
+	}
 	if sub, _ = g.Change(ctx, sub.ID); sub.Status != domain.ChangeAbandoned {
 		t.Fatalf("the sub-change is closed, landing nothing: %s", sub.Status)
 	}
