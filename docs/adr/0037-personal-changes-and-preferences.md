@@ -22,7 +22,7 @@ or removes it (the Connect interceptor `Handler.PersonalScope` answers "not foun
 included; `ListChanges` / `ListNodeChanges` leave it out), and it is never split into sub-changes nor a sub-change.
 As first decided the personal unit was an `OrgUnit` of kind `personal`, written directly on first use; since ADR 0039 /
 0040 it is the user's own `organisation@User` node (a subtype of `OrgUnit`), created through a change by
-`graphsvc.EnsureUser` (`pkg/access/personal.go`).
+`graphsvc.EnsureUser` (`lib/access/personal.go`).
 
 ### 2. Purging a change that landed nothing
 

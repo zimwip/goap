@@ -4,7 +4,7 @@
 
 ## Context
 
-`cmd/goap-dev/main.go` was one 350-line `main` wiring the whole platform (stores, graph, registry, seeds, model gateway,
+`platform/cmd/goap-dev/main.go` was one 350-line `main` wiring the whole platform (stores, graph, registry, seeds, model gateway,
 node index, MCP hub, engine, triggers, HTTP routes) with `platform.Fatal` on every error and a forward-declared
 `triggers` variable the change and registry hooks closed over: nothing could build it without exiting the process, so
 nothing tested it. `web/src/lib/api.ts` was 2,600 lines (transport, 190 exports of proto3 shapes, every service client,
@@ -23,7 +23,7 @@ the session calls, display helpers) imported by 85 files.
 - **Smoke test** (`app_test.go`): the whole platform on a temporary SQLite database with `GOAP_AUTH_MODE=none`, served
   through `httptest` over the Echo handler (`/readyz`, `/api/status`, `/api/whoami`, a graph RPC), and `run` stopping with
   its context; `-race` clean (about 20 s under the race detector, 2 s without).
-- **`cmd/engine` is left alone**: it wires the engine over RPC clients, NATS events, a lease-based trigger leader and an LLM
+- **`platform/cmd/engine` is left alone**: it wires the engine over RPC clients, NATS events, a lease-based trigger leader and an LLM
   ranker; only the executor table is literally shared, which is not worth a package.
 - **Web API**: `web/src/lib/api.ts` re-exports `web/src/lib/api/`: `transport.ts` (base URL, token store, `RpcError`,
   `rpc`, `reportUnauthorized`), `types/{common,registry,access,graph,engine,models,mcp,nodeIndex}.ts` (shapes only, but
@@ -32,7 +32,7 @@ the session calls, display helpers) imported by 85 files.
   `authApi.ts` (the session calls; named so it does not suggest `stores/session.svelte.ts`) and `helpers.ts`. No module
   imports a module above it; the types do not import clients. The importers are unchanged; `api.test.ts` covers the
   transport. `Int64`, `FlowOrigin`, `FlowEvent`, `OptionSpec` and `DecisionPolicy` moved down (common, graph) to keep
-  the engine and graph shapes acyclic. The Go tests that read the web (`pkg/events` for `TRIGGER_EVENTS`) point at the
+  the engine and graph shapes acyclic. The Go tests that read the web (`contracts/events` for `TRIGGER_EVENTS`) point at the
   new file.
 
 ## Consequences

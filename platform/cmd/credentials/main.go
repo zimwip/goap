@@ -1,0 +1,37 @@
+// Command credentials keeps the local sign-in password of subjects that connect without an external
+// identity provider (ADR 0040).
+package main
+
+import (
+	"context"
+	"errors"
+
+	"github.com/jackc/pgx/v5/stdlib"
+
+	"github.com/zimwip/goap/contracts/gen/goap/credentials/v1/credentialsv1connect"
+	"github.com/zimwip/goap/gateway/credsvc"
+	"github.com/zimwip/goap/lib/platform"
+	"github.com/zimwip/goap/lib/telemetry"
+)
+
+func main() {
+	ctx := context.Background()
+	log := platform.Logger("credentials")
+	defer telemetry.Setup(context.Background(), log, "credentials")(context.Background())
+	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
+	var store credsvc.Store = credsvc.NewMemoryStore()
+	if pool := platform.OptionalPostgres(ctx, log, credsvc.Migrations); pool != nil {
+		defer pool.Close()
+		store = credsvc.SQLStore{DB: stdlib.OpenDBFromPool(pool), Dollar: true}
+		srv.Readiness(pool.Ping)
+	}
+	// the gateway is the only caller: it presents a shared service credential; without one nobody may call
+	token, err := platform.NewSecrets().Get(ctx, "goap/credentials#service_token", "GOAP_CREDENTIALS_TOKEN")
+	if err != nil || token == "" {
+		platform.Fatal(log, "credentials service token (GOAP_CREDENTIALS_TOKEN)", errors.Join(err, errors.New("not set")))
+	}
+	srv.Mount(credentialsv1connect.NewCredentialsServiceHandler(&credsvc.Handler{Service: &credsvc.Service{Store: store}, Token: token}, telemetry.HandlerOptions()...))
+	if err := srv.Run(); err != nil {
+		platform.Fatal(log, "server", err)
+	}
+}

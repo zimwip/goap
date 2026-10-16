@@ -1,7 +1,7 @@
 # ADR 0054 — Structures, bootstrap and the guard of the graph
 
 **Status**: accepted, implemented; the default project superseded by ADR 0091 (a change names its project); the
-built-in names moved out of `pkg/domain` by ADR 0069 · **Date**: 2026-10 ·
+built-in names moved out of `contracts/domain` by ADR 0069 · **Date**: 2026-10 ·
 Builds on ADR 0012/0013 (domains, type catalogue), ADR 0039 (project), ADR 0040 (mandatory parenting), ADR 0049
 (mandatory change). Roots, default flag and bootstrap properties moved into the tag by ADR 0069. Supersedes ADR 0049's `LinkOrphanUnits` and the `organisation@owner` link, and ADR 0039's
 "empty project resolves to the root project" and its `Engine.Start` project gate.
@@ -32,7 +32,7 @@ hard-coded in three packages. `ORG-DEFAULT` and `PROJ-ROOT` were seeded by `grap
 A node type may carry a `structure` tag (`def.NodeType.Structure`, proto `StructureTag`):
 `{kind: organisation | project, parent: <link type of the domain, from and to the type>, root: <key>, selfParent}`.
 The schema check refuses an unknown kind, a tag twice in a domain, a missing root or a parent link that does not go
-from and to the type; the type catalogue (`pkg/typecat`) refuses a second domain tagging a kind already tagged and a
+from and to the type; the type catalogue (`lib/typecat`) refuses a second domain tagging a kind already tagged and a
 catalogue without both, so the registry reports it when the domain is saved and never publishes it. The built-in
 organisation domain tags `OrgUnit` (`part_of`, root `ORG-DEFAULT`) and `ProjectUnit` (`project_part_of`, root
 `PROJ-ROOT`, self-parent). `TypeCatalog.Structure(kind)` and `IsA(typ, base)` give the graph what it needs; an
@@ -45,13 +45,13 @@ OrgUnit` is a unit).
 in (`Bootstrap`, administrative, held by the root unit and acting in the root project it creates): the root unit owns
 itself and the root project, both were created in the root project, the root project links to itself. It is
 idempotent (a graph with both roots is left alone, one with a single root is refused) and safe between processes (a
-conflict is read back). The services run it at start, before serving and before any seed (`cmd/graph`,
-`cmd/goap-dev`); `CreateChange` and `MergeBranch` run it too, so no change can precede it. Every seed is then an
+conflict is read back). The services run it at start, before serving and before any seed (`platform/cmd/graph`,
+`platform/cmd/goap-dev`); `CreateChange` and `MergeBranch` run it too, so no change can precede it. Every seed is then an
 ordinary change: the demo organisation hangs under `ORG-DEFAULT` from its creation (`LinkOrphanUnits` is gone).
 
 ### The guard (graph service, whatever the storage)
 
-`graph.New` wraps every repository transaction in a guard (`pkg/graph/guard.go`), so the rules hold for the in-memory
+`graph.New` wraps every repository transaction in a guard (`graph/graph/guard.go`), so the rules hold for the in-memory
 store, SQLite, PostgreSQL and any storage to come, with or without constraints:
 
 - a node version, a link, a branch membership (`JoinBranch` now takes the change whose merge makes the version join)
@@ -92,12 +92,12 @@ outside it, stays with the parent), an `organisation@Adapter` belongs to the uni
 - Rule 1 holds by construction at two levels (the guard, the schema); rules 2 and 3 hold in the guard and the schema
   alike; no caller-level exemption remains (test fixtures write through a change too).
 - No service names the organisation or the projects itself: the graph reads the structures from its catalogue, and
-  the services reading them (`pkg/access`, `internal/mcpsvc`) ask the graph service (`GetStructures`: every structure
+  the services reading them (`lib/access`, `mcp/mcpsvc`) ask the graph service (`GetStructures`: every structure
   with the types belonging to each, a `User` being a unit, `domain.Structures`) and build their snapshots from the
   answer: units and projects are the nodes of those types, their hierarchies the parent links named, the roots the
   keys named. The catalogue requires both structures to live in one namespace (the Assignment links a unit and a
-  project), so these services read one head. The constants of the built-in organisation live in `pkg/access`
-  (`access.DefaultOrg`, `NodeTypeOrgUnit`, ..., moved out of `pkg/domain` by ADR 0069) for the seeds and tests
+  project), so these services read one head. The constants of the built-in organisation live in `lib/access`
+  (`access.DefaultOrg`, `NodeTypeOrgUnit`, ..., moved out of `contracts/domain` by ADR 0069) for the seeds and tests
   writing organisation data; the untyped graph uses `typecat.Builtin()`.
 - An existing database must be recreated (`make devlocal-reset` for the local mode): the new schema file cannot be
   applied over the old one, and fails loudly if tried.

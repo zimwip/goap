@@ -6,7 +6,7 @@
 
 Four pieces of knowledge lived in two or three places, each a list or a branch that had to be kept in step by hand:
 the node types only administrators write (`access.IsAccessType`, a hardcoded list used by the graph handler and by
-`goap-change`), the walk up the organisation (`pkg/access`, `internal/mcpsvc` and `goap-admin` each rebuilt it), the
+`goap-change`), the walk up the organisation (`lib/access`, `mcp/mcpsvc` and `goap-admin` each rebuilt it), the
 authentication modes (`switch AuthMode` in the gateway, in two commands and, by name, in the web), and the keys of the
 user preferences (a schema in the preferences service mirrored by the web).
 
@@ -27,20 +27,20 @@ Greenfield: no shim, the old list, switches and schema are removed.
    in-process graph implements and `graphsvc.Client` implements with the new RPC `IsAdminOnlyType`. A domain
    flagged type is gated with no code naming it. `access.IsAccessType` is gone. `AdminFloorValidator.Types()` stays a
    list: it is not "who may write a type" but the two types that decide who administers (User, Assignment).
-2. **One chain resolver.** `domain.Hierarchy` (`pkg/domain/hierarchy.go`), built by
+2. **One chain resolver.** `domain.Hierarchy` (`contracts/domain/hierarchy.go`), built by
    `domain.Structures.Hierarchy(kind, nodes, links)` from the structures and the nodes / links the graph returns, with
    `Chain(key)` (self first, nearest first, root last, an empty key is the root, cycle-safe), `Parent`, `Root`. It is
    used by `access.Snapshot` (organisation and project chains), `mcpsvc.Snapshot` (the adapter chain) and the `units`
    / `users` listings of `goap-admin`, which no longer rebuilds parents ad hoc nor names the unit type, link or
-   `ORG-DEFAULT` (`engine.GraphPort` gained `Structures`). It lives in `pkg/domain`, the leaf both services already
+   `ORG-DEFAULT` (`engine.GraphPort` gained `Structures`). It lives in `contracts/domain`, the leaf both services already
    import, so no layering rule moves.
 3. **Auth modes are strategies.** `gateway.Mode` (`Name`, `Open`, `VerifiesTokens`, `Sessions`, `Validate`,
    `Authenticate`, `Routes`), three implementations (`none`, `hs256`, `local`) registered by name
    (`RegisterMode`, `LookupMode`; an unset or unknown name is an error). The gateway looks the mode up once and no
    longer branches on the name: the authenticator calls `Authenticate`, `MountAuthEndpoints` calls `Validate` and
    `Routes`, `checkSession` and `Prepare` ask `Sessions()` (server-side sessions are keyed on the strategy, not on
-   `"local"`), `cmd/gateway` loads the secret when `VerifiesTokens()` and the credentials client when `Sessions()`,
-   `cmd/goap-dev` skips the gateway when `Open()` and generates its secret when `Sessions()`. `GET /api/auth/config`
+   `"local"`), `platform/cmd/gateway` loads the secret when `VerifiesTokens()` and the credentials client when `Sessions()`,
+   `platform/cmd/goap-dev` skips the gateway when `Open()` and generates its secret when `Sessions()`. `GET /api/auth/config`
    answers `{authMode, signsIn}`; the web reads `signsIn` (`authState.signsIn`) instead of comparing the name to
    `"local"`. Flags and environment variables are unchanged.
 4. **Preferences are an opaque document.** The preferences service keeps one JSON object per subject, whatever its

@@ -68,7 +68,8 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://graph:graph@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_SEED: demo
-      GOAP_REGISTRY_URL: http://registry:8080
+      # the domain registry is the graph's (ADR 0125 §3): it publishes the shipped domains at start
+      GOAP_DOMAINS_DIR: /domains
     ports: ["8081:8080"]
 
   registry:
@@ -76,8 +77,6 @@ services:
     build: {context: ../.., args: {SERVICE: registry}}
     environment:
       <<: *env
-      GOAP_DB_DSN: postgres://registry:registry@postgres:5432/goap?sslmode=disable
-      GOAP_DOMAINS_DIR: /domains
       GOAP_METHODOLOGIES_DIR: /methodologies
       GOAP_GRAPH_URL: http://graph:8080
     ports: ["8082:8080"]
@@ -144,6 +143,8 @@ services:
     build: {context: ../.., args: {SERVICE: engine}}
     environment:
       <<: *env
+      # processes shared by the engine replicas (ADR 0124)
+      GOAP_DB_DSN: postgres://engine:engine@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
       GOAP_REGISTRY_URL: http://registry:8080
       GOAP_MODELGW_URL: http://modelgw:8080

@@ -38,7 +38,7 @@ things by *concern*, and a slot that pulled organisation rules into the action w
 |---|---|---|---|
 | Flow | inputs consumed, outputs produced | Action `pre` / `effects`; items and impacts on the change blackboard | Methodology (declares) + Change (holds) |
 | Resource, mechanism | human, agent, tool | Action `mcps`, `model`, `roles`; resolved through Adapter and model gateway | Organisation + Adapter (late binding, rule 5) |
-| Resource, context | reference documents, history | Brief (`pkg/brief`), references of processes, facets | Change |
+| Resource, context | reference documents, history | Brief (`lib/brief`), references of processes, facets | Change |
 | Recipe | steps | Method / process (ADR 0034, 0035, 0050) | Methodology |
 | Frame, postconditions and oracle | acceptance criteria | `Expects`, `verify` (section 3) | Methodology |
 | Frame, rules, budget, forbidden | policies | `Policy` nodes (ABAC), adapter restrictions, quotas, criticality policy | **Organisation** |
@@ -83,7 +83,7 @@ Expiry sends the covered impacts back to `proposed` through the normal review pa
 
 | Notion | GOAP | Status |
 |---|---|---|
-| Derogation with signatory and expiry | `pkg/risk` kind `derogation`, `derogation:sign`, `derogation:sign-role` | ✅ |
+| Derogation with signatory and expiry | `contracts/risk` kind `derogation`, `derogation:sign`, `derogation:sign-role` | ✅ |
 | Debt threshold | `derogation_debt` (≥ 3, `condition.DerogationDebtLimit`) | ✅ (constant, not yet policy) |
 | Expiry sweep | builtin `derogation.expire`, example trigger `methodologies/examples/derogation-expiry.yaml` (not seeded) | 🟡 not tested through the trigger manager |
 | Signatory is a named person other than the writer | only the writer's authority is checked | 🟡 |
@@ -135,7 +135,7 @@ It also counts **active constraints**, which feeds the capacity check (section 6
 
 | Notion | GOAP | Status |
 |---|---|---|
-| Compiled brief per LLM action | `pkg/brief` (intent, step, risks, decisions, actions; no rules from other axes) | 🟡 |
+| Compiled brief per LLM action | `lib/brief` (intent, step, risks, decisions, actions; no rules from other axes) | 🟡 |
 | Layers, priority, provenance, conflicts | policy chain (ABAC along unit chain, nearest wins), adapter restrictions, method priority/specificity: mechanisms exist, nothing compiles them into one object | ⬜ |
 
 ### 5.4 Evolution of the frame is a Change
@@ -147,7 +147,7 @@ exclusive owner per rule, a review date and a retirement path (rule accretion co
 
 | Notion | GOAP | Status |
 |---|---|---|
-| Observer turns runs into proposed methodology changes | `methodology-improvement.yaml`, `pkg/observe`, `pkg/selfimprove` (ADR 0011) | ✅ |
+| Observer turns runs into proposed methodology changes | `methodology-improvement.yaml`, `engine/observe`, `engine/selfimprove` (ADR 0011) | ✅ |
 | Aggregated-evidence threshold across runs | thresholds are per run | 🟡 |
 | Rule owner, review date, retirement | none | ⬜ |
 | Urgent frame change (andon) marking running work stale | none | ⬜ |

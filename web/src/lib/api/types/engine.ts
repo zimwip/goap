@@ -78,6 +78,8 @@ export interface Structure {
   selfParent?: boolean;
   /** node types belonging to the structure (the tagged type and its subtypes) */
   types?: string[];
+  /** the initial properties of the root node */
+  bootstrap?: Struct;
 }
 
 /** A built-in platform role (an Assignment naming no project grants it platform-wide). */
@@ -673,6 +675,8 @@ export interface AttachChangeRequest {
   namespace?: string;
   ownerOrg?: string;
   baselineId?: string;
+  /** key of the ProjectUnit the new change belongs to (empty: the caller's active project) */
+  projectId?: string;
 }
 
 /** One append-only entry of a process's own log (ADR 0031): turn-by-turn state independent
@@ -791,4 +795,6 @@ export interface StartProcessRequest {
   /** key of the OrgUnit holding the change (empty: the default organisation) */
   ownerOrg?: string;
   vars?: Struct;
+  /** key of the ProjectUnit the new change belongs to (empty: the caller's active project) */
+  projectId?: string;
 }

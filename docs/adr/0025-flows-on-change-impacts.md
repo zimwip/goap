@@ -99,10 +99,10 @@ The history is kept: the change log holds every edit, the stale ones included.
 ## Consequences
 - **Storage**: `node_version.execution`; `change_impact.flow`, `change_impact.superseded`; `Review.Flow`,
   `Review.Execution` (inside the JSON); `FlowEvent.StaleRuns`. Both SQL dialects, proto (`ChangeImpact.flow`,
-  `.superseded`, `Node.execution`, `Review.flow`, `.execution`, `FlowEvent`), `gen/`.
-- **Code**: `pkg/graph/flow.go` (open, adopt as reset, discard, competition), `pkg/graph/flownodes.go` (the view,
-  `adoptNodes`), `pkg/graph/draft.go` (a flow's drafts), `pkg/domain` (view of the change impacts per flow),
-  `pkg/engine` (`applyNodeOps`, `Relaunch`), the UI flow graph and the change tab (candidates and superseded change
+  `.superseded`, `Node.execution`, `Review.flow`, `.execution`, `FlowEvent`), `contracts/gen/`.
+- **Code**: `graph/graph/flow.go` (open, adopt as reset, discard, competition), `graph/graph/flownodes.go` (the view,
+  `adoptNodes`), `graph/graph/draft.go` (a flow's drafts), `contracts/domain` (view of the change impacts per flow),
+  `engine/engine` (`applyNodeOps`, `Relaunch`), the UI flow graph and the change tab (candidates and superseded change
   impacts).
 - **Cost**: every write records its execution; a flow read is a fold of the change log (ADR 0029); adoption appends
   one event per affected node.
@@ -125,7 +125,7 @@ The history is kept: the change log holds every edit, the stale ones included.
 ## Implementation notes
 - **Storage**: the uniqueness of a node in a change is per flow among the change impacts that are not superseded
   (partial unique index `change_impact_live`); `Review.Flow` / `Execution` / `Superseded` (in the JSON).
-- **View** (`pkg/graph/flownodes.go`): the change impacts a flow sees, with the draft and `review` resolved (§3); used
+- **View** (`graph/graph/flownodes.go`): the change impacts a flow sees, with the draft and `review` resolved (§3); used
   by `Blackboard`, so CEL, the DSL snapshot and the engine read the flow view. `Graph.Change` returns every stored
   change impact, with `flow` / `superseded`, for audit.
 - **Writes**: the node operations and `ProposeImpact` carry `Flow` and `Execution`; `ImpactNodeReviewOn(flow,

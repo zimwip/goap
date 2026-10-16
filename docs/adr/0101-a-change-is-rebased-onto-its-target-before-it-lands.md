@@ -36,7 +36,7 @@ As first decided, the rebase worked on the **drafts of an uncommitted change** (
 `Draft.Base`; the merged draft installed by a `transitioned` event with `Base` moved to the head and `Patch {"rebased",
 "conflicts"}`), and a committed change was not rebased. **Since ADR 0102** it is the reverse: a change that committed
 nothing has nothing to rebase (`RebaseChange` / `GetRebaseState` answer nothing for it), and what a change committed on
-its branch is rebased at its merge (`rebaseCommittedTx`, `pkg/graph/rebase_committed.go`: a baseline of kind `rebase` on
+its branch is rebased at its merge (`rebaseCommittedTx`, `graph/graph/rebase_committed.go`: a baseline of kind `rebase` on
 its branch, the nodes changed on both sides merged into drafts whose `Base` is the committed version and `MergedWith`
 the target's). A sub-change is rebased onto its parent's branch the same way (ADR 0103).
 
@@ -107,4 +107,4 @@ planner applies again (which rebases again, and may raise a new task if the targ
 - Web: the `change.updated` entry carries no branch name, so the audit trail (`auditTrail.ts`) reads "rebased onto
   <branch> head" from the payload when present, else "the target branch"; the sync pane of the change overview
   (`SubChangeSync.svelte`) serves root and sub-changes, and a failed Apply reloads the change so it lists the conflicts.
-- Tests: `pkg/graph/rebase_root_test.go`, on both dialects and with `GOAP_MATERIALIZE_EVERY` 1, 3 and 100000.
+- Tests: `graph/graph/rebase_root_test.go`, on both dialects and with `GOAP_MATERIALIZE_EVERY` 1, 3 and 100000.

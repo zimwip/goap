@@ -15,7 +15,7 @@ title be here". The helper is the light counterpart: hidden, ephemeral, tied to 
   interface aid over the model gateway (*with what*). It opens no change, runs no agent, writes nothing to the graph,
   the change log or the journal, and keeps nothing: closing it discards the discussion. A value it proposes reaches the
   graph only if the person accepts it into the form and then goes through the form's own save, as any edit.
-- **One stateless RPC**, `ModelService.Suggest` (`internal/modelgw/suggest.go`). Request: the context (the tab as
+- **One stateless RPC**, `ModelService.Suggest` (`platform/modelgw/suggest.go`). Request: the context (the tab as
   `{kind, params}`, the subject as an opaque string, the text selected on the page, the fields of the form with id,
   label, type, enum values, description, current value as JSON text and `readOnly`), the small discussion (`user` /
   `assistant` turns, resent each time) and an optional instruction. Response: a short message, the proposals

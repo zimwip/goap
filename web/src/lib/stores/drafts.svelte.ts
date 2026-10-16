@@ -41,6 +41,8 @@ export class Draft {
   form = $state<MethodologyForm>(emptyForm());
   snapshot = $state(JSON.stringify(emptyForm()));
   status = $state('draft');
+  /** why the published version is suspended (ADR 0125 §3): the domains in force break it; '' when in force */
+  suspended = $state('');
   meta = $state<Meta>({});
   loading = $state(true);
   loadError = $state('');
@@ -109,6 +111,7 @@ export class Draft {
     this.snapshot = JSON.stringify(this.form);
     this.remote = undefined;
     this.status = m.status || 'draft';
+    this.suspended = m.suspended ?? '';
     this.meta = { createdAt: m.createdAt, updatedAt: m.updatedAt, publishedAt: m.publishedAt, updatedBy: m.updatedBy };
     void loadTypes();
   }

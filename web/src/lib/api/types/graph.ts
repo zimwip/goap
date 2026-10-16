@@ -440,6 +440,12 @@ export interface ChangeImpact {
   /** replaced by an adopted flow */
   superseded?: boolean;
   createdAt?: string;
+  /** the change impacts this one is derived from */
+  derivedFrom?: string[];
+  /** the execution (journal record of an action run) that wrote it */
+  execution?: string;
+  /** impact / proposal items it is derived from (empty when written directly) */
+  items?: string[];
 }
 
 /** process.started | tick | action | approval | process.ended */

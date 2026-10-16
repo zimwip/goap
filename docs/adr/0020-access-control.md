@@ -21,7 +21,7 @@ through changes (CLAUDE.md, rule 4).
    (subject, displayName, email, locale) are node types of the `organisation` domain; a user belongs to a unit
    through `member_of`. The `roles` the `User` first held are gone: roles are granted by `organisation@Assignment`
    nodes, on a project or platform-wide (ADR 0043, 0047).
-3. `pkg/access` reads them from a snapshot of the head of `main` (`Directory`, same pattern as the MCP directory) and
+3. `lib/access` reads them from a snapshot of the head of `main` (`Directory`, same pattern as the MCP directory) and
    builds the enforcer (`Authorizer`). Each service decides in process: the graph service over its own graph, the others
    through a graph client, falling back to the compiled-in defaults while the graph has no policy.
 4. The principal is completed with its `User` node: the roles its Assignments grant are added to those of the token
@@ -32,7 +32,7 @@ through changes (CLAUDE.md, rule 4).
    and guards changes to `Policy` and `User` nodes (`policy:write`, `graphsvc.Handler.Floor`), since ADR 0068 to every
    node type flagged `adminOnly` (`Graph.AdminOnlyType`). These nodes are written only through changes, like every node
    (ADR 0049). With no policy in the graph (first start) or an unreadable graph, the
-   compiled-in default policies (`pkg/authz/casbin.go`) apply; `graphsvc.SeedAccess` creates them as nodes once.
+   compiled-in default policies (`contracts/authz/casbin.go`) apply; `graphsvc.SeedAccess` creates them as nodes once.
 6. **Permissions of actions** (ADR 0004) are decided the same way, for the initiator of the process.
 
 ## Consequences

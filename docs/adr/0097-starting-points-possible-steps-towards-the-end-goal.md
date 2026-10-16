@@ -15,7 +15,7 @@ sequencing of its activities by the conditions of its steps. The scheduler does 
 
 ### A starting point is a step, never an action
 
-`Engine.StartingPoints(ctx, changeID, opts)` (`pkg/engine/startingpoints.go`) reads the change (methodology, goal,
+`Engine.StartingPoints(ctx, changeID, opts)` (`engine/engine/startingpoints.go`) reads the change (methodology, goal,
 status) and its blackboard, evaluates the world (`Conditions.Evaluate`, with the supertypes) and walks the processes of
 the methodology that no step nests (a nested process is reached through the step that nests it):
 
@@ -86,7 +86,7 @@ to once per second, never polled. The screen exposes the points as `step` entiti
 
 ### Methodology quality hint
 
-A well-made methodology can start on an empty change. `Compiled.Hints()` (`pkg/methodology/hints.go`) returns a
+A well-made methodology can start on an empty change. `Compiled.Hints()` (`engine/methodology/hints.go`) returns a
 non-blocking remark tied to the path `goal` when, on an empty blackboard, no step (no action when there is no process)
 working towards the main goal has its entry satisfied, with the first conditions it waits for. It is not a compile
 issue: nothing is refused, the shipped methodologies and examples give no hint (`TestShippedMethodologiesHaveNoHint`).

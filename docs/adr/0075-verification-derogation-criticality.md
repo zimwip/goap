@@ -24,7 +24,7 @@ a mechanism that exists:
 
 Constraints from the project rules: a methodology knows no organisation (rule 1), so who signs and how critical a
 kind of change is cannot live in a methodology; every modification is a Change (rule 2); the graph keeps mechanisms
-and names no use-case vocabulary (ADR 0066, 0067; `pkg/layering`).
+and names no use-case vocabulary (ADR 0066, 0067; `platform/layering`).
 
 ## Decision
 
@@ -46,12 +46,12 @@ optional hook `Graph.ReviewPolicy` (a `domain.ReviewPolicy`, nil: anyone with `n
 before every verdict (`reviewTx`, so `ImpactNodeReviewOn` and the batches of a submitted review, ADR 0080, 0105) with
 a `domain.ReviewRequest` (the impact with its producer, execution and flow, the reviewer, the
 verdict, the facts of the change) and may refuse. The platform plugs
-the rule `verifier ≠ producer` (principal, and model alias when both are models) from `pkg/verify`, wired explicitly
-by `cmd/graph` and `cmd/goap-dev`; `pkg/graph` and `pkg/domain` do not import it (`pkg/layering`).
+the rule `verifier ≠ producer` (principal, and model alias when both are models) from `contracts/verify`, wired explicitly
+by `platform/cmd/graph` and `platform/cmd/goap-dev`; `graph/graph` and `contracts/domain` do not import it (`platform/layering`).
 A refusal is an error, not a state: nothing is written.
 
 **States are facts, not a new storage.** Per effect of an action run, `produced → verified → accepted |
-accepted_with_reserve | rejected` are items of kind `verification` (`pkg/verify`, `verify.Register()`), entries
+accepted_with_reserve | rejected` are items of kind `verification` (`contracts/verify`, `verify.Register()`), entries
 `fact.verification` of the change log (ADR 0030): `Graph.AppendLog` refuses the `fact` stream, so they are written
 through `AddItems` like the other item kinds, and `verify.Subjects` folds them. The engine writes a `produced` entry
 when the action ends, carrying the oracle, `independent`, the model alias of the producer and the impact ids it
@@ -88,17 +88,17 @@ comment)` (`NodeOp.Reserve`).
   `risks`: a methodology that signs none imports none, ADR 0064), the conditions `no_expired_derogation` (a gate
   guard: a landed change cannot stand on an expired one) and `derogation_debt` (true from
   `condition.DerogationDebtLimit` = 3 open ones; a gate guard or a decision point reads it).
-- Expiry: the builtin `derogation.expire` (`pkg/builtins`) closes the derogations that ran out and calls
+- Expiry: the builtin `derogation.expire` (`contracts/builtins`) closes the derogations that ran out and calls
   `ReopenImpacts` for what they covered, as going back in a lifecycle does (ADR 0058); the clock is the trigger's,
   never the graph's. `methodologies/examples/derogation-expiry.yaml` runs it from a schedule trigger (an example, not
   seeded).
-- Where it lives: `pkg/risk` is the use case of risks and actions; derogations are the same family, so they go in
-  that package (`pkg/risk/derogation.go`) and `risk.Register()` registers the kind.
+- Where it lives: `contracts/risk` is the use case of risks and actions; derogations are the same family, so they go in
+  that package (`contracts/risk/derogation.go`) and `risk.Register()` registers the kind.
 
 ### 3. Criticality is data of the change, the weight of it is policy of the organisation
 
 - **WHY.** A change carries a `criticality` (`C1` low, `C2` current, `C3` critical) in `Change.Data`
-  (`domain.DataCriticality`, ADR 0065, `pkg/criticality`): the graph never reads it. The methodology gives a default
+  (`domain.DataCriticality`, ADR 0065, `contracts/criticality`): the graph never reads it. The methodology gives a default
   (`Methodology.Criticality`, else `C2`), the requester may raise it freely, lowering it needs the permission
   `change:lower-criticality` (administrators by default).
 - **WHO.** What each level *requires* is organisation policy: `organisation@CriticalityPolicy` nodes (added to the
@@ -137,8 +137,8 @@ strict, the change is where they meet at run time.
 - "Accepted with reserve" becomes visible and countable; debt has an expiry instead of accumulating.
 - One field (`criticality`) and one policy table give gates and reviews their weight without a gate per level.
 - The graph gains four seams (`ReviewPolicy`, `ItemAuthorizer`, `ItemPolicy`, `ReopenImpacts`) and no vocabulary;
-  `pkg/layering` keeps `pkg/graph` and `pkg/domain` free of `pkg/verify`, `pkg/criticality` and the derogations of
-  `pkg/risk`.
+  `platform/layering` keeps `graph/graph` and `contracts/domain` free of `contracts/verify`, `contracts/criticality` and the derogations of
+  `contracts/risk`.
 - Greenfield: no migration, no shim; existing methodologies without `verify` behave as today.
 
 ## Not decided (open)
@@ -166,8 +166,8 @@ strict, the change is where they meet at run time.
 
 ## Plan (phases, one fresh sub-agent each; all done)
 
-1. `Action.Verify`, `pkg/verify`, `Graph.ReviewPolicy`, verification items, layering rule.
+1. `Action.Verify`, `contracts/verify`, `Graph.ReviewPolicy`, verification items, layering rule.
 2. `derogation` item kind, `risk.Derogations`, CEL `derogations`, library, `derogation.expire`, ABAC `derogation:sign`.
-3. Criticality in `Change.Data`, `pkg/criticality`, `CriticalityPolicy`, CEL, vetos / objectives, web panes.
+3. Criticality in `Change.Data`, `contracts/criticality`, `CriticalityPolicy`, CEL, vetos / objectives, web panes.
 4. Docs: `docs/architecture.md`, `docs/dsl.md`, the `CLAUDE.md` note. The example in `methodologies/sdlc.yaml` was not
    added: its actions have no review step through the engine, so `verify` there would only make the tests drift.

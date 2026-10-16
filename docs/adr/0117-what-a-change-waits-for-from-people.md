@@ -20,7 +20,7 @@ approves, the reviewers. Each opens the change and must see at once what is thei
 
 ### 1. The asks of a change are a read model of the engine
 
-`Engine.ChangeAsks(ctx, changeID)` (`pkg/engine/asks.go`, RPC `engine.v1.GetChangeAsks`, read like the change itself:
+`Engine.ChangeAsks(ctx, changeID)` (`engine/engine/asks.go`, RPC `engine.v1.GetChangeAsks`, read like the change itself:
 a personal change is its subject's only) gathers what the change waits for from people, the oldest first; nothing is
 stored, the tasks stay where they are:
 

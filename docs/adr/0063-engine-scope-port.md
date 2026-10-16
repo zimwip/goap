@@ -29,6 +29,6 @@ everything" was tested at each of them. None of it was tested in isolation.
 ## Consequences
 
 - A different authorization model or tool binding is a new `Scope`, not a change to the engine.
-- `pkg/engine` still imports `pkg/authz` for `authz.Principal` (the initiator and approver of a process, the caller
+- `engine/engine` still imports `contracts/authz` for `authz.Principal` (the initiator and approver of a process, the caller
   in a context), `authz.From` / `With` and `ErrForbidden`; it no longer builds a request or a resource. The graph
-  request types it imports from `pkg/graph` are a later phase.
+  request types it imports from `graph/graph` are a later phase.

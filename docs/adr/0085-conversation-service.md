@@ -13,7 +13,7 @@ so it cannot stay in the browser.
 
 ## Decision
 
-- **A service of its own, shaped like `prefssvc`** (`internal/convsvc`, `cmd/conversations`, Connect
+- **A service of its own, shaped like `prefssvc`** (`platform/convsvc`, `platform/cmd/conversations`, Connect
   `conversations.v1.ConversationService`, gateway route, port 8090): its own store, `MemoryStore` and `SQLStore`
   (SQLite local mode / PostgreSQL), its own `migrations/` and `migrations_sqlite/` kept aligned by `TestSchemasAligned`.
   Tables `conversation` and `conversation_message` (times in unix microseconds), and `conversation_summary` (the rolling

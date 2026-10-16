@@ -14,7 +14,7 @@ what they are, and what writing one asks. The word "kind" also stood apart from 
 ## Decision
 
 1. **The catalogue.** `domain.ItemTypes()` lists the item types the process accepts: the core types (described in
-   `pkg/domain/itemtypes.go`) and the registered ones, with their origin (`core`, else the use case: `risk`, `assess`,
+   `contracts/domain/itemtypes.go`) and the registered ones, with their origin (`core`, else the use case: `risk`, `assess`,
    `verify`), a description (`domain.DescribeItemType`, called by the use case next to `RegisterItemType`) and the
    permission they ask of their writer (`RequireItemPermission`). RPC `GraphService.ListItemTypes` serves it to any
    identified caller (static metadata of the process).

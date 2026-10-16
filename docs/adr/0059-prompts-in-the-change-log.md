@@ -1,7 +1,7 @@
 # ADR 0059 — The prompt of every LLM call is an entry of the change log
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0011, 0020, 0030, 0057. The exchange type moved
-to `pkg/journal` (ADR 0066); the Tokens console reads the LLM call ledger (ADR 0089), which keeps the exchange of
+to `contracts/journal` (ADR 0066); the Tokens console reads the LLM call ledger (ADR 0089), which keeps the exchange of
 every call that is not an engine call of a change.
 
 ## Context

@@ -136,17 +136,17 @@ Rules:
   `landed_version` on one `node_id`, `review`, the `reviews` history as JSON, `via`, `recheck`, `key`,
   `type`). The ADR 0014 attachment table is renamed `change_attachment` and kept until the items that fill
   it are retired (step 2). `node_version` gets `change_impact` and `comment`. Both SQL dialects (now
-  `pkg/graph/migrations/` and `migrations_sqlite/`), proto `graph.v1` (`ChangeImpact`, `Review`; `Item` loses `target`, `post`,
-  `proposal`), and `gen/` regenerated.
+  `graph/graph/migrations/` and `migrations_sqlite/`), proto `graph.v1` (`ChangeImpact`, `Review`; `Item` loses `target`, `post`,
+  `proposal`), and `contracts/gen/` regenerated.
 - Migration of existing data: an `impact` item becomes a change impact (intent from its proposal, else
   `modified`); the `post` link or proposal becomes `post`; a `decision` on a proposal becomes a `review`
   entry with the decision text as its comment (empty comments are filled with "migrated"); a
   `delete_node` proposal becomes a `modified` change impact on the parent with the removal, or is dropped
   with a warning when there is no parent link.
-- Code: `pkg/domain/change.go` (types, `Proposal` and `Op*` removed), `pkg/graph/apply.go` and
+- Code: `contracts/domain/change.go` (types, `Proposal` and `Op*` removed), `graph/graph/apply.go` and
   `walk` (realization from change impacts, merge at apply), the engine bindings
-  and `pkg/dsl`, the builtins `graph.propagate` / `graph.apply`, the impact analysis actions of
-  `methodologies/`, `pkg/observe`, and the web views of a change.
+  and `lib/dsl`, the builtins `graph.propagate` / `graph.apply`, the impact analysis actions of
+  `methodologies/`, `engine/observe`, and the web views of a change.
 - Docs: `docs/architecture.md` (§2.1 change axis, §2.3 CEL bindings), ADR 0011 (journal items), ADR 0015
   §8 (pre/post: superseded by this ADR), `docs/dsl.md` and its copy in `web/src/lib/help/dsl.md`.
 - Sub-changes (ADR 0016) are unchanged: each holds its own change impacts (since ADR 0103 the work a sub-change merges

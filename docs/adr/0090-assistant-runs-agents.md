@@ -71,8 +71,8 @@ before anything starts.
   permission `StartProcess` checks). `StartProcess` itself is unchanged and re-checks everything when the process starts, so
   the assistant's checks are a filter for the model and the person, never the authority. The assistant reaches the engine
   through a port (`assistantsvc.Engine`: `CheckAgents`, `StartProcess`, `Active`; ADR 0097 adds `StartingPoints`),
-  `EngineClient` over the engine service (the handler in `goap-dev`, a Connect client in `cmd/conversations`,
-  `GOAP_ENGINE_URL`), the caller's identity headers on every request. `pkg/graph` and `pkg/engine` still do not import `internal/assistantsvc`.
+  `EngineClient` over the engine service (the handler in `goap-dev`, a Connect client in `platform/cmd/conversations`,
+  `GOAP_ENGINE_URL`), the caller's identity headers on every request. `graph/graph` and `engine/engine` still do not import `platform/assistantsvc`.
 - **Attached to the conversation.** The process variables carry `conversationId` and `messageId`; the engine puts the
   conversation id (`engine.VarConversation`) in the ledger `CallMeta` of the model calls of that process (ADR 0089), so the
   gateway's ledger can group a conversation's turns and the runs it started. The run's status is read from the process by

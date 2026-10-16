@@ -36,7 +36,7 @@ OIDC/OAuth) has no signup, no login, and no logout.
   which is what matters (the existing `Floor` policy already guarantees admins can't be locked out, ADR 0020).
   `SeedUser` gets the same treatment for the seeding path.
 - **`member_of` is exactly one link, enforced — at creation, and again after every write.**
-  `checkRequiredParent` (`pkg/graph/subchange.go`) rejects a `User` *creation* that would leave it with zero
+  `checkRequiredParent` (`graph/graph/subchange.go`) rejects a `User` *creation* that would leave it with zero
   or more than one outgoing `member_of`, checked against the edit's own declared links before anything is
   written. The links a node actually holds are checked again afterwards (first right after the write,
   `checkParentInvariant`; since ADR 0079 when a draft is accepted and when its version lands,
@@ -51,17 +51,17 @@ OIDC/OAuth) has no signup, no login, and no logout.
   `Graph.Bootstrap` (ADR 0054; first by the seeds), which stays privileged and unaffected. This mirrors the existing "root is special-cased, not
   generically exempted" precedent already set for `PROJ-ROOT`'s self-link (ADR 0039).
 - **A new `move` action reassigns membership/parentage.** One administrative action (this namespace's own
-  processes are already documented as administrative, `domains/builtin/organisation.yaml`) that, in a single
+  processes are already documented as administrative, `lib/domains/builtin/organisation.yaml`) that, in a single
   Change, removes the existing `member_of`/`part_of`/`project_part_of` link and adds the new one — a unit or
   user is never left, even transiently at rest, with zero or two. Surfaced next to the now-read-only "Part
   of"/"Member of" display in `OrganisationTab.svelte`/`UserTab.svelte` as a "Move to…" control.
 - **A third gateway `AuthMode`, `"local"`.** Parallel to `"none"`/`"hs256"` (first a branch of the gateway's
-  authenticator; since ADR 0068 a `gateway.Mode` strategy, `internal/gateway/mode.go`). New endpoints, same shape as the existing `devToken`/`switchProject`
+  authenticator; since ADR 0068 a `gateway.Mode` strategy, `gateway/gateway/mode.go`). New endpoints, same shape as the existing `devToken`/`switchProject`
   registrations: `POST /auth/register` (subject + password → creates the `User` through `EnsureUser`,
   including first-admin bootstrap, plus a credential), `POST /auth/login` (subject + password → a JWT signed
   the same way `Claims`/`signToken` already do), `POST /auth/logout` (below).
-- **Credentials live in a new, separate service — not the graph, not a User property.** `internal/credsvc`,
-  shaped like `internal/prefssvc` (ADR 0038): one record per subject (password hash + algorithm id) in its
+- **Credentials live in a new, separate service — not the graph, not a User property.** `gateway/credsvc`,
+  shaped like `platform/prefssvc` (ADR 0038): one record per subject (password hash + algorithm id) in its
   own store, so a failed login never touches the audited graph/change log and no secret material ever
   becomes graph data (design rule 4's exception list gains one entry, alongside domains and service
   config). It sits behind a small `Verify(subject, password) bool` / `SetPassword(subject, password) error`
@@ -90,7 +90,7 @@ OIDC/OAuth) has no signup, no login, and no logout.
 
 ## Consequences
 
-- `credsvc` has its own schema in both dialects (`internal/credsvc/migrations*/`, checked by `TestSchemasAligned`).
+- `credsvc` has its own schema in both dialects (`gateway/credsvc/migrations*/`, checked by `TestSchemasAligned`).
 - Any direct API caller that creates a bare `OrgUnit`/`ProjectUnit` with no parent (seeding scripts, tests)
   must be audited and given one — this is a breaking change for that narrow path, not for normal usage
   through `OrganisationExplorer.svelte`/`ProjectsExplorer.svelte`, which already collect a parent at creation.

@@ -59,9 +59,9 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
 model configuration), and the meta-domain `methodology` that holds the definitions of the methodologies
 ([ADR 0023](adr/0023-definitions-in-the-graph.md)). `methodology`, `organisation` and `platform` are **built in and
-frozen**: the platform reads them in its own way, so they are initialised at startup from `domains/builtin/`, change
+frozen**: the platform reads them in its own way, so they are initialised at startup from `lib/domains/builtin/`, change
 with the code and are read-only in the domain editor; a new namespace is a new domain published from the domain editor.
-Domains themselves are not graph data: the registry keeps them in its database. Keys are unique per namespace. A change acts on one namespace: it can
+Domains themselves are not graph data: the domain registry, served by the graph, keeps them in its database ([ADR 0125](adr/0125-source-components.md) §3). Keys are unique per namespace. A change acts on one namespace: it can
 only create and modify nodes of that namespace, but may link to nodes of another one. So that an action or agent's
 default queries (a prompt's `.Baseline.Nodes`, a script's `Host.Node`/`Nodes`/`Links`, a human task's node picker)
 are bound to the change's own declared namespace rather than exposing every namespace at once, baselines and
@@ -72,7 +72,7 @@ methodology registry) are unaffected: they read a specific namespace's own head 
 "main")`) instead of relying on one shared baseline that happened to hold every namespace's nodes together.
 A baseline can be browsed without loading it whole (`ListNamespaces`, `ListBaselineNodes`: the node count per type
 and a page of the nodes of one type, text-filtered on the server; `GetNodeNeighbourhood`: a node, its direct
-neighbours in both directions and the suspect links among them, `pkg/graph/browse.go`). The IDE's Baseline explorer
+neighbours in both directions and the suspect links among them, `graph/graph/browse.go`). The IDE's Baseline explorer
 and tab navigate namespace → baseline → node type → paged nodes, and show the neighbour graph of the selected node.
 A request started without a baseline or a change (the assistant, a trigger) opens its change on the latest baseline
 of the namespace its methodology acts on, known once the intent is identified.
@@ -119,9 +119,9 @@ a change and the merge order of its open sub-changes (`domain.DependencyOrder`).
 dependency`). Set from `goap-change` (`depend`, `dependencies`) and the change tab's *Depends on* section.
 
 **Operations on a change** ([ADR 0103](adr/0103-sub-changes-on-their-own-branch-operation-rights.md)) are a catalogue
-the code owns: each method of `pkg/graph` a person performs on a change (checkout, edit, withdraw, review, commit,
+the code owns: each method of `graph/graph` a person performs on a change (checkout, edit, withdraw, review, commit,
 merge...) carries `//goap:operation <code> <doer|reviewer>` and calls `g.allow(ctx, id, operations.<Const>)` first;
-`cmd/goap-opgen` (`internal/opgen`, `go generate ./pkg/operations/`) generates `pkg/operations/operations_gen.go` from the
+`platform/cmd/goap-opgen` (`platform/opgen`, `go generate ./contracts/operations/`) generates `contracts/operations/operations_gen.go` from the
 annotations and refuses a duplicate code. A methodology's roles list the operations they allow (`roles[].operations`:
 codes or kinds; none listed anywhere: nothing restricted), so a reviewer (`operations: [reviewer]`) accepts or rejects
 and never edits or withdraws; the graph asks `Graph.OperationAuthorizer` (`graphsvc.OperationAuthorizer`:
@@ -209,7 +209,7 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   **policy** ([ADR 0067](adr/0067-flow-origin-and-decision-policy.md)), not the graph's: the graph keeps the mechanism
   (open, rule, answer, ratify, who ruled, the statuses) and the opaque policy values the opener gave
   (`DecisionPoint.Policy`), and asks a `domain.DecisionPolicy` (`Graph.DecisionPolicy`; none: a ruling of anyone
-  settles the point). The platform's policy is `pkg/decision`: an agent ruling below the point's confidence threshold
+  settles the point). The platform's policy is `contracts/decision`: an agent ruling below the point's confidence threshold
   waits for a person's **ratification**; after `maxRounds` rulings that did not settle it, or past its deadline, the
   point is **escalated**: only a person rules it (values `decider`, `threshold`, `maxRounds`, `maxDuration`). A
   decided point selects its option; `Apply` refuses a change with a pending decision. The points are facts of the main flow (`TypeDecisionPoint`, replayed by
@@ -224,13 +224,13 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
 |---|---|
 | **Change** | A modification request. References a starting baseline, carries the initial intent and the chosen goal. It is **the blackboard** of an agentic process. |
 | **ChangeItem** | Blackboard **fact** with no node: its `type` (the **item type**) is a built-in one (`artifact`, `decision`, `decision_point`, `flow`, `review`, `signal`, `transition`) or one a use case registers (`risk`, `action`, `derogation`, `assessment`, `comment`, `verification`); its `target` is what it is about within that type (what an artifact is, the name of a signal), a signal's `recipient` the process it addresses. The types are listed, described, by `ListItemTypes` and shown read-only under *Item types* in the domain explorer ([ADR 0119](adr/0119-item-types-in-the-domain-explorer.md)). Each item has a provenance (`producedBy` = action, `derivedFrom` = other items). |
-| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (the **draft reference** `{node, version 0}` while the change works on the node, the version written once it is committed; empty while the impact of an existing node is only proposed, or while a creation is only planned: `ProposeImpact` takes existing nodes and planned creations (intent `created`, a key and a type, no draft, [ADR 0121](adr/0121-planned-creations.md)), a new node is created by `ImpactNodeCreate`, one `created` event for its impact and draft, or, for a planned key, a `checkedOut` event giving the planned impact its draft), `landed` (version on the target branch once applied: the post version itself when it joined the target, a merge version when the node changed on both sides), `review` with a mandatory comment. Every node write names a change and works on a **draft** ([ADR 0076](adr/0076-checkout-working-versions.md), [ADR 0079](adr/0079-drafts-and-versions-at-landing.md)): `ImpactNodeCreate` / `ImpactNodeCheckout` give the node its draft (once per change and flow; the impact's post), `ImpactNodeUpdate` and the link operations (`ImpactLinkCreate`, `ImpactLinkUpdate`, `ImpactLinkDelete`) edit it, `ImpactNodeReview` accepts or rejects (always an explicit operation: an edit never reviews; an acceptance is gated by the checks of a version run on the draft and writes nothing; editing after it sends the review back to `proposed`), `ImpactNodeTransition` moves a node along its lifecycle (on the draft, which a node with none is checked out for first, the guard seeing the change, the impact and the draft); `ImpactNodeCancel` drops a draft and `WithdrawImpact` takes an impact out of the change (`WithdrawImpacts` several at once, in one transaction: all or none, the impacts tab's *Remove selected from change* over the checked rows; a node is never deleted: a creation dropped leaves no node, a node no parent holds is retired by its lifecycle). A draft is free to be incomplete (only the attributes, their types and enums are checked as it is edited); its validators, required links and link attributes are checked when its review is accepted and when it lands. `Apply` (every impact accepted) commits the change, which **writes the versions from the drafts** on its own branch (the next version number, the version checked out from as parent, owner, origins, comment, links resolved to the versions of the change) after rebasing a root change onto the head of its target branch ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-lands.md)), and lands the branch (a fast-forward; the three-way merge only when the target moved between the rebase and the integration, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`proposed` for an existing node, `created` for a new one with its draft, `checkedOut`, `transitioned`, `updated`, `cancelled`, `withdrawn`, `reviewed`, `discarded`, `adopted`, `landed`, `rebased`) is an event of the change's impact log with its caller (principal, action run, flow); the `change_impact` table is its projection, and the drafts are not stored at all: they are the fold of the log (`domain.FoldDrafts`), kept in a per-change in-process cache validated by the log position (`pkg/graph/draftcache.go`, ADR 0079 §2), and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export, and the whole log as W3C PROV-O provenance in JSON-LD, `ExportChangeProvenance`, `pkg/prov`, [ADR 0057](adr/0057-change-log-as-prov-o.md)). The state of a namespace at a baseline is exported as a JSON snapshot without history (`ExportGraph`, `pkg/graph/snapshot.go`) and imported as one new change left for review, which creates the missing nodes and brings the others to the snapshot (`ImportGraph`, [ADR 0104](adr/0104-domain-and-graph-import-export.md)); the same state is exported as an OKF tree, a zip of one Markdown file per node with a YAML front matter (`ExportGraphOkf`, streamed while it is written, `pkg/okf`, [ADR 0111](adr/0111-okf-export-of-the-graph.md)). Merging nodes into a new one and splitting one into several are modifications of the **parents** (`ImpactNodeMerge`, `ImpactNodeSplit`, [ADR 0077](adr/0077-impact-node-operations.md)): the parent's draft loses the links to the sources and gains the links to the successors, the sources stay untouched and their impacts carry the parent's impact as `via`; a successor is accepted and landed only once the impacts of its origins are accepted. |
+| **ChangeImpact** | Link from the change to a node ([ADR 0024](adr/0024-change-impacts.md)): `intent` (`created` / `modified`), `rationale`, `pre` (released version), `post` (the **draft reference** `{node, version 0}` while the change works on the node, the version written once it is committed; empty while the impact of an existing node is only proposed, or while a creation is only planned: `ProposeImpact` takes existing nodes and planned creations (intent `created`, a key and a type, no draft, [ADR 0121](adr/0121-planned-creations.md)), a new node is created by `ImpactNodeCreate`, one `created` event for its impact and draft, or, for a planned key, a `checkedOut` event giving the planned impact its draft), `landed` (version on the target branch once applied: the post version itself when it joined the target, a merge version when the node changed on both sides), `review` with a mandatory comment. Every node write names a change and works on a **draft** ([ADR 0076](adr/0076-checkout-working-versions.md), [ADR 0079](adr/0079-drafts-and-versions-at-landing.md)): `ImpactNodeCreate` / `ImpactNodeCheckout` give the node its draft (once per change and flow; the impact's post), `ImpactNodeUpdate` and the link operations (`ImpactLinkCreate`, `ImpactLinkUpdate`, `ImpactLinkDelete`) edit it, `ImpactNodeReview` accepts or rejects (always an explicit operation: an edit never reviews; an acceptance is gated by the checks of a version run on the draft and writes nothing; editing after it sends the review back to `proposed`), `ImpactNodeTransition` moves a node along its lifecycle (on the draft, which a node with none is checked out for first, the guard seeing the change, the impact and the draft); `ImpactNodeCancel` drops a draft and `WithdrawImpact` takes an impact out of the change (`WithdrawImpacts` several at once, in one transaction: all or none, the impacts tab's *Remove selected from change* over the checked rows; a node is never deleted: a creation dropped leaves no node, a node no parent holds is retired by its lifecycle). A draft is free to be incomplete (only the attributes, their types and enums are checked as it is edited); its validators, required links and link attributes are checked when its review is accepted and when it lands. `Apply` (every impact accepted) commits the change, which **writes the versions from the drafts** on its own branch (the next version number, the version checked out from as parent, owner, origins, comment, links resolved to the versions of the change) after rebasing a root change onto the head of its target branch ([ADR 0101](adr/0101-a-change-is-rebased-onto-its-target-before-it-lands.md)), and lands the branch (a fast-forward; the three-way merge only when the target moved between the rebase and the integration, then `MergeChange`). A node version records its `changeId`, `changeImpact` and `comment`. A node's type is a direct attribute of the node (`Node.Type`), there is no `instanceOf` link. Everything that happens to a change is an entry of **one log** ([ADR 0030](adr/0030-one-change-log.md)): its facts, its journal records (scheduling included) and its impact events, in one order, with the type, flow branch, process and action run as columns to filter on (`ListChangeLog`). The change impacts are **event-sourced** ([ADR 0029](adr/0029-event-sourced-change-impacts.md)): every operation (`proposed` for an existing node, `created` for a new one with its draft, `checkedOut`, `transitioned`, `updated`, `cancelled`, `withdrawn`, `reviewed`, `discarded`, `adopted`, `landed`, `rebased`) is an event of the change's impact log with its caller (principal, action run, flow); the `change_impact` table is its projection, and the drafts are not stored at all: they are the fold of the log (`domain.FoldDrafts`), kept in a per-change in-process cache validated by the log position (`graph/graph/draftcache.go`, ADR 0079 §2), and what a flow sees is a fold of the log (`ListChangeEvents`; the **Audit** pane of the change merges it with the execution journal and the facts into one chronological trail, with CSV / JSON export, and the whole log as W3C PROV-O provenance in JSON-LD, `ExportChangeProvenance`, `graph/prov`, [ADR 0057](adr/0057-change-log-as-prov-o.md)). The state of a namespace at a baseline is exported as a JSON snapshot without history (`ExportGraph`, `graph/graph/snapshot.go`) and imported as one new change left for review, which creates the missing nodes and brings the others to the snapshot (`ImportGraph`, [ADR 0104](adr/0104-domain-and-graph-import-export.md)); the same state is exported as an OKF tree, a zip of one Markdown file per node with a YAML front matter (`ExportGraphOkf`, streamed while it is written, `graph/okf`, [ADR 0111](adr/0111-okf-export-of-the-graph.md)). Merging nodes into a new one and splitting one into several are modifications of the **parents** (`ImpactNodeMerge`, `ImpactNodeSplit`, [ADR 0077](adr/0077-impact-node-operations.md)): the parent's draft loses the links to the sources and gains the links to the successors, the sources stay untouched and their impacts carry the parent's impact as `via`; a successor is accepted and landed only once the impacts of its origins are accepted. |
 | **Change lifecycle, gate** | A change may have a lifecycle ([ADR 0058](adr/0058-change-lifecycle-and-gates.md)), orthogonal to its technical status: the domain defines it (`domain.Lifecycle`), the methodology says which one its changes follow, the change holds its state. A transition is guarded by a CEL guard in the condition environment; a **gate** is a guard requiring a decided decision point and the expected world state (the `done` of the steps of the state being left, no checklist of its own). A step names the state it is active in through `pre: {"state:<name>": true}`. Leaving a state freezes its impacts, going back needs a new decision and marks later impacts `stale`; landing stays at the end of the change. Which states and gates exist is a use case, not the platform's. |
-| **Model exchange** | The request and the answer of one LLM call of an action, an entry `model.call` of the change log ([ADR 0059](adr/0059-prompts-in-the-change-log.md)): capped, read with `prompt:inspect`, shown by the Tokens console (the call itself is a row of the gateway's ledger, ADR 0089, which stores the exchange of every call this log does not keep); the journal record keeps the token counts only (`pkg/journal`, ADR 0066). |
+| **Model exchange** | The request and the answer of one LLM call of an action, an entry `model.call` of the change log ([ADR 0059](adr/0059-prompts-in-the-change-log.md)): capped, read with `prompt:inspect`, shown by the Tokens console (the call itself is a row of the gateway's ledger, ADR 0089, which stores the exchange of every call this log does not keep); the journal record keeps the token counts only (`contracts/journal`, ADR 0066). |
 | **Decision** | A choice about something that is not a node (human or agent); the acceptance of a node is the review of its change impact. |
 | **Artifact** | Free-form data produced by an action (summary, report, tool response). |
-| **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of the built-in kind `review` (`domain.TypeReview`; `pkg/review` the use case), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. Every verdict is made by a submitted review ([ADR 0105](adr/0105-every-verdict-is-a-submitted-review.md)): a single verdict, a producer's commit, an action's review and a merge each write the record of a submitted review first, and each decided `impact.reviewed` log entry names it as its `causation`. |
-| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `pkg/risk` registers the item types (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Derogations`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
+| **Review** (object) | A review the reviewer builds up and submits ([ADR 0080](adr/0080-review-object.md)): a change item of the built-in kind `review` (`domain.TypeReview`; `contracts/review` the use case), each version the whole record of its `key` (`REV-…`): a global comment, a status `open` → `submitted` or `discarded` (both final) and one entry per change impact (own comment, outcome `accept` / `reject`). Submitting applies every entry as an ordinary review in one transaction (`ImpactNodeReviewBatch`: all or none), each `reviewed` event carrying the review id. Every verdict is made by a submitted review ([ADR 0105](adr/0105-every-verdict-is-a-submitted-review.md)): a single verdict, a producer's commit, an action's review and a merge each write the record of a submitted review first, and each decided `impact.reviewed` log entry names it as its `causation`. |
+| **Risk**, **Action** | Records of the change ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md)): each item is a version of the risk or action of its `key` (`RSK-1`, `ACT-1`); the register is the last version of each. A risk has a probability, an impact, a status and an owner role; an action answers a risk or a decision. The register is a use case outside the core: `contracts/risk` registers the item types (`risk.Register()`, [ADR 0065](adr/0065-item-kinds-required-links-change-data.md)) and folds them (`risk.Risks`, `risk.Actions`, `risk.Derogations`). `goap-change` serves `risks`, `risk`, `action`, and `brief` (the change in one line per fact, also given to every LLM action on a change in its system prompt) and `trace` (where an item, a risk or a node comes from and what it led to). |
 
 Applying a Change (`ApplyChange`) commits its accepted modifications on its branch and merges it (ADR 0102: the same two acts as *Commit* then *Merge*), creating a new baseline. The Change remains the explainable history of *why* the graph changed.
 
@@ -278,9 +278,9 @@ the authorizer reads the access graph, which the transaction of the apply would 
 | Agent (`@Agent`) | Methodology **Agent**: a planner (`goap`, `utility`, `hybrid`) + admissible actions + goals | See §2.9. An agent can call other agents. |
 | Action (`@Action`) | Methodology **Action** (`script` JS/Go, `llm`, `tool`, `human`, `builtin`) | Preconditions/effects = named conditions. An action's **expectation** translates into a link on the domain axis (§2.4). `script` action code uses the DSL (§2.10). |
 | Goal (`@AchievesGoal`) | **Goal** = conjunction of conditions + value | |
-| GOAP planner (A\*) | `pkg/goap` 🟢 | A\* over the space of boolean states. |
-| Autonomy / goal selection | **Intent loop** `pkg/intent` 🟢 | Identification of the agent and the goal (all published methodologies) + clarification as long as confidence is insufficient. |
-| AgentProcess | **Process** `pkg/engine` 🟢 | Observe → plan → act → replan loop. |
+| GOAP planner (A\*) | `engine/goap` 🟢 | A\* over the space of boolean states. |
+| Autonomy / goal selection | **Intent loop** `engine/intent` 🟢 | Identification of the agent and the goal (all published methodologies) + clarification as long as confidence is insufficient. |
+| AgentProcess | **Process** `engine/engine` 🟢 | Observe → plan → act → replan loop. |
 
 ### 2.3 Conditions: expressions on the state of the change
 
@@ -303,7 +303,7 @@ Variables exposed to the expression:
 | `verifications`, `derogations` | the verification state of the effects of the action runs and the derogations of the change ([ADR 0075](adr/0075-verification-derogation-criticality.md)): `{execution, action, impact, oracle, independent, state, producer, by, open}` and `{key, rule, target, reason, signatory, expires, status, open, expired, versions}` |
 | `change.criticality`, `criticalityPolicy` | the criticality level of the change and what the organisation requires of it: `{oracles, sampling, signatoryRole, maxDerogationHours}` (not `policy`, taken by decision points) |
 | `dependencies`, `change.dependsOn` | the changes the change depends on ([ADR 0108](adr/0108-dependencies-between-changes.md)): `{id, title, methodology, status, state, parent, satisfied, reason}`, `satisfied` when its work reached the branch the change merges into; and their ids |
-| `assessments` | the latest rating of each subject of the change ([ADR 0110](adr/0110-reactive-activities-review-of-the-description.md), `pkg/assess`): `{key, score (0-5), verdict, findings, suggestion, current, answered, item, versions}`; `current` the subject (`description`: the title and the intent) still reads as rated, `answered` no `comment` about it came after the rating |
+| `assessments` | the latest rating of each subject of the change ([ADR 0110](adr/0110-reactive-activities-review-of-the-description.md), `contracts/assess`): `{key, score (0-5), verdict, findings, suggestion, current, answered, item, versions}`; `current` the subject (`description`: the title and the intent) still reads as rated, `answered` no `comment` about it came after the rating |
 | `history` | what the runs on the change did ([ADR 0109](adr/0109-conditions-derived-scoped-history.md) §4), folded from the log of the change (`journal.Fold`, facet `domain.FacetHistory`: by the graph with every blackboard, `Graph.LogFacets`, so lifecycle guards, gates and guardians read it too, else by the engine): `runs` `{process, parent, methodology, agent, goal, status, seq}`, `steps` `{path, methodology, process, action, execution, outcome (succeeded / failed / running), succeeded, error, seq, runs, current, staleBy}` and `last` (the latest run of each step path). `current`: the success still stands, nothing it started from moved since (an edit, a rebase, a cancel, a new version of a keyed item) but by a step relying on it, and the steps it relies on stand and are older, so a stale step re-opens the steps after it (§5) |
 
 **Condition libraries** ([ADR 0064](adr/0064-condition-libraries.md)): a methodology gets no condition it did not
@@ -373,7 +373,7 @@ Executor types:
 |---|---|---|
 | `llm` | Prompt (Go template) + blackboard context → Model Gateway, structured JSON output | ChangeItems |
 | `tool` | Call to a tool (`<mcp>/<tool>`) of the MCP hub, through the organization binding (§3.9) | Artifact `{tool, result}` |
-| `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput`. An action declaring a `form` (ADR 0115, `pkg/form`: fields, widgets of an extensible registry, constraints) shows it and takes its values (`SubmitHumanInput.form`, `Engine.SubmitForm`), checked by the engine, then turned into items by the action's `code` (`ctx.var("form")`) or recorded as an artifact with the links of its link fields | Submitted items, or the items of the form |
+| `human` | Creates a task; the process moves to `waiting` until `SubmitHumanInput`. An action declaring a `form` (ADR 0115, `contracts/form`: fields, widgets of an extensible registry, constraints) shows it and takes its values (`SubmitHumanInput.form`, `Engine.SubmitForm`), checked by the engine, then turned into items by the action's `code` (`ctx.var("form")`) or recorded as an artifact with the links of its link fields | Submitted items, or the items of the form |
 | `builtin` | Registered Go function, checked by name when the methodology is compiled ([ADR 0062](adr/0062-builtins-registry.md)): `graph.propagate` (impact propagation), `graph.apply` (change application), `decision.investigate`, `process.step`; the self-observation ones (`observe.analyze`, `observe.propose`, `methodology.draft`) are registered by the composition roots | ChangeItems / new baseline |
 
 LLM/human outputs use a simplified input format (`engine.ItemInput`): nodes are
@@ -466,23 +466,23 @@ A result produced is not a result accepted. Three small mechanisms, each placed 
 | WHAT | Domain | nothing: the domains stay unaware |
 | WITH WHAT | Adapter / model alias | the alias of a `model` oracle must differ from the producer's |
 
-- **Verification** (`pkg/verify`). When an action with `verify` ends, the engine writes a `produced` item of type
+- **Verification** (`contracts/verify`). When an action with `verify` ends, the engine writes a `produced` item of type
   `verification` (oracle, `independent`, producer alias, impact ids); the states `produced`, `verified`, `accepted`,
   `accepted_with_reserve`, `rejected` are items of the change log (`fact.verification`), folded by `verify.Subjects`.
   `Graph.ReviewPolicy` (a `domain.ReviewPolicy`) is asked by every review of an impact and `verify.Policy` refuses a
-  verifier equal to the producer. The graph keeps the mechanism, `pkg/verify` the rule, as for decisions.
-- **Derogations** (`pkg/risk`). An item of type `derogation` (key, rule, target, reason, signatory, `expires`; no
+  verifier equal to the producer. The graph keeps the mechanism, `contracts/verify` the rule, as for decisions.
+- **Derogations** (`contracts/risk`). An item of type `derogation` (key, rule, target, reason, signatory, `expires`; no
   expiry, no derogation), versioned like a risk; `derogation:sign` (and `derogation:sign-role` for the role the policy
   of the level asks) is checked through `Graph.ItemAuthorizer`; `accepted_with_reserve` needs one in force
   (`ImpactNodeReviewWithReserve`). The builtin `derogation.expire` (`methodologies/examples/derogation-expiry.yaml`) closes
   the expired ones and sends what they covered back to `proposed` (`Graph.ReopenImpacts`).
-- **Criticality** (`pkg/criticality`). The policy of a level is resolved along the unit chain (`pkg/access`), else the
+- **Criticality** (`contracts/criticality`). The policy of a level is resolved along the unit chain (`lib/access`), else the
   compiled-in `Defaults()`; `Graph.ItemPolicy` applies it to the items written (oracle kinds). CEL reads
   `change.criticality` and `criticalityPolicy`.
 - **Gates**. A transition may list `vetos` (one unmet blocks) and `objectives` (an unmet one needs a derogation in force
   naming it); `condition.CheckGate` evaluates them, the reserve is recorded on the transition item as `unmet` / `reserve`.
 
-`pkg/graph` and `pkg/domain` import none of these packages (`pkg/layering`); `cmd/graph` and `cmd/goap-dev` plug the
+`graph/graph` and `contracts/domain` import none of these packages (`platform/layering`); `platform/cmd/graph` and `platform/cmd/goap-dev` plug the
 seams explicitly. Open points (web editors of the policies, sampling enforcement...) are in the ADR's "Not done".
 
 ### 2.8 ABAC access control (Casbin)
@@ -504,7 +504,7 @@ Functions available in rules: `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b"
 `onProject(r.sub)` (holds a role on the resource's project), `mayRun(r.sub, r.obj)` (one of `r.obj.Roles`, any role
 on the project when it lists none), `isAnonymous(r.sub)`. A matching `deny` overrides any `allow`.
 
-Default policies (compiled in `pkg/authz`; seeded as `Policy` nodes at the first start, and applied as they are while
+Default policies (compiled in `contracts/authz`; seeded as `Policy` nodes at the first start, and applied as they are while
 the graph holds none; a graph still holding the defaults of before ADR 0043 unchanged gets these instead,
 `graphsvc.SeedAccess`):
 
@@ -545,7 +545,7 @@ processes, changes and tools of a project, not of a node's own project.
   `Policy` node and a caller a `User` node (profile, `member_of` a unit) of the `organisation` domain, changed
   through changes like any node and edited in the frontend's "Access" screen. A rule is validated (compilation + trial
   evaluation) when read.
-- Every service builds its `authz.Authorizer` in process (`pkg/access`) from a snapshot of the head of the
+- Every service builds its `authz.Authorizer` in process (`lib/access`) from a snapshot of the head of the
   `organisation` namespace's `main` (the graph service over its own graph, the others through a graph client),
   rebuilt when that head moves (looked at once per second).
   The roles of the `User` node of the subject are added to those of its token, and its unit is its organisation when the
@@ -653,9 +653,8 @@ Events come from NATS (graph, engine, registry services) or the local bus in all
 With several engine replicas, event triggers are delivered through a durable JetStream consumer
 (competing consumers, one replica handles each event) and schedule (cron) firing is gated by a
 JetStream-KV lease (`TriggerManager.Leader`) — `Reload`/`States()`/manual `fire` stay available
-on every replica regardless of leadership (ADR 0031). This resolves leader election for trigger
-firing specifically, not the broader engine-clustering work of §3.2, which is unrelated and
-still open.
+on every replica regardless of leadership (ADR 0031). The runs themselves are shared by the
+replicas through the process store and its locks (§3.2, ADR 0124).
 
 **Transverse methodologies** ([ADR 0036](adr/0036-risks-actions-brief-transverse-methodologies.md) §3): a methodology
 that declares `appliesTo: [sdlc]` has its processes run **alongside** the changes of those methodologies, on the same
@@ -697,7 +696,7 @@ and runs it again on the change as it is now, instead of waiting in its inbox (`
 edited description so); an event trigger on the change of the event takes the same flag and cancels its runs still at
 work on that change before it starts the new one (`Engine.supersedeRuns`). The graph publishes
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
-`sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `pkg/assess`) and
+`sdlc`'s `description_review` process rates the description of every change through the goap method `description_rating` (an llm action first, a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `contracts/assess`) and
 answers the requester's `comment` items; the analysis waits for `description_accepted`; the web shows every assessment
 by its subject as a comment bubble (`AssessmentBubble.svelte`, `web/src/lib/descriptionReview.ts`): the description wraps
 the intent, its badge coloured by the state of the rating and the bubble opened by a click (by itself only for a
@@ -852,13 +851,13 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | Service | Responsibility | API | Persistence | Status |
 |---|---|---|---|---|
 | **gateway** | Single entry point, authentication (JWT/OIDC), routing to services, CORS, rate-limit | Echo HTTP, Connect reverse proxy | — | 🟢 core |
-| **registry** | Methodologies (graph data) and domains (its database), ADR 0023: editing (draft), validation, publishing, versions, the type catalogue, YAML import/export (domains also JSON, [ADR 0104](adr/0104-domain-and-graph-import-export.md)) | Connect `registry.v1` | `registry` (`domain_version`) + the graph | 🟢 |
+| **registry** | Methodologies (graph data, ADR 0023): editing (draft), validation against the domains of the domain registry, publishing, versions, suspension of a version the domains in force break (ADR 0125 §3), YAML import/export | Connect `registry.v1.RegistryService` | the graph | 🟢 |
 | **engine** | Intent loop, planning, process execution; deployable as a cluster | Connect `engine.v1` | `engine` | 🟢 core (memory) |
-| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply) | Connect `graph.v1` | `graph` | 🟢 |
+| **graph** | Domain axis (versioned nodes, links, baselines) + change axis (Changes, change impacts, facts, apply); the **domain registry**, its definition (ADR 0125 §3): domain versions, the type catalogue, YAML / JSON import-export ([ADR 0104](adr/0104-domain-and-graph-import-export.md)) | Connect `graph.v1`, `registry.v1.DomainService` | `graph` (with `domain_version`) | 🟢 |
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces; `Suggest`, the stateless contextual helper over the `helper` alias (ADR 0086); the **one ledger of LLM calls**: `ListUsage` / `UsageSummary` (ADR 0089) | Connect `model.v1` | `modelgw` (quota counters and the ledger of LLM calls, ADR 0089; the configuration is graph data, ADR 0021) | 🟢 core |
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0085-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
-| **assistant** (hosted by `conversations`) | The conversational assistant: answers the messages of a conversation on the `assistant` model alias as the caller, with its tools declared to the model as native tools ([ADR 0098](adr/0098-native-tool-calling.md), like the screen tools) (list methodologies, select project, search the open changes, create change (offered once the open changes were searched in the conversation, [ADR 0106](adr/0106-methodologies-integrating-methodologies.md)), open change, propose to attach or detach the change it is on, list the agents the caller may run here, propose to start one, and `methodology_query`: read what a methodology declares, filtered by kind / name / text / parent, projected and capped at 6 KiB, [ADR 0094](adr/0094-assistant-methodology-query.md)); the pending message is the run, and an agent starts only when the person confirms the proposal (`ConfirmAction`, [ADR 0087](adr/0087-conversational-assistant.md), [ADR 0090](adr/0090-assistant-runs-agents.md)); it is contextualised to the open screen (layered context focus / screen / app) and may ask the interface to act through the tools the screen offers (`ui.*`: effects run at once, writes only after the person's confirmation and reported with `ReportAction`, [ADR 0092](adr/0092-contextual-assistant-screen-tools.md)); a long conversation keeps its older messages as a rolling summary (`internal/assistantsvc/compact.go`: once `CompactBatch` messages fell out of the history window, the summary is rewritten after the turn from the previous one and those messages: the recorded facts (what the actions of the messages proposed, started or changed and how it ended) written by code, never by the model, kept first with their exact ids and dropped oldest first past 2.5 KiB, then the model's text for what only the words say, durable facts kept verbatim, stored by `conversations` in `conversation_summary` with the seq it covers, `convsvc.Service.Summary` / `SetSummary`, and sent with the rules of each turn) | Connect `assistant.v1` | none (writes through `conversations`) | 🟢 |
+| **assistant** (hosted by `conversations`) | The conversational assistant: answers the messages of a conversation on the `assistant` model alias as the caller, with its tools declared to the model as native tools ([ADR 0098](adr/0098-native-tool-calling.md), like the screen tools) (list methodologies, select project, search the open changes, create change (offered once the open changes were searched in the conversation, [ADR 0106](adr/0106-methodologies-integrating-methodologies.md)), open change, propose to attach or detach the change it is on, list the agents the caller may run here, propose to start one, and `methodology_query`: read what a methodology declares, filtered by kind / name / text / parent, projected and capped at 6 KiB, [ADR 0094](adr/0094-assistant-methodology-query.md)); the pending message is the run, and an agent starts only when the person confirms the proposal (`ConfirmAction`, [ADR 0087](adr/0087-conversational-assistant.md), [ADR 0090](adr/0090-assistant-runs-agents.md)); it is contextualised to the open screen (layered context focus / screen / app) and may ask the interface to act through the tools the screen offers (`ui.*`: effects run at once, writes only after the person's confirmation and reported with `ReportAction`, [ADR 0092](adr/0092-contextual-assistant-screen-tools.md)); a long conversation keeps its older messages as a rolling summary (`platform/assistantsvc/compact.go`: once `CompactBatch` messages fell out of the history window, the summary is rewritten after the turn from the previous one and those messages: the recorded facts (what the actions of the messages proposed, started or changed and how it ended) written by code, never by the model, kept first with their exact ids and dropped oldest first past 2.5 KiB, then the model's text for what only the words say, durable facts kept verbatim, stored by `conversations` in `conversation_summary` with the seq it covers, `convsvc.Service.Summary` / `SetSummary`, and sent with the rules of each turn) | Connect `assistant.v1` | none (writes through `conversations`) | 🟢 |
 | **indexer** | Document index ([ADR 0026](adr/0026-node-index-and-search.md), [0095](adr/0095-changes-in-the-index-typed-search.md)): follows the node / baseline / change-document events of the graph, embeds through modelgw (alias `embed`), answers lexical / semantic / hybrid and nearest-document searches over nodes and changes with facets, filtered by ABAC and project | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters and their restrictions (graph) along the organisation hierarchy, tool calls, the built-in connectors of the platform (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
@@ -866,12 +865,44 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **otel-collector** | OTLP reception, trace export (Jaeger) and metrics (Prometheus) | OTLP | — | 🟢 |
 | **vault** | Secrets (LLM API keys, MCP credentials, DSN) | HashiCorp Vault KV v2 | — | 🟢 dev mode |
 
+### 3.0 Source components ([ADR 0125](adr/0125-source-components.md))
+
+The services are cut along components the sources follow too: a **contract** (protos, generated code, the pure
+model, `contracts/graphapi`: the requests, answers and errors of the graph's operations), the **graph**, the **engine**, the
+**MCP hub**, the **gateway** and the **platform** that composes them. The engine reaches the graph only through the
+ports it defines (`engine.GraphPort`, written with `contracts/graphapi`), the graph and its service name no engine type;
+each component is a Go module of the `go.work`, one directory at the root (`contracts`, `lib`, `graph`, `engine`,
+`mcp`, `gateway`, `platform`; import paths `github.com/zimwip/goap/<module>/<package>`), whose `go.mod` requires the
+modules it may depend on (contracts ← lib ← graph / engine / mcp / gateway ← platform). `platform/layering` checks
+every import, the tests' included (`TestComponents`), and each `go.mod` (`TestModuleRequirements`); every
+`platform/cmd/*` is the platform's composition.
+
+Two registries: the **domain registry** (`graph/domainsvc`, `registry.v1.DomainService`) goes with the graph, which
+serves it, seeds the shipped domains and loads its type catalogue from it in process; it names no methodology. The
+**methodology registry** (`platform/registrysvc`, `platform/cmd/registry`) goes with the engine: it reads the domains through a
+port (`registrysvc.Domains`: the service in process, `lib/domainclient` over RPC) and the graph through
+`graphapi`. Publishing or archiving a domain is never refused for a methodology: the domain registry emits
+`goap.registry.domain.published` / `deleted`, the methodology registry checks every published methodology version
+again (`DomainsChanged` → `Recheck`, also at start) and **suspends** the ones that no longer compile against the
+domains in force (`ErrSuspended`; events `goap.registry.methodology.suspended` / `resumed`; nothing stored): no change
+starts on a suspended version, no run reads it, the lists leave it out, until a compatible methodology version is
+published or the domains come back. The graph and the domain are never blocked. Migrating the data of a domain is a
+separate matter.
+
+The engine is tested without the graph: the scenarios that run it on a real graph are the platform's integration tests
+(`platform/e2e/engine`), reaching the engine's unexported workings through `engine.Internals` only. So are the other
+tests that need two components (`platform/e2e/<name>`: the hub, the connectors and the access over a seeded graph).
+
+The web's TypeScript is generated from the protos too (`web/src/gen`, `protoc-gen-es` with the JSON forms); the
+hand-written API types are checked against it field by field (`web/src/lib/api/contract.test.ts`).
+
 ### 3.1 Communication
 
 - **External**: HTTP via Echo on the gateway. The frontend uses the **Connect JSON**
-  protocol (`POST /goap.engine.v1.EngineService/StartProcess`), avoiding any code generation on the web side.
+  protocol (`POST /goap.engine.v1.EngineService/StartProcess`); the web calls it with its own types, checked against the
+  TypeScript generated from the protos (§3.0).
 - **Synchronous inter-service**: **connect-rpc** (HTTP/2 h2c internally, HTTP/1.1 compatible). Contracts in
-  `proto/`, generated by `buf` into `gen/`.
+  `proto/`, generated by `buf` into `contracts/gen/`.
 - **Asynchronous**: **NATS JetStream**. Subject conventions:
 
 | Subject | Emitter | Content |
@@ -880,17 +911,20 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | `goap.change.<id>.item_added` / `.applied` | graph | `ChangeEvent` |
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
-| `goap.registry.methodology.published` | registry | name + version |
-| `goap.engine.work` (work queue) 🟡 | engine | process tick to execute (clustering) |
+| `goap.registry.methodology.published` / `.suspended` / `.resumed` | registry | name + version (+ reason) |
+| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph) | name + version + status |
 
-### 3.2 Engine clustering 🟡
+### 3.2 Engine clustering ([ADR 0124](adr/0124-engine-replicas-share-processes.md))
 
-Target: a process's state is persisted (`engine` schema); each execution step is triggered by a
-message on a **work-queue** JetStream stream (`goap.engine.work`, key = processId). Any
-replica consumes the message, locks the process (`SELECT … FOR UPDATE SKIP LOCKED` or an advisory lock),
-executes **one** step, persists it, and republishes a tick if the process is not terminal. Steps are
-idempotent (key `processId/stepIndex`). The initial core uses an in-memory `ProcessStore` behind
-an interface, replaceable with the PostgreSQL implementation without changing the engine.
+Several engine replicas share one process store (`internal/enginesvc.SQLStore`: PostgreSQL with `GOAP_DB_DSN`, SQLite
+in the local mode). The work on a process is serialized across them by a shared lock (`engine.Locker`, a lease per key
+in table `engine_lock`, renewed while held, `Engine.LockTTL`): the process, its supersede, the companions of a change,
+the instance of a persistent agent. The store refuses the write of a replica that lost the lock of a process
+(`engine.ErrFenced`); `Cancel` and a supersede reach the holder through the lock; `Engine.Recover` resumes the running
+processes whose lock nobody holds (a replica stopped, or one at capacity, `MaxRuns`, left it to the pool). A step is
+recorded before it runs; a run resumed after a stop closes it from what its execution wrote on the change (ended,
+cut halfway: failed, nothing: run again), so a step never writes twice. Core NATS carries the hints (`engine.wake`,
+`engine.interrupt`); the locks stay the arbiter.
 
 ### 3.3 Persistence
 
@@ -920,16 +954,16 @@ tag(id uuid, name, namespace, change_id, baseline_id, by, created_at)  -- names 
 ```
 
 **Two dialects, one model** ([ADR 0074](adr/0074-sql-dialect-builders-and-schema-guard.md)): the PostgreSQL repository
-(`pkg/graph/postgres.go`, pgx) and the SQLite one (`sqlite.go`, `database/sql`) keep their executors, row scanning and
-value encodings (uuid / text, jsonb / text, arrays, timestamps), and share the statements: `pkg/graph/sqlbuild.go`
+(`graph/graph/postgres.go`, pgx) and the SQLite one (`sqlite.go`, `database/sql`) keep their executors, row scanning and
+value encodings (uuid / text, jsonb / text, arrays, timestamps), and share the statements: `graph/graph/sqlbuild.go`
 builds the text and arguments of the queries both run from one `dialect` value (placeholder, `::text` cast of a uuid,
 nullable test, order tie-break), `sqlbuild_test.go` holds the text each query had in each dialect, and
-`internal/sqlschematest` compares the two migration directories of a service (`TestSchemasAligned` in `pkg/graph`,
-`credsvc`, `mcpsvc`, `modelgw`, `prefssvc`, `registrysvc`; `pkg/index` differs by design: pgvector / FTS5). `make test-pg`
+`lib/sqlschematest` compares the two migration directories of a service (`TestSchemasAligned` in `graph/graph`,
+`credsvc`, `mcpsvc`, `modelgw`, `prefssvc`, `registrysvc`; `graph/index` differs by design: pgvector / FTS5). `make test-pg`
 runs every test against PostgreSQL (a throw-away `pgvector/pgvector:pg17` container unless `GOAP_TEST_PG_DSN` is set).
 
 Every `change_id`, `owner_id` and `project_id` above is `NOT NULL` with a foreign key (deferred where the bootstrap
-needs it), and `pkg/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
+needs it), and `graph/graph` enforces the same rules in Go whatever the storage (its guard, ADR 0054): the constraints
 are a second line, a storage without any keeps the rules.
 
 > Why PostgreSQL and not a graph database? The required traversals (neighborhood, impact propagation
@@ -945,7 +979,7 @@ are a second line, a storage without any keeps the rules.
   reachable via the gateway (which systematically overwrites them).
 - Each resource (methodology, changeset, process) belongs to an **organization**: multi-tenant isolation
   via `org_id` in all tables (organisation units of the graph).
-- Secrets are never in environment variables in prod: `internal/platform/secrets` reads from Vault
+- Secrets are never in environment variables in prod: `lib/platform/secrets` reads from Vault
   (KV v2, token auth in dev / Kubernetes auth in prod) with a fallback to the environment in dev.
 
 ### 3.4b Node index and search ([ADR 0026](adr/0026-node-index-and-search.md))
@@ -1029,18 +1063,18 @@ methodologies' code ([ADR 0007](adr/0007-sandbox-executor.md)).
 One Connect stream, `EventService/Watch` ([ADR 0053](adr/0053-one-event-stream-and-presence.md)), carries every
 platform fact (processes, changes, nodes, baselines, registry) as a thin ordered event with resume by `(epoch, seq)`;
 the web reduces them into invalidation signals and never refetches after a write. `Heartbeat` / `Leave` and the
-`presence.*` events say who looks at which tab. `cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`); `goap-dev` feeds the hub in process.
+`presence.*` events say who looks at which tab. `platform/cmd/events` follows `goap.>` on NATS (presence is relayed between replicas on `presence.>`); `goap-dev` feeds the hub in process.
 
 ### 3.7 Observability (OpenTelemetry)
 
-`internal/telemetry` component ([ADR 0008](adr/0008-opentelemetry-observability.md)), enabled by the
+`lib/telemetry` component ([ADR 0008](adr/0008-opentelemetry-observability.md)), enabled by the
 standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
 
 - **traces** of all calls: HTTP (Echo, gateway), Connect (client and server, W3C context propagated),
   PostgreSQL (pgx), NATS (headers), sandboxes (the runner continues the action's trace);
 - **one process = one trace**: root span `process <agent>` (the `traceparent` is kept in the
   process, background executions continue it), an `action <name>` span per action;
-- **LLM calls** (`internal/telemetry/genai.go`, wired on `Router.Instrument` / `InstrumentEmbed` by `cmd/modelgw` and
+- **LLM calls** (`lib/telemetry/genai.go`, wired on `Router.Instrument` / `InstrumentEmbed` by `platform/cmd/modelgw` and
   `goap-dev`): span `chat <model>` per completion and `embeddings <model>` per embedding call (GenAI semantic conventions:
   `gen_ai.system` and its successor `gen_ai.provider.name`, `gen_ai.request.model`, `gen_ai.output.type`,
   `gen_ai.usage.input_tokens` / `output_tokens` / `cache_read.input_tokens` / `cache_creation.input_tokens`,
@@ -1099,7 +1133,7 @@ Connector  a service of its own wrapping a real API (connector-localfs, connecto
            itself with the hub and announces its configuration parameters, secrets and the operations it
            exposes (list_dir, read_file, ...). Knows no MCP, no adapter.
 Adapter    the code that makes the two work together: it implements the tools the MCP expects with the
-           operations the connector exposes. An `AdapterDef` node of the `platform` namespace (`pkg/adapter`,
+           operations the connector exposes. An `AdapterDef` node of the `platform` namespace (`lib/adapter`,
            changed through a change; not a domain algorithm), for one MCP and one connector, with typed parameters. Each
            organisational unit holds an INSTANCE (an `Adapter` node of the `organisation` namespace, owned by
            the unit: the owner of its version, ADR 0054): the name of the definition and the parameter values.
@@ -1130,7 +1164,7 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   decision / rule / answer for its decision points, reviews / review_open / review_update / review_submit / review_discard for its review objects (ADR 0080); no apply, no selection, no ratification), `goap-scheduler` (start / list / get processes, triggers / fire; scope
   `agent`) and
   `goap-admin` (units, users, MCPs, connectors, domains, methodologies). Their connectors
-  (`internal/connectors/builtin`) run in the hub and act for the caller (per-type read authorization, the access gate
+  (`mcp/connectors/builtin`) run in the hub and act for the caller (per-type read authorization, the access gate
   on `User` / `Policy`, the engine's process authorization); the call context (`mcp.CallContext`: unit, change,
   process) lets `goap-change` work on the change of the calling process by default. Pass-through adapter
   definitions and instances on `ORG-DEFAULT` give them to every unit (`graphsvc.SeedBuiltins`, which keeps the
@@ -1139,12 +1173,12 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   `close`, `read`, `write`, `edit`, `ls`, `glob`, `grep`, `bash`, `bash_output`, `bash_kill`, `diff`, `push`) is the
   tool box of a coding agent, one workspace per change found from the call context (`InvokeRequest.change_id` /
   `process_id`, put back in the context by `connectorkit`). Defined on every platform, held by no unit by default;
-  the local connector `workspace-local` (`internal/connectors/workspace`, `cmd/connector-workspace`) keeps a
+  the local connector `workspace-local` (`mcp/connectors/workspace`, `platform/cmd/connector-workspace`) keeps a
   directory per change, files confined by `os.Root`, commands in a cleaned environment with a timeout but not
   isolated; `goap-dev` gives it to the default organisation with `GOAP_DEV_WORKSPACE_ROOT`. An llm action coding in
   it states the budget of its tool loop (`loop: {maxRounds, maxTokens, timeout, maxToolResultBytes, compactBytes}`):
   once spent it is asked for its final answer instead of failing, and its conversation is compacted as it grows.
-  Without a model (`pkg/engine/condense.go`): a tool result is tidied before the model sees it (terminal escapes,
+  Without a model (`engine/engine/condense.go`): a tool result is tidied before the model sees it (terminal escapes,
   carriage-return redraws, trailing blanks dropped, identical lines in a row past two counted), and a result the
   conversation holds again later is replaced by a short note (the same call made again: superseded; the same output:
   identical; results of 512 bytes or more, errors never), before the older results are elided past `compactBytes`.
@@ -1154,10 +1188,10 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   The connector `workspace-docker` (`workspace.NewDocker`) keeps the files and git on its host and runs the commands
   of each workspace in a container of its own (the unit's `image`, no network by default, hardened, limits).
 - **Claude coding agent** ([ADR 0123](adr/0123-claude-coding-agent.md)): the MCP `claude-coding-agent` (`run`,
-  `answer`, `status`, `cancel`; `pkg/mcpbuiltin/claudeagent.go`) hands a coding task to a Claude Code session run by
+  `answer`, `status`, `cancel`; `lib/mcpbuiltin/claudeagent.go`) hands a coding task to a Claude Code session run by
   the Claude Agent SDK in the workspace of the change (`<root>/<change>`, `workspace.DirName`), held by no unit by
-  default like `workspace`. Its connector (`internal/connectors/claudeagent`, in `goap-dev`, standalone
-  `cmd/connector-claude-coding-agent`) starts a Node runner per turn (`runner/runner.mjs`, embedded, written into
+  default like `workspace`. Its connector (`mcp/connectors/claudeagent`, in `goap-dev`, standalone
+  `platform/cmd/connector-claude-coding-agent`) starts a Node runner per turn (`runner/runner.mjs`, embedded, written into
   `GOAP_CLAUDE_AGENT_DIR` where `make claude-agent-runner` installs the pinned SDK): one JSON request in, JSON lines
   out. A question (`AskUserQuestion`) or a tool the permissions do not settle ends the turn (`needs_input` /
   `needs_approval`, through `canUseTool`); `answer` resumes the session (`resume`) with the person's decision. The
@@ -1165,12 +1199,12 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   (`settingSources: [project]`), one session per change at a time. The model calls of a session do not go through
   the gateway yet (only its `costUsd` / `usage` come back).
 - **Adding a connector is adding a service.** A connector implements `connector.v1.ConnectorService`
-  (`Describe`, `Invoke`); `internal/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
+  (`Describe`, `Invoke`); `mcp/connectorkit` does the rest: `connectorkit.Run("name", connector)` serves the
   protocol and registers the connector with the hub (`RegisterConnector`, renewed as a heartbeat within a
   lease, 30 s by default; the hub lists it live or expired). No hub configuration is needed; only
   `GOAP_MCP_URL`, `GOAP_CONNECTOR_URL` (its address as the hub reaches it) and, when set on both sides,
-  the shared `GOAP_CONNECTOR_TOKEN`. `internal/connectors/localfs` is the reference implementation.
-- **The hub** (`cmd/mcp`, `internal/mcpsvc`) keeps only the registry of connectors (table `connector`, PostgreSQL and
+  the shared `GOAP_CONNECTOR_TOKEN`. `mcp/connectors/localfs` is the reference implementation.
+- **The hub** (`platform/cmd/mcp`, `mcp/mcpsvc`) keeps only the registry of connectors (table `connector`, PostgreSQL and
   SQLite). MCPs and adapter definitions (`platform` namespace) and adapter instances and the unit hierarchy
   (`organisation` namespace) are read from the graph — a snapshot of each namespace's own head of `main`, combined,
   rebuilt when either moves. It checks the arguments against
@@ -1236,7 +1270,7 @@ project at landing.
 **Moving a change** (ADR 0091). `Graph.MoveChange(id, project)` (RPC `MoveChange`, `goap-change/move`, web "Move to
 project…" on the change overview) changes the project of a *root* change, `draft` or `active`, and of its open
 sub-changes, in one transaction; a sub-change cannot move alone, a `committed`, `applied` or `abandoned` change stays,
-the target must be another existing project. `Graph.ProjectMoveGate` (plugged by `cmd/graph` and `goap-dev` with
+the target must be another existing project. `Graph.ProjectMoveGate` (plugged by `platform/cmd/graph` and `goap-dev` with
 `graphsvc.ProjectMoveGate(authorizer, directory)`, asked outside the transaction) asks `change:move` on the project
 of each change and on the target, the caller's access to both (`Snapshot.MayAccessProject`) and that the methodology of
 each change of the family applies (own or inherited, `Snapshot.ApplicableMethodologies`) to **both** projects; a change
@@ -1251,7 +1285,7 @@ process (roles are checked on the project the change is in now).
 (unions the `roles` of every `Assignment` whose org is in a subject's org chain and whose project is in the
 change's project chain). `access.Authorizer.Authorize` merges them into the subject's roles when
 `authz.Resource.ProjectID` is set, riding the existing `hasRoleIn` step policy unscoped (the membership
-test already happened) — no new Casbin function. `pkg/engine` threads a project through `Process.Project`
+test already happened) — no new Casbin function. `engine/engine` threads a project through `Process.Project`
 (mirroring `Process.Org`) into `stepAllowed`'s `Resource.ProjectID`.
 
 **Identity.** `organisation@User` is created automatically, not by an administrator's hand: the same key
@@ -1285,7 +1319,7 @@ created in a project; the engine only executes, through changes.
 - **Bootstrap** (`Graph.Bootstrap`): `ORG-DEFAULT` and `PROJ-ROOT` in one transaction, by one applied change held by
   the root unit and acting in the root project; the services run it at start, before any seed; `CreateChange` runs it
   too. Idempotent.
-- **Guard** (`pkg/graph/guard.go`, wrapped around every repository transaction by `graph.New`): a node version, link,
+- **Guard** (`graph/graph/guard.go`, wrapped around every repository transaction by `graph.New`): a node version, link,
   branch membership or node origin names an existing change; a version has an owner unit and its node a project, nodes
   of their structures (stamped from the version it follows, else from its change; the project never changes, the owner
   moves through `ImpactNodeUpdate`'s owner, ADR 0076); a version is immutable once written (ADR 0079: the working state of a node in a
@@ -1294,26 +1328,26 @@ created in a project; the engine only executes, through changes.
   like deferred foreign keys.
 - **Ownership** is the owner of the version: `SplitByOwner` and the adapters of a unit read it (there is no `owner`
   link).
-- **Readers ask the graph.** `pkg/access` and `internal/mcpsvc` never name the organisation or project types: they ask
+- **Readers ask the graph.** `lib/access` and `mcp/mcpsvc` never name the organisation or project types: they ask
   the graph service for its structures (`GetStructures`, `domain.Structures`: a list, each structure with its kind, type, parent, root, default flag and
   subtypes) and read units, projects, parents and roots from the answer.
 
 #### Startup sequence ([ADR 0071](adr/0071-one-platform-bootstrap.md))
 
-Every composition (`goap-dev`, `cmd/graph`) seeds the platform through one function, `graphsvc.Boot(ctx, g, Options)`:
+Every composition (`goap-dev`, `platform/cmd/graph`) seeds the platform through one function, `graphsvc.Boot(ctx, g, Options)`:
 
 1. The caller sets every hook of the graph first (`Authorizer`, `ChangeAuthorizer`, `Validators`, `DecisionPolicy`, `Types`;
    `SubChangeValidator`, `Lifecycles` (the guardian of the changes) where the registry runs in process: only `goap-dev`) and has a type
-   catalogue holding the domains (`goap-dev`: `SeedDomains`, then the catalogue reload; `cmd/graph`: it waits for the
-   catalogue). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
+   catalogue holding the domains (`goap-dev` and `platform/cmd/graph`: the domain registry's `SeedDomains`, then the catalogue
+   reload). `Options.RequireHooks` makes `Boot` panic if the access hooks are missing; without the registry hooks `Boot`
    logs one warning, "change lifecycle and activity gating are not available in this composition".
 2. `Boot`: `Graph.Bootstrap` (roots), `SeedAccess` (default policies), `SeedBuiltins` (built-in MCPs, adapter definitions,
    platform roles), `SeedModels` (`Options.Models`), `SeedProtectedAliases` (the `assistant` and `helper` aliases, ADR 0084), `SeedBehaviors` (the built-in `terse` LLM behaviour, disabled, ADR 0093), then `Options.Dev`. Each step is idempotent.
-3. The registry then seeds the methodologies (`goap-dev`; `cmd/registry` seeds them over RPC): they need the aliases of step 2.
+3. The registry then seeds the methodologies (`goap-dev`; `platform/cmd/registry` seeds them over RPC): they need the aliases of step 2.
 
-Development and demo data is not part of it (`internal/devseed`: `Demo` the ALM repository, `DocumentRepository` the
+Development and demo data is not part of it (`platform/devseed`: `Demo` the ALM repository, `DocumentRepository` the
 document-repository MCP and its localfs adapter definition, `LocalFS` a directory as the default organisation's repository).
-`goap-dev` passes them as `Options.Dev`; `cmd/graph` only with `GOAP_GRAPH_SEED=demo`. `cmd/graph` still bootstraps the roots
+`goap-dev` passes them as `Options.Dev`; `platform/cmd/graph` only with `GOAP_GRAPH_SEED=demo`. `platform/cmd/graph` still bootstraps the roots
 before serving (a no-op for `Boot` afterwards). Platform services act as `authz.System(name, roles...)`
 (`system:registry`, `system:graph`, `system:trigger:<key>`).
 
@@ -1324,7 +1358,7 @@ compaction, access hooks: `graph.go`), `buildRegistry` (registry, its hooks on t
 `buildEngine` (engine, builtins, triggers, built-in connectors: `engine.go`), `buildServer` (auth strategy, routes, event
 stream, status, IDE: `server.go`). The trigger manager needs the engine while the hooks it serves are wired before, so they
 hold a `triggerRef` that ignores events until `buildEngine` sets it. `run(ctx, cfg)` builds and serves until the context ends
-(`platform.Server.RunContext`); `cmd/goap-dev/app_test.go` builds the whole platform on a temporary SQLite database.
+(`platform.Server.RunContext`); `platform/cmd/goap-dev/app_test.go` builds the whole platform on a temporary SQLite database.
 
 ### 3.9c User bootstrap, mandatory parenting, local auth ([ADR 0040](adr/0040-user-bootstrap-org-membership-local-auth.md))
 
@@ -1341,7 +1375,7 @@ connections can only ever grant admin to more than one subject, never to none. `
 single choke point behind `CommitEdits`, seeding and the registry) now refuses to create an
 `OrgUnit`/`ProjectUnit` with anything but exactly one `part_of`/`project_part_of` link, and a `User` with
 anything but exactly one `member_of` (declared on the node type, `requires:`, ADR 0065) — except `ORG-DEFAULT`/`PROJ-ROOT` themselves (`checkRequiredParent`,
-`pkg/graph/subchange.go`, checked against the edit's own declared links before anything is written). A
+`graph/graph/subchange.go`, checked against the edit's own declared links before anything is written). A
 second check, `checkRequiredLinks`, re-reads a *modified* node's actual live links right after the write
 lands: a client can build its edit from a `headGraph`-style baseline snapshot that predates an import-written
 link (again, `EnsureUser`'s own `member_of`), so its "current link to remove" can come back empty even though
@@ -1352,7 +1386,7 @@ controls on the Organisation and User tabs build this edit from the graph's own 
 
 **Local auth.** A third gateway `AuthMode`, `"local"` (alongside `"none"`/`"hs256"`), verifies bearer tokens
 exactly as `"hs256"` does; the difference is only how a token is first obtained. `POST /auth/register` and
-`POST /auth/login` (`internal/gateway`) call a new `internal/credsvc` service (shaped like `internal/prefssvc`,
+`POST /auth/login` (`gateway/gateway`) call a new `gateway/credsvc` service (shaped like `platform/prefssvc`,
 ADR 0038: its own store, its own migrations, both dialects) that keeps one bcrypt password hash per subject,
 outside the graph — a failed login never touches the audited graph/change log, and no secret material ever
 becomes graph data. `credsvc.Store` is a small interface so the concrete backend can move from its own SQL
@@ -1377,7 +1411,7 @@ The preferences service keeps an opaque JSON object per user (size-limited): the
 file, unless an external identity provider issues the tokens (`hs256` today); `"none"` must be asked for.
 `goap-dev` generates its JWT secret when none is configured (kept in `.goap/jwt_secret` with SQLite).
 `gateway.Config.OnSignIn` declares the user before a register/login returns a token (`graphsvc.EnsureUser`
-in process, `graphsvc.Client.DeclareUser` from the gateway) and refreshes the `access.Directory`, so the first
+in process, `graphclient.Client.DeclareUser` from the gateway) and refreshes the `access.Directory`, so the first
 calls carry the user's unit and roles. `EnsureUser` commits the `User` node and its `member_of` as one change
 on `main` (journaled, moves the head the access snapshot reads — the import write described above no longer
 happens), serialized per process. New users join the waiting unit, an `OrgUnit` an administrator created and
@@ -1450,8 +1484,9 @@ reached through `sub_activity` only; no element stands alone (a modelling princi
 a change applied on main; editing an action versions that node only (`registrysvc.GraphStore`, through a graph
 client). **Domains** are the definition of a graph (namespace, node types, link types, lifecycles, algorithms): each
 graph holds them in memory (the type catalogue) to keep its data coherent, and the registry keeps their versions in its
-database (`domain_version`, PostgreSQL or SQLite, `registrysvc.SQLDomainStore`). The registry validates, compiles,
-publishes and emits the `goap.registry.*` events. Compilation is one pipeline with a policy
+database, the **domain registry** the graph serves (`domain_version`, PostgreSQL or SQLite, `domainsvc.SQLStore`,
+ADR 0125 §3). The methodology registry validates, compiles, publishes, suspends the versions the domains in force
+break, and emits the `goap.registry.methodology.*` events. Compilation is one pipeline with a policy
 (`Methodology.CompileWith(CompileOptions{Lenient, Stored})`; `Compile`, `CompileLenient`, `Validate`, `ValidateStored` are `def.Issue.Severity` (`error` default, `warning`; ADR 0097): only errors refuse a compile, a validation or a publish (`Issues.HasErrors`), and `CompileWith` adds the `Compiled.Hints()` remarks as `goal` warnings, shown by the editor without blocking Save or Publish.
 its policies, [ADR 0072](adr/0072-one-compile-pipeline-split-apply-compile-cache.md)); the registry caches the compiled
 methodologies by (name, version, content hash, published domains in force), so the engine's per-event and per-action reads
@@ -1472,27 +1507,29 @@ and the engine, whose process runs the version it started with (`Process.Methodo
 A methodology version pins the domain versions it is written against (`Methodology.Domains`, `domains:` by domain
 name): publishing pins every published domain in force, the registry validates and compiles a version against its
 pins (`domainsFor`; a version published before pins existed follows the domains in force when it was published), a
-new version of a domain does not reach the published methodologies pinned on another one, and `CreateVersion` drops
+new compatible version of a domain does not reach the published methodologies pinned on another one (one they no
+longer compile against suspends them, ADR 0125 §3), and `CreateVersion` drops
 the pins so a new draft moves to the latest domains. The graph keeps one type catalogue, the latest published
 domains: its data follows the domain in force. Each start publishes the shipped domain and methodology files whose
 version is not stored yet (`SeedDomains`, `Seed`): a new shipped version needs no reset of the database.
 
 **Domains** ([ADR 0013](adr/0013-domains.md)). The object part of the model (node types, link types, lifecycles,
 algorithms) lives in **domains**, one per namespace (`alm`, `organisation`, `platform`), versioned on their own (same
-draft → published → archived lifecycle; `registry.v1` `*Domain*` RPCs, ABAC resource `domain`, administrators).
+draft → published → archived lifecycle; `registry.v1.DomainService`, served by the graph, ABAC resource `domain`, administrators).
 A methodology is the active part only (agents, actions, conditions, goals, processes): it names its **target namespace**
 (`namespace: alm`, the domain its changes act on; it replaces `domainRef`) and the types it works on with qualified
 references (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)), which may point to other domains for what it reads
 or links to. Consistency is
 checked at save / publish against the domain versions in force: action `expects`, CEL type literals
 (`"alm@Requirement" in n.types`, `l.type == "alm@verifies"`) and builtin `params.linkTypes` must resolve. A methodology
-can only be published on published domains; a published methodology stays on the domain versions it pins (ADR
-0113), so a domain version is refused only when it would break a published methodology that follows the latest one
-(published before the domain existed; `GetDomainUsage` lists the dependents).
+can only be published on published domains; a published methodology compiles against the domain versions it pins
+(ADR 0113), and a domain version is never refused for a methodology: one the domains in force break is suspended by
+the methodology registry (ADR 0125 §3; `GetDomainUsage` lists the methodologies using a domain).
 
 **YAML** is only an **import / export** format (`ImportMethodology`, `ExportMethodology`, `ImportDomain`, ...); the
-files in `domains/` then `methodologies/` are imported and published at registry startup if they don't already exist
-(`GOAP_DOMAINS_DIR`, `GOAP_METHODOLOGIES_DIR`; a changed file needs a new version number).
+files in `domains/` are imported and published by the graph at startup (`GOAP_DOMAINS_DIR`), those of
+`methodologies/` by the methodology registry (`GOAP_METHODOLOGIES_DIR`), when they don't already exist (a changed file
+needs a new version number).
 Example YAML definition (target format of ADR 0012):
 
 ```yaml
@@ -1614,7 +1651,7 @@ executions: an execution that produces items without reaching them is **progress
 
 ### 4.1 SDLC methodology on the ALM domain (`methodologies/sdlc.yaml`, version 0.5.6, on the shared `alm` domain of `domains/alm.yaml`)
 
-ALM domain (demo data: `internal/devseed/demo.go`):
+ALM domain (demo data: `platform/devseed/demo.go`):
 
 ```
 Need ◄─satisfies─ Requirement ◄─realizes─ Function ◄─implements─ Component ◄─built_from─ BuildArtifact
@@ -1654,37 +1691,37 @@ to any other methodology.
 ## 5. Repository organization
 
 ```
-cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, indexer, mcp)
-cmd/goap-dev/                all-in-one for local development (memory or SQLite, serves the IDE)
-cmd/goap-runner/             sandbox for executing script actions
-internal/platform/           config, logs, HTTP/Connect server, NATS, Postgres, Vault secrets
+platform/cmd/<service>/main.go        entry points (gateway, registry, engine, graph, modelgw, indexer, mcp)
+platform/cmd/goap-dev/                all-in-one for local development (memory or SQLite, serves the IDE)
+platform/cmd/goap-runner/             sandbox for executing script actions
+lib/platform/           config, logs, HTTP/Connect server, NATS, Postgres, Vault secrets
 internal/<service>/          Connect handler implementation for a service (graphsvc, registrysvc…)
-internal/identity/           caller identity (headers set by the gateway)
-pkg/domain/                  graph model (domain axis + change axis)
-pkg/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, the generic log of a change (`AppendLog` / `ChangeLog`); hooks (`Lifecycles` the guardian of the changes, `SubChangeValidator`, `Facets`) for the use cases it does not know (ADR 0066)
-pkg/journal/                 the execution journal: records, prompts and their entries in the log of a change (ADR 0011, 0066); the graph and the domain import nothing of it
-pkg/observe/                 run cost analysis (journal + traces) and improvement proposals
-pkg/builtins/                names of the builtin actions and the static list the compiler and the registry check (ADR 0062); a leaf package
-pkg/selfimprove/             the self-observation builtins (`observe.analyze`, `observe.propose`, `methodology.draft`), registered by `cmd/engine` and `cmd/goap-dev`; the engine imports no observer
-pkg/goap/                    A* planner
-pkg/condition/               CEL compilation/evaluation, `expects` compilation
-pkg/intent/                  intent loop (lexical Ranker, LLM Ranker)
-pkg/engine/                  processes, agents and planners, action executors, DSL host, sub-agents, events
-pkg/dsl/                     script action DSL (ctx API, JavaScript and Go interpreters); the adapter script context too (`RunAdapter`)
-pkg/algo/                    generic algorithm model of the domains (usages, typed params, instances, binding); knows no MCP, connector or secret
-pkg/mcp/                     MCP definition (tools, scopes, call context); knows no connector, adapter or organisation
-pkg/adapter/                 the adapter, where organisation, MCP and connector meet: `Def`, `Instance`, `Restriction`, code template, secret params (ADR 0061)
-pkg/mcpbuiltin/              schemas of the built-in MCPs and their adapters (ADR 0028, 0061)
-pkg/layering/                test of the dependency rules between these packages
-internal/sandbox/            sandbox pool, provisioners (process, docker, kubernetes), RuntimeService, runner
-internal/telemetry/          OpenTelemetry: exporters, interceptors, process / action / LLM / tool spans
-pkg/domain/def/              domain definition model (ADR 0060): Domain, Schema, node / link types, attributes, enums, lifecycles, algorithms; built-in domains, validation, YAML import/export
-pkg/methodology/             methodology model only (a methodology is a domain-typed definition): validation (localized anomalies), compilation, YAML import/export
-pkg/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
-pkg/llm/                     completion and embedding contracts (implemented by internal/modelgw)
-pkg/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
+lib/identity/           caller identity (headers set by the gateway)
+contracts/domain/                  graph model (domain axis + change axis)
+graph/graph/                   Store (memory, PostgreSQL, SQLite), apply, branches / merge / rebase, the generic log of a change (`AppendLog` / `ChangeLog`); hooks (`Lifecycles` the guardian of the changes, `SubChangeValidator`, `Facets`) for the use cases it does not know (ADR 0066)
+contracts/journal/                 the execution journal: records, prompts and their entries in the log of a change (ADR 0011, 0066); the graph and the domain import nothing of it
+engine/observe/                 run cost analysis (journal + traces) and improvement proposals
+contracts/builtins/                names of the builtin actions and the static list the compiler and the registry check (ADR 0062); a leaf package
+engine/selfimprove/             the self-observation builtins (`observe.analyze`, `observe.propose`, `methodology.draft`), registered by `platform/cmd/engine` and `platform/cmd/goap-dev`; the engine imports no observer
+engine/goap/                    A* planner
+engine/condition/               CEL compilation/evaluation, `expects` compilation
+engine/intent/                  intent loop (lexical Ranker, LLM Ranker)
+engine/engine/                  processes, agents and planners, action executors, DSL host, sub-agents, events
+lib/dsl/                     script action DSL (ctx API, JavaScript and Go interpreters); the adapter script context too (`RunAdapter`)
+contracts/algo/                    generic algorithm model of the domains (usages, typed params, instances, binding); knows no MCP, connector or secret
+contracts/mcp/                     MCP definition (tools, scopes, call context); knows no connector, adapter or organisation
+lib/adapter/                 the adapter, where organisation, MCP and connector meet: `Def`, `Instance`, `Restriction`, code template, secret params (ADR 0061)
+lib/mcpbuiltin/              schemas of the built-in MCPs and their adapters (ADR 0028, 0061)
+platform/layering/                test of the dependency rules between these packages
+engine/sandbox/            sandbox pool, provisioners (process, docker, kubernetes), RuntimeService, runner
+lib/telemetry/          OpenTelemetry: exporters, interceptors, process / action / LLM / tool spans
+lib/def/              domain definition model (ADR 0060): Domain, Schema, node / link types, attributes, enums, lifecycles, algorithms; built-in domains, validation, YAML import/export
+engine/methodology/             methodology model only (a methodology is a domain-typed definition): validation (localized anomalies), compilation, YAML import/export
+contracts/authz/                   ABAC: identity, requests, Casbin model and enforcer, default policies
+contracts/llm/                     completion and embedding contracts (implemented by platform/modelgw)
+graph/index/                   document index (nodes and changes): hybrid search, facets, similar_to, stores (memory, SQLite FTS5, PostgreSQL pgvector)
 proto/                       connect-rpc contracts (buf)
-gen/                         generated code (committed)
+contracts/gen/                         generated code (committed)
 methodologies/               example methodologies (active part)
 domains/                     domains: seeded at startup (alm), builtin/ embedded and frozen except domain (one per namespace)
 deploy/                      compose, postgres init, otel collector, prometheus, grafana, k8s (sandboxes)
@@ -1697,7 +1734,7 @@ docs/                        architecture, ADRs
 | Step | Content |
 |---|---|
 | **M0 — foundation** 🟢 | Doc, domain/change model, A\* planner, CEL conditions, intent loop, engine (memory), graph (memory + Postgres), registry, modelgw (fake + Anthropic + OpenAI-compatible), gateway, compose, minimal UI |
-| **M1 — engine persistence** | PostgreSQL `ProcessStore`, JetStream work-queue, crash recovery, multi-replica |
+| **M1 — engine persistence** ✅ | PostgreSQL / SQLite process store shared by the replicas, locks with fencing, crash recovery, steps never written twice, capacity per replica (ADR 0124) |
 | **M2 — IAM** | organizations, users, OIDC, `org_id` isolation in the graph, ABAC on the graph service |
 | **M3 — MCP** ✅ | MCP hub, connectors as separate self-registering services, MCPs and adapter instances as graph nodes, adapter definitions as platform nodes, resolved along the organisation hierarchy, `tool` actions and LLM tools, scheduling filter, secrets via Vault · remaining: more connectors, adapter validation as a node type algorithm |
 | **M4 — advanced change axis** | impact propagation (recursive CTE parameterized by link types), suspect links, baseline diff, merge/rebase of concurrent changesets |
@@ -1730,12 +1767,12 @@ docs/                        architecture, ADRs
 
 Administrators (`admin` on the `platform` resource, Casbin) open **Platform settings** from the gear in the IDE
 status bar. The gateway configuration is **graph data** ([ADR 0021](adr/0021-model-configuration-in-the-graph.md)):
-`LlmProvider`, `LlmModel`, `LlmAlias` and `LlmBehavior` nodes of the `platform` namespace (`pkg/llmcfg`, the built-in `platform` domain), changed
+`LlmProvider`, `LlmModel`, `LlmAlias` and `LlmBehavior` nodes of the `platform` namespace (`lib/llmcfg`, the built-in `platform` domain), changed
 through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the
 `platform` namespace's head of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
 (`graphsvc.SeedModels`). The `modelgw` database keeps the quota counters (`llm_usage`, keyed by the key of the model node and period, for the admission) the ledger of calls (`llm_call`) and the exchanges of the calls no change log keeps (`llm_call_exchange`, ADR 0089, below).
 
-- **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `internal/modelgw/protocols.go`)
+- **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `platform/modelgw/protocols.go`)
   knows how to complete and how to list models; a `Kind` is a preset on a protocol (Anthropic, Mistral AI, Google
   Gemini, OpenAI, custom OpenAI-compatible). Adding a provider type = `RegisterProtocol` / `RegisterKind`.
 - **API keys** are never stored: a provider node holds `apiKeyRef` (`env:<VAR>` or `<vault path>#<field>`, alternatives
@@ -1746,18 +1783,18 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   (engine, in-process) are trusted and skip the role check but still count toward the quota.
 - **Provider calls** (`Router.Complete`): a transient failure (408, 409, 429, 5xx, 529, a dropped connection) is retried
   `Router.Retries` times (`DefaultRetries` 3) with exponential backoff and jitter, honouring `Retry-After`
-  (`internal/modelgw/retry.go`; the Anthropic SDK retries on its own, `anthropicRetries`). `llm.Request.Cache` (set by
+  (`platform/modelgw/retry.go`; the Anthropic SDK retries on its own, `anthropicRetries`). `llm.Request.Cache` (set by
   callers that send the same prefix again: a tool loop, the assistant's rounds) marks the system text and the
   conversation as a cache prefix on Anthropic; OpenAI and Gemini cache on their own. `llm.Usage.InputTokens` is the
   whole prompt, cached or not, with `CacheReadTokens` / `CacheWriteTokens` beside it; `llm.Response.StopReason` is
   normalised (`end`, `max_tokens`, else the provider's word).
-- **Tool calling** (ADR 0098, `internal/modelgw/tools.go`): `llm.Request.Tools` reach a provider implementing
+- **Tool calling** (ADR 0098, `platform/modelgw/tools.go`): `llm.Request.Tools` reach a provider implementing
   `NativeTools` (Anthropic, OpenAI-compatible, Gemini) through its tool API, under names every API accepts (mapped back);
   any other provider, or an OpenAI-compatible model that refuses tools (remembered, `textToolsOnly`), gets the text
   protocol run by the gateway. The exchange of a call keeps the calls and results as text (`llm.Message.Transcript`).
-- **Offline evaluation** (ADR 0099): `pkg/eval` runs YAML cases (`evals/`: a prompt, mocked tools, expected items,
+- **Offline evaluation** (ADR 0099): `engine/eval` runs YAML cases (`evals/`: a prompt, mocked tools, expected items,
   tool trajectory, a judge's rubric) through the tool loop of an engine LLM action, several runs each, and reports pass
-  rate, tokens and latency; `cmd/goap-eval` (`make eval`) runs them through the gateway as the user of `GOAP_TOKEN`
+  rate, tokens and latency; `platform/cmd/goap-eval` (`make eval`) runs them through the gateway as the user of `GOAP_TOKEN`
   (source `eval` in the ledger).
 - **Aliases** (`default`, `fast`…) point to catalog models; the router follows the graph. The RPCs of the gateway are read-only
   (`ListProviders`, `ListCatalog`, `ListBehaviors`, `PreviewBehaviors`, `DiscoverModels`, `ListProviderKinds`, `ListModels`, `Complete`).
@@ -1806,6 +1843,6 @@ each node version. A node is edited in any state while it is in a change (ADR 00
 `notLandable` (a draft) keeps the change from landing, so the change moves the node to a landable state before it is
 applied. Changes are attached to the nodes they modify (several changes may be attached to one node;
 conflicts appear at Apply). A document type embeds nodes through `contains` links and its transitions
-validate the states of its children in the result baseline. The rules live in `pkg/graph/lifecycle.go`
+validate the states of its children in the result baseline. The rules live in `graph/graph/lifecycle.go`
 (checked when a change impact writes a version and again by `Apply`); the type catalogue resolves the lifecycles
 (ADR 0012).

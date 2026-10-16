@@ -16,7 +16,7 @@ unit may use them).
 ## Decision
 
 ### 1. Four built-in MCPs, split by concern
-The platform is exposed as four MCPs of the `platform` namespace (`pkg/mcpbuiltin/builtin.go`), each with a connector
+The platform is exposed as four MCPs of the `platform` namespace (`lib/mcpbuiltin/builtin.go`), each with a connector
 of the same name:
 
 | MCP | Tools | What it is for |
@@ -58,9 +58,9 @@ agent level, not of a step. The rule holds everywhere:
 - The IDE edits the scope of an MCP, and the action and agent editors say which MCPs they may not declare.
 
 ### 3. Built-in connectors, served by the hub
-- `internal/connectors/builtin` implements the four connectors with `connectorkit.Connector`. The hub serves them
+- `mcp/connectors/builtin` implements the four connectors with `connectorkit.Connector`. The hub serves them
   in-process (`inproc://<id>`, `mcpsvc.InprocInvoker`) and registers them like any connector (`KeepRegistered`);
-  `goap-dev` wires the in-process graph, engine handler, registry and hub, `cmd/mcp` the service clients
+  `goap-dev` wires the in-process graph, engine handler, registry and hub, `platform/cmd/mcp` the service clients
   (`GOAP_GRAPH_URL`, `GOAP_ENGINE_URL`, `GOAP_REGISTRY_URL`). A connector still knows no MCP: it declares its own
   operations, a test checks they match the tools of the MCP of the same name.
 - **They act for the caller, never for themselves.** The hub has already checked `tool:call` for the principal (the

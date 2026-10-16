@@ -12,7 +12,7 @@ come after the fact, on real changes.
 
 ## Decision
 
-`pkg/eval` runs **cases** against a model and scores them; `cmd/goap-eval` runs case files against the model gateway.
+`engine/eval` runs **cases** against a model and scores them; `platform/cmd/goap-eval` runs case files against the model gateway.
 
 - **A case** (YAML, `evals/`): a system text (with `prompt: engine`, the item protocol of the engine's LLM actions
   comes first: `engine.ActionSystem`), the messages, `json`, the **tools** the model may call, **mocked**: each answers

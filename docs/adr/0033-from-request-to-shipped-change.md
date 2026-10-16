@@ -22,18 +22,18 @@ A walkthrough of the code (2026-09) showed that almost none of this path existed
 | Step | At the time | Where |
 |---|---|---|
 | Request | Every assistant message starts a new process; the conversation lives only in the browser's localStorage; no follow-up in context. | `web/src/lib/stores/assistant.svelte.ts` (`sendRequest`) |
-| Identification | The intent loop picks (methodology, agent, goal) with the **lexical** ranker by default; the LLM ranker only with `GOAP_INTENT_RANKER=llm`. | `pkg/intent`, `cmd/engine/main.go`, `cmd/goap-dev/main.go` |
-| Change creation | Eager: `selectTarget` → `bindChange` creates a change as soon as the goal is known, with no proposal and no acceptance. | `pkg/engine/engine.go` (`selectTarget`, `resolveChange`) |
+| Identification | The intent loop picks (methodology, agent, goal) with the **lexical** ranker by default; the LLM ranker only with `GOAP_INTENT_RANKER=llm`. | `engine/intent`, `platform/cmd/engine/main.go`, `platform/cmd/goap-dev/main.go` |
+| Change creation | Eager: `selectTarget` → `bindChange` creates a change as soon as the goal is known, with no proposal and no acceptance. | `engine/engine/engine.go` (`selectTarget`, `resolveChange`) |
 | Matching to an existing change | Only in one LLM action of `sdlc` (`find_or_create_change`). When it matches, the change opened eagerly for the request stays behind as an orphan `draft`. | `methodologies/sdlc.yaml` (intake) |
-| Self-attach | `goap-scheduler/attach` on its own process calls `Engine.AttachChange`, which takes the process lock that `Run` already holds, and `Run` later saves its stale copy over the new binding. | `pkg/engine/engine.go` (`AttachChange`, `Run`) |
-| Clarification by intake | The question is written as an artifact; the effect is not met, so after 2 rounds the action is disabled and the process goes `stuck`. The requester has no way to answer. | `sdlc.yaml`, `pkg/engine` (`recordFailure`) |
-| Amending an intent | Possible (`goap-change/reformulate`, `UpdateChange`), but never proposed to anyone; the requester is not recorded. | `internal/connectors/builtin/change.go` |
+| Self-attach | `goap-scheduler/attach` on its own process calls `Engine.AttachChange`, which takes the process lock that `Run` already holds, and `Run` later saves its stale copy over the new binding. | `engine/engine/engine.go` (`AttachChange`, `Run`) |
+| Clarification by intake | The question is written as an artifact; the effect is not met, so after 2 rounds the action is disabled and the process goes `stuck`. The requester has no way to answer. | `sdlc.yaml`, `engine/engine` (`recordFailure`) |
+| Amending an intent | Possible (`goap-change/reformulate`, `UpdateChange`), but never proposed to anyone; the requester is not recorded. | `mcp/connectors/builtin/change.go` |
 | Default goal | None. "I need X" matches `intake/formulate`, which stops once the change is formulated; nothing chains to `deliver`. | `sdlc.yaml` |
 | Participation | A process has at most one pending human task, without assignee or role. No participants on a change; no inbox; notifications are computed in the browser from the live stream and lost when it is closed. Decision points, questions, merges and changes ready to ship are notified nowhere. | `engine.proto` (`HumanTask`), `web/src/lib/stores/notifications.svelte.ts` |
 | Chat result | No link to the change; the pending kinds `flow`, `board`, `relaunched` render nothing in the chat. | `web/src/lib/views/assistant/AssistantRun.svelte` |
 | First screen | An authoring IDE: Methodologies panel, empty Events console, shortcut table, DSL help. The assistant is one icon among eleven. No login (a Bearer token pasted in a menu). | `web/src/lib/shell/layout.svelte.ts`, `views/Welcome.svelte` |
 | Vocabulary | Baseline, namespace, own branch, flow, option, decision point, board, ticks, world state, raw 8-character IDs, JSON dumps. | `ChangeTab.svelte`, `NewChangeForm.svelte`, `HumanTaskForm.svelte` |
-| Shipping | *Apply* has no confirmation; the reason it is disabled is only a tooltip. The `ApplyChange` RPC does not check `change:apply` itself. | `ChangeTab.svelte`, `internal/graphsvc/handler.go` |
+| Shipping | *Apply* has no confirmation; the reason it is disabled is only a tooltip. The `ApplyChange` RPC does not check `change:apply` itself. | `ChangeTab.svelte`, `graph/graphsvc/handler.go` |
 
 ## Decision (proposed)
 
@@ -159,16 +159,16 @@ without saying why.
   authorized; the approval gate of the methodology can be bypassed through the RPC).
 - `goap-scheduler/attach` on the caller's own process must not go through `Engine.AttachChange` from inside
   `Run` (lock held, stale save); it becomes an effect applied by the run loop itself.
-- `internal/enginesvc` `ListProcesses`: the store error is checked after the loop, not before it.
+- `engine/enginesvc` `ListProcesses`: the store error is checked after the loop, not before it.
 
 ## Phasing
 
 | Phase | Content | Main code |
 |---|---|---|
-| **1 — the path** | Built-in intake with deferred binding (§1), conversation turns on the engine, proposal pending kind with accept / edit / switch / reject (§3), `request` fact, ship goal and hand-over (§4), clarification as a human task, fixes of §8. Chat: proposal card, change card, follow-ups in the same conversation. | `pkg/engine` (`selectTarget`, `AttachChange`, new pending kind), `proto/goap/engine/v1`, `methodologies/`, `pkg/methodology` (`ship`), `web/src/lib/stores/assistant.svelte.ts`, `views/assistant/` |
-| **2 — who** | Participants and roles (§5), task addressees, `ListMyWork`, persisted notifications, Home view. | `pkg/graph/changelog.go`, `pkg/engine`, `internal/enginesvc`, `internal/graphsvc`, `web/src/lib/stores/notifications.svelte.ts` |
+| **1 — the path** | Built-in intake with deferred binding (§1), conversation turns on the engine, proposal pending kind with accept / edit / switch / reject (§3), `request` fact, ship goal and hand-over (§4), clarification as a human task, fixes of §8. Chat: proposal card, change card, follow-ups in the same conversation. | `engine/engine` (`selectTarget`, `AttachChange`, new pending kind), `proto/goap/engine/v1`, `methodologies/`, `engine/methodology` (`ship`), `web/src/lib/stores/assistant.svelte.ts`, `views/assistant/` |
+| **2 — who** | Participants and roles (§5), task addressees, `ListMyWork`, persisted notifications, Home view. | `graph/graph/changelog.go`, `engine/engine`, `engine/enginesvc`, `graph/graphsvc`, `web/src/lib/stores/notifications.svelte.ts` |
 | **3 — readability** | Stage / waiting on / next step (§6), workspace vs studio, change page Summary and Advanced, plain vocabulary, confirmations, login, locale. | `web/src/lib/shell/`, `views/editors/ChangeTab.svelte`, `components/NewChangeForm.svelte` |
-| **4 — matching quality** | Change intents in the node index, ranking by unit and similarity (§2), amendments ruled by the owner as decision points. | `pkg/index`, `internal/indexersvc`, `pkg/graph/decision.go` |
+| **4 — matching quality** | Change intents in the node index, ranking by unit and similarity (§2), amendments ruled by the owner as decision points. | `graph/index`, `graph/indexersvc`, `graph/graph/decision.go` |
 
 ## Consequences
 

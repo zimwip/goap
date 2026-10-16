@@ -33,7 +33,7 @@ subject, set by whoever established it, readable the same way whatever the subje
 4. **Read side**: the CEL variables of a condition carry `effects` (a map name → value, empty when none) on every entry
    of `changeImpacts`, `items` (so `artifacts`, `decisions`, `merges`), `risks` and `actions`:
    `changeImpacts.all(i, i.effects.formulated == true)`, `risks.all(r, has(r.effects.assessed))`. The brief every LLM
-   action gets (`pkg/brief`) appends ` effects=formulated,assessed=high` to the impacts, risks, actions and artifacts
+   action gets (`lib/brief`) appends ` effects=formulated,assessed=high` to the impacts, risks, actions and artifacts
    that have some.
 5. **Write side for tools**: `goap-change/effect {impact | item, effects}` (an impact by node key or impact id, an item
    by id or by the key of a risk / action, resolved to its latest version in force).

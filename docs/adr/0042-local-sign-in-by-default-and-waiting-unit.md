@@ -8,13 +8,13 @@ since ADR 0047.
 ## Context
 
 ADR 0040 gave the platform its own sign-in (`AuthMode` `"local"`: register, login, logout backed by
-`internal/credsvc`), but left it opt-in: both `cmd/gateway` and `cmd/goap-dev` defaulted to `"none"`, where
+`gateway/credsvc`), but left it opt-in: both `platform/cmd/gateway` and `platform/cmd/goap-dev` defaulted to `"none"`, where
 every caller is a fixed dev principal. Three gaps remained to make users a real part of the system:
 
 - **Sign-in was not the default.** A deployment with no identity provider still had to know to turn it on.
 - **Users were declared late and by import.** The `User` node was created on the first graph call after
   sign-in (`EnsureCaller`), written outside of any change (`CreateNode` + `Link`, not atomic). An import
-  write does not move the head of `main`, and `pkg/access` reads roles and units from that head: a new user,
+  write does not move the head of `main`, and `lib/access` reads roles and units from that head: a new user,
   including the first administrator, got neither their unit nor their roles until some unrelated change
   happened to fold them in. It also broke design rule 2 (every modification is a change).
 - **The unit new users join was hardcoded** to `ORG-DEFAULT`, the root of adapter resolution — two different
