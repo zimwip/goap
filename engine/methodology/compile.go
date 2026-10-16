@@ -636,6 +636,12 @@ func (s *compileState) checkSpecializations() {
 // checkReferences checks the conditions the actions name (the expect:* conditions are known once every action has
 // been compiled) and that none is both an input and an output of one (ADR 0051).
 func (s *compileState) checkReferences() {
+	// the passage of a gate is a condition an action may need (ADR 0132: the change lands delivered)
+	for _, path := range s.m.gatePaths() {
+		for _, c := range []string{GatePassed(path), GateOpen(path), GateGo(path)} {
+			s.known[c] = true
+		}
+	}
 	for i, a := range s.m.Actions {
 		for field, set := range map[string]map[string]bool{"pre": a.Pre, "effects": a.Effects} {
 			for k := range set {

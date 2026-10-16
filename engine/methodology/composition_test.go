@@ -247,7 +247,8 @@ func TestCompositionOfTheRepository(t *testing.T) {
 			got = append(got, n+": "+i.Path)
 		}
 	}
-	if want := []string{"release-based: on[1].event", "sdlc: lifecycle"}; !slices.Equal(got, want) {
+	// sdlc follows a lifecycle since its gates (ADR 0132): the transitions release-based follows exist
+	if want := []string(nil); !slices.Equal(got, want) {
 		t.Fatalf("composition of the repository: %v, want %v", got, want)
 	}
 }

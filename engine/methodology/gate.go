@@ -410,3 +410,39 @@ func (s *compileState) checkManualSteps() {
 		walk(p.Steps, fmt.Sprintf("processes[%d]", i))
 	}
 }
+
+// gatePaths are the paths of the gate steps of the processes of m, as declared.
+func (m *Methodology) gatePaths() []string {
+	var out []string
+	var walk func(prefix string, steps []Step)
+	walk = func(prefix string, steps []Step) {
+		for _, st := range steps {
+			path := prefix + "/" + st.Name
+			if st.Gate != nil {
+				out = append(out, path)
+			}
+			walk(path, st.Steps)
+		}
+	}
+	for _, p := range m.Processes {
+		walk(p.Name, p.Steps)
+	}
+	return out
+}
+
+// gateActions are the actions generated for the gates (attestations, opening, ruling or decision, passage).
+func (c *Compiled) gateActions() []Action {
+	gates := map[string]bool{}
+	for _, g := range c.gates {
+		gates[g.Path] = true
+	}
+	var out []Action
+	for _, p := range c.definition.Processes {
+		for _, a := range c.StepActions(p.Name) {
+			if gates[a.Step] {
+				out = append(out, a)
+			}
+		}
+	}
+	return out
+}

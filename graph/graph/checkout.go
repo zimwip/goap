@@ -43,6 +43,8 @@ type work struct {
 	// transition is set for a move of the lifecycle of the node (ImpactNodeTransition): a freeze of its type may let
 	// it through (domain.Freezes.Transitions, ADR 0132 §4)
 	transition bool
+	// withdraw is set for a withdrawal: a candidate the change never wrote is taken out whatever is frozen
+	withdraw bool
 }
 
 // workOn opens an operation on a change, on a flow: the change gets its branch (where its versions are written when it
@@ -104,6 +106,9 @@ func (g *Graph) impact(ctx context.Context, tx Tx, w *work, id domain.ChangeImpa
 // creation, checkout or edit of it until the change goes back; a move of its own lifecycle when the freeze lets it.
 func (w *work) checkTypeFreeze(typ string) error {
 	if typ == "" {
+		return nil
+	}
+	if w.withdraw && w.cn.Post == nil {
 		return nil
 	}
 	for _, f := range w.c.InForceFreezes() {
@@ -969,6 +974,7 @@ func (g *Graph) withdrawTx(ctx context.Context, tx Tx, id domain.ChangeID, impac
 	if err != nil {
 		return err
 	}
+	w.withdraw = true
 	gone := map[domain.ChangeImpactID]bool{}
 	var events []domain.ImpactEvent
 	withdraw := func(impact domain.ChangeImpactID) {
