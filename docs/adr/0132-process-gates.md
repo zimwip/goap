@@ -45,10 +45,13 @@ not a checkpoint of maturity.
 
 ## Decision
 
-A **gate** is a milestone of a process: a **step** that declares a checklist on the change, a **go decision** taken by a
-person holding its accountable role, what the go **freezes**, and the **transition** of the change's lifecycle the go
-takes. It is abstract: it has no method and runs no action of its own; the engine prepares the decision, a person takes
-it, the engine carries out the move.
+A **gate** is a milestone of a process: a **step** that declares a checklist on the change, **split among the roles**
+that answer for it, a **go decision**, what the go **freezes**, and the **transition** of the change's lifecycle the go
+takes. The gate itself is abstract (organisation: what must hold, who answers for what, who decides). **How** the
+decision is reached is a **method**, like any other activity: by default one person of the accountable role rules; a
+methodology may name a decision method instead (a collegial board, a vote, a light review for a low criticality),
+specialised by context and run by the engine as any method is. The engine opens the decision and carries out the move;
+people take it.
 
 ### 1. A step declares a gate: `gate: {transition, checklist, decision, freezes}`
 
@@ -73,14 +76,19 @@ processes:
         steps: [...]
       - name: analysis_gate
         roles: {accountable: tech_lead, consulted: [solution_architect, product_owner]}
+        method: gate_decision                # the decision workflow, a capability (§3bis); none: one ruling
         gate:
           transition: design
           checklist:
-            - {name: impact_analysis_validated, veto: true}
-            - {name: requirements_specified, veto: true}
-            - {name: requirements_traced}
-            - {name: pocs_concluded}                          # ADR 0131: a POC still running goes with reserve
-            - {name: risks_under_control, when: 'change.criticality in ["high", "critical"]', veto: true}
+            - {name: impact_analysis_validated, role: solution_architect, veto: true}
+            - {name: requirements_specified, role: business_analyst, veto: true}
+            - {name: requirements_traced, role: business_analyst}
+            - {name: pocs_concluded, role: tech_lead}           # ADR 0131: a POC still running goes with reserve
+            - {name: risks_under_control, role: tech_lead, when: 'change.criticality in ["high", "critical"]', veto: true}
+            - {name: architecture_compliant, role: solution_architect, attest: true}   # a person attests it
+          decision:
+            board: [tech_lead, solution_architect, product_owner]   # collegial: who sits on the decision
+            rule: consent                                           # no member objects; unanimity | majority | consent
           freezes: {types: [alm@Requirement, alm@Function]}
       - name: design
         pre: {"gate:software_delivery/analysis_gate": true}
@@ -99,10 +107,27 @@ processes:
   force whose rule is the item's name, ADR 0075 §3), and an optional `when` (CEL over the change: the item applies only
   then, e.g. by criticality, ADR 0075 §4). An item is never an inline CEL expression: a criterion worth checking is worth
   naming as a condition, which the planner, the current state and the brief then read the same way (ADR 0109).
+  - **`role`**: the role that **answers for the item** (a role of the methodology; default the gate's accountable role).
+    The checklist is so split among responsibilities: each role sees its own items in *Waiting for you* (ADR 0117), the
+    brief and the current state group them by role, and a derogation of an objective is signed by its role
+    (`derogation:sign-role`, ADR 0075).
+  - **`attest: true`**: the item is not derived from the work but **attested by a person** of its role (what no condition
+    can see: "the architecture complies with the standards"). The compiler generates the condition `attested:<path>/<item>`
+    (an `attestation` item of the change, `data.key` = `<path>/<item>`, `verdict` `met` / `not_met`, `comment`, `by`;
+    a new item type of the `methodology` meta-domain, ADR 0128) and a generated **human action**
+    `attest:<path>/<item>` (`roles: [<role>]`, a form with the verdict and a comment, ADR 0115) that establishes it. An
+    attestation is a person's (ADR 0129: an llm or a script may not write one), and stands while what it was given on
+    has not moved (its `rated` fingerprint of the checklist's other items, as an assessment, ADR 0110 §6): a rework of
+    the analysis after the attestation makes it stale.
 - **`decision`** (optional): `options` (default `[go, no_go]`; `back: <transition>` adds an option that takes that
-  transition instead, e.g. back to framing) and `question` (default "Go for <step label>?"). Who decides is the step's
-  **accountable** role (`roles.accountable`), required by the compiler on a gate step.
+  transition instead, e.g. back to framing), `question` (default "Go for <step label>?"), and for a **collegial**
+  decision `board` (the roles that sit on it; default the accountable role alone) and `rule` (`unanimity`, `majority`,
+  `consent`: no member objects; default `unanimity` with a board, a single ruling without). The step's **accountable**
+  role (`roles.accountable`), required by the compiler on a gate step, sits on every board and is the one who ratifies
+  when the rule is not met in time (§3bis).
 - **`freezes`** (§4).
+- The step's **`method:`** (optional) names the **decision method** (a capability, §3bis); without it the default
+  decision applies (the engine opens the point, the board rules it).
 
 The gate's **exit** is the generated condition `gate:<path>`: the change took the gate's transition and has not gone back
 to its `from` state since (a fold of the `transition` facts, ADR 0109: `history.gates["<path>"]`). The steps after the
@@ -131,7 +156,15 @@ The domain keeps the states, the transitions, their permission, and the guards t
   on `change.updated`, `step.completed` and `change.item_added`, so the point opens as soon as the checklist allows, and
   a point opened while the checklist then breaks again (a veto turned false) is marked stale, not ruled.
 - **Asking.** The point is a decision only a person settles, so it is listed by `Engine.ChangeAsks` (ADR 0117) to the
-  holders of the accountable role, with the checklist; consulted roles see it in *Waiting for others*.
+  holders of the roles of the board who have not ruled yet, with the checklist grouped by role; the other roles see it
+  in *Waiting for others*.
+- **Collegial ruling.** Each member of the board rules the point (`Graph.RuleDecision`, `by` and the role it sat as);
+  the decision policy folds the rulings by the gate's `rule` (`contracts/decision`: policy keys `board`, `rule`, stored on
+  the point; `Fold` settles it when the rule holds: every role of the board ruled `go` for `unanimity`, a majority of
+  them for `majority`, no `no_go` once the deadline `maxDuration` passes for `consent`), a `no_go` of a member under
+  `unanimity` settles it `no_go` at once. When the rule cannot settle it (a split vote, the deadline passed under
+  `unanimity`), the point is **escalated** to the accountable role, whose ruling settles it (`Reserve`, the existing
+  escalation). The rulings stay on the point with their justifications: the record of the board.
 - **Ruling.** `go`: the engine takes the transition as the person who ruled (`Principal.For`, ADR 0114) with the point as
   `change.decision` (a builtin `change.transition`, the one ADR 0058 left for later, `contracts/builtins`); the guard
   and the gate criteria are checked again by `TransitionChange`, so a checklist that broke in between refuses the move
@@ -142,6 +175,44 @@ The domain keeps the states, the transitions, their permission, and the guards t
   "confirmation" steps; a manual process step (a step with no method, action or sub-steps) becomes a compile **warning**
   ("a process step does nothing by itself: name a method, or make it a gate"), its generated human action kept for the
   methodologies already published.
+
+### 3bis. The decision workflow is a method
+
+A gate step may name a method (`method: <capability>`), as a reviewing step does (ADR 0130): the method is the
+**workflow of the decision**, run by the engine like any method step (a fresh sub-agent acting as its responsible role,
+the most specific method chosen by `when` / priority, ADR 0050 §3; `foreach` over the board's roles to run the members'
+parts in parallel). Its exit is the generated condition `gate_decided:<path>` (the gate's point is settled), so its
+planner works towards the ruling; the engine still opens the point (§3) and carries out the move.
+
+```yaml
+methods:
+  - name: decision_board                 # high criticality: each member examines, then the board rules
+    for: gate_decision
+    when: 'change.criticality in ["high", "critical"]'
+    roles: {responsible: tech_lead}
+    steps:
+      - name: examine                    # each member reads the checklist items of its role, comments, attests
+        foreach: 'gate.board'
+        action: examine_gate_items       # human, roles from vars.item, a form: comments on its items, attestations
+      - name: advise                     # an llm reads the change and the checklist and advises (an assessment of
+        action: advise_gate              # subject gate:<path>, never a ruling: ADR 0129, 0130)
+      - name: rule                       # each member rules through a decision field (form widget decision, ADR 0115)
+        foreach: 'gate.board'
+        action: rule_gate
+        pre: {"step:decision_board/examine": true}
+  - name: single_go                      # otherwise: the accountable rules, nothing more
+    for: gate_decision
+    actions: [rule_gate]
+```
+
+The variables of the run carry the gate (`vars.gate`: path, transition, board, rule, the point, the checklist evaluated
+with each item's role), so one decision method serves every gate of the methodology, and a gate specialises it only by
+its `board`, `rule` and checklist. A human action of the method rules the point through the `decision` form widget
+(`form.Rulings`): the people of the board decide, the method only lays out who examines what and in which order. A
+decision method that writes impacts is refused by the compiler (a decision decides; the work is done by the phases).
+
+Without a method, the default is the method `gate_decision.single` built in: every role of the board rules once through
+its ask; nothing else runs.
 
 ### 4. What a go freezes
 
@@ -162,7 +233,8 @@ methodology (`Graph.frozen` widened; the graph keeps the mechanism, ADR 0067). G
 
 - The view and the flow draw a gate as a milestone (`ViewStep.Gate`, a diamond in `ProcessFlowView`), between the
   phases it separates; the current state of the change (`GetChangeState`) gives each gate its checklist evaluated
-  (`GateState{items: [{name, met, veto, reserve, description, producedBy}], decision, transition}`) next to the steps'
+  (`GateState{items: [{name, role, met, veto, attest, reserve, description, producedBy}], decision: {point, board,
+  rule, rulings}, transition}`) next to the steps'
   `Needs` (ADR 0112), and the change tab shows the checklist under the lifecycle diagram (`ChangeTransitions.svelte`:
   the transition named by a gate shows the gate's checklist instead of the raw guard).
 - Starting points (ADR 0097): a gate is never proposed as a step to start; an unmet gate is *what blocks* the steps
@@ -181,7 +253,7 @@ methodology (`Graph.frozen` widened; the graph keeps the mechanism, ADR 0067). G
 | Gate | Transition | Vetos | Objectives | Freezes |
 |---|---|---|---|---|
 | `framing_gate` (product owner) | `analyse` | `description_accepted` (ADR 0130) | `risks_identified` (new: a risk register was opened) | title, intent |
-| `analysis_gate` (tech lead) | `design` | `impact_analysis_validated`, `requirements_specified` | `requirements_traced`, `pocs_concluded` (ADR 0131) | `alm@Requirement`, `alm@Function` |
+| `analysis_gate` (board: tech lead, solution architect, product owner; consent; method `gate_decision`) | `design` | `impact_analysis_validated`, `requirements_specified` | `requirements_traced`, `pocs_concluded` (ADR 0131), attested `architecture_compliant` | `alm@Requirement`, `alm@Function` |
 | `design_gate` (tech lead) | `build` | `design_checked` | `tests_planned` | `alm@Application`, `alm@Interface` |
 | `build_gate` (change approver) | `release` | `built`, `requirements_approved` | `risks_under_control` (veto when high criticality) | `alm@Component` |
 | `delivery` | `deliver` | `rolled_out` | — | — |
@@ -194,8 +266,11 @@ lifecycle; its `merge` guardian may then read `integrated.state == "releasing"`.
 ## Consequences
 
 - A gate is one more declared property of a step, like a review (ADR 0130): no new node type, no new language, no
-  checklist structure outside the conditions. What is new: the methodology-level gate criteria, the opening of the
-  decision by the engine, the builtin move, the declared freezes.
+  checklist structure outside the conditions. What is new: the methodology-level gate criteria, the items' roles and
+  attestations, the opening of the decision by the engine, the collegial rules of the decision policy, the builtin move,
+  the declared freezes.
+- The decision workflow is ordinary methodology (a method and human actions), so it is specialised by context, edited,
+  versioned and observed (ADR 0011) like the rest; the platform only adds the collegial fold of a decision point.
 - The domain stops naming a methodology's conditions; the methodology says what maturity means, the domain only what
   states exist.
 - Human in the loop reads in the methodology: human actions do, gate decisions decide; the engine waits for nothing else.
@@ -209,18 +284,21 @@ lifecycle; its `merge` guardian may then read `integrated.state == "releasing"`.
   context): a warning "a process step names how: put the action in a method" would complete the layering; `sdlc`'s
   specification and release-train steps would then become methods. Left to a separate decision, since it changes every
   methodology.
-- An agent proposing the go (an llm advising the decision, as a review advises, ADR 0130): possible later as an
-  assessment of subject `gate:<path>`, never a ruling (ADR 0129).
-- Notifications to the accountable role holders when a point opens (ADR 0117's next steps).
+- Whether a member of a board may delegate its ruling (a deputy holding the role elsewhere), and a quorum distinct from
+  the board.
+- Notifications to the board's role holders when a point opens (ADR 0117's next steps).
 - Freezing items (risks, artifacts) and a partial landing of frozen phases (ADR 0058, still out).
 
 ## Phasing
 
-1. Model and compiler: `methodology.Gate`, checks, `gate:<path>` condition, gate criteria in the guardian, view /
-   proto / attribute (meta-domain), warnings (manual step, domain criteria reading `world`).
+1. Model and compiler: `methodology.Gate` (items with `role` / `attest`, `decision` with `board` / `rule`), checks,
+   `gate:<path>` / `gate_decided:<path>` / `attested:` conditions, the generated attest actions, item type
+   `attestation`, gate criteria in the guardian, view / proto / attribute (meta-domain), warnings (manual step, domain
+   criteria reading `world`).
 2. Graph: freezes on the `transition` fact (`fields`, `types`), `Graph.frozen` widened, tests on both repositories.
-3. Engine: the gate step as a reactive step opening its decision, the builtin `change.transition`, `GateState` in
-   `ChangeState`, the ask in `ChangeAsks`.
-4. Web: milestone in the flow, gate checklist on the change tab, *Gate* section of the step editor.
-5. `alm` lifecycle `maturity_of_change`, `sdlc` 0.10.0 with its gates, `platform/e2e/engine/sdlc_test.go` through the
+3. Decision policy: `board` / `rule` folded by `contracts/decision`, escalation to the accountable role.
+4. Engine: the gate step as a reactive step opening its decision, the decision method run with `vars.gate`, the builtin
+   `change.transition`, `GateState` in `ChangeState`, the asks per role in `ChangeAsks`.
+5. Web: milestone in the flow, gate checklist on the change tab, *Gate* section of the step editor.
+6. `alm` lifecycle `maturity_of_change`, `sdlc` 0.10.0 with its gates, `platform/e2e/engine/sdlc_test.go` through the
    gates.
