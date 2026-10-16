@@ -33,6 +33,7 @@ type config struct {
 	MethodologiesDir string // GOAP_METHODOLOGIES_DIR
 	ModelsConfig     string // GOAP_MODELS_CONFIG
 	DevFSRoot        string // GOAP_DEV_FS_ROOT
+	Demo             bool   // GOAP_DEV_DEMO=1: load the demo data at start (else on demand, from the settings)
 	WorkspaceRoot    string // GOAP_DEV_WORKSPACE_ROOT
 	WorkspaceImage   string // GOAP_DEV_WORKSPACE_IMAGE: the commands of the workspaces in containers of this image
 	DockerHost       string // GOAP_DOCKER_HOST
@@ -50,6 +51,7 @@ func loadConfig() config {
 		MethodologiesDir: platform.Env("GOAP_METHODOLOGIES_DIR", "methodologies"),
 		ModelsConfig:     platform.Env("GOAP_MODELS_CONFIG", ""),
 		DevFSRoot:        platform.Env("GOAP_DEV_FS_ROOT", ""),
+		Demo:             platform.Env("GOAP_DEV_DEMO", "") == "1",
 		WorkspaceRoot:    platform.Env("GOAP_DEV_WORKSPACE_ROOT", ""),
 		WorkspaceImage:   platform.Env("GOAP_DEV_WORKSPACE_IMAGE", ""),
 		DockerHost:       platform.Env("GOAP_DOCKER_HOST", "unix:///var/run/docker.sock"),

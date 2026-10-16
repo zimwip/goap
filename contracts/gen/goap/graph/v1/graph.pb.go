@@ -4140,6 +4140,96 @@ func (x *IsAdminOnlyTypeResponse) GetAdminOnly() bool {
 	return false
 }
 
+type LoadDemoDataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LoadDemoDataRequest) Reset() {
+	*x = LoadDemoDataRequest{}
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LoadDemoDataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LoadDemoDataRequest) ProtoMessage() {}
+
+func (x *LoadDemoDataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LoadDemoDataRequest.ProtoReflect.Descriptor instead.
+func (*LoadDemoDataRequest) Descriptor() ([]byte, []int) {
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{56}
+}
+
+type LoadDemoDataResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// whether anything was written (false: the graph held the demo already)
+	Loaded bool `protobuf:"varint,1,opt,name=loaded,proto3" json:"loaded,omitempty"`
+	// key of the demo project
+	Project       string `protobuf:"bytes,2,opt,name=project,proto3" json:"project,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LoadDemoDataResponse) Reset() {
+	*x = LoadDemoDataResponse{}
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LoadDemoDataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LoadDemoDataResponse) ProtoMessage() {}
+
+func (x *LoadDemoDataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LoadDemoDataResponse.ProtoReflect.Descriptor instead.
+func (*LoadDemoDataResponse) Descriptor() ([]byte, []int) {
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *LoadDemoDataResponse) GetLoaded() bool {
+	if x != nil {
+		return x.Loaded
+	}
+	return false
+}
+
+func (x *LoadDemoDataResponse) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
 // A hierarchy every node version is placed in (domain.Structure).
 type Structure struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
@@ -4159,7 +4249,7 @@ type Structure struct {
 
 func (x *Structure) Reset() {
 	*x = Structure{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[56]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4171,7 +4261,7 @@ func (x *Structure) String() string {
 func (*Structure) ProtoMessage() {}
 
 func (x *Structure) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[56]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4184,7 +4274,7 @@ func (x *Structure) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Structure.ProtoReflect.Descriptor instead.
 func (*Structure) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{56}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *Structure) GetKind() string {
@@ -4253,7 +4343,7 @@ type GetStructuresResponse struct {
 
 func (x *GetStructuresResponse) Reset() {
 	*x = GetStructuresResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[57]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4265,7 +4355,7 @@ func (x *GetStructuresResponse) String() string {
 func (*GetStructuresResponse) ProtoMessage() {}
 
 func (x *GetStructuresResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[57]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4278,7 +4368,7 @@ func (x *GetStructuresResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetStructuresResponse.ProtoReflect.Descriptor instead.
 func (*GetStructuresResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{57}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{59}
 }
 
 func (x *GetStructuresResponse) GetStructures() []*Structure {
@@ -4317,7 +4407,7 @@ type CreateChangeRequest struct {
 
 func (x *CreateChangeRequest) Reset() {
 	*x = CreateChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[58]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4329,7 +4419,7 @@ func (x *CreateChangeRequest) String() string {
 func (*CreateChangeRequest) ProtoMessage() {}
 
 func (x *CreateChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[58]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4342,7 +4432,7 @@ func (x *CreateChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateChangeRequest.ProtoReflect.Descriptor instead.
 func (*CreateChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{58}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *CreateChangeRequest) GetTitle() string {
@@ -4438,7 +4528,7 @@ type CreateChangeResponse struct {
 
 func (x *CreateChangeResponse) Reset() {
 	*x = CreateChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[59]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4450,7 +4540,7 @@ func (x *CreateChangeResponse) String() string {
 func (*CreateChangeResponse) ProtoMessage() {}
 
 func (x *CreateChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[59]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4463,7 +4553,7 @@ func (x *CreateChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateChangeResponse.ProtoReflect.Descriptor instead.
 func (*CreateChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{59}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{61}
 }
 
 func (x *CreateChangeResponse) GetChange() *Change {
@@ -4482,7 +4572,7 @@ type GetChangeRequest struct {
 
 func (x *GetChangeRequest) Reset() {
 	*x = GetChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[60]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4494,7 +4584,7 @@ func (x *GetChangeRequest) String() string {
 func (*GetChangeRequest) ProtoMessage() {}
 
 func (x *GetChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[60]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4507,7 +4597,7 @@ func (x *GetChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeRequest.ProtoReflect.Descriptor instead.
 func (*GetChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{60}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *GetChangeRequest) GetId() string {
@@ -4526,7 +4616,7 @@ type GetChangeResponse struct {
 
 func (x *GetChangeResponse) Reset() {
 	*x = GetChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[61]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4538,7 +4628,7 @@ func (x *GetChangeResponse) String() string {
 func (*GetChangeResponse) ProtoMessage() {}
 
 func (x *GetChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[61]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4551,7 +4641,7 @@ func (x *GetChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeResponse.ProtoReflect.Descriptor instead.
 func (*GetChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{61}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *GetChangeResponse) GetChange() *Change {
@@ -4575,7 +4665,7 @@ type ListChangesRequest struct {
 
 func (x *ListChangesRequest) Reset() {
 	*x = ListChangesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[62]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4587,7 +4677,7 @@ func (x *ListChangesRequest) String() string {
 func (*ListChangesRequest) ProtoMessage() {}
 
 func (x *ListChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[62]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4600,7 +4690,7 @@ func (x *ListChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListChangesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{62}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ListChangesRequest) GetNamespace() string {
@@ -4633,7 +4723,7 @@ type ListChangesResponse struct {
 
 func (x *ListChangesResponse) Reset() {
 	*x = ListChangesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[63]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4645,7 +4735,7 @@ func (x *ListChangesResponse) String() string {
 func (*ListChangesResponse) ProtoMessage() {}
 
 func (x *ListChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[63]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4658,7 +4748,7 @@ func (x *ListChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListChangesResponse.ProtoReflect.Descriptor instead.
 func (*ListChangesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{63}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ListChangesResponse) GetChanges() []*Change {
@@ -4684,7 +4774,7 @@ type UpdateChangeRequest struct {
 
 func (x *UpdateChangeRequest) Reset() {
 	*x = UpdateChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[64]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4696,7 +4786,7 @@ func (x *UpdateChangeRequest) String() string {
 func (*UpdateChangeRequest) ProtoMessage() {}
 
 func (x *UpdateChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[64]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4709,7 +4799,7 @@ func (x *UpdateChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateChangeRequest.ProtoReflect.Descriptor instead.
 func (*UpdateChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{64}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *UpdateChangeRequest) GetId() string {
@@ -4763,7 +4853,7 @@ type UpdateChangeResponse struct {
 
 func (x *UpdateChangeResponse) Reset() {
 	*x = UpdateChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[65]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4775,7 +4865,7 @@ func (x *UpdateChangeResponse) String() string {
 func (*UpdateChangeResponse) ProtoMessage() {}
 
 func (x *UpdateChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[65]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4788,7 +4878,7 @@ func (x *UpdateChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateChangeResponse.ProtoReflect.Descriptor instead.
 func (*UpdateChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{65}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *UpdateChangeResponse) GetChange() *Change {
@@ -4809,7 +4899,7 @@ type MoveChangeRequest struct {
 
 func (x *MoveChangeRequest) Reset() {
 	*x = MoveChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[66]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4821,7 +4911,7 @@ func (x *MoveChangeRequest) String() string {
 func (*MoveChangeRequest) ProtoMessage() {}
 
 func (x *MoveChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[66]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4834,7 +4924,7 @@ func (x *MoveChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveChangeRequest.ProtoReflect.Descriptor instead.
 func (*MoveChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{66}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *MoveChangeRequest) GetChangeId() string {
@@ -4860,7 +4950,7 @@ type MoveChangeResponse struct {
 
 func (x *MoveChangeResponse) Reset() {
 	*x = MoveChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[67]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4872,7 +4962,7 @@ func (x *MoveChangeResponse) String() string {
 func (*MoveChangeResponse) ProtoMessage() {}
 
 func (x *MoveChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[67]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4885,7 +4975,7 @@ func (x *MoveChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MoveChangeResponse.ProtoReflect.Descriptor instead.
 func (*MoveChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{67}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *MoveChangeResponse) GetChange() *Change {
@@ -4906,7 +4996,7 @@ type AttachChangeRequest struct {
 
 func (x *AttachChangeRequest) Reset() {
 	*x = AttachChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[68]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4918,7 +5008,7 @@ func (x *AttachChangeRequest) String() string {
 func (*AttachChangeRequest) ProtoMessage() {}
 
 func (x *AttachChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[68]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4931,7 +5021,7 @@ func (x *AttachChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachChangeRequest.ProtoReflect.Descriptor instead.
 func (*AttachChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{68}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *AttachChangeRequest) GetChangeId() string {
@@ -4957,7 +5047,7 @@ type AttachChangeResponse struct {
 
 func (x *AttachChangeResponse) Reset() {
 	*x = AttachChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[69]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4969,7 +5059,7 @@ func (x *AttachChangeResponse) String() string {
 func (*AttachChangeResponse) ProtoMessage() {}
 
 func (x *AttachChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[69]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4982,7 +5072,7 @@ func (x *AttachChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttachChangeResponse.ProtoReflect.Descriptor instead.
 func (*AttachChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{69}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *AttachChangeResponse) GetChange() *Change {
@@ -5002,7 +5092,7 @@ type DetachChangeRequest struct {
 
 func (x *DetachChangeRequest) Reset() {
 	*x = DetachChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[70]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5014,7 +5104,7 @@ func (x *DetachChangeRequest) String() string {
 func (*DetachChangeRequest) ProtoMessage() {}
 
 func (x *DetachChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[70]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5027,7 +5117,7 @@ func (x *DetachChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DetachChangeRequest.ProtoReflect.Descriptor instead.
 func (*DetachChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{70}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *DetachChangeRequest) GetChangeId() string {
@@ -5046,7 +5136,7 @@ type DetachChangeResponse struct {
 
 func (x *DetachChangeResponse) Reset() {
 	*x = DetachChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[71]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5058,7 +5148,7 @@ func (x *DetachChangeResponse) String() string {
 func (*DetachChangeResponse) ProtoMessage() {}
 
 func (x *DetachChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[71]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5071,7 +5161,7 @@ func (x *DetachChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DetachChangeResponse.ProtoReflect.Descriptor instead.
 func (*DetachChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{71}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *DetachChangeResponse) GetChange() *Change {
@@ -5092,7 +5182,7 @@ type SetChangeDependenciesRequest struct {
 
 func (x *SetChangeDependenciesRequest) Reset() {
 	*x = SetChangeDependenciesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[72]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5104,7 +5194,7 @@ func (x *SetChangeDependenciesRequest) String() string {
 func (*SetChangeDependenciesRequest) ProtoMessage() {}
 
 func (x *SetChangeDependenciesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[72]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5117,7 +5207,7 @@ func (x *SetChangeDependenciesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChangeDependenciesRequest.ProtoReflect.Descriptor instead.
 func (*SetChangeDependenciesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{72}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *SetChangeDependenciesRequest) GetChangeId() string {
@@ -5143,7 +5233,7 @@ type SetChangeDependenciesResponse struct {
 
 func (x *SetChangeDependenciesResponse) Reset() {
 	*x = SetChangeDependenciesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[73]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5155,7 +5245,7 @@ func (x *SetChangeDependenciesResponse) String() string {
 func (*SetChangeDependenciesResponse) ProtoMessage() {}
 
 func (x *SetChangeDependenciesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[73]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5168,7 +5258,7 @@ func (x *SetChangeDependenciesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetChangeDependenciesResponse.ProtoReflect.Descriptor instead.
 func (*SetChangeDependenciesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{73}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *SetChangeDependenciesResponse) GetChange() *Change {
@@ -5190,7 +5280,7 @@ type UpgradeChangeRequest struct {
 
 func (x *UpgradeChangeRequest) Reset() {
 	*x = UpgradeChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[74]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5202,7 +5292,7 @@ func (x *UpgradeChangeRequest) String() string {
 func (*UpgradeChangeRequest) ProtoMessage() {}
 
 func (x *UpgradeChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[74]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5215,7 +5305,7 @@ func (x *UpgradeChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpgradeChangeRequest.ProtoReflect.Descriptor instead.
 func (*UpgradeChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{74}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *UpgradeChangeRequest) GetChangeId() string {
@@ -5241,7 +5331,7 @@ type UpgradeChangeResponse struct {
 
 func (x *UpgradeChangeResponse) Reset() {
 	*x = UpgradeChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[75]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5253,7 +5343,7 @@ func (x *UpgradeChangeResponse) String() string {
 func (*UpgradeChangeResponse) ProtoMessage() {}
 
 func (x *UpgradeChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[75]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5266,7 +5356,7 @@ func (x *UpgradeChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpgradeChangeResponse.ProtoReflect.Descriptor instead.
 func (*UpgradeChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{75}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *UpgradeChangeResponse) GetChange() *Change {
@@ -5285,7 +5375,7 @@ type GetChangeDependenciesRequest struct {
 
 func (x *GetChangeDependenciesRequest) Reset() {
 	*x = GetChangeDependenciesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[76]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5297,7 +5387,7 @@ func (x *GetChangeDependenciesRequest) String() string {
 func (*GetChangeDependenciesRequest) ProtoMessage() {}
 
 func (x *GetChangeDependenciesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[76]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5310,7 +5400,7 @@ func (x *GetChangeDependenciesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeDependenciesRequest.ProtoReflect.Descriptor instead.
 func (*GetChangeDependenciesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{76}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *GetChangeDependenciesRequest) GetChangeId() string {
@@ -5339,7 +5429,7 @@ type Dependency struct {
 
 func (x *Dependency) Reset() {
 	*x = Dependency{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[77]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5351,7 +5441,7 @@ func (x *Dependency) String() string {
 func (*Dependency) ProtoMessage() {}
 
 func (x *Dependency) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[77]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5364,7 +5454,7 @@ func (x *Dependency) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Dependency.ProtoReflect.Descriptor instead.
 func (*Dependency) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{77}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *Dependency) GetId() string {
@@ -5437,7 +5527,7 @@ type GetChangeDependenciesResponse struct {
 
 func (x *GetChangeDependenciesResponse) Reset() {
 	*x = GetChangeDependenciesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[78]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5449,7 +5539,7 @@ func (x *GetChangeDependenciesResponse) String() string {
 func (*GetChangeDependenciesResponse) ProtoMessage() {}
 
 func (x *GetChangeDependenciesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[78]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5462,7 +5552,7 @@ func (x *GetChangeDependenciesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeDependenciesResponse.ProtoReflect.Descriptor instead.
 func (*GetChangeDependenciesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{78}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *GetChangeDependenciesResponse) GetDependsOn() []*Dependency {
@@ -5496,7 +5586,7 @@ type AddItemsRequest struct {
 
 func (x *AddItemsRequest) Reset() {
 	*x = AddItemsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[79]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5508,7 +5598,7 @@ func (x *AddItemsRequest) String() string {
 func (*AddItemsRequest) ProtoMessage() {}
 
 func (x *AddItemsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[79]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5521,7 +5611,7 @@ func (x *AddItemsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddItemsRequest.ProtoReflect.Descriptor instead.
 func (*AddItemsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{79}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *AddItemsRequest) GetChangeId() string {
@@ -5547,7 +5637,7 @@ type AddItemsResponse struct {
 
 func (x *AddItemsResponse) Reset() {
 	*x = AddItemsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[80]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5559,7 +5649,7 @@ func (x *AddItemsResponse) String() string {
 func (*AddItemsResponse) ProtoMessage() {}
 
 func (x *AddItemsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[80]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5572,7 +5662,7 @@ func (x *AddItemsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AddItemsResponse.ProtoReflect.Descriptor instead.
 func (*AddItemsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{80}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *AddItemsResponse) GetItems() []*ChangeItem {
@@ -5593,7 +5683,7 @@ type GetBlackboardRequest struct {
 
 func (x *GetBlackboardRequest) Reset() {
 	*x = GetBlackboardRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[81]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5605,7 +5695,7 @@ func (x *GetBlackboardRequest) String() string {
 func (*GetBlackboardRequest) ProtoMessage() {}
 
 func (x *GetBlackboardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[81]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5618,7 +5708,7 @@ func (x *GetBlackboardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBlackboardRequest.ProtoReflect.Descriptor instead.
 func (*GetBlackboardRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{81}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *GetBlackboardRequest) GetChangeId() string {
@@ -5652,7 +5742,7 @@ type GetBlackboardResponse struct {
 
 func (x *GetBlackboardResponse) Reset() {
 	*x = GetBlackboardResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[82]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5664,7 +5754,7 @@ func (x *GetBlackboardResponse) String() string {
 func (*GetBlackboardResponse) ProtoMessage() {}
 
 func (x *GetBlackboardResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[82]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5677,7 +5767,7 @@ func (x *GetBlackboardResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBlackboardResponse.ProtoReflect.Descriptor instead.
 func (*GetBlackboardResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{82}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *GetBlackboardResponse) GetChange() *Change {
@@ -5739,7 +5829,7 @@ type ApplyChangeRequest struct {
 
 func (x *ApplyChangeRequest) Reset() {
 	*x = ApplyChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[83]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5751,7 +5841,7 @@ func (x *ApplyChangeRequest) String() string {
 func (*ApplyChangeRequest) ProtoMessage() {}
 
 func (x *ApplyChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[83]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5764,7 +5854,7 @@ func (x *ApplyChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyChangeRequest.ProtoReflect.Descriptor instead.
 func (*ApplyChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{83}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *ApplyChangeRequest) GetChangeId() string {
@@ -5791,7 +5881,7 @@ type CommitChangeRequest struct {
 
 func (x *CommitChangeRequest) Reset() {
 	*x = CommitChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[84]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5803,7 +5893,7 @@ func (x *CommitChangeRequest) String() string {
 func (*CommitChangeRequest) ProtoMessage() {}
 
 func (x *CommitChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[84]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5816,7 +5906,7 @@ func (x *CommitChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitChangeRequest.ProtoReflect.Descriptor instead.
 func (*CommitChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{84}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{86}
 }
 
 func (x *CommitChangeRequest) GetChangeId() string {
@@ -5843,7 +5933,7 @@ type CommitChangeResponse struct {
 
 func (x *CommitChangeResponse) Reset() {
 	*x = CommitChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[85]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5855,7 +5945,7 @@ func (x *CommitChangeResponse) String() string {
 func (*CommitChangeResponse) ProtoMessage() {}
 
 func (x *CommitChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[85]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5868,7 +5958,7 @@ func (x *CommitChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitChangeResponse.ProtoReflect.Descriptor instead.
 func (*CommitChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{85}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *CommitChangeResponse) GetBaseline() *Baseline {
@@ -5891,7 +5981,7 @@ type TransitionChangeRequest struct {
 
 func (x *TransitionChangeRequest) Reset() {
 	*x = TransitionChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[86]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5903,7 +5993,7 @@ func (x *TransitionChangeRequest) String() string {
 func (*TransitionChangeRequest) ProtoMessage() {}
 
 func (x *TransitionChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[86]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5916,7 +6006,7 @@ func (x *TransitionChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransitionChangeRequest.ProtoReflect.Descriptor instead.
 func (*TransitionChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{86}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *TransitionChangeRequest) GetChangeId() string {
@@ -5949,7 +6039,7 @@ type TransitionChangeResponse struct {
 
 func (x *TransitionChangeResponse) Reset() {
 	*x = TransitionChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[87]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5961,7 +6051,7 @@ func (x *TransitionChangeResponse) String() string {
 func (*TransitionChangeResponse) ProtoMessage() {}
 
 func (x *TransitionChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[87]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5974,7 +6064,7 @@ func (x *TransitionChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TransitionChangeResponse.ProtoReflect.Descriptor instead.
 func (*TransitionChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{87}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *TransitionChangeResponse) GetChange() *Change {
@@ -5993,7 +6083,7 @@ type DeleteChangeRequest struct {
 
 func (x *DeleteChangeRequest) Reset() {
 	*x = DeleteChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[88]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6005,7 +6095,7 @@ func (x *DeleteChangeRequest) String() string {
 func (*DeleteChangeRequest) ProtoMessage() {}
 
 func (x *DeleteChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[88]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6018,7 +6108,7 @@ func (x *DeleteChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteChangeRequest.ProtoReflect.Descriptor instead.
 func (*DeleteChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{88}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *DeleteChangeRequest) GetChangeId() string {
@@ -6038,7 +6128,7 @@ type DeleteChangeResponse struct {
 
 func (x *DeleteChangeResponse) Reset() {
 	*x = DeleteChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[89]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6050,7 +6140,7 @@ func (x *DeleteChangeResponse) String() string {
 func (*DeleteChangeResponse) ProtoMessage() {}
 
 func (x *DeleteChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[89]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6063,7 +6153,7 @@ func (x *DeleteChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteChangeResponse.ProtoReflect.Descriptor instead.
 func (*DeleteChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{89}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *DeleteChangeResponse) GetChange() *Change {
@@ -6081,7 +6171,7 @@ type GetPendingSettingsRequest struct {
 
 func (x *GetPendingSettingsRequest) Reset() {
 	*x = GetPendingSettingsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[90]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6093,7 +6183,7 @@ func (x *GetPendingSettingsRequest) String() string {
 func (*GetPendingSettingsRequest) ProtoMessage() {}
 
 func (x *GetPendingSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[90]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6106,7 +6196,7 @@ func (x *GetPendingSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPendingSettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetPendingSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{90}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{92}
 }
 
 type SaveSettingsRequest struct {
@@ -6117,7 +6207,7 @@ type SaveSettingsRequest struct {
 
 func (x *SaveSettingsRequest) Reset() {
 	*x = SaveSettingsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[91]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6129,7 +6219,7 @@ func (x *SaveSettingsRequest) String() string {
 func (*SaveSettingsRequest) ProtoMessage() {}
 
 func (x *SaveSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[91]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6142,7 +6232,7 @@ func (x *SaveSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveSettingsRequest.ProtoReflect.Descriptor instead.
 func (*SaveSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{91}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{93}
 }
 
 type DiscardSettingsRequest struct {
@@ -6153,7 +6243,7 @@ type DiscardSettingsRequest struct {
 
 func (x *DiscardSettingsRequest) Reset() {
 	*x = DiscardSettingsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[92]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6165,7 +6255,7 @@ func (x *DiscardSettingsRequest) String() string {
 func (*DiscardSettingsRequest) ProtoMessage() {}
 
 func (x *DiscardSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[92]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6178,7 +6268,7 @@ func (x *DiscardSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardSettingsRequest.ProtoReflect.Descriptor instead.
 func (*DiscardSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{92}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{94}
 }
 
 // One edit of the settings dialog.
@@ -6198,7 +6288,7 @@ type SettingEdit struct {
 
 func (x *SettingEdit) Reset() {
 	*x = SettingEdit{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[93]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6210,7 +6300,7 @@ func (x *SettingEdit) String() string {
 func (*SettingEdit) ProtoMessage() {}
 
 func (x *SettingEdit) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[93]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6223,7 +6313,7 @@ func (x *SettingEdit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingEdit.ProtoReflect.Descriptor instead.
 func (*SettingEdit) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{93}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{95}
 }
 
 func (x *SettingEdit) GetNamespace() string {
@@ -6270,7 +6360,7 @@ type StageSettingsRequest struct {
 
 func (x *StageSettingsRequest) Reset() {
 	*x = StageSettingsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[94]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6282,7 +6372,7 @@ func (x *StageSettingsRequest) String() string {
 func (*StageSettingsRequest) ProtoMessage() {}
 
 func (x *StageSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[94]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6295,7 +6385,7 @@ func (x *StageSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StageSettingsRequest.ProtoReflect.Descriptor instead.
 func (*StageSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{94}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *StageSettingsRequest) GetEdits() []*SettingEdit {
@@ -6324,7 +6414,7 @@ type StagedSetting struct {
 
 func (x *StagedSetting) Reset() {
 	*x = StagedSetting{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[95]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6336,7 +6426,7 @@ func (x *StagedSetting) String() string {
 func (*StagedSetting) ProtoMessage() {}
 
 func (x *StagedSetting) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[95]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6349,7 +6439,7 @@ func (x *StagedSetting) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StagedSetting.ProtoReflect.Descriptor instead.
 func (*StagedSetting) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{95}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *StagedSetting) GetKey() string {
@@ -6412,7 +6502,7 @@ type PendingSettings struct {
 
 func (x *PendingSettings) Reset() {
 	*x = PendingSettings{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[96]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6424,7 +6514,7 @@ func (x *PendingSettings) String() string {
 func (*PendingSettings) ProtoMessage() {}
 
 func (x *PendingSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[96]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6437,7 +6527,7 @@ func (x *PendingSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PendingSettings.ProtoReflect.Descriptor instead.
 func (*PendingSettings) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{96}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *PendingSettings) GetNamespace() string {
@@ -6470,7 +6560,7 @@ type PendingSettingsResponse struct {
 
 func (x *PendingSettingsResponse) Reset() {
 	*x = PendingSettingsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[97]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6482,7 +6572,7 @@ func (x *PendingSettingsResponse) String() string {
 func (*PendingSettingsResponse) ProtoMessage() {}
 
 func (x *PendingSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[97]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6495,7 +6585,7 @@ func (x *PendingSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PendingSettingsResponse.ProtoReflect.Descriptor instead.
 func (*PendingSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{97}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{99}
 }
 
 func (x *PendingSettingsResponse) GetChanges() []*PendingSettings {
@@ -6514,7 +6604,7 @@ type ApplyChangeResponse struct {
 
 func (x *ApplyChangeResponse) Reset() {
 	*x = ApplyChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[98]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6526,7 +6616,7 @@ func (x *ApplyChangeResponse) String() string {
 func (*ApplyChangeResponse) ProtoMessage() {}
 
 func (x *ApplyChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[98]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6539,7 +6629,7 @@ func (x *ApplyChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyChangeResponse.ProtoReflect.Descriptor instead.
 func (*ApplyChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{98}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *ApplyChangeResponse) GetBaseline() *Baseline {
@@ -6570,7 +6660,7 @@ type Branch struct {
 
 func (x *Branch) Reset() {
 	*x = Branch{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[99]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6582,7 +6672,7 @@ func (x *Branch) String() string {
 func (*Branch) ProtoMessage() {}
 
 func (x *Branch) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[99]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6595,7 +6685,7 @@ func (x *Branch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Branch.ProtoReflect.Descriptor instead.
 func (*Branch) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{99}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *Branch) GetName() string {
@@ -6681,7 +6771,7 @@ type CreateBranchRequest struct {
 
 func (x *CreateBranchRequest) Reset() {
 	*x = CreateBranchRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[100]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6693,7 +6783,7 @@ func (x *CreateBranchRequest) String() string {
 func (*CreateBranchRequest) ProtoMessage() {}
 
 func (x *CreateBranchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[100]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6706,7 +6796,7 @@ func (x *CreateBranchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBranchRequest.ProtoReflect.Descriptor instead.
 func (*CreateBranchRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{100}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *CreateBranchRequest) GetName() string {
@@ -6753,7 +6843,7 @@ type CreateBranchResponse struct {
 
 func (x *CreateBranchResponse) Reset() {
 	*x = CreateBranchResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[101]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6765,7 +6855,7 @@ func (x *CreateBranchResponse) String() string {
 func (*CreateBranchResponse) ProtoMessage() {}
 
 func (x *CreateBranchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[101]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6778,7 +6868,7 @@ func (x *CreateBranchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBranchResponse.ProtoReflect.Descriptor instead.
 func (*CreateBranchResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{101}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *CreateBranchResponse) GetBranch() *Branch {
@@ -6797,7 +6887,7 @@ type ListBranchesRequest struct {
 
 func (x *ListBranchesRequest) Reset() {
 	*x = ListBranchesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[102]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6809,7 +6899,7 @@ func (x *ListBranchesRequest) String() string {
 func (*ListBranchesRequest) ProtoMessage() {}
 
 func (x *ListBranchesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[102]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6822,7 +6912,7 @@ func (x *ListBranchesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBranchesRequest.ProtoReflect.Descriptor instead.
 func (*ListBranchesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{102}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *ListBranchesRequest) GetNamespace() string {
@@ -6841,7 +6931,7 @@ type ListBranchesResponse struct {
 
 func (x *ListBranchesResponse) Reset() {
 	*x = ListBranchesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[103]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6853,7 +6943,7 @@ func (x *ListBranchesResponse) String() string {
 func (*ListBranchesResponse) ProtoMessage() {}
 
 func (x *ListBranchesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[103]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6866,7 +6956,7 @@ func (x *ListBranchesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBranchesResponse.ProtoReflect.Descriptor instead.
 func (*ListBranchesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{103}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{105}
 }
 
 func (x *ListBranchesResponse) GetBranches() []*Branch {
@@ -6886,7 +6976,7 @@ type GetBranchRequest struct {
 
 func (x *GetBranchRequest) Reset() {
 	*x = GetBranchRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[104]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6898,7 +6988,7 @@ func (x *GetBranchRequest) String() string {
 func (*GetBranchRequest) ProtoMessage() {}
 
 func (x *GetBranchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[104]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6911,7 +7001,7 @@ func (x *GetBranchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBranchRequest.ProtoReflect.Descriptor instead.
 func (*GetBranchRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{104}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *GetBranchRequest) GetName() string {
@@ -6938,7 +7028,7 @@ type GetBranchResponse struct {
 
 func (x *GetBranchResponse) Reset() {
 	*x = GetBranchResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[105]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6950,7 +7040,7 @@ func (x *GetBranchResponse) String() string {
 func (*GetBranchResponse) ProtoMessage() {}
 
 func (x *GetBranchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[105]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6963,7 +7053,7 @@ func (x *GetBranchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBranchResponse.ProtoReflect.Descriptor instead.
 func (*GetBranchResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{105}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *GetBranchResponse) GetBranch() *Branch {
@@ -6991,7 +7081,7 @@ type SetBranchStatusRequest struct {
 
 func (x *SetBranchStatusRequest) Reset() {
 	*x = SetBranchStatusRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[106]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7003,7 +7093,7 @@ func (x *SetBranchStatusRequest) String() string {
 func (*SetBranchStatusRequest) ProtoMessage() {}
 
 func (x *SetBranchStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[106]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7016,7 +7106,7 @@ func (x *SetBranchStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBranchStatusRequest.ProtoReflect.Descriptor instead.
 func (*SetBranchStatusRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{106}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *SetBranchStatusRequest) GetName() string {
@@ -7048,7 +7138,7 @@ type SetBranchStatusResponse struct {
 
 func (x *SetBranchStatusResponse) Reset() {
 	*x = SetBranchStatusResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[107]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7060,7 +7150,7 @@ func (x *SetBranchStatusResponse) String() string {
 func (*SetBranchStatusResponse) ProtoMessage() {}
 
 func (x *SetBranchStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[107]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7073,7 +7163,7 @@ func (x *SetBranchStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBranchStatusResponse.ProtoReflect.Descriptor instead.
 func (*SetBranchStatusResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{107}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{109}
 }
 
 type SetBranchDescriptionRequest struct {
@@ -7087,7 +7177,7 @@ type SetBranchDescriptionRequest struct {
 
 func (x *SetBranchDescriptionRequest) Reset() {
 	*x = SetBranchDescriptionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[108]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7099,7 +7189,7 @@ func (x *SetBranchDescriptionRequest) String() string {
 func (*SetBranchDescriptionRequest) ProtoMessage() {}
 
 func (x *SetBranchDescriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[108]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7112,7 +7202,7 @@ func (x *SetBranchDescriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBranchDescriptionRequest.ProtoReflect.Descriptor instead.
 func (*SetBranchDescriptionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{108}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *SetBranchDescriptionRequest) GetName() string {
@@ -7144,7 +7234,7 @@ type SetBranchDescriptionResponse struct {
 
 func (x *SetBranchDescriptionResponse) Reset() {
 	*x = SetBranchDescriptionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[109]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7156,7 +7246,7 @@ func (x *SetBranchDescriptionResponse) String() string {
 func (*SetBranchDescriptionResponse) ProtoMessage() {}
 
 func (x *SetBranchDescriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[109]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7169,7 +7259,7 @@ func (x *SetBranchDescriptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetBranchDescriptionResponse.ProtoReflect.Descriptor instead.
 func (*SetBranchDescriptionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{109}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{111}
 }
 
 type ListNodeVersionsRequest struct {
@@ -7181,7 +7271,7 @@ type ListNodeVersionsRequest struct {
 
 func (x *ListNodeVersionsRequest) Reset() {
 	*x = ListNodeVersionsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[110]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7193,7 +7283,7 @@ func (x *ListNodeVersionsRequest) String() string {
 func (*ListNodeVersionsRequest) ProtoMessage() {}
 
 func (x *ListNodeVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[110]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7206,7 +7296,7 @@ func (x *ListNodeVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodeVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListNodeVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{110}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *ListNodeVersionsRequest) GetId() string {
@@ -7225,7 +7315,7 @@ type ListNodeVersionsResponse struct {
 
 func (x *ListNodeVersionsResponse) Reset() {
 	*x = ListNodeVersionsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[111]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7237,7 +7327,7 @@ func (x *ListNodeVersionsResponse) String() string {
 func (*ListNodeVersionsResponse) ProtoMessage() {}
 
 func (x *ListNodeVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[111]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7250,7 +7340,7 @@ func (x *ListNodeVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodeVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListNodeVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{111}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{113}
 }
 
 func (x *ListNodeVersionsResponse) GetVersions() []*Node {
@@ -7282,7 +7372,7 @@ type MergeCandidate struct {
 
 func (x *MergeCandidate) Reset() {
 	*x = MergeCandidate{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[112]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7294,7 +7384,7 @@ func (x *MergeCandidate) String() string {
 func (*MergeCandidate) ProtoMessage() {}
 
 func (x *MergeCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[112]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7307,7 +7397,7 @@ func (x *MergeCandidate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeCandidate.ProtoReflect.Descriptor instead.
 func (*MergeCandidate) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{112}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *MergeCandidate) GetNode() string {
@@ -7413,7 +7503,7 @@ type MergePlan struct {
 
 func (x *MergePlan) Reset() {
 	*x = MergePlan{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[113]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7425,7 +7515,7 @@ func (x *MergePlan) String() string {
 func (*MergePlan) ProtoMessage() {}
 
 func (x *MergePlan) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[113]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7438,7 +7528,7 @@ func (x *MergePlan) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergePlan.ProtoReflect.Descriptor instead.
 func (*MergePlan) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{113}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *MergePlan) GetFrom() string {
@@ -7480,7 +7570,7 @@ type PlanMergeRequest struct {
 
 func (x *PlanMergeRequest) Reset() {
 	*x = PlanMergeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[114]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7492,7 +7582,7 @@ func (x *PlanMergeRequest) String() string {
 func (*PlanMergeRequest) ProtoMessage() {}
 
 func (x *PlanMergeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[114]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7505,7 +7595,7 @@ func (x *PlanMergeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanMergeRequest.ProtoReflect.Descriptor instead.
 func (*PlanMergeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{114}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *PlanMergeRequest) GetFrom() string {
@@ -7539,7 +7629,7 @@ type DiffBaselinesRequest struct {
 
 func (x *DiffBaselinesRequest) Reset() {
 	*x = DiffBaselinesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[115]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7551,7 +7641,7 @@ func (x *DiffBaselinesRequest) String() string {
 func (*DiffBaselinesRequest) ProtoMessage() {}
 
 func (x *DiffBaselinesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[115]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7564,7 +7654,7 @@ func (x *DiffBaselinesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffBaselinesRequest.ProtoReflect.Descriptor instead.
 func (*DiffBaselinesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{115}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *DiffBaselinesRequest) GetFrom() string {
@@ -7590,7 +7680,7 @@ type DiffBaselinesResponse struct {
 
 func (x *DiffBaselinesResponse) Reset() {
 	*x = DiffBaselinesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[116]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7602,7 +7692,7 @@ func (x *DiffBaselinesResponse) String() string {
 func (*DiffBaselinesResponse) ProtoMessage() {}
 
 func (x *DiffBaselinesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[116]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7615,7 +7705,7 @@ func (x *DiffBaselinesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffBaselinesResponse.ProtoReflect.Descriptor instead.
 func (*DiffBaselinesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{116}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *DiffBaselinesResponse) GetNodes() []*BaselineDiff {
@@ -7641,7 +7731,7 @@ type BaselineDiff struct {
 
 func (x *BaselineDiff) Reset() {
 	*x = BaselineDiff{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[117]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7653,7 +7743,7 @@ func (x *BaselineDiff) String() string {
 func (*BaselineDiff) ProtoMessage() {}
 
 func (x *BaselineDiff) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[117]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7666,7 +7756,7 @@ func (x *BaselineDiff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BaselineDiff.ProtoReflect.Descriptor instead.
 func (*BaselineDiff) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{117}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *BaselineDiff) GetNode() string {
@@ -7720,7 +7810,7 @@ type PlanMergeResponse struct {
 
 func (x *PlanMergeResponse) Reset() {
 	*x = PlanMergeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[118]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7732,7 +7822,7 @@ func (x *PlanMergeResponse) String() string {
 func (*PlanMergeResponse) ProtoMessage() {}
 
 func (x *PlanMergeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[118]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7745,7 +7835,7 @@ func (x *PlanMergeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PlanMergeResponse.ProtoReflect.Descriptor instead.
 func (*PlanMergeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{118}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *PlanMergeResponse) GetPlan() *MergePlan {
@@ -7766,7 +7856,7 @@ type Resolution struct {
 
 func (x *Resolution) Reset() {
 	*x = Resolution{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[119]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7778,7 +7868,7 @@ func (x *Resolution) String() string {
 func (*Resolution) ProtoMessage() {}
 
 func (x *Resolution) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[119]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7791,7 +7881,7 @@ func (x *Resolution) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Resolution.ProtoReflect.Descriptor instead.
 func (*Resolution) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{119}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *Resolution) GetProps() *structpb.Struct {
@@ -7823,7 +7913,7 @@ type MergeBranchRequest struct {
 
 func (x *MergeBranchRequest) Reset() {
 	*x = MergeBranchRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[120]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7835,7 +7925,7 @@ func (x *MergeBranchRequest) String() string {
 func (*MergeBranchRequest) ProtoMessage() {}
 
 func (x *MergeBranchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[120]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7848,7 +7938,7 @@ func (x *MergeBranchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeBranchRequest.ProtoReflect.Descriptor instead.
 func (*MergeBranchRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{120}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *MergeBranchRequest) GetFrom() string {
@@ -7897,7 +7987,7 @@ type MergeBranchResponse struct {
 
 func (x *MergeBranchResponse) Reset() {
 	*x = MergeBranchResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[121]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7909,7 +7999,7 @@ func (x *MergeBranchResponse) String() string {
 func (*MergeBranchResponse) ProtoMessage() {}
 
 func (x *MergeBranchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[121]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7922,7 +8012,7 @@ func (x *MergeBranchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeBranchResponse.ProtoReflect.Descriptor instead.
 func (*MergeBranchResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{121}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *MergeBranchResponse) GetChange() *Change {
@@ -7957,7 +8047,7 @@ type AppendLogRequest struct {
 
 func (x *AppendLogRequest) Reset() {
 	*x = AppendLogRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[122]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7969,7 +8059,7 @@ func (x *AppendLogRequest) String() string {
 func (*AppendLogRequest) ProtoMessage() {}
 
 func (x *AppendLogRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[122]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7982,7 +8072,7 @@ func (x *AppendLogRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendLogRequest.ProtoReflect.Descriptor instead.
 func (*AppendLogRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{122}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *AppendLogRequest) GetEntries() []*LogEntry {
@@ -8000,7 +8090,7 @@ type AppendLogResponse struct {
 
 func (x *AppendLogResponse) Reset() {
 	*x = AppendLogResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[123]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8012,7 +8102,7 @@ func (x *AppendLogResponse) String() string {
 func (*AppendLogResponse) ProtoMessage() {}
 
 func (x *AppendLogResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[123]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8025,7 +8115,7 @@ func (x *AppendLogResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AppendLogResponse.ProtoReflect.Descriptor instead.
 func (*AppendLogResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{123}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{125}
 }
 
 type ModelCall struct {
@@ -8042,7 +8132,7 @@ type ModelCall struct {
 
 func (x *ModelCall) Reset() {
 	*x = ModelCall{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[124]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8054,7 +8144,7 @@ func (x *ModelCall) String() string {
 func (*ModelCall) ProtoMessage() {}
 
 func (x *ModelCall) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[124]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8067,7 +8157,7 @@ func (x *ModelCall) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ModelCall.ProtoReflect.Descriptor instead.
 func (*ModelCall) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{124}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *ModelCall) GetProvider() string {
@@ -8123,7 +8213,7 @@ type ToolUse struct {
 
 func (x *ToolUse) Reset() {
 	*x = ToolUse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[125]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8135,7 +8225,7 @@ func (x *ToolUse) String() string {
 func (*ToolUse) ProtoMessage() {}
 
 func (x *ToolUse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[125]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8148,7 +8238,7 @@ func (x *ToolUse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolUse.ProtoReflect.Descriptor instead.
 func (*ToolUse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{125}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *ToolUse) GetName() string {
@@ -8226,7 +8316,7 @@ type ExecutionRecord struct {
 
 func (x *ExecutionRecord) Reset() {
 	*x = ExecutionRecord{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[126]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8238,7 +8328,7 @@ func (x *ExecutionRecord) String() string {
 func (*ExecutionRecord) ProtoMessage() {}
 
 func (x *ExecutionRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[126]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8251,7 +8341,7 @@ func (x *ExecutionRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecutionRecord.ProtoReflect.Descriptor instead.
 func (*ExecutionRecord) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{126}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *ExecutionRecord) GetId() string {
@@ -8537,7 +8627,7 @@ type ListExecutionsRequest struct {
 
 func (x *ListExecutionsRequest) Reset() {
 	*x = ListExecutionsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[127]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8549,7 +8639,7 @@ func (x *ListExecutionsRequest) String() string {
 func (*ListExecutionsRequest) ProtoMessage() {}
 
 func (x *ListExecutionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[127]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8562,7 +8652,7 @@ func (x *ListExecutionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListExecutionsRequest.ProtoReflect.Descriptor instead.
 func (*ListExecutionsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{127}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *ListExecutionsRequest) GetChangeId() string {
@@ -8588,7 +8678,7 @@ type ListExecutionsResponse struct {
 
 func (x *ListExecutionsResponse) Reset() {
 	*x = ListExecutionsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[128]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8600,7 +8690,7 @@ func (x *ListExecutionsResponse) String() string {
 func (*ListExecutionsResponse) ProtoMessage() {}
 
 func (x *ListExecutionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[128]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8613,7 +8703,7 @@ func (x *ListExecutionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListExecutionsResponse.ProtoReflect.Descriptor instead.
 func (*ListExecutionsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{128}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *ListExecutionsResponse) GetRecords() []*ExecutionRecord {
@@ -8636,7 +8726,7 @@ type LinkEdit struct {
 
 func (x *LinkEdit) Reset() {
 	*x = LinkEdit{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[129]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8648,7 +8738,7 @@ func (x *LinkEdit) String() string {
 func (*LinkEdit) ProtoMessage() {}
 
 func (x *LinkEdit) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[129]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8661,7 +8751,7 @@ func (x *LinkEdit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LinkEdit.ProtoReflect.Descriptor instead.
 func (*LinkEdit) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{129}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *LinkEdit) GetType() string {
@@ -8717,7 +8807,7 @@ type NodeEdit struct {
 
 func (x *NodeEdit) Reset() {
 	*x = NodeEdit{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[130]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8729,7 +8819,7 @@ func (x *NodeEdit) String() string {
 func (*NodeEdit) ProtoMessage() {}
 
 func (x *NodeEdit) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[130]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8742,7 +8832,7 @@ func (x *NodeEdit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeEdit.ProtoReflect.Descriptor instead.
 func (*NodeEdit) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{130}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *NodeEdit) GetKey() string {
@@ -8828,7 +8918,7 @@ type CommitEditsRequest struct {
 
 func (x *CommitEditsRequest) Reset() {
 	*x = CommitEditsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[131]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8840,7 +8930,7 @@ func (x *CommitEditsRequest) String() string {
 func (*CommitEditsRequest) ProtoMessage() {}
 
 func (x *CommitEditsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[131]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8853,7 +8943,7 @@ func (x *CommitEditsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitEditsRequest.ProtoReflect.Descriptor instead.
 func (*CommitEditsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{131}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *CommitEditsRequest) GetNamespace() string {
@@ -8936,7 +9026,7 @@ type CommitEditsResponse struct {
 
 func (x *CommitEditsResponse) Reset() {
 	*x = CommitEditsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[132]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8948,7 +9038,7 @@ func (x *CommitEditsResponse) String() string {
 func (*CommitEditsResponse) ProtoMessage() {}
 
 func (x *CommitEditsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[132]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8961,7 +9051,7 @@ func (x *CommitEditsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CommitEditsResponse.ProtoReflect.Descriptor instead.
 func (*CommitEditsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{132}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *CommitEditsResponse) GetChangeId() string {
@@ -8988,7 +9078,7 @@ type ProposeImpactRequest struct {
 
 func (x *ProposeImpactRequest) Reset() {
 	*x = ProposeImpactRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[133]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9000,7 +9090,7 @@ func (x *ProposeImpactRequest) String() string {
 func (*ProposeImpactRequest) ProtoMessage() {}
 
 func (x *ProposeImpactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[133]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9013,7 +9103,7 @@ func (x *ProposeImpactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProposeImpactRequest.ProtoReflect.Descriptor instead.
 func (*ProposeImpactRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{133}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *ProposeImpactRequest) GetChangeId() string {
@@ -9039,7 +9129,7 @@ type ProposeImpactResponse struct {
 
 func (x *ProposeImpactResponse) Reset() {
 	*x = ProposeImpactResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[134]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9051,7 +9141,7 @@ func (x *ProposeImpactResponse) String() string {
 func (*ProposeImpactResponse) ProtoMessage() {}
 
 func (x *ProposeImpactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[134]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9064,7 +9154,7 @@ func (x *ProposeImpactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProposeImpactResponse.ProtoReflect.Descriptor instead.
 func (*ProposeImpactResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{134}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *ProposeImpactResponse) GetNodes() []*ChangeImpact {
@@ -9085,7 +9175,7 @@ type NodeLinkWrite struct {
 
 func (x *NodeLinkWrite) Reset() {
 	*x = NodeLinkWrite{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[135]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9097,7 +9187,7 @@ func (x *NodeLinkWrite) String() string {
 func (*NodeLinkWrite) ProtoMessage() {}
 
 func (x *NodeLinkWrite) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[135]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9110,7 +9200,7 @@ func (x *NodeLinkWrite) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeLinkWrite.ProtoReflect.Descriptor instead.
 func (*NodeLinkWrite) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{135}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *NodeLinkWrite) GetType() string {
@@ -9155,7 +9245,7 @@ type ImpactNodeCreateRequest struct {
 
 func (x *ImpactNodeCreateRequest) Reset() {
 	*x = ImpactNodeCreateRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[136]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9167,7 +9257,7 @@ func (x *ImpactNodeCreateRequest) String() string {
 func (*ImpactNodeCreateRequest) ProtoMessage() {}
 
 func (x *ImpactNodeCreateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[136]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9180,7 +9270,7 @@ func (x *ImpactNodeCreateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeCreateRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeCreateRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{136}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *ImpactNodeCreateRequest) GetChangeId() string {
@@ -9261,7 +9351,7 @@ type NodeCreateSpec struct {
 
 func (x *NodeCreateSpec) Reset() {
 	*x = NodeCreateSpec{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[137]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9273,7 +9363,7 @@ func (x *NodeCreateSpec) String() string {
 func (*NodeCreateSpec) ProtoMessage() {}
 
 func (x *NodeCreateSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[137]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9286,7 +9376,7 @@ func (x *NodeCreateSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeCreateSpec.ProtoReflect.Descriptor instead.
 func (*NodeCreateSpec) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{137}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *NodeCreateSpec) GetKey() string {
@@ -9343,7 +9433,7 @@ type NodeName struct {
 
 func (x *NodeName) Reset() {
 	*x = NodeName{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[138]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9355,7 +9445,7 @@ func (x *NodeName) String() string {
 func (*NodeName) ProtoMessage() {}
 
 func (x *NodeName) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[138]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9368,7 +9458,7 @@ func (x *NodeName) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NodeName.ProtoReflect.Descriptor instead.
 func (*NodeName) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{138}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *NodeName) GetChangeImpactId() string {
@@ -9407,7 +9497,7 @@ type ImpactNodeMergeRequest struct {
 
 func (x *ImpactNodeMergeRequest) Reset() {
 	*x = ImpactNodeMergeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[139]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9419,7 +9509,7 @@ func (x *ImpactNodeMergeRequest) String() string {
 func (*ImpactNodeMergeRequest) ProtoMessage() {}
 
 func (x *ImpactNodeMergeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[139]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9432,7 +9522,7 @@ func (x *ImpactNodeMergeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeMergeRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeMergeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{139}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *ImpactNodeMergeRequest) GetChangeId() string {
@@ -9491,7 +9581,7 @@ type ImpactNodeSplitRequest struct {
 
 func (x *ImpactNodeSplitRequest) Reset() {
 	*x = ImpactNodeSplitRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[140]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9503,7 +9593,7 @@ func (x *ImpactNodeSplitRequest) String() string {
 func (*ImpactNodeSplitRequest) ProtoMessage() {}
 
 func (x *ImpactNodeSplitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[140]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9516,7 +9606,7 @@ func (x *ImpactNodeSplitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeSplitRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeSplitRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{140}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *ImpactNodeSplitRequest) GetChangeId() string {
@@ -9575,7 +9665,7 @@ type SuspectLink struct {
 
 func (x *SuspectLink) Reset() {
 	*x = SuspectLink{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[141]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9587,7 +9677,7 @@ func (x *SuspectLink) String() string {
 func (*SuspectLink) ProtoMessage() {}
 
 func (x *SuspectLink) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[141]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9600,7 +9690,7 @@ func (x *SuspectLink) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SuspectLink.ProtoReflect.Descriptor instead.
 func (*SuspectLink) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{141}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *SuspectLink) GetFrom() *NodeRef {
@@ -9650,7 +9740,7 @@ type ImpactNodeRestructureResponse struct {
 
 func (x *ImpactNodeRestructureResponse) Reset() {
 	*x = ImpactNodeRestructureResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[142]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9662,7 +9752,7 @@ func (x *ImpactNodeRestructureResponse) String() string {
 func (*ImpactNodeRestructureResponse) ProtoMessage() {}
 
 func (x *ImpactNodeRestructureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[142]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9675,7 +9765,7 @@ func (x *ImpactNodeRestructureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeRestructureResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeRestructureResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{142}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *ImpactNodeRestructureResponse) GetSuccessors() []*ChangeImpact {
@@ -9716,7 +9806,7 @@ type DerivedNodesRequest struct {
 
 func (x *DerivedNodesRequest) Reset() {
 	*x = DerivedNodesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[143]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9728,7 +9818,7 @@ func (x *DerivedNodesRequest) String() string {
 func (*DerivedNodesRequest) ProtoMessage() {}
 
 func (x *DerivedNodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[143]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9741,7 +9831,7 @@ func (x *DerivedNodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DerivedNodesRequest.ProtoReflect.Descriptor instead.
 func (*DerivedNodesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{143}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *DerivedNodesRequest) GetRef() *NodeRef {
@@ -9760,7 +9850,7 @@ type DerivedNodesResponse struct {
 
 func (x *DerivedNodesResponse) Reset() {
 	*x = DerivedNodesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[144]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9772,7 +9862,7 @@ func (x *DerivedNodesResponse) String() string {
 func (*DerivedNodesResponse) ProtoMessage() {}
 
 func (x *DerivedNodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[144]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9785,7 +9875,7 @@ func (x *DerivedNodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DerivedNodesResponse.ProtoReflect.Descriptor instead.
 func (*DerivedNodesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{144}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *DerivedNodesResponse) GetNodes() []*Node {
@@ -9804,7 +9894,7 @@ type ImpactNodeCreateResponse struct {
 
 func (x *ImpactNodeCreateResponse) Reset() {
 	*x = ImpactNodeCreateResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[145]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9816,7 +9906,7 @@ func (x *ImpactNodeCreateResponse) String() string {
 func (*ImpactNodeCreateResponse) ProtoMessage() {}
 
 func (x *ImpactNodeCreateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[145]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9829,7 +9919,7 @@ func (x *ImpactNodeCreateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeCreateResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeCreateResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{145}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *ImpactNodeCreateResponse) GetNode() *ChangeImpact {
@@ -9854,7 +9944,7 @@ type ImpactNodeCheckoutRequest struct {
 
 func (x *ImpactNodeCheckoutRequest) Reset() {
 	*x = ImpactNodeCheckoutRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[146]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9866,7 +9956,7 @@ func (x *ImpactNodeCheckoutRequest) String() string {
 func (*ImpactNodeCheckoutRequest) ProtoMessage() {}
 
 func (x *ImpactNodeCheckoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[146]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9879,7 +9969,7 @@ func (x *ImpactNodeCheckoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeCheckoutRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeCheckoutRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{146}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *ImpactNodeCheckoutRequest) GetChangeId() string {
@@ -9933,7 +10023,7 @@ type ImpactNodeCheckoutResponse struct {
 
 func (x *ImpactNodeCheckoutResponse) Reset() {
 	*x = ImpactNodeCheckoutResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[147]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9945,7 +10035,7 @@ func (x *ImpactNodeCheckoutResponse) String() string {
 func (*ImpactNodeCheckoutResponse) ProtoMessage() {}
 
 func (x *ImpactNodeCheckoutResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[147]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9958,7 +10048,7 @@ func (x *ImpactNodeCheckoutResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeCheckoutResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeCheckoutResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{147}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *ImpactNodeCheckoutResponse) GetNode() *ChangeImpact {
@@ -9984,7 +10074,7 @@ type ImpactNodeUpdateRequest struct {
 
 func (x *ImpactNodeUpdateRequest) Reset() {
 	*x = ImpactNodeUpdateRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[148]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9996,7 +10086,7 @@ func (x *ImpactNodeUpdateRequest) String() string {
 func (*ImpactNodeUpdateRequest) ProtoMessage() {}
 
 func (x *ImpactNodeUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[148]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10009,7 +10099,7 @@ func (x *ImpactNodeUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeUpdateRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{148}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *ImpactNodeUpdateRequest) GetChangeId() string {
@@ -10063,7 +10153,7 @@ type ImpactNodeUpdateResponse struct {
 
 func (x *ImpactNodeUpdateResponse) Reset() {
 	*x = ImpactNodeUpdateResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[149]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10075,7 +10165,7 @@ func (x *ImpactNodeUpdateResponse) String() string {
 func (*ImpactNodeUpdateResponse) ProtoMessage() {}
 
 func (x *ImpactNodeUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[149]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10088,7 +10178,7 @@ func (x *ImpactNodeUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeUpdateResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{149}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *ImpactNodeUpdateResponse) GetNode() *ChangeImpact {
@@ -10114,7 +10204,7 @@ type ImpactLinkCreateRequest struct {
 
 func (x *ImpactLinkCreateRequest) Reset() {
 	*x = ImpactLinkCreateRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[150]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10126,7 +10216,7 @@ func (x *ImpactLinkCreateRequest) String() string {
 func (*ImpactLinkCreateRequest) ProtoMessage() {}
 
 func (x *ImpactLinkCreateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[150]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10139,7 +10229,7 @@ func (x *ImpactLinkCreateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactLinkCreateRequest.ProtoReflect.Descriptor instead.
 func (*ImpactLinkCreateRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{150}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *ImpactLinkCreateRequest) GetChangeId() string {
@@ -10200,7 +10290,7 @@ type ImpactLinkCreateResponse struct {
 
 func (x *ImpactLinkCreateResponse) Reset() {
 	*x = ImpactLinkCreateResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[151]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10212,7 +10302,7 @@ func (x *ImpactLinkCreateResponse) String() string {
 func (*ImpactLinkCreateResponse) ProtoMessage() {}
 
 func (x *ImpactLinkCreateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[151]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10225,7 +10315,7 @@ func (x *ImpactLinkCreateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactLinkCreateResponse.ProtoReflect.Descriptor instead.
 func (*ImpactLinkCreateResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{151}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *ImpactLinkCreateResponse) GetLink() *Link {
@@ -10248,7 +10338,7 @@ type ImpactLinkUpdateRequest struct {
 
 func (x *ImpactLinkUpdateRequest) Reset() {
 	*x = ImpactLinkUpdateRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[152]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10260,7 +10350,7 @@ func (x *ImpactLinkUpdateRequest) String() string {
 func (*ImpactLinkUpdateRequest) ProtoMessage() {}
 
 func (x *ImpactLinkUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[152]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10273,7 +10363,7 @@ func (x *ImpactLinkUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactLinkUpdateRequest.ProtoReflect.Descriptor instead.
 func (*ImpactLinkUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{152}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *ImpactLinkUpdateRequest) GetChangeId() string {
@@ -10320,7 +10410,7 @@ type ImpactLinkUpdateResponse struct {
 
 func (x *ImpactLinkUpdateResponse) Reset() {
 	*x = ImpactLinkUpdateResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[153]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10332,7 +10422,7 @@ func (x *ImpactLinkUpdateResponse) String() string {
 func (*ImpactLinkUpdateResponse) ProtoMessage() {}
 
 func (x *ImpactLinkUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[153]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10345,7 +10435,7 @@ func (x *ImpactLinkUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactLinkUpdateResponse.ProtoReflect.Descriptor instead.
 func (*ImpactLinkUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{153}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *ImpactLinkUpdateResponse) GetLink() *Link {
@@ -10367,7 +10457,7 @@ type ImpactLinkDeleteRequest struct {
 
 func (x *ImpactLinkDeleteRequest) Reset() {
 	*x = ImpactLinkDeleteRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[154]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10379,7 +10469,7 @@ func (x *ImpactLinkDeleteRequest) String() string {
 func (*ImpactLinkDeleteRequest) ProtoMessage() {}
 
 func (x *ImpactLinkDeleteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[154]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10392,7 +10482,7 @@ func (x *ImpactLinkDeleteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactLinkDeleteRequest.ProtoReflect.Descriptor instead.
 func (*ImpactLinkDeleteRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{154}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *ImpactLinkDeleteRequest) GetChangeId() string {
@@ -10431,7 +10521,7 @@ type ImpactLinkDeleteResponse struct {
 
 func (x *ImpactLinkDeleteResponse) Reset() {
 	*x = ImpactLinkDeleteResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[155]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10443,7 +10533,7 @@ func (x *ImpactLinkDeleteResponse) String() string {
 func (*ImpactLinkDeleteResponse) ProtoMessage() {}
 
 func (x *ImpactLinkDeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[155]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10456,7 +10546,7 @@ func (x *ImpactLinkDeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactLinkDeleteResponse.ProtoReflect.Descriptor instead.
 func (*ImpactLinkDeleteResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{155}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{157}
 }
 
 type ImpactNodeTransitionRequest struct {
@@ -10475,7 +10565,7 @@ type ImpactNodeTransitionRequest struct {
 
 func (x *ImpactNodeTransitionRequest) Reset() {
 	*x = ImpactNodeTransitionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[156]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10487,7 +10577,7 @@ func (x *ImpactNodeTransitionRequest) String() string {
 func (*ImpactNodeTransitionRequest) ProtoMessage() {}
 
 func (x *ImpactNodeTransitionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[156]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10500,7 +10590,7 @@ func (x *ImpactNodeTransitionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeTransitionRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeTransitionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{156}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *ImpactNodeTransitionRequest) GetChangeId() string {
@@ -10561,7 +10651,7 @@ type ImpactNodeTransitionResponse struct {
 
 func (x *ImpactNodeTransitionResponse) Reset() {
 	*x = ImpactNodeTransitionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[157]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10573,7 +10663,7 @@ func (x *ImpactNodeTransitionResponse) String() string {
 func (*ImpactNodeTransitionResponse) ProtoMessage() {}
 
 func (x *ImpactNodeTransitionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[157]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10586,7 +10676,7 @@ func (x *ImpactNodeTransitionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeTransitionResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeTransitionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{157}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *ImpactNodeTransitionResponse) GetNode() *ChangeImpact {
@@ -10608,7 +10698,7 @@ type ImpactNodeCancelRequest struct {
 
 func (x *ImpactNodeCancelRequest) Reset() {
 	*x = ImpactNodeCancelRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[158]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10620,7 +10710,7 @@ func (x *ImpactNodeCancelRequest) String() string {
 func (*ImpactNodeCancelRequest) ProtoMessage() {}
 
 func (x *ImpactNodeCancelRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[158]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10633,7 +10723,7 @@ func (x *ImpactNodeCancelRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeCancelRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeCancelRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{158}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{160}
 }
 
 func (x *ImpactNodeCancelRequest) GetChangeId() string {
@@ -10674,7 +10764,7 @@ type ImpactNodeCancelResponse struct {
 
 func (x *ImpactNodeCancelResponse) Reset() {
 	*x = ImpactNodeCancelResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[159]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10686,7 +10776,7 @@ func (x *ImpactNodeCancelResponse) String() string {
 func (*ImpactNodeCancelResponse) ProtoMessage() {}
 
 func (x *ImpactNodeCancelResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[159]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10699,7 +10789,7 @@ func (x *ImpactNodeCancelResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeCancelResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeCancelResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{159}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *ImpactNodeCancelResponse) GetNode() *ChangeImpact {
@@ -10721,7 +10811,7 @@ type WithdrawImpactRequest struct {
 
 func (x *WithdrawImpactRequest) Reset() {
 	*x = WithdrawImpactRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[160]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10733,7 +10823,7 @@ func (x *WithdrawImpactRequest) String() string {
 func (*WithdrawImpactRequest) ProtoMessage() {}
 
 func (x *WithdrawImpactRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[160]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10746,7 +10836,7 @@ func (x *WithdrawImpactRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawImpactRequest.ProtoReflect.Descriptor instead.
 func (*WithdrawImpactRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{160}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{162}
 }
 
 func (x *WithdrawImpactRequest) GetChangeId() string {
@@ -10785,7 +10875,7 @@ type WithdrawImpactResponse struct {
 
 func (x *WithdrawImpactResponse) Reset() {
 	*x = WithdrawImpactResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[161]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10797,7 +10887,7 @@ func (x *WithdrawImpactResponse) String() string {
 func (*WithdrawImpactResponse) ProtoMessage() {}
 
 func (x *WithdrawImpactResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[161]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10810,7 +10900,7 @@ func (x *WithdrawImpactResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawImpactResponse.ProtoReflect.Descriptor instead.
 func (*WithdrawImpactResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{161}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{163}
 }
 
 type WithdrawImpactsRequest struct {
@@ -10825,7 +10915,7 @@ type WithdrawImpactsRequest struct {
 
 func (x *WithdrawImpactsRequest) Reset() {
 	*x = WithdrawImpactsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[162]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10837,7 +10927,7 @@ func (x *WithdrawImpactsRequest) String() string {
 func (*WithdrawImpactsRequest) ProtoMessage() {}
 
 func (x *WithdrawImpactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[162]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10850,7 +10940,7 @@ func (x *WithdrawImpactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawImpactsRequest.ProtoReflect.Descriptor instead.
 func (*WithdrawImpactsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{162}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *WithdrawImpactsRequest) GetChangeId() string {
@@ -10889,7 +10979,7 @@ type WithdrawImpactsResponse struct {
 
 func (x *WithdrawImpactsResponse) Reset() {
 	*x = WithdrawImpactsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[163]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10901,7 +10991,7 @@ func (x *WithdrawImpactsResponse) String() string {
 func (*WithdrawImpactsResponse) ProtoMessage() {}
 
 func (x *WithdrawImpactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[163]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10914,7 +11004,7 @@ func (x *WithdrawImpactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WithdrawImpactsResponse.ProtoReflect.Descriptor instead.
 func (*WithdrawImpactsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{163}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{165}
 }
 
 type RebaseChangeRequest struct {
@@ -10926,7 +11016,7 @@ type RebaseChangeRequest struct {
 
 func (x *RebaseChangeRequest) Reset() {
 	*x = RebaseChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[164]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10938,7 +11028,7 @@ func (x *RebaseChangeRequest) String() string {
 func (*RebaseChangeRequest) ProtoMessage() {}
 
 func (x *RebaseChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[164]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10951,7 +11041,7 @@ func (x *RebaseChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebaseChangeRequest.ProtoReflect.Descriptor instead.
 func (*RebaseChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{164}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{166}
 }
 
 func (x *RebaseChangeRequest) GetChangeId() string {
@@ -10979,7 +11069,7 @@ type RebasedImpact struct {
 
 func (x *RebasedImpact) Reset() {
 	*x = RebasedImpact{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[165]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10991,7 +11081,7 @@ func (x *RebasedImpact) String() string {
 func (*RebasedImpact) ProtoMessage() {}
 
 func (x *RebasedImpact) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[165]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11004,7 +11094,7 @@ func (x *RebasedImpact) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebasedImpact.ProtoReflect.Descriptor instead.
 func (*RebasedImpact) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{165}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{167}
 }
 
 func (x *RebasedImpact) GetChangeImpactId() string {
@@ -11057,7 +11147,7 @@ type RebaseChangeResponse struct {
 
 func (x *RebaseChangeResponse) Reset() {
 	*x = RebaseChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[166]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11069,7 +11159,7 @@ func (x *RebaseChangeResponse) String() string {
 func (*RebaseChangeResponse) ProtoMessage() {}
 
 func (x *RebaseChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[166]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11082,7 +11172,7 @@ func (x *RebaseChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RebaseChangeResponse.ProtoReflect.Descriptor instead.
 func (*RebaseChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{166}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{168}
 }
 
 func (x *RebaseChangeResponse) GetParentId() string {
@@ -11131,7 +11221,7 @@ type ImpactNodeResolveRequest struct {
 
 func (x *ImpactNodeResolveRequest) Reset() {
 	*x = ImpactNodeResolveRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[167]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[169]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11143,7 +11233,7 @@ func (x *ImpactNodeResolveRequest) String() string {
 func (*ImpactNodeResolveRequest) ProtoMessage() {}
 
 func (x *ImpactNodeResolveRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[167]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[169]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11156,7 +11246,7 @@ func (x *ImpactNodeResolveRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeResolveRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeResolveRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{167}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{169}
 }
 
 func (x *ImpactNodeResolveRequest) GetChangeId() string {
@@ -11189,7 +11279,7 @@ type ImpactNodeResolveResponse struct {
 
 func (x *ImpactNodeResolveResponse) Reset() {
 	*x = ImpactNodeResolveResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[168]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[170]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11201,7 +11291,7 @@ func (x *ImpactNodeResolveResponse) String() string {
 func (*ImpactNodeResolveResponse) ProtoMessage() {}
 
 func (x *ImpactNodeResolveResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[168]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[170]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11214,7 +11304,7 @@ func (x *ImpactNodeResolveResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeResolveResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeResolveResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{168}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{170}
 }
 
 func (x *ImpactNodeResolveResponse) GetNode() *ChangeImpact {
@@ -11233,7 +11323,7 @@ type GetRebaseStateRequest struct {
 
 func (x *GetRebaseStateRequest) Reset() {
 	*x = GetRebaseStateRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[169]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11245,7 +11335,7 @@ func (x *GetRebaseStateRequest) String() string {
 func (*GetRebaseStateRequest) ProtoMessage() {}
 
 func (x *GetRebaseStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[169]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11258,7 +11348,7 @@ func (x *GetRebaseStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRebaseStateRequest.ProtoReflect.Descriptor instead.
 func (*GetRebaseStateRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{169}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{171}
 }
 
 func (x *GetRebaseStateRequest) GetChangeId() string {
@@ -11277,7 +11367,7 @@ type GetCommitStateRequest struct {
 
 func (x *GetCommitStateRequest) Reset() {
 	*x = GetCommitStateRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[170]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11289,7 +11379,7 @@ func (x *GetCommitStateRequest) String() string {
 func (*GetCommitStateRequest) ProtoMessage() {}
 
 func (x *GetCommitStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[170]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11302,7 +11392,7 @@ func (x *GetCommitStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCommitStateRequest.ProtoReflect.Descriptor instead.
 func (*GetCommitStateRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{170}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{172}
 }
 
 func (x *GetCommitStateRequest) GetChangeId() string {
@@ -11330,7 +11420,7 @@ type GetCommitStateResponse struct {
 
 func (x *GetCommitStateResponse) Reset() {
 	*x = GetCommitStateResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[171]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[173]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11342,7 +11432,7 @@ func (x *GetCommitStateResponse) String() string {
 func (*GetCommitStateResponse) ProtoMessage() {}
 
 func (x *GetCommitStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[171]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[173]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11355,7 +11445,7 @@ func (x *GetCommitStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCommitStateResponse.ProtoReflect.Descriptor instead.
 func (*GetCommitStateResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{171}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{173}
 }
 
 func (x *GetCommitStateResponse) GetToCommit() []string {
@@ -11412,7 +11502,7 @@ type ImpactConflicts struct {
 
 func (x *ImpactConflicts) Reset() {
 	*x = ImpactConflicts{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[172]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11424,7 +11514,7 @@ func (x *ImpactConflicts) String() string {
 func (*ImpactConflicts) ProtoMessage() {}
 
 func (x *ImpactConflicts) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[172]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11437,7 +11527,7 @@ func (x *ImpactConflicts) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactConflicts.ProtoReflect.Descriptor instead.
 func (*ImpactConflicts) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{172}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{174}
 }
 
 func (x *ImpactConflicts) GetChangeImpactId() string {
@@ -11477,7 +11567,7 @@ type GetRebaseStateResponse struct {
 
 func (x *GetRebaseStateResponse) Reset() {
 	*x = GetRebaseStateResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[173]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11489,7 +11579,7 @@ func (x *GetRebaseStateResponse) String() string {
 func (*GetRebaseStateResponse) ProtoMessage() {}
 
 func (x *GetRebaseStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[173]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11502,7 +11592,7 @@ func (x *GetRebaseStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRebaseStateResponse.ProtoReflect.Descriptor instead.
 func (*GetRebaseStateResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{173}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *GetRebaseStateResponse) GetParentId() string {
@@ -11555,7 +11645,7 @@ type ImpactNodeReviewRequest struct {
 
 func (x *ImpactNodeReviewRequest) Reset() {
 	*x = ImpactNodeReviewRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[174]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11567,7 +11657,7 @@ func (x *ImpactNodeReviewRequest) String() string {
 func (*ImpactNodeReviewRequest) ProtoMessage() {}
 
 func (x *ImpactNodeReviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[174]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11580,7 +11670,7 @@ func (x *ImpactNodeReviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeReviewRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeReviewRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{174}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{176}
 }
 
 func (x *ImpactNodeReviewRequest) GetChangeId() string {
@@ -11634,7 +11724,7 @@ type ImpactNodeReviewResponse struct {
 
 func (x *ImpactNodeReviewResponse) Reset() {
 	*x = ImpactNodeReviewResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[175]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11646,7 +11736,7 @@ func (x *ImpactNodeReviewResponse) String() string {
 func (*ImpactNodeReviewResponse) ProtoMessage() {}
 
 func (x *ImpactNodeReviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[175]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11659,7 +11749,7 @@ func (x *ImpactNodeReviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeReviewResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeReviewResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{175}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{177}
 }
 
 func (x *ImpactNodeReviewResponse) GetNode() *ChangeImpact {
@@ -11680,7 +11770,7 @@ type ImpactVerdict struct {
 
 func (x *ImpactVerdict) Reset() {
 	*x = ImpactVerdict{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[176]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[178]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11692,7 +11782,7 @@ func (x *ImpactVerdict) String() string {
 func (*ImpactVerdict) ProtoMessage() {}
 
 func (x *ImpactVerdict) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[176]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[178]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11705,7 +11795,7 @@ func (x *ImpactVerdict) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactVerdict.ProtoReflect.Descriptor instead.
 func (*ImpactVerdict) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{176}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{178}
 }
 
 func (x *ImpactVerdict) GetChangeImpactId() string {
@@ -11744,7 +11834,7 @@ type ImpactNodeReviewBatchRequest struct {
 
 func (x *ImpactNodeReviewBatchRequest) Reset() {
 	*x = ImpactNodeReviewBatchRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[177]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[179]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11756,7 +11846,7 @@ func (x *ImpactNodeReviewBatchRequest) String() string {
 func (*ImpactNodeReviewBatchRequest) ProtoMessage() {}
 
 func (x *ImpactNodeReviewBatchRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[177]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[179]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11769,7 +11859,7 @@ func (x *ImpactNodeReviewBatchRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeReviewBatchRequest.ProtoReflect.Descriptor instead.
 func (*ImpactNodeReviewBatchRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{177}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{179}
 }
 
 func (x *ImpactNodeReviewBatchRequest) GetChangeId() string {
@@ -11823,7 +11913,7 @@ type ImpactNodeReviewBatchResponse struct {
 
 func (x *ImpactNodeReviewBatchResponse) Reset() {
 	*x = ImpactNodeReviewBatchResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[178]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[180]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11835,7 +11925,7 @@ func (x *ImpactNodeReviewBatchResponse) String() string {
 func (*ImpactNodeReviewBatchResponse) ProtoMessage() {}
 
 func (x *ImpactNodeReviewBatchResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[178]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[180]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11848,7 +11938,7 @@ func (x *ImpactNodeReviewBatchResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactNodeReviewBatchResponse.ProtoReflect.Descriptor instead.
 func (*ImpactNodeReviewBatchResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{178}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{180}
 }
 
 func (x *ImpactNodeReviewBatchResponse) GetNodes() []*ChangeImpact {
@@ -11871,7 +11961,7 @@ type ReviewEntry struct {
 
 func (x *ReviewEntry) Reset() {
 	*x = ReviewEntry{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[179]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[181]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11883,7 +11973,7 @@ func (x *ReviewEntry) String() string {
 func (*ReviewEntry) ProtoMessage() {}
 
 func (x *ReviewEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[179]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[181]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11896,7 +11986,7 @@ func (x *ReviewEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewEntry.ProtoReflect.Descriptor instead.
 func (*ReviewEntry) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{179}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{181}
 }
 
 func (x *ReviewEntry) GetChangeImpactId() string {
@@ -11940,7 +12030,7 @@ type ReviewRecord struct {
 
 func (x *ReviewRecord) Reset() {
 	*x = ReviewRecord{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[180]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[182]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11952,7 +12042,7 @@ func (x *ReviewRecord) String() string {
 func (*ReviewRecord) ProtoMessage() {}
 
 func (x *ReviewRecord) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[180]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[182]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11965,7 +12055,7 @@ func (x *ReviewRecord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewRecord.ProtoReflect.Descriptor instead.
 func (*ReviewRecord) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{180}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{182}
 }
 
 func (x *ReviewRecord) GetKey() string {
@@ -12042,7 +12132,7 @@ type ReviewOpenRequest struct {
 
 func (x *ReviewOpenRequest) Reset() {
 	*x = ReviewOpenRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[181]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[183]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12054,7 +12144,7 @@ func (x *ReviewOpenRequest) String() string {
 func (*ReviewOpenRequest) ProtoMessage() {}
 
 func (x *ReviewOpenRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[181]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[183]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12067,7 +12157,7 @@ func (x *ReviewOpenRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewOpenRequest.ProtoReflect.Descriptor instead.
 func (*ReviewOpenRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{181}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{183}
 }
 
 func (x *ReviewOpenRequest) GetChangeId() string {
@@ -12107,7 +12197,7 @@ type ReviewEntryEdit struct {
 
 func (x *ReviewEntryEdit) Reset() {
 	*x = ReviewEntryEdit{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[182]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[184]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12119,7 +12209,7 @@ func (x *ReviewEntryEdit) String() string {
 func (*ReviewEntryEdit) ProtoMessage() {}
 
 func (x *ReviewEntryEdit) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[182]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[184]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12132,7 +12222,7 @@ func (x *ReviewEntryEdit) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewEntryEdit.ProtoReflect.Descriptor instead.
 func (*ReviewEntryEdit) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{182}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{184}
 }
 
 func (x *ReviewEntryEdit) GetChangeImpactId() string {
@@ -12185,7 +12275,7 @@ type ReviewUpdateRequest struct {
 
 func (x *ReviewUpdateRequest) Reset() {
 	*x = ReviewUpdateRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[183]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[185]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12197,7 +12287,7 @@ func (x *ReviewUpdateRequest) String() string {
 func (*ReviewUpdateRequest) ProtoMessage() {}
 
 func (x *ReviewUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[183]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[185]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12210,7 +12300,7 @@ func (x *ReviewUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewUpdateRequest.ProtoReflect.Descriptor instead.
 func (*ReviewUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{183}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{185}
 }
 
 func (x *ReviewUpdateRequest) GetChangeId() string {
@@ -12272,7 +12362,7 @@ type ReviewSubmitRequest struct {
 
 func (x *ReviewSubmitRequest) Reset() {
 	*x = ReviewSubmitRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[184]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[186]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12284,7 +12374,7 @@ func (x *ReviewSubmitRequest) String() string {
 func (*ReviewSubmitRequest) ProtoMessage() {}
 
 func (x *ReviewSubmitRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[184]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[186]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12297,7 +12387,7 @@ func (x *ReviewSubmitRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewSubmitRequest.ProtoReflect.Descriptor instead.
 func (*ReviewSubmitRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{184}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{186}
 }
 
 func (x *ReviewSubmitRequest) GetChangeId() string {
@@ -12324,7 +12414,7 @@ type ReviewDiscardRequest struct {
 
 func (x *ReviewDiscardRequest) Reset() {
 	*x = ReviewDiscardRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[185]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[187]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12336,7 +12426,7 @@ func (x *ReviewDiscardRequest) String() string {
 func (*ReviewDiscardRequest) ProtoMessage() {}
 
 func (x *ReviewDiscardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[185]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[187]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12349,7 +12439,7 @@ func (x *ReviewDiscardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewDiscardRequest.ProtoReflect.Descriptor instead.
 func (*ReviewDiscardRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{185}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{187}
 }
 
 func (x *ReviewDiscardRequest) GetChangeId() string {
@@ -12375,7 +12465,7 @@ type ReviewResponse struct {
 
 func (x *ReviewResponse) Reset() {
 	*x = ReviewResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[186]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[188]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12387,7 +12477,7 @@ func (x *ReviewResponse) String() string {
 func (*ReviewResponse) ProtoMessage() {}
 
 func (x *ReviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[186]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[188]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12400,7 +12490,7 @@ func (x *ReviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReviewResponse.ProtoReflect.Descriptor instead.
 func (*ReviewResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{186}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{188}
 }
 
 func (x *ReviewResponse) GetReview() *ReviewRecord {
@@ -12422,7 +12512,7 @@ type ReopenChangeImpactsRequest struct {
 
 func (x *ReopenChangeImpactsRequest) Reset() {
 	*x = ReopenChangeImpactsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[187]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[189]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12434,7 +12524,7 @@ func (x *ReopenChangeImpactsRequest) String() string {
 func (*ReopenChangeImpactsRequest) ProtoMessage() {}
 
 func (x *ReopenChangeImpactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[187]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[189]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12447,7 +12537,7 @@ func (x *ReopenChangeImpactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReopenChangeImpactsRequest.ProtoReflect.Descriptor instead.
 func (*ReopenChangeImpactsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{187}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{189}
 }
 
 func (x *ReopenChangeImpactsRequest) GetChangeId() string {
@@ -12480,7 +12570,7 @@ type ReopenChangeImpactsResponse struct {
 
 func (x *ReopenChangeImpactsResponse) Reset() {
 	*x = ReopenChangeImpactsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[188]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[190]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12492,7 +12582,7 @@ func (x *ReopenChangeImpactsResponse) String() string {
 func (*ReopenChangeImpactsResponse) ProtoMessage() {}
 
 func (x *ReopenChangeImpactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[188]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[190]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12505,7 +12595,7 @@ func (x *ReopenChangeImpactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReopenChangeImpactsResponse.ProtoReflect.Descriptor instead.
 func (*ReopenChangeImpactsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{188}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{190}
 }
 
 func (x *ReopenChangeImpactsResponse) GetReopened() []string {
@@ -12524,7 +12614,7 @@ type GetChangeImpactsRequest struct {
 
 func (x *GetChangeImpactsRequest) Reset() {
 	*x = GetChangeImpactsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[189]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[191]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12536,7 +12626,7 @@ func (x *GetChangeImpactsRequest) String() string {
 func (*GetChangeImpactsRequest) ProtoMessage() {}
 
 func (x *GetChangeImpactsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[189]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[191]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12549,7 +12639,7 @@ func (x *GetChangeImpactsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeImpactsRequest.ProtoReflect.Descriptor instead.
 func (*GetChangeImpactsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{189}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{191}
 }
 
 func (x *GetChangeImpactsRequest) GetChangeId() string {
@@ -12568,7 +12658,7 @@ type GetChangeImpactsResponse struct {
 
 func (x *GetChangeImpactsResponse) Reset() {
 	*x = GetChangeImpactsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[190]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[192]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12580,7 +12670,7 @@ func (x *GetChangeImpactsResponse) String() string {
 func (*GetChangeImpactsResponse) ProtoMessage() {}
 
 func (x *GetChangeImpactsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[190]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[192]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12593,7 +12683,7 @@ func (x *GetChangeImpactsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeImpactsResponse.ProtoReflect.Descriptor instead.
 func (*GetChangeImpactsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{190}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{192}
 }
 
 func (x *GetChangeImpactsResponse) GetNodes() []*NodeRef {
@@ -12612,7 +12702,7 @@ type ListNodeChangesRequest struct {
 
 func (x *ListNodeChangesRequest) Reset() {
 	*x = ListNodeChangesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[191]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[193]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12624,7 +12714,7 @@ func (x *ListNodeChangesRequest) String() string {
 func (*ListNodeChangesRequest) ProtoMessage() {}
 
 func (x *ListNodeChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[191]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[193]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12637,7 +12727,7 @@ func (x *ListNodeChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodeChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListNodeChangesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{191}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{193}
 }
 
 func (x *ListNodeChangesRequest) GetNodeId() string {
@@ -12657,7 +12747,7 @@ type ListNodeChangesResponse struct {
 
 func (x *ListNodeChangesResponse) Reset() {
 	*x = ListNodeChangesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[192]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[194]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12669,7 +12759,7 @@ func (x *ListNodeChangesResponse) String() string {
 func (*ListNodeChangesResponse) ProtoMessage() {}
 
 func (x *ListNodeChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[192]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[194]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12682,7 +12772,7 @@ func (x *ListNodeChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNodeChangesResponse.ProtoReflect.Descriptor instead.
 func (*ListNodeChangesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{192}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{194}
 }
 
 func (x *ListNodeChangesResponse) GetChanges() []*Change {
@@ -12703,7 +12793,7 @@ type MergeChangeRequest struct {
 
 func (x *MergeChangeRequest) Reset() {
 	*x = MergeChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[193]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[195]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12715,7 +12805,7 @@ func (x *MergeChangeRequest) String() string {
 func (*MergeChangeRequest) ProtoMessage() {}
 
 func (x *MergeChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[193]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[195]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12728,7 +12818,7 @@ func (x *MergeChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeChangeRequest.ProtoReflect.Descriptor instead.
 func (*MergeChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{193}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{195}
 }
 
 func (x *MergeChangeRequest) GetChangeId() string {
@@ -12754,7 +12844,7 @@ type MergeChangeResponse struct {
 
 func (x *MergeChangeResponse) Reset() {
 	*x = MergeChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[194]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[196]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12766,7 +12856,7 @@ func (x *MergeChangeResponse) String() string {
 func (*MergeChangeResponse) ProtoMessage() {}
 
 func (x *MergeChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[194]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[196]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12779,7 +12869,7 @@ func (x *MergeChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MergeChangeResponse.ProtoReflect.Descriptor instead.
 func (*MergeChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{194}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{196}
 }
 
 func (x *MergeChangeResponse) GetChange() *Change {
@@ -12798,7 +12888,7 @@ type GetSharedNodesRequest struct {
 
 func (x *GetSharedNodesRequest) Reset() {
 	*x = GetSharedNodesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[195]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[197]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12810,7 +12900,7 @@ func (x *GetSharedNodesRequest) String() string {
 func (*GetSharedNodesRequest) ProtoMessage() {}
 
 func (x *GetSharedNodesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[195]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[197]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12823,7 +12913,7 @@ func (x *GetSharedNodesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSharedNodesRequest.ProtoReflect.Descriptor instead.
 func (*GetSharedNodesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{195}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{197}
 }
 
 func (x *GetSharedNodesRequest) GetChangeId() string {
@@ -12844,7 +12934,7 @@ type SharedNode struct {
 
 func (x *SharedNode) Reset() {
 	*x = SharedNode{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[196]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[198]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12856,7 +12946,7 @@ func (x *SharedNode) String() string {
 func (*SharedNode) ProtoMessage() {}
 
 func (x *SharedNode) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[196]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[198]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12869,7 +12959,7 @@ func (x *SharedNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SharedNode.ProtoReflect.Descriptor instead.
 func (*SharedNode) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{196}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{198}
 }
 
 func (x *SharedNode) GetNode() *NodeRef {
@@ -12902,7 +12992,7 @@ type GetSharedNodesResponse struct {
 
 func (x *GetSharedNodesResponse) Reset() {
 	*x = GetSharedNodesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[197]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[199]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12914,7 +13004,7 @@ func (x *GetSharedNodesResponse) String() string {
 func (*GetSharedNodesResponse) ProtoMessage() {}
 
 func (x *GetSharedNodesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[197]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[199]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12927,7 +13017,7 @@ func (x *GetSharedNodesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSharedNodesResponse.ProtoReflect.Descriptor instead.
 func (*GetSharedNodesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{197}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{199}
 }
 
 func (x *GetSharedNodesResponse) GetNodes() []*SharedNode {
@@ -12946,7 +13036,7 @@ type SplitChangeRequest struct {
 
 func (x *SplitChangeRequest) Reset() {
 	*x = SplitChangeRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[198]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[200]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12958,7 +13048,7 @@ func (x *SplitChangeRequest) String() string {
 func (*SplitChangeRequest) ProtoMessage() {}
 
 func (x *SplitChangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[198]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[200]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12971,7 +13061,7 @@ func (x *SplitChangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SplitChangeRequest.ProtoReflect.Descriptor instead.
 func (*SplitChangeRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{198}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{200}
 }
 
 func (x *SplitChangeRequest) GetChangeId() string {
@@ -12991,7 +13081,7 @@ type SplitChangeResponse struct {
 
 func (x *SplitChangeResponse) Reset() {
 	*x = SplitChangeResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[199]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[201]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13003,7 +13093,7 @@ func (x *SplitChangeResponse) String() string {
 func (*SplitChangeResponse) ProtoMessage() {}
 
 func (x *SplitChangeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[199]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[201]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13016,7 +13106,7 @@ func (x *SplitChangeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SplitChangeResponse.ProtoReflect.Descriptor instead.
 func (*SplitChangeResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{199}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{201}
 }
 
 func (x *SplitChangeResponse) GetChanges() []*Change {
@@ -13035,7 +13125,7 @@ type ListSubChangesRequest struct {
 
 func (x *ListSubChangesRequest) Reset() {
 	*x = ListSubChangesRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[200]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[202]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13047,7 +13137,7 @@ func (x *ListSubChangesRequest) String() string {
 func (*ListSubChangesRequest) ProtoMessage() {}
 
 func (x *ListSubChangesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[200]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[202]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13060,7 +13150,7 @@ func (x *ListSubChangesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSubChangesRequest.ProtoReflect.Descriptor instead.
 func (*ListSubChangesRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{200}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{202}
 }
 
 func (x *ListSubChangesRequest) GetChangeId() string {
@@ -13079,7 +13169,7 @@ type ListSubChangesResponse struct {
 
 func (x *ListSubChangesResponse) Reset() {
 	*x = ListSubChangesResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[201]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[203]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13091,7 +13181,7 @@ func (x *ListSubChangesResponse) String() string {
 func (*ListSubChangesResponse) ProtoMessage() {}
 
 func (x *ListSubChangesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[201]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[203]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13104,7 +13194,7 @@ func (x *ListSubChangesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSubChangesResponse.ProtoReflect.Descriptor instead.
 func (*ListSubChangesResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{201}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{203}
 }
 
 func (x *ListSubChangesResponse) GetChanges() []*Change {
@@ -13136,7 +13226,7 @@ type FlowEvent struct {
 
 func (x *FlowEvent) Reset() {
 	*x = FlowEvent{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[202]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[204]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13148,7 +13238,7 @@ func (x *FlowEvent) String() string {
 func (*FlowEvent) ProtoMessage() {}
 
 func (x *FlowEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[202]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[204]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13161,7 +13251,7 @@ func (x *FlowEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FlowEvent.ProtoReflect.Descriptor instead.
 func (*FlowEvent) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{202}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{204}
 }
 
 func (x *FlowEvent) GetOp() string {
@@ -13245,7 +13335,7 @@ type Option struct {
 
 func (x *Option) Reset() {
 	*x = Option{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[203]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[205]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13257,7 +13347,7 @@ func (x *Option) String() string {
 func (*Option) ProtoMessage() {}
 
 func (x *Option) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[203]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[205]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13270,7 +13360,7 @@ func (x *Option) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Option.ProtoReflect.Descriptor instead.
 func (*Option) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{203}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{205}
 }
 
 func (x *Option) GetName() string {
@@ -13318,7 +13408,7 @@ type Flow struct {
 
 func (x *Flow) Reset() {
 	*x = Flow{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[204]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[206]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13330,7 +13420,7 @@ func (x *Flow) String() string {
 func (*Flow) ProtoMessage() {}
 
 func (x *Flow) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[204]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[206]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13343,7 +13433,7 @@ func (x *Flow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Flow.ProtoReflect.Descriptor instead.
 func (*Flow) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{204}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{206}
 }
 
 func (x *Flow) GetId() string {
@@ -13469,7 +13559,7 @@ type OpenFlowRequest struct {
 
 func (x *OpenFlowRequest) Reset() {
 	*x = OpenFlowRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[205]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[207]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13481,7 +13571,7 @@ func (x *OpenFlowRequest) String() string {
 func (*OpenFlowRequest) ProtoMessage() {}
 
 func (x *OpenFlowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[205]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[207]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13494,7 +13584,7 @@ func (x *OpenFlowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenFlowRequest.ProtoReflect.Descriptor instead.
 func (*OpenFlowRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{205}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{207}
 }
 
 func (x *OpenFlowRequest) GetChangeId() string {
@@ -13555,7 +13645,7 @@ type OpenFlowResponse struct {
 
 func (x *OpenFlowResponse) Reset() {
 	*x = OpenFlowResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[206]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[208]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13567,7 +13657,7 @@ func (x *OpenFlowResponse) String() string {
 func (*OpenFlowResponse) ProtoMessage() {}
 
 func (x *OpenFlowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[206]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[208]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13580,7 +13670,7 @@ func (x *OpenFlowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenFlowResponse.ProtoReflect.Descriptor instead.
 func (*OpenFlowResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{206}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{208}
 }
 
 func (x *OpenFlowResponse) GetFlow() *Flow {
@@ -13600,7 +13690,7 @@ type AdoptFlowRequest struct {
 
 func (x *AdoptFlowRequest) Reset() {
 	*x = AdoptFlowRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[207]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[209]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13612,7 +13702,7 @@ func (x *AdoptFlowRequest) String() string {
 func (*AdoptFlowRequest) ProtoMessage() {}
 
 func (x *AdoptFlowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[207]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[209]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13625,7 +13715,7 @@ func (x *AdoptFlowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdoptFlowRequest.ProtoReflect.Descriptor instead.
 func (*AdoptFlowRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{207}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{209}
 }
 
 func (x *AdoptFlowRequest) GetChangeId() string {
@@ -13651,7 +13741,7 @@ type AdoptFlowResponse struct {
 
 func (x *AdoptFlowResponse) Reset() {
 	*x = AdoptFlowResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[208]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[210]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13663,7 +13753,7 @@ func (x *AdoptFlowResponse) String() string {
 func (*AdoptFlowResponse) ProtoMessage() {}
 
 func (x *AdoptFlowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[208]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[210]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13676,7 +13766,7 @@ func (x *AdoptFlowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AdoptFlowResponse.ProtoReflect.Descriptor instead.
 func (*AdoptFlowResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{208}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{210}
 }
 
 func (x *AdoptFlowResponse) GetFlow() *Flow {
@@ -13696,7 +13786,7 @@ type DiscardFlowRequest struct {
 
 func (x *DiscardFlowRequest) Reset() {
 	*x = DiscardFlowRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[209]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[211]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13708,7 +13798,7 @@ func (x *DiscardFlowRequest) String() string {
 func (*DiscardFlowRequest) ProtoMessage() {}
 
 func (x *DiscardFlowRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[209]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[211]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13721,7 +13811,7 @@ func (x *DiscardFlowRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardFlowRequest.ProtoReflect.Descriptor instead.
 func (*DiscardFlowRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{209}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{211}
 }
 
 func (x *DiscardFlowRequest) GetChangeId() string {
@@ -13747,7 +13837,7 @@ type DiscardFlowResponse struct {
 
 func (x *DiscardFlowResponse) Reset() {
 	*x = DiscardFlowResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[210]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[212]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13759,7 +13849,7 @@ func (x *DiscardFlowResponse) String() string {
 func (*DiscardFlowResponse) ProtoMessage() {}
 
 func (x *DiscardFlowResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[210]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[212]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13772,7 +13862,7 @@ func (x *DiscardFlowResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiscardFlowResponse.ProtoReflect.Descriptor instead.
 func (*DiscardFlowResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{210}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{212}
 }
 
 func (x *DiscardFlowResponse) GetFlow() *Flow {
@@ -13791,7 +13881,7 @@ type ListFlowsRequest struct {
 
 func (x *ListFlowsRequest) Reset() {
 	*x = ListFlowsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[211]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[213]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13803,7 +13893,7 @@ func (x *ListFlowsRequest) String() string {
 func (*ListFlowsRequest) ProtoMessage() {}
 
 func (x *ListFlowsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[211]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[213]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13816,7 +13906,7 @@ func (x *ListFlowsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFlowsRequest.ProtoReflect.Descriptor instead.
 func (*ListFlowsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{211}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{213}
 }
 
 func (x *ListFlowsRequest) GetChangeId() string {
@@ -13835,7 +13925,7 @@ type ListFlowsResponse struct {
 
 func (x *ListFlowsResponse) Reset() {
 	*x = ListFlowsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[212]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[214]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13847,7 +13937,7 @@ func (x *ListFlowsResponse) String() string {
 func (*ListFlowsResponse) ProtoMessage() {}
 
 func (x *ListFlowsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[212]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[214]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13860,7 +13950,7 @@ func (x *ListFlowsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListFlowsResponse.ProtoReflect.Descriptor instead.
 func (*ListFlowsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{212}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{214}
 }
 
 func (x *ListFlowsResponse) GetFlows() []*Flow {
@@ -13886,7 +13976,7 @@ type BoardIssue struct {
 
 func (x *BoardIssue) Reset() {
 	*x = BoardIssue{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[213]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[215]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13898,7 +13988,7 @@ func (x *BoardIssue) String() string {
 func (*BoardIssue) ProtoMessage() {}
 
 func (x *BoardIssue) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[213]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[215]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13911,7 +14001,7 @@ func (x *BoardIssue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BoardIssue.ProtoReflect.Descriptor instead.
 func (*BoardIssue) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{213}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{215}
 }
 
 func (x *BoardIssue) GetItem() string {
@@ -13960,7 +14050,7 @@ type ValidateBoardRequest struct {
 
 func (x *ValidateBoardRequest) Reset() {
 	*x = ValidateBoardRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[214]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[216]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13972,7 +14062,7 @@ func (x *ValidateBoardRequest) String() string {
 func (*ValidateBoardRequest) ProtoMessage() {}
 
 func (x *ValidateBoardRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[214]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[216]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13985,7 +14075,7 @@ func (x *ValidateBoardRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateBoardRequest.ProtoReflect.Descriptor instead.
 func (*ValidateBoardRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{214}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{216}
 }
 
 func (x *ValidateBoardRequest) GetChangeId() string {
@@ -14011,7 +14101,7 @@ type ValidateBoardResponse struct {
 
 func (x *ValidateBoardResponse) Reset() {
 	*x = ValidateBoardResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[215]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[217]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14023,7 +14113,7 @@ func (x *ValidateBoardResponse) String() string {
 func (*ValidateBoardResponse) ProtoMessage() {}
 
 func (x *ValidateBoardResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[215]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[217]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14036,7 +14126,7 @@ func (x *ValidateBoardResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateBoardResponse.ProtoReflect.Descriptor instead.
 func (*ValidateBoardResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{215}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{217}
 }
 
 func (x *ValidateBoardResponse) GetIssues() []*BoardIssue {
@@ -14059,7 +14149,7 @@ type OpenOptionRequest struct {
 
 func (x *OpenOptionRequest) Reset() {
 	*x = OpenOptionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[216]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[218]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14071,7 +14161,7 @@ func (x *OpenOptionRequest) String() string {
 func (*OpenOptionRequest) ProtoMessage() {}
 
 func (x *OpenOptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[216]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[218]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14084,7 +14174,7 @@ func (x *OpenOptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenOptionRequest.ProtoReflect.Descriptor instead.
 func (*OpenOptionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{216}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{218}
 }
 
 func (x *OpenOptionRequest) GetChangeId() string {
@@ -14124,7 +14214,7 @@ type OpenOptionResponse struct {
 
 func (x *OpenOptionResponse) Reset() {
 	*x = OpenOptionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[217]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[219]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14136,7 +14226,7 @@ func (x *OpenOptionResponse) String() string {
 func (*OpenOptionResponse) ProtoMessage() {}
 
 func (x *OpenOptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[217]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[219]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14149,7 +14239,7 @@ func (x *OpenOptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenOptionResponse.ProtoReflect.Descriptor instead.
 func (*OpenOptionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{217}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{219}
 }
 
 func (x *OpenOptionResponse) GetOption() *Flow {
@@ -14170,7 +14260,7 @@ type ActivateOptionRequest struct {
 
 func (x *ActivateOptionRequest) Reset() {
 	*x = ActivateOptionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[218]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[220]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14182,7 +14272,7 @@ func (x *ActivateOptionRequest) String() string {
 func (*ActivateOptionRequest) ProtoMessage() {}
 
 func (x *ActivateOptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[218]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[220]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14195,7 +14285,7 @@ func (x *ActivateOptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivateOptionRequest.ProtoReflect.Descriptor instead.
 func (*ActivateOptionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{218}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{220}
 }
 
 func (x *ActivateOptionRequest) GetChangeId() string {
@@ -14222,7 +14312,7 @@ type ActivateOptionResponse struct {
 
 func (x *ActivateOptionResponse) Reset() {
 	*x = ActivateOptionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[219]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[221]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14234,7 +14324,7 @@ func (x *ActivateOptionResponse) String() string {
 func (*ActivateOptionResponse) ProtoMessage() {}
 
 func (x *ActivateOptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[219]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[221]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14247,7 +14337,7 @@ func (x *ActivateOptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivateOptionResponse.ProtoReflect.Descriptor instead.
 func (*ActivateOptionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{219}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{221}
 }
 
 func (x *ActivateOptionResponse) GetActive() string {
@@ -14268,7 +14358,7 @@ type EvaluateOptionRequest struct {
 
 func (x *EvaluateOptionRequest) Reset() {
 	*x = EvaluateOptionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[220]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[222]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14280,7 +14370,7 @@ func (x *EvaluateOptionRequest) String() string {
 func (*EvaluateOptionRequest) ProtoMessage() {}
 
 func (x *EvaluateOptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[220]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[222]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14293,7 +14383,7 @@ func (x *EvaluateOptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateOptionRequest.ProtoReflect.Descriptor instead.
 func (*EvaluateOptionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{220}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{222}
 }
 
 func (x *EvaluateOptionRequest) GetChangeId() string {
@@ -14326,7 +14416,7 @@ type EvaluateOptionResponse struct {
 
 func (x *EvaluateOptionResponse) Reset() {
 	*x = EvaluateOptionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[221]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[223]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14338,7 +14428,7 @@ func (x *EvaluateOptionResponse) String() string {
 func (*EvaluateOptionResponse) ProtoMessage() {}
 
 func (x *EvaluateOptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[221]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[223]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14351,7 +14441,7 @@ func (x *EvaluateOptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EvaluateOptionResponse.ProtoReflect.Descriptor instead.
 func (*EvaluateOptionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{221}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{223}
 }
 
 func (x *EvaluateOptionResponse) GetOption() *Flow {
@@ -14371,7 +14461,7 @@ type SelectOptionRequest struct {
 
 func (x *SelectOptionRequest) Reset() {
 	*x = SelectOptionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[222]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[224]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14383,7 +14473,7 @@ func (x *SelectOptionRequest) String() string {
 func (*SelectOptionRequest) ProtoMessage() {}
 
 func (x *SelectOptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[222]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[224]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14396,7 +14486,7 @@ func (x *SelectOptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectOptionRequest.ProtoReflect.Descriptor instead.
 func (*SelectOptionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{222}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{224}
 }
 
 func (x *SelectOptionRequest) GetChangeId() string {
@@ -14422,7 +14512,7 @@ type SelectOptionResponse struct {
 
 func (x *SelectOptionResponse) Reset() {
 	*x = SelectOptionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[223]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[225]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14434,7 +14524,7 @@ func (x *SelectOptionResponse) String() string {
 func (*SelectOptionResponse) ProtoMessage() {}
 
 func (x *SelectOptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[223]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[225]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14447,7 +14537,7 @@ func (x *SelectOptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelectOptionResponse.ProtoReflect.Descriptor instead.
 func (*SelectOptionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{223}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{225}
 }
 
 func (x *SelectOptionResponse) GetOption() *Flow {
@@ -14467,7 +14557,7 @@ type RejectOptionRequest struct {
 
 func (x *RejectOptionRequest) Reset() {
 	*x = RejectOptionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[224]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[226]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14479,7 +14569,7 @@ func (x *RejectOptionRequest) String() string {
 func (*RejectOptionRequest) ProtoMessage() {}
 
 func (x *RejectOptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[224]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[226]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14492,7 +14582,7 @@ func (x *RejectOptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectOptionRequest.ProtoReflect.Descriptor instead.
 func (*RejectOptionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{224}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{226}
 }
 
 func (x *RejectOptionRequest) GetChangeId() string {
@@ -14518,7 +14608,7 @@ type RejectOptionResponse struct {
 
 func (x *RejectOptionResponse) Reset() {
 	*x = RejectOptionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[225]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[227]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14530,7 +14620,7 @@ func (x *RejectOptionResponse) String() string {
 func (*RejectOptionResponse) ProtoMessage() {}
 
 func (x *RejectOptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[225]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[227]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14543,7 +14633,7 @@ func (x *RejectOptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RejectOptionResponse.ProtoReflect.Descriptor instead.
 func (*RejectOptionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{225}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{227}
 }
 
 func (x *RejectOptionResponse) GetOption() *Flow {
@@ -14562,7 +14652,7 @@ type ListOptionsRequest struct {
 
 func (x *ListOptionsRequest) Reset() {
 	*x = ListOptionsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[226]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[228]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14574,7 +14664,7 @@ func (x *ListOptionsRequest) String() string {
 func (*ListOptionsRequest) ProtoMessage() {}
 
 func (x *ListOptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[226]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[228]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14587,7 +14677,7 @@ func (x *ListOptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOptionsRequest.ProtoReflect.Descriptor instead.
 func (*ListOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{226}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{228}
 }
 
 func (x *ListOptionsRequest) GetChangeId() string {
@@ -14608,7 +14698,7 @@ type ListOptionsResponse struct {
 
 func (x *ListOptionsResponse) Reset() {
 	*x = ListOptionsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[227]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[229]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14620,7 +14710,7 @@ func (x *ListOptionsResponse) String() string {
 func (*ListOptionsResponse) ProtoMessage() {}
 
 func (x *ListOptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[227]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[229]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14633,7 +14723,7 @@ func (x *ListOptionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListOptionsResponse.ProtoReflect.Descriptor instead.
 func (*ListOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{227}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{229}
 }
 
 func (x *ListOptionsResponse) GetOptions() []*Flow {
@@ -14663,7 +14753,7 @@ type CompareOptionsRequest struct {
 
 func (x *CompareOptionsRequest) Reset() {
 	*x = CompareOptionsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[228]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[230]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14675,7 +14765,7 @@ func (x *CompareOptionsRequest) String() string {
 func (*CompareOptionsRequest) ProtoMessage() {}
 
 func (x *CompareOptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[228]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[230]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14688,7 +14778,7 @@ func (x *CompareOptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompareOptionsRequest.ProtoReflect.Descriptor instead.
 func (*CompareOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{228}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{230}
 }
 
 func (x *CompareOptionsRequest) GetChangeId() string {
@@ -14730,7 +14820,7 @@ type OptionNode struct {
 
 func (x *OptionNode) Reset() {
 	*x = OptionNode{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[229]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[231]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14742,7 +14832,7 @@ func (x *OptionNode) String() string {
 func (*OptionNode) ProtoMessage() {}
 
 func (x *OptionNode) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[229]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[231]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14755,7 +14845,7 @@ func (x *OptionNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OptionNode.ProtoReflect.Descriptor instead.
 func (*OptionNode) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{229}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{231}
 }
 
 func (x *OptionNode) GetNode() string {
@@ -14811,7 +14901,7 @@ type CompareOptionsResponse struct {
 
 func (x *CompareOptionsResponse) Reset() {
 	*x = CompareOptionsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[230]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[232]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14823,7 +14913,7 @@ func (x *CompareOptionsResponse) String() string {
 func (*CompareOptionsResponse) ProtoMessage() {}
 
 func (x *CompareOptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[230]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[232]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14836,7 +14926,7 @@ func (x *CompareOptionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompareOptionsResponse.ProtoReflect.Descriptor instead.
 func (*CompareOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{230}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{232}
 }
 
 func (x *CompareOptionsResponse) GetLevel() string {
@@ -14874,7 +14964,7 @@ type DiffFlowsRequest struct {
 
 func (x *DiffFlowsRequest) Reset() {
 	*x = DiffFlowsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[231]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[233]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14886,7 +14976,7 @@ func (x *DiffFlowsRequest) String() string {
 func (*DiffFlowsRequest) ProtoMessage() {}
 
 func (x *DiffFlowsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[231]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[233]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14899,7 +14989,7 @@ func (x *DiffFlowsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffFlowsRequest.ProtoReflect.Descriptor instead.
 func (*DiffFlowsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{231}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{233}
 }
 
 func (x *DiffFlowsRequest) GetChangeId() string {
@@ -14948,7 +15038,7 @@ type FieldChange struct {
 
 func (x *FieldChange) Reset() {
 	*x = FieldChange{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[232]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[234]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14960,7 +15050,7 @@ func (x *FieldChange) String() string {
 func (*FieldChange) ProtoMessage() {}
 
 func (x *FieldChange) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[232]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[234]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14973,7 +15063,7 @@ func (x *FieldChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FieldChange.ProtoReflect.Descriptor instead.
 func (*FieldChange) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{232}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{234}
 }
 
 func (x *FieldChange) GetKind() string {
@@ -15036,7 +15126,7 @@ type ImpactSide struct {
 
 func (x *ImpactSide) Reset() {
 	*x = ImpactSide{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[233]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[235]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15048,7 +15138,7 @@ func (x *ImpactSide) String() string {
 func (*ImpactSide) ProtoMessage() {}
 
 func (x *ImpactSide) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[233]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[235]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15061,7 +15151,7 @@ func (x *ImpactSide) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactSide.ProtoReflect.Descriptor instead.
 func (*ImpactSide) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{233}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{235}
 }
 
 func (x *ImpactSide) GetImpact() string {
@@ -15130,7 +15220,7 @@ type ImpactDiff struct {
 
 func (x *ImpactDiff) Reset() {
 	*x = ImpactDiff{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[234]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[236]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15142,7 +15232,7 @@ func (x *ImpactDiff) String() string {
 func (*ImpactDiff) ProtoMessage() {}
 
 func (x *ImpactDiff) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[234]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[236]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15155,7 +15245,7 @@ func (x *ImpactDiff) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImpactDiff.ProtoReflect.Descriptor instead.
 func (*ImpactDiff) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{234}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{236}
 }
 
 func (x *ImpactDiff) GetNode() string {
@@ -15221,7 +15311,7 @@ type DiffFlowsResponse struct {
 
 func (x *DiffFlowsResponse) Reset() {
 	*x = DiffFlowsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[235]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[237]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15233,7 +15323,7 @@ func (x *DiffFlowsResponse) String() string {
 func (*DiffFlowsResponse) ProtoMessage() {}
 
 func (x *DiffFlowsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[235]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[237]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15246,7 +15336,7 @@ func (x *DiffFlowsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DiffFlowsResponse.ProtoReflect.Descriptor instead.
 func (*DiffFlowsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{235}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{237}
 }
 
 func (x *DiffFlowsResponse) GetLeft() string {
@@ -15297,7 +15387,7 @@ type GetChangeViewRequest struct {
 
 func (x *GetChangeViewRequest) Reset() {
 	*x = GetChangeViewRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[236]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[238]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15309,7 +15399,7 @@ func (x *GetChangeViewRequest) String() string {
 func (*GetChangeViewRequest) ProtoMessage() {}
 
 func (x *GetChangeViewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[236]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[238]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15322,7 +15412,7 @@ func (x *GetChangeViewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeViewRequest.ProtoReflect.Descriptor instead.
 func (*GetChangeViewRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{236}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{238}
 }
 
 func (x *GetChangeViewRequest) GetChangeId() string {
@@ -15356,7 +15446,7 @@ type GetChangeViewResponse struct {
 
 func (x *GetChangeViewResponse) Reset() {
 	*x = GetChangeViewResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[237]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[239]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15368,7 +15458,7 @@ func (x *GetChangeViewResponse) String() string {
 func (*GetChangeViewResponse) ProtoMessage() {}
 
 func (x *GetChangeViewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[237]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[239]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15381,7 +15471,7 @@ func (x *GetChangeViewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeViewResponse.ProtoReflect.Descriptor instead.
 func (*GetChangeViewResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{237}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{239}
 }
 
 func (x *GetChangeViewResponse) GetBaseline() *Baseline {
@@ -15402,7 +15492,7 @@ type GetChangeGraphRequest struct {
 
 func (x *GetChangeGraphRequest) Reset() {
 	*x = GetChangeGraphRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[238]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[240]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15414,7 +15504,7 @@ func (x *GetChangeGraphRequest) String() string {
 func (*GetChangeGraphRequest) ProtoMessage() {}
 
 func (x *GetChangeGraphRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[238]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[240]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15427,7 +15517,7 @@ func (x *GetChangeGraphRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeGraphRequest.ProtoReflect.Descriptor instead.
 func (*GetChangeGraphRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{238}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{240}
 }
 
 func (x *GetChangeGraphRequest) GetChangeId() string {
@@ -15454,7 +15544,7 @@ type GetChangeGraphResponse struct {
 
 func (x *GetChangeGraphResponse) Reset() {
 	*x = GetChangeGraphResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[239]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[241]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15466,7 +15556,7 @@ func (x *GetChangeGraphResponse) String() string {
 func (*GetChangeGraphResponse) ProtoMessage() {}
 
 func (x *GetChangeGraphResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[239]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[241]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15479,7 +15569,7 @@ func (x *GetChangeGraphResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetChangeGraphResponse.ProtoReflect.Descriptor instead.
 func (*GetChangeGraphResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{239}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{241}
 }
 
 func (x *GetChangeGraphResponse) GetNodes() []*Node {
@@ -15525,7 +15615,7 @@ type DecisionEvent struct {
 
 func (x *DecisionEvent) Reset() {
 	*x = DecisionEvent{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[240]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[242]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15537,7 +15627,7 @@ func (x *DecisionEvent) String() string {
 func (*DecisionEvent) ProtoMessage() {}
 
 func (x *DecisionEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[240]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[242]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15550,7 +15640,7 @@ func (x *DecisionEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecisionEvent.ProtoReflect.Descriptor instead.
 func (*DecisionEvent) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{240}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{242}
 }
 
 func (x *DecisionEvent) GetOp() string {
@@ -15697,7 +15787,7 @@ type Question struct {
 
 func (x *Question) Reset() {
 	*x = Question{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[241]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[243]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15709,7 +15799,7 @@ func (x *Question) String() string {
 func (*Question) ProtoMessage() {}
 
 func (x *Question) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[241]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[243]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15722,7 +15812,7 @@ func (x *Question) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Question.ProtoReflect.Descriptor instead.
 func (*Question) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{241}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{243}
 }
 
 func (x *Question) GetId() string {
@@ -15797,7 +15887,7 @@ type Ruling struct {
 
 func (x *Ruling) Reset() {
 	*x = Ruling{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[242]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[244]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15809,7 +15899,7 @@ func (x *Ruling) String() string {
 func (*Ruling) ProtoMessage() {}
 
 func (x *Ruling) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[242]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[244]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15822,7 +15912,7 @@ func (x *Ruling) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ruling.ProtoReflect.Descriptor instead.
 func (*Ruling) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{242}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{244}
 }
 
 func (x *Ruling) GetOutcome() string {
@@ -15902,7 +15992,7 @@ type DecisionPoint struct {
 
 func (x *DecisionPoint) Reset() {
 	*x = DecisionPoint{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[243]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[245]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -15914,7 +16004,7 @@ func (x *DecisionPoint) String() string {
 func (*DecisionPoint) ProtoMessage() {}
 
 func (x *DecisionPoint) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[243]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[245]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -15927,7 +16017,7 @@ func (x *DecisionPoint) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DecisionPoint.ProtoReflect.Descriptor instead.
 func (*DecisionPoint) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{243}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{245}
 }
 
 func (x *DecisionPoint) GetId() string {
@@ -16052,7 +16142,7 @@ type OpenDecisionRequest struct {
 
 func (x *OpenDecisionRequest) Reset() {
 	*x = OpenDecisionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[244]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[246]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16064,7 +16154,7 @@ func (x *OpenDecisionRequest) String() string {
 func (*OpenDecisionRequest) ProtoMessage() {}
 
 func (x *OpenDecisionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[244]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[246]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16077,7 +16167,7 @@ func (x *OpenDecisionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenDecisionRequest.ProtoReflect.Descriptor instead.
 func (*OpenDecisionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{244}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{246}
 }
 
 func (x *OpenDecisionRequest) GetChangeId() string {
@@ -16131,7 +16221,7 @@ type OpenDecisionResponse struct {
 
 func (x *OpenDecisionResponse) Reset() {
 	*x = OpenDecisionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[245]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[247]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16143,7 +16233,7 @@ func (x *OpenDecisionResponse) String() string {
 func (*OpenDecisionResponse) ProtoMessage() {}
 
 func (x *OpenDecisionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[245]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[247]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16156,7 +16246,7 @@ func (x *OpenDecisionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OpenDecisionResponse.ProtoReflect.Descriptor instead.
 func (*OpenDecisionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{245}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{247}
 }
 
 func (x *OpenDecisionResponse) GetPoint() *DecisionPoint {
@@ -16186,7 +16276,7 @@ type RuleDecisionRequest struct {
 
 func (x *RuleDecisionRequest) Reset() {
 	*x = RuleDecisionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[246]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[248]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16198,7 +16288,7 @@ func (x *RuleDecisionRequest) String() string {
 func (*RuleDecisionRequest) ProtoMessage() {}
 
 func (x *RuleDecisionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[246]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[248]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16211,7 +16301,7 @@ func (x *RuleDecisionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleDecisionRequest.ProtoReflect.Descriptor instead.
 func (*RuleDecisionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{246}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{248}
 }
 
 func (x *RuleDecisionRequest) GetChangeId() string {
@@ -16279,7 +16369,7 @@ type RuleDecisionResponse struct {
 
 func (x *RuleDecisionResponse) Reset() {
 	*x = RuleDecisionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[247]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[249]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16291,7 +16381,7 @@ func (x *RuleDecisionResponse) String() string {
 func (*RuleDecisionResponse) ProtoMessage() {}
 
 func (x *RuleDecisionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[247]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[249]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16304,7 +16394,7 @@ func (x *RuleDecisionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RuleDecisionResponse.ProtoReflect.Descriptor instead.
 func (*RuleDecisionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{247}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{249}
 }
 
 func (x *RuleDecisionResponse) GetPoint() *DecisionPoint {
@@ -16326,7 +16416,7 @@ type AnswerQuestionRequest struct {
 
 func (x *AnswerQuestionRequest) Reset() {
 	*x = AnswerQuestionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[248]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[250]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16338,7 +16428,7 @@ func (x *AnswerQuestionRequest) String() string {
 func (*AnswerQuestionRequest) ProtoMessage() {}
 
 func (x *AnswerQuestionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[248]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[250]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16351,7 +16441,7 @@ func (x *AnswerQuestionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerQuestionRequest.ProtoReflect.Descriptor instead.
 func (*AnswerQuestionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{248}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{250}
 }
 
 func (x *AnswerQuestionRequest) GetChangeId() string {
@@ -16391,7 +16481,7 @@ type AnswerQuestionResponse struct {
 
 func (x *AnswerQuestionResponse) Reset() {
 	*x = AnswerQuestionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[249]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[251]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16403,7 +16493,7 @@ func (x *AnswerQuestionResponse) String() string {
 func (*AnswerQuestionResponse) ProtoMessage() {}
 
 func (x *AnswerQuestionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[249]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[251]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16416,7 +16506,7 @@ func (x *AnswerQuestionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnswerQuestionResponse.ProtoReflect.Descriptor instead.
 func (*AnswerQuestionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{249}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{251}
 }
 
 func (x *AnswerQuestionResponse) GetPoint() *DecisionPoint {
@@ -16438,7 +16528,7 @@ type RatifyDecisionRequest struct {
 
 func (x *RatifyDecisionRequest) Reset() {
 	*x = RatifyDecisionRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[250]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[252]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16450,7 +16540,7 @@ func (x *RatifyDecisionRequest) String() string {
 func (*RatifyDecisionRequest) ProtoMessage() {}
 
 func (x *RatifyDecisionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[250]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[252]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16463,7 +16553,7 @@ func (x *RatifyDecisionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RatifyDecisionRequest.ProtoReflect.Descriptor instead.
 func (*RatifyDecisionRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{250}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{252}
 }
 
 func (x *RatifyDecisionRequest) GetChangeId() string {
@@ -16503,7 +16593,7 @@ type RatifyDecisionResponse struct {
 
 func (x *RatifyDecisionResponse) Reset() {
 	*x = RatifyDecisionResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[251]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[253]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16515,7 +16605,7 @@ func (x *RatifyDecisionResponse) String() string {
 func (*RatifyDecisionResponse) ProtoMessage() {}
 
 func (x *RatifyDecisionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[251]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[253]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16528,7 +16618,7 @@ func (x *RatifyDecisionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RatifyDecisionResponse.ProtoReflect.Descriptor instead.
 func (*RatifyDecisionResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{251}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{253}
 }
 
 func (x *RatifyDecisionResponse) GetPoint() *DecisionPoint {
@@ -16547,7 +16637,7 @@ type ListDecisionPointsRequest struct {
 
 func (x *ListDecisionPointsRequest) Reset() {
 	*x = ListDecisionPointsRequest{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[252]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[254]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16559,7 +16649,7 @@ func (x *ListDecisionPointsRequest) String() string {
 func (*ListDecisionPointsRequest) ProtoMessage() {}
 
 func (x *ListDecisionPointsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[252]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[254]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16572,7 +16662,7 @@ func (x *ListDecisionPointsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDecisionPointsRequest.ProtoReflect.Descriptor instead.
 func (*ListDecisionPointsRequest) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{252}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{254}
 }
 
 func (x *ListDecisionPointsRequest) GetChangeId() string {
@@ -16591,7 +16681,7 @@ type ListDecisionPointsResponse struct {
 
 func (x *ListDecisionPointsResponse) Reset() {
 	*x = ListDecisionPointsResponse{}
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[253]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[255]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -16603,7 +16693,7 @@ func (x *ListDecisionPointsResponse) String() string {
 func (*ListDecisionPointsResponse) ProtoMessage() {}
 
 func (x *ListDecisionPointsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_goap_graph_v1_graph_proto_msgTypes[253]
+	mi := &file_goap_graph_v1_graph_proto_msgTypes[255]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -16616,7 +16706,7 @@ func (x *ListDecisionPointsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDecisionPointsResponse.ProtoReflect.Descriptor instead.
 func (*ListDecisionPointsResponse) Descriptor() ([]byte, []int) {
-	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{253}
+	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{255}
 }
 
 func (x *ListDecisionPointsResponse) GetPoints() []*DecisionPoint {
@@ -16988,7 +17078,11 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\"8\n" +
 	"\x17IsAdminOnlyTypeResponse\x12\x1d\n" +
 	"\n" +
-	"admin_only\x18\x01 \x01(\bR\tadminOnly\"\xeb\x01\n" +
+	"admin_only\x18\x01 \x01(\bR\tadminOnly\"\x15\n" +
+	"\x13LoadDemoDataRequest\"H\n" +
+	"\x14LoadDemoDataResponse\x12\x16\n" +
+	"\x06loaded\x18\x01 \x01(\bR\x06loaded\x12\x18\n" +
+	"\aproject\x18\x02 \x01(\tR\aproject\"\xeb\x01\n" +
 	"\tStructure\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1c\n" +
@@ -17940,7 +18034,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x19ListDecisionPointsRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\"R\n" +
 	"\x1aListDecisionPointsResponse\x124\n" +
-	"\x06points\x18\x01 \x03(\v2\x1c.goap.graph.v1.DecisionPointR\x06points2\x9eK\n" +
+	"\x06points\x18\x01 \x03(\v2\x1c.goap.graph.v1.DecisionPointR\x06points2\xf7K\n" +
 	"\fGraphService\x12H\n" +
 	"\aGetNode\x12\x1d.goap.graph.v1.GetNodeRequest\x1a\x1e.goap.graph.v1.GetNodeResponse\x12Z\n" +
 	"\rListBaselines\x12#.goap.graph.v1.ListBaselinesRequest\x1a$.goap.graph.v1.ListBaselinesResponse\x12N\n" +
@@ -17961,6 +18055,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\vExportGraph\x12!.goap.graph.v1.ExportGraphRequest\x1a\".goap.graph.v1.ExportGraphResponse\x12_\n" +
 	"\x0eExportGraphOkf\x12$.goap.graph.v1.ExportGraphOkfRequest\x1a%.goap.graph.v1.ExportGraphOkfResponse0\x01\x12T\n" +
 	"\vImportGraph\x12!.goap.graph.v1.ImportGraphRequest\x1a\".goap.graph.v1.ImportGraphResponse\x12W\n" +
+	"\fLoadDemoData\x12\".goap.graph.v1.LoadDemoDataRequest\x1a#.goap.graph.v1.LoadDemoDataResponse\x12W\n" +
 	"\fCreateChange\x12\".goap.graph.v1.CreateChangeRequest\x1a#.goap.graph.v1.CreateChangeResponse\x12N\n" +
 	"\tGetChange\x12\x1f.goap.graph.v1.GetChangeRequest\x1a .goap.graph.v1.GetChangeResponse\x12T\n" +
 	"\vListChanges\x12!.goap.graph.v1.ListChangesRequest\x1a\".goap.graph.v1.ListChangesResponse\x12c\n" +
@@ -18063,7 +18158,7 @@ func file_goap_graph_v1_graph_proto_rawDescGZIP() []byte {
 	return file_goap_graph_v1_graph_proto_rawDescData
 }
 
-var file_goap_graph_v1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 262)
+var file_goap_graph_v1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 264)
 var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*RepublishIndexRequest)(nil),          // 0: goap.graph.v1.RepublishIndexRequest
 	(*RepublishIndexResponse)(nil),         // 1: goap.graph.v1.RepublishIndexResponse
@@ -18121,248 +18216,250 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*ListItemTypesResponse)(nil),          // 53: goap.graph.v1.ListItemTypesResponse
 	(*IsAdminOnlyTypeRequest)(nil),         // 54: goap.graph.v1.IsAdminOnlyTypeRequest
 	(*IsAdminOnlyTypeResponse)(nil),        // 55: goap.graph.v1.IsAdminOnlyTypeResponse
-	(*Structure)(nil),                      // 56: goap.graph.v1.Structure
-	(*GetStructuresResponse)(nil),          // 57: goap.graph.v1.GetStructuresResponse
-	(*CreateChangeRequest)(nil),            // 58: goap.graph.v1.CreateChangeRequest
-	(*CreateChangeResponse)(nil),           // 59: goap.graph.v1.CreateChangeResponse
-	(*GetChangeRequest)(nil),               // 60: goap.graph.v1.GetChangeRequest
-	(*GetChangeResponse)(nil),              // 61: goap.graph.v1.GetChangeResponse
-	(*ListChangesRequest)(nil),             // 62: goap.graph.v1.ListChangesRequest
-	(*ListChangesResponse)(nil),            // 63: goap.graph.v1.ListChangesResponse
-	(*UpdateChangeRequest)(nil),            // 64: goap.graph.v1.UpdateChangeRequest
-	(*UpdateChangeResponse)(nil),           // 65: goap.graph.v1.UpdateChangeResponse
-	(*MoveChangeRequest)(nil),              // 66: goap.graph.v1.MoveChangeRequest
-	(*MoveChangeResponse)(nil),             // 67: goap.graph.v1.MoveChangeResponse
-	(*AttachChangeRequest)(nil),            // 68: goap.graph.v1.AttachChangeRequest
-	(*AttachChangeResponse)(nil),           // 69: goap.graph.v1.AttachChangeResponse
-	(*DetachChangeRequest)(nil),            // 70: goap.graph.v1.DetachChangeRequest
-	(*DetachChangeResponse)(nil),           // 71: goap.graph.v1.DetachChangeResponse
-	(*SetChangeDependenciesRequest)(nil),   // 72: goap.graph.v1.SetChangeDependenciesRequest
-	(*SetChangeDependenciesResponse)(nil),  // 73: goap.graph.v1.SetChangeDependenciesResponse
-	(*UpgradeChangeRequest)(nil),           // 74: goap.graph.v1.UpgradeChangeRequest
-	(*UpgradeChangeResponse)(nil),          // 75: goap.graph.v1.UpgradeChangeResponse
-	(*GetChangeDependenciesRequest)(nil),   // 76: goap.graph.v1.GetChangeDependenciesRequest
-	(*Dependency)(nil),                     // 77: goap.graph.v1.Dependency
-	(*GetChangeDependenciesResponse)(nil),  // 78: goap.graph.v1.GetChangeDependenciesResponse
-	(*AddItemsRequest)(nil),                // 79: goap.graph.v1.AddItemsRequest
-	(*AddItemsResponse)(nil),               // 80: goap.graph.v1.AddItemsResponse
-	(*GetBlackboardRequest)(nil),           // 81: goap.graph.v1.GetBlackboardRequest
-	(*GetBlackboardResponse)(nil),          // 82: goap.graph.v1.GetBlackboardResponse
-	(*ApplyChangeRequest)(nil),             // 83: goap.graph.v1.ApplyChangeRequest
-	(*CommitChangeRequest)(nil),            // 84: goap.graph.v1.CommitChangeRequest
-	(*CommitChangeResponse)(nil),           // 85: goap.graph.v1.CommitChangeResponse
-	(*TransitionChangeRequest)(nil),        // 86: goap.graph.v1.TransitionChangeRequest
-	(*TransitionChangeResponse)(nil),       // 87: goap.graph.v1.TransitionChangeResponse
-	(*DeleteChangeRequest)(nil),            // 88: goap.graph.v1.DeleteChangeRequest
-	(*DeleteChangeResponse)(nil),           // 89: goap.graph.v1.DeleteChangeResponse
-	(*GetPendingSettingsRequest)(nil),      // 90: goap.graph.v1.GetPendingSettingsRequest
-	(*SaveSettingsRequest)(nil),            // 91: goap.graph.v1.SaveSettingsRequest
-	(*DiscardSettingsRequest)(nil),         // 92: goap.graph.v1.DiscardSettingsRequest
-	(*SettingEdit)(nil),                    // 93: goap.graph.v1.SettingEdit
-	(*StageSettingsRequest)(nil),           // 94: goap.graph.v1.StageSettingsRequest
-	(*StagedSetting)(nil),                  // 95: goap.graph.v1.StagedSetting
-	(*PendingSettings)(nil),                // 96: goap.graph.v1.PendingSettings
-	(*PendingSettingsResponse)(nil),        // 97: goap.graph.v1.PendingSettingsResponse
-	(*ApplyChangeResponse)(nil),            // 98: goap.graph.v1.ApplyChangeResponse
-	(*Branch)(nil),                         // 99: goap.graph.v1.Branch
-	(*CreateBranchRequest)(nil),            // 100: goap.graph.v1.CreateBranchRequest
-	(*CreateBranchResponse)(nil),           // 101: goap.graph.v1.CreateBranchResponse
-	(*ListBranchesRequest)(nil),            // 102: goap.graph.v1.ListBranchesRequest
-	(*ListBranchesResponse)(nil),           // 103: goap.graph.v1.ListBranchesResponse
-	(*GetBranchRequest)(nil),               // 104: goap.graph.v1.GetBranchRequest
-	(*GetBranchResponse)(nil),              // 105: goap.graph.v1.GetBranchResponse
-	(*SetBranchStatusRequest)(nil),         // 106: goap.graph.v1.SetBranchStatusRequest
-	(*SetBranchStatusResponse)(nil),        // 107: goap.graph.v1.SetBranchStatusResponse
-	(*SetBranchDescriptionRequest)(nil),    // 108: goap.graph.v1.SetBranchDescriptionRequest
-	(*SetBranchDescriptionResponse)(nil),   // 109: goap.graph.v1.SetBranchDescriptionResponse
-	(*ListNodeVersionsRequest)(nil),        // 110: goap.graph.v1.ListNodeVersionsRequest
-	(*ListNodeVersionsResponse)(nil),       // 111: goap.graph.v1.ListNodeVersionsResponse
-	(*MergeCandidate)(nil),                 // 112: goap.graph.v1.MergeCandidate
-	(*MergePlan)(nil),                      // 113: goap.graph.v1.MergePlan
-	(*PlanMergeRequest)(nil),               // 114: goap.graph.v1.PlanMergeRequest
-	(*DiffBaselinesRequest)(nil),           // 115: goap.graph.v1.DiffBaselinesRequest
-	(*DiffBaselinesResponse)(nil),          // 116: goap.graph.v1.DiffBaselinesResponse
-	(*BaselineDiff)(nil),                   // 117: goap.graph.v1.BaselineDiff
-	(*PlanMergeResponse)(nil),              // 118: goap.graph.v1.PlanMergeResponse
-	(*Resolution)(nil),                     // 119: goap.graph.v1.Resolution
-	(*MergeBranchRequest)(nil),             // 120: goap.graph.v1.MergeBranchRequest
-	(*MergeBranchResponse)(nil),            // 121: goap.graph.v1.MergeBranchResponse
-	(*AppendLogRequest)(nil),               // 122: goap.graph.v1.AppendLogRequest
-	(*AppendLogResponse)(nil),              // 123: goap.graph.v1.AppendLogResponse
-	(*ModelCall)(nil),                      // 124: goap.graph.v1.ModelCall
-	(*ToolUse)(nil),                        // 125: goap.graph.v1.ToolUse
-	(*ExecutionRecord)(nil),                // 126: goap.graph.v1.ExecutionRecord
-	(*ListExecutionsRequest)(nil),          // 127: goap.graph.v1.ListExecutionsRequest
-	(*ListExecutionsResponse)(nil),         // 128: goap.graph.v1.ListExecutionsResponse
-	(*LinkEdit)(nil),                       // 129: goap.graph.v1.LinkEdit
-	(*NodeEdit)(nil),                       // 130: goap.graph.v1.NodeEdit
-	(*CommitEditsRequest)(nil),             // 131: goap.graph.v1.CommitEditsRequest
-	(*CommitEditsResponse)(nil),            // 132: goap.graph.v1.CommitEditsResponse
-	(*ProposeImpactRequest)(nil),           // 133: goap.graph.v1.ProposeImpactRequest
-	(*ProposeImpactResponse)(nil),          // 134: goap.graph.v1.ProposeImpactResponse
-	(*NodeLinkWrite)(nil),                  // 135: goap.graph.v1.NodeLinkWrite
-	(*ImpactNodeCreateRequest)(nil),        // 136: goap.graph.v1.ImpactNodeCreateRequest
-	(*NodeCreateSpec)(nil),                 // 137: goap.graph.v1.NodeCreateSpec
-	(*NodeName)(nil),                       // 138: goap.graph.v1.NodeName
-	(*ImpactNodeMergeRequest)(nil),         // 139: goap.graph.v1.ImpactNodeMergeRequest
-	(*ImpactNodeSplitRequest)(nil),         // 140: goap.graph.v1.ImpactNodeSplitRequest
-	(*SuspectLink)(nil),                    // 141: goap.graph.v1.SuspectLink
-	(*ImpactNodeRestructureResponse)(nil),  // 142: goap.graph.v1.ImpactNodeRestructureResponse
-	(*DerivedNodesRequest)(nil),            // 143: goap.graph.v1.DerivedNodesRequest
-	(*DerivedNodesResponse)(nil),           // 144: goap.graph.v1.DerivedNodesResponse
-	(*ImpactNodeCreateResponse)(nil),       // 145: goap.graph.v1.ImpactNodeCreateResponse
-	(*ImpactNodeCheckoutRequest)(nil),      // 146: goap.graph.v1.ImpactNodeCheckoutRequest
-	(*ImpactNodeCheckoutResponse)(nil),     // 147: goap.graph.v1.ImpactNodeCheckoutResponse
-	(*ImpactNodeUpdateRequest)(nil),        // 148: goap.graph.v1.ImpactNodeUpdateRequest
-	(*ImpactNodeUpdateResponse)(nil),       // 149: goap.graph.v1.ImpactNodeUpdateResponse
-	(*ImpactLinkCreateRequest)(nil),        // 150: goap.graph.v1.ImpactLinkCreateRequest
-	(*ImpactLinkCreateResponse)(nil),       // 151: goap.graph.v1.ImpactLinkCreateResponse
-	(*ImpactLinkUpdateRequest)(nil),        // 152: goap.graph.v1.ImpactLinkUpdateRequest
-	(*ImpactLinkUpdateResponse)(nil),       // 153: goap.graph.v1.ImpactLinkUpdateResponse
-	(*ImpactLinkDeleteRequest)(nil),        // 154: goap.graph.v1.ImpactLinkDeleteRequest
-	(*ImpactLinkDeleteResponse)(nil),       // 155: goap.graph.v1.ImpactLinkDeleteResponse
-	(*ImpactNodeTransitionRequest)(nil),    // 156: goap.graph.v1.ImpactNodeTransitionRequest
-	(*ImpactNodeTransitionResponse)(nil),   // 157: goap.graph.v1.ImpactNodeTransitionResponse
-	(*ImpactNodeCancelRequest)(nil),        // 158: goap.graph.v1.ImpactNodeCancelRequest
-	(*ImpactNodeCancelResponse)(nil),       // 159: goap.graph.v1.ImpactNodeCancelResponse
-	(*WithdrawImpactRequest)(nil),          // 160: goap.graph.v1.WithdrawImpactRequest
-	(*WithdrawImpactResponse)(nil),         // 161: goap.graph.v1.WithdrawImpactResponse
-	(*WithdrawImpactsRequest)(nil),         // 162: goap.graph.v1.WithdrawImpactsRequest
-	(*WithdrawImpactsResponse)(nil),        // 163: goap.graph.v1.WithdrawImpactsResponse
-	(*RebaseChangeRequest)(nil),            // 164: goap.graph.v1.RebaseChangeRequest
-	(*RebasedImpact)(nil),                  // 165: goap.graph.v1.RebasedImpact
-	(*RebaseChangeResponse)(nil),           // 166: goap.graph.v1.RebaseChangeResponse
-	(*ImpactNodeResolveRequest)(nil),       // 167: goap.graph.v1.ImpactNodeResolveRequest
-	(*ImpactNodeResolveResponse)(nil),      // 168: goap.graph.v1.ImpactNodeResolveResponse
-	(*GetRebaseStateRequest)(nil),          // 169: goap.graph.v1.GetRebaseStateRequest
-	(*GetCommitStateRequest)(nil),          // 170: goap.graph.v1.GetCommitStateRequest
-	(*GetCommitStateResponse)(nil),         // 171: goap.graph.v1.GetCommitStateResponse
-	(*ImpactConflicts)(nil),                // 172: goap.graph.v1.ImpactConflicts
-	(*GetRebaseStateResponse)(nil),         // 173: goap.graph.v1.GetRebaseStateResponse
-	(*ImpactNodeReviewRequest)(nil),        // 174: goap.graph.v1.ImpactNodeReviewRequest
-	(*ImpactNodeReviewResponse)(nil),       // 175: goap.graph.v1.ImpactNodeReviewResponse
-	(*ImpactVerdict)(nil),                  // 176: goap.graph.v1.ImpactVerdict
-	(*ImpactNodeReviewBatchRequest)(nil),   // 177: goap.graph.v1.ImpactNodeReviewBatchRequest
-	(*ImpactNodeReviewBatchResponse)(nil),  // 178: goap.graph.v1.ImpactNodeReviewBatchResponse
-	(*ReviewEntry)(nil),                    // 179: goap.graph.v1.ReviewEntry
-	(*ReviewRecord)(nil),                   // 180: goap.graph.v1.ReviewRecord
-	(*ReviewOpenRequest)(nil),              // 181: goap.graph.v1.ReviewOpenRequest
-	(*ReviewEntryEdit)(nil),                // 182: goap.graph.v1.ReviewEntryEdit
-	(*ReviewUpdateRequest)(nil),            // 183: goap.graph.v1.ReviewUpdateRequest
-	(*ReviewSubmitRequest)(nil),            // 184: goap.graph.v1.ReviewSubmitRequest
-	(*ReviewDiscardRequest)(nil),           // 185: goap.graph.v1.ReviewDiscardRequest
-	(*ReviewResponse)(nil),                 // 186: goap.graph.v1.ReviewResponse
-	(*ReopenChangeImpactsRequest)(nil),     // 187: goap.graph.v1.ReopenChangeImpactsRequest
-	(*ReopenChangeImpactsResponse)(nil),    // 188: goap.graph.v1.ReopenChangeImpactsResponse
-	(*GetChangeImpactsRequest)(nil),        // 189: goap.graph.v1.GetChangeImpactsRequest
-	(*GetChangeImpactsResponse)(nil),       // 190: goap.graph.v1.GetChangeImpactsResponse
-	(*ListNodeChangesRequest)(nil),         // 191: goap.graph.v1.ListNodeChangesRequest
-	(*ListNodeChangesResponse)(nil),        // 192: goap.graph.v1.ListNodeChangesResponse
-	(*MergeChangeRequest)(nil),             // 193: goap.graph.v1.MergeChangeRequest
-	(*MergeChangeResponse)(nil),            // 194: goap.graph.v1.MergeChangeResponse
-	(*GetSharedNodesRequest)(nil),          // 195: goap.graph.v1.GetSharedNodesRequest
-	(*SharedNode)(nil),                     // 196: goap.graph.v1.SharedNode
-	(*GetSharedNodesResponse)(nil),         // 197: goap.graph.v1.GetSharedNodesResponse
-	(*SplitChangeRequest)(nil),             // 198: goap.graph.v1.SplitChangeRequest
-	(*SplitChangeResponse)(nil),            // 199: goap.graph.v1.SplitChangeResponse
-	(*ListSubChangesRequest)(nil),          // 200: goap.graph.v1.ListSubChangesRequest
-	(*ListSubChangesResponse)(nil),         // 201: goap.graph.v1.ListSubChangesResponse
-	(*FlowEvent)(nil),                      // 202: goap.graph.v1.FlowEvent
-	(*Option)(nil),                         // 203: goap.graph.v1.Option
-	(*Flow)(nil),                           // 204: goap.graph.v1.Flow
-	(*OpenFlowRequest)(nil),                // 205: goap.graph.v1.OpenFlowRequest
-	(*OpenFlowResponse)(nil),               // 206: goap.graph.v1.OpenFlowResponse
-	(*AdoptFlowRequest)(nil),               // 207: goap.graph.v1.AdoptFlowRequest
-	(*AdoptFlowResponse)(nil),              // 208: goap.graph.v1.AdoptFlowResponse
-	(*DiscardFlowRequest)(nil),             // 209: goap.graph.v1.DiscardFlowRequest
-	(*DiscardFlowResponse)(nil),            // 210: goap.graph.v1.DiscardFlowResponse
-	(*ListFlowsRequest)(nil),               // 211: goap.graph.v1.ListFlowsRequest
-	(*ListFlowsResponse)(nil),              // 212: goap.graph.v1.ListFlowsResponse
-	(*BoardIssue)(nil),                     // 213: goap.graph.v1.BoardIssue
-	(*ValidateBoardRequest)(nil),           // 214: goap.graph.v1.ValidateBoardRequest
-	(*ValidateBoardResponse)(nil),          // 215: goap.graph.v1.ValidateBoardResponse
-	(*OpenOptionRequest)(nil),              // 216: goap.graph.v1.OpenOptionRequest
-	(*OpenOptionResponse)(nil),             // 217: goap.graph.v1.OpenOptionResponse
-	(*ActivateOptionRequest)(nil),          // 218: goap.graph.v1.ActivateOptionRequest
-	(*ActivateOptionResponse)(nil),         // 219: goap.graph.v1.ActivateOptionResponse
-	(*EvaluateOptionRequest)(nil),          // 220: goap.graph.v1.EvaluateOptionRequest
-	(*EvaluateOptionResponse)(nil),         // 221: goap.graph.v1.EvaluateOptionResponse
-	(*SelectOptionRequest)(nil),            // 222: goap.graph.v1.SelectOptionRequest
-	(*SelectOptionResponse)(nil),           // 223: goap.graph.v1.SelectOptionResponse
-	(*RejectOptionRequest)(nil),            // 224: goap.graph.v1.RejectOptionRequest
-	(*RejectOptionResponse)(nil),           // 225: goap.graph.v1.RejectOptionResponse
-	(*ListOptionsRequest)(nil),             // 226: goap.graph.v1.ListOptionsRequest
-	(*ListOptionsResponse)(nil),            // 227: goap.graph.v1.ListOptionsResponse
-	(*CompareOptionsRequest)(nil),          // 228: goap.graph.v1.CompareOptionsRequest
-	(*OptionNode)(nil),                     // 229: goap.graph.v1.OptionNode
-	(*CompareOptionsResponse)(nil),         // 230: goap.graph.v1.CompareOptionsResponse
-	(*DiffFlowsRequest)(nil),               // 231: goap.graph.v1.DiffFlowsRequest
-	(*FieldChange)(nil),                    // 232: goap.graph.v1.FieldChange
-	(*ImpactSide)(nil),                     // 233: goap.graph.v1.ImpactSide
-	(*ImpactDiff)(nil),                     // 234: goap.graph.v1.ImpactDiff
-	(*DiffFlowsResponse)(nil),              // 235: goap.graph.v1.DiffFlowsResponse
-	(*GetChangeViewRequest)(nil),           // 236: goap.graph.v1.GetChangeViewRequest
-	(*GetChangeViewResponse)(nil),          // 237: goap.graph.v1.GetChangeViewResponse
-	(*GetChangeGraphRequest)(nil),          // 238: goap.graph.v1.GetChangeGraphRequest
-	(*GetChangeGraphResponse)(nil),         // 239: goap.graph.v1.GetChangeGraphResponse
-	(*DecisionEvent)(nil),                  // 240: goap.graph.v1.DecisionEvent
-	(*Question)(nil),                       // 241: goap.graph.v1.Question
-	(*Ruling)(nil),                         // 242: goap.graph.v1.Ruling
-	(*DecisionPoint)(nil),                  // 243: goap.graph.v1.DecisionPoint
-	(*OpenDecisionRequest)(nil),            // 244: goap.graph.v1.OpenDecisionRequest
-	(*OpenDecisionResponse)(nil),           // 245: goap.graph.v1.OpenDecisionResponse
-	(*RuleDecisionRequest)(nil),            // 246: goap.graph.v1.RuleDecisionRequest
-	(*RuleDecisionResponse)(nil),           // 247: goap.graph.v1.RuleDecisionResponse
-	(*AnswerQuestionRequest)(nil),          // 248: goap.graph.v1.AnswerQuestionRequest
-	(*AnswerQuestionResponse)(nil),         // 249: goap.graph.v1.AnswerQuestionResponse
-	(*RatifyDecisionRequest)(nil),          // 250: goap.graph.v1.RatifyDecisionRequest
-	(*RatifyDecisionResponse)(nil),         // 251: goap.graph.v1.RatifyDecisionResponse
-	(*ListDecisionPointsRequest)(nil),      // 252: goap.graph.v1.ListDecisionPointsRequest
-	(*ListDecisionPointsResponse)(nil),     // 253: goap.graph.v1.ListDecisionPointsResponse
-	nil,                                    // 254: goap.graph.v1.Baseline.NodesEntry
-	nil,                                    // 255: goap.graph.v1.ListChangeLogResponse.CountsEntry
-	nil,                                    // 256: goap.graph.v1.MergeBranchRequest.ResolutionsEntry
-	nil,                                    // 257: goap.graph.v1.ExecutionRecord.BeforeEntry
-	nil,                                    // 258: goap.graph.v1.ExecutionRecord.AfterEntry
-	nil,                                    // 259: goap.graph.v1.MergeChangeRequest.ResolutionsEntry
-	nil,                                    // 260: goap.graph.v1.OptionNode.OptionsEntry
-	nil,                                    // 261: goap.graph.v1.OptionNode.PropsEntry
-	(*structpb.Struct)(nil),                // 262: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),          // 263: google.protobuf.Timestamp
-	(*structpb.Value)(nil),                 // 264: google.protobuf.Value
+	(*LoadDemoDataRequest)(nil),            // 56: goap.graph.v1.LoadDemoDataRequest
+	(*LoadDemoDataResponse)(nil),           // 57: goap.graph.v1.LoadDemoDataResponse
+	(*Structure)(nil),                      // 58: goap.graph.v1.Structure
+	(*GetStructuresResponse)(nil),          // 59: goap.graph.v1.GetStructuresResponse
+	(*CreateChangeRequest)(nil),            // 60: goap.graph.v1.CreateChangeRequest
+	(*CreateChangeResponse)(nil),           // 61: goap.graph.v1.CreateChangeResponse
+	(*GetChangeRequest)(nil),               // 62: goap.graph.v1.GetChangeRequest
+	(*GetChangeResponse)(nil),              // 63: goap.graph.v1.GetChangeResponse
+	(*ListChangesRequest)(nil),             // 64: goap.graph.v1.ListChangesRequest
+	(*ListChangesResponse)(nil),            // 65: goap.graph.v1.ListChangesResponse
+	(*UpdateChangeRequest)(nil),            // 66: goap.graph.v1.UpdateChangeRequest
+	(*UpdateChangeResponse)(nil),           // 67: goap.graph.v1.UpdateChangeResponse
+	(*MoveChangeRequest)(nil),              // 68: goap.graph.v1.MoveChangeRequest
+	(*MoveChangeResponse)(nil),             // 69: goap.graph.v1.MoveChangeResponse
+	(*AttachChangeRequest)(nil),            // 70: goap.graph.v1.AttachChangeRequest
+	(*AttachChangeResponse)(nil),           // 71: goap.graph.v1.AttachChangeResponse
+	(*DetachChangeRequest)(nil),            // 72: goap.graph.v1.DetachChangeRequest
+	(*DetachChangeResponse)(nil),           // 73: goap.graph.v1.DetachChangeResponse
+	(*SetChangeDependenciesRequest)(nil),   // 74: goap.graph.v1.SetChangeDependenciesRequest
+	(*SetChangeDependenciesResponse)(nil),  // 75: goap.graph.v1.SetChangeDependenciesResponse
+	(*UpgradeChangeRequest)(nil),           // 76: goap.graph.v1.UpgradeChangeRequest
+	(*UpgradeChangeResponse)(nil),          // 77: goap.graph.v1.UpgradeChangeResponse
+	(*GetChangeDependenciesRequest)(nil),   // 78: goap.graph.v1.GetChangeDependenciesRequest
+	(*Dependency)(nil),                     // 79: goap.graph.v1.Dependency
+	(*GetChangeDependenciesResponse)(nil),  // 80: goap.graph.v1.GetChangeDependenciesResponse
+	(*AddItemsRequest)(nil),                // 81: goap.graph.v1.AddItemsRequest
+	(*AddItemsResponse)(nil),               // 82: goap.graph.v1.AddItemsResponse
+	(*GetBlackboardRequest)(nil),           // 83: goap.graph.v1.GetBlackboardRequest
+	(*GetBlackboardResponse)(nil),          // 84: goap.graph.v1.GetBlackboardResponse
+	(*ApplyChangeRequest)(nil),             // 85: goap.graph.v1.ApplyChangeRequest
+	(*CommitChangeRequest)(nil),            // 86: goap.graph.v1.CommitChangeRequest
+	(*CommitChangeResponse)(nil),           // 87: goap.graph.v1.CommitChangeResponse
+	(*TransitionChangeRequest)(nil),        // 88: goap.graph.v1.TransitionChangeRequest
+	(*TransitionChangeResponse)(nil),       // 89: goap.graph.v1.TransitionChangeResponse
+	(*DeleteChangeRequest)(nil),            // 90: goap.graph.v1.DeleteChangeRequest
+	(*DeleteChangeResponse)(nil),           // 91: goap.graph.v1.DeleteChangeResponse
+	(*GetPendingSettingsRequest)(nil),      // 92: goap.graph.v1.GetPendingSettingsRequest
+	(*SaveSettingsRequest)(nil),            // 93: goap.graph.v1.SaveSettingsRequest
+	(*DiscardSettingsRequest)(nil),         // 94: goap.graph.v1.DiscardSettingsRequest
+	(*SettingEdit)(nil),                    // 95: goap.graph.v1.SettingEdit
+	(*StageSettingsRequest)(nil),           // 96: goap.graph.v1.StageSettingsRequest
+	(*StagedSetting)(nil),                  // 97: goap.graph.v1.StagedSetting
+	(*PendingSettings)(nil),                // 98: goap.graph.v1.PendingSettings
+	(*PendingSettingsResponse)(nil),        // 99: goap.graph.v1.PendingSettingsResponse
+	(*ApplyChangeResponse)(nil),            // 100: goap.graph.v1.ApplyChangeResponse
+	(*Branch)(nil),                         // 101: goap.graph.v1.Branch
+	(*CreateBranchRequest)(nil),            // 102: goap.graph.v1.CreateBranchRequest
+	(*CreateBranchResponse)(nil),           // 103: goap.graph.v1.CreateBranchResponse
+	(*ListBranchesRequest)(nil),            // 104: goap.graph.v1.ListBranchesRequest
+	(*ListBranchesResponse)(nil),           // 105: goap.graph.v1.ListBranchesResponse
+	(*GetBranchRequest)(nil),               // 106: goap.graph.v1.GetBranchRequest
+	(*GetBranchResponse)(nil),              // 107: goap.graph.v1.GetBranchResponse
+	(*SetBranchStatusRequest)(nil),         // 108: goap.graph.v1.SetBranchStatusRequest
+	(*SetBranchStatusResponse)(nil),        // 109: goap.graph.v1.SetBranchStatusResponse
+	(*SetBranchDescriptionRequest)(nil),    // 110: goap.graph.v1.SetBranchDescriptionRequest
+	(*SetBranchDescriptionResponse)(nil),   // 111: goap.graph.v1.SetBranchDescriptionResponse
+	(*ListNodeVersionsRequest)(nil),        // 112: goap.graph.v1.ListNodeVersionsRequest
+	(*ListNodeVersionsResponse)(nil),       // 113: goap.graph.v1.ListNodeVersionsResponse
+	(*MergeCandidate)(nil),                 // 114: goap.graph.v1.MergeCandidate
+	(*MergePlan)(nil),                      // 115: goap.graph.v1.MergePlan
+	(*PlanMergeRequest)(nil),               // 116: goap.graph.v1.PlanMergeRequest
+	(*DiffBaselinesRequest)(nil),           // 117: goap.graph.v1.DiffBaselinesRequest
+	(*DiffBaselinesResponse)(nil),          // 118: goap.graph.v1.DiffBaselinesResponse
+	(*BaselineDiff)(nil),                   // 119: goap.graph.v1.BaselineDiff
+	(*PlanMergeResponse)(nil),              // 120: goap.graph.v1.PlanMergeResponse
+	(*Resolution)(nil),                     // 121: goap.graph.v1.Resolution
+	(*MergeBranchRequest)(nil),             // 122: goap.graph.v1.MergeBranchRequest
+	(*MergeBranchResponse)(nil),            // 123: goap.graph.v1.MergeBranchResponse
+	(*AppendLogRequest)(nil),               // 124: goap.graph.v1.AppendLogRequest
+	(*AppendLogResponse)(nil),              // 125: goap.graph.v1.AppendLogResponse
+	(*ModelCall)(nil),                      // 126: goap.graph.v1.ModelCall
+	(*ToolUse)(nil),                        // 127: goap.graph.v1.ToolUse
+	(*ExecutionRecord)(nil),                // 128: goap.graph.v1.ExecutionRecord
+	(*ListExecutionsRequest)(nil),          // 129: goap.graph.v1.ListExecutionsRequest
+	(*ListExecutionsResponse)(nil),         // 130: goap.graph.v1.ListExecutionsResponse
+	(*LinkEdit)(nil),                       // 131: goap.graph.v1.LinkEdit
+	(*NodeEdit)(nil),                       // 132: goap.graph.v1.NodeEdit
+	(*CommitEditsRequest)(nil),             // 133: goap.graph.v1.CommitEditsRequest
+	(*CommitEditsResponse)(nil),            // 134: goap.graph.v1.CommitEditsResponse
+	(*ProposeImpactRequest)(nil),           // 135: goap.graph.v1.ProposeImpactRequest
+	(*ProposeImpactResponse)(nil),          // 136: goap.graph.v1.ProposeImpactResponse
+	(*NodeLinkWrite)(nil),                  // 137: goap.graph.v1.NodeLinkWrite
+	(*ImpactNodeCreateRequest)(nil),        // 138: goap.graph.v1.ImpactNodeCreateRequest
+	(*NodeCreateSpec)(nil),                 // 139: goap.graph.v1.NodeCreateSpec
+	(*NodeName)(nil),                       // 140: goap.graph.v1.NodeName
+	(*ImpactNodeMergeRequest)(nil),         // 141: goap.graph.v1.ImpactNodeMergeRequest
+	(*ImpactNodeSplitRequest)(nil),         // 142: goap.graph.v1.ImpactNodeSplitRequest
+	(*SuspectLink)(nil),                    // 143: goap.graph.v1.SuspectLink
+	(*ImpactNodeRestructureResponse)(nil),  // 144: goap.graph.v1.ImpactNodeRestructureResponse
+	(*DerivedNodesRequest)(nil),            // 145: goap.graph.v1.DerivedNodesRequest
+	(*DerivedNodesResponse)(nil),           // 146: goap.graph.v1.DerivedNodesResponse
+	(*ImpactNodeCreateResponse)(nil),       // 147: goap.graph.v1.ImpactNodeCreateResponse
+	(*ImpactNodeCheckoutRequest)(nil),      // 148: goap.graph.v1.ImpactNodeCheckoutRequest
+	(*ImpactNodeCheckoutResponse)(nil),     // 149: goap.graph.v1.ImpactNodeCheckoutResponse
+	(*ImpactNodeUpdateRequest)(nil),        // 150: goap.graph.v1.ImpactNodeUpdateRequest
+	(*ImpactNodeUpdateResponse)(nil),       // 151: goap.graph.v1.ImpactNodeUpdateResponse
+	(*ImpactLinkCreateRequest)(nil),        // 152: goap.graph.v1.ImpactLinkCreateRequest
+	(*ImpactLinkCreateResponse)(nil),       // 153: goap.graph.v1.ImpactLinkCreateResponse
+	(*ImpactLinkUpdateRequest)(nil),        // 154: goap.graph.v1.ImpactLinkUpdateRequest
+	(*ImpactLinkUpdateResponse)(nil),       // 155: goap.graph.v1.ImpactLinkUpdateResponse
+	(*ImpactLinkDeleteRequest)(nil),        // 156: goap.graph.v1.ImpactLinkDeleteRequest
+	(*ImpactLinkDeleteResponse)(nil),       // 157: goap.graph.v1.ImpactLinkDeleteResponse
+	(*ImpactNodeTransitionRequest)(nil),    // 158: goap.graph.v1.ImpactNodeTransitionRequest
+	(*ImpactNodeTransitionResponse)(nil),   // 159: goap.graph.v1.ImpactNodeTransitionResponse
+	(*ImpactNodeCancelRequest)(nil),        // 160: goap.graph.v1.ImpactNodeCancelRequest
+	(*ImpactNodeCancelResponse)(nil),       // 161: goap.graph.v1.ImpactNodeCancelResponse
+	(*WithdrawImpactRequest)(nil),          // 162: goap.graph.v1.WithdrawImpactRequest
+	(*WithdrawImpactResponse)(nil),         // 163: goap.graph.v1.WithdrawImpactResponse
+	(*WithdrawImpactsRequest)(nil),         // 164: goap.graph.v1.WithdrawImpactsRequest
+	(*WithdrawImpactsResponse)(nil),        // 165: goap.graph.v1.WithdrawImpactsResponse
+	(*RebaseChangeRequest)(nil),            // 166: goap.graph.v1.RebaseChangeRequest
+	(*RebasedImpact)(nil),                  // 167: goap.graph.v1.RebasedImpact
+	(*RebaseChangeResponse)(nil),           // 168: goap.graph.v1.RebaseChangeResponse
+	(*ImpactNodeResolveRequest)(nil),       // 169: goap.graph.v1.ImpactNodeResolveRequest
+	(*ImpactNodeResolveResponse)(nil),      // 170: goap.graph.v1.ImpactNodeResolveResponse
+	(*GetRebaseStateRequest)(nil),          // 171: goap.graph.v1.GetRebaseStateRequest
+	(*GetCommitStateRequest)(nil),          // 172: goap.graph.v1.GetCommitStateRequest
+	(*GetCommitStateResponse)(nil),         // 173: goap.graph.v1.GetCommitStateResponse
+	(*ImpactConflicts)(nil),                // 174: goap.graph.v1.ImpactConflicts
+	(*GetRebaseStateResponse)(nil),         // 175: goap.graph.v1.GetRebaseStateResponse
+	(*ImpactNodeReviewRequest)(nil),        // 176: goap.graph.v1.ImpactNodeReviewRequest
+	(*ImpactNodeReviewResponse)(nil),       // 177: goap.graph.v1.ImpactNodeReviewResponse
+	(*ImpactVerdict)(nil),                  // 178: goap.graph.v1.ImpactVerdict
+	(*ImpactNodeReviewBatchRequest)(nil),   // 179: goap.graph.v1.ImpactNodeReviewBatchRequest
+	(*ImpactNodeReviewBatchResponse)(nil),  // 180: goap.graph.v1.ImpactNodeReviewBatchResponse
+	(*ReviewEntry)(nil),                    // 181: goap.graph.v1.ReviewEntry
+	(*ReviewRecord)(nil),                   // 182: goap.graph.v1.ReviewRecord
+	(*ReviewOpenRequest)(nil),              // 183: goap.graph.v1.ReviewOpenRequest
+	(*ReviewEntryEdit)(nil),                // 184: goap.graph.v1.ReviewEntryEdit
+	(*ReviewUpdateRequest)(nil),            // 185: goap.graph.v1.ReviewUpdateRequest
+	(*ReviewSubmitRequest)(nil),            // 186: goap.graph.v1.ReviewSubmitRequest
+	(*ReviewDiscardRequest)(nil),           // 187: goap.graph.v1.ReviewDiscardRequest
+	(*ReviewResponse)(nil),                 // 188: goap.graph.v1.ReviewResponse
+	(*ReopenChangeImpactsRequest)(nil),     // 189: goap.graph.v1.ReopenChangeImpactsRequest
+	(*ReopenChangeImpactsResponse)(nil),    // 190: goap.graph.v1.ReopenChangeImpactsResponse
+	(*GetChangeImpactsRequest)(nil),        // 191: goap.graph.v1.GetChangeImpactsRequest
+	(*GetChangeImpactsResponse)(nil),       // 192: goap.graph.v1.GetChangeImpactsResponse
+	(*ListNodeChangesRequest)(nil),         // 193: goap.graph.v1.ListNodeChangesRequest
+	(*ListNodeChangesResponse)(nil),        // 194: goap.graph.v1.ListNodeChangesResponse
+	(*MergeChangeRequest)(nil),             // 195: goap.graph.v1.MergeChangeRequest
+	(*MergeChangeResponse)(nil),            // 196: goap.graph.v1.MergeChangeResponse
+	(*GetSharedNodesRequest)(nil),          // 197: goap.graph.v1.GetSharedNodesRequest
+	(*SharedNode)(nil),                     // 198: goap.graph.v1.SharedNode
+	(*GetSharedNodesResponse)(nil),         // 199: goap.graph.v1.GetSharedNodesResponse
+	(*SplitChangeRequest)(nil),             // 200: goap.graph.v1.SplitChangeRequest
+	(*SplitChangeResponse)(nil),            // 201: goap.graph.v1.SplitChangeResponse
+	(*ListSubChangesRequest)(nil),          // 202: goap.graph.v1.ListSubChangesRequest
+	(*ListSubChangesResponse)(nil),         // 203: goap.graph.v1.ListSubChangesResponse
+	(*FlowEvent)(nil),                      // 204: goap.graph.v1.FlowEvent
+	(*Option)(nil),                         // 205: goap.graph.v1.Option
+	(*Flow)(nil),                           // 206: goap.graph.v1.Flow
+	(*OpenFlowRequest)(nil),                // 207: goap.graph.v1.OpenFlowRequest
+	(*OpenFlowResponse)(nil),               // 208: goap.graph.v1.OpenFlowResponse
+	(*AdoptFlowRequest)(nil),               // 209: goap.graph.v1.AdoptFlowRequest
+	(*AdoptFlowResponse)(nil),              // 210: goap.graph.v1.AdoptFlowResponse
+	(*DiscardFlowRequest)(nil),             // 211: goap.graph.v1.DiscardFlowRequest
+	(*DiscardFlowResponse)(nil),            // 212: goap.graph.v1.DiscardFlowResponse
+	(*ListFlowsRequest)(nil),               // 213: goap.graph.v1.ListFlowsRequest
+	(*ListFlowsResponse)(nil),              // 214: goap.graph.v1.ListFlowsResponse
+	(*BoardIssue)(nil),                     // 215: goap.graph.v1.BoardIssue
+	(*ValidateBoardRequest)(nil),           // 216: goap.graph.v1.ValidateBoardRequest
+	(*ValidateBoardResponse)(nil),          // 217: goap.graph.v1.ValidateBoardResponse
+	(*OpenOptionRequest)(nil),              // 218: goap.graph.v1.OpenOptionRequest
+	(*OpenOptionResponse)(nil),             // 219: goap.graph.v1.OpenOptionResponse
+	(*ActivateOptionRequest)(nil),          // 220: goap.graph.v1.ActivateOptionRequest
+	(*ActivateOptionResponse)(nil),         // 221: goap.graph.v1.ActivateOptionResponse
+	(*EvaluateOptionRequest)(nil),          // 222: goap.graph.v1.EvaluateOptionRequest
+	(*EvaluateOptionResponse)(nil),         // 223: goap.graph.v1.EvaluateOptionResponse
+	(*SelectOptionRequest)(nil),            // 224: goap.graph.v1.SelectOptionRequest
+	(*SelectOptionResponse)(nil),           // 225: goap.graph.v1.SelectOptionResponse
+	(*RejectOptionRequest)(nil),            // 226: goap.graph.v1.RejectOptionRequest
+	(*RejectOptionResponse)(nil),           // 227: goap.graph.v1.RejectOptionResponse
+	(*ListOptionsRequest)(nil),             // 228: goap.graph.v1.ListOptionsRequest
+	(*ListOptionsResponse)(nil),            // 229: goap.graph.v1.ListOptionsResponse
+	(*CompareOptionsRequest)(nil),          // 230: goap.graph.v1.CompareOptionsRequest
+	(*OptionNode)(nil),                     // 231: goap.graph.v1.OptionNode
+	(*CompareOptionsResponse)(nil),         // 232: goap.graph.v1.CompareOptionsResponse
+	(*DiffFlowsRequest)(nil),               // 233: goap.graph.v1.DiffFlowsRequest
+	(*FieldChange)(nil),                    // 234: goap.graph.v1.FieldChange
+	(*ImpactSide)(nil),                     // 235: goap.graph.v1.ImpactSide
+	(*ImpactDiff)(nil),                     // 236: goap.graph.v1.ImpactDiff
+	(*DiffFlowsResponse)(nil),              // 237: goap.graph.v1.DiffFlowsResponse
+	(*GetChangeViewRequest)(nil),           // 238: goap.graph.v1.GetChangeViewRequest
+	(*GetChangeViewResponse)(nil),          // 239: goap.graph.v1.GetChangeViewResponse
+	(*GetChangeGraphRequest)(nil),          // 240: goap.graph.v1.GetChangeGraphRequest
+	(*GetChangeGraphResponse)(nil),         // 241: goap.graph.v1.GetChangeGraphResponse
+	(*DecisionEvent)(nil),                  // 242: goap.graph.v1.DecisionEvent
+	(*Question)(nil),                       // 243: goap.graph.v1.Question
+	(*Ruling)(nil),                         // 244: goap.graph.v1.Ruling
+	(*DecisionPoint)(nil),                  // 245: goap.graph.v1.DecisionPoint
+	(*OpenDecisionRequest)(nil),            // 246: goap.graph.v1.OpenDecisionRequest
+	(*OpenDecisionResponse)(nil),           // 247: goap.graph.v1.OpenDecisionResponse
+	(*RuleDecisionRequest)(nil),            // 248: goap.graph.v1.RuleDecisionRequest
+	(*RuleDecisionResponse)(nil),           // 249: goap.graph.v1.RuleDecisionResponse
+	(*AnswerQuestionRequest)(nil),          // 250: goap.graph.v1.AnswerQuestionRequest
+	(*AnswerQuestionResponse)(nil),         // 251: goap.graph.v1.AnswerQuestionResponse
+	(*RatifyDecisionRequest)(nil),          // 252: goap.graph.v1.RatifyDecisionRequest
+	(*RatifyDecisionResponse)(nil),         // 253: goap.graph.v1.RatifyDecisionResponse
+	(*ListDecisionPointsRequest)(nil),      // 254: goap.graph.v1.ListDecisionPointsRequest
+	(*ListDecisionPointsResponse)(nil),     // 255: goap.graph.v1.ListDecisionPointsResponse
+	nil,                                    // 256: goap.graph.v1.Baseline.NodesEntry
+	nil,                                    // 257: goap.graph.v1.ListChangeLogResponse.CountsEntry
+	nil,                                    // 258: goap.graph.v1.MergeBranchRequest.ResolutionsEntry
+	nil,                                    // 259: goap.graph.v1.ExecutionRecord.BeforeEntry
+	nil,                                    // 260: goap.graph.v1.ExecutionRecord.AfterEntry
+	nil,                                    // 261: goap.graph.v1.MergeChangeRequest.ResolutionsEntry
+	nil,                                    // 262: goap.graph.v1.OptionNode.OptionsEntry
+	nil,                                    // 263: goap.graph.v1.OptionNode.PropsEntry
+	(*structpb.Struct)(nil),                // 264: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),          // 265: google.protobuf.Timestamp
+	(*structpb.Value)(nil),                 // 266: google.protobuf.Value
 }
 var file_goap_graph_v1_graph_proto_depIdxs = []int32{
-	262, // 0: goap.graph.v1.Node.props:type_name -> google.protobuf.Struct
-	263, // 1: goap.graph.v1.Node.created_at:type_name -> google.protobuf.Timestamp
+	264, // 0: goap.graph.v1.Node.props:type_name -> google.protobuf.Struct
+	265, // 1: goap.graph.v1.Node.created_at:type_name -> google.protobuf.Timestamp
 	2,   // 2: goap.graph.v1.Node.origins:type_name -> goap.graph.v1.NodeRef
 	2,   // 3: goap.graph.v1.Link.from:type_name -> goap.graph.v1.NodeRef
 	2,   // 4: goap.graph.v1.Link.to:type_name -> goap.graph.v1.NodeRef
-	262, // 5: goap.graph.v1.Link.props:type_name -> google.protobuf.Struct
+	264, // 5: goap.graph.v1.Link.props:type_name -> google.protobuf.Struct
 	3,   // 6: goap.graph.v1.NodeView.node:type_name -> goap.graph.v1.Node
 	4,   // 7: goap.graph.v1.NodeView.out:type_name -> goap.graph.v1.Link
 	4,   // 8: goap.graph.v1.NodeView.in:type_name -> goap.graph.v1.Link
-	254, // 9: goap.graph.v1.Baseline.nodes:type_name -> goap.graph.v1.Baseline.NodesEntry
-	263, // 10: goap.graph.v1.Baseline.created_at:type_name -> google.protobuf.Timestamp
+	256, // 9: goap.graph.v1.Baseline.nodes:type_name -> goap.graph.v1.Baseline.NodesEntry
+	265, // 10: goap.graph.v1.Baseline.created_at:type_name -> google.protobuf.Timestamp
 	7,   // 11: goap.graph.v1.ChangeItem.decision:type_name -> goap.graph.v1.Decision
-	262, // 12: goap.graph.v1.ChangeItem.data:type_name -> google.protobuf.Struct
-	263, // 13: goap.graph.v1.ChangeItem.created_at:type_name -> google.protobuf.Timestamp
-	202, // 14: goap.graph.v1.ChangeItem.flow_event:type_name -> goap.graph.v1.FlowEvent
-	240, // 15: goap.graph.v1.ChangeItem.decision_event:type_name -> goap.graph.v1.DecisionEvent
-	262, // 16: goap.graph.v1.Change.data:type_name -> google.protobuf.Struct
+	264, // 12: goap.graph.v1.ChangeItem.data:type_name -> google.protobuf.Struct
+	265, // 13: goap.graph.v1.ChangeItem.created_at:type_name -> google.protobuf.Timestamp
+	204, // 14: goap.graph.v1.ChangeItem.flow_event:type_name -> goap.graph.v1.FlowEvent
+	242, // 15: goap.graph.v1.ChangeItem.decision_event:type_name -> goap.graph.v1.DecisionEvent
+	264, // 16: goap.graph.v1.Change.data:type_name -> google.protobuf.Struct
 	8,   // 17: goap.graph.v1.Change.items:type_name -> goap.graph.v1.ChangeItem
-	263, // 18: goap.graph.v1.Change.created_at:type_name -> google.protobuf.Timestamp
+	265, // 18: goap.graph.v1.Change.created_at:type_name -> google.protobuf.Timestamp
 	12,  // 19: goap.graph.v1.Change.nodes:type_name -> goap.graph.v1.ChangeImpact
 	10,  // 20: goap.graph.v1.Change.guardians:type_name -> goap.graph.v1.GuardianRef
-	263, // 21: goap.graph.v1.Review.at:type_name -> google.protobuf.Timestamp
+	265, // 21: goap.graph.v1.Review.at:type_name -> google.protobuf.Timestamp
 	2,   // 22: goap.graph.v1.ChangeImpact.pre:type_name -> goap.graph.v1.NodeRef
 	2,   // 23: goap.graph.v1.ChangeImpact.post:type_name -> goap.graph.v1.NodeRef
 	2,   // 24: goap.graph.v1.ChangeImpact.landed:type_name -> goap.graph.v1.NodeRef
 	11,  // 25: goap.graph.v1.ChangeImpact.reviews:type_name -> goap.graph.v1.Review
-	263, // 26: goap.graph.v1.ChangeImpact.created_at:type_name -> google.protobuf.Timestamp
+	265, // 26: goap.graph.v1.ChangeImpact.created_at:type_name -> google.protobuf.Timestamp
 	13,  // 27: goap.graph.v1.ChangeImpact.validation:type_name -> goap.graph.v1.ImpactValidation
 	2,   // 28: goap.graph.v1.GetNodeRequest.ref:type_name -> goap.graph.v1.NodeRef
 	5,   // 29: goap.graph.v1.GetNodeResponse.view:type_name -> goap.graph.v1.NodeView
-	263, // 30: goap.graph.v1.Tag.created_at:type_name -> google.protobuf.Timestamp
+	265, // 30: goap.graph.v1.Tag.created_at:type_name -> google.protobuf.Timestamp
 	16,  // 31: goap.graph.v1.TagChangeResponse.tag:type_name -> goap.graph.v1.Tag
 	16,  // 32: goap.graph.v1.ListTagsResponse.tags:type_name -> goap.graph.v1.Tag
 	6,   // 33: goap.graph.v1.ListBaselinesResponse.baselines:type_name -> goap.graph.v1.Baseline
@@ -18379,192 +18476,192 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	3,   // 44: goap.graph.v1.GetNodeNeighbourhoodResponse.node:type_name -> goap.graph.v1.Node
 	3,   // 45: goap.graph.v1.GetNodeNeighbourhoodResponse.nodes:type_name -> goap.graph.v1.Node
 	4,   // 46: goap.graph.v1.GetNodeNeighbourhoodResponse.links:type_name -> goap.graph.v1.Link
-	263, // 47: goap.graph.v1.ImpactEvent.at:type_name -> google.protobuf.Timestamp
+	265, // 47: goap.graph.v1.ImpactEvent.at:type_name -> google.protobuf.Timestamp
 	12,  // 48: goap.graph.v1.ImpactEvent.state:type_name -> goap.graph.v1.ChangeImpact
 	2,   // 49: goap.graph.v1.ImpactEvent.post:type_name -> goap.graph.v1.NodeRef
 	2,   // 50: goap.graph.v1.ImpactEvent.pre:type_name -> goap.graph.v1.NodeRef
 	2,   // 51: goap.graph.v1.ImpactEvent.landed:type_name -> goap.graph.v1.NodeRef
 	11,  // 52: goap.graph.v1.ImpactEvent.review:type_name -> goap.graph.v1.Review
-	263, // 53: goap.graph.v1.LogEntry.at:type_name -> google.protobuf.Timestamp
+	265, // 53: goap.graph.v1.LogEntry.at:type_name -> google.protobuf.Timestamp
 	35,  // 54: goap.graph.v1.ListChangeLogResponse.entries:type_name -> goap.graph.v1.LogEntry
-	255, // 55: goap.graph.v1.ListChangeLogResponse.counts:type_name -> goap.graph.v1.ListChangeLogResponse.CountsEntry
+	257, // 55: goap.graph.v1.ListChangeLogResponse.counts:type_name -> goap.graph.v1.ListChangeLogResponse.CountsEntry
 	9,   // 56: goap.graph.v1.ImportGraphResponse.change:type_name -> goap.graph.v1.Change
 	34,  // 57: goap.graph.v1.ListChangeEventsResponse.events:type_name -> goap.graph.v1.ImpactEvent
 	52,  // 58: goap.graph.v1.ListItemTypesResponse.types:type_name -> goap.graph.v1.ItemTypeInfo
-	262, // 59: goap.graph.v1.Structure.bootstrap:type_name -> google.protobuf.Struct
-	56,  // 60: goap.graph.v1.GetStructuresResponse.structures:type_name -> goap.graph.v1.Structure
-	262, // 61: goap.graph.v1.CreateChangeRequest.data:type_name -> google.protobuf.Struct
+	264, // 59: goap.graph.v1.Structure.bootstrap:type_name -> google.protobuf.Struct
+	58,  // 60: goap.graph.v1.GetStructuresResponse.structures:type_name -> goap.graph.v1.Structure
+	264, // 61: goap.graph.v1.CreateChangeRequest.data:type_name -> google.protobuf.Struct
 	9,   // 62: goap.graph.v1.CreateChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 63: goap.graph.v1.GetChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 64: goap.graph.v1.ListChangesResponse.changes:type_name -> goap.graph.v1.Change
-	262, // 65: goap.graph.v1.UpdateChangeRequest.data:type_name -> google.protobuf.Struct
+	264, // 65: goap.graph.v1.UpdateChangeRequest.data:type_name -> google.protobuf.Struct
 	9,   // 66: goap.graph.v1.UpdateChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 67: goap.graph.v1.MoveChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 68: goap.graph.v1.AttachChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 69: goap.graph.v1.DetachChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 70: goap.graph.v1.SetChangeDependenciesResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 71: goap.graph.v1.UpgradeChangeResponse.change:type_name -> goap.graph.v1.Change
-	77,  // 72: goap.graph.v1.GetChangeDependenciesResponse.depends_on:type_name -> goap.graph.v1.Dependency
-	77,  // 73: goap.graph.v1.GetChangeDependenciesResponse.dependents:type_name -> goap.graph.v1.Dependency
-	77,  // 74: goap.graph.v1.GetChangeDependenciesResponse.order:type_name -> goap.graph.v1.Dependency
+	79,  // 72: goap.graph.v1.GetChangeDependenciesResponse.depends_on:type_name -> goap.graph.v1.Dependency
+	79,  // 73: goap.graph.v1.GetChangeDependenciesResponse.dependents:type_name -> goap.graph.v1.Dependency
+	79,  // 74: goap.graph.v1.GetChangeDependenciesResponse.order:type_name -> goap.graph.v1.Dependency
 	8,   // 75: goap.graph.v1.AddItemsRequest.items:type_name -> goap.graph.v1.ChangeItem
 	8,   // 76: goap.graph.v1.AddItemsResponse.items:type_name -> goap.graph.v1.ChangeItem
 	9,   // 77: goap.graph.v1.GetBlackboardResponse.change:type_name -> goap.graph.v1.Change
 	5,   // 78: goap.graph.v1.GetBlackboardResponse.nodes:type_name -> goap.graph.v1.NodeView
 	3,   // 79: goap.graph.v1.GetBlackboardResponse.neighbors:type_name -> goap.graph.v1.Node
-	204, // 80: goap.graph.v1.GetBlackboardResponse.options:type_name -> goap.graph.v1.Flow
-	243, // 81: goap.graph.v1.GetBlackboardResponse.decision_points:type_name -> goap.graph.v1.DecisionPoint
-	263, // 82: goap.graph.v1.GetBlackboardResponse.at:type_name -> google.protobuf.Timestamp
+	206, // 80: goap.graph.v1.GetBlackboardResponse.options:type_name -> goap.graph.v1.Flow
+	245, // 81: goap.graph.v1.GetBlackboardResponse.decision_points:type_name -> goap.graph.v1.DecisionPoint
+	265, // 82: goap.graph.v1.GetBlackboardResponse.at:type_name -> google.protobuf.Timestamp
 	6,   // 83: goap.graph.v1.CommitChangeResponse.baseline:type_name -> goap.graph.v1.Baseline
 	9,   // 84: goap.graph.v1.TransitionChangeResponse.change:type_name -> goap.graph.v1.Change
 	9,   // 85: goap.graph.v1.DeleteChangeResponse.change:type_name -> goap.graph.v1.Change
-	262, // 86: goap.graph.v1.SettingEdit.props:type_name -> google.protobuf.Struct
-	93,  // 87: goap.graph.v1.StageSettingsRequest.edits:type_name -> goap.graph.v1.SettingEdit
-	262, // 88: goap.graph.v1.StagedSetting.props:type_name -> google.protobuf.Struct
-	95,  // 89: goap.graph.v1.PendingSettings.nodes:type_name -> goap.graph.v1.StagedSetting
-	96,  // 90: goap.graph.v1.PendingSettingsResponse.changes:type_name -> goap.graph.v1.PendingSettings
+	264, // 86: goap.graph.v1.SettingEdit.props:type_name -> google.protobuf.Struct
+	95,  // 87: goap.graph.v1.StageSettingsRequest.edits:type_name -> goap.graph.v1.SettingEdit
+	264, // 88: goap.graph.v1.StagedSetting.props:type_name -> google.protobuf.Struct
+	97,  // 89: goap.graph.v1.PendingSettings.nodes:type_name -> goap.graph.v1.StagedSetting
+	98,  // 90: goap.graph.v1.PendingSettingsResponse.changes:type_name -> goap.graph.v1.PendingSettings
 	6,   // 91: goap.graph.v1.ApplyChangeResponse.baseline:type_name -> goap.graph.v1.Baseline
-	263, // 92: goap.graph.v1.Branch.created_at:type_name -> google.protobuf.Timestamp
-	99,  // 93: goap.graph.v1.CreateBranchResponse.branch:type_name -> goap.graph.v1.Branch
-	99,  // 94: goap.graph.v1.ListBranchesResponse.branches:type_name -> goap.graph.v1.Branch
-	99,  // 95: goap.graph.v1.GetBranchResponse.branch:type_name -> goap.graph.v1.Branch
+	265, // 92: goap.graph.v1.Branch.created_at:type_name -> google.protobuf.Timestamp
+	101, // 93: goap.graph.v1.CreateBranchResponse.branch:type_name -> goap.graph.v1.Branch
+	101, // 94: goap.graph.v1.ListBranchesResponse.branches:type_name -> goap.graph.v1.Branch
+	101, // 95: goap.graph.v1.GetBranchResponse.branch:type_name -> goap.graph.v1.Branch
 	6,   // 96: goap.graph.v1.GetBranchResponse.head:type_name -> goap.graph.v1.Baseline
 	3,   // 97: goap.graph.v1.ListNodeVersionsResponse.versions:type_name -> goap.graph.v1.Node
 	2,   // 98: goap.graph.v1.MergeCandidate.ancestor:type_name -> goap.graph.v1.NodeRef
 	2,   // 99: goap.graph.v1.MergeCandidate.ours:type_name -> goap.graph.v1.NodeRef
 	2,   // 100: goap.graph.v1.MergeCandidate.theirs:type_name -> goap.graph.v1.NodeRef
-	262, // 101: goap.graph.v1.MergeCandidate.base:type_name -> google.protobuf.Struct
-	262, // 102: goap.graph.v1.MergeCandidate.ours_props:type_name -> google.protobuf.Struct
-	262, // 103: goap.graph.v1.MergeCandidate.theirs_props:type_name -> google.protobuf.Struct
-	262, // 104: goap.graph.v1.MergeCandidate.merged:type_name -> google.protobuf.Struct
-	112, // 105: goap.graph.v1.MergePlan.candidates:type_name -> goap.graph.v1.MergeCandidate
-	117, // 106: goap.graph.v1.DiffBaselinesResponse.nodes:type_name -> goap.graph.v1.BaselineDiff
+	264, // 101: goap.graph.v1.MergeCandidate.base:type_name -> google.protobuf.Struct
+	264, // 102: goap.graph.v1.MergeCandidate.ours_props:type_name -> google.protobuf.Struct
+	264, // 103: goap.graph.v1.MergeCandidate.theirs_props:type_name -> google.protobuf.Struct
+	264, // 104: goap.graph.v1.MergeCandidate.merged:type_name -> google.protobuf.Struct
+	114, // 105: goap.graph.v1.MergePlan.candidates:type_name -> goap.graph.v1.MergeCandidate
+	119, // 106: goap.graph.v1.DiffBaselinesResponse.nodes:type_name -> goap.graph.v1.BaselineDiff
 	3,   // 107: goap.graph.v1.BaselineDiff.from:type_name -> goap.graph.v1.Node
 	3,   // 108: goap.graph.v1.BaselineDiff.to:type_name -> goap.graph.v1.Node
-	113, // 109: goap.graph.v1.PlanMergeResponse.plan:type_name -> goap.graph.v1.MergePlan
-	262, // 110: goap.graph.v1.Resolution.props:type_name -> google.protobuf.Struct
-	256, // 111: goap.graph.v1.MergeBranchRequest.resolutions:type_name -> goap.graph.v1.MergeBranchRequest.ResolutionsEntry
+	115, // 109: goap.graph.v1.PlanMergeResponse.plan:type_name -> goap.graph.v1.MergePlan
+	264, // 110: goap.graph.v1.Resolution.props:type_name -> google.protobuf.Struct
+	258, // 111: goap.graph.v1.MergeBranchRequest.resolutions:type_name -> goap.graph.v1.MergeBranchRequest.ResolutionsEntry
 	9,   // 112: goap.graph.v1.MergeBranchResponse.change:type_name -> goap.graph.v1.Change
 	6,   // 113: goap.graph.v1.MergeBranchResponse.baseline:type_name -> goap.graph.v1.Baseline
-	113, // 114: goap.graph.v1.MergeBranchResponse.plan:type_name -> goap.graph.v1.MergePlan
+	115, // 114: goap.graph.v1.MergeBranchResponse.plan:type_name -> goap.graph.v1.MergePlan
 	35,  // 115: goap.graph.v1.AppendLogRequest.entries:type_name -> goap.graph.v1.LogEntry
-	257, // 116: goap.graph.v1.ExecutionRecord.before:type_name -> goap.graph.v1.ExecutionRecord.BeforeEntry
-	258, // 117: goap.graph.v1.ExecutionRecord.after:type_name -> goap.graph.v1.ExecutionRecord.AfterEntry
-	124, // 118: goap.graph.v1.ExecutionRecord.model_calls:type_name -> goap.graph.v1.ModelCall
-	125, // 119: goap.graph.v1.ExecutionRecord.tool_calls:type_name -> goap.graph.v1.ToolUse
-	262, // 120: goap.graph.v1.ExecutionRecord.data:type_name -> google.protobuf.Struct
-	263, // 121: goap.graph.v1.ExecutionRecord.started_at:type_name -> google.protobuf.Timestamp
-	263, // 122: goap.graph.v1.ExecutionRecord.ended_at:type_name -> google.protobuf.Timestamp
+	259, // 116: goap.graph.v1.ExecutionRecord.before:type_name -> goap.graph.v1.ExecutionRecord.BeforeEntry
+	260, // 117: goap.graph.v1.ExecutionRecord.after:type_name -> goap.graph.v1.ExecutionRecord.AfterEntry
+	126, // 118: goap.graph.v1.ExecutionRecord.model_calls:type_name -> goap.graph.v1.ModelCall
+	127, // 119: goap.graph.v1.ExecutionRecord.tool_calls:type_name -> goap.graph.v1.ToolUse
+	264, // 120: goap.graph.v1.ExecutionRecord.data:type_name -> google.protobuf.Struct
+	265, // 121: goap.graph.v1.ExecutionRecord.started_at:type_name -> google.protobuf.Timestamp
+	265, // 122: goap.graph.v1.ExecutionRecord.ended_at:type_name -> google.protobuf.Timestamp
 	2,   // 123: goap.graph.v1.ExecutionRecord.reads:type_name -> goap.graph.v1.NodeRef
-	126, // 124: goap.graph.v1.ListExecutionsResponse.records:type_name -> goap.graph.v1.ExecutionRecord
+	128, // 124: goap.graph.v1.ListExecutionsResponse.records:type_name -> goap.graph.v1.ExecutionRecord
 	2,   // 125: goap.graph.v1.LinkEdit.to:type_name -> goap.graph.v1.NodeRef
-	262, // 126: goap.graph.v1.LinkEdit.props:type_name -> google.protobuf.Struct
+	264, // 126: goap.graph.v1.LinkEdit.props:type_name -> google.protobuf.Struct
 	2,   // 127: goap.graph.v1.NodeEdit.pre:type_name -> goap.graph.v1.NodeRef
-	262, // 128: goap.graph.v1.NodeEdit.props:type_name -> google.protobuf.Struct
-	129, // 129: goap.graph.v1.NodeEdit.links:type_name -> goap.graph.v1.LinkEdit
-	262, // 130: goap.graph.v1.CommitEditsRequest.data:type_name -> google.protobuf.Struct
-	130, // 131: goap.graph.v1.CommitEditsRequest.edits:type_name -> goap.graph.v1.NodeEdit
+	264, // 128: goap.graph.v1.NodeEdit.props:type_name -> google.protobuf.Struct
+	131, // 129: goap.graph.v1.NodeEdit.links:type_name -> goap.graph.v1.LinkEdit
+	264, // 130: goap.graph.v1.CommitEditsRequest.data:type_name -> google.protobuf.Struct
+	132, // 131: goap.graph.v1.CommitEditsRequest.edits:type_name -> goap.graph.v1.NodeEdit
 	6,   // 132: goap.graph.v1.CommitEditsResponse.baseline:type_name -> goap.graph.v1.Baseline
 	12,  // 133: goap.graph.v1.ProposeImpactRequest.nodes:type_name -> goap.graph.v1.ChangeImpact
 	12,  // 134: goap.graph.v1.ProposeImpactResponse.nodes:type_name -> goap.graph.v1.ChangeImpact
 	2,   // 135: goap.graph.v1.NodeLinkWrite.to:type_name -> goap.graph.v1.NodeRef
-	262, // 136: goap.graph.v1.NodeLinkWrite.props:type_name -> google.protobuf.Struct
-	262, // 137: goap.graph.v1.ImpactNodeCreateRequest.props:type_name -> google.protobuf.Struct
-	135, // 138: goap.graph.v1.ImpactNodeCreateRequest.links:type_name -> goap.graph.v1.NodeLinkWrite
-	262, // 139: goap.graph.v1.NodeCreateSpec.props:type_name -> google.protobuf.Struct
-	135, // 140: goap.graph.v1.NodeCreateSpec.links:type_name -> goap.graph.v1.NodeLinkWrite
-	138, // 141: goap.graph.v1.ImpactNodeMergeRequest.sources:type_name -> goap.graph.v1.NodeName
-	137, // 142: goap.graph.v1.ImpactNodeMergeRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
-	138, // 143: goap.graph.v1.ImpactNodeSplitRequest.source:type_name -> goap.graph.v1.NodeName
-	137, // 144: goap.graph.v1.ImpactNodeSplitRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
+	264, // 136: goap.graph.v1.NodeLinkWrite.props:type_name -> google.protobuf.Struct
+	264, // 137: goap.graph.v1.ImpactNodeCreateRequest.props:type_name -> google.protobuf.Struct
+	137, // 138: goap.graph.v1.ImpactNodeCreateRequest.links:type_name -> goap.graph.v1.NodeLinkWrite
+	264, // 139: goap.graph.v1.NodeCreateSpec.props:type_name -> google.protobuf.Struct
+	137, // 140: goap.graph.v1.NodeCreateSpec.links:type_name -> goap.graph.v1.NodeLinkWrite
+	140, // 141: goap.graph.v1.ImpactNodeMergeRequest.sources:type_name -> goap.graph.v1.NodeName
+	139, // 142: goap.graph.v1.ImpactNodeMergeRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
+	140, // 143: goap.graph.v1.ImpactNodeSplitRequest.source:type_name -> goap.graph.v1.NodeName
+	139, // 144: goap.graph.v1.ImpactNodeSplitRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
 	2,   // 145: goap.graph.v1.SuspectLink.from:type_name -> goap.graph.v1.NodeRef
 	2,   // 146: goap.graph.v1.SuspectLink.to:type_name -> goap.graph.v1.NodeRef
 	12,  // 147: goap.graph.v1.ImpactNodeRestructureResponse.successors:type_name -> goap.graph.v1.ChangeImpact
 	12,  // 148: goap.graph.v1.ImpactNodeRestructureResponse.sources:type_name -> goap.graph.v1.ChangeImpact
 	12,  // 149: goap.graph.v1.ImpactNodeRestructureResponse.parents:type_name -> goap.graph.v1.ChangeImpact
-	141, // 150: goap.graph.v1.ImpactNodeRestructureResponse.suspect:type_name -> goap.graph.v1.SuspectLink
+	143, // 150: goap.graph.v1.ImpactNodeRestructureResponse.suspect:type_name -> goap.graph.v1.SuspectLink
 	2,   // 151: goap.graph.v1.DerivedNodesRequest.ref:type_name -> goap.graph.v1.NodeRef
 	3,   // 152: goap.graph.v1.DerivedNodesResponse.nodes:type_name -> goap.graph.v1.Node
 	12,  // 153: goap.graph.v1.ImpactNodeCreateResponse.node:type_name -> goap.graph.v1.ChangeImpact
 	12,  // 154: goap.graph.v1.ImpactNodeCheckoutResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	262, // 155: goap.graph.v1.ImpactNodeUpdateRequest.props:type_name -> google.protobuf.Struct
+	264, // 155: goap.graph.v1.ImpactNodeUpdateRequest.props:type_name -> google.protobuf.Struct
 	12,  // 156: goap.graph.v1.ImpactNodeUpdateResponse.node:type_name -> goap.graph.v1.ChangeImpact
 	2,   // 157: goap.graph.v1.ImpactLinkCreateRequest.to:type_name -> goap.graph.v1.NodeRef
-	262, // 158: goap.graph.v1.ImpactLinkCreateRequest.props:type_name -> google.protobuf.Struct
+	264, // 158: goap.graph.v1.ImpactLinkCreateRequest.props:type_name -> google.protobuf.Struct
 	4,   // 159: goap.graph.v1.ImpactLinkCreateResponse.link:type_name -> goap.graph.v1.Link
-	262, // 160: goap.graph.v1.ImpactLinkUpdateRequest.props:type_name -> google.protobuf.Struct
+	264, // 160: goap.graph.v1.ImpactLinkUpdateRequest.props:type_name -> google.protobuf.Struct
 	4,   // 161: goap.graph.v1.ImpactLinkUpdateResponse.link:type_name -> goap.graph.v1.Link
 	12,  // 162: goap.graph.v1.ImpactNodeTransitionResponse.node:type_name -> goap.graph.v1.ChangeImpact
 	12,  // 163: goap.graph.v1.ImpactNodeCancelResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	165, // 164: goap.graph.v1.RebaseChangeResponse.impacts:type_name -> goap.graph.v1.RebasedImpact
+	167, // 164: goap.graph.v1.RebaseChangeResponse.impacts:type_name -> goap.graph.v1.RebasedImpact
 	12,  // 165: goap.graph.v1.ImpactNodeResolveResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	172, // 166: goap.graph.v1.GetRebaseStateResponse.conflicts:type_name -> goap.graph.v1.ImpactConflicts
+	174, // 166: goap.graph.v1.GetRebaseStateResponse.conflicts:type_name -> goap.graph.v1.ImpactConflicts
 	12,  // 167: goap.graph.v1.ImpactNodeReviewResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	176, // 168: goap.graph.v1.ImpactNodeReviewBatchRequest.verdicts:type_name -> goap.graph.v1.ImpactVerdict
+	178, // 168: goap.graph.v1.ImpactNodeReviewBatchRequest.verdicts:type_name -> goap.graph.v1.ImpactVerdict
 	8,   // 169: goap.graph.v1.ImpactNodeReviewBatchRequest.item:type_name -> goap.graph.v1.ChangeItem
 	12,  // 170: goap.graph.v1.ImpactNodeReviewBatchResponse.nodes:type_name -> goap.graph.v1.ChangeImpact
-	179, // 171: goap.graph.v1.ReviewRecord.entries:type_name -> goap.graph.v1.ReviewEntry
-	263, // 172: goap.graph.v1.ReviewRecord.submitted_at:type_name -> google.protobuf.Timestamp
-	182, // 173: goap.graph.v1.ReviewUpdateRequest.entries:type_name -> goap.graph.v1.ReviewEntryEdit
-	180, // 174: goap.graph.v1.ReviewResponse.review:type_name -> goap.graph.v1.ReviewRecord
+	181, // 171: goap.graph.v1.ReviewRecord.entries:type_name -> goap.graph.v1.ReviewEntry
+	265, // 172: goap.graph.v1.ReviewRecord.submitted_at:type_name -> google.protobuf.Timestamp
+	184, // 173: goap.graph.v1.ReviewUpdateRequest.entries:type_name -> goap.graph.v1.ReviewEntryEdit
+	182, // 174: goap.graph.v1.ReviewResponse.review:type_name -> goap.graph.v1.ReviewRecord
 	2,   // 175: goap.graph.v1.GetChangeImpactsResponse.nodes:type_name -> goap.graph.v1.NodeRef
 	9,   // 176: goap.graph.v1.ListNodeChangesResponse.changes:type_name -> goap.graph.v1.Change
-	259, // 177: goap.graph.v1.MergeChangeRequest.resolutions:type_name -> goap.graph.v1.MergeChangeRequest.ResolutionsEntry
+	261, // 177: goap.graph.v1.MergeChangeRequest.resolutions:type_name -> goap.graph.v1.MergeChangeRequest.ResolutionsEntry
 	9,   // 178: goap.graph.v1.MergeChangeResponse.change:type_name -> goap.graph.v1.Change
 	2,   // 179: goap.graph.v1.SharedNode.node:type_name -> goap.graph.v1.NodeRef
-	196, // 180: goap.graph.v1.GetSharedNodesResponse.nodes:type_name -> goap.graph.v1.SharedNode
+	198, // 180: goap.graph.v1.GetSharedNodesResponse.nodes:type_name -> goap.graph.v1.SharedNode
 	9,   // 181: goap.graph.v1.SplitChangeResponse.changes:type_name -> goap.graph.v1.Change
 	9,   // 182: goap.graph.v1.ListSubChangesResponse.changes:type_name -> goap.graph.v1.Change
-	203, // 183: goap.graph.v1.FlowEvent.option:type_name -> goap.graph.v1.Option
-	262, // 184: goap.graph.v1.FlowEvent.origin:type_name -> google.protobuf.Struct
-	263, // 185: goap.graph.v1.Flow.opened_at:type_name -> google.protobuf.Timestamp
-	263, // 186: goap.graph.v1.Flow.decided_at:type_name -> google.protobuf.Timestamp
-	203, // 187: goap.graph.v1.Flow.option:type_name -> goap.graph.v1.Option
-	262, // 188: goap.graph.v1.Flow.origin:type_name -> google.protobuf.Struct
-	262, // 189: goap.graph.v1.OpenFlowRequest.origin:type_name -> google.protobuf.Struct
+	205, // 183: goap.graph.v1.FlowEvent.option:type_name -> goap.graph.v1.Option
+	264, // 184: goap.graph.v1.FlowEvent.origin:type_name -> google.protobuf.Struct
+	265, // 185: goap.graph.v1.Flow.opened_at:type_name -> google.protobuf.Timestamp
+	265, // 186: goap.graph.v1.Flow.decided_at:type_name -> google.protobuf.Timestamp
+	205, // 187: goap.graph.v1.Flow.option:type_name -> goap.graph.v1.Option
+	264, // 188: goap.graph.v1.Flow.origin:type_name -> google.protobuf.Struct
+	264, // 189: goap.graph.v1.OpenFlowRequest.origin:type_name -> google.protobuf.Struct
 	8,   // 190: goap.graph.v1.OpenFlowRequest.items:type_name -> goap.graph.v1.ChangeItem
-	204, // 191: goap.graph.v1.OpenFlowResponse.flow:type_name -> goap.graph.v1.Flow
-	204, // 192: goap.graph.v1.AdoptFlowResponse.flow:type_name -> goap.graph.v1.Flow
-	204, // 193: goap.graph.v1.DiscardFlowResponse.flow:type_name -> goap.graph.v1.Flow
-	204, // 194: goap.graph.v1.ListFlowsResponse.flows:type_name -> goap.graph.v1.Flow
-	213, // 195: goap.graph.v1.ValidateBoardResponse.issues:type_name -> goap.graph.v1.BoardIssue
-	204, // 196: goap.graph.v1.OpenOptionResponse.option:type_name -> goap.graph.v1.Flow
-	204, // 197: goap.graph.v1.EvaluateOptionResponse.option:type_name -> goap.graph.v1.Flow
-	204, // 198: goap.graph.v1.SelectOptionResponse.option:type_name -> goap.graph.v1.Flow
-	204, // 199: goap.graph.v1.RejectOptionResponse.option:type_name -> goap.graph.v1.Flow
-	204, // 200: goap.graph.v1.ListOptionsResponse.options:type_name -> goap.graph.v1.Flow
+	206, // 191: goap.graph.v1.OpenFlowResponse.flow:type_name -> goap.graph.v1.Flow
+	206, // 192: goap.graph.v1.AdoptFlowResponse.flow:type_name -> goap.graph.v1.Flow
+	206, // 193: goap.graph.v1.DiscardFlowResponse.flow:type_name -> goap.graph.v1.Flow
+	206, // 194: goap.graph.v1.ListFlowsResponse.flows:type_name -> goap.graph.v1.Flow
+	215, // 195: goap.graph.v1.ValidateBoardResponse.issues:type_name -> goap.graph.v1.BoardIssue
+	206, // 196: goap.graph.v1.OpenOptionResponse.option:type_name -> goap.graph.v1.Flow
+	206, // 197: goap.graph.v1.EvaluateOptionResponse.option:type_name -> goap.graph.v1.Flow
+	206, // 198: goap.graph.v1.SelectOptionResponse.option:type_name -> goap.graph.v1.Flow
+	206, // 199: goap.graph.v1.RejectOptionResponse.option:type_name -> goap.graph.v1.Flow
+	206, // 200: goap.graph.v1.ListOptionsResponse.options:type_name -> goap.graph.v1.Flow
 	2,   // 201: goap.graph.v1.OptionNode.main:type_name -> goap.graph.v1.NodeRef
-	260, // 202: goap.graph.v1.OptionNode.options:type_name -> goap.graph.v1.OptionNode.OptionsEntry
-	261, // 203: goap.graph.v1.OptionNode.props:type_name -> goap.graph.v1.OptionNode.PropsEntry
-	204, // 204: goap.graph.v1.CompareOptionsResponse.options:type_name -> goap.graph.v1.Flow
-	229, // 205: goap.graph.v1.CompareOptionsResponse.nodes:type_name -> goap.graph.v1.OptionNode
-	264, // 206: goap.graph.v1.FieldChange.old:type_name -> google.protobuf.Value
-	264, // 207: goap.graph.v1.FieldChange.new:type_name -> google.protobuf.Value
-	233, // 208: goap.graph.v1.ImpactDiff.left:type_name -> goap.graph.v1.ImpactSide
-	233, // 209: goap.graph.v1.ImpactDiff.right:type_name -> goap.graph.v1.ImpactSide
-	232, // 210: goap.graph.v1.ImpactDiff.changes:type_name -> goap.graph.v1.FieldChange
-	234, // 211: goap.graph.v1.DiffFlowsResponse.impacts:type_name -> goap.graph.v1.ImpactDiff
+	262, // 202: goap.graph.v1.OptionNode.options:type_name -> goap.graph.v1.OptionNode.OptionsEntry
+	263, // 203: goap.graph.v1.OptionNode.props:type_name -> goap.graph.v1.OptionNode.PropsEntry
+	206, // 204: goap.graph.v1.CompareOptionsResponse.options:type_name -> goap.graph.v1.Flow
+	231, // 205: goap.graph.v1.CompareOptionsResponse.nodes:type_name -> goap.graph.v1.OptionNode
+	266, // 206: goap.graph.v1.FieldChange.old:type_name -> google.protobuf.Value
+	266, // 207: goap.graph.v1.FieldChange.new:type_name -> google.protobuf.Value
+	235, // 208: goap.graph.v1.ImpactDiff.left:type_name -> goap.graph.v1.ImpactSide
+	235, // 209: goap.graph.v1.ImpactDiff.right:type_name -> goap.graph.v1.ImpactSide
+	234, // 210: goap.graph.v1.ImpactDiff.changes:type_name -> goap.graph.v1.FieldChange
+	236, // 211: goap.graph.v1.DiffFlowsResponse.impacts:type_name -> goap.graph.v1.ImpactDiff
 	6,   // 212: goap.graph.v1.GetChangeViewResponse.baseline:type_name -> goap.graph.v1.Baseline
 	3,   // 213: goap.graph.v1.GetChangeGraphResponse.nodes:type_name -> goap.graph.v1.Node
 	4,   // 214: goap.graph.v1.GetChangeGraphResponse.links:type_name -> goap.graph.v1.Link
-	262, // 215: goap.graph.v1.DecisionEvent.policy:type_name -> google.protobuf.Struct
-	263, // 216: goap.graph.v1.Question.asked_at:type_name -> google.protobuf.Timestamp
-	263, // 217: goap.graph.v1.Ruling.at:type_name -> google.protobuf.Timestamp
-	263, // 218: goap.graph.v1.DecisionPoint.opened_at:type_name -> google.protobuf.Timestamp
-	241, // 219: goap.graph.v1.DecisionPoint.questions:type_name -> goap.graph.v1.Question
-	242, // 220: goap.graph.v1.DecisionPoint.ruling:type_name -> goap.graph.v1.Ruling
-	263, // 221: goap.graph.v1.DecisionPoint.decided_at:type_name -> google.protobuf.Timestamp
-	262, // 222: goap.graph.v1.DecisionPoint.policy:type_name -> google.protobuf.Struct
-	262, // 223: goap.graph.v1.OpenDecisionRequest.policy:type_name -> google.protobuf.Struct
-	243, // 224: goap.graph.v1.OpenDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	243, // 225: goap.graph.v1.RuleDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	243, // 226: goap.graph.v1.AnswerQuestionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	243, // 227: goap.graph.v1.RatifyDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	243, // 228: goap.graph.v1.ListDecisionPointsResponse.points:type_name -> goap.graph.v1.DecisionPoint
-	119, // 229: goap.graph.v1.MergeBranchRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
-	119, // 230: goap.graph.v1.MergeChangeRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
+	264, // 215: goap.graph.v1.DecisionEvent.policy:type_name -> google.protobuf.Struct
+	265, // 216: goap.graph.v1.Question.asked_at:type_name -> google.protobuf.Timestamp
+	265, // 217: goap.graph.v1.Ruling.at:type_name -> google.protobuf.Timestamp
+	265, // 218: goap.graph.v1.DecisionPoint.opened_at:type_name -> google.protobuf.Timestamp
+	243, // 219: goap.graph.v1.DecisionPoint.questions:type_name -> goap.graph.v1.Question
+	244, // 220: goap.graph.v1.DecisionPoint.ruling:type_name -> goap.graph.v1.Ruling
+	265, // 221: goap.graph.v1.DecisionPoint.decided_at:type_name -> google.protobuf.Timestamp
+	264, // 222: goap.graph.v1.DecisionPoint.policy:type_name -> google.protobuf.Struct
+	264, // 223: goap.graph.v1.OpenDecisionRequest.policy:type_name -> google.protobuf.Struct
+	245, // 224: goap.graph.v1.OpenDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	245, // 225: goap.graph.v1.RuleDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	245, // 226: goap.graph.v1.AnswerQuestionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	245, // 227: goap.graph.v1.RatifyDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	245, // 228: goap.graph.v1.ListDecisionPointsResponse.points:type_name -> goap.graph.v1.DecisionPoint
+	121, // 229: goap.graph.v1.MergeBranchRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
+	121, // 230: goap.graph.v1.MergeChangeRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
 	2,   // 231: goap.graph.v1.OptionNode.OptionsEntry.value:type_name -> goap.graph.v1.NodeRef
-	262, // 232: goap.graph.v1.OptionNode.PropsEntry.value:type_name -> google.protobuf.Struct
+	264, // 232: goap.graph.v1.OptionNode.PropsEntry.value:type_name -> google.protobuf.Struct
 	14,  // 233: goap.graph.v1.GraphService.GetNode:input_type -> goap.graph.v1.GetNodeRequest
 	23,  // 234: goap.graph.v1.GraphService.ListBaselines:input_type -> goap.graph.v1.ListBaselinesRequest
 	17,  // 235: goap.graph.v1.GraphService.TagChange:input_type -> goap.graph.v1.TagChangeRequest
@@ -18584,195 +18681,197 @@ var file_goap_graph_v1_graph_proto_depIdxs = []int32{
 	40,  // 249: goap.graph.v1.GraphService.ExportGraph:input_type -> goap.graph.v1.ExportGraphRequest
 	42,  // 250: goap.graph.v1.GraphService.ExportGraphOkf:input_type -> goap.graph.v1.ExportGraphOkfRequest
 	44,  // 251: goap.graph.v1.GraphService.ImportGraph:input_type -> goap.graph.v1.ImportGraphRequest
-	58,  // 252: goap.graph.v1.GraphService.CreateChange:input_type -> goap.graph.v1.CreateChangeRequest
-	60,  // 253: goap.graph.v1.GraphService.GetChange:input_type -> goap.graph.v1.GetChangeRequest
-	62,  // 254: goap.graph.v1.GraphService.ListChanges:input_type -> goap.graph.v1.ListChangesRequest
-	189, // 255: goap.graph.v1.GraphService.GetChangeImpacts:input_type -> goap.graph.v1.GetChangeImpactsRequest
-	191, // 256: goap.graph.v1.GraphService.ListNodeChanges:input_type -> goap.graph.v1.ListNodeChangesRequest
-	64,  // 257: goap.graph.v1.GraphService.UpdateChange:input_type -> goap.graph.v1.UpdateChangeRequest
-	66,  // 258: goap.graph.v1.GraphService.MoveChange:input_type -> goap.graph.v1.MoveChangeRequest
-	68,  // 259: goap.graph.v1.GraphService.AttachChange:input_type -> goap.graph.v1.AttachChangeRequest
-	70,  // 260: goap.graph.v1.GraphService.DetachChange:input_type -> goap.graph.v1.DetachChangeRequest
-	72,  // 261: goap.graph.v1.GraphService.SetChangeDependencies:input_type -> goap.graph.v1.SetChangeDependenciesRequest
-	76,  // 262: goap.graph.v1.GraphService.GetChangeDependencies:input_type -> goap.graph.v1.GetChangeDependenciesRequest
-	74,  // 263: goap.graph.v1.GraphService.UpgradeChange:input_type -> goap.graph.v1.UpgradeChangeRequest
-	79,  // 264: goap.graph.v1.GraphService.AddItems:input_type -> goap.graph.v1.AddItemsRequest
-	133, // 265: goap.graph.v1.GraphService.ProposeImpact:input_type -> goap.graph.v1.ProposeImpactRequest
-	136, // 266: goap.graph.v1.GraphService.ImpactNodeCreate:input_type -> goap.graph.v1.ImpactNodeCreateRequest
-	146, // 267: goap.graph.v1.GraphService.ImpactNodeCheckout:input_type -> goap.graph.v1.ImpactNodeCheckoutRequest
-	148, // 268: goap.graph.v1.GraphService.ImpactNodeUpdate:input_type -> goap.graph.v1.ImpactNodeUpdateRequest
-	150, // 269: goap.graph.v1.GraphService.ImpactLinkCreate:input_type -> goap.graph.v1.ImpactLinkCreateRequest
-	152, // 270: goap.graph.v1.GraphService.ImpactLinkUpdate:input_type -> goap.graph.v1.ImpactLinkUpdateRequest
-	154, // 271: goap.graph.v1.GraphService.ImpactLinkDelete:input_type -> goap.graph.v1.ImpactLinkDeleteRequest
-	156, // 272: goap.graph.v1.GraphService.ImpactNodeTransition:input_type -> goap.graph.v1.ImpactNodeTransitionRequest
-	158, // 273: goap.graph.v1.GraphService.ImpactNodeCancel:input_type -> goap.graph.v1.ImpactNodeCancelRequest
-	139, // 274: goap.graph.v1.GraphService.ImpactNodeMerge:input_type -> goap.graph.v1.ImpactNodeMergeRequest
-	140, // 275: goap.graph.v1.GraphService.ImpactNodeSplit:input_type -> goap.graph.v1.ImpactNodeSplitRequest
-	160, // 276: goap.graph.v1.GraphService.WithdrawImpact:input_type -> goap.graph.v1.WithdrawImpactRequest
-	162, // 277: goap.graph.v1.GraphService.WithdrawImpacts:input_type -> goap.graph.v1.WithdrawImpactsRequest
-	164, // 278: goap.graph.v1.GraphService.RebaseChange:input_type -> goap.graph.v1.RebaseChangeRequest
-	167, // 279: goap.graph.v1.GraphService.ImpactNodeResolve:input_type -> goap.graph.v1.ImpactNodeResolveRequest
-	169, // 280: goap.graph.v1.GraphService.GetRebaseState:input_type -> goap.graph.v1.GetRebaseStateRequest
-	170, // 281: goap.graph.v1.GraphService.GetCommitState:input_type -> goap.graph.v1.GetCommitStateRequest
-	174, // 282: goap.graph.v1.GraphService.ImpactNodeReview:input_type -> goap.graph.v1.ImpactNodeReviewRequest
-	177, // 283: goap.graph.v1.GraphService.ImpactNodeReviewBatch:input_type -> goap.graph.v1.ImpactNodeReviewBatchRequest
-	181, // 284: goap.graph.v1.GraphService.ReviewOpen:input_type -> goap.graph.v1.ReviewOpenRequest
-	183, // 285: goap.graph.v1.GraphService.ReviewUpdate:input_type -> goap.graph.v1.ReviewUpdateRequest
-	184, // 286: goap.graph.v1.GraphService.ReviewSubmit:input_type -> goap.graph.v1.ReviewSubmitRequest
-	185, // 287: goap.graph.v1.GraphService.ReviewDiscard:input_type -> goap.graph.v1.ReviewDiscardRequest
-	187, // 288: goap.graph.v1.GraphService.ReopenChangeImpacts:input_type -> goap.graph.v1.ReopenChangeImpactsRequest
-	131, // 289: goap.graph.v1.GraphService.CommitEdits:input_type -> goap.graph.v1.CommitEditsRequest
-	81,  // 290: goap.graph.v1.GraphService.GetBlackboard:input_type -> goap.graph.v1.GetBlackboardRequest
-	83,  // 291: goap.graph.v1.GraphService.ApplyChange:input_type -> goap.graph.v1.ApplyChangeRequest
-	84,  // 292: goap.graph.v1.GraphService.CommitChange:input_type -> goap.graph.v1.CommitChangeRequest
-	86,  // 293: goap.graph.v1.GraphService.TransitionChange:input_type -> goap.graph.v1.TransitionChangeRequest
-	88,  // 294: goap.graph.v1.GraphService.DeleteChange:input_type -> goap.graph.v1.DeleteChangeRequest
-	90,  // 295: goap.graph.v1.GraphService.GetPendingSettings:input_type -> goap.graph.v1.GetPendingSettingsRequest
-	94,  // 296: goap.graph.v1.GraphService.StageSettings:input_type -> goap.graph.v1.StageSettingsRequest
-	91,  // 297: goap.graph.v1.GraphService.SaveSettings:input_type -> goap.graph.v1.SaveSettingsRequest
-	92,  // 298: goap.graph.v1.GraphService.DiscardSettings:input_type -> goap.graph.v1.DiscardSettingsRequest
-	100, // 299: goap.graph.v1.GraphService.CreateBranch:input_type -> goap.graph.v1.CreateBranchRequest
-	102, // 300: goap.graph.v1.GraphService.ListBranches:input_type -> goap.graph.v1.ListBranchesRequest
-	104, // 301: goap.graph.v1.GraphService.GetBranch:input_type -> goap.graph.v1.GetBranchRequest
-	106, // 302: goap.graph.v1.GraphService.SetBranchStatus:input_type -> goap.graph.v1.SetBranchStatusRequest
-	108, // 303: goap.graph.v1.GraphService.SetBranchDescription:input_type -> goap.graph.v1.SetBranchDescriptionRequest
-	110, // 304: goap.graph.v1.GraphService.ListNodeVersions:input_type -> goap.graph.v1.ListNodeVersionsRequest
-	143, // 305: goap.graph.v1.GraphService.DerivedNodes:input_type -> goap.graph.v1.DerivedNodesRequest
-	114, // 306: goap.graph.v1.GraphService.PlanMerge:input_type -> goap.graph.v1.PlanMergeRequest
-	120, // 307: goap.graph.v1.GraphService.MergeBranch:input_type -> goap.graph.v1.MergeBranchRequest
-	115, // 308: goap.graph.v1.GraphService.DiffBaselines:input_type -> goap.graph.v1.DiffBaselinesRequest
-	193, // 309: goap.graph.v1.GraphService.MergeChange:input_type -> goap.graph.v1.MergeChangeRequest
-	195, // 310: goap.graph.v1.GraphService.GetSharedNodes:input_type -> goap.graph.v1.GetSharedNodesRequest
-	198, // 311: goap.graph.v1.GraphService.SplitChange:input_type -> goap.graph.v1.SplitChangeRequest
-	200, // 312: goap.graph.v1.GraphService.ListSubChanges:input_type -> goap.graph.v1.ListSubChangesRequest
-	205, // 313: goap.graph.v1.GraphService.OpenFlow:input_type -> goap.graph.v1.OpenFlowRequest
-	207, // 314: goap.graph.v1.GraphService.AdoptFlow:input_type -> goap.graph.v1.AdoptFlowRequest
-	209, // 315: goap.graph.v1.GraphService.DiscardFlow:input_type -> goap.graph.v1.DiscardFlowRequest
-	211, // 316: goap.graph.v1.GraphService.ListFlows:input_type -> goap.graph.v1.ListFlowsRequest
-	214, // 317: goap.graph.v1.GraphService.ValidateBoard:input_type -> goap.graph.v1.ValidateBoardRequest
-	216, // 318: goap.graph.v1.GraphService.OpenOption:input_type -> goap.graph.v1.OpenOptionRequest
-	218, // 319: goap.graph.v1.GraphService.ActivateOption:input_type -> goap.graph.v1.ActivateOptionRequest
-	220, // 320: goap.graph.v1.GraphService.EvaluateOption:input_type -> goap.graph.v1.EvaluateOptionRequest
-	222, // 321: goap.graph.v1.GraphService.SelectOption:input_type -> goap.graph.v1.SelectOptionRequest
-	224, // 322: goap.graph.v1.GraphService.RejectOption:input_type -> goap.graph.v1.RejectOptionRequest
-	226, // 323: goap.graph.v1.GraphService.ListOptions:input_type -> goap.graph.v1.ListOptionsRequest
-	228, // 324: goap.graph.v1.GraphService.CompareOptions:input_type -> goap.graph.v1.CompareOptionsRequest
-	231, // 325: goap.graph.v1.GraphService.DiffFlows:input_type -> goap.graph.v1.DiffFlowsRequest
-	236, // 326: goap.graph.v1.GraphService.GetChangeView:input_type -> goap.graph.v1.GetChangeViewRequest
-	244, // 327: goap.graph.v1.GraphService.OpenDecision:input_type -> goap.graph.v1.OpenDecisionRequest
-	246, // 328: goap.graph.v1.GraphService.RuleDecision:input_type -> goap.graph.v1.RuleDecisionRequest
-	248, // 329: goap.graph.v1.GraphService.AnswerQuestion:input_type -> goap.graph.v1.AnswerQuestionRequest
-	250, // 330: goap.graph.v1.GraphService.RatifyDecision:input_type -> goap.graph.v1.RatifyDecisionRequest
-	252, // 331: goap.graph.v1.GraphService.ListDecisionPoints:input_type -> goap.graph.v1.ListDecisionPointsRequest
-	238, // 332: goap.graph.v1.GraphService.GetChangeGraph:input_type -> goap.graph.v1.GetChangeGraphRequest
-	122, // 333: goap.graph.v1.GraphService.AppendLog:input_type -> goap.graph.v1.AppendLogRequest
-	127, // 334: goap.graph.v1.GraphService.ListExecutions:input_type -> goap.graph.v1.ListExecutionsRequest
-	0,   // 335: goap.graph.v1.GraphService.RepublishIndex:input_type -> goap.graph.v1.RepublishIndexRequest
-	15,  // 336: goap.graph.v1.GraphService.GetNode:output_type -> goap.graph.v1.GetNodeResponse
-	24,  // 337: goap.graph.v1.GraphService.ListBaselines:output_type -> goap.graph.v1.ListBaselinesResponse
-	18,  // 338: goap.graph.v1.GraphService.TagChange:output_type -> goap.graph.v1.TagChangeResponse
-	20,  // 339: goap.graph.v1.GraphService.ListTags:output_type -> goap.graph.v1.ListTagsResponse
-	22,  // 340: goap.graph.v1.GraphService.DeleteTag:output_type -> goap.graph.v1.DeleteTagResponse
-	26,  // 341: goap.graph.v1.GraphService.GetBaselineGraph:output_type -> goap.graph.v1.GetBaselineGraphResponse
-	29,  // 342: goap.graph.v1.GraphService.ListBaselineNodes:output_type -> goap.graph.v1.ListBaselineNodesResponse
-	31,  // 343: goap.graph.v1.GraphService.ListBaselineLinks:output_type -> goap.graph.v1.ListBaselineLinksResponse
-	33,  // 344: goap.graph.v1.GraphService.GetNodeNeighbourhood:output_type -> goap.graph.v1.GetNodeNeighbourhoodResponse
-	49,  // 345: goap.graph.v1.GraphService.ListNamespaces:output_type -> goap.graph.v1.ListNamespacesResponse
-	57,  // 346: goap.graph.v1.GraphService.GetStructures:output_type -> goap.graph.v1.GetStructuresResponse
-	53,  // 347: goap.graph.v1.GraphService.ListItemTypes:output_type -> goap.graph.v1.ListItemTypesResponse
-	55,  // 348: goap.graph.v1.GraphService.IsAdminOnlyType:output_type -> goap.graph.v1.IsAdminOnlyTypeResponse
-	47,  // 349: goap.graph.v1.GraphService.ListChangeEvents:output_type -> goap.graph.v1.ListChangeEventsResponse
-	37,  // 350: goap.graph.v1.GraphService.ListChangeLog:output_type -> goap.graph.v1.ListChangeLogResponse
-	39,  // 351: goap.graph.v1.GraphService.ExportChangeProvenance:output_type -> goap.graph.v1.ExportChangeProvenanceResponse
-	41,  // 352: goap.graph.v1.GraphService.ExportGraph:output_type -> goap.graph.v1.ExportGraphResponse
-	43,  // 353: goap.graph.v1.GraphService.ExportGraphOkf:output_type -> goap.graph.v1.ExportGraphOkfResponse
-	45,  // 354: goap.graph.v1.GraphService.ImportGraph:output_type -> goap.graph.v1.ImportGraphResponse
-	59,  // 355: goap.graph.v1.GraphService.CreateChange:output_type -> goap.graph.v1.CreateChangeResponse
-	61,  // 356: goap.graph.v1.GraphService.GetChange:output_type -> goap.graph.v1.GetChangeResponse
-	63,  // 357: goap.graph.v1.GraphService.ListChanges:output_type -> goap.graph.v1.ListChangesResponse
-	190, // 358: goap.graph.v1.GraphService.GetChangeImpacts:output_type -> goap.graph.v1.GetChangeImpactsResponse
-	192, // 359: goap.graph.v1.GraphService.ListNodeChanges:output_type -> goap.graph.v1.ListNodeChangesResponse
-	65,  // 360: goap.graph.v1.GraphService.UpdateChange:output_type -> goap.graph.v1.UpdateChangeResponse
-	67,  // 361: goap.graph.v1.GraphService.MoveChange:output_type -> goap.graph.v1.MoveChangeResponse
-	69,  // 362: goap.graph.v1.GraphService.AttachChange:output_type -> goap.graph.v1.AttachChangeResponse
-	71,  // 363: goap.graph.v1.GraphService.DetachChange:output_type -> goap.graph.v1.DetachChangeResponse
-	73,  // 364: goap.graph.v1.GraphService.SetChangeDependencies:output_type -> goap.graph.v1.SetChangeDependenciesResponse
-	78,  // 365: goap.graph.v1.GraphService.GetChangeDependencies:output_type -> goap.graph.v1.GetChangeDependenciesResponse
-	75,  // 366: goap.graph.v1.GraphService.UpgradeChange:output_type -> goap.graph.v1.UpgradeChangeResponse
-	80,  // 367: goap.graph.v1.GraphService.AddItems:output_type -> goap.graph.v1.AddItemsResponse
-	134, // 368: goap.graph.v1.GraphService.ProposeImpact:output_type -> goap.graph.v1.ProposeImpactResponse
-	145, // 369: goap.graph.v1.GraphService.ImpactNodeCreate:output_type -> goap.graph.v1.ImpactNodeCreateResponse
-	147, // 370: goap.graph.v1.GraphService.ImpactNodeCheckout:output_type -> goap.graph.v1.ImpactNodeCheckoutResponse
-	149, // 371: goap.graph.v1.GraphService.ImpactNodeUpdate:output_type -> goap.graph.v1.ImpactNodeUpdateResponse
-	151, // 372: goap.graph.v1.GraphService.ImpactLinkCreate:output_type -> goap.graph.v1.ImpactLinkCreateResponse
-	153, // 373: goap.graph.v1.GraphService.ImpactLinkUpdate:output_type -> goap.graph.v1.ImpactLinkUpdateResponse
-	155, // 374: goap.graph.v1.GraphService.ImpactLinkDelete:output_type -> goap.graph.v1.ImpactLinkDeleteResponse
-	157, // 375: goap.graph.v1.GraphService.ImpactNodeTransition:output_type -> goap.graph.v1.ImpactNodeTransitionResponse
-	159, // 376: goap.graph.v1.GraphService.ImpactNodeCancel:output_type -> goap.graph.v1.ImpactNodeCancelResponse
-	142, // 377: goap.graph.v1.GraphService.ImpactNodeMerge:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
-	142, // 378: goap.graph.v1.GraphService.ImpactNodeSplit:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
-	161, // 379: goap.graph.v1.GraphService.WithdrawImpact:output_type -> goap.graph.v1.WithdrawImpactResponse
-	163, // 380: goap.graph.v1.GraphService.WithdrawImpacts:output_type -> goap.graph.v1.WithdrawImpactsResponse
-	166, // 381: goap.graph.v1.GraphService.RebaseChange:output_type -> goap.graph.v1.RebaseChangeResponse
-	168, // 382: goap.graph.v1.GraphService.ImpactNodeResolve:output_type -> goap.graph.v1.ImpactNodeResolveResponse
-	173, // 383: goap.graph.v1.GraphService.GetRebaseState:output_type -> goap.graph.v1.GetRebaseStateResponse
-	171, // 384: goap.graph.v1.GraphService.GetCommitState:output_type -> goap.graph.v1.GetCommitStateResponse
-	175, // 385: goap.graph.v1.GraphService.ImpactNodeReview:output_type -> goap.graph.v1.ImpactNodeReviewResponse
-	178, // 386: goap.graph.v1.GraphService.ImpactNodeReviewBatch:output_type -> goap.graph.v1.ImpactNodeReviewBatchResponse
-	186, // 387: goap.graph.v1.GraphService.ReviewOpen:output_type -> goap.graph.v1.ReviewResponse
-	186, // 388: goap.graph.v1.GraphService.ReviewUpdate:output_type -> goap.graph.v1.ReviewResponse
-	186, // 389: goap.graph.v1.GraphService.ReviewSubmit:output_type -> goap.graph.v1.ReviewResponse
-	186, // 390: goap.graph.v1.GraphService.ReviewDiscard:output_type -> goap.graph.v1.ReviewResponse
-	188, // 391: goap.graph.v1.GraphService.ReopenChangeImpacts:output_type -> goap.graph.v1.ReopenChangeImpactsResponse
-	132, // 392: goap.graph.v1.GraphService.CommitEdits:output_type -> goap.graph.v1.CommitEditsResponse
-	82,  // 393: goap.graph.v1.GraphService.GetBlackboard:output_type -> goap.graph.v1.GetBlackboardResponse
-	98,  // 394: goap.graph.v1.GraphService.ApplyChange:output_type -> goap.graph.v1.ApplyChangeResponse
-	85,  // 395: goap.graph.v1.GraphService.CommitChange:output_type -> goap.graph.v1.CommitChangeResponse
-	87,  // 396: goap.graph.v1.GraphService.TransitionChange:output_type -> goap.graph.v1.TransitionChangeResponse
-	89,  // 397: goap.graph.v1.GraphService.DeleteChange:output_type -> goap.graph.v1.DeleteChangeResponse
-	97,  // 398: goap.graph.v1.GraphService.GetPendingSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	97,  // 399: goap.graph.v1.GraphService.StageSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	97,  // 400: goap.graph.v1.GraphService.SaveSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	97,  // 401: goap.graph.v1.GraphService.DiscardSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	101, // 402: goap.graph.v1.GraphService.CreateBranch:output_type -> goap.graph.v1.CreateBranchResponse
-	103, // 403: goap.graph.v1.GraphService.ListBranches:output_type -> goap.graph.v1.ListBranchesResponse
-	105, // 404: goap.graph.v1.GraphService.GetBranch:output_type -> goap.graph.v1.GetBranchResponse
-	107, // 405: goap.graph.v1.GraphService.SetBranchStatus:output_type -> goap.graph.v1.SetBranchStatusResponse
-	109, // 406: goap.graph.v1.GraphService.SetBranchDescription:output_type -> goap.graph.v1.SetBranchDescriptionResponse
-	111, // 407: goap.graph.v1.GraphService.ListNodeVersions:output_type -> goap.graph.v1.ListNodeVersionsResponse
-	144, // 408: goap.graph.v1.GraphService.DerivedNodes:output_type -> goap.graph.v1.DerivedNodesResponse
-	118, // 409: goap.graph.v1.GraphService.PlanMerge:output_type -> goap.graph.v1.PlanMergeResponse
-	121, // 410: goap.graph.v1.GraphService.MergeBranch:output_type -> goap.graph.v1.MergeBranchResponse
-	116, // 411: goap.graph.v1.GraphService.DiffBaselines:output_type -> goap.graph.v1.DiffBaselinesResponse
-	194, // 412: goap.graph.v1.GraphService.MergeChange:output_type -> goap.graph.v1.MergeChangeResponse
-	197, // 413: goap.graph.v1.GraphService.GetSharedNodes:output_type -> goap.graph.v1.GetSharedNodesResponse
-	199, // 414: goap.graph.v1.GraphService.SplitChange:output_type -> goap.graph.v1.SplitChangeResponse
-	201, // 415: goap.graph.v1.GraphService.ListSubChanges:output_type -> goap.graph.v1.ListSubChangesResponse
-	206, // 416: goap.graph.v1.GraphService.OpenFlow:output_type -> goap.graph.v1.OpenFlowResponse
-	208, // 417: goap.graph.v1.GraphService.AdoptFlow:output_type -> goap.graph.v1.AdoptFlowResponse
-	210, // 418: goap.graph.v1.GraphService.DiscardFlow:output_type -> goap.graph.v1.DiscardFlowResponse
-	212, // 419: goap.graph.v1.GraphService.ListFlows:output_type -> goap.graph.v1.ListFlowsResponse
-	215, // 420: goap.graph.v1.GraphService.ValidateBoard:output_type -> goap.graph.v1.ValidateBoardResponse
-	217, // 421: goap.graph.v1.GraphService.OpenOption:output_type -> goap.graph.v1.OpenOptionResponse
-	219, // 422: goap.graph.v1.GraphService.ActivateOption:output_type -> goap.graph.v1.ActivateOptionResponse
-	221, // 423: goap.graph.v1.GraphService.EvaluateOption:output_type -> goap.graph.v1.EvaluateOptionResponse
-	223, // 424: goap.graph.v1.GraphService.SelectOption:output_type -> goap.graph.v1.SelectOptionResponse
-	225, // 425: goap.graph.v1.GraphService.RejectOption:output_type -> goap.graph.v1.RejectOptionResponse
-	227, // 426: goap.graph.v1.GraphService.ListOptions:output_type -> goap.graph.v1.ListOptionsResponse
-	230, // 427: goap.graph.v1.GraphService.CompareOptions:output_type -> goap.graph.v1.CompareOptionsResponse
-	235, // 428: goap.graph.v1.GraphService.DiffFlows:output_type -> goap.graph.v1.DiffFlowsResponse
-	237, // 429: goap.graph.v1.GraphService.GetChangeView:output_type -> goap.graph.v1.GetChangeViewResponse
-	245, // 430: goap.graph.v1.GraphService.OpenDecision:output_type -> goap.graph.v1.OpenDecisionResponse
-	247, // 431: goap.graph.v1.GraphService.RuleDecision:output_type -> goap.graph.v1.RuleDecisionResponse
-	249, // 432: goap.graph.v1.GraphService.AnswerQuestion:output_type -> goap.graph.v1.AnswerQuestionResponse
-	251, // 433: goap.graph.v1.GraphService.RatifyDecision:output_type -> goap.graph.v1.RatifyDecisionResponse
-	253, // 434: goap.graph.v1.GraphService.ListDecisionPoints:output_type -> goap.graph.v1.ListDecisionPointsResponse
-	239, // 435: goap.graph.v1.GraphService.GetChangeGraph:output_type -> goap.graph.v1.GetChangeGraphResponse
-	123, // 436: goap.graph.v1.GraphService.AppendLog:output_type -> goap.graph.v1.AppendLogResponse
-	128, // 437: goap.graph.v1.GraphService.ListExecutions:output_type -> goap.graph.v1.ListExecutionsResponse
-	1,   // 438: goap.graph.v1.GraphService.RepublishIndex:output_type -> goap.graph.v1.RepublishIndexResponse
-	336, // [336:439] is the sub-list for method output_type
-	233, // [233:336] is the sub-list for method input_type
+	56,  // 252: goap.graph.v1.GraphService.LoadDemoData:input_type -> goap.graph.v1.LoadDemoDataRequest
+	60,  // 253: goap.graph.v1.GraphService.CreateChange:input_type -> goap.graph.v1.CreateChangeRequest
+	62,  // 254: goap.graph.v1.GraphService.GetChange:input_type -> goap.graph.v1.GetChangeRequest
+	64,  // 255: goap.graph.v1.GraphService.ListChanges:input_type -> goap.graph.v1.ListChangesRequest
+	191, // 256: goap.graph.v1.GraphService.GetChangeImpacts:input_type -> goap.graph.v1.GetChangeImpactsRequest
+	193, // 257: goap.graph.v1.GraphService.ListNodeChanges:input_type -> goap.graph.v1.ListNodeChangesRequest
+	66,  // 258: goap.graph.v1.GraphService.UpdateChange:input_type -> goap.graph.v1.UpdateChangeRequest
+	68,  // 259: goap.graph.v1.GraphService.MoveChange:input_type -> goap.graph.v1.MoveChangeRequest
+	70,  // 260: goap.graph.v1.GraphService.AttachChange:input_type -> goap.graph.v1.AttachChangeRequest
+	72,  // 261: goap.graph.v1.GraphService.DetachChange:input_type -> goap.graph.v1.DetachChangeRequest
+	74,  // 262: goap.graph.v1.GraphService.SetChangeDependencies:input_type -> goap.graph.v1.SetChangeDependenciesRequest
+	78,  // 263: goap.graph.v1.GraphService.GetChangeDependencies:input_type -> goap.graph.v1.GetChangeDependenciesRequest
+	76,  // 264: goap.graph.v1.GraphService.UpgradeChange:input_type -> goap.graph.v1.UpgradeChangeRequest
+	81,  // 265: goap.graph.v1.GraphService.AddItems:input_type -> goap.graph.v1.AddItemsRequest
+	135, // 266: goap.graph.v1.GraphService.ProposeImpact:input_type -> goap.graph.v1.ProposeImpactRequest
+	138, // 267: goap.graph.v1.GraphService.ImpactNodeCreate:input_type -> goap.graph.v1.ImpactNodeCreateRequest
+	148, // 268: goap.graph.v1.GraphService.ImpactNodeCheckout:input_type -> goap.graph.v1.ImpactNodeCheckoutRequest
+	150, // 269: goap.graph.v1.GraphService.ImpactNodeUpdate:input_type -> goap.graph.v1.ImpactNodeUpdateRequest
+	152, // 270: goap.graph.v1.GraphService.ImpactLinkCreate:input_type -> goap.graph.v1.ImpactLinkCreateRequest
+	154, // 271: goap.graph.v1.GraphService.ImpactLinkUpdate:input_type -> goap.graph.v1.ImpactLinkUpdateRequest
+	156, // 272: goap.graph.v1.GraphService.ImpactLinkDelete:input_type -> goap.graph.v1.ImpactLinkDeleteRequest
+	158, // 273: goap.graph.v1.GraphService.ImpactNodeTransition:input_type -> goap.graph.v1.ImpactNodeTransitionRequest
+	160, // 274: goap.graph.v1.GraphService.ImpactNodeCancel:input_type -> goap.graph.v1.ImpactNodeCancelRequest
+	141, // 275: goap.graph.v1.GraphService.ImpactNodeMerge:input_type -> goap.graph.v1.ImpactNodeMergeRequest
+	142, // 276: goap.graph.v1.GraphService.ImpactNodeSplit:input_type -> goap.graph.v1.ImpactNodeSplitRequest
+	162, // 277: goap.graph.v1.GraphService.WithdrawImpact:input_type -> goap.graph.v1.WithdrawImpactRequest
+	164, // 278: goap.graph.v1.GraphService.WithdrawImpacts:input_type -> goap.graph.v1.WithdrawImpactsRequest
+	166, // 279: goap.graph.v1.GraphService.RebaseChange:input_type -> goap.graph.v1.RebaseChangeRequest
+	169, // 280: goap.graph.v1.GraphService.ImpactNodeResolve:input_type -> goap.graph.v1.ImpactNodeResolveRequest
+	171, // 281: goap.graph.v1.GraphService.GetRebaseState:input_type -> goap.graph.v1.GetRebaseStateRequest
+	172, // 282: goap.graph.v1.GraphService.GetCommitState:input_type -> goap.graph.v1.GetCommitStateRequest
+	176, // 283: goap.graph.v1.GraphService.ImpactNodeReview:input_type -> goap.graph.v1.ImpactNodeReviewRequest
+	179, // 284: goap.graph.v1.GraphService.ImpactNodeReviewBatch:input_type -> goap.graph.v1.ImpactNodeReviewBatchRequest
+	183, // 285: goap.graph.v1.GraphService.ReviewOpen:input_type -> goap.graph.v1.ReviewOpenRequest
+	185, // 286: goap.graph.v1.GraphService.ReviewUpdate:input_type -> goap.graph.v1.ReviewUpdateRequest
+	186, // 287: goap.graph.v1.GraphService.ReviewSubmit:input_type -> goap.graph.v1.ReviewSubmitRequest
+	187, // 288: goap.graph.v1.GraphService.ReviewDiscard:input_type -> goap.graph.v1.ReviewDiscardRequest
+	189, // 289: goap.graph.v1.GraphService.ReopenChangeImpacts:input_type -> goap.graph.v1.ReopenChangeImpactsRequest
+	133, // 290: goap.graph.v1.GraphService.CommitEdits:input_type -> goap.graph.v1.CommitEditsRequest
+	83,  // 291: goap.graph.v1.GraphService.GetBlackboard:input_type -> goap.graph.v1.GetBlackboardRequest
+	85,  // 292: goap.graph.v1.GraphService.ApplyChange:input_type -> goap.graph.v1.ApplyChangeRequest
+	86,  // 293: goap.graph.v1.GraphService.CommitChange:input_type -> goap.graph.v1.CommitChangeRequest
+	88,  // 294: goap.graph.v1.GraphService.TransitionChange:input_type -> goap.graph.v1.TransitionChangeRequest
+	90,  // 295: goap.graph.v1.GraphService.DeleteChange:input_type -> goap.graph.v1.DeleteChangeRequest
+	92,  // 296: goap.graph.v1.GraphService.GetPendingSettings:input_type -> goap.graph.v1.GetPendingSettingsRequest
+	96,  // 297: goap.graph.v1.GraphService.StageSettings:input_type -> goap.graph.v1.StageSettingsRequest
+	93,  // 298: goap.graph.v1.GraphService.SaveSettings:input_type -> goap.graph.v1.SaveSettingsRequest
+	94,  // 299: goap.graph.v1.GraphService.DiscardSettings:input_type -> goap.graph.v1.DiscardSettingsRequest
+	102, // 300: goap.graph.v1.GraphService.CreateBranch:input_type -> goap.graph.v1.CreateBranchRequest
+	104, // 301: goap.graph.v1.GraphService.ListBranches:input_type -> goap.graph.v1.ListBranchesRequest
+	106, // 302: goap.graph.v1.GraphService.GetBranch:input_type -> goap.graph.v1.GetBranchRequest
+	108, // 303: goap.graph.v1.GraphService.SetBranchStatus:input_type -> goap.graph.v1.SetBranchStatusRequest
+	110, // 304: goap.graph.v1.GraphService.SetBranchDescription:input_type -> goap.graph.v1.SetBranchDescriptionRequest
+	112, // 305: goap.graph.v1.GraphService.ListNodeVersions:input_type -> goap.graph.v1.ListNodeVersionsRequest
+	145, // 306: goap.graph.v1.GraphService.DerivedNodes:input_type -> goap.graph.v1.DerivedNodesRequest
+	116, // 307: goap.graph.v1.GraphService.PlanMerge:input_type -> goap.graph.v1.PlanMergeRequest
+	122, // 308: goap.graph.v1.GraphService.MergeBranch:input_type -> goap.graph.v1.MergeBranchRequest
+	117, // 309: goap.graph.v1.GraphService.DiffBaselines:input_type -> goap.graph.v1.DiffBaselinesRequest
+	195, // 310: goap.graph.v1.GraphService.MergeChange:input_type -> goap.graph.v1.MergeChangeRequest
+	197, // 311: goap.graph.v1.GraphService.GetSharedNodes:input_type -> goap.graph.v1.GetSharedNodesRequest
+	200, // 312: goap.graph.v1.GraphService.SplitChange:input_type -> goap.graph.v1.SplitChangeRequest
+	202, // 313: goap.graph.v1.GraphService.ListSubChanges:input_type -> goap.graph.v1.ListSubChangesRequest
+	207, // 314: goap.graph.v1.GraphService.OpenFlow:input_type -> goap.graph.v1.OpenFlowRequest
+	209, // 315: goap.graph.v1.GraphService.AdoptFlow:input_type -> goap.graph.v1.AdoptFlowRequest
+	211, // 316: goap.graph.v1.GraphService.DiscardFlow:input_type -> goap.graph.v1.DiscardFlowRequest
+	213, // 317: goap.graph.v1.GraphService.ListFlows:input_type -> goap.graph.v1.ListFlowsRequest
+	216, // 318: goap.graph.v1.GraphService.ValidateBoard:input_type -> goap.graph.v1.ValidateBoardRequest
+	218, // 319: goap.graph.v1.GraphService.OpenOption:input_type -> goap.graph.v1.OpenOptionRequest
+	220, // 320: goap.graph.v1.GraphService.ActivateOption:input_type -> goap.graph.v1.ActivateOptionRequest
+	222, // 321: goap.graph.v1.GraphService.EvaluateOption:input_type -> goap.graph.v1.EvaluateOptionRequest
+	224, // 322: goap.graph.v1.GraphService.SelectOption:input_type -> goap.graph.v1.SelectOptionRequest
+	226, // 323: goap.graph.v1.GraphService.RejectOption:input_type -> goap.graph.v1.RejectOptionRequest
+	228, // 324: goap.graph.v1.GraphService.ListOptions:input_type -> goap.graph.v1.ListOptionsRequest
+	230, // 325: goap.graph.v1.GraphService.CompareOptions:input_type -> goap.graph.v1.CompareOptionsRequest
+	233, // 326: goap.graph.v1.GraphService.DiffFlows:input_type -> goap.graph.v1.DiffFlowsRequest
+	238, // 327: goap.graph.v1.GraphService.GetChangeView:input_type -> goap.graph.v1.GetChangeViewRequest
+	246, // 328: goap.graph.v1.GraphService.OpenDecision:input_type -> goap.graph.v1.OpenDecisionRequest
+	248, // 329: goap.graph.v1.GraphService.RuleDecision:input_type -> goap.graph.v1.RuleDecisionRequest
+	250, // 330: goap.graph.v1.GraphService.AnswerQuestion:input_type -> goap.graph.v1.AnswerQuestionRequest
+	252, // 331: goap.graph.v1.GraphService.RatifyDecision:input_type -> goap.graph.v1.RatifyDecisionRequest
+	254, // 332: goap.graph.v1.GraphService.ListDecisionPoints:input_type -> goap.graph.v1.ListDecisionPointsRequest
+	240, // 333: goap.graph.v1.GraphService.GetChangeGraph:input_type -> goap.graph.v1.GetChangeGraphRequest
+	124, // 334: goap.graph.v1.GraphService.AppendLog:input_type -> goap.graph.v1.AppendLogRequest
+	129, // 335: goap.graph.v1.GraphService.ListExecutions:input_type -> goap.graph.v1.ListExecutionsRequest
+	0,   // 336: goap.graph.v1.GraphService.RepublishIndex:input_type -> goap.graph.v1.RepublishIndexRequest
+	15,  // 337: goap.graph.v1.GraphService.GetNode:output_type -> goap.graph.v1.GetNodeResponse
+	24,  // 338: goap.graph.v1.GraphService.ListBaselines:output_type -> goap.graph.v1.ListBaselinesResponse
+	18,  // 339: goap.graph.v1.GraphService.TagChange:output_type -> goap.graph.v1.TagChangeResponse
+	20,  // 340: goap.graph.v1.GraphService.ListTags:output_type -> goap.graph.v1.ListTagsResponse
+	22,  // 341: goap.graph.v1.GraphService.DeleteTag:output_type -> goap.graph.v1.DeleteTagResponse
+	26,  // 342: goap.graph.v1.GraphService.GetBaselineGraph:output_type -> goap.graph.v1.GetBaselineGraphResponse
+	29,  // 343: goap.graph.v1.GraphService.ListBaselineNodes:output_type -> goap.graph.v1.ListBaselineNodesResponse
+	31,  // 344: goap.graph.v1.GraphService.ListBaselineLinks:output_type -> goap.graph.v1.ListBaselineLinksResponse
+	33,  // 345: goap.graph.v1.GraphService.GetNodeNeighbourhood:output_type -> goap.graph.v1.GetNodeNeighbourhoodResponse
+	49,  // 346: goap.graph.v1.GraphService.ListNamespaces:output_type -> goap.graph.v1.ListNamespacesResponse
+	59,  // 347: goap.graph.v1.GraphService.GetStructures:output_type -> goap.graph.v1.GetStructuresResponse
+	53,  // 348: goap.graph.v1.GraphService.ListItemTypes:output_type -> goap.graph.v1.ListItemTypesResponse
+	55,  // 349: goap.graph.v1.GraphService.IsAdminOnlyType:output_type -> goap.graph.v1.IsAdminOnlyTypeResponse
+	47,  // 350: goap.graph.v1.GraphService.ListChangeEvents:output_type -> goap.graph.v1.ListChangeEventsResponse
+	37,  // 351: goap.graph.v1.GraphService.ListChangeLog:output_type -> goap.graph.v1.ListChangeLogResponse
+	39,  // 352: goap.graph.v1.GraphService.ExportChangeProvenance:output_type -> goap.graph.v1.ExportChangeProvenanceResponse
+	41,  // 353: goap.graph.v1.GraphService.ExportGraph:output_type -> goap.graph.v1.ExportGraphResponse
+	43,  // 354: goap.graph.v1.GraphService.ExportGraphOkf:output_type -> goap.graph.v1.ExportGraphOkfResponse
+	45,  // 355: goap.graph.v1.GraphService.ImportGraph:output_type -> goap.graph.v1.ImportGraphResponse
+	57,  // 356: goap.graph.v1.GraphService.LoadDemoData:output_type -> goap.graph.v1.LoadDemoDataResponse
+	61,  // 357: goap.graph.v1.GraphService.CreateChange:output_type -> goap.graph.v1.CreateChangeResponse
+	63,  // 358: goap.graph.v1.GraphService.GetChange:output_type -> goap.graph.v1.GetChangeResponse
+	65,  // 359: goap.graph.v1.GraphService.ListChanges:output_type -> goap.graph.v1.ListChangesResponse
+	192, // 360: goap.graph.v1.GraphService.GetChangeImpacts:output_type -> goap.graph.v1.GetChangeImpactsResponse
+	194, // 361: goap.graph.v1.GraphService.ListNodeChanges:output_type -> goap.graph.v1.ListNodeChangesResponse
+	67,  // 362: goap.graph.v1.GraphService.UpdateChange:output_type -> goap.graph.v1.UpdateChangeResponse
+	69,  // 363: goap.graph.v1.GraphService.MoveChange:output_type -> goap.graph.v1.MoveChangeResponse
+	71,  // 364: goap.graph.v1.GraphService.AttachChange:output_type -> goap.graph.v1.AttachChangeResponse
+	73,  // 365: goap.graph.v1.GraphService.DetachChange:output_type -> goap.graph.v1.DetachChangeResponse
+	75,  // 366: goap.graph.v1.GraphService.SetChangeDependencies:output_type -> goap.graph.v1.SetChangeDependenciesResponse
+	80,  // 367: goap.graph.v1.GraphService.GetChangeDependencies:output_type -> goap.graph.v1.GetChangeDependenciesResponse
+	77,  // 368: goap.graph.v1.GraphService.UpgradeChange:output_type -> goap.graph.v1.UpgradeChangeResponse
+	82,  // 369: goap.graph.v1.GraphService.AddItems:output_type -> goap.graph.v1.AddItemsResponse
+	136, // 370: goap.graph.v1.GraphService.ProposeImpact:output_type -> goap.graph.v1.ProposeImpactResponse
+	147, // 371: goap.graph.v1.GraphService.ImpactNodeCreate:output_type -> goap.graph.v1.ImpactNodeCreateResponse
+	149, // 372: goap.graph.v1.GraphService.ImpactNodeCheckout:output_type -> goap.graph.v1.ImpactNodeCheckoutResponse
+	151, // 373: goap.graph.v1.GraphService.ImpactNodeUpdate:output_type -> goap.graph.v1.ImpactNodeUpdateResponse
+	153, // 374: goap.graph.v1.GraphService.ImpactLinkCreate:output_type -> goap.graph.v1.ImpactLinkCreateResponse
+	155, // 375: goap.graph.v1.GraphService.ImpactLinkUpdate:output_type -> goap.graph.v1.ImpactLinkUpdateResponse
+	157, // 376: goap.graph.v1.GraphService.ImpactLinkDelete:output_type -> goap.graph.v1.ImpactLinkDeleteResponse
+	159, // 377: goap.graph.v1.GraphService.ImpactNodeTransition:output_type -> goap.graph.v1.ImpactNodeTransitionResponse
+	161, // 378: goap.graph.v1.GraphService.ImpactNodeCancel:output_type -> goap.graph.v1.ImpactNodeCancelResponse
+	144, // 379: goap.graph.v1.GraphService.ImpactNodeMerge:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
+	144, // 380: goap.graph.v1.GraphService.ImpactNodeSplit:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
+	163, // 381: goap.graph.v1.GraphService.WithdrawImpact:output_type -> goap.graph.v1.WithdrawImpactResponse
+	165, // 382: goap.graph.v1.GraphService.WithdrawImpacts:output_type -> goap.graph.v1.WithdrawImpactsResponse
+	168, // 383: goap.graph.v1.GraphService.RebaseChange:output_type -> goap.graph.v1.RebaseChangeResponse
+	170, // 384: goap.graph.v1.GraphService.ImpactNodeResolve:output_type -> goap.graph.v1.ImpactNodeResolveResponse
+	175, // 385: goap.graph.v1.GraphService.GetRebaseState:output_type -> goap.graph.v1.GetRebaseStateResponse
+	173, // 386: goap.graph.v1.GraphService.GetCommitState:output_type -> goap.graph.v1.GetCommitStateResponse
+	177, // 387: goap.graph.v1.GraphService.ImpactNodeReview:output_type -> goap.graph.v1.ImpactNodeReviewResponse
+	180, // 388: goap.graph.v1.GraphService.ImpactNodeReviewBatch:output_type -> goap.graph.v1.ImpactNodeReviewBatchResponse
+	188, // 389: goap.graph.v1.GraphService.ReviewOpen:output_type -> goap.graph.v1.ReviewResponse
+	188, // 390: goap.graph.v1.GraphService.ReviewUpdate:output_type -> goap.graph.v1.ReviewResponse
+	188, // 391: goap.graph.v1.GraphService.ReviewSubmit:output_type -> goap.graph.v1.ReviewResponse
+	188, // 392: goap.graph.v1.GraphService.ReviewDiscard:output_type -> goap.graph.v1.ReviewResponse
+	190, // 393: goap.graph.v1.GraphService.ReopenChangeImpacts:output_type -> goap.graph.v1.ReopenChangeImpactsResponse
+	134, // 394: goap.graph.v1.GraphService.CommitEdits:output_type -> goap.graph.v1.CommitEditsResponse
+	84,  // 395: goap.graph.v1.GraphService.GetBlackboard:output_type -> goap.graph.v1.GetBlackboardResponse
+	100, // 396: goap.graph.v1.GraphService.ApplyChange:output_type -> goap.graph.v1.ApplyChangeResponse
+	87,  // 397: goap.graph.v1.GraphService.CommitChange:output_type -> goap.graph.v1.CommitChangeResponse
+	89,  // 398: goap.graph.v1.GraphService.TransitionChange:output_type -> goap.graph.v1.TransitionChangeResponse
+	91,  // 399: goap.graph.v1.GraphService.DeleteChange:output_type -> goap.graph.v1.DeleteChangeResponse
+	99,  // 400: goap.graph.v1.GraphService.GetPendingSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	99,  // 401: goap.graph.v1.GraphService.StageSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	99,  // 402: goap.graph.v1.GraphService.SaveSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	99,  // 403: goap.graph.v1.GraphService.DiscardSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	103, // 404: goap.graph.v1.GraphService.CreateBranch:output_type -> goap.graph.v1.CreateBranchResponse
+	105, // 405: goap.graph.v1.GraphService.ListBranches:output_type -> goap.graph.v1.ListBranchesResponse
+	107, // 406: goap.graph.v1.GraphService.GetBranch:output_type -> goap.graph.v1.GetBranchResponse
+	109, // 407: goap.graph.v1.GraphService.SetBranchStatus:output_type -> goap.graph.v1.SetBranchStatusResponse
+	111, // 408: goap.graph.v1.GraphService.SetBranchDescription:output_type -> goap.graph.v1.SetBranchDescriptionResponse
+	113, // 409: goap.graph.v1.GraphService.ListNodeVersions:output_type -> goap.graph.v1.ListNodeVersionsResponse
+	146, // 410: goap.graph.v1.GraphService.DerivedNodes:output_type -> goap.graph.v1.DerivedNodesResponse
+	120, // 411: goap.graph.v1.GraphService.PlanMerge:output_type -> goap.graph.v1.PlanMergeResponse
+	123, // 412: goap.graph.v1.GraphService.MergeBranch:output_type -> goap.graph.v1.MergeBranchResponse
+	118, // 413: goap.graph.v1.GraphService.DiffBaselines:output_type -> goap.graph.v1.DiffBaselinesResponse
+	196, // 414: goap.graph.v1.GraphService.MergeChange:output_type -> goap.graph.v1.MergeChangeResponse
+	199, // 415: goap.graph.v1.GraphService.GetSharedNodes:output_type -> goap.graph.v1.GetSharedNodesResponse
+	201, // 416: goap.graph.v1.GraphService.SplitChange:output_type -> goap.graph.v1.SplitChangeResponse
+	203, // 417: goap.graph.v1.GraphService.ListSubChanges:output_type -> goap.graph.v1.ListSubChangesResponse
+	208, // 418: goap.graph.v1.GraphService.OpenFlow:output_type -> goap.graph.v1.OpenFlowResponse
+	210, // 419: goap.graph.v1.GraphService.AdoptFlow:output_type -> goap.graph.v1.AdoptFlowResponse
+	212, // 420: goap.graph.v1.GraphService.DiscardFlow:output_type -> goap.graph.v1.DiscardFlowResponse
+	214, // 421: goap.graph.v1.GraphService.ListFlows:output_type -> goap.graph.v1.ListFlowsResponse
+	217, // 422: goap.graph.v1.GraphService.ValidateBoard:output_type -> goap.graph.v1.ValidateBoardResponse
+	219, // 423: goap.graph.v1.GraphService.OpenOption:output_type -> goap.graph.v1.OpenOptionResponse
+	221, // 424: goap.graph.v1.GraphService.ActivateOption:output_type -> goap.graph.v1.ActivateOptionResponse
+	223, // 425: goap.graph.v1.GraphService.EvaluateOption:output_type -> goap.graph.v1.EvaluateOptionResponse
+	225, // 426: goap.graph.v1.GraphService.SelectOption:output_type -> goap.graph.v1.SelectOptionResponse
+	227, // 427: goap.graph.v1.GraphService.RejectOption:output_type -> goap.graph.v1.RejectOptionResponse
+	229, // 428: goap.graph.v1.GraphService.ListOptions:output_type -> goap.graph.v1.ListOptionsResponse
+	232, // 429: goap.graph.v1.GraphService.CompareOptions:output_type -> goap.graph.v1.CompareOptionsResponse
+	237, // 430: goap.graph.v1.GraphService.DiffFlows:output_type -> goap.graph.v1.DiffFlowsResponse
+	239, // 431: goap.graph.v1.GraphService.GetChangeView:output_type -> goap.graph.v1.GetChangeViewResponse
+	247, // 432: goap.graph.v1.GraphService.OpenDecision:output_type -> goap.graph.v1.OpenDecisionResponse
+	249, // 433: goap.graph.v1.GraphService.RuleDecision:output_type -> goap.graph.v1.RuleDecisionResponse
+	251, // 434: goap.graph.v1.GraphService.AnswerQuestion:output_type -> goap.graph.v1.AnswerQuestionResponse
+	253, // 435: goap.graph.v1.GraphService.RatifyDecision:output_type -> goap.graph.v1.RatifyDecisionResponse
+	255, // 436: goap.graph.v1.GraphService.ListDecisionPoints:output_type -> goap.graph.v1.ListDecisionPointsResponse
+	241, // 437: goap.graph.v1.GraphService.GetChangeGraph:output_type -> goap.graph.v1.GetChangeGraphResponse
+	125, // 438: goap.graph.v1.GraphService.AppendLog:output_type -> goap.graph.v1.AppendLogResponse
+	130, // 439: goap.graph.v1.GraphService.ListExecutions:output_type -> goap.graph.v1.ListExecutionsResponse
+	1,   // 440: goap.graph.v1.GraphService.RepublishIndex:output_type -> goap.graph.v1.RepublishIndexResponse
+	337, // [337:441] is the sub-list for method output_type
+	233, // [233:337] is the sub-list for method input_type
 	233, // [233:233] is the sub-list for extension type_name
 	233, // [233:233] is the sub-list for extension extendee
 	0,   // [0:233] is the sub-list for field type_name
@@ -18783,15 +18882,15 @@ func file_goap_graph_v1_graph_proto_init() {
 	if File_goap_graph_v1_graph_proto != nil {
 		return
 	}
-	file_goap_graph_v1_graph_proto_msgTypes[64].OneofWrappers = []any{}
-	file_goap_graph_v1_graph_proto_msgTypes[126].OneofWrappers = []any{}
+	file_goap_graph_v1_graph_proto_msgTypes[66].OneofWrappers = []any{}
+	file_goap_graph_v1_graph_proto_msgTypes[128].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_graph_v1_graph_proto_rawDesc), len(file_goap_graph_v1_graph_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   262,
+			NumMessages:   264,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

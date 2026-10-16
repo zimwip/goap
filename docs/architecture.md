@@ -1358,7 +1358,12 @@ Every composition (`goap-dev`, `platform/cmd/graph`) seeds the platform through 
 
 Development and demo data is not part of it (`platform/devseed`: `Demo` the ALM repository, `DocumentRepository` the
 document-repository MCP and its localfs adapter definition, `LocalFS` a directory as the default organisation's repository).
-`goap-dev` passes them as `Options.Dev`; `platform/cmd/graph` only with `GOAP_GRAPH_SEED=demo`. `platform/cmd/graph` still bootstraps the roots
+`goap-dev` passes them as `Options.Dev`, the demo only with `GOAP_DEV_DEMO=1`; `platform/cmd/graph` the document repository
+with `GOAP_GRAPH_SEED=dev`, the demo too with `GOAP_GRAPH_SEED=demo`. Otherwise an administrator loads the demo on demand:
+*Settings → Demo data → Load demo data* (RPC `GraphService.LoadDemoData`, `graphsvc.Handler.Demo` = `devseed.DemoLoader`,
+administrators only, idempotent). The demo is the organisation `ORG-ACME` and its teams, the project `PROJ-DEMO` (under
+`PROJ-ROOT`, methodology `sdlc`) bound to `ORG-ACME` by an assignment holding the roles of `sdlc`, and the ALM repository,
+written in `PROJ-DEMO`. `platform/cmd/graph` still bootstraps the roots
 before serving (a no-op for `Boot` afterwards). Platform services act as `authz.System(name, roles...)`
 (`system:registry`, `system:graph`, `system:trigger:<key>`).
 

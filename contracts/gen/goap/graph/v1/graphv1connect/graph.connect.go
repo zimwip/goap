@@ -86,6 +86,9 @@ const (
 	// GraphServiceImportGraphProcedure is the fully-qualified name of the GraphService's ImportGraph
 	// RPC.
 	GraphServiceImportGraphProcedure = "/goap.graph.v1.GraphService/ImportGraph"
+	// GraphServiceLoadDemoDataProcedure is the fully-qualified name of the GraphService's LoadDemoData
+	// RPC.
+	GraphServiceLoadDemoDataProcedure = "/goap.graph.v1.GraphService/LoadDemoData"
 	// GraphServiceCreateChangeProcedure is the fully-qualified name of the GraphService's CreateChange
 	// RPC.
 	GraphServiceCreateChangeProcedure = "/goap.graph.v1.GraphService/CreateChange"
@@ -363,6 +366,9 @@ type GraphServiceClient interface {
 	ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest]) (*connect.ServerStreamForClient[v1.ExportGraphOkfResponse], error)
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
+	// Loads the demo data (administrators only): the demo organisation, the demo project bound to it and the ALM
+	// repository acting in that project, each part when it is missing. Unimplemented where the deployment ships no demo.
+	LoadDemoData(context.Context, *connect.Request[v1.LoadDemoDataRequest]) (*connect.Response[v1.LoadDemoDataResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -643,6 +649,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceImportGraphProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("ImportGraph")),
+			connect.WithClientOptions(opts...),
+		),
+		loadDemoData: connect.NewClient[v1.LoadDemoDataRequest, v1.LoadDemoDataResponse](
+			httpClient,
+			baseURL+GraphServiceLoadDemoDataProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("LoadDemoData")),
 			connect.WithClientOptions(opts...),
 		),
 		createChange: connect.NewClient[v1.CreateChangeRequest, v1.CreateChangeResponse](
@@ -1173,6 +1185,7 @@ type graphServiceClient struct {
 	exportGraph            *connect.Client[v1.ExportGraphRequest, v1.ExportGraphResponse]
 	exportGraphOkf         *connect.Client[v1.ExportGraphOkfRequest, v1.ExportGraphOkfResponse]
 	importGraph            *connect.Client[v1.ImportGraphRequest, v1.ImportGraphResponse]
+	loadDemoData           *connect.Client[v1.LoadDemoDataRequest, v1.LoadDemoDataResponse]
 	createChange           *connect.Client[v1.CreateChangeRequest, v1.CreateChangeResponse]
 	getChange              *connect.Client[v1.GetChangeRequest, v1.GetChangeResponse]
 	listChanges            *connect.Client[v1.ListChangesRequest, v1.ListChangesResponse]
@@ -1352,6 +1365,11 @@ func (c *graphServiceClient) ExportGraphOkf(ctx context.Context, req *connect.Re
 // ImportGraph calls goap.graph.v1.GraphService.ImportGraph.
 func (c *graphServiceClient) ImportGraph(ctx context.Context, req *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error) {
 	return c.importGraph.CallUnary(ctx, req)
+}
+
+// LoadDemoData calls goap.graph.v1.GraphService.LoadDemoData.
+func (c *graphServiceClient) LoadDemoData(ctx context.Context, req *connect.Request[v1.LoadDemoDataRequest]) (*connect.Response[v1.LoadDemoDataResponse], error) {
+	return c.loadDemoData.CallUnary(ctx, req)
 }
 
 // CreateChange calls goap.graph.v1.GraphService.CreateChange.
@@ -1809,6 +1827,9 @@ type GraphServiceHandler interface {
 	ExportGraphOkf(context.Context, *connect.Request[v1.ExportGraphOkfRequest], *connect.ServerStream[v1.ExportGraphOkfResponse]) error
 	// Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
 	ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error)
+	// Loads the demo data (administrators only): the demo organisation, the demo project bound to it and the ALM
+	// repository acting in that project, each part when it is missing. Unimplemented where the deployment ships no demo.
+	LoadDemoData(context.Context, *connect.Request[v1.LoadDemoDataRequest]) (*connect.Response[v1.LoadDemoDataResponse], error)
 	// Change axis
 	CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error)
 	GetChange(context.Context, *connect.Request[v1.GetChangeRequest]) (*connect.Response[v1.GetChangeResponse], error)
@@ -2085,6 +2106,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceImportGraphProcedure,
 		svc.ImportGraph,
 		connect.WithSchema(graphServiceMethods.ByName("ImportGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceLoadDemoDataHandler := connect.NewUnaryHandler(
+		GraphServiceLoadDemoDataProcedure,
+		svc.LoadDemoData,
+		connect.WithSchema(graphServiceMethods.ByName("LoadDemoData")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceCreateChangeHandler := connect.NewUnaryHandler(
@@ -2631,6 +2658,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceExportGraphOkfHandler.ServeHTTP(w, r)
 		case GraphServiceImportGraphProcedure:
 			graphServiceImportGraphHandler.ServeHTTP(w, r)
+		case GraphServiceLoadDemoDataProcedure:
+			graphServiceLoadDemoDataHandler.ServeHTTP(w, r)
 		case GraphServiceCreateChangeProcedure:
 			graphServiceCreateChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetChangeProcedure:
@@ -2882,6 +2911,10 @@ func (UnimplementedGraphServiceHandler) ExportGraphOkf(context.Context, *connect
 
 func (UnimplementedGraphServiceHandler) ImportGraph(context.Context, *connect.Request[v1.ImportGraphRequest]) (*connect.Response[v1.ImportGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.ImportGraph is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) LoadDemoData(context.Context, *connect.Request[v1.LoadDemoDataRequest]) (*connect.Response[v1.LoadDemoDataResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.LoadDemoData is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) CreateChange(context.Context, *connect.Request[v1.CreateChangeRequest]) (*connect.Response[v1.CreateChangeResponse], error) {

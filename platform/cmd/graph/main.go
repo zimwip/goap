@@ -139,21 +139,26 @@ func main() {
 	// SubChangeValidator and Lifecycles, the guardian of the changes (ADR 0058, 0102), need the registry service itself
 	// (its methodology store): only goap-dev, which holds it in process, wires them; the registry client has no RPC for
 	// them, so this graph merges by the landable states of the domains only
-	// the built-in domains (organisation, platform) are always there; the demo seed needs alm
+	// the built-in domains (organisation, platform) are always there; the demo seed needs alm. GOAP_GRAPH_SEED=dev seeds
+	// the development data (the document-repository MCP), =demo the demo data too; otherwise an administrator loads the
+	// demo from the settings (LoadDemoData)
 	var need []string
-	demo := platform.Env("GOAP_GRAPH_SEED", "") == "demo"
+	seed := platform.Env("GOAP_GRAPH_SEED", "")
+	demo := seed == "demo"
 	if demo {
 		need = append(need, "alm")
 	}
 	opts := graphsvc.Options{RequireHooks: true, Log: log}
-	if demo {
+	if demo || seed == "dev" {
 		opts.Dev = func(ctx context.Context, g *graph.Graph) error {
-			seeded, err := devseed.Demo(ctx, g)
-			log.Info("demo seed", "loaded", seeded)
-			if err != nil {
-				return err
+			if demo {
+				seeded, err := devseed.Demo(ctx, g)
+				log.Info("demo seed", "loaded", seeded)
+				if err != nil {
+					return err
+				}
 			}
-			_, err = devseed.DocumentRepository(ctx, g)
+			_, err := devseed.DocumentRepository(ctx, g)
 			return err
 		}
 	}
@@ -171,7 +176,8 @@ func main() {
 		}
 	})
 	domains.Authz = authorizer
-	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor()}
+	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor(),
+		Demo: devseed.DemoLoader(directory)} // the "Load demo data" setting; the alm domain must be published
 	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {

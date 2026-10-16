@@ -12,6 +12,7 @@
   import ProvidersPane from '../views/platform/ProvidersPane.svelte';
   import CatalogPane from '../views/platform/CatalogPane.svelte';
   import BehaviorsPane from '../views/platform/BehaviorsPane.svelte';
+  import DemoDataPane from '../views/platform/DemoDataPane.svelte';
   import { models, errorMessage, type CatalogModel, type LlmBehavior, type LlmProvider, type ModelAlias, type ProviderKind } from '../api';
   import { overlayAliases, overlayBehaviors, overlayCatalog, overlayProviders, listAliasProposals, type AliasProposal } from '../llmEdit';
 
@@ -27,6 +28,7 @@
     { id: 'providers', label: 'LLM providers', icon: 'zap', admin: true },
     { id: 'catalog', label: 'Models & quotas', icon: 'database', admin: true },
     { id: 'behaviors', label: 'LLM behaviours', icon: 'bot', admin: true },
+    { id: 'demo', label: 'Demo data', icon: 'download', admin: true },
   ];
 
   const visible = $derived(SECTIONS.filter((s) => !s.admin || can.administer));
@@ -144,6 +146,8 @@
           {:else if active.id === 'behaviors'}
             {#if gatewayError}<div class="alert">{gatewayError}</div>{/if}
             <BehaviorsPane {behaviors} {catalog} {aliases} maxInstruction={behaviorCaps.maxInstruction || undefined} maxTotal={behaviorCaps.maxTotal || undefined} sources={behaviorCaps.sources?.length ? behaviorCaps.sources : undefined} onchange={refreshGateway} />
+          {:else if active.id === 'demo'}
+            <DemoDataPane />
           {/if}
         </div>
         <div class="savebar" class:dirty={count > 0}>

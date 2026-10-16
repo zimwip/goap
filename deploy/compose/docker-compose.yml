@@ -67,7 +67,8 @@ services:
     environment:
       <<: *env
       GOAP_DB_DSN: postgres://graph:graph@postgres:5432/goap?sslmode=disable
-      GOAP_GRAPH_SEED: demo
+      # dev: the document-repository MCP; demo: the demo data too (else loaded from the settings, "Load demo data")
+      GOAP_GRAPH_SEED: dev
       # the domain registry is the graph's (ADR 0125 §3): it publishes the shipped domains at start
       GOAP_DOMAINS_DIR: /domains
     ports: ["8081:8080"]
