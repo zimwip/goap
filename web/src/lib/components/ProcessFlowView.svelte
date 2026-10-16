@@ -554,14 +554,14 @@
       <span class="legend small" title="The agent plans the actions in the order that reaches the goal">agent <b class="mono">{level.agent}</b>{#if level.goal} → goal <b class="mono">{level.goal}</b>{/if}</span>
     {/if}
     <button type="button" class="small" onclick={relayout} title="Arrange the steps automatically">Auto layout</button>
-    <span class="legend small">
+    {#if traced || !simple}<span class="legend small">
       {#if traced}
         <b class="mono">{traced}</b> <i class="l up"></i>carries it
         <button type="button" class="ghost small" onclick={() => (traced = '')}>clear</button>
-      {:else}
+      {:else if !simple}
         click a condition to trace it · right-click a step, a condition or the background to inspect it · double-click to zoom into sub-steps · see the legend (top right)
       {/if}
-    </span>
+    </span>{/if}
   </div>
 </div>
 

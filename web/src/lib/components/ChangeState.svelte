@@ -36,20 +36,32 @@
       return { state: p, activity: c.activity, steps: c.steps };
     }),
   );
-  // the flow of a process, read when the reader asks for it
+  // how a process is shown: its flow unless the reader asks for the list
   let shown = $state<Record<string, 'list' | 'flow'>>({});
+  const modeOf = (process: string) => shown[process] ?? 'flow';
   let flows = $state<Record<string, { graph?: ProcessGraph; levels?: LevelCheck[]; conditions?: { name: string; expr: string }[]; error?: string }>>({});
   function showFlow(process: string) {
-    show(process, shown[process] === 'flow' ? 'list' : 'flow');
+    show(process, modeOf(process) === 'flow' ? 'list' : 'flow');
   }
   // every process at once: the display the reader picks in the header
-  const allShown = $derived((cs?.processes ?? []).length > 0 && (cs?.processes ?? []).every((p) => shown[p.process ?? ''] === 'flow') ? 'flow' : 'list');
+  const allShown = $derived((cs?.processes ?? []).length > 0 && (cs?.processes ?? []).every((p) => modeOf(p.process ?? '') === 'flow') ? 'flow' : 'list');
   function showAll(as: 'list' | 'flow') {
     for (const p of cs?.processes ?? []) show(p.process ?? '', as);
   }
   function show(process: string, as: 'list' | 'flow') {
     shown = { ...shown, [process]: as };
-    if (as !== 'flow' || flows[process] || !cs?.methodology) return;
+    if (as === 'flow') loadFlow(process);
+  }
+  // the flows shown by default are read as soon as the state names their processes
+  $effect(() => {
+    for (const p of cs?.processes ?? []) if (modeOf(p.process ?? '') === 'flow') loadFlow(p.process ?? '');
+  });
+  const asked = new Set<string>();
+  function loadFlow(process: string) {
+    if (!cs?.methodology) return;
+    const key = `${cs.methodology}@${cs.version ?? ''}/${process}`;
+    if (asked.has(key)) return;
+    asked.add(key);
     const name = cs.methodology;
     const version = cs.version ?? '';
     Promise.all([registry.storedProcessGraph(name, version, process), registry.storedLevels(name, version, process)])
@@ -116,23 +128,19 @@
           <span class="chip {p.state}">{LABEL[p.state ?? ''] ?? p.state}</span>
           <strong>{p.process}</strong>
           {#if c?.activity?.reactive}<span class="hint" title="Runs again on the events of the change, in the same run">reacts to the change</span>{/if}
-          <span class="hint">{p.done ?? 0}/{p.total ?? 0} steps · {runsText(p)}</span>
+          <span class="hint" title={runsText(p)}>{p.done ?? 0}/{p.total ?? 0}</span>
           {#if p.current}<button type="button" class="link" onclick={(e) => { e.preventDefault(); onopen?.(p.current ?? ''); }}>open run</button>{/if}
-          <button type="button" class="link" aria-pressed={shown[p.process ?? ''] === 'flow'} onclick={(e) => { e.preventDefault(); showFlow(p.process ?? ''); }}>{shown[p.process ?? ''] === 'flow' ? 'as a list' : 'as a flow'}</button>
+          <button type="button" class="link" aria-pressed={modeOf(p.process ?? '') === 'flow'} onclick={(e) => { e.preventDefault(); showFlow(p.process ?? ''); }}>{modeOf(p.process ?? '') === 'flow' ? 'as a list' : 'as a flow'}</button>
         </summary>
         <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow={pct(p)}><span style="width: {pct(p)}%"></span></div>
         {#if p.error && p.state !== 'done'}<p class="hint">{p.error}</p>{/if}
         {#if stuck.length && p.state !== 'done'}
-          <div class="needs">
-            <span class="hint">Waiting for:</span>
-            <ul>
-              {#each stuck as s (s.path)}
-                <li><strong>{s.name}</strong> needs {needsOf(s).map(needDetail).join('; ')}</li>
-              {/each}
-            </ul>
-          </div>
+          <p class="needs hint">
+            Waiting:
+            {#each stuck as s, i (s.path)}{i ? ', ' : ' '}<strong title="needs {needsOf(s).map(needDetail).join('; ')}">{s.name}</strong>{/each}
+          </p>
         {/if}
-        {#if shown[p.process ?? ''] === 'flow'}
+        {#if modeOf(p.process ?? '') === 'flow'}
           {#if flow?.error}<p class="hint">Flow unavailable: {flow.error}</p>
           {:else if flow?.graph}
             <div class="flow"><ProcessFlowView graph={flow.graph} levels={flow.levels} conditions={flow.conditions} states={statesByPath(steps)} mode="simple" /></div>
@@ -168,6 +176,11 @@
   .flow {
     margin: 4px 0;
   }
+  /* a compact flow in the change: the full screen icon gives the room */
+  .flow :global(.canvas:not(.full)) {
+    height: 360px;
+    min-height: 0;
+  }
   .proc summary {
     display: flex;
     gap: 8px;
@@ -192,10 +205,6 @@
     border-left: 3px solid var(--warn);
     background: var(--warn-soft);
     font-size: 0.92em;
-  }
-  .needs ul {
-    margin: 2px 0 0;
-    padding-left: 1.2em;
   }
   .chip {
     display: inline-block;
