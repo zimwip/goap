@@ -62,7 +62,9 @@ type gatedLifecycles struct {
 	lc *domain.Lifecycle
 }
 
-func (l gatedLifecycles) Lifecycle(context.Context, string) (*domain.Lifecycle, error) { return l.lc, nil }
+func (l gatedLifecycles) Lifecycle(context.Context, string) (*domain.Lifecycle, error) {
+	return l.lc, nil
+}
 func (l gatedLifecycles) Guard(_ context.Context, bb domain.Blackboard, expr, transition, d string) (bool, error) {
 	return condition.CheckGuard(expr, bb, l.c.Conditions.Evaluate(bb).State, transition, d)
 }

@@ -9,7 +9,7 @@
   import ReferencesEditor from './ReferencesEditor.svelte';
   import SubscriptionsEditor from './SubscriptionsEditor.svelte';
   import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
-  import { STEP_METHODS, emptyStep, moveItem, type StepForm } from '../../methodologyForm';
+  import { STEP_METHODS, emptyStep, moveItem, parseGate, type StepForm } from '../../methodologyForm';
   import type { Draft } from '../../stores/drafts.svelte';
 
   let {
@@ -33,6 +33,8 @@
   // the top steps unfolded, their sub-steps folded: the process reads as an outline
   let open = $state(untrack(() => depth === 0));
   const f = $derived(d.form);
+  const gateOf = (text: string) => parseGate(text).gate;
+  const GATE_EXAMPLE = '{"transition": "design", "checklist": [{"name": "analysed", "role": "analyst", "veto": true}], "decision": {"board": ["architect"], "rule": "consent", "back": "reframe"}, "freezes": {"types": ["alm@Requirement"]}}';
   const actionNames = $derived(f.actions.filter((a) => a.name && !a.specializes.trim()).map((a) => a.name));
   const processNames = $derived(f.processes.map((p) => p.name).filter(Boolean));
   const capabilities = $derived([...new Set(f.methods.map((m) => m.for.trim()).filter(Boolean))]);
@@ -210,6 +212,15 @@
               Starts by itself <span class="opt">(on the events of its subject: the change created, the subject edited, a remark about it; other runs wait for it, ADR 0130)</span>
             </label>
           </div>
+        </div>
+      </details>
+      <details class="more" open={!!step.gate.trim()}>
+        <summary>Gate {#if gateOf(step.gate)?.transition}<span class="hint">◆ {gateOf(step.gate)?.transition}</span>{/if}</summary>
+        <div class="field">
+          <label for="{step.key}-gate">Gate of the lifecycle of the change <span class="opt">(JSON; empty: not a gate. The go of its decision takes the transition, ADR 0132)</span></label>
+          <textarea id="{step.key}-gate" class="mono" rows={step.gate.trim() ? 10 : 2} bind:value={step.gate} class:bad={d.bad(`${path}.gate`) || !!parseGate(step.gate).error} data-path="{path}.gate" placeholder={GATE_EXAMPLE} readonly={d.readonly}></textarea>
+          {#if parseGate(step.gate).error}<span class="hint bad">Invalid JSON: {parseGate(step.gate).error}</span>{/if}
+          <span class="hint">transition; checklist of conditions, each with its role, veto or objective, attested by a person or not; decision by a board (unanimity, majority, consent) chaired by the accountable role of the step, back by another transition; what the go freezes (fields, node types)</span>
         </div>
       </details>
       <details class="more" open={step.on.length > 0}>

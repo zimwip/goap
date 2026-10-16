@@ -1,6 +1,6 @@
 # ADR 0132 — Process gates: milestones of a change, a checklist, a go decision, a move of its lifecycle
 
-**Status**: proposed · **Date**: 2026-10 · Builds on ADR 0009 §4 (decision points), 0034 (processes and steps), 0035 /
+**Status**: accepted, built (see *As built*) · **Date**: 2026-10 · Builds on ADR 0009 §4 (decision points), 0034 (processes and steps), 0035 /
 0050 (methods, roles), 0058 (change lifecycle and gates), 0075 (vetos, objectives, derogations, criticality), 0097
 (starting points), 0106 (guardians), 0109 (conditions derived from the history), 0117 (what a change waits for from
 people), 0130 (reviewing steps), 0131 (proofs of concept)
@@ -262,6 +262,27 @@ methodology (`Graph.frozen` widened; the graph keeps the mechanism, ADR 0067). G
 the analysis and its conclusion is read by the analysis gate; a POC still running lets the analysis gate go only with
 reserve (a derogation of `pocs_concluded` signed by the tech lead). The release methodology (ADR 0106) keeps its own
 lifecycle; its `merge` guardian may then read `integrated.state == "releasing"`.
+
+## As built
+
+- The gate of a step compiles as described, with these names: conditions `gate:<path>`, `gate_open:<path>`, `gate_go:<path>`
+  (a decided go not consumed by a move yet, `change.consumed`), `attested:<path>/<item>`; actions `<path>:open` (builtin
+  `gate.open`), `<path>:rule` (the default decision workflow: one human action for the board, run again seat by seat
+  until the rule settles it) or `<path>:decide` (a call to the decision method the step names), `<path>` (builtin
+  `gate.pass`), `attest:<path>/<item>`.
+- An attestation is an artifact `attestation:<path>/<item>` (`verdict` met / not_met, `comment`), read by CEL
+  `attestations`; no new item type.
+- The choices of the point are plain labels (`OpenDecisionRequest.Choices`: go, no_go, back), selecting no flow.
+- No entry by default on the `from` state of the transition: the methodology does not know its lifecycle at compile
+  time, so a gate names the gate before it in its `pre` (`sdlc` does), and the graph refuses a move from another state.
+- A no go opens a new decision at once (the board is asked again); a back takes the back transition with the point.
+- `sdlc` 0.10.0: no `risks_identified` objective (a register to open would block every change without a derogation);
+  the analysis gate is ruled by the default workflow (no `gate_decision` method yet); the build gate vetoes
+  `build_complete` and `risks_under_control`, the delivery gate `rolled_out` and `requirements_approved`; every gate
+  keeps the impacts of its phase editable (`keepPhase`), since the release approves the requirements of the analysis
+  and the build edits the components it found.
+- The change tab shows a gate through its steps (needs, asks of the board and the attestations); a checklist view of
+  the gate on the change tab is still to come.
 
 ## Consequences
 
