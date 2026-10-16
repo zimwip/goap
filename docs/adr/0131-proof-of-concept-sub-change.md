@@ -1,6 +1,6 @@
 # ADR 0131 — Proofs of concept and prototypes: a relaxed build in a sub-change, to derisk or to explore the need
 
-**Status**: proposed · **Date**: 2026-10 · Builds on ADR 0036 (risks and actions, transverse risk management), 0075
+**Status**: accepted, implemented (first cut, see *As built*) · **Date**: 2026-10 · Builds on ADR 0036 (risks and actions, transverse risk management), 0075
 (criticality), 0103 (sub-changes on their own branch), 0106 (methodologies integrating methodologies), 0109 (scoped
 conditions, assessments as verdicts of a claim), 0110 (reactive activities, methodology events), 0115 (forms of human
 actions), 0118 (workspace of a change), 0129 (a person reviews model output)
@@ -325,6 +325,42 @@ The delivery run waits at the confirmation while a prototype is open, exactly as
   `implement_component`), `risk-management` 1.2.0 (`plan_mitigation` may propose a POC).
 - A test in `platform/e2e/engine` (`sdlc_poc_test.go`, on a local git repository like `sdlc_workspace_test.go`): a high
   risk, a POC action, opened, built, concluded refuted, the risk closed, the build of the parent released.
+
+### As built (first cut)
+
+Where the implementation differs from the sections above, it is what holds:
+
+- **One step for both purposes.** `sdlc` 0.10.0 has one process step `proofs` before the build (sub-steps `open` and
+  `conclusion`), for POCs and prototypes alike; `framing/confirmation` waits for `prototypes_concluded`, the build for
+  `pocs_concluded`. Only `conclusion` is reactive (`on: poc.concluded, from: integrated`); `open` is planned by the
+  delivery run, or launched from the starting points (goal `software_delivery/proofs/open`), so a proposed POC gives one
+  human task, not one per run. `open` declares `done: {pocs_opened: true}`.
+- **Hypotheses only.** The sub-change copies no risk: `open_poc` writes into it an artifact `poc_scope` (the
+  hypotheses, a risk `RSK-n` becoming `"RSK-n holds: <title>"` with `source: RSK-n`, the repositories, the timebox, the
+  notes), and the POC's first step `state_hypotheses` states them as `hypothesis` items (`HYP-n`). Its conditions are
+  scoped `item` where `self.type == "hypothesis"`. The form takes repositories, never impacted components.
+- **Criticality.** `open_poc` passes `criticality: C1` to `goap-change/create`, which writes it on the change's data;
+  the create does not apply the methodology's default by itself.
+- **A confirmed risk** is set back to `open` with a rationale naming the POC (probability unchanged); the done POC no
+  longer covers it, so `risk-management` asks for another mitigation.
+- **Timebox.** Carried in the intent and the scope as guidance; the loop budget of `implement_probe` is fixed
+  (`maxRounds: 60`, `timeout: 30m`); no step deadline.
+- **Platform.** `goap-change/create` takes `parent` (a sub-change takes its parent's namespace, project and unit),
+  `criticality` and `data`; `goap-change/close` abandons a change with a reason (from a process: its own change or one
+  of its sub-changes); `goap-change/action` takes `kind`, `purpose`, `risks`, `hypotheses`, `subChange`. The DSL gains
+  `ctx.addItem(type, data)`. A human action with `code` may declare `mcps` (its code runs as the person submits), and a
+  scoped human action's code sees its subject (`vars.item`). `contracts/risk`: `ActionItem.Kind` / `Purpose` / `Risks`
+  / `Hypotheses` / `Change`, `Covers`, `IsPOC`, item type `hypothesis` (`risk.Hypotheses`); CEL `actions[].covers`;
+  library condition `pocs_pending`; the brief shows the POC actions and the hypotheses.
+- **Planning a process over scoped actions.** The steps of `poc` declare their `done`, since the pending conditions
+  `chainScoped` adds to the effects would otherwise enter the goal of the process; `state_hypotheses` declares the
+  pending conditions of the framing actions among its effects, the subjects it creates being what they work on.
+- **Not yet**: the prompt of `implement_component` showing the concluded POCs, the web (*Propose a POC* / *a
+  prototype*), the description review suggesting a prototype.
+- **Test**: `platform/e2e/engine/sdlc_poc_test.go` (`TestSDLCDerisksByAProofOfConcept`): a 4x4 risk and its POC
+  action, opened by a person through the form, the sub-change running by itself (probe, confirmation, build in a local
+  workspace, check, verdict refuted, conclusion), `poc.concluded` carried to the parent, the risk closed, the action
+  done, the sub-change abandoned.
 
 ## Consequences
 
