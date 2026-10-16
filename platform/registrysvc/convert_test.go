@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/methodology"
 )
 
@@ -31,6 +32,10 @@ func TestProcessesRoundTripThroughPB(t *testing.T) {
 			{Name: "sign", Instructions: "sign it", Guidance: "how", Checklist: []string{"one"}, Deliverables: []string{"Report"}},
 			{Name: "alt", Actions: []string{"x", "y"}},
 			{Name: "cap", Capability: "design", Roles: &methodology.Responsibilities{Responsible: "dev", Consulted: []string{"arch"}}},
+			{Name: "go", Capability: "gate_decision", Roles: &methodology.Responsibilities{Accountable: "lead"}, Gate: &methodology.Gate{Transition: "design",
+				Checklist: []methodology.GateItem{{Name: "analysed", Role: "dev", Veto: true}, {Name: "compliant", Attest: true, When: "true", Description: "d"}},
+				Decision:  &methodology.GateDecision{Question: "q", Back: "reframe", Board: []string{"dev", "lead"}, Rule: "consent", MaxDuration: "72h"},
+				Freezes:   &domain.Freezes{Fields: []string{"intent"}, Types: []string{"alm@Requirement"}, Transitions: true, KeepPhase: true}}},
 		}}}}
 	out := FromPB(ToPB(Record{Methodology: in}))
 	in.Methods = []methodology.Method{

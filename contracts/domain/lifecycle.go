@@ -66,6 +66,42 @@ type Transition struct {
 	// Children (documents): every contained child must be in one of these
 	// states for the transition to be accepted. Validation only, no cascade.
 	Children *ChildrenRule `yaml:"children,omitempty" json:"children,omitempty"`
+	// Freezes is what taking the transition of the lifecycle of a change freezes beyond the impacts of the state it
+	// leaves (ADR 0132 §4), until the change goes back to the state the transition leaves.
+	Freezes *Freezes `yaml:"freezes,omitempty" json:"freezes,omitempty"`
+}
+
+// Freezes is what a move of the lifecycle of a change freezes (ADR 0132 §4): fields of the change header, node types
+// the change may no longer create, check out or edit, and whether the impacts of the state left stay editable.
+type Freezes struct {
+	// Fields of the change header no longer edited: title, intent, description (both).
+	Fields []string `yaml:"fields,omitempty" json:"fields,omitempty"`
+	// Types are qualified node types (subtypes included) the change no longer creates, checks out or edits.
+	Types []string `yaml:"types,omitempty" json:"types,omitempty"`
+	// Transitions lets the lifecycle of a node of a frozen type still move (an approval after the freeze).
+	Transitions bool `yaml:"transitions,omitempty" json:"transitions,omitempty"`
+	// KeepPhase leaves the impacts of the state left editable (the default freezes them, ADR 0058 rule 4).
+	KeepPhase bool `yaml:"keepPhase,omitempty" json:"keepPhase,omitempty"`
+}
+
+// Empty reports whether f freezes nothing beyond the phase.
+func (f *Freezes) Empty() bool {
+	return f == nil || (len(f.Fields) == 0 && len(f.Types) == 0 && !f.KeepPhase)
+}
+
+// Header fields a freeze names.
+const (
+	FreezeTitle       = "title"
+	FreezeIntent      = "intent"
+	FreezeDescription = "description"
+)
+
+// FrozenField reports whether f freezes the field of the change header (title or intent; description is both).
+func (f *Freezes) FrozenField(field string) bool {
+	if f == nil {
+		return false
+	}
+	return slices.Contains(f.Fields, field) || (slices.Contains(f.Fields, FreezeDescription) && (field == FreezeTitle || field == FreezeIntent))
 }
 
 // Criterion is one criterion of a gate (ADR 0075 §3): a named CEL predicate over the same variables as a guard.

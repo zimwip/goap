@@ -434,6 +434,8 @@ type Compiled struct {
 	reactions []Reaction
 	// automaticReviews gives the automatic review step of each action generated for it (ADR 0130)
 	automaticReviews map[string]string
+	// gates are the gates of the processes (ADR 0132)
+	gates []GateInfo
 	// assessments are the compiled assessment views (ADR 0116); nil: the defaults
 	assessments *condition.AssessmentViews
 	// view is the shape of the activities as they are shown (ADR 0126 step 3), computed once at compilation
@@ -715,7 +717,8 @@ func (c *Compiled) AgentActions(ag Agent) []Action {
 	}
 	all := c.PlannedActions()
 	if len(ag.Actions) == 0 {
-		return all
+		// an agent of every action plans the gates of the methodology too (ADR 0132): a change lands through them
+		return append(all, c.gateActions()...)
 	}
 	out := make([]Action, 0, len(ag.Actions))
 	for _, a := range all {

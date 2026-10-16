@@ -43,7 +43,7 @@ func (e *Engine) formItems(ctx context.Context, p *Process, m *methodology.Compi
 	items := []ItemInput{{Type: "artifact", Target: typ, Data: clean}}
 	for _, r := range form.Rulings(*action.Form, clean) {
 		items = append(items, ItemInput{Type: "decisionPoint", DecisionPoint: &DecisionOp{
-			Op: "rule", Point: r.Point, Outcome: domain.OutcomeDecided, Option: r.Option, Justification: r.Justification}})
+			Op: "rule", Point: r.Point, Outcome: domain.OutcomeDecided, Option: r.Option, Justification: r.Justification, Role: r.Role}})
 	}
 	ops := createOps(form.NewNodes(*action.Form, clean), impacted)
 	return items, append(ops, linkOps(form.Links(*action.Form, clean), impacted)...), nil

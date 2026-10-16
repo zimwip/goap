@@ -127,6 +127,7 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.checkStepScopes()
 	s.compileReactions()
 	s.compileAutomaticReviews()
+	s.checkManualSteps()
 	s.checkMainGoal()
 	s.compileAssessments()
 	return s.finish(lenient)
@@ -635,6 +636,12 @@ func (s *compileState) checkSpecializations() {
 // checkReferences checks the conditions the actions name (the expect:* conditions are known once every action has
 // been compiled) and that none is both an input and an output of one (ADR 0051).
 func (s *compileState) checkReferences() {
+	// the passage of a gate is a condition an action may need (ADR 0132: the change lands delivered)
+	for _, path := range s.m.gatePaths() {
+		for _, c := range []string{GatePassed(path), GateOpen(path), GateGo(path)} {
+			s.known[c] = true
+		}
+	}
 	for i, a := range s.m.Actions {
 		for field, set := range map[string]map[string]bool{"pre": a.Pre, "effects": a.Effects} {
 			for k := range set {
@@ -849,7 +856,7 @@ func (s *compileState) finish(lenient bool) (*Compiled, def.Issues) {
 			s.issues[i].Activity = m.ActivityOf(s.issues[i].Path)
 		}
 		sort.SliceStable(s.issues, func(i, j int) bool { return s.issues[i].Path < s.issues[j].Path })
-		if !lenient {
+		if !lenient && s.issues.HasErrors() {
 			return nil, s.issues
 		}
 	}
@@ -870,7 +877,8 @@ func (s *compileState) finish(lenient bool) (*Compiled, def.Issues) {
 		return nil, def.Issues{{Message: err.Error()}}
 	}
 	c := &Compiled{definition: m, Conditions: set, actions: s.actions, utilities: uset, agents: s.agents, whens: wset, processes: s.procs,
-		methods: s.meths, methodGuards: mset, reactions: s.reactions, automaticReviews: s.automaticReviews, assessments: s.assessments}
+		methods: s.meths, methodGuards: mset, reactions: s.reactions, automaticReviews: s.automaticReviews, assessments: s.assessments,
+		gates: s.procs.gates}
 	c.view = c.buildView()
 	return c, s.issues
 }

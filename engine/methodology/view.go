@@ -68,7 +68,9 @@ type StepView struct {
 	Foreach string `json:"foreach,omitempty"`
 	GroupBy string `json:"groupBy,omitempty"`
 	// Review: the step is a review of a subject, automatic when it starts by itself (ADR 0130).
-	Review      *Review     `json:"review,omitempty"`
+	Review *Review `json:"review,omitempty"`
+	// Gate: the step is a gate of its process (ADR 0132).
+	Gate        *Gate       `json:"gate,omitempty"`
 	Description string      `json:"description,omitempty"`
 	Guidance    string      `json:"guidance,omitempty"`
 	Checklist   []string    `json:"checklist,omitempty"`
@@ -198,7 +200,7 @@ func (c *Compiled) stepViews(steps []StepInfo) []StepView {
 	out := make([]StepView, 0, len(steps))
 	for _, s := range steps {
 		sv := StepView{Path: s.Path, Name: s.Name, Owner: s.Owner, Method: s.Method(), Capability: s.Capability, Process: s.Process,
-			Foreach: s.Foreach, GroupBy: s.GroupBy, Review: s.Review, Description: s.Description, Guidance: s.Guidance, Checklist: s.Checklist,
+			Foreach: s.Foreach, GroupBy: s.GroupBy, Review: s.Review, Gate: s.Gate, Description: s.Description, Guidance: s.Guidance, Checklist: s.Checklist,
 			References: s.References, Roles: s.Effective, Entry: s.Entry, Exit: s.Exit, Planned: slices.Clone(s.Planned), Steps: c.stepViews(s.Steps)}
 		switch sv.Method {
 		case MethodAction:

@@ -658,6 +658,57 @@ message Step {
   string where = 23;
   // the step is a review of a subject of the change; an automatic one starts by itself (ADR 0130)
   StepReview review = 24;
+  // the step is a gate of its process: a checklist, a go decision, a move of the lifecycle of the change (ADR 0132)
+  StepGate gate = 25;
+}
+
+// A gate of a process (ADR 0132): a milestone where the checklist of the change is checked, a go is decided and the
+// change takes a transition of its lifecycle, freezing what the gate declares.
+message StepGate {
+  // the transition of the lifecycle of the change the go takes
+  string transition = 1;
+  repeated GateItem checklist = 2;
+  GateDecision decision = 3;
+  GateFreezes freezes = 4;
+}
+
+// An item of the checklist of a gate: a condition of the methodology, or an attestation of a person of its role.
+message GateItem {
+  string name = 1;
+  string description = 2;
+  // the role that answers for the item (default: the accountable role of the step)
+  string role = 3;
+  // an unmet veto blocks the gate; an unmet objective is covered by a derogation
+  bool veto = 4;
+  // CEL over the change: the item applies only then
+  string when = 5;
+  // a person of the role attests the item
+  bool attest = 6;
+}
+
+// How the go of a gate is decided: the accountable role alone, or a board ruling by a rule.
+message GateDecision {
+  string question = 1;
+  // a transition back the decision may take instead
+  string back = 2;
+  // the roles that sit on the decision (the accountable role always does)
+  repeated string board = 3;
+  // unanimity | majority | consent
+  string rule = 4;
+  // how long before it is escalated to the accountable role ("72h")
+  string max_duration = 5;
+}
+
+// What the go of a gate freezes beyond the impacts of the state it leaves.
+message GateFreezes {
+  // title | intent | description
+  repeated string fields = 1;
+  // qualified node types (subtypes included) no longer created, checked out or edited
+  repeated string types = 2;
+  // the lifecycle of a node of a frozen type may still move
+  bool transitions = 3;
+  // the impacts of the state left stay editable
+  bool keep_phase = 4;
 }
 
 // A step that reviews a subject of the change (ADR 0130): its verdict is an assessment, which advises and never decides.
@@ -1084,6 +1135,8 @@ message ViewStep {
   repeated ViewStep steps = 17;
   // the step is a review of a subject; automatic: it starts by itself (ADR 0130)
   StepReview review = 18;
+  // the step is a gate of its process (ADR 0132)
+  StepGate gate = 19;
 }
 
 // What a condition means, the actions making it hold and the conditions it cannot hold without.
@@ -1150,6 +1203,8 @@ message LevelNode {
   string group_by = 12;
   // the step reviews a subject; automatic: it starts by itself (ADR 0130)
   StepReview review = 13;
+  // the step is a gate of its process (ADR 0132)
+  StepGate gate = 14;
 }
 
 message LevelStep {
@@ -1203,6 +1258,8 @@ message GraphStep {
   string group_by = 17;
   // the step is a review of a subject; automatic: it starts by itself (ADR 0130)
   StepReview review = 18;
+  // the step is a gate of its process (ADR 0132)
+  StepGate gate = 19;
 }
 
 // The exit criteria of from meet the entry of to, on these conditions.

@@ -132,7 +132,11 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p, err = e.Run(context.Background(), p.ID); err != nil || p.Pending == nil || p.Pending.Action != "validate_impact_analysis" {
+	rateDescription(t, g, p.ChangeID)
+	if p, err = e.Run(context.Background(), p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p = passGate(t, e, g, p); p.Pending == nil || p.Pending.Action != "validate_impact_analysis" {
 		t.Fatalf("impact analysis: %v %s %s %+v", err, p.Status, p.Error, p.Pending)
 	}
 	if _, err = e.Submit(ctx, p.ID, []engine.ItemInput{validation}); err != nil {
@@ -141,6 +145,7 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
+	p = passGate(t, e, g, p)
 	var actions []string
 	for _, s := range p.Steps {
 		if len(actions) == 0 || actions[len(actions)-1] != s.Action {

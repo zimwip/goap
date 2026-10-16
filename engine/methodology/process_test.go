@@ -332,8 +332,10 @@ func TestProcessGraphDrawsTheConditions(t *testing.T) {
 		"software_delivery/framing/review":                      "software_delivery/framing/confirmation",
 		"software_delivery/framing/confirmation":                "software_delivery/analysis/impacts",
 		"software_delivery/analysis/impacts":                    "software_delivery/analysis/specification/requirements",
-		"software_delivery/analysis/specification/traceability": "software_delivery/design",
-		"software_delivery/release":                             "software_delivery/application",
+		"software_delivery/analysis/specification/traceability": "software_delivery/analysis/gate",
+		"software_delivery/analysis/gate":                       "software_delivery/design",
+		"software_delivery/release":                             "software_delivery/delivery_gate",
+		"software_delivery/delivery_gate":                       "software_delivery/application",
 	} {
 		if _, ok := edges[from+" -> "+to]; !ok {
 			t.Errorf("no edge %s -> %s in %v", from, to, edges)

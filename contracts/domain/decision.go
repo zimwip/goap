@@ -81,6 +81,8 @@ type DecisionEvent struct {
 	Accept  bool   `json:"accept,omitempty"`
 	Comment string `json:"comment,omitempty"`
 	By      string `json:"by,omitempty"`
+	// Role is the role a person rules a point of a board in (ADR 0132 §3): the seat of a collegial decision.
+	Role string `json:"role,omitempty"`
 }
 
 func (e *DecisionEvent) validate() error {
@@ -120,13 +122,15 @@ type Question struct {
 
 // Ruling is the last ruling of a decision point.
 type Ruling struct {
-	Outcome       string    `json:"outcome"`
-	Option        string    `json:"option,omitempty"`
-	Confidence    float64   `json:"confidence,omitempty"`
-	Justification string    `json:"justification,omitempty"`
-	By            string    `json:"by,omitempty"`
-	Human         bool      `json:"human,omitempty"`
-	At            time.Time `json:"at"`
+	Outcome       string  `json:"outcome"`
+	Option        string  `json:"option,omitempty"`
+	Confidence    float64 `json:"confidence,omitempty"`
+	Justification string  `json:"justification,omitempty"`
+	By            string  `json:"by,omitempty"`
+	Human         bool    `json:"human,omitempty"`
+	// Role is the seat the ruling was made in, on a point of a board (ADR 0132 §3).
+	Role string    `json:"role,omitempty"`
+	At   time.Time `json:"at"`
 }
 
 // DecisionPoint is a decision point, replayed from its events.
@@ -185,6 +189,12 @@ type DecisionPolicy interface {
 	// Reserve says whether only a person may rule the point at now (humanOnly), and why when the point is escalated.
 	// It is asked of the points that are not decided.
 	Reserve(p DecisionPoint, now time.Time) (humanOnly bool, escalation string)
+}
+
+// SeatedPolicy is a DecisionPolicy whose points may be ruled by a board (ADR 0132 §3): Seats are the roles that sit on
+// a point (nil: anyone rules it alone). A ruling of a seated point names the seat it is made in.
+type SeatedPolicy interface {
+	Seats(p DecisionPoint) []string
 }
 
 // DefaultDecisionPolicy is the policy of a graph that was given none: a decided ruling of anyone settles the point,
@@ -246,7 +256,7 @@ func (c *Change) DecisionPointsAt(now time.Time, policy DecisionPolicy) []Decisi
 		}
 		switch e.Op {
 		case DecisionRuleOp:
-			r := &Ruling{Outcome: e.Outcome, Option: e.Option, Confidence: e.Confidence, Justification: e.Justification, By: e.By, Human: e.Human, At: it.CreatedAt}
+			r := &Ruling{Outcome: e.Outcome, Option: e.Option, Confidence: e.Confidence, Justification: e.Justification, By: e.By, Human: e.Human, Role: e.Role, At: it.CreatedAt}
 			d.Ruling = r
 			settled := policy.Fold(d, *e)
 			switch {

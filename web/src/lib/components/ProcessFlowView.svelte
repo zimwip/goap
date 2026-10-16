@@ -203,6 +203,7 @@
         issuesInside: issuesInside(p),
         groupBy: n.groupBy,
         review: n.review,
+        gate: n.gate,
         state: stateOf(p),
         simple,
         onzoom: () => (path = p),

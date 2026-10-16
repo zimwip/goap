@@ -6,7 +6,7 @@
 // between this model and the proto message.
 
 import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
-import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, StepGate, Struct, Trigger } from './api';
 
 export interface CondRow {
   cond: string;
@@ -349,6 +349,8 @@ export interface StepForm {
   /** the subject the step reviews (empty: not a review); automatic: it starts by itself on its events (ADR 0130) */
   reviewSubject: string;
   reviewAutomatic: boolean;
+  /** the gate of the step, as JSON (empty: not a gate, ADR 0132) */
+  gate: string;
 }
 
 export interface ReferenceForm {
@@ -580,6 +582,7 @@ export const emptyStep = (name = ''): StepForm => ({
   where: '',
   reviewSubject: '',
   reviewAutomatic: false,
+  gate: '',
   pre: [],
   done: [],
   references: [],
@@ -1079,6 +1082,7 @@ function stepToForm(s: ProcessStep): StepForm {
     where: s.where ?? '',
     reviewSubject: s.review?.subject ?? '',
     reviewAutomatic: s.review?.automatic ?? false,
+    gate: s.gate ? JSON.stringify(s.gate, null, 2) : '',
     pre: rows(s.pre),
     done: rows(s.done),
     references: refsToForm(s.references),
@@ -1121,6 +1125,28 @@ export function stepConditionNames(f: MethodologyForm): string[] {
   return out;
 }
 
+/** parseGate reads the JSON of the gate of a step (ADR 0132): empty is no gate. */
+export function parseGate(text: string): { gate?: StepGate; error?: string } {
+  if (!text.trim()) return {};
+  try {
+    const g: unknown = JSON.parse(text);
+    if (g === null || typeof g !== 'object' || Array.isArray(g)) return { error: 'object expected' };
+    return { gate: g as StepGate };
+  } catch (e) {
+    return { error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** gateIssues are the gates of the steps whose JSON does not read, at their definition path. */
+function gateIssues(steps: StepForm[], path: string, out: Issue[]) {
+  steps.forEach((s, i) => {
+    const p = `${path}.steps[${i}]`;
+    const { error } = parseGate(s.gate);
+    if (error) out.push({ path: `${p}.gate`, message: `Invalid gate JSON: ${error}` });
+    gateIssues(s.steps, p, out);
+  });
+}
+
 /** The step as the server expects it: only the fields of its method. */
 export function stepFromForm(s: StepForm): ProcessStep {
   const o: ProcessStep = {};
@@ -1143,6 +1169,8 @@ export function stepFromForm(s: StepForm): ProcessStep {
   put(o, 'on', subsFromForm(s.on));
   if (s.method === 'action' || s.method === 'actions') put(o, 'where', s.where.trim());
   if (s.reviewSubject.trim()) put(o, 'review', s.reviewAutomatic ? { subject: s.reviewSubject.trim(), automatic: true } : { subject: s.reviewSubject.trim() });
+  const gate = parseGate(s.gate);
+  if (gate.gate) o.gate = gate.gate;
   switch (s.method) {
     case 'manual':
       put(o, 'instructions', s.instructions.trim());
@@ -1434,6 +1462,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       }),
   );
   issues.push(...activityEventIssues(f));
+  f.processes.forEach((p, i) => gateIssues(p.steps, `processes[${i}]`, issues));
   if (f.assessments.trim()) {
     try {
       const v: unknown = JSON.parse(f.assessments);

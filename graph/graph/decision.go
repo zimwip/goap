@@ -68,6 +68,12 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 				return err
 			}
 		}
+		for _, ch := range in.Choices {
+			if ch == "" || slices.Contains(options, ch) {
+				return fmt.Errorf("choice %q: a choice is named once: %w", ch, ErrInvalid)
+			}
+			options = append(options, ch)
+		}
 		e := domain.DecisionEvent{Op: domain.DecisionOpenOp, Question: q, Options: options, Criteria: in.Criteria, Policy: policy, By: in.By}
 		pid, err := g.putDecisionEvent(ctx, tx, id, e)
 		if err != nil {
@@ -111,11 +117,14 @@ func (g *Graph) RuleDecision(ctx context.Context, id domain.ChangeID, in RuleReq
 		case cur.Status == domain.PointRatifying && !in.Human:
 			return fmt.Errorf("decision point %s waits for the ratification of its ruling: %w", cur.ID, ErrConflict)
 		}
-		e := domain.DecisionEvent{Op: domain.DecisionRuleOp, Point: cur.ID, Outcome: in.Outcome, Justification: in.Justification, Human: in.Human, By: in.By}
+		if err := g.checkSeat(ctx, c, cur, in); err != nil {
+			return err
+		}
+		e := domain.DecisionEvent{Op: domain.DecisionRuleOp, Point: cur.ID, Outcome: in.Outcome, Justification: in.Justification, Human: in.Human, By: in.By, Role: in.Role}
 		switch in.Outcome {
 		case domain.OutcomeDecided:
-			if in.Option != "" {
-				in.Option = optionID(c, in.Option)
+			if in.Option != "" && !slices.Contains(cur.Options, in.Option) {
+				in.Option = optionID(c, in.Option) // a choice is kept as named
 			}
 			if len(cur.Options) > 0 && !slices.Contains(cur.Options, in.Option) {
 				return fmt.Errorf("decision point %s chooses among %v, not %q: %w", cur.ID, cur.Options, in.Option, ErrInvalid)
@@ -298,4 +307,31 @@ func pendingPoint(c domain.Change, point string, now time.Time, policy domain.De
 // pendingDecisions are the decision points of c not decided yet.
 func pendingDecisions(c domain.Change, now time.Time, policy domain.DecisionPolicy) []domain.DecisionPoint {
 	return slices.DeleteFunc(c.DecisionPointsAt(now, policy), func(d domain.DecisionPoint) bool { return !d.Pending() })
+}
+
+// checkSeat checks the seat of a ruling of a point of a board (ADR 0132 §3): a person, in one of the seats of the
+// board, holding its role (SeatAuthorizer). A point with no board takes no seat.
+func (g *Graph) checkSeat(ctx context.Context, c domain.Change, p domain.DecisionPoint, in RuleRequest) error {
+	sp, ok := g.decisionPolicy().(domain.SeatedPolicy)
+	var seats []string
+	if ok {
+		seats = sp.Seats(p)
+	}
+	switch {
+	case len(seats) == 0:
+		if in.Role != "" {
+			return fmt.Errorf("decision point %s has no board: rule it without a seat: %w", p.ID, ErrInvalid)
+		}
+		return nil
+	case !in.Human:
+		return fmt.Errorf("decision point %s is ruled by its board (%s): people only: %w", p.ID, strings.Join(seats, ", "), ErrConflict)
+	case in.Role == "":
+		return fmt.Errorf("decision point %s is ruled by its board: name your seat (%s): %w", p.ID, strings.Join(seats, ", "), ErrInvalid)
+	}
+	if g.SeatAuthorizer != nil {
+		if err := g.SeatAuthorizer(ctx, c, in.Role); err != nil {
+			return fmt.Errorf("the seat %s of decision point %s: %w", in.Role, p.ID, err)
+		}
+	}
+	return nil
 }
