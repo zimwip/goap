@@ -1,6 +1,8 @@
 // Package devseed holds the data of the development and demo compositions: the ALM demo repository and the local file
-// system document repository. It is separate from the platform bootstrap (graphsvc.Boot), which every composition runs;
-// a production composition never calls it unless asked (GOAP_GRAPH_SEED=demo), the dev composition (goap-dev) does.
+// system document repository. It is separate from the platform bootstrap (graphsvc.Boot), which every composition runs.
+// The demo is loaded on demand (the "Load demo data" setting, RPC LoadDemoData) or at start when asked
+// (GOAP_GRAPH_SEED=demo for the graph service, GOAP_DEV_DEMO=1 for goap-dev); the document repository is seeded by
+// goap-dev at every start.
 package devseed
 
 import (
@@ -26,42 +28,133 @@ type demoNode struct {
 	State string
 }
 
+// DemoProject is the project of the demo: the ALM data acts in it, and the demo organisation (ORG-ACME) holds the roles
+// of its methodology there.
+const DemoProject = "PROJ-DEMO"
+
+// demoMethodologies apply to the demo project, demoRoles are the roles ORG-ACME holds on it (those of sdlc).
+var (
+	demoMethodologies = []string{"sdlc"}
+	demoRoles         = []string{"product_owner", "business_analyst", "solution_architect", "tech_lead", "developer",
+		"release_manager", "service_owner", "change_approver"}
+)
+
 // Demo loads a small ALM repository (namespace alm) once: needs, requirements and tests
 // (methodologies/examples/impact-analysis.yaml), and the functions, components, build artifacts, applications,
-// solution, data, interfaces and flows of methodologies/sdlc.yaml, with a small organisation owning them. The graph is
-// bootstrapped first (a seed is an ordinary change, ADR 0054).
+// solution, data, interfaces and flows of methodologies/sdlc.yaml, with a small organisation owning them and the demo
+// project (DemoProject) bound to that organisation by an assignment. Each part is seeded when it is missing, so a
+// graph holding an older demo gains the project. It reports whether it seeded anything. The graph is bootstrapped
+// first (a seed is an ordinary change, ADR 0054).
 func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 	if err := g.Bootstrap(ctx); err != nil {
 		return false, err
 	}
-	if _, err := g.NodeByKey(ctx, alm, "NEED-1"); err == nil {
-		return false, nil
-	} else if !errors.Is(err, graph.ErrNotFound) {
-		return false, err
-	}
-	// the organisation first, under the root unit of the bootstrap (ADR 0054): the nodes below are owned by its units.
-	// All the units are one change; a unit links to its parent, created by the same change (ToKey) or the root.
-	root, err := g.NodeByKey(ctx, access.NamespaceOrganisation, g.Structure(domain.StructureOrganisation).Root)
+	seeded, err := demoOrganisation(ctx, g)
 	if err != nil {
 		return false, err
 	}
-	var units []graph.NodeEdit
-	for _, u := range [][4]string{
-		{"ORG-ACME", "Acme", "company", ""}, {"ORG-DIGITAL", "Direction Digitale", "direction", "ORG-ACME"},
-		{"ORG-CHECKOUT", "Team Checkout", "team", "ORG-DIGITAL"}, {"ORG-CRM", "Team CRM", "team", "ORG-DIGITAL"},
-		{"ORG-FINANCE", "Team Finance", "team", "ORG-DIGITAL"}, {"ORG-SECURITY", "Team Security", "team", "ORG-DIGITAL"},
-	} {
-		e := graphsvc.SeedNode(u[0], access.NodeTypeOrgUnit, map[string]any{"name": u[1], "kind": u[2]})
-		if u[3] == "" {
-			e = linkPartOf(e, root.Ref())
-		} else {
-			e.Links = append(e.Links, graph.LinkEdit{Type: access.LinkPartOf, ToKey: u[3]})
-		}
-		units = append(units, e)
-	}
-	if err := graphsvc.SeedChange(ctx, g, access.NamespaceOrganisation, "Import demo organisation", units); err != nil {
+	if _, err := g.NodeByKey(ctx, alm, "NEED-1"); err == nil {
+		return seeded, nil
+	} else if !errors.Is(err, graph.ErrNotFound) {
 		return false, err
 	}
+	if err := demoRepository(ctx, g); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// DemoLoader is Demo as the graph handler takes it (graphsvc.Handler.Demo, the "Load demo data" setting): whether it
+// wrote anything, and the key of the demo project. Once something is written the directory (when given) reads the
+// organisation again, so the demo project is offered at once.
+func DemoLoader(d *access.Directory) func(context.Context, *graph.Graph) (bool, string, error) {
+	return func(ctx context.Context, g *graph.Graph) (bool, string, error) {
+		loaded, err := Demo(ctx, g)
+		if err == nil && loaded && d != nil {
+			err = d.Refresh(ctx)
+		}
+		return loaded, DemoProject, err
+	}
+}
+
+// exists tells whether the namespace holds a node of that key.
+func exists(ctx context.Context, g *graph.Graph, namespace, key string) (bool, error) {
+	_, err := g.NodeByKey(ctx, namespace, key)
+	if errors.Is(err, graph.ErrNotFound) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// demoOrganisation seeds the units of the demo organisation under the root unit, and the demo project under the root
+// project with the assignment binding the organisation to it, in one change of the organisation namespace (what is
+// missing of them).
+func demoOrganisation(ctx context.Context, g *graph.Graph) (bool, error) {
+	hasOrg, err := exists(ctx, g, access.NamespaceOrganisation, "ORG-ACME")
+	if err != nil {
+		return false, err
+	}
+	hasProject, err := exists(ctx, g, access.NamespaceOrganisation, DemoProject)
+	if err != nil {
+		return false, err
+	}
+	if hasOrg && hasProject {
+		return false, nil
+	}
+	// the organisation first, under the root unit of the bootstrap (ADR 0054): the nodes below are owned by its units.
+	// All the units are one change; a unit links to its parent, created by the same change (ToKey) or the root.
+	var edits []graph.NodeEdit
+	if !hasOrg {
+		root, err := g.NodeByKey(ctx, access.NamespaceOrganisation, g.Structure(domain.StructureOrganisation).Root)
+		if err != nil {
+			return false, err
+		}
+		for _, u := range [][4]string{
+			{"ORG-ACME", "Acme", "company", ""}, {"ORG-DIGITAL", "Direction Digitale", "direction", "ORG-ACME"},
+			{"ORG-CHECKOUT", "Team Checkout", "team", "ORG-DIGITAL"}, {"ORG-CRM", "Team CRM", "team", "ORG-DIGITAL"},
+			{"ORG-FINANCE", "Team Finance", "team", "ORG-DIGITAL"}, {"ORG-SECURITY", "Team Security", "team", "ORG-DIGITAL"},
+		} {
+			e := graphsvc.SeedNode(u[0], access.NodeTypeOrgUnit, map[string]any{"name": u[1], "kind": u[2]})
+			if u[3] == "" {
+				e = linkTo(e, access.LinkPartOf, root.Ref())
+			} else {
+				e.Links = append(e.Links, graph.LinkEdit{Type: access.LinkPartOf, ToKey: u[3]})
+			}
+			edits = append(edits, e)
+		}
+	}
+	if !hasProject {
+		// the project hangs under the root project (ADR 0039); the assignment is where it meets the organisation
+		root, err := g.NodeByKey(ctx, access.NamespaceOrganisation, g.Structure(domain.StructureProject).Root)
+		if err != nil {
+			return false, err
+		}
+		project := graphsvc.SeedNode(DemoProject, access.NodeTypeProjectUnit, access.ProjectUnit{Name: "Online commerce",
+			Description: "Demo project: the delivery of Acme's online commerce solution", Kind: "product", Status: "active",
+			Methodologies: demoMethodologies}.Props())
+		edits = append(edits, linkTo(project, access.LinkProjectPartOf, root.Ref()))
+		asg := graphsvc.SeedNode(access.AssignmentKey("ORG-ACME", DemoProject), access.NodeTypeAssignment, access.Assignment{
+			Roles: demoRoles, Description: "The demo organisation works on the demo project"}.Props())
+		if hasOrg {
+			acme, err := g.NodeByKey(ctx, access.NamespaceOrganisation, "ORG-ACME")
+			if err != nil {
+				return false, err
+			}
+			asg = linkTo(asg, access.LinkAssignsOrg, acme.Ref())
+		} else {
+			asg.Links = append(asg.Links, graph.LinkEdit{Type: access.LinkAssignsOrg, ToKey: "ORG-ACME"})
+		}
+		asg.Links = append(asg.Links, graph.LinkEdit{Type: access.LinkAssignsProject, ToKey: DemoProject})
+		edits = append(edits, asg)
+	}
+	if err := graphsvc.SeedChange(ctx, g, access.NamespaceOrganisation, "Import demo organisation", edits); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// demoRepository seeds the alm data of the demo in the demo project, owned by the units of the demo organisation.
+func demoRepository(ctx context.Context, g *graph.Graph) error {
 	// ownership: a node of one namespace is owned by a unit of the organisation (the owner of its versions)
 	owners := map[string]string{"CMP-1": "ORG-CHECKOUT", "CMP-2": "ORG-CRM", "CMP-3": "ORG-FINANCE", "CMP-4": "ORG-SECURITY",
 		"APP-1": "ORG-CHECKOUT", "APP-2": "ORG-CRM", "APP-3": "ORG-FINANCE", "SOL-1": "ORG-DIGITAL"}
@@ -148,16 +241,16 @@ func Demo(ctx context.Context, g *graph.Graph) (bool, error) {
 	for _, l := range links {
 		i, ok := at[l[0]]
 		if !ok {
-			return false, fmt.Errorf("demo link from unknown node %s", l[0])
+			return fmt.Errorf("demo link from unknown node %s", l[0])
 		}
 		edits[i].Links = append(edits[i].Links, graph.LinkEdit{Type: alm + "@" + l[1], ToKey: l[2]})
 	}
-	_, err = g.Commit(ctx, graph.Commit{Namespace: alm, Title: "Import demo data", Intent: "Seed demo data", By: "devseed", BaselineName: "Initial baseline", Edits: edits,
-		ProjectID: g.Structure(domain.StructureProject).Root})
-	return err == nil, err
+	_, err := g.Commit(ctx, graph.Commit{Namespace: alm, Title: "Import demo data", Intent: "Seed demo data", By: "devseed", BaselineName: "Initial baseline", Edits: edits,
+		ProjectID: DemoProject})
+	return err
 }
 
-func linkPartOf(e graph.NodeEdit, to domain.NodeRef) graph.NodeEdit {
-	e.Links = append(e.Links, graph.LinkEdit{Type: access.LinkPartOf, To: &to})
+func linkTo(e graph.NodeEdit, typ string, to domain.NodeRef) graph.NodeEdit {
+	e.Links = append(e.Links, graph.LinkEdit{Type: typ, To: &to})
 	return e
 }

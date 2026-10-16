@@ -159,3 +159,64 @@ func TestDocumentRepositoryAndLocalFS(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// The demo project hangs under the root project, is bound to the demo organisation by an assignment, and the alm data
+// of the demo acts in it.
+func TestSeedDemoProjectBoundToTheOrganisation(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if _, err := devseed.Demo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	project, err := g.NodeByKey(ctx, access.NamespaceOrganisation, devseed.DemoProject)
+	if err != nil || project.Type != access.NodeTypeProjectUnit {
+		t.Fatalf("project = %+v, %v", project, err)
+	}
+	asg, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.AssignmentKey("ORG-ACME", devseed.DemoProject))
+	if err != nil {
+		t.Fatal(err)
+	}
+	acme, _ := g.NodeByKey(ctx, access.NamespaceOrganisation, "ORG-ACME")
+	out, err := g.OutLinksOf(ctx, asg.Ref())
+	if err != nil {
+		t.Fatal(err)
+	}
+	to := map[string]domain.NodeID{}
+	for _, l := range out {
+		to[l.Type] = l.To.ID
+	}
+	if to[access.LinkAssignsOrg] != acme.ID || to[access.LinkAssignsProject] != project.ID {
+		t.Fatalf("the assignment binds ORG-ACME to the demo project: %+v", out)
+	}
+	need, err := g.NodeByKey(ctx, "alm", "NEED-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if need.Project != project.ID {
+		t.Fatalf("the alm data acts in the demo project: %q", need.Project)
+	}
+}
+
+// A graph holding the demo of before the demo project gains the project, and nothing else is written again.
+func TestSeedDemoAddsTheProjectToAnOlderDemo(t *testing.T) {
+	ctx := context.Background()
+	g := typedGraph(t)
+	if err := g.Bootstrap(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range [][3]string{{"ORG-ACME", "company", ""}, {"ORG-DIGITAL", "direction", "ORG-ACME"}, {"ORG-CHECKOUT", "team", "ORG-DIGITAL"},
+		{"ORG-CRM", "team", "ORG-DIGITAL"}, {"ORG-FINANCE", "team", "ORG-DIGITAL"}, {"ORG-SECURITY", "team", "ORG-DIGITAL"}} {
+		if err := graphsvc.SeedUnit(ctx, g, u[0], u[0], u[1], u[2]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := devseed.Demo(ctx, g); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.NodeByKey(ctx, access.NamespaceOrganisation, access.AssignmentKey("ORG-ACME", devseed.DemoProject)); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := devseed.Demo(ctx, g); err != nil || again {
+		t.Fatalf("seeded once: %v %v", again, err)
+	}
+}

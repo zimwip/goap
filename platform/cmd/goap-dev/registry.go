@@ -88,8 +88,8 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	if err := types.Reload(e.ctx); err != nil {
 		return nil, wrap("type catalogue", err)
 	}
-	// the one platform bootstrap (graphsvc.Boot, ADR 0071) with the development data of this composition: the ALM demo,
-	// the document-repository MCP and, with GOAP_DEV_FS_ROOT, a directory as the default organisation's repository;
+	// the one platform bootstrap (graphsvc.Boot, ADR 0071) with the development data of this composition: the ALM demo
+	// with GOAP_DEV_DEMO=1 (else loaded on demand from the settings, graphsvc.Handler.Demo), the document-repository MCP and, with GOAP_DEV_FS_ROOT, a directory as the default organisation's repository;
 	// with GOAP_DEV_WORKSPACE_ROOT, the workspaces of the changes (ADR 0118), their commands in containers of
 	// GOAP_DEV_WORKSPACE_IMAGE when it is set.
 	// The gateway configuration is seeded before the methodologies below: publishing a methodology stubs any alias it
@@ -101,8 +101,10 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	}
 	if _, err := graphsvc.Boot(e.ctx, g, graphsvc.Options{Models: bootModels, RequireHooks: true, Log: e.log,
 		Dev: func(ctx context.Context, g *graph.Graph) error {
-			if _, err := devseed.Demo(ctx, g); err != nil {
-				return err
+			if e.cfg.Demo {
+				if _, err := devseed.Demo(ctx, g); err != nil {
+					return err
+				}
 			}
 			if _, err := devseed.DocumentRepository(ctx, g); err != nil {
 				return err

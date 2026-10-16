@@ -32,6 +32,7 @@ import (
 	"github.com/zimwip/goap/mcp/mcpsvc"
 	"github.com/zimwip/goap/platform/assistantsvc"
 	"github.com/zimwip/goap/platform/convsvc"
+	"github.com/zimwip/goap/platform/devseed"
 	"github.com/zimwip/goap/platform/eventsvc"
 	"github.com/zimwip/goap/platform/modelgw"
 	"github.com/zimwip/goap/platform/prefssvc"
@@ -63,7 +64,8 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		srv.Mount(path, h)
 	}
 
-	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: engine.Publishers{changePublisher(e.triggers.onChange), pp.indexSink, rp.bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident}
+	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: engine.Publishers{changePublisher(e.triggers.onChange), pp.indexSink, rp.bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident,
+		Demo: devseed.DemoLoader(gp.directory)}
 	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: rp.reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: rp.domains, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))

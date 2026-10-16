@@ -50,6 +50,9 @@ type Handler struct {
 	Floor authz.Authorizer
 	// Identity extracts the caller from request headers (set by the gateway).
 	Identity identity.Extractor
+	// Demo loads the demo data of the composition (platform/devseed), reporting whether it wrote anything and the key
+	// of the demo project; nil: the deployment ships no demo (LoadDemoData is unimplemented).
+	Demo func(ctx context.Context, g *graph.Graph) (loaded bool, project string, err error)
 }
 
 var _ graphv1connect.GraphServiceHandler = (*Handler)(nil)

@@ -3,6 +3,8 @@ import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
 import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, Tag, TypeCount } from './types/graph';
 
+import type { LoadDemoDataResponseJson } from '../../gen/goap/graph/v1/graph_pb';
+
 const GRAPH = 'goap.graph.v1.GraphService';
 
 export const GRAPH_SERVICE = GRAPH;
@@ -75,6 +77,9 @@ export const graph = {
     rpc<{ namespace: string; branch?: string; baselineId?: string }, GraphExport>(GRAPH, 'ExportGraph', { namespace, branch, baselineId }),
   /** Imports a JSON snapshot into main as one new change, left open for review (ADR 0104). */
   importGraph: (req: GraphImport) => rpc<GraphImport, GraphImportResult>(GRAPH, 'ImportGraph', req),
+  /** Loads the demo data (administrators only): the demo organisation, the demo project bound to it and its ALM
+   *  data, whatever is missing of them; `loaded` false when the graph held them already. */
+  loadDemoData: () => rpc<Empty, LoadDemoDataResponseJson>(GRAPH, 'LoadDemoData', {}),
   exportChangeProvenance: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { document?: string; filename?: string; mediaType?: string }>(
       GRAPH,

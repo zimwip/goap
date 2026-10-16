@@ -42,6 +42,9 @@ service GraphService {
   rpc ExportGraphOkf(ExportGraphOkfRequest) returns (stream ExportGraphOkfResponse);
   // Imports a JSON snapshot into the main branch of its namespace as one new change, left open for review (ADR 0104).
   rpc ImportGraph(ImportGraphRequest) returns (ImportGraphResponse);
+  // Loads the demo data (administrators only): the demo organisation, the demo project bound to it and the ALM
+  // repository acting in that project, each part when it is missing. Unimplemented where the deployment ships no demo.
+  rpc LoadDemoData(LoadDemoDataRequest) returns (LoadDemoDataResponse);
 
   // Change axis
   rpc CreateChange(CreateChangeRequest) returns (CreateChangeResponse);
@@ -725,6 +728,15 @@ message IsAdminOnlyTypeRequest {
 
 message IsAdminOnlyTypeResponse {
   bool admin_only = 1;
+}
+
+message LoadDemoDataRequest {}
+
+message LoadDemoDataResponse {
+  // whether anything was written (false: the graph held the demo already)
+  bool loaded = 1;
+  // key of the demo project
+  string project = 2;
 }
 
 // A hierarchy every node version is placed in (domain.Structure).
