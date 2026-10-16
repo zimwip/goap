@@ -18,6 +18,9 @@ const (
 	LogFact   = "fact"   // fact.<item kind>: fact.artifact, fact.decision, fact.flow…
 	LogImpact = "impact" // impact.<op>: impact.proposed, impact.transitioned…
 	LogChange = "change" // change.updated: an edit of the header of the change (title, intent, goal, status, data)
+	// LogModel is the stream of the exchanges with a model (model.call, ADR 0059), written by the execution journal
+	// (journal.StreamModel); the graph only reads that an execution called a model (the provenance of an export).
+	LogModel = "model"
 )
 
 // HeaderEdit is the payload of a change.updated entry: for each field of the header the edit set, the value it left

@@ -49,16 +49,17 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 			methodology.KindBuiltin: builtins,
 			methodology.KindTool:    engine.ToolExecutor{},
 		},
-		Intent:      intent.Resolver{Ranker: intent.Lexical{}},
-		Store:       st.processes,
-		Events:      engine.Publishers{broker, rp.bus},
-		Scope:       engine.AuthzScope{Authz: gp.authorizer, Hub: mcpsvc.HubPort{Service: pp.hub}},
-		LLM:         models,
-		Sandboxes:   sandboxes,
-		Tracer:      enginetel.NewEngineTracer(),
-		Log:         e.log,
-		MaxParallel: platform.EnvInt("GOAP_MAX_PARALLEL", 4),
-		Types:       func() def.TypeSet { return rp.types.Get() },
+		Intent:                   intent.Resolver{Ranker: intent.Lexical{}},
+		Store:                    st.processes,
+		Events:                   engine.Publishers{broker, rp.bus},
+		Scope:                    engine.AuthzScope{Authz: gp.authorizer, Hub: mcpsvc.HubPort{Service: pp.hub}},
+		LLM:                      models,
+		Sandboxes:                sandboxes,
+		Tracer:                   enginetel.NewEngineTracer(),
+		Log:                      e.log,
+		MaxParallel:              platform.EnvInt("GOAP_MAX_PARALLEL", 4),
+		PersonReviewsModelOutput: platform.EnvBool("GOAP_PERSON_REVIEWS_MODEL_OUTPUT", true), // the oversight floor (EU AI Act Art. 14)
+		Types:                    func() def.TypeSet { return rp.types.Get() },
 	}
 	// a store shared by replicas (sqlite) serializes the work on a process through its locks, and the runs left by
 	// the previous start are resumed (ADR 0124)

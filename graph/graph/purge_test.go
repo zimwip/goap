@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/zimwip/goap/contracts/domain"
 )
 
 func TestPurgeChange(t *testing.T) { forEachRepo(t, testPurgeChange) }
@@ -37,5 +39,14 @@ func testPurgeChange(t *testing.T, repo Repo) {
 	// an applied change landed in the graph: it stays
 	if _, err := g.PurgeChange(ctx, d.ID); !errors.Is(err, ErrConflict) {
 		t.Fatalf("purge of an applied change: %v", err)
+	}
+
+	// a change whose log records an execution keeps it for audit: it can be abandoned, not purged
+	e := setProp(t, g, f, f.base.ID, "C", map[string]any{"title": "C title"})
+	if err := g.AppendLog(ctx, []domain.LogEntry{{Change: e.ID, Type: "model.call"}}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+	if _, err := g.PurgeChange(ctx, e.ID); !errors.Is(err, ErrConflict) {
+		t.Fatalf("purge of a change with a recorded execution: %v", err)
 	}
 }

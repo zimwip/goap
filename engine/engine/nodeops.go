@@ -442,6 +442,9 @@ func (e *Engine) applyNodeOps(ctx context.Context, p *Process, ops []dsl.NodeOp,
 			}
 			status := domain.ReviewRejected
 			if op.Accept {
+				if err := e.checkOversight(ctx, bb.Change, id); err != nil {
+					return declared, fail(err)
+				}
 				status = domain.ReviewAccepted
 			}
 			// an acceptance with a reserve stands on a derogation in force that covers the effect (ADR 0075 §2): without

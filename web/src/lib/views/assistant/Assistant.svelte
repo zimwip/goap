@@ -5,7 +5,7 @@
   import VoiceButton from '../../voice/VoiceButton.svelte';
   import { openSettings } from '../../shell/settingsState.svelte';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { assistantEnabled, ASSISTANT_OFF } from '../../assistant/enabled';
+  import { AI_DISCLOSURE, assistantEnabled, ASSISTANT_OFF } from '../../assistant/enabled';
   import { actionChipLabel, repeatable, runAction } from '../../assistant/actions';
   import { isCard } from '../../assistant/proposal';
   import { captureSelectionNow } from '../../assist/capture';
@@ -117,6 +117,7 @@
 <div class="assistant {mode}" data-assistant>
   <div class="bar">
     <strong class="title"><Icon name="chat" size={15} /> Assistant</strong>
+    <span class="ai-badge" title={AI_DISCLOSURE}>AI</span>
     <span class="grow"></span>
     {#if enabled}
       <button type="button" class="small" onclick={newConversation} title="New conversation" aria-label="New conversation">
@@ -256,10 +257,27 @@
         </button>
       {/if}
     </form>
+    <p class="disclosure" role="note">{AI_DISCLOSURE}</p>
   {/if}
 </div>
 
 <style>
+  .ai-badge {
+    margin-left: 6px;
+    padding: 0 5px;
+    border: 1px solid var(--border, currentColor);
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    opacity: 0.75;
+  }
+  .disclosure {
+    margin: 0;
+    padding: 2px 10px 6px;
+    font-size: 11px;
+    opacity: 0.7;
+  }
   .assistant {
     display: flex;
     flex-direction: column;

@@ -55,7 +55,7 @@ wrong by construction.
 - **Live**: no event is published. A feed follows with `ListUsage(after_seq = next_seq)` (cheap: indexed by seq). The
   event hub of ADR 0053 is fed by the graph, engine and registry; a gateway publisher would be a new publisher and a new
   event kind for little gain.
-- **Retention**: `GOAP_LLM_CALL_RETENTION_DAYS` (default 90, 0 keeps everything); purged at start and every 24 hours by
+- **Retention**: `GOAP_LLM_CALL_RETENTION_DAYS` (default 183, six months, the minimum of the EU AI Act for its logs, Art. 19 and 26(6): a shorter one is warned about at start; 0 keeps everything); purged at start and every 24 hours by
   `Service.KeepCalls` (`platform/cmd/modelgw`, `goap-dev`).
 
 ## Exchanges: the prompt of every call
