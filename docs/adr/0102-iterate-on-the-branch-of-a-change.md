@@ -91,7 +91,7 @@ that committed.
 
 The merge goes through the **guardian of the change**, the one that already guards its transitions (ADR 0058:
 `ChangeLifecycles`, implemented by the registry, which knows the methodology), asked outside any transaction
-(`checkMerge`, `pkg/graph/mergecheck.go`) on the blackboard of what the change lands (its impacts, their pre versions and
+(`checkMerge`, `graph/graph/mergecheck.go`) on the blackboard of what the change lands (its impacts, their pre versions and
 what each lands: the version committed on the change's branch, for a sub-change too since ADR 0103):
 
 1. the lifecycle of the change (resolved by the guardian) must be in a **final state**: its transitions, guarded,
@@ -101,7 +101,7 @@ what each lands: the version committed on the change's branch, for a sub-change 
 3. else no node left in a state its domain cannot land (ADR 0078).
 
 There is no other hook: `Graph.LandingGate`, the separate final-state check of the commit and the guard chain of the first
-draft of this ADR are gone. A graph with no guardian (no registry in process, `cmd/graph`) merges by 3 alone. Since ADR
+draft of this ADR are gone. A graph with no guardian (no registry in process, `platform/cmd/graph`) merges by 3 alone. Since ADR
 0106 the outer guardians of the chain saved on the change (the methodologies integrating its own) are asked after these
 three (`checkGuardians`).
 

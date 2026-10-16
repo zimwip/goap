@@ -13,7 +13,7 @@ The graph describes the enterprise; the enterprise does not care that a user pre
 ## Decision
 
 - **The user is declared in the graph** (`organisation@User`); **their preferences are not**. A new service,
-  `preferences` (`cmd/preferences`, `internal/prefssvc`, Connect `preferences.v1`), keeps one JSON document per subject
+  `preferences` (`platform/cmd/preferences`, `platform/prefssvc`, Connect `preferences.v1`), keeps one JSON document per subject
   in its own store (`user_preference`; PostgreSQL, SQLite in local mode, memory). It is routed by the gateway and run
   in process by `goap-dev`.
 - **A caller only reaches their own document**: the subject is the one of the request identity, there is no way to

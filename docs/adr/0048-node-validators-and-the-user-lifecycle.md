@@ -30,7 +30,7 @@ editable in. The rule was unconditional; `User` needed it to not apply.
 
 ### NodeValidator: a commit-time, graph-query-capable extension point
 
-`pkg/graph/validator.go` adds `NodeValidator`, a Go-level plugin interface distinct from ADR 0018's property
+`graph/graph/validator.go` adds `NodeValidator`, a Go-level plugin interface distinct from ADR 0018's property
 validators:
 
 ```go
@@ -46,7 +46,7 @@ type NodeValidator interface {
   the commit is about to persist as its baseline, not a branch read, since an impacted node's new version only
   joins its branch once the branch advances, which happens after validators run.
 - **Invocation point**: the commit of the change (`CommitChange`, so `Apply`; `commitOnBranch` in
-  `pkg/graph/apply.go` since ADR 0102), immediately after the impacts are checked (`walkChangeImpacts`) and before
+  `graph/graph/apply.go` since ADR 0102), immediately after the impacts are checked (`walkChangeImpacts`) and before
   `tx.PutBaseline`, inside the same transaction — a rejection aborts the whole commit atomically, the same
   guarantee property validators and the landing checks give.
 - **No nested transaction**: `ValidatorQuery` is served directly off the `Tx` the commit already holds (the stores
@@ -107,7 +107,7 @@ other). `Types()` returns `User` and `Assignment` — either can remove the last
 `User`, or retiring/narrowing their platform Assignment). `Validate` builds the snapshot of the `User`s,
 `Assignment`s and units the change leaves live, counts the users holding `RoleAdmin` the way `Snapshot.Enrich`
 grants it (a **platform** Assignment, ADR 0046 / 0047, of the user or of a unit above it), and accepts if at least
-one of them is `active`. Wired onto `Graph.Validators` in `cmd/goap-dev` and `cmd/graph`.
+one of them is `active`. Wired onto `Graph.Validators` in `platform/cmd/goap-dev` and `platform/cmd/graph`.
 
 ## Consequences
 

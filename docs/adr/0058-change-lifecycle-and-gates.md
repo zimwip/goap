@@ -60,11 +60,11 @@ methodologies.
 ## Mechanism
 
 - The registry resolves what the graph does not know (`graph.ChangeLifecycles`, implemented by `registrysvc.Service`,
-  wired in `goap-dev`; `cmd/graph`, with no registry in process, wires none and its changes have no state): the
+  wired in `goap-dev`; `platform/cmd/graph`, with no registry in process, wires none and its changes have no state): the
   lifecycle of a methodology (`Methodology.Lifecycle`, a lifecycle of the domain of its namespace) and the guard
   evaluation, with the world state of the compiled methodology. `CreateChange` sets `Change.Lifecycle` / `State`
   (initial state); a methodology the registry does not know, or naming none, leaves the change without state.
-- The guard is the node one (`pkg/guard`), its environment widened with `decisionPoints` and `world` (condition name
+- The guard is the node one (`lib/guard`), its environment widened with `decisionPoints` and `world` (condition name
   to bool); `condition.CheckGuard` builds it from the blackboard. It sees `change.transition` and `change.decision`,
   the decision point the caller names. A decision point gates one transition only: the ones already named by a
   transition are left out of what a guard sees. Example:

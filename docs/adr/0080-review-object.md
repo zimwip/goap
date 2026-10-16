@@ -1,6 +1,6 @@
 # ADR 0080 — The review object: a review built up, then submitted
 
-**Status**: accepted, implemented (graph mechanism, `pkg/review`, services, `goap-change`, PROV-O, web); amended by
+**Status**: accepted, implemented (graph mechanism, `contracts/review`, services, `goap-change`, PROV-O, web); amended by
 [ADR 0105](0105-every-verdict-is-a-submitted-review.md) (every verdict is a submitted review, the record is built in, the
 verdicts name it as their cause) · **Date**: 2026-10 · Builds on
 ADR 0036 / 0065 (change items of a use case), ADR 0029 / 0030 (the impact log), ADR 0075 (`ReviewPolicy`), ADR 0079 (reviews are
@@ -19,9 +19,9 @@ grouped them in the log, and a reviewer could not leave a decision half made.
 A **review** is a change item of the kind `review`, in the manner of `risk`, `action`, `waiver` (ADR 0036, 0065): each item is a
 version of the record of its `data.key`, event-logged as `fact.review`. The kind and its record are built in
 (`domain.KindReview`, `domain.ReviewRecord`, `ReviewEntry`, known to `ChangeItem.Validate` without a registration, ADR 0105;
-this ADR first had `pkg/review` register it with `review.Register()`). `pkg/review` is the use case and folds the items
-(`review.Reviews(items)`, pure, its names aliases of the domain's). `pkg/graph` and `pkg/domain` import nothing of it
-(`pkg/layering`).
+this ADR first had `contracts/review` register it with `review.Register()`). `contracts/review` is the use case and folds the items
+(`review.Reviews(items)`, pure, its names aliases of the domain's). `graph/graph` and `contracts/domain` import nothing of it
+(`platform/layering`).
 
 Data of an item (the whole record, a version never restates by omission): `key` (`REV-…`), `flow` (the flow the entries are
 reviewed on, empty: main), `comment` (the **global comment**), `status`, `entries` `[{impact, comment, outcome}]`, `by` (the
@@ -46,8 +46,8 @@ has no unset). They are RPCs of `graph.v1`, tools of `goap-change` (`reviews`, `
 The logic is the use case `review.Service` over a small `review.Port` (`Change`, `AddItems`, `ImpactNodeReviewBatch`), implemented
 by `graph.Graph` and `graphsvc.Client` and so by every caller of `engine.GraphPort` (which gained those two methods: the
 blackboard is the view of one flow, a review needs the whole change). `graphsvc.Handler`, the `goap-change` connector and tests
-build a `Service` over their graph; none of them has review logic of its own. The graph does not import `pkg/review`, and
-`pkg/review` does not import `pkg/graph` (the graph's tests import it): the refusals are `review.ErrInvalid` / `ErrConflict` /
+build a `Service` over their graph; none of them has review logic of its own. The graph does not import `contracts/review`, and
+`contracts/review` does not import `graph/graph` (the graph's tests import it): the refusals are `review.ErrInvalid` / `ErrConflict` /
 `ErrNotFound` / `authz.ErrForbidden`, mapped to the Connect codes by `rpcerr` like the graph's own.
 
 **Authorization**: only the author or an administrator updates, submits or discards (`review.Actor{Subject, Admin}`; the handler

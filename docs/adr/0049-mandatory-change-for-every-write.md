@@ -10,14 +10,14 @@ Builds on ADR 0024 (change impacts), ADR 0029/0030 (impact log), ADR 0040 (user 
 
 "Every modification is a Change" (this project's second design rule) was enforced only at the RPC gateway
 (`internal/graphsvc.refuseDirectWrite`), and only for lifecycle-controlled or access-listed types.
-`pkg/graph` core — `CreateNode`, `UpdateNode`, `Link` — stayed fully open to direct writes bypassing Change
+`graph/graph` core — `CreateNode`, `UpdateNode`, `Link` — stayed fully open to direct writes bypassing Change
 entirely, used by seeding (`SeedDemo`, `LinkOrphanUnits`) and dominant in the test suite (~60 call sites). This
 closes that gap in the Graph Service itself, not just the gateway: no node, node version or link is written
 outside the frame of a change, hardwired, with no caller-level exemption.
 
 ## Decision
 
-No node, node version or link is written by `pkg/graph` outside the frame of a change, hardwired, with no
+No node, node version or link is written by `graph/graph` outside the frame of a change, hardwired, with no
 caller-level exemption. As first implemented:
 
 - **`CreateNode` / `UpdateNode` became `Commit` sugar**, signatures unchanged: each opened, populated and applied a
@@ -34,16 +34,16 @@ caller-level exemption. As first implemented:
   an implicit change would defeat asking which change it belongs to (the `CreateLink` RPC gained a `change_id`). Nodes
   a `Commit` creates link each other freely, cycles included (`NodeEdit.Links` with `ToKey`), so a whole import is one
   change per namespace.
-- **Test fixtures** got two helpers in `pkg/graph/repos_test.go`: `seedNode`, writing a node in an arbitrary lifecycle
+- **Test fixtures** got two helpers in `graph/graph/repos_test.go`: `seedNode`, writing a node in an arbitrary lifecycle
   state for a fixture, and `testChange`, opening a change on a namespace's current head for a test that needs a
   `ChangeID`.
 
 ## Since then
 
-- ADR 0054 made the rule a property of the storage: the guard (`pkg/graph/guard.go`) checks at the end of every
+- ADR 0054 made the rule a property of the storage: the guard (`graph/graph/guard.go`) checks at the end of every
   transaction that every node version, link, branch membership and node origin names an existing change, and the
   schema repeats it with `NOT NULL` foreign keys; even `seedNode` writes inside a change. Units are created with their
-  parent, `LinkOrphanUnits` is gone, and the demo data lives in `internal/devseed`.
+  parent, `LinkOrphanUnits` is gone, and the demo data lives in `platform/devseed`.
 - ADR 0056 removed the empty initial baseline (the state before a namespace's first change is the empty baseline id,
   stored nowhere) and `CreateBaseline` (a baseline is the state a change leaves).
 - ADR 0076, 0077 and 0079 removed the implicit changes: `CreateNode`, `UpdateNode`, the standalone `Link` and

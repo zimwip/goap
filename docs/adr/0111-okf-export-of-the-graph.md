@@ -14,7 +14,7 @@
 
 ### 1. The OKF tree
 
-`pkg/okf` renders a `graph.Snapshot` (the state of one baseline, no history) as a tree of Markdown files with a YAML front
+`graph/okf` renders a `graph.Snapshot` (the state of one baseline, no history) as a tree of Markdown files with a YAML front
 matter (format `goap.okf/v1`):
 
 - `<namespace>/index.md`: front matter `{format, namespace, branch, baseline, exportedAt, nodes, types: {type: count}}`,

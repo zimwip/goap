@@ -52,13 +52,13 @@ log).
    policy)`. The callers are the graph's own (it holds the policy), so the replay stays a pure function of the log,
    the moment and the policy, with no global state and tests that run in parallel with different policies. (Item kinds
    of ADR 0065 are a registry because `ChangeItem.Validate` has no graph in hand; the replay does.)
-3. **`pkg/decision`** is the platform's policy, with the same math, defaults and escalation texts as before: values
+3. **`contracts/decision`** is the platform's policy, with the same math, defaults and escalation texts as before: values
    `decider` (`agent` / `human`), `threshold` (0.7), `maxRounds` (3; negative: no limit), `maxDuration` (a duration
    that `Open` turns into `deadline`), kept `rounds`; a decided ruling settles when `Human || Confidence >=
    threshold`, an undecidable ruling or a refused ratification is a round, 3 rounds or the deadline escalate, a
    human decider reserves the point without escalating it. The composition roots plug it explicitly
-   (`g.DecisionPolicy = decision.Policy{}` in `cmd/graph`, `cmd/goap-dev`, and the tests that exercise it).
-   `pkg/graph` and `pkg/domain` must not import it (`pkg/layering`), nor name the vocabulary above
+   (`g.DecisionPolicy = decision.Policy{}` in `platform/cmd/graph`, `platform/cmd/goap-dev`, and the tests that exercise it).
+   `graph/graph` and `contracts/domain` must not import it (`platform/layering`), nor name the vocabulary above
    (`TestCoreNamesNoEnginePolicy`).
 4. **Callers.** The CEL activation of a decision point exposes `policy` (a map: whole numbers as ints) and `humanOnly`
    instead of `decider` / `threshold` / `rounds` / `maxRounds`; `status` and `escalation` are unchanged, so the
@@ -72,6 +72,6 @@ log).
 - A use case other than the engine can open flows with its own origin and its own items, and decide points under its
   own policy, without a change to the graph.
 - A flow of an option has no `Reason`; the web reads the relaunch's step, process and reason from `Flow.origin`.
-- The policy values cross the wire as JSON numbers: `pkg/decision` reads any numeric encoding; expressions see whole
+- The policy values cross the wire as JSON numbers: `contracts/decision` reads any numeric encoding; expressions see whole
   numbers as ints.
 - PostgreSQL: no schema change (events live in the JSON of the log); PG tests not executed here.

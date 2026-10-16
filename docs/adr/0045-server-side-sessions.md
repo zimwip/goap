@@ -11,7 +11,7 @@ ended a user's sessions when their password changed, and a user could not sign o
 
 ## Decision
 
-- **A sign-in opens a session**, kept by the credentials service (`internal/credsvc`, table `auth_session` in both
+- **A sign-in opens a session**, kept by the credentials service (`gateway/credsvc`, table `auth_session` in both
   dialects: id, subject, created, expires — the maximum session —, revoked): `StartSession` at register/login,
   `SessionActive`, `EndSession`, `EndSessions` (Connect `credentials.v1` `StartSession` / `CheckSession` /
   `EndSession` / `EndSessions`). Sessions expired for a day are purged as new ones open. Every token of the

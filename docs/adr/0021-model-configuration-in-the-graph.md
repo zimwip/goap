@@ -13,7 +13,7 @@ providers, catalog (quotas, roles) and aliases in SQL tables, with API keys seal
 1. Providers, models and aliases are nodes of the `platform` domain: `LlmProvider` (`LLP:<name>`), `LlmModel`
    (`LLM:<provider>/<model>`), `LlmAlias` (`LLA:<alias>`). They reference each other by name, like an `AdapterDef` names
    its MCP and connector; a model of an unknown provider and an alias of an unknown model are reported and ignored.
-2. `pkg/llmcfg` holds the node schema and a snapshot of the head of `main` (`pkg/graphsnap.Cache`, shared with `pkg/access`);
+2. `lib/llmcfg` holds the node schema and a snapshot of the head of `main` (`pkg/graphsnap.Cache`, shared with `lib/access`);
    the gateway rebuilds its router when the head moves (looked at once per second).
 3. An API key is never in the graph: `apiKeyRef` (`env:<VAR>` or `<vault path>#<field>`, alternatives separated by `|`) is
    resolved by the gateway at load time. A provider that needs a key and has none is reported inactive.

@@ -79,7 +79,7 @@ and history are those of any run.
 An event arriving while the run is at work waits in its inbox by default: the run ends, then runs again for it. That is
 wrong when the event makes the work in flight pointless: the person edits the description, the rating starts, the
 person edits it again before the answer, and the answer would be about a text that is gone. An event of a subscription
-flagged `supersede` interrupts the run instead (`Engine.restartFor`, `pkg/engine/companion.go`, in the background so the
+flagged `supersede` interrupts the run instead (`Engine.restartFor`, `engine/engine/companion.go`, in the background so the
 publisher of the event never waits): its sub-processes (the agent of the step it carries out, a task waiting for a
 person) are cancelled, its run in flight is interrupted (its model and tool calls end with their context, as for
 `Cancel`) and lets go without failing, then the run starts again for the event, with what it waited for, what it tried
@@ -95,7 +95,7 @@ starts the new one, and the rate limit of the trigger does not apply to it (the 
 
 ### 3. The rating is an assessment item of the change
 
-A built-in use case, `pkg/assess` (registered like `pkg/risk`: `assess.Register()`), with an item kind `assessment`:
+A built-in use case, `contracts/assess` (registered like `contracts/risk`: `assess.Register()`), with an item kind `assessment`:
 each item is the whole record of its `data.key` (the subject), the latest one in effect is the rating.
 
 ```text
@@ -133,7 +133,7 @@ The rater never writes the description: `suggestion` is shown in the bubble with
 A person answers with an item of kind `comment` (`{about: "description", text}`); the rater answers with its next
 rating (`reply`). The thread of a subject is its comments and ratings in the order of the log (`assess.Thread`). A
 comment raises `change.item_added`, which wakes the same run of the rating step (filter on the comment); the brief of
-the LLM action (`pkg/brief`) carries the latest rating and the thread, so it refines rather than starts over. The
+the LLM action (`lib/brief`) carries the latest rating and the thread, so it refines rather than starts over. The
 discussion is part of the change (journaled, PROV), not of the conversation service (ADR 0085), and the rater's run is
 an ordinary run (Progress, journal, prompts), reachable from the bubble.
 
@@ -210,13 +210,13 @@ again; the bubble finds the run from the step that wrote the rating, up to the c
 
 - `pkg/events.ChangeEdited`, `domain.ChangeEvent.Fields`, `domain.EditedFields`; published by
   `graphsvc.Handler.UpdateChange` and `engine.EventingGraph.UpdateChange`; `TriggerEvent.Fields`, `event.fields`.
-- `pkg/methodology`: `On` on `Process`, `Step`, `Method`, `Action` (YAML, proto, attribute `on` of
+- `engine/methodology`: `On` on `Process`, `Step`, `Method`, `Action` (YAML, proto, attribute `on` of
   `methodology@Activity`); `compileReactions` / `Compiled.Reactions()` (`reaction.go`): event known, filter compiles,
   `from` valid, a reactive action declares effects and is not a specialization, none in a transverse methodology
   (it subscribes at its own level), a warning for a reactive step whose exit is only its own run.
-- `pkg/engine`: `Engine.react` from `Accompany` (the change's own methodology, `from: self`) and from `relay` (the
+- `engine/engine`: `Engine.react` from `Accompany` (the change's own methodology, `from: self`) and from `relay` (the
   related changes); `companionRun` shared with the transverse processes.
-- `pkg/assess`, CEL `assessments` (conditions and lifecycle guards), library `assessments`, `pkg/brief` (`ASSESSMENT`,
+- `contracts/assess`, CEL `assessments` (conditions and lifecycle guards), library `assessments`, `lib/brief` (`ASSESSMENT`,
   `THREAD`, the intent up to 1500 runes).
 - `methodologies/sdlc.yaml` 0.7.1: process `description_review`, step `rate` (method `description_rating`, goap: `rate_description` llm first, `rate_description_by_hand` human fallback),
   reactive on `change.created`, `change.edited` (title or intent) and comments on the description; the analysis step

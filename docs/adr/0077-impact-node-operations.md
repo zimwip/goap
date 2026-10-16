@@ -52,7 +52,7 @@ target is one `created` event, then `reviewed`, `landed`).
 
 ## Resolution
 
-Every operation that names a node resolves it through one function (`resolve`, `pkg/graph/checkout.go`) against the
+Every operation that names a node resolves it through one function (`resolve`, `graph/graph/checkout.go`) against the
 reference baseline of the change and what the flow sees of it; an operation names a change impact, or a node (its id, or
 its key, with the type for a creation):
 
@@ -80,7 +80,7 @@ P→A and P→B and gains P→C; splitting A into C and D loses P→A and gains 
 in history untouched.
 
 - **Operations**: `ImpactNodeMerge` (`MergeInput{Sources, Into}`) and `ImpactNodeSplit` (`SplitInput{Source, Into}`),
-  in `pkg/graph/restructure.go`; names are the same in the service (RPC `ImpactNodeMerge` / `ImpactNodeSplit`,
+  in `graph/graph/restructure.go`; names are the same in the service (RPC `ImpactNodeMerge` / `ImpactNodeSplit`,
   `graphsvc.Client`), the engine port, the DSL (`ctx.impactNodeMerge(sources, type, key, rationale)`,
   `ctx.impactNodeSplit(source, [{type, key, rationale, props}])`), the `goap-change` tools `merge` / `split` and the web
   client. Each is one transaction built on the resolver of the previous section. The result lists the successors, the

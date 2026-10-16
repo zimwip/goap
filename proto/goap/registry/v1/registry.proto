@@ -5,8 +5,8 @@ package goap.registry.v1;
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
-// RegistryService stores the methodologies (as nodes of the graph) and the domains (in its database, ADR 0023). A
-// version is a draft (editable) until published (immutable). YAML is only an import / export format.
+// RegistryService stores the methodologies (as nodes of the graph, ADR 0023); the domains are DomainService's (ADR
+// 0125). A version is a draft (editable) until published (immutable). YAML is only an import / export format.
 service RegistryService {
   rpc ListMethodologies(ListMethodologiesRequest) returns (ListMethodologiesResponse);
   // version empty = latest published version
@@ -34,21 +34,27 @@ service RegistryService {
   rpc ImportMethodology(ImportMethodologyRequest) returns (ImportMethodologyResponse);
   rpc ExportMethodology(ExportMethodologyRequest) returns (ExportMethodologyResponse);
 
-  // Domains are the object part (node types, link types, lifecycles, algorithms), one per namespace (ADR 0013);
-  // methodologies reference their types as <namespace>@<type>. They have the same lifecycle as methodologies.
+  // Methodology versions referencing a domain version.
+  rpc GetDomainUsage(GetDomainUsageRequest) returns (GetDomainUsageResponse);
+}
+
+// DomainService stores the domains (in its database, ADR 0023), the definition of the graph: the object part (node
+// types, link types, lifecycles, algorithms), one per namespace (ADR 0013); methodologies reference their types as
+// <namespace>@<type>. A version is a draft (editable) until published (immutable), like a methodology. It names no
+// methodology (ADR 0125 §3).
+service DomainService {
   rpc ListDomains(ListDomainsRequest) returns (ListDomainsResponse);
   // version empty = latest published version
   rpc GetDomain(GetDomainRequest) returns (GetDomainResponse);
   rpc SaveDomain(SaveDomainRequest) returns (SaveDomainResponse);
   rpc ValidateDomain(ValidateDomainRequest) returns (ValidateDomainResponse);
-  // Freeze a valid draft, once no published methodology would break.
+  // Freeze a valid draft: it becomes the version in force. The methodologies it breaks are suspended by the
+  // methodology registry, which follows the events of the domains (ADR 0125 §3).
   rpc PublishDomain(PublishDomainRequest) returns (PublishDomainResponse);
   rpc CreateDomainVersion(CreateDomainVersionRequest) returns (CreateDomainVersionResponse);
   rpc DeleteDomain(DeleteDomainRequest) returns (DeleteDomainResponse);
   rpc ImportDomain(ImportDomainRequest) returns (ImportDomainResponse);
   rpc ExportDomain(ExportDomainRequest) returns (ExportDomainResponse);
-  // Methodology versions referencing a domain version.
-  rpc GetDomainUsage(GetDomainUsageRequest) returns (GetDomainUsageResponse);
   // The type catalogue in force (ADR 0012): the node and link types of the published and built-in domains, resolved.
   rpc ListTypes(ListTypesRequest) returns (ListTypesResponse);
   // Try an algorithm of a domain on a sample input, without saving anything.
@@ -341,6 +347,8 @@ message Action {
   google.protobuf.Struct form = 29;
   // llm actions: the budget of the tool loop (ADR 0118)
   ActionLoop loop = 30;
+  // roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent
+  repeated string roles = 31;
 }
 
 // The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default.
@@ -382,6 +390,8 @@ message Agent {
   string model = 9;
   // one instance per scope, run again for every new execution there with its conversation (ADR 0112)
   Persistence persistent = 10;
+  // roles allowed to run the agent (ADR 0043), declared by the methodology; empty: any member of the project
+  repeated string roles = 11;
 }
 
 // The persistence of an agent (ADR 0112): what one instance is for, what closes it, how much of its conversation it
@@ -475,6 +485,10 @@ message Methodology {
   map<string, string> domains = 30;
   // how the assessments of the subjects of its changes read: per subject, states bound to conditions (ADR 0116)
   repeated AssessmentView assessments = 31;
+  // why a published version is suspended (ADR 0125 §3): the domains it follows changed and it no longer compiles against
+  // them; no change starts on it and no run reads it until a compatible version is published. Empty: in force. Set by
+  // the registry, ignored on a write.
+  string suspended = 32;
 }
 
 // AssessmentView is how the assessments of the subjects a pattern matches read (ADR 0116): the first state that holds wins.
@@ -654,6 +668,8 @@ message MethodologySummary {
   google.protobuf.Timestamp published_at = 7;
   // namespace (domain) the changes of the methodology act on
   string namespace = 9;
+  // why a published version is suspended (ADR 0125 §3); empty: in force
+  string suspended = 10;
 }
 
 // A validation issue. `path` locates the field, e.g. "conditions[2].expr".

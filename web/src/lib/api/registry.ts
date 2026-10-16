@@ -3,6 +3,7 @@ import type { Empty } from './types/common';
 import type { Algorithm, Domain, DomainSummary, DomainUser, Issue, LevelCheck, LinkTypeInfo, Methodology, MethodologySummary, PlanPreview, ProcessGraph, RunAlgorithmResponse, TypeInfo } from './types/registry';
 
 const REGISTRY = 'goap.registry.v1.RegistryService';
+const DOMAINS = 'goap.registry.v1.DomainService';
 type NameVersion = { name: string; version: string };
 
 export const registry = {
@@ -61,53 +62,55 @@ export const registry = {
   exportMethodology: (name: string, version: string) =>
     rpc<NameVersion, { yaml?: string; filename?: string }>(REGISTRY, 'ExportMethodology', { name, version }),
 
-  // --- domains (one per namespace; no change / impact / proposal involved) ---
+  /** Methodology versions referencing a domain version (unpinned references included). */
+  getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
+    rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),
+
+  // --- domains (one per namespace; no change / impact / proposal involved): the domain registry, served by the graph
+  // (ADR 0125 §3) ---
   listDomains: (allVersions = false, signal?: AbortSignal) =>
     rpc<{ allVersions?: boolean }, { domains?: DomainSummary[] }>(
-      REGISTRY,
+      DOMAINS,
       'ListDomains',
       allVersions ? { allVersions } : {},
       signal,
     ),
   /** empty `version`: latest published version. */
   getDomain: (name: string, version = '', signal?: AbortSignal) =>
-    rpc<NameVersion, { domain?: Domain }>(REGISTRY, 'GetDomain', { name, version }, signal),
+    rpc<NameVersion, { domain?: Domain }>(DOMAINS, 'GetDomain', { name, version }, signal),
   saveDomain: (domain: Domain) =>
-    rpc<{ domain: Domain }, { domain?: Domain; issues?: Issue[] }>(REGISTRY, 'SaveDomain', { domain }),
-  validateDomain: (domain: Domain) => rpc<{ domain: Domain }, { issues?: Issue[] }>(REGISTRY, 'ValidateDomain', { domain }),
+    rpc<{ domain: Domain }, { domain?: Domain; issues?: Issue[] }>(DOMAINS, 'SaveDomain', { domain }),
+  validateDomain: (domain: Domain) => rpc<{ domain: Domain }, { issues?: Issue[] }>(DOMAINS, 'ValidateDomain', { domain }),
   publishDomain: (name: string, version: string) =>
-    rpc<NameVersion, { domain?: Domain }>(REGISTRY, 'PublishDomain', { name, version }),
+    rpc<NameVersion, { domain?: Domain }>(DOMAINS, 'PublishDomain', { name, version }),
   createDomainVersion: (name: string, fromVersion: string, newVersion: string) =>
-    rpc<{ name: string; fromVersion: string; newVersion: string }, { domain?: Domain }>(REGISTRY, 'CreateDomainVersion', {
+    rpc<{ name: string; fromVersion: string; newVersion: string }, { domain?: Domain }>(DOMAINS, 'CreateDomainVersion', {
       name,
       fromVersion,
       newVersion,
     }),
   /** Deletes a draft, or archives a published version. */
-  deleteDomain: (name: string, version: string) => rpc<NameVersion, Empty>(REGISTRY, 'DeleteDomain', { name, version }),
+  deleteDomain: (name: string, version: string) => rpc<NameVersion, Empty>(DOMAINS, 'DeleteDomain', { name, version }),
   importDomain: (yaml: string, publish: boolean) =>
     rpc<{ yaml: string; publish?: boolean }, { domain?: Domain; issues?: Issue[] }>(
-      REGISTRY,
+      DOMAINS,
       'ImportDomain',
       publish ? { yaml, publish } : { yaml },
     ),
   /** The definition of a domain version, YAML (default) or JSON: the content is in `yaml` whatever the format. */
   exportDomain: (name: string, version: string, format: 'yaml' | 'json' = 'yaml') =>
-    rpc<NameVersion & { format?: string }, { yaml?: string; filename?: string; mediaType?: string }>(REGISTRY, 'ExportDomain', {
+    rpc<NameVersion & { format?: string }, { yaml?: string; filename?: string; mediaType?: string }>(DOMAINS, 'ExportDomain', {
       name,
       version,
       ...(format === 'json' ? { format } : {}),
     }),
-  /** Methodology versions referencing a domain version (unpinned references included). */
-  getDomainUsage: (name: string, version: string, signal?: AbortSignal) =>
-    rpc<NameVersion, { methodologies?: DomainUser[] }>(REGISTRY, 'GetDomainUsage', { name, version }, signal),
   /** The type catalogue in force (ADR 0012): node and link types of the published and built-in domains. */
   listTypes: (signal?: AbortSignal) =>
-    rpc<Record<string, never>, { types?: TypeInfo[]; linkTypes?: LinkTypeInfo[]; domains?: Record<string, string> }>(REGISTRY, 'ListTypes', {}, signal),
+    rpc<Record<string, never>, { types?: TypeInfo[]; linkTypes?: LinkTypeInfo[]; domains?: Record<string, string> }>(DOMAINS, 'ListTypes', {}, signal),
   /** Tries an algorithm on a sample input; nothing is saved. */
   runAlgorithm: (algorithm: Algorithm, values: Record<string, unknown>, input: Record<string, unknown>) =>
     rpc<{ algorithm: Algorithm; values: Record<string, unknown>; input: Record<string, unknown> }, RunAlgorithmResponse>(
-      REGISTRY,
+      DOMAINS,
       'RunAlgorithm',
       { algorithm, values, input },
     ),

@@ -13,7 +13,7 @@ compiled a methodology on every `Methodology` / `List` call, which the engine ma
 
 ## Decision
 
-- **Compile pipeline** (`pkg/methodology/compile.go`): `compileWith` orchestrates one `compileState` method per phase
+- **Compile pipeline** (`engine/methodology/compile.go`): `compileWith` orchestrates one `compileState` method per phase
   (`checkHeader`, `checkMainGoal` (added by ADR 0096), `compileConditions`, `injectLibraries`, `compileActions`,
   `checkSpecializations`, `checkReferences`, `compileGoals`, `compileAgents`, `checkTransverse`,
   `mergeRolesMethodsProcesses`, `finish`); the order is a constraint
@@ -33,7 +33,7 @@ compiled a methodology on every `Methodology` / `List` call, which the engine ma
   a move is authorized, guarded and acted when it is taken (`ImpactNodeTransition`, ADR 0079), so the commit's check is
   `walkChangeImpacts` alone (properties, `walkTransitions` replaying the recorded moves); `settleChangeImpacts` and
   `authorizeMoves` are gone, and the landing gate became the guardian of the merge (`checkMerge`, ADR 0102).
-- **Compile cache** (`internal/registrysvc/compilecache.go`): the key is (name, version, hash of the definition's JSON,
+- **Compile cache** (`platform/registrysvc/compilecache.go`): the key is (name, version, hash of the definition's JSON,
   the published domains in force as `name@version`), so a stale hit cannot happen (a draft replaced in place, a domain
   republished, are other keys); the value is the compiled methodology or its error. It is bounded (256 entries, then it
   starts over), guarded by a mutex, and emptied by every write the service publishes (`publish`, `publishDomainEvent`:

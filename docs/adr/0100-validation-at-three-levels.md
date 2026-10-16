@@ -19,13 +19,13 @@ the change lands (`Graph.checkVersion`, ADR 0079):
 1. **Attribute**: `property_validator` instances plugged on an attribute of a node type or of a link type (the latter
    now run).
 2. **Link**: `link_validator` instances plugged on a link type (`linkTypes[].validators`, `def.LinkType.Validators`).
-   Context `LinkValidatorCtx` (`pkg/dsl`): `param`, `link()` (`{type, props}`), `from()`, `to()`, `fail` / `log` /
+   Context `LinkValidatorCtx` (`lib/dsl`): `param`, `link()` (`{type, props}`), `from()`, `to()`, `fail` / `log` /
    `warn`. They run after the validators of the link's attributes.
 3. **Node**: `node_validator` instances plugged on a node type, after the attribute validators.
 
 Readers never define these rules: a reader of the graph (the model gateway's alias snapshot, the access snapshot) takes
 what it is given and the domain says what is valid. The Settings dialog is only an accelerator that fills the forms; it
-holds no rule. The alias rule is the `alias-target` validator of `domains/builtin/platform.yaml`, plugged on the alias
+holds no rule. The alias rule is the `alias-target` validator of `lib/domains/builtin/platform.yaml`, plugged on the alias
 type. The registry carries the new field (`LinkType.validators`), the algorithm editor and the "Try it" run know the
 usage, and the link type editor plugs instances.
 

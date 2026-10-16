@@ -84,8 +84,8 @@ which runs a deployment procedure).
 - `methodologies/sdlc.yaml` 0.5.1 describes `software_delivery` (framing by hand, analysis entered once framed
   (`step:software_delivery/framing`) in sub-steps with alternatives, design by the architect agent once the
   requirements are specified, build by the specialized `build` action, `release_train` nested and entered on its
-  prerequisites, application) next to its existing agents, with its reference documents; `pkg/engine/sdlc_test.go`
-  runs it end to end, and `pkg/engine/steps_test.go` a process declared out of order that its conditions sequence.
+  prerequisites, application) next to its existing agents, with its reference documents; `platform/e2e/engine/sdlc_test.go`
+  runs it end to end, and `platform/e2e/engine/steps_test.go` a process declared out of order that its conditions sequence.
 - A step whose entry is under-specified can be planned too early (the planner minimizes cost among what is
   possible): the conditions are the design, and the validation only checks that they exist and do not contradict.
 - A step retried after its sub-agent ended appears twice in the run's steps (suspended, then completed), as for any

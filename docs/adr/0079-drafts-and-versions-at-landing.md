@@ -60,7 +60,7 @@ honour stale runs). The events carry what is needed:
 - `cancelled` drops the draft of its flow, `withdrawn` and `landed` drop the drafts of the impact, `adopted` drops the
   flow's and the ones of the impacts it supersedes.
 
-Reads go through `Graph.drafts` (`pkg/graph/draftcache.go`). The graph keeps, per change, the fold up to a log position:
+Reads go through `Graph.drafts` (`graph/graph/draftcache.go`). The graph keeps, per change, the fold up to a log position:
 the drafts and the change impacts they depend on (a superseded impact loses its drafts), stamped with the `seq` of the
 last event folded. A read asks the log for the impact events **after** that `seq` (an indexed `Tx.Log` with `AfterSeq`,
 empty when nothing happened) and folds only those on top of the cached state: a read after one edit folds one event, not

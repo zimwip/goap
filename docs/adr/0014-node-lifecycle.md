@@ -17,7 +17,7 @@ the intent without any rule. Compared with plm-core, aifact and ailm, the missin
 ## Decision
 
 1. **A domain is composed of node types, link types and lifecycles.** A lifecycle is a named,
-   reusable state machine of the domain (`Schema.lifecycles`, `pkg/domain/lifecycle.go`): an initial
+   reusable state machine of the domain (`Schema.lifecycles`, `contracts/domain/lifecycle.go`): an initial
    state, states (`final`; first `editable`, now `notLandable`, ADR 0078) and transitions (`from`, `to`,
    `permission`, CEL `guard`, `requires` attributes / outgoing links, `children.states`). A node type **names** its
    lifecycle (`NodeType.lifecycle`); a subtype inherits it through `extends` and may name another one (it then

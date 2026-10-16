@@ -26,7 +26,7 @@ wrong by construction.
   `output_tokens` (an embedding's tokens are input), `error` (capped at 500 bytes), `source` and the correlation ids.
   Indexes: subject+at, source+at, model+at, process, at. The row holds counters; the exchange has its own table (see "Exchanges").
   ADR 0093 adds the behaviours the gateway applied (`behaviors`, `behavior_tokens`, migration `0005`).
-- **Declared meta** (`llm.CallMeta`, pure, `pkg/llm`): `Source` (free-form, lower case `[a-z0-9._:-]`, at most 40 bytes,
+- **Declared meta** (`llm.CallMeta`, pure, `contracts/llm`): `Source` (free-form, lower case `[a-z0-9._:-]`, at most 40 bytes,
   else `other`), `ConversationID`, `ProcessID`, `ChangeID`, `Step`, `Call`, `Action`, `Agent`. In process it travels in
   the context (`llm.WithMeta` / `MetaFrom`); over RPC as `CallMeta` on `CompleteRequest` / `EmbedRequest`, which
   `modelgw.Client` fills from its context and the `Handler` puts back in the context. It is accounting only and
@@ -35,7 +35,7 @@ wrong by construction.
   of the step their plan opens, then the host's: the numbering of the journal, so that `(change_id, process_id, step,
   call)` finds the exchange of ADR 0059, the `model.call` entry of the change log, which **stays there**), the assistant
   (`assistant`, conversation id), the helper (`helper`, inside `Suggest`), the indexer's embeddings (`indexer`), the
-  intent ranker (`intent`); later `eval` (offline evaluation, ADR 0099) and the gateway's own `calibration` calls (ADR 0093). `cmd/engine` now forwards the caller's identity to the gateway (`identity.Forward`), as the
+  intent ranker (`intent`); later `eval` (offline evaluation, ADR 0099) and the gateway's own `calibration` calls (ADR 0093). `platform/cmd/engine` now forwards the caller's identity to the gateway (`identity.Forward`), as the
   in-process composition always did, so the engine's calls carry the initiator as subject.
 - **Quota**: `llm_usage` stays, updated in the same step (one code path: `recordUsage` next to the ledger write). Deriving
   the quota from `SUM(llm_call)` was rejected: the retention purge would shrink the `total` and `month` periods, and the
@@ -56,7 +56,7 @@ wrong by construction.
   event hub of ADR 0053 is fed by the graph, engine and registry; a gateway publisher would be a new publisher and a new
   event kind for little gain.
 - **Retention**: `GOAP_LLM_CALL_RETENTION_DAYS` (default 90, 0 keeps everything); purged at start and every 24 hours by
-  `Service.KeepCalls` (`cmd/modelgw`, `goap-dev`).
+  `Service.KeepCalls` (`platform/cmd/modelgw`, `goap-dev`).
 
 ## Exchanges: the prompt of every call
 

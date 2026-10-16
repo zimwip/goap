@@ -6,7 +6,7 @@ Builds on ADR 0084 (protected aliases), 0085 (conversations) and 0086 (contextua
 
 > "Four tools" below is the original set. ADR 0090 adds `list_agents` / `start_agent` and the confirmation
 > `ConfirmAction`, ADR 0094 `methodology_query`, ADR 0106 §6 `search_changes` and the **frame** of a turn
-> (`internal/assistantsvc/frame.go`): eight server tools (`Tools()`), of which a turn offers those of its level
+> (`platform/assistantsvc/frame.go`): eight server tools (`Tools()`), of which a turn offers those of its level
 > (`project`, or `change` when the person looks at a change they can read); `create_change` only at level project and
 > once `search_changes` ran in the conversation. ADR 0092 replaces the context with a layered one and adds the screen
 > tools; ADR 0098 gives the tools through the provider's tool API.
@@ -24,9 +24,9 @@ and ask it to start a change or to take them to one. The conversation is stored 
   its methodology; nothing it does bypasses a change.
 - **A dedicated builtin, not a methodology agent.** The engine's `llm` action is a one-shot items protocol (a prompt, a
   set of items back); it cannot hold a conversation, ask the model again with tool results, or answer a person in
-  seconds. The assistant is a use case (`internal/assistantsvc`) over three ports (`Graph`, `Methodologies`, `Projects`;
+  seconds. The assistant is a use case (`platform/assistantsvc`) over three ports (`Graph`, `Methodologies`, `Projects`;
   ADR 0090 adds `Engine`), the model gateway (`modelgw.SuggestModel`: `Complete` and `Available`) and the conversation
-  service. `pkg/graph` and `pkg/engine` must not import it (`pkg/layering`).
+  service. `graph/graph` and `engine/engine` must not import it (`platform/layering`).
 - **One RPC of its own, `assistant.v1.AssistantService.Send`**, rather than a method of `ConversationService`: that service
   only stores, has no graph and no model gateway, and keeps its schema and trust small (ADR 0085). `Send` takes
   `{conversationId, text, context}` and returns the appended user message and the pending assistant message at once.

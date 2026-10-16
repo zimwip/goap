@@ -43,7 +43,7 @@ on:
 - **Levels are derived, never declared.** A methodology that integrates others is one level above them; the relation
   chains (a portfolio integrating `release-based`). There is no `level` field: a project lists its methodologies in
   `ProjectUnit.methodologies` as today, and an integrator frames the changes of a project only when it applies there.
-- `pkg/methodology/integrate.go`: `Integration{Methodologies, Exclusive, Attach}`, `Guardian{Merge, Transitions}`,
+- `engine/methodology/integrate.go`: `Integration{Methodologies, Exclusive, Attach}`, `Guardian{Merge, Transitions}`,
   `IntegratesChangesOf`, `IntegrationOf`, `MergeGuard(of)` (the `merge` guard, prefixed by `integrator.attached` when
   the integration is exclusive), `TransitionGuard(name)`; the compiler (`checkIntegration`) refuses an integration
   naming no methodology or itself, an unknown `attach`, a `guardian` without `integrates`, a guard that does not
@@ -68,14 +68,14 @@ attachment or a detachment journals the old and new chain in a `change.updated` 
 
 **Combination.** Every guardian of the chain must agree, innermost first:
 
-- **Merge** (`checkMerge`, `pkg/graph/mergecheck.go`): the own methodology as before (final state of its lifecycle,
+- **Merge** (`checkMerge`, `graph/graph/mergecheck.go`): the own methodology as before (final state of its lifecycle,
   its Activity goal, else the landable states), then `checkGuardians`: each outer methodology's `MergeGuard` of the
   methodology just inside it. The first refusal is reported (`ErrConflict`) with the methodology and the guard.
 - **Transitions** (`TransitionChange`): the change follows the lifecycle of its own methodology; each outer guardian
   may add a guard to a transition by name (`guardian.transitions`), checked after the lifecycle's own guard, vetos and
   objectives.
 - `ChangeLifecycles.CheckGuardians(bb, transition, ancestors)` evaluates the chain in the registry
-  (`internal/registrysvc/guardians.go`); `pkg/graph` stores the chain, collects the ancestor changes and names no
+  (`platform/registrysvc/guardians.go`); `graph/graph` stores the chain, collects the ancestor changes and names no
   methodology. Each guard is CEL in the condition environment of the change's own methodology plus `integrator`
   (`condition.CheckGuardian`, `guard.Facts.Integrator`): `{attached, id, methodology, state, status}` of the nearest
   ancestor change of that guardian's methodology, `attached` false and the rest empty when there is none
@@ -100,12 +100,12 @@ to change…* (the open changes of another methodology in its namespace, `web/sr
 **Validation and moves.** The registry refuses a cycle of integrations at validation (`integrationIssues`: a
 methodology integrating, directly or through others, one that integrates it; the wildcard is not followed).
 `MoveChange` computes the chain of the root change again for its new project, and of its sub-changes from it, journaled
-in the same `change.updated` entry (`guardians` field). `cmd/registry` gets `Applicable` from the organisation snapshot
+in the same `change.updated` entry (`guardians` field). `platform/cmd/registry` gets `Applicable` from the organisation snapshot
 like `goap-dev`.
 
 **Composition checks.** A methodology compiles alone, but what it expects of the ones it is composed with holds only
 against their definitions. The registry's validation adds `compositionIssues` (`methodology.CompositionIssues`,
-`pkg/methodology/composition.go`: the latest version of every other stored methodology, the lifecycles of the domains
+`engine/methodology/composition.go`: the latest version of every other stored methodology, the lifecycles of the domains
 in force), **warnings** each carrying a fix (`Issue.Hint`, proto `Issue.hint`), never an error, since the others change
 on their own:
 
@@ -137,8 +137,8 @@ which has no lifecycle yet.
 (the events of its sub-changes), `integrator` (the events of its parent). A methodology with an `on.from` other than
 `self` needs no `appliesTo`. The engine relays an event of a change to its parent (`from: integrated`) and to its open
 sub-changes (`from: integrator`) and wakes the processes of their methodologies that subscribe to it on **their own**
-change (`Engine.relay`, `pkg/engine/companion.go`), with `vars.event.relation` saying which side it came from; the
-runs waiting for conditions there are retried. New events, constants of `pkg/events` checked against the web's
+change (`Engine.relay`, `engine/engine/companion.go`), with `vars.event.relation` saying which side it came from; the
+runs waiting for conditions there are retried. New events, constants of `contracts/events` checked against the web's
 `TRIGGER_EVENTS`: `change.transitioned`, `change.committed`, `change.attached`, `change.detached` (published by the
 graph handler and the engine's `EventingGraph`). The merge of a sub-change into its parent is its `change.applied`.
 
@@ -156,14 +156,14 @@ do not use an integrator; moving them out (with `agile` / `safe`) is a follow-up
 
 ### 6. The assistant works in a frame
 
-Each turn computes its frame from the context of the turn and the history (`internal/assistantsvc/frame.go`): level
+Each turn computes its frame from the context of the turn and the history (`platform/assistantsvc/frame.go`): level
 `change` when the person looks at a change they can read (its methodology with it), else level `project`. Tools and
 prompt follow the frame. At level project, `create_change` (and `start_agent` with a new change) is offered only once
 `search_changes` (the open changes of the active project matching the intent, `searchtool.go`) ran in this
 conversation, so the assistant proposes an existing change before opening a new one.
 At level change it may propose to attach the change to a change integrating it (`attach_change {parent}`) or to
 detach it (`detach_change`): proposals the person confirms like `start_agent` (`ConfirmAction` re-validates, then calls `AttachChange` / `DetachChange` as them;
-`internal/assistantsvc/relate.go`), shown as cards with *Attach* / *Detach* (`web/src/lib/assistant/proposal.ts`).
+`platform/assistantsvc/relate.go`), shown as cards with *Attach* / *Detach* (`web/src/lib/assistant/proposal.ts`).
 
 ## Consequences
 
@@ -178,7 +178,7 @@ detach it (`detach_change`): proposals the person confirms like `start_agent` (`
 - `attach: auto` is declared and compiled but the engine attaches nothing on its own: which open change of the
   integrator receives a new change is a policy not decided yet. `release-based` attaches through its human step (the
   change tab's *Attach to change…*, `goap-change/attach`, or the assistant's proposal).
-- `cmd/graph` (distributed) wires no `ChangeLifecycles` (no registry in process), so a change gets no chain and no
+- `platform/cmd/graph` (distributed) wires no `ChangeLifecycles` (no registry in process), so a change gets no chain and no
   outer guardian there, as for its lifecycle (ADR 0058).
 - Dependencies between changes: done by ADR 0108 (`depends_on`, held at the merge, the merge order of the sub-changes
   of an integrator, runs waiting for `dependencies_met`).

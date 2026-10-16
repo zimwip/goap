@@ -125,7 +125,7 @@ kept in the browser; "New conversation" resets it.
 ## Getting started
 
 Prerequisites: Node.js ≥ 20.19 (or ≥ 22.12) and an accessible GOAP gateway
-(or `go run ./cmd/goap-dev` at the repository root).
+(or `go run ./platform/cmd/goap-dev` at the repository root).
 
 ```sh
 cd web

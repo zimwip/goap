@@ -1,13 +1,13 @@
 # ADR 0018 — Algorithms: the DSL as a generic capability, plugged into the domain
 
 **Status**: accepted, implemented; amended by ADR 0055 (property validators plugged on attributes, node validators),
-ADR 0061 (the adapter leaves `pkg/algo` for `pkg/adapter`), ADR 0079 (validation on drafts, moves checked when taken)
+ADR 0061 (the adapter leaves `contracts/algo` for `lib/adapter`), ADR 0079 (validation on drafts, moves checked when taken)
 and ADR 0100 (link validators) · **Date**: 2026-09 · Extends ADR 0007 (sandbox), ADR 0013 (domains), ADR 0014
 (lifecycle).
 
 ## Context
 
-Dynamic code (JavaScript / Go, `pkg/dsl`) was only usable in the `script` actions of a methodology.
+Dynamic code (JavaScript / Go, `lib/dsl`) was only usable in the `script` actions of a methodology.
 The object part of the model, the **domain**, stayed declarative: a property could not be validated
 beyond its name, a lifecycle transition could only be judged by a CEL guard or `requires`, and nothing
 could run when a transition was taken. Making the domain customizable meant changing the platform.
@@ -15,7 +15,7 @@ could run when a transition was taken. Making the domain customizable meant chan
 ## Decision
 
 1. **The DSL is a generic capability tied to a usage.** A *usage* fixes where a script runs, the
-   context object (`ctx`) it sees and what its result means. The script engine of `pkg/dsl`
+   context object (`ctx`) it sees and what its result means. The script engine of `lib/dsl`
    (goja / yaegi, `runScript`) is shared; only the context differs. Fixed list (`algo.Usage`, plus the adapter):
 
    | Usage | Context | Go entry point | Meaning |
@@ -64,7 +64,7 @@ could run when a transition was taken. Making the domain customizable meant chan
    parameter table, instance value forms, *try it* through `RegistryService.RunAlgorithm`, which
    runs an algorithm on a sample input without storing anything); the domain editor plugs instances.
 
-   The `adapter` usage is the exception: it is **not declared in a domain** (it is no `algo.Usage`; `pkg/adapter`
+   The `adapter` usage is the exception: it is **not declared in a domain** (it is no `algo.Usage`; `lib/adapter`
    since ADR 0061, its context still `dsl.AdapterCtx`): it is a `platform@AdapterDef` node, changed through a change, with `mcp`, `connector` and `secret`
    parameters (never readable by the code), and it is **not plugged** into a node type or a
    lifecycle: organisational units instantiate it (ADR 0019). It calls the connector, so it is bounded by 30 s and

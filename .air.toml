@@ -2,7 +2,7 @@ root = "."
 tmp_dir = ".air"
 
 [build]
-cmd = "go build -o .air/goap-dev ./cmd/goap-dev"
+cmd = "go build -o .air/goap-dev ./platform/cmd/goap-dev"
 entrypoint = ".air/goap-dev"
 full_bin = "GOAP_STORE=sqlite .air/goap-dev"
 include_ext = ["go"]

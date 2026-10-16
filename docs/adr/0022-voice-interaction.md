@@ -46,7 +46,7 @@ the assistant became a conversation answered on the server, ADR 0087 / 0088):
 
 A stateless unary RPC (`Transcribe`: short utterance, 30 s at most, to text) on `modelgw` or
 a dedicated `speech` service, with a provider interface mirroring
-`internal/modelgw/router.go` (Fake, OpenAI-compatible, faster-whisper on a GPU pool). It
+`platform/modelgw/router.go` (Fake, OpenAI-compatible, faster-whisper on a GPU pool). It
 scales horizontally like any unary call. It requires an authorization check, telemetry
 spans following the GenAI attribute conventions (architecture §3.7), and no audio
 persistence by default. Opt-in per deployment, since it breaks the "audio never leaves the

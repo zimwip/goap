@@ -1,0 +1,85 @@
+package registrysvc
+
+import (
+	"reflect"
+	"slices"
+	"testing"
+
+	"github.com/zimwip/goap/engine/methodology"
+)
+
+func TestAgentModelRoundTripsThroughPB(t *testing.T) {
+	r := Record{Methodology: methodology.Methodology{
+		Name: "m", Version: "1",
+		Agents: []methodology.Agent{{Name: "a", Planner: methodology.PlannerLLMScoring, Model: "fast"}},
+	}}
+	p := ToPB(r)
+	if len(p.Agents) != 1 || p.Agents[0].Model != "fast" {
+		t.Fatalf("ToPB dropped Agent.Model: %+v", p.Agents)
+	}
+	m := FromPB(p)
+	if len(m.Agents) != 1 || m.Agents[0].Model != "fast" {
+		t.Fatalf("FromPB dropped Agent.Model: %+v", m.Agents)
+	}
+}
+
+func TestProcessesRoundTripThroughPB(t *testing.T) {
+	in := methodology.Methodology{Name: "m", Version: "1", Processes: []methodology.Process{{Name: "flow", Description: "d",
+		References: []methodology.Reference{{Title: "Delivery guide", Ref: "document-repository:procedures/delivery.md", Section: "§2"}}, Steps: []methodology.Step{
+			{Name: "phase", Steps: []methodology.Step{{Name: "a", Action: "do", Pre: map[string]bool{"x": true}}, {Name: "b", Action: "act", References: []methodology.Reference{{Ref: "doc:SAD-1"}}}}},
+			{Name: "nested", Process: "other/p", Done: map[string]bool{"y": true}},
+			{Name: "sign", Instructions: "sign it", Guidance: "how", Checklist: []string{"one"}, Deliverables: []string{"Report"}},
+			{Name: "alt", Actions: []string{"x", "y"}},
+			{Name: "cap", Capability: "design", Roles: &methodology.Responsibilities{Responsible: "dev", Consulted: []string{"arch"}}},
+		}}}}
+	out := FromPB(ToPB(Record{Methodology: in}))
+	in.Methods = []methodology.Method{
+		{Name: "m", For: "design", When: "true", Priority: 3, Guidance: "g", Checklist: []string{"c"},
+			Deliverables: []string{"D"}, References: []methodology.Reference{{Ref: "doc:X"}}, Actions: []string{"a"}, Done: map[string]bool{"d": true}, Planner: "hybrid", Model: "m", MCPs: []string{"goap-graph"},
+			Roles: &methodology.Responsibilities{Accountable: "lead", Informed: []string{"po"}}},
+		{Name: "inspect", For: "verification", Steps: []methodology.Step{{Name: "note", Action: "write_note"}, {Name: "verify", Action: "check"}}},
+	}
+	in.Roles = []methodology.Role{{Name: "dev", Description: "d"}, {Name: "lead"}}
+	in.AppliesTo = []string{"sdlc"}
+	in.Imports = []string{"risks"}
+	in.On = []methodology.Subscription{{Event: "step.completed", Filter: `event.step.process == "x"`}}
+	out = FromPB(ToPB(Record{Methodology: in}))
+	if !reflect.DeepEqual(out.Methods, in.Methods) || !reflect.DeepEqual(out.Roles, in.Roles) || !reflect.DeepEqual(out.AppliesTo, in.AppliesTo) || !reflect.DeepEqual(out.Imports, in.Imports) || !reflect.DeepEqual(out.On, in.On) {
+		t.Fatalf("methods changed through PB:\n%+v\n%+v", in.Methods, out.Methods)
+	}
+	if !reflect.DeepEqual(out.Processes, in.Processes) {
+		t.Fatalf("processes changed through PB:\n%+v\n%+v", in.Processes, out.Processes)
+	}
+	s := SummaryToPB(Record{Methodology: in})
+	if len(s.Agents) != 1 || s.Agents[0].Name != "flow" || s.Agents[0].Planner != "process" {
+		t.Fatalf("a process is listed as the agent that runs it: %+v", s.Agents)
+	}
+}
+
+// The default criticality of a methodology survives the PB round trip (ADR 0075 §3).
+func TestCriticalityRoundTripsThroughPB(t *testing.T) {
+	in := methodology.Methodology{Name: "m", Version: "1", Criticality: "C3"}
+	if out := FromPB(ToPB(Record{Methodology: in})); out.Criticality != "C3" {
+		t.Fatalf("criticality: %q", out.Criticality)
+	}
+}
+
+func TestGoalRoundTripsThroughPB(t *testing.T) {
+	in := methodology.Methodology{Name: "m", Version: "1", Goal: "deliver"}
+	if out := FromPB(ToPB(Record{Methodology: in})); out.Goal != "deliver" {
+		t.Fatalf("goal: %q", out.Goal)
+	}
+}
+
+// The roles allowed to run an agent or an action (ADR 0043) cross the protocol: the methodology editor saves them.
+func TestRunRolesRoundTripThroughPB(t *testing.T) {
+	back := FromPB(ToPB(Record{Methodology: methodology.Methodology{Name: "m", Version: "1",
+		Agents:  []methodology.Agent{{Name: "a", Roles: []string{"release_manager"}}},
+		Actions: []methodology.Action{{Name: "x", Kind: methodology.KindHuman, Roles: []string{"developer", "auditor"}}}}}))
+	if got := back.Agents[0].Roles; !slices.Equal(got, []string{"release_manager"}) {
+		t.Fatalf("agent roles: %v", got)
+	}
+	if got := back.Actions[0].Roles; !slices.Equal(got, []string{"developer", "auditor"}) {
+		t.Fatalf("action roles: %v", got)
+	}
+}

@@ -68,7 +68,7 @@ curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Typ
 
 ```bash
 make tools      # buf + protoc plugins
-make generate   # proto/ -> gen/
+make generate   # proto/ -> contracts/gen/
 make test       # unit tests
 make test-pg    # graph PostgreSQL repository tests
 make lint

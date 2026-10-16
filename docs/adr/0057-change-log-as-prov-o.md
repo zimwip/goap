@@ -14,7 +14,7 @@ tools already read: W3C PROV-O.
 
 ## Decision
 
-- **`pkg/prov`** (no infra deps) builds a JSON-LD document (`application/ld+json`, PROV-O + the `goap:` vocabulary
+- **`graph/prov`** (no infra deps) builds a JSON-LD document (`application/ld+json`, PROV-O + the `goap:` vocabulary
   `https://github.com/zimwip/goap/ns/prov#`) from a change and its whole log (`prov.Export`). Instances are named
   `urn:goap:<kind>:<id>` (`change`, `execution`, `item`, `impact`, `node`, `baseline`, `unit`, `principal`, `agent`,
   `model`, `tool`, `plan`, `review`, `review-object`, `exchange`, `header`, `adoption`).

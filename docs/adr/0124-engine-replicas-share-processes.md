@@ -8,7 +8,7 @@
 Several engines must be able to join a pool and execute the runs. The triggers were ready for it (a durable JetStream
 consumer shared by the replicas, a KV lease for the cron, ADR 0031), the runs were not:
 
-- `cmd/engine` kept its processes in memory (`NewMemoryStore`, "PostgreSQL store: milestone M1"): a replica did not see
+- `platform/cmd/engine` kept its processes in memory (`NewMemoryStore`, "PostgreSQL store: milestone M1"): a replica did not see
   the runs of another;
 - the work on a process was serialized by mutexes of the process (`Engine.lock`, the `companions` and `instances`
   mutexes): two replicas could run one process at once, and two events of one change handled by two replicas could
@@ -43,14 +43,14 @@ executor that lost its turn refused, and a run left by a stopped replica resumed
    (`TestSchemasAligned`): table `engine_lock (key, holder, lease_until, interrupt)`, `process.updated_at` (leases and
    instants in unix milliseconds: comparable in both dialects). `Holder` names the replica (`NewHolder`: host, pid, a
    random part); the clocks of the replicas must agree to well under a lease.
-6. **Wiring.** `cmd/engine` uses PostgreSQL when `GOAP_DB_DSN` is set (memory otherwise, one replica) and then sets
+6. **Wiring.** `platform/cmd/engine` uses PostgreSQL when `GOAP_DB_DSN` is set (memory otherwise, one replica) and then sets
    `Locks` and runs `Recover`. `goap-dev` with `GOAP_STORE=sqlite` does the same on its file and drops the locks the
    previous start left (`ReleaseAll`, the local mode being the one process on its file), so its runs left running are
    resumed at once instead of failed.
 7. **Pub/sub is a signal, not the arbiter.** JetStream delivers at least once: who executes is decided by the lock,
    never by the reception of a message. The event triggers keep their competing consumers (ADR 0031). Two hints go
    over core NATS (`engine.Signals`, `enginesvc.NATSSignals`, subjects `engine.wake` and `engine.interrupt`, outside
-   the GOAP stream, wired by `cmd/engine` when `GOAP_NATS_URL` is set): an interruption reaches the holder at once
+   the GOAP stream, wired by `platform/cmd/engine` when `GOAP_NATS_URL` is set): an interruption reaches the holder at once
    (`Engine.Interrupted`) instead of at its next renewal, a wake-up makes the replicas look for work at once
    (`Engine.Woken`). A lost signal only delays: the renewal and the recovery pass catch up.
 8. **A step is never written twice.** With shared locks, the engine records a step on the process before running it

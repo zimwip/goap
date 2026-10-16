@@ -29,7 +29,7 @@ talks to its models*, so it is platform configuration, next to the aliases and t
   key exists: an edited, disabled or retired `terse` is never touched again. Nothing else
   is hardcoded; a behaviour is an ordinary retirable node.
 - **Applied at the gateway, as close to the call as possible.** `modelgw.Service.Complete`, after `admit` and before
-  `Router.Complete`: `Snapshot.Apply(system, CallInfo)` (pure, in `pkg/llmcfg`) selects the enabled behaviours matching the alias
+  `Router.Complete`: `Snapshot.Apply(system, CallInfo)` (pure, in `lib/llmcfg`) selects the enabled behaviours matching the alias
   requested (`default` when none; a literal `provider/model` matches no alias selector), the resolved provider/model and the
   source, sorts them, puts the `prepend` ones before the request's system text and the `append` ones after, joined by blank
   lines. The request is the gateway's by-value copy: the caller's `System` is never mutated. Embeddings never get a behaviour
@@ -38,7 +38,7 @@ talks to its models*, so it is platform configuration, next to the aliases and t
 - **Hard cap**: the text added to one call is at most 8 KiB (`llmcfg.MaxBehaviorBytes`); in order, a behaviour that no longer
   fits is dropped, logged as a warning and recorded in the ledger as skipped (`!name`).
 - **JSON calls.** Every call that depends on structured output sets `llm.Request.JSON`: the engine's `llm` actions and their
-  items / tool-call protocol (`pkg/engine/executors.go`, `llmSystem`), the planners (`planners.go`), the DSL `complete` with
+  items / tool-call protocol (`engine/engine/executors.go`, `llmSystem`), the planners (`planners.go`), the DSL `complete` with
   `json`, the intent rankers and the helper (`suggest.go`) do; the assistant turn did until ADR 0098 made its answer plain
   text with native tool calls, so it now gets the behaviours as a free-text call (its compaction summary too). The gateway therefore skips, for a call
   with `JSON` true, every behaviour whose `appliesToJSON` is false (the default). One flagged `appliesToJSON` is applied wrapped:
@@ -71,7 +71,7 @@ talks to its models*, so it is platform configuration, next to the aliases and t
 
 The estimate of the tokens a behaviour adds (four bytes a token) is replaced by a measure on the real model, kept and refreshed.
 
-- **Measure** (`internal/modelgw/behaviorcost.go`). The cost of an instruction on a model is the input tokens the provider reports for a
+- **Measure** (`platform/modelgw/behaviorcost.go`). The cost of an instruction on a model is the input tokens the provider reports for a
   minimal request carrying the instruction as its system text, minus those it reports for the same request with no system text (the
   baseline of the model): one user message `.`, `MaxTokens` 1, no JSON, never negative (`costOf`). When the provider reports no usage
   (zero), or no difference between the two requests, there is no measure: the byte estimate is stored with source `estimated`, so it

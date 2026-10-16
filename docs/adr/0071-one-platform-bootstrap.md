@@ -4,7 +4,7 @@
 
 ## Context
 
-`goap-dev` and `cmd/graph` each spelled their own seed sequence, in different orders (the access policies before or
+`goap-dev` and `platform/cmd/graph` each spelled their own seed sequence, in different orders (the access policies before or
 after the methodologies, the models first or last, the demo unconditional or behind `GOAP_GRAPH_SEED`), and the
 "platform defaults" mixed in development concepts: `SeedDefaults` created the `document-repository` MCP and its localfs
 adapter definition in every deployment, `SeedDemo` lived next to the platform seeds, `goap-dev` hard-coded the
@@ -17,18 +17,18 @@ adapter definition in every deployment, `SeedDemo` lived next to the platform se
   `SeedBehaviors`, ADR 0093, after `SeedModels`). Idempotent. The caller assigns the hooks of the graph and loads the
   type catalogue before, and seeds the methodologies after (the registry needs the model aliases). `Options.RequireHooks`
   panics when the access hooks are missing; a graph without `SubChangeValidator` / `Lifecycles` (no registry in
-  process: `cmd/graph`) gets one warning, no behaviour change (the gap of ADR 0066 stays, now visible). The warning
+  process: `platform/cmd/graph`) gets one warning, no behaviour change (the gap of ADR 0066 stays, now visible). The warning
   first named `LandingGate` too; that hook is gone (the guardian of a merge is `ChangeLifecycles.Merge`, ADR 0102).
 - **Platform defaults carry no development concept.** `SeedDefaults` is gone (nothing generic remained once the bootstrap
-  is `Graph.Bootstrap`). `internal/devseed` holds the ALM demo (`Demo`), the document-repository MCP and its localfs
+  is `Graph.Bootstrap`). `platform/devseed` holds the ALM demo (`Demo`), the document-repository MCP and its localfs
   adapter definition (`DocumentRepository`) and the directory-backed repository of the default organisation (`LocalFS`).
-  `goap-dev` passes them as `Options.Dev`; `cmd/graph` only with `GOAP_GRAPH_SEED=demo`.
+  `goap-dev` passes them as `Options.Dev`; `platform/cmd/graph` only with `GOAP_GRAPH_SEED=demo`.
 - **Service identity has one constructor**, `authz.System(name, roles...)` (`authz.SystemPrefix` + name), used for
   `system:registry`, `system:graph`, `system:client` and the trigger / companion principals.
 
 ## Consequences
 
-- A production `cmd/graph` no longer creates the `document-repository` MCP; it appears with the demo seed or a dev run.
-- `cmd/graph` still bootstraps the roots synchronously before serving (the catalogue may load later); `Boot` repeats it
+- A production `platform/cmd/graph` no longer creates the `document-repository` MCP; it appears with the demo seed or a dev run.
+- `platform/cmd/graph` still bootstraps the roots synchronously before serving (the catalogue may load later); `Boot` repeats it
   as a no-op.
 - The first human to sign in remains the administrator (ADR 0040, 0047); nothing here changes it.

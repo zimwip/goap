@@ -13,7 +13,7 @@ OpenTelemetry remains the source of truth for durations and technical pain point
 ## Decision
 
 ### 1. Execution journal (change axis)
-- Each change carries a **journal** of records (`journal.Record`, `pkg/journal`; first `domain.ExecutionRecord`,
+- Each change carries a **journal** of records (`journal.Record`, `contracts/journal`; first `domain.ExecutionRecord`,
   moved out of the core by ADR 0066), written by the engine:
   `process.started`, `schedule` (a run picks up a process made runnable: why — started, sub-agent, trigger,
   answered, input, approved / rejected, relaunched, sub-agent-ended, board-ignored, flow-adopted / flow-discarded —,

@@ -21,7 +21,7 @@ never changes.
    check), the `default` attribute of `ProjectUnit`, `Graph.DefaultProject`, the web's `defaultProject` /
    `defaultProjectProp` and the Project tab's "Make default project" are deleted. (The *waiting unit* of the
    organisation is another property, `waiting`, and stays.)
-   The **edges resolve** the caller's project, an empty claim meaning the root project, never `pkg/graph`: the RPC
+   The **edges resolve** the caller's project, an empty claim meaning the root project, never `graph/graph`: the RPC
    handlers (`Handler.projectOf`: the request's, else the caller's active project, else `Structure(project).Root`),
    `graphsvc.Client.CreateChange` (it did not send the project: fixed), the engine (`resolveChange`: the request's
    project, else the run's, else the root of `Structures`), `goap-change/create` (argument `project`), the assistant
@@ -46,7 +46,7 @@ never changes.
    the family; a change with no methodology is held to no such rule. The graph names no methodology (ADR 0066), so the
    check is a seam: `Graph.ProjectMoveGate func(ctx, family []domain.Change, to string) error`, asked outside the
    transaction (it reads the graph) and checked again for consistency inside (the family and its projects must not have
-   changed, else `ErrConflict`). `graphsvc.ProjectMoveGate(authorizer, directory)` is plugged explicitly by `cmd/graph`
+   changed, else `ErrConflict`). `graphsvc.ProjectMoveGate(authorizer, directory)` is plugged explicitly by `platform/cmd/graph`
    and `goap-dev` (nil: no check beyond the graph's own rules, as for the other seams). It reads
    `access.Snapshot.ApplicableMethodologies` and returns an error naming the methodology and the project that does not
    list it.
@@ -64,7 +64,7 @@ never changes.
 6. **Running processes follow the change.** The roles of a process are checked on its `ProcessRef.Project`;
    `Engine.observe` already sets `p.Project = bb.Change.ProjectID` at every cycle, so a process of a moved change checks
    its roles on the new project from its next cycle. No move is refused for a running process, and no port to the
-   engine is needed (so `cmd/graph` without an engine behaves the same). The administrative / criticality marks the
+   engine is needed (so `platform/cmd/graph` without an engine behaves the same). The administrative / criticality marks the
    engine put in `Change.Data` at creation are kept by a move; the criticality policy resolved along the unit chain is
    unaffected (the owner unit does not change).
 

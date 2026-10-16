@@ -13,13 +13,13 @@ generic default of the subscriptions of a transverse methodology also hardcoded 
 
 ## Decision
 
-1. **Libraries.** `pkg/condition` names two built-in libraries (`condition.LibraryNames`, `condition.Library(name)`;
+1. **Libraries.** `engine/condition` names two built-in libraries (`condition.LibraryNames`, `condition.Library(name)`;
    four since ADR 0075):
    - `decisions`: `open_questions`, `no_open_questions`, `decision_ready`, `decision_pending`, `no_decision_pending`,
      `ratification_pending`, `decision_escalated`, `options_open`, `options_evaluated`, `option_selected`;
    - `risks`: `open_risks`, `unmitigated_risks`, `risks_under_control`, `open_actions`, `no_open_actions`. Its
      parameter is the score from which a live risk needs an action, `condition.HighRisk` (9), the one place the
-     threshold is written (no longer in `pkg/domain`).
+     threshold is written (no longer in `contracts/domain`).
 2. **`Methodology.Imports`** (`imports: [risks]`, protobuf `imports = 24`, the editor's "Condition libraries" field)
    names the libraries a methodology uses. `Validate` refuses an unknown or repeated name (issue at `imports[i]`).
    Compilation adds the conditions of the imported libraries only; a condition the methodology declares under the same
@@ -40,4 +40,4 @@ imports `decisions`) and the test fixtures declare their imports.
 ## Consequences
 
 A methodology says which vocabulary it uses; the engine adds nothing. New libraries are a name and a list of
-definitions in `pkg/condition/library.go`.
+definitions in `engine/condition/library.go`.

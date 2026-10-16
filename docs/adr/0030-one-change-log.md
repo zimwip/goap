@@ -41,7 +41,7 @@ no data to move). `change_impact` stays, as the projection of the impact events 
 
 ### 2. Storage
 The repositories store entries: `Tx.AppendLog`, `Tx.Log(filter)`, `Tx.LogCounts(filter)` (entries per type, counted
-by the store). Facts, journal records and impact events are written and read through them (`pkg/graph/changelog.go`);
+by the store). Facts, journal records and impact events are written and read through them (`graph/graph/changelog.go`);
 their domain types are unchanged. `domain.LogFilter` selects on the columns: types (exact, or a stream as a prefix
 ending with a dot: `journal.`), flows (`''` for the main flow), processes, action run, position (`AfterSeq`, to follow
 the log) and a limit. The SQL repositories build the `WHERE` clause from it; the memory repository applies
@@ -62,7 +62,7 @@ too, to name the runs and draw the flow branches whatever the filters.
   the `fact`, `impact` and `change` streams it writes itself).
   Journal records read back from the memory repository are decoded from JSON, as they always were from SQL (numbers of
   `Data` are floats).
-- **Migrations**: the table is part of the graph schema (`pkg/graph/migrations*/0001_schema.sql`, the schema started
+- **Migrations**: the table is part of the graph schema (`graph/graph/migrations*/0001_schema.sql`, the schema started
   from zero).
 
 **Note (ADR 0037)**: a change that landed nothing can be purged with its whole log (`Graph.PurgeChange`); nothing that is part of the graph is ever deleted.

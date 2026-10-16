@@ -29,7 +29,7 @@ and checks the result.
 
 The MCP is specific to Claude Code, not a generic "coding agent": its tools carry Claude Code's notions (a session,
 its permission requests, its `AskUserQuestion`) and a methodology that names it knows what it gets. Another agent
-would be another MCP. Tools (`pkg/mcpbuiltin/claudeagent.go`):
+would be another MCP. Tools (`lib/mcpbuiltin/claudeagent.go`):
 
 | Tool | Does |
 |---|---|
@@ -48,8 +48,8 @@ administrator gives.
 
 ### 2. The connector: Go around a Node runner of the Agent SDK
 
-`internal/connectors/claudeagent` (`ID` `claude-coding-agent`; in `goap-dev`, standalone
-`cmd/connector-claude-coding-agent`) is a Go connector like the others (connectorkit, registers itself). Each call
+`mcp/connectors/claudeagent` (`ID` `claude-coding-agent`; in `goap-dev`, standalone
+`platform/cmd/connector-claude-coding-agent`) is a Go connector like the others (connectorkit, registers itself). Each call
 starts the runner (`runner/runner.mjs`, embedded, written into the connector's runner directory next to its
 `package.json`; `make claude-agent-runner` / `.\make.ps1 claude-agent-runner` installs the pinned SDK there): one
 JSON request on its standard input, JSON lines on its output (the tool uses as they happen, then one `result`).
