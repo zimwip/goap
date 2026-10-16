@@ -1,6 +1,6 @@
 import { rpc } from './transport';
 import type { Empty } from './types/common';
-import type { Algorithm, Domain, DomainSummary, DomainUser, Issue, LevelCheck, LinkTypeInfo, Methodology, MethodologySummary, PlanPreview, ProcessGraph, RunAlgorithmResponse, TypeInfo } from './types/registry';
+import type { Algorithm, Domain, DomainSummary, DomainUser, Issue, LevelCheck, LinkTypeInfo, Methodology, MethodologyView, MethodologySummary, PlanPreview, ProcessGraph, RunAlgorithmResponse, TypeInfo } from './types/registry';
 
 const REGISTRY = 'goap.registry.v1.RegistryService';
 const DOMAINS = 'goap.registry.v1.DomainService';
@@ -27,6 +27,9 @@ export const registry = {
   /** a process of a methodology as edited, as a graph (ADR 0036 §4) */
   processGraph: (methodology: Methodology, process: string, signal?: AbortSignal) =>
     rpc<{ methodology: Methodology; process: string }, { graph?: ProcessGraph; issues?: Issue[] }>(REGISTRY, 'GetProcessGraph', { methodology, process }, signal),
+  /** the compiled view of the activities of a methodology as edited (ADR 0126 step 3), drawn as far as it stands */
+  methodologyView: (methodology: Methodology, signal?: AbortSignal) =>
+    rpc<{ methodology: Methodology }, { view?: MethodologyView; issues?: Issue[] }>(REGISTRY, 'GetMethodologyView', { methodology }, signal),
   /** coherence of a process or method, level by level, as edited */
   checkLevels: (methodology: Methodology, root: string, signal?: AbortSignal) =>
     rpc<{ methodology: Methodology; root: string }, { levels?: LevelCheck[]; issues?: Issue[]; conditions?: Record<string, string> }>(REGISTRY, 'CheckLevels', { methodology, root }, signal),

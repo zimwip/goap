@@ -108,22 +108,18 @@ func (e *Engine) ChangeState(ctx context.Context, changeID domain.ChangeID) (*Ch
 		}
 	}
 	sort.SliceStable(runs, func(i, j int) bool { return runs[i].CreatedAt.Before(runs[j].CreatedAt) })
-	reactive := map[string]bool{}
-	for _, r := range m.Reactions() {
-		reactive[r.Owner] = true
-	}
-	for _, proc := range m.Processes() {
+	for _, proc := range m.View().Processes {
 		if proc.Nested {
 			continue // shown in the step that nests it
 		}
-		out.Processes = append(out.Processes, e.processState(ctx, m, proc, &bb, world, runs, reactive[proc.Name]))
+		out.Processes = append(out.Processes, e.processState(ctx, m, proc, &bb, world, runs))
 	}
 	return out, nil
 }
 
 // processState lays the live runs of a process over its steps judged against the change.
-func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc methodology.ProcessInfo, bb *domain.Blackboard, world map[string]bool, runs []*Process, reactive bool) ProcessState {
-	ps := ProcessState{Process: proc.Name, Description: proc.Description, Reactive: reactive, Steps: []StepProgress{}}
+func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc methodology.ActivityView, bb *domain.Blackboard, world map[string]bool, runs []*Process) ProcessState {
+	ps := ProcessState{Process: proc.Name, Description: proc.Description, Reactive: proc.Reactive, Steps: []StepProgress{}}
 	// the runs of the process (its agent; a nested process or a method has its own)
 	var mine []*Process
 	for _, p := range runs {
@@ -137,7 +133,7 @@ func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc
 		now.Steps = append(now.Steps, p.Steps...)
 		ps.Runs += 1 + p.Runs
 	}
-	steps := m.ProcessSteps(proc.Name)
+	steps := proc.Steps
 	for _, s := range steps {
 		ps.Steps = append(ps.Steps, stepProgress(now, s))
 	}
@@ -162,7 +158,7 @@ func (e *Engine) processState(ctx context.Context, m *methodology.Compiled, proc
 		ps.Current, ps.Status, ps.Error = last.ID, last.Status, last.Error
 	}
 	ps.Done, ps.Total = countSteps(ps.Steps)
-	if g, ok := m.Goal(proc.Name); ok && len(g.Pre) > 0 && satisfiesAll(world, g.Pre) {
+	if len(proc.Done) > 0 && satisfiesAll(world, proc.Done) {
 		ps.State = StepDone
 	} else {
 		ps.State = aggregate(ps.Steps)
@@ -217,19 +213,23 @@ func countSteps(steps []StepProgress) (done, total int) {
 }
 
 // describeNeeds fills the needs of the steps from what they miss, with what each condition means, the actions
-// producing it and, for one wanted true, the conditions it cannot hold without that do not hold yet.
+// producing it and, for one wanted true, the conditions it cannot hold without that do not hold yet: the conditions of
+// the compiled view, bound to the world and the blackboard.
 func describeNeeds(m *methodology.Compiled, world map[string]bool, bb *domain.Blackboard, steps []StepProgress) {
+	v := m.View()
 	for i := range steps {
 		describeNeeds(m, world, bb, steps[i].Steps)
 		steps[i].Needs = nil
 		for _, c := range steps[i].Missing {
 			name, neg := strings.CutPrefix(c, "!")
-			n := Need{Condition: name, Want: !neg, Description: conditionMeaning(m, name)}
+			cv := v.Condition(name)
+			n := Need{Condition: name, Want: !neg, Description: cv.Description}
 			if n.Want {
-				n.ProducedBy = m.Producers(name)
-				for _, p := range m.Prerequisites(name) {
+				n.ProducedBy = cv.ProducedBy
+				for _, p := range cv.Requires {
 					if !world[p] {
-						n.Requires = append(n.Requires, Need{Condition: p, Want: true, Description: conditionMeaning(m, p), ProducedBy: m.Producers(p)})
+						pv := v.Condition(p)
+						n.Requires = append(n.Requires, Need{Condition: p, Want: true, Description: pv.Description, ProducedBy: pv.ProducedBy})
 					}
 				}
 				if bb != nil {
@@ -265,10 +265,4 @@ func factsOf(m *methodology.Compiled, name string, bb domain.Blackboard) []Fact 
 		return out
 	}
 	return conv(cf)
-}
-
-// conditionMeaning says what a condition of the methodology means: the description its definition carries, given by
-// the methodology, a library or the compiler for a condition it generates.
-func conditionMeaning(m *methodology.Compiled, name string) string {
-	return m.ConditionDescription(name)
 }

@@ -152,7 +152,7 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 			active = append(active, p)
 		}
 	}
-	w := &pointWalker{e: e, ctx: ctx, m: m, bb: bb, world: world, needed: m.NeededBy(goal.Pre), active: active, project: project,
+	w := &pointWalker{e: e, ctx: ctx, m: m, v: m.View(), bb: bb, world: world, needed: m.NeededBy(goal.Pre), active: active, project: project,
 		change: changeID, out: out, maxPoints: opts.MaxPoints, maxBlocked: opts.MaxBlocked}
 	if w.maxPoints <= 0 {
 		w.maxPoints = 20
@@ -160,16 +160,12 @@ func (e *Engine) StartingPoints(ctx context.Context, changeID domain.ChangeID, o
 	if w.maxBlocked <= 0 {
 		w.maxBlocked = 8
 	}
-	for _, proc := range m.Processes() {
-		if proc.Nested {
+	for _, proc := range w.v.Processes {
+		if proc.Nested || proc.Agent == "" {
 			continue // reached through the step that nests it
 		}
-		agent, ok := processAgent(m, proc.Name)
-		if !ok {
-			continue
-		}
-		for _, s := range m.ProcessSteps(proc.Name) {
-			if err := w.visit(s, agent, PointStep, "", nil); err != nil {
+		for _, s := range proc.Steps {
+			if err := w.visit(s, proc.Agent, PointStep, "", nil); err != nil {
 				return nil, err
 			}
 		}
@@ -195,20 +191,11 @@ func satisfiesAll(world, want map[string]bool) bool {
 	return true
 }
 
-// processAgent is the agent generated for a process.
-func processAgent(m *methodology.Compiled, process string) (string, bool) {
-	for _, ag := range m.AgentList() {
-		if ag.ProcessOf() == process {
-			return ag.Name, true
-		}
-	}
-	return "", false
-}
-
 type pointWalker struct {
 	e                     *Engine
 	ctx                   context.Context
 	m                     *methodology.Compiled
+	v                     *methodology.View
 	bb                    domain.Blackboard
 	world                 map[string]bool
 	needed                map[string]bool
@@ -224,7 +211,7 @@ type pointWalker struct {
 // is proposed as a whole, its sub-steps being sequenced by the scheduler. A step naming a capability is proposed
 // through the method that applies: the method (a pool of actions), or the possible steps of the method.
 // me is set for the steps of a method (kind method).
-func (w *pointWalker) visit(s methodology.StepInfo, agent, kind, parent string, me *methodology.Method) error {
+func (w *pointWalker) visit(s methodology.StepView, agent, kind, parent string, me *methodology.ActivityView) error {
 	if kind == PointStep && !w.towardsGoal(s) {
 		return nil
 	}
@@ -235,23 +222,29 @@ func (w *pointWalker) visit(s methodology.StepInfo, agent, kind, parent string, 
 		w.block(s, miss)
 		return nil
 	}
-	if kind == PointStep && s.Method() == methodology.MethodCapability && s.Foreach == "" {
-		choices := w.m.MethodsFor(s.Capability, w.bb)
-		if len(choices) == 0 {
-			w.block(s, w.m.CapabilityGuards(s.Capability))
+	if kind == PointStep && s.Method == methodology.MethodCapability && s.Foreach == "" {
+		// which method applies depends on the change: bound here, among the methods of the view
+		var choice methodology.ActivityView
+		for _, c := range w.m.MethodsFor(s.Capability, w.bb) {
+			if mv, ok := w.v.Method(c.Name); ok {
+				choice = mv
+				break
+			}
+		}
+		if choice.Name == "" {
+			w.block(s, s.Unavailable)
 			return nil
 		}
-		choice := choices[0]
-		if steps := w.m.MethodSteps(choice.Name); len(steps) > 0 {
-			for _, ms := range steps {
-				if err := w.visit(ms, choice.ActorAgent(), PointMethod, s.Path, &choice.Method); err != nil {
+		if len(choice.Steps) > 0 {
+			for _, ms := range choice.Steps {
+				if err := w.visit(ms, choice.Agent, PointMethod, s.Path, &choice); err != nil {
 					return err
 				}
 			}
 			return nil
 		}
 		return w.add(s, StartingPoint{Kind: PointMethod, Process: s.Owner, Method: choice.Name, Capability: s.Capability,
-			Launch: Launch{Agent: choice.ActorAgent(), Goal: choice.AgentGoal}, Responsible: roleOf(s, &choice.Method, true), Accountable: roleOf(s, &choice.Method, false)})
+			Launch: Launch{Agent: choice.Agent, Goal: choice.Goal}, Responsible: roleOf(s, &choice, true), Accountable: roleOf(s, &choice, false)})
 	}
 	pt := StartingPoint{Kind: kind, Process: s.Owner, Parent: parent,
 		Launch: Launch{Agent: agent, Goal: s.Path}, Responsible: roleOf(s, me, true), Accountable: roleOf(s, me, false)}
@@ -262,7 +255,7 @@ func (w *pointWalker) visit(s methodology.StepInfo, agent, kind, parent string, 
 }
 
 // towardsGoal reports whether the step reaches something the goal needs.
-func (w *pointWalker) towardsGoal(s methodology.StepInfo) bool {
+func (w *pointWalker) towardsGoal(s methodology.StepView) bool {
 	for k := range s.Exit {
 		if w.needed[k] {
 			return true
@@ -271,8 +264,8 @@ func (w *pointWalker) towardsGoal(s methodology.StepInfo) bool {
 	return false
 }
 
-func roleOf(s methodology.StepInfo, me *methodology.Method, responsible bool) string {
-	r := s.Effective
+func roleOf(s methodology.StepView, me *methodology.ActivityView, responsible bool) string {
+	r := s.Roles
 	if me != nil && me.Roles != nil {
 		r = me.Roles
 	}
@@ -285,7 +278,7 @@ func roleOf(s methodology.StepInfo, me *methodology.Method, responsible bool) st
 	return r.Accountable
 }
 
-func (w *pointWalker) block(s methodology.StepInfo, miss []string) {
+func (w *pointWalker) block(s methodology.StepView, miss []string) {
 	w.out.BlockedCount++
 	if len(w.out.Blocked) < w.maxBlocked {
 		w.out.Blocked = append(w.out.Blocked, BlockedStep{ID: s.Path, Name: s.Name, Missing: miss})
@@ -293,7 +286,7 @@ func (w *pointWalker) block(s methodology.StepInfo, miss []string) {
 }
 
 // add completes and records a possible step.
-func (w *pointWalker) add(s methodology.StepInfo, pt StartingPoint) error {
+func (w *pointWalker) add(s methodology.StepView, pt StartingPoint) error {
 	if len(w.out.Points) >= w.maxPoints {
 		return nil
 	}

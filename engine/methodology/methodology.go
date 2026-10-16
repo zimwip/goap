@@ -434,6 +434,8 @@ type Compiled struct {
 	reactions []Reaction
 	// assessments are the compiled assessment views (ADR 0116); nil: the defaults
 	assessments *condition.AssessmentViews
+	// view is the shape of the activities as they are shown (ADR 0126 step 3), computed once at compilation
+	view *View
 }
 
 // Definition is the methodology as written, compiled into c.
@@ -444,6 +446,7 @@ func (c *Compiled) Definition() *Methodology { return c.definition }
 func (c *Compiled) WithDefinition(m *Methodology) *Compiled {
 	out := *c
 	out.definition = m
+	out.view = nil // computed again from m on demand
 	return &out
 }
 

@@ -2,7 +2,7 @@
 
 import type { Struct } from './common';
 import type { FormDef } from '../../forms/types';
-import type { RequiredLinkJson, StructureTagJson } from '../../../gen/goap/registry/v1/registry_pb';
+import type { MethodologyViewJson, RequiredLinkJson, StructureTagJson } from '../../../gen/goap/registry/v1/registry_pb';
 
 // --- registry ---------------------------------------------------------------
 
@@ -826,3 +826,7 @@ export interface Issue {
   /** how to fix it, when the check knows (the closest name, the names allowed, what to change) */
   hint?: string;
 }
+
+/** The compiled view of the activities of a methodology (ADR 0126 step 3): processes, methods, step trees with their
+ * conditions, and what each condition means; no value of a change (the engine binds it). */
+export type MethodologyView = MethodologyViewJson;

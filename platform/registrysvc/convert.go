@@ -377,3 +377,33 @@ func loopFromPB(l *registryv1.ActionLoop) *methodology.Loop {
 	return &methodology.Loop{MaxRounds: int(l.MaxRounds), MaxToolResultBytes: int(l.MaxToolResultBytes),
 		MaxTokens: int(l.MaxTokens), Timeout: l.Timeout, CompactBytes: int(l.CompactBytes)}
 }
+
+// MethodologyViewToPB converts the compiled view of a methodology (ADR 0126 step 3).
+func MethodologyViewToPB(v *methodology.View) *registryv1.MethodologyView {
+	out := &registryv1.MethodologyView{Methodology: v.Methodology, Version: v.Version, Goal: v.Goal,
+		Processes: activityViewsToPB(v.Processes), Methods: activityViewsToPB(v.Methods), Conditions: map[string]*registryv1.ViewCondition{}}
+	for name, c := range v.Conditions {
+		out.Conditions[name] = &registryv1.ViewCondition{Description: c.Description, ProducedBy: c.ProducedBy, Requires: c.Requires}
+	}
+	return out
+}
+
+func activityViewsToPB(as []methodology.ActivityView) []*registryv1.ViewActivity {
+	out := make([]*registryv1.ViewActivity, 0, len(as))
+	for _, a := range as {
+		out = append(out, &registryv1.ViewActivity{Name: a.Name, Kind: a.Kind, Description: a.Description, Agent: a.Agent, Goal: a.Goal,
+			Done: a.Done, Nested: a.Nested, Reactive: a.Reactive, For: a.For, Roles: respToPB(a.Roles), Steps: stepViewsToPB(a.Steps)})
+	}
+	return out
+}
+
+func stepViewsToPB(steps []methodology.StepView) []*registryv1.ViewStep {
+	var out []*registryv1.ViewStep
+	for _, s := range steps {
+		out = append(out, &registryv1.ViewStep{Path: s.Path, Name: s.Name, Owner: s.Owner, Method: s.Method, Target: s.Target,
+			Capability: s.Capability, Foreach: s.Foreach, Description: s.Description, Guidance: s.Guidance, Checklist: s.Checklist,
+			References: refsToPB(s.References), Roles: respToPB(s.Roles), Entry: s.Entry, Exit: s.Exit, Planned: s.Planned,
+			Unavailable: s.Unavailable, Steps: stepViewsToPB(s.Steps)})
+	}
+	return out
+}

@@ -97,6 +97,18 @@ func (h *Handler) GetProcessGraph(ctx context.Context, r *connect.Request[regist
 	return connect.NewResponse(&registryv1.GetProcessGraphResponse{Graph: ProcessGraphToPB(g), Issues: domainpb.IssuesToPB(issues)}), nil
 }
 
+// GetMethodologyView is the compiled view of the activities of a methodology as edited (ADR 0126 step 3), with its
+// issues: drawn as far as it stands.
+func (h *Handler) GetMethodologyView(ctx context.Context, r *connect.Request[registryv1.GetMethodologyViewRequest]) (*connect.Response[registryv1.GetMethodologyViewResponse], error) {
+	m := FromPB(r.Msg.Methodology)
+	c, issues := m.CompileLenient()
+	out := &registryv1.GetMethodologyViewResponse{Issues: domainpb.IssuesToPB(issues)}
+	if c != nil {
+		out.View = MethodologyViewToPB(c.View())
+	}
+	return connect.NewResponse(out), nil
+}
+
 // CheckLevels checks the coherence of a process or method, level by level, as edited, with the issues of the
 // methodology.
 func (h *Handler) CheckLevels(ctx context.Context, r *connect.Request[registryv1.CheckLevelsRequest]) (*connect.Response[registryv1.CheckLevelsResponse], error) {

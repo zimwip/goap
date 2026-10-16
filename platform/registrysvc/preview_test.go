@@ -96,3 +96,31 @@ func TestGraphAndLevelsOfADraftWithBrokenRules(t *testing.T) {
 		t.Fatalf("levels %+v %v", l, err)
 	}
 }
+
+// The view of a methodology as edited is drawn as far as it stands: its process, its steps with their conditions,
+// and what the conditions mean (ADR 0126 step 3).
+func TestMethodologyViewOfADraft(t *testing.T) {
+	m := methodology.Methodology{Name: "m", Version: "1", Namespace: "alm",
+		Conditions: []methodology.Condition{{Name: "done", Expr: "false", Description: "the work is done"}},
+		Processes: []methodology.Process{{Name: "flow", Steps: []methodology.Step{
+			{Name: "fine", Action: "work"}, {Name: "broken", Action: "nope"},
+		}}},
+		Actions: []methodology.Action{{Name: "work", Kind: methodology.KindHuman, Instructions: "do it", Effects: map[string]bool{"done": true}}},
+	}
+	h := &Handler{}
+	r, err := h.GetMethodologyView(context.Background(), connect.NewRequest(&registryv1.GetMethodologyViewRequest{Methodology: ToPB(Record{Methodology: m})}))
+	if err != nil || r.Msg.View == nil || len(r.Msg.Issues) == 0 {
+		t.Fatalf("view %+v %v", r, err)
+	}
+	v := r.Msg.View
+	if len(v.Processes) != 1 || v.Processes[0].Name != "flow" || len(v.Processes[0].Steps) == 0 {
+		t.Fatalf("processes %+v", v.Processes)
+	}
+	fine := v.Processes[0].Steps[0]
+	if fine.Path != "flow/fine" || fine.Owner != "flow" || !fine.Exit["done"] {
+		t.Fatalf("step %+v", fine)
+	}
+	if c := v.Conditions["done"]; c == nil || c.Description != "the work is done" || len(c.ProducedBy) == 0 {
+		t.Fatalf("condition %+v", v.Conditions)
+	}
+}

@@ -1,8 +1,8 @@
 # ADR 0126 — Formal execution elements between the methodology and the engine
 
 **Status**: accepted; step 1 implemented (the call of a step, the owner of a step and of a reaction, the descriptions
-of the generated conditions), step 2 implemented (`Compiled` the activable form, the planner conversion in the engine).
-The read models on the methodology side are to come · **Date**: 2026-10 · Builds on
+of the generated conditions), step 2 implemented (`Compiled` the activable form, the planner conversion in the engine),
+step 3 implemented (the compiled view, bound by the engine) · **Date**: 2026-10 · Builds on
 ADR 0034 (processes), ADR 0035 / 0050 (methods), ADR 0062 (builtins), ADR 0109 (conditions), ADR 0125 (components)
 
 ## Context
@@ -62,10 +62,33 @@ the change.
 7. `platform/layering`: the `forbidden` map keeps `engine/methodology` and `engine/condition` off `engine/goap` and
    `engine/engine`; `TestEngineDecodesNoConvention` refuses `.Definition()` in the engine.
 
+## Step 3: the compiled view, bound by the engine
+
+The read models of a change (its starting points, its current state, the progress of a run) mixed two things: the
+shape of what is shown (the step trees, the entry and exit conditions, what a condition means, the actions producing
+it, the method a capability resolves to), which follows from the methodology alone and was walked again on every call,
+and its binding to a change (the conditions evaluated, the live runs laid over the steps, the rights of the caller).
+
+8. The compiler produces `methodology.View` (`engine/methodology/view.go`, `Compiled.View()`, computed once at
+   compilation): the processes and the valid methods (`ActivityView`: kind, agent and goal running it, what its goal
+   asks, `Nested`, `Reactive`, a method's capability and roles), their step trees (`StepView`: path, owner, method and
+   target, capability, `foreach`, guidance, checklist, references, roles in force, entry, exit, the actions planned for
+   it, `Unavailable` the context conditions of the methods of its capability) and `Conditions` (`ConditionView`:
+   description, producers, prerequisites) for every condition they name. It holds no value of a change.
+9. The engine binds it: `StartingPoints`, `ChangeState` and `Progress` walk the view, evaluate its conditions on the
+   blackboard, lay the runs over its steps, choose the applicable method (`MethodsFor`, a binding: it depends on the
+   change) and ask the rights of the caller; the facts of a missing condition stay a binding too (its terms evaluated
+   on the blackboard). `platform/layering` `TestEngineBindsTheView` refuses `ProcessSteps(`, `MethodSteps(`,
+   `CapabilityGuards(`, `ConditionDescription(`, `.Producers(` and `.Prerequisites(` in the engine.
+10. The front reads the view as it is: RPC `registry.v1.GetMethodologyView` (a methodology as edited, saved or not,
+    drawn as far as it compiles, with its issues; messages `MethodologyView`, `ViewActivity`, `ViewStep`,
+    `ViewCondition`), web `registry.methodologyView`, type `MethodologyView` (`MethodologyViewJson`).
+
 ## Next step
 
-The read models over the definition (starting points, current state, progress) move to the methodology side, so
-that the engine keeps only what runs; `MethodologyPort` over RPC stops recompiling the definition it fetched.
+The views of the web over a change (`ChangeState.svelte`, `PossibleSteps.svelte`) can draw the compiled view and take
+from the engine only the binding (states, runs, rights), and the methodology editor can show it for a draft;
+`MethodologyPort` over RPC still recompiles the definition it fetched.
 
 ## Consequences
 

@@ -50,6 +50,9 @@ const (
 	// RegistryServiceGetProcessGraphProcedure is the fully-qualified name of the RegistryService's
 	// GetProcessGraph RPC.
 	RegistryServiceGetProcessGraphProcedure = "/goap.registry.v1.RegistryService/GetProcessGraph"
+	// RegistryServiceGetMethodologyViewProcedure is the fully-qualified name of the RegistryService's
+	// GetMethodologyView RPC.
+	RegistryServiceGetMethodologyViewProcedure = "/goap.registry.v1.RegistryService/GetMethodologyView"
 	// RegistryServiceCheckLevelsProcedure is the fully-qualified name of the RegistryService's
 	// CheckLevels RPC.
 	RegistryServiceCheckLevelsProcedure = "/goap.registry.v1.RegistryService/CheckLevels"
@@ -117,6 +120,10 @@ type RegistryServiceClient interface {
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
 	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
 	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
+	// The compiled view of the activities of a methodology (as edited, saved or not): processes, methods, step trees
+	// with their entry and exit conditions, and what each condition means (ADR 0126 step 3). It holds no value of a
+	// change: the engine binds it to a change (GetChangeState, ListStartingPoints, GetProgress).
+	GetMethodologyView(context.Context, *connect.Request[v1.GetMethodologyViewRequest]) (*connect.Response[v1.GetMethodologyViewResponse], error)
 	// Level-by-level coherence of a process, or of a method composing its own steps (as edited): for the root and each
 	// step with sub-steps, whether the entry conditions and exit criteria of the direct steps chain the parent's
 	// inputs to its outputs.
@@ -179,6 +186,12 @@ func NewRegistryServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
 			connect.WithClientOptions(opts...),
 		),
+		getMethodologyView: connect.NewClient[v1.GetMethodologyViewRequest, v1.GetMethodologyViewResponse](
+			httpClient,
+			baseURL+RegistryServiceGetMethodologyViewProcedure,
+			connect.WithSchema(registryServiceMethods.ByName("GetMethodologyView")),
+			connect.WithClientOptions(opts...),
+		),
 		checkLevels: connect.NewClient[v1.CheckLevelsRequest, v1.CheckLevelsResponse](
 			httpClient,
 			baseURL+RegistryServiceCheckLevelsProcedure,
@@ -237,6 +250,7 @@ type registryServiceClient struct {
 	saveMethodology     *connect.Client[v1.SaveMethodologyRequest, v1.SaveMethodologyResponse]
 	validateMethodology *connect.Client[v1.ValidateMethodologyRequest, v1.ValidateMethodologyResponse]
 	getProcessGraph     *connect.Client[v1.GetProcessGraphRequest, v1.GetProcessGraphResponse]
+	getMethodologyView  *connect.Client[v1.GetMethodologyViewRequest, v1.GetMethodologyViewResponse]
 	checkLevels         *connect.Client[v1.CheckLevelsRequest, v1.CheckLevelsResponse]
 	previewPlan         *connect.Client[v1.PreviewPlanRequest, v1.PreviewPlanResponse]
 	publishMethodology  *connect.Client[v1.PublishMethodologyRequest, v1.PublishMethodologyResponse]
@@ -270,6 +284,11 @@ func (c *registryServiceClient) ValidateMethodology(ctx context.Context, req *co
 // GetProcessGraph calls goap.registry.v1.RegistryService.GetProcessGraph.
 func (c *registryServiceClient) GetProcessGraph(ctx context.Context, req *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
 	return c.getProcessGraph.CallUnary(ctx, req)
+}
+
+// GetMethodologyView calls goap.registry.v1.RegistryService.GetMethodologyView.
+func (c *registryServiceClient) GetMethodologyView(ctx context.Context, req *connect.Request[v1.GetMethodologyViewRequest]) (*connect.Response[v1.GetMethodologyViewResponse], error) {
+	return c.getMethodologyView.CallUnary(ctx, req)
 }
 
 // CheckLevels calls goap.registry.v1.RegistryService.CheckLevels.
@@ -322,6 +341,10 @@ type RegistryServiceHandler interface {
 	ValidateMethodology(context.Context, *connect.Request[v1.ValidateMethodologyRequest]) (*connect.Response[v1.ValidateMethodologyResponse], error)
 	// A process of a methodology (as edited, saved or not) as a graph: steps, the edges its conditions draw, methods (ADR 0036 §4).
 	GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error)
+	// The compiled view of the activities of a methodology (as edited, saved or not): processes, methods, step trees
+	// with their entry and exit conditions, and what each condition means (ADR 0126 step 3). It holds no value of a
+	// change: the engine binds it to a change (GetChangeState, ListStartingPoints, GetProgress).
+	GetMethodologyView(context.Context, *connect.Request[v1.GetMethodologyViewRequest]) (*connect.Response[v1.GetMethodologyViewResponse], error)
 	// Level-by-level coherence of a process, or of a method composing its own steps (as edited): for the root and each
 	// step with sub-steps, whether the entry conditions and exit criteria of the direct steps chain the parent's
 	// inputs to its outputs.
@@ -378,6 +401,12 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 		RegistryServiceGetProcessGraphProcedure,
 		svc.GetProcessGraph,
 		connect.WithSchema(registryServiceMethods.ByName("GetProcessGraph")),
+		connect.WithHandlerOptions(opts...),
+	)
+	registryServiceGetMethodologyViewHandler := connect.NewUnaryHandler(
+		RegistryServiceGetMethodologyViewProcedure,
+		svc.GetMethodologyView,
+		connect.WithSchema(registryServiceMethods.ByName("GetMethodologyView")),
 		connect.WithHandlerOptions(opts...),
 	)
 	registryServiceCheckLevelsHandler := connect.NewUnaryHandler(
@@ -440,6 +469,8 @@ func NewRegistryServiceHandler(svc RegistryServiceHandler, opts ...connect.Handl
 			registryServiceValidateMethodologyHandler.ServeHTTP(w, r)
 		case RegistryServiceGetProcessGraphProcedure:
 			registryServiceGetProcessGraphHandler.ServeHTTP(w, r)
+		case RegistryServiceGetMethodologyViewProcedure:
+			registryServiceGetMethodologyViewHandler.ServeHTTP(w, r)
 		case RegistryServiceCheckLevelsProcedure:
 			registryServiceCheckLevelsHandler.ServeHTTP(w, r)
 		case RegistryServicePreviewPlanProcedure:
@@ -483,6 +514,10 @@ func (UnimplementedRegistryServiceHandler) ValidateMethodology(context.Context, 
 
 func (UnimplementedRegistryServiceHandler) GetProcessGraph(context.Context, *connect.Request[v1.GetProcessGraphRequest]) (*connect.Response[v1.GetProcessGraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetProcessGraph is not implemented"))
+}
+
+func (UnimplementedRegistryServiceHandler) GetMethodologyView(context.Context, *connect.Request[v1.GetMethodologyViewRequest]) (*connect.Response[v1.GetMethodologyViewResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.registry.v1.RegistryService.GetMethodologyView is not implemented"))
 }
 
 func (UnimplementedRegistryServiceHandler) CheckLevels(context.Context, *connect.Request[v1.CheckLevelsRequest]) (*connect.Response[v1.CheckLevelsResponse], error) {
