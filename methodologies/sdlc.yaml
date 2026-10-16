@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.9.0
+version: 0.10.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -13,6 +13,11 @@ description: >
 namespace: alm
 goal: deliver
 
+# the proofs of concept and prototypes it opens as its sub-changes (ADR 0131): the poc methodology, whose conclusion it
+# takes back (`poc.concluded` from an integrated change)
+integrates:
+  - methodologies: [poc]
+
 # risks_under_control, the release train gate, is a condition of the `risks` library
 # the rating in two steps, conditions of the `assessments` library (ADR 0110): the rating actions establish
 # description_rated (a rating of the description as it reads now exists); description_accepted, the gate of the
@@ -22,6 +27,7 @@ imports: [risks, dependencies, assessments]
 # the events of the methodology (ADR 0110), raised by the actions that emit them
 events:
   - {name: impact.analysed, description: "A person validated the impact analysis of the change (its four passes done)"}
+  - {name: poc.concluded, description: "A proof of concept or a prototype the change opened concluded (raised by its poc sub-change)"}
 
 # how the assessments of a change read (ADR 0116): the first state that holds wins, the defaults settle the rest
 assessments:
@@ -213,6 +219,27 @@ conditions:
   - name: applied
     description: The change is applied to the ALM repository (new baseline)
     expr: change.status == "applied"
+  # --- proofs of concept and prototypes (ADR 0131): an action of kind poc of the register, opened by a person as a
+  # sub-change of the poc methodology, concluded there, taken back here; one opened for the framing explores the need,
+  # one opened against risks derisks them. The steps waiting for them hold while one is open (true when there is none).
+  - name: poc_opened
+    scope: action
+    description: The proof of concept has its sub-change
+    expr: self.change != ""
+  - name: poc_concluded_now
+    scope: action
+    description: The sub-change of the proof of concept just concluded (the event of its conclusion is being handled)
+    expr: 'has(vars.event) && vars.event.type == "poc.concluded" && vars.event.change.id == self.change'
+  - name: poc_settled
+    scope: action
+    description: The proof of concept is concluded (its verdicts taken back) or cancelled
+    expr: self.status != "open"
+  - {name: pocs_opened, all: poc_opened, where: self.kind == "poc" && self.status == "open", empty: true,
+     description: Every proof of concept proposed is opened as a sub-change}
+  - {name: prototypes_concluded, all: poc_settled, where: self.kind == "poc" && self.purpose == "explore", empty: true,
+     description: Every prototype of the framing is concluded (true when there is none)}
+  - {name: pocs_concluded, all: poc_settled, where: self.kind == "poc" && self.purpose == "derisk", empty: true,
+     description: Every proof of concept against the risks is concluded (true when there is none)}
 
 actions:
   # ======================= intake
@@ -269,8 +296,11 @@ actions:
       {"type":"assessment","data":{"key":"description","score":<0 to 5>,"verdict":"clear|unclear|insufficient",
        "findings":[{"text":"<what is missing or ambiguous>","severity":"major|minor"}],
        "suggestion":"<a rewritten description, same language as the original, only if it can be improved>",
-       "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>"}}
-      (what you rated is recorded for you: the description as it is in this prompt.)
+       "reply":"<one or two sentences to the requester: your answer to their last remark, or what to fix first>",
+       "prototype":["<only when the text cannot settle it: a statement about the need a prototype would confirm or refute>"]}}
+      (what you rated is recorded for you: the description as it is in this prompt.) Leave "prototype" out unless
+      something only trying it would settle (is this flow what they want, can the data be shown that way): a person
+      decides whether to build one (ADR 0131), never you.
       A score of 3 or more means the change can be worked on as described.
 
   - name: rate_description_by_hand
@@ -857,6 +887,8 @@ actions:
       (the functions the component implements, the requirements they realize, the test cases verifying them).
       {{ range .Artifacts }}{{ if and (eq .Target "build_report") (eq (index .Data "component") $.Subject.key) }}A build of this component {{ if index .Data "ok" }}succeeded{{ else }}FAILED{{ end }} (`{{ index .Data "command" }}`, after code change {{ index .Data "revision" }}):
       {{ index .Data "output" }}
+      {{ end }}{{ if eq .Target "poc_findings" }}A proof of concept of this change ({{ index .Data "change" }}) concluded: {{ index .Data "summary" }}
+      Its verdicts: {{ json (index .Data "verdicts") }}; its code (a reference only, never copied as is): {{ json (index .Data "branches") }}; it was built without the rules of the delivery: learn from it, build again here.
       {{ end }}{{ end }}
       Work with the workspace tools: read and search the code, edit it, run the build and the tests with bash (cwd
       {{ .Subject.key }}) until they pass, then commit your work there (git add -A && git commit -m "<what and why>").
@@ -1141,6 +1173,108 @@ actions:
     cost: 1
     permission: change:apply
 
+  # ======================= proofs of concept and prototypes (ADR 0131)
+  - name: open_poc
+    kind: human
+    language: javascript
+    scope: action
+    where: self.kind == "poc" && self.status == "open"
+    description: Open a proposed proof of concept or prototype as a sub-change, with what it checks
+    effects: {poc_opened: true}
+    cost: 2
+    mcps: [goap-change]
+    instructions: >
+      A proof of concept (or a prototype, during the framing) is proposed on the risk register. Say what it starts
+      from and how long it may take: it opens a sub-change of the poc methodology that builds the least that shows
+      whether its hypotheses hold, without the quality rules of the delivery, and lands nothing. Cancel the action on
+      the register instead if it is not worth it.
+    form:
+      title: Open the proof of concept
+      fields:
+        - {name: hypotheses, widget: textarea, label: What to check, help: "One statement per line, on top of the risks of the action (a prototype: what the need should look like)"}
+        - {name: repositories, widget: textarea, label: Sources, help: "The repositories it starts from, one per line (none: an empty workspace, for a mock-up)"}
+        - {name: timebox, widget: text, label: Timebox, help: "How long it may take, e.g. 2 days"}
+        - {name: notes, widget: textarea, label: Notes, help: "What to try, who to ask"}
+    code: |
+      function lines(s) { return String(s || "").split("\n").map(x => x.trim()).filter(x => x); }
+      function run(ctx) {
+        const a = ctx.var("item");
+        const f = ctx.var("form") || {};
+        const titles = {};
+        for (const r of ctx.items("risk")) if (r.data.title) titles[r.data.key] = r.data.title;
+        // the hypotheses are its requirements: a risk it checks holds, or a statement about the need
+        const hypotheses = [];
+        for (const k of (a.risks || [])) hypotheses.push({ statement: k + " holds: " + (titles[k] || k), source: k });
+        for (const st of (a.hypotheses || []).concat(lines(f.hypotheses))) hypotheses.push({ statement: st, source: "framing" });
+        if (hypotheses.length === 0) throw new Error("the proof of concept checks nothing: name a risk on the action, or a statement");
+        const me = ctx.callTool("goap-change/read", {}).change;
+        const what = a.purpose === "explore" ? "Prototype" : "POC";
+        const intent = what + " for " + me.title + ": " + hypotheses.map(h => h.statement).join("; ") +
+          (f.timebox ? " (timebox " + f.timebox + ")" : "");
+        const sub = ctx.callTool("goap-change/create", { parent: me.id, title: what + ": " + a.title, intent: intent,
+          methodology: "poc", criticality: "C1", data: { poc: { action: a.key, purpose: a.purpose, parent: me.id } } }).change;
+        // what it checks, for the sub-change to state as its own hypotheses
+        ctx.callTool("goap-change/note", { change: sub.id, target: "poc_scope", text: intent, data: { action: a.key,
+          purpose: a.purpose, parent: me.id, hypotheses: hypotheses, repositories: lines(f.repositories),
+          timebox: f.timebox || "", notes: f.notes || "" } });
+        ctx.addItem("action", { key: a.key, title: a.title, change: sub.id });
+        return what + " opened: " + sub.id;
+      }
+
+  - name: conclude_poc
+    kind: script
+    language: javascript
+    scope: action
+    where: self.kind == "poc"
+    description: Take back the verdicts of a concluded proof of concept, settle its risks and close its sub-change
+    pre: {poc_opened: true, poc_concluded_now: true}
+    effects: {poc_settled: true}
+    mcps: [goap-change]
+    code: |
+      function run(ctx) {
+        const a = ctx.var("item");
+        const sub = ctx.callTool("goap-change/read", { change: a.change });
+        const items = sub.items || [];
+        const last = (type, key) => items.filter(i => i.type === type && i.data && i.data.key === key).pop();
+        const conclusion = items.filter(i => i.type === "artifact" && i.target === "poc_conclusion").pop();
+        const kept = items.filter(i => i.type === "artifact" && i.target === "probes_kept").pop();
+        const titles = {};
+        for (const r of ctx.items("risk")) if (r.data.title) titles[r.data.key] = r.data.title;
+        const verdicts = [];
+        for (const h of items.filter(i => i.type === "hypothesis")) {
+          const v = last("assessment", "item:" + h.data.key);
+          const verdict = v ? v.data.verdict : "confirmed"; // no verdict: it was not shown to work
+          const findings = v && v.data.findings ? v.data.findings : [];
+          verdicts.push({ hypothesis: h.data.key, statement: h.data.statement, source: h.data.source, verdict: verdict,
+            findings: findings, suggestion: v ? v.data.suggestion || "" : "" });
+          const risk = h.data.source;
+          if (!titles[risk]) continue;
+          // the verdict on the risk, where the register reads it (ADR 0110 §6, the bubble of the risk)
+          ctx.addItem("assessment", { key: "item:" + risk, verdict: verdict, score: v ? v.data.score : 0, findings: findings,
+            from: a.change });
+          if (verdict === "refuted") {
+            ctx.addItem("risk", { key: risk, title: titles[risk], status: "closed",
+              rationale: "the proof of concept " + a.key + " showed it works as expected (" + a.change + ")" });
+          } else {
+            // it holds: the concluded POC no longer covers it, the risk management asks for another mitigation
+            ctx.addItem("risk", { key: risk, title: titles[risk], status: "open",
+              rationale: "the proof of concept " + a.key + " confirmed it (" + a.change + "): another mitigation is needed" });
+          }
+        }
+        const findings = { action: a.key, purpose: a.purpose, change: a.change, verdicts: verdicts,
+          summary: conclusion ? conclusion.data.summary || "" : "", branches: kept ? kept.data.branches || [] : [] };
+        // for the delivery: what the POC learnt and where its code is, a reference, never reused as is (ADR 0131 §5)
+        ctx.addArtifact("poc_findings", findings);
+        if (a.purpose === "explore") {
+          // for the person confirming the framing: never applied to the description by itself (ADR 0110 §4)
+          ctx.addArtifact("prototype_findings", findings);
+        }
+        const result = verdicts.map(v => v.hypothesis + " " + v.verdict + ": " + v.statement).join("; ");
+        ctx.addItem("action", { key: a.key, title: a.title, status: "done", result: result });
+        ctx.callTool("goap-change/close", { change: a.change, reason: "proof of concept concluded, nothing to land" });
+        return a.key + " concluded: " + result;
+      }
+
 goals:
   - name: formulate
     description: Attach a request to the change that should carry it (an open one it continues, or this new one, well-defined)
@@ -1379,10 +1513,12 @@ processes:
             method: description_rating
             review: {subject: description, automatic: true}
           - name: confirmation
-            description: A person confirms the framing, in the light of the review of the description
-            pre: {description_rated: true}
+            description: A person confirms the framing, in the light of the review of the description and of its prototypes
+            # a prototype of the framing (ADR 0131) holds the confirmation until it is concluded: its findings are read here
+            pre: {description_rated: true, prototypes_concluded: true}
             instructions: >
-              Read the review of the description, check with the requester that the intent states a concrete outcome,
+              Read the review of the description and the findings of its prototypes, if any (prototype_findings: a verdict
+              per statement, a refuted one being a need the prototype answers); check with the requester that the intent states a concrete outcome,
               its scope (what it touches) and why it is needed; amend the intent of the change if it does not (the
               review rates it again by itself), then mark the step done.
             guidance: >
@@ -1416,10 +1552,29 @@ processes:
         description: Allocate the functions and design the solution, by the method that fits the change, once the requirements are specified
         pre: {impact_analysis_validated: true, requirements_specified: true, requirements_traced: true}
         method: design
+      - name: proofs
+        description: Prove what is uncertain by building the least that shows it, before investing in it (ADR 0131)
+        roles: {responsible: tech_lead, accountable: product_owner}
+        guidance: >
+          A proof of concept is a mitigation action of kind poc on the risk register (purpose derisk, the risks it
+          checks), a prototype one proposed during the framing (purpose explore, the statements about the need it
+          checks). A person opens it: a sub-change of the poc methodology builds it under relaxed rules and lands
+          nothing; its verdicts come back here (a refuted risk closed, a confirmed one needing another mitigation).
+        steps:
+          - name: open
+            description: Open each proposed proof of concept or prototype as a sub-change, with what it checks
+            action: open_poc
+            done: {pocs_opened: true}
+          - name: conclusion
+            description: Take back the verdicts of a concluded proof of concept and close its sub-change
+            action: conclude_poc
+            on:
+              - {event: poc.concluded, from: integrated}
       - name: build
-        description: Build every component in scope, from its sources in the workspace of the change when its repository is known, else according to its technology (once the design is checked)
+        description: Build every component in scope, from its sources in the workspace of the change when its repository is known, else according to its technology (once the design is checked and its proofs of concept concluded)
         roles: {responsible: developer, accountable: tech_lead}
-        pre: {impact_analysis_validated: true, design_checked: true}
+        # a proof of concept against the risks (ADR 0131) holds the build: what it checks decides what is built
+        pre: {impact_analysis_validated: true, design_checked: true, pocs_concluded: true}
         method: build
       - name: release
         description: Plan, note, review and roll out the releases, once what the release train needs holds and the risks are under control

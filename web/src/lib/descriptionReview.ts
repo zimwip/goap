@@ -33,6 +33,8 @@ export interface Assessment {
   findings: Finding[];
   suggestion: string;
   reply: string;
+  /** statements about the need only a prototype would settle, as the rater proposes them (ADR 0131): a person decides */
+  prototype: string[];
   rated: string;
   /** the description still reads as rated */
   current: boolean;
@@ -131,6 +133,7 @@ export function assessmentOf(change: { title?: string; intent?: string; items?: 
     findings,
     suggestion: str(d.suggestion),
     reply: str(d.reply),
+    prototype: Array.isArray(d.prototype) ? d.prototype.map(String).map((x) => x.trim()).filter((x) => x) : [],
     rated,
     current: text === undefined || rates(rated, text),
     answered: commented < at,

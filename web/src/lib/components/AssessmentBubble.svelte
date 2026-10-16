@@ -26,6 +26,7 @@
   } from '../descriptionReview';
   import { processes } from '../stores/live.svelte';
   import { openTab } from '../shell/tabs.svelte';
+  import { actionList, nextKey, pocData, KIND_POC, PURPOSE_EXPLORE } from '../risks';
 
   let {
     change,
@@ -120,6 +121,28 @@
 
   const stateLabel = $derived(view.label);
 
+  // a prototype the rater thinks only trying would settle (ADR 0131): proposed on the register by a person, opened
+  // from the proofs step; the one already proposed for these statements, if any
+  const proposed = $derived.by(() => {
+    const want = rating?.prototype.join('\n') ?? '';
+    return actionList(change.items ?? []).find((a) => a.kind === KIND_POC && a.purpose === PURPOSE_EXPLORE && a.status !== 'cancelled' && a.hypotheses.join('\n') === want);
+  });
+
+  async function proposePrototype() {
+    if (!rating?.prototype.length || !change.id) return;
+    busy = true;
+    error = '';
+    try {
+      const key = nextKey('ACT-', actionList(change.items ?? []).map((a) => a.key));
+      await graph.addItems(change.id, [{ type: 'action', target: 'action', data: pocData(key, `Prototype: ${rating.prototype[0]}`, PURPOSE_EXPLORE, [], rating.prototype) }]);
+      onchange?.();
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      busy = false;
+    }
+  }
+
   async function send() {
     const text = answer.trim();
     if (!text || !change.id) return;
@@ -213,6 +236,21 @@
               {/if}
             </div>
           {/if}
+        {/if}
+        {#if rating && rating.prototype.length > 0}
+          <div class="suggestion">
+            <span class="hint">A prototype could settle</span>
+            <ul class="findings">
+              {#each rating.prototype as st, i (i)}<li>{st}</li>{/each}
+            </ul>
+            {#if proposed}
+              <span class="hint">Proposed as {proposed.key} ({proposed.status})</span>
+            {:else if !closed}
+              <div class="row">
+                <button type="button" class="small" disabled={busy} title="Propose it on the register; a person opens it from the proofs step" onclick={proposePrototype}>Propose a prototype</button>
+              </div>
+            {/if}
+          </div>
         {/if}
         {#if thread.length > 0}
           <ol class="thread">

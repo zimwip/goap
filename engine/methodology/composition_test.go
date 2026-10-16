@@ -226,7 +226,7 @@ func TestCompositionOfTheRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	others := map[string]*Methodology{}
-	for _, f := range []string{"sdlc", "release-based", "risk-management", "methodology-improvement"} {
+	for _, f := range []string{"sdlc", "release-based", "risk-management", "methodology-improvement", "poc"} {
 		m, err := LoadFile("../../methodologies/" + f + ".yaml")
 		if err != nil {
 			t.Fatal(err)
