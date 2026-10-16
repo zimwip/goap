@@ -64,7 +64,17 @@ func (h *Handler) GetMethodology(ctx context.Context, r *connect.Request[registr
 	}
 	m := ToPB(rec)
 	m.Suspended = h.Service.Suspended(ctx, rec)
-	return connect.NewResponse(&registryv1.GetMethodologyResponse{Methodology: m}), nil
+	out := &registryv1.GetMethodologyResponse{Methodology: m}
+	if r.Msg.WithDomains {
+		ds, err := h.Service.CompileDomains(ctx, rec)
+		if err != nil {
+			return nil, toConnect(err)
+		}
+		for _, d := range ds {
+			out.Domains = append(out.Domains, domainpb.DomainToPB(def.Record{Domain: *d, Status: def.StatusPublished}))
+		}
+	}
+	return connect.NewResponse(out), nil
 }
 
 func (h *Handler) SaveMethodology(ctx context.Context, r *connect.Request[registryv1.SaveMethodologyRequest]) (*connect.Response[registryv1.SaveMethodologyResponse], error) {

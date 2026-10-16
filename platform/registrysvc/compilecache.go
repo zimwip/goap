@@ -85,6 +85,28 @@ func contentHash(m methodology.Methodology) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// Activate builds the activable form of a methodology version from its definition and the domains it compiles against
+// (ADR 0126): the one compilation of a stored version, run by the registry and by its clients (Client.Methodology)
+// with the same inputs. It is the refusal of the compiler, or of the type catalogue when the domains do not make one
+// together.
+func Activate(m methodology.Methodology, ds []*def.Domain) (*methodology.Compiled, error) {
+	cat, err := typecat.New(ds...)
+	if err != nil {
+		return nil, err
+	}
+	return resolve(m, cat).Compile()
+}
+
+// CompileDomains are the domain versions a stored methodology version compiles against: the ones it pins, else the
+// ones in force at its publication, else the ones in force (ADR 0113).
+func (s *Service) CompileDomains(ctx context.Context, r Record) ([]*def.Domain, error) {
+	inForce, err := s.domainsInForce(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.domainsAmong(ctx, &r.Methodology, r.PublishedAt, inForce)
+}
+
 // Methodology implements engine.MethodologyPort for in-process use: the version a reference names (domain.MethodologyRef,
 // ADR 0113), else the latest published one, compiled against the domain versions it pins once for as long as neither
 // it nor those types change. A published version the domains in force break is suspended (ErrSuspended, ADR 0125 §3).
@@ -120,12 +142,8 @@ func (s *Service) compileAgainst(r Record, ds []*def.Domain) (*methodology.Compi
 			return e.c, e.err
 		}
 	}
-	cat, err := typecat.New(ds...)
-	if err != nil {
-		return nil, err
-	}
 	s.compiled.compiles.Add(1)
-	c, err := resolve(r.Methodology, cat).Compile()
+	c, err := Activate(r.Methodology, ds)
 	if k.content != "" {
 		s.compiled.put(k, compileEntry{c: c, err: err})
 	}

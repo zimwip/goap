@@ -700,10 +700,16 @@ message ListMethodologiesResponse {
 message GetMethodologyRequest {
   string name = 1;
   string version = 2;
+  // also answer the domains the version compiles against (ADR 0126 step 6): with them a client builds the activable
+  // form the registry builds, through the same compilation
+  bool with_domains = 3;
 }
 
 message GetMethodologyResponse {
   Methodology methodology = 1;
+  // with with_domains: the domain versions the methodology version compiles against (pinned, in force at its
+  // publication, else in force; the built-in domains left out)
+  repeated Domain domains = 2;
 }
 
 message SaveMethodologyRequest {

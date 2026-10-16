@@ -124,9 +124,23 @@ and its binding to a change (the conditions evaluated, the live runs laid over t
     `WaitingStep`, `PossibleStepList`; the bindings are the generated `StartingPointBinding` /
     `StartingPointsBinding`.
 
+## Step 6: one activation of a stored version
+
+18. The activable form cannot travel: it holds compiled CEL programs and the planners' operators are built from it.
+    So a client of the registry builds it from the same inputs, through the same function: `registrysvc.Activate(def,
+    domains)` (the type catalogue of the domains, the definition resolved against it with the known builtins, then
+    `Compile`) is the one compilation of a stored version, used by the registry's cache (`compileAgainst`) and by
+    `registrysvc.Client.Methodology`.
+19. `registry.v1.GetMethodology` takes `with_domains` and then answers the domain versions the version compiles against
+    (`Service.CompileDomains`: the pinned ones, else those in force at its publication, else those in force; ADR 0113).
+    The client used to compile the bare definition, so a remote engine ran a methodology with no types (no supertypes,
+    no type checks) where the engine of `goap-dev` ran it against its pinned domains; the client now caches per
+    version and per domain versions.
+
 ## Next step
 
-`MethodologyPort` over RPC still recompiles the definition it fetched.
+None planned: the methodology describes, the compiler activates (once, the same way everywhere), the engine executes
+the compiled form and binds its view to the change.
 
 ## Consequences
 
