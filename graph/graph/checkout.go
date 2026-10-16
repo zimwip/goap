@@ -40,6 +40,9 @@ type work struct {
 	vcn    domain.ChangeImpact // as the flow sees it
 	// planned is set when a creation names the key of a planned creation (resolve): its draft fulfils that impact
 	planned bool
+	// transition is set for a move of the lifecycle of the node (ImpactNodeTransition): a freeze of its type may let
+	// it through (domain.Freezes.Transitions, ADR 0132 §4)
+	transition bool
 }
 
 // workOn opens an operation on a change, on a flow: the change gets its branch (where its versions are written when it
@@ -86,6 +89,33 @@ func (g *Graph) impact(ctx context.Context, tx Tx, w *work, id domain.ChangeImpa
 	} else if frozen {
 		return fmt.Errorf("change impact %s was written in state %s, which the change has left (now %s): go back to it first: %w", id, in, w.c.State, ErrConflict)
 	}
+	typ := w.cn.Type
+	if typ == "" {
+		if n, err := w.base(ctx, tx); err != nil {
+			return err
+		} else if n != nil {
+			typ = n.Type
+		}
+	}
+	return w.checkTypeFreeze(typ)
+}
+
+// checkTypeFreeze refuses to touch a node of a type a move of the lifecycle of the change froze (ADR 0132 §4): no
+// creation, checkout or edit of it until the change goes back; a move of its own lifecycle when the freeze lets it.
+func (w *work) checkTypeFreeze(typ string) error {
+	if typ == "" {
+		return nil
+	}
+	for _, f := range w.c.InForceFreezes() {
+		if w.transition && f.Transitions {
+			continue
+		}
+		for _, frozen := range f.Types {
+			if typ == frozen || (w.ix != nil && w.ix.cat != nil && w.ix.cat.IsA(typ, frozen)) {
+				return fmt.Errorf("the nodes of type %s are frozen in change %s since it left a state of its lifecycle (now %s): go back first: %w", frozen, w.c.ID, w.c.State, ErrConflict)
+			}
+		}
+	}
 	return nil
 }
 
@@ -116,7 +146,9 @@ type target struct {
 	Key    string
 	Type   string
 	// create: the operation creates the node, so the key must be new.
-	create          bool
+	create bool
+	// transition: the operation moves the lifecycle of the node (a type freeze may let it, ADR 0132 §4).
+	transition      bool
 	Rationale       string
 	Flow, Execution string
 	ProducedBy      string
@@ -144,8 +176,14 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	if err != nil {
 		return nil, err
 	}
+	w.transition = t.transition
 	if t.Impact != "" {
 		return w, g.impact(ctx, tx, w, t.Impact)
+	}
+	if t.create {
+		if err := w.checkTypeFreeze(t.Type); err != nil {
+			return nil, err
+		}
 	}
 	if t.Node == "" && t.Key == "" {
 		return nil, invalidf("name a change impact or a node")
@@ -206,6 +244,7 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 	if w, err = g.workOn(ctx, tx, id, t.Flow); err != nil {
 		return nil, err
 	}
+	w.transition = t.transition
 	if t.create {
 		// not recorded yet: the created event of the first version adds it (createTx)
 		w.cn, w.vcn = out[0], out[0]
@@ -779,7 +818,7 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 			if _, err := g.checkoutTx(ctx, tx, w, in.Execution); err != nil {
 				return err
 			}
-			if w, err = g.resolve(ctx, tx, id, target{Impact: w.cn.ID, Flow: in.Flow, Execution: in.Execution}); err != nil {
+			if w, err = g.resolve(ctx, tx, id, target{Impact: w.cn.ID, Flow: in.Flow, Execution: in.Execution, transition: true}); err != nil {
 				return err
 			}
 		}
@@ -834,7 +873,9 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 // node), the node as the flow sees it (its draft, else the stored version it starts from) with the state it leaves, and
 // the transition of the lifecycle.
 func (g *Graph) transitionOf(ctx context.Context, tx Tx, id domain.ChangeID, in NodeTransition) (*work, domain.Node, domain.Transition, error) {
-	w, err := g.resolve(ctx, tx, id, checkoutTarget(in.NodeCheckout))
+	tg := checkoutTarget(in.NodeCheckout)
+	tg.transition = true
+	w, err := g.resolve(ctx, tx, id, tg)
 	if err != nil {
 		return nil, domain.Node{}, domain.Transition{}, err
 	}

@@ -16152,7 +16152,9 @@ type OpenDecisionRequest struct {
 	Criteria   []string `protobuf:"bytes,5,rep,name=criteria,proto3" json:"criteria,omitempty"`
 	// the policy values the opener gives (who decides, a threshold, rounds, a duration): resolved by the graph's
 	// decision policy (ADR 0067)
-	Policy        *structpb.Struct `protobuf:"bytes,10,opt,name=policy,proto3" json:"policy,omitempty"`
+	Policy *structpb.Struct `protobuf:"bytes,10,opt,name=policy,proto3" json:"policy,omitempty"`
+	// what it chooses among beyond the options of the change: plain labels (go, no_go, back of a gate, ADR 0132)
+	Choices       []string `protobuf:"bytes,11,rep,name=choices,proto3" json:"choices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -16229,6 +16231,13 @@ func (x *OpenDecisionRequest) GetPolicy() *structpb.Struct {
 	return nil
 }
 
+func (x *OpenDecisionRequest) GetChoices() []string {
+	if x != nil {
+		return x.Choices
+	}
+	return nil
+}
+
 type OpenDecisionResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Point         *DecisionPoint         `protobuf:"bytes,1,opt,name=point,proto3" json:"point,omitempty"`
@@ -16286,7 +16295,9 @@ type RuleDecisionRequest struct {
 	Questions     []string `protobuf:"bytes,7,rep,name=questions,proto3" json:"questions,omitempty"`
 	// ruled by an agent of a process (the engine): below the threshold it waits for a ratification, and it is refused
 	// on a point a person rules; unset, the caller rules as a person
-	Agent         bool `protobuf:"varint,8,opt,name=agent,proto3" json:"agent,omitempty"`
+	Agent bool `protobuf:"varint,8,opt,name=agent,proto3" json:"agent,omitempty"`
+	// the seat of the board the person rules in, for a collegial decision (ADR 0132)
+	Role          string `protobuf:"bytes,9,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -16375,6 +16386,13 @@ func (x *RuleDecisionRequest) GetAgent() bool {
 		return x.Agent
 	}
 	return false
+}
+
+func (x *RuleDecisionRequest) GetRole() string {
+	if x != nil {
+		return x.Role
+	}
+	return ""
 }
 
 type RuleDecisionResponse struct {
@@ -18011,7 +18029,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"decided_by\x18\x12 \x01(\tR\tdecidedBy\x12/\n" +
 	"\x06policy\x18\x13 \x01(\v2\x17.google.protobuf.StructR\x06policy\x12\x1d\n" +
 	"\n" +
-	"human_only\x18\x14 \x01(\bR\thumanOnly\"\xd6\x01\n" +
+	"human_only\x18\x14 \x01(\bR\thumanOnly\"\xf0\x01\n" +
 	"\x13OpenDecisionRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x1a\n" +
 	"\bquestion\x18\x02 \x01(\tR\bquestion\x12\x18\n" +
@@ -18020,9 +18038,10 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"allOptions\x12\x1a\n" +
 	"\bcriteria\x18\x05 \x03(\tR\bcriteria\x12/\n" +
 	"\x06policy\x18\n" +
-	" \x01(\v2\x17.google.protobuf.StructR\x06policy\"J\n" +
+	" \x01(\v2\x17.google.protobuf.StructR\x06policy\x12\x18\n" +
+	"\achoices\x18\v \x03(\tR\achoices\"J\n" +
 	"\x14OpenDecisionResponse\x122\n" +
-	"\x05point\x18\x01 \x01(\v2\x1c.goap.graph.v1.DecisionPointR\x05point\"\xf4\x01\n" +
+	"\x05point\x18\x01 \x01(\v2\x1c.goap.graph.v1.DecisionPointR\x05point\"\x88\x02\n" +
 	"\x13RuleDecisionRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12\x14\n" +
 	"\x05point\x18\x02 \x01(\tR\x05point\x12\x18\n" +
@@ -18033,7 +18052,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"confidence\x12$\n" +
 	"\rjustification\x18\x06 \x01(\tR\rjustification\x12\x1c\n" +
 	"\tquestions\x18\a \x03(\tR\tquestions\x12\x14\n" +
-	"\x05agent\x18\b \x01(\bR\x05agent\"J\n" +
+	"\x05agent\x18\b \x01(\bR\x05agent\x12\x12\n" +
+	"\x04role\x18\t \x01(\tR\x04role\"J\n" +
 	"\x14RuleDecisionResponse\x122\n" +
 	"\x05point\x18\x01 \x01(\v2\x1c.goap.graph.v1.DecisionPointR\x05point\"\x82\x01\n" +
 	"\x15AnswerQuestionRequest\x12\x1b\n" +

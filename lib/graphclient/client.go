@@ -780,7 +780,7 @@ func (c *Client) ValidateBoard(ctx context.Context, id domain.ChangeID, flow str
 // OpenDecision implements engine.GraphPort (the principal comes from the request identity).
 func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in graphapi.OpenDecisionRequest) (domain.DecisionPoint, error) {
 	req := &graphv1.OpenDecisionRequest{ChangeId: string(id), Question: in.Question, Options: in.Options, AllOptions: in.Options == nil,
-		Criteria: in.Criteria, Policy: pbconv.Struct(in.Policy)}
+		Criteria: in.Criteria, Policy: pbconv.Struct(in.Policy), Choices: in.Choices}
 	r, err := c.rpc.OpenDecision(ctx, connect.NewRequest(req))
 	if err != nil {
 		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
@@ -791,7 +791,7 @@ func (c *Client) OpenDecision(ctx context.Context, id domain.ChangeID, in grapha
 // RuleDecision implements engine.GraphPort.
 func (c *Client) RuleDecision(ctx context.Context, id domain.ChangeID, in graphapi.RuleRequest) (domain.DecisionPoint, error) {
 	r, err := c.rpc.RuleDecision(ctx, connect.NewRequest(&graphv1.RuleDecisionRequest{ChangeId: string(id), Point: in.Point, Outcome: in.Outcome,
-		Option: in.Option, Confidence: in.Confidence, Justification: in.Justification, Questions: in.Questions, Agent: !in.Human}))
+		Option: in.Option, Confidence: in.Confidence, Justification: in.Justification, Questions: in.Questions, Agent: !in.Human, Role: in.Role}))
 	if err != nil {
 		return domain.DecisionPoint{}, rpcerr.FromConnect(err)
 	}

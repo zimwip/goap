@@ -101,6 +101,9 @@ type Graph struct {
 	// (domain.RequireItemPermission, ADR 0075). It runs outside any transaction, with the change as stored. Unset: no
 	// item asks anything of its writer.
 	ItemAuthorizer ItemAuthorizer
+	// SeatAuthorizer, when set, is asked before a person rules a decision point of a board in a seat (ADR 0132 §3): the
+	// caller must hold the role of the seat on the project of the change. Nil: any seat is taken at its word.
+	SeatAuthorizer SeatAuthorizer
 
 	// ItemPolicy, when set, is asked about every item AddItems is about to store, with the change as stored (ADR 0075 §3):
 	// a use-case rule of what may be written on a change (the oracle a verification names, the lifetime of a
@@ -489,6 +492,13 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 			edit.Fields["intent"] = domain.HeaderValue{From: c.Intent, To: *p.Intent}
 			c.Intent = *p.Intent
 		}
+		for f := range edit.Fields {
+			for _, fr := range c.InForceFreezes() {
+				if fr.FrozenField(f) {
+					return fmt.Errorf("the %s of change %s is frozen since it left a state of its lifecycle (now %s): %w", f, id, c.State, ErrConflict)
+				}
+			}
+		}
 		if p.Goal != nil && *p.Goal != c.Goal {
 			edit.Fields["goal"] = domain.HeaderValue{From: c.Goal, To: *p.Goal}
 			c.Goal = *p.Goal
@@ -621,6 +631,9 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 // ItemAuthorizer judges the write of an item whose kind asks a permission of its writer: the permission it asks, the
 // change it is written on and the item. An error refuses it.
 type ItemAuthorizer func(ctx context.Context, c domain.Change, it domain.ChangeItem, p domain.ItemPermission) error
+
+// SeatAuthorizer judges whether the caller of ctx may rule a decision point of the change in the seat of role.
+type SeatAuthorizer func(ctx context.Context, c domain.Change, role string) error
 
 // ItemPolicy judges any item about to be written on a change; an error refuses it.
 type ItemPolicy func(ctx context.Context, c domain.Change, it domain.ChangeItem) error

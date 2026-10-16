@@ -366,6 +366,7 @@ func init() {
 	}, Check: checkNewNodes})
 	Register(Widget{Name: WidgetDecision, Description: "rules a decision point of the change: an option and why", Value: ValueObject, Constraints: []Constraint{
 		{Name: "justify", Type: ConstraintBoolean, Description: "the justification is required"},
+		{Name: "roles", Type: ConstraintStrings, Description: "the seats of a collegial decision: the person rules in one of these roles (ADR 0132)"},
 	}, Check: checkDecision})
 	Register(Widget{Name: WidgetFile, Description: "a file the person attaches, kept in the values", Value: ValueObject, Constraints: []Constraint{
 		{Name: "accept", Type: ConstraintStrings, Description: "media types (text/*, application/pdf) or extensions (.csv) accepted"},
@@ -694,6 +695,12 @@ func checkDecision(f Field, v any, env Env, _ map[string]any) []string {
 	}
 	if b, _ := f.Constraints["justify"].(bool); b && strings.TrimSpace(why) == "" {
 		out = append(out, "needs a justification")
+	}
+	if seats := stringsOf(f.Constraints["roles"]); len(seats) > 0 {
+		role, _ := m["role"].(string)
+		if !contains(seats, role) {
+			out = append(out, fmt.Sprintf("rules in one of the roles %s", strings.Join(seats, ", ")))
+		}
 	}
 	if len(out) > 0 || env.Decision == nil {
 		return out

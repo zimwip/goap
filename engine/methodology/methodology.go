@@ -434,6 +434,8 @@ type Compiled struct {
 	reactions []Reaction
 	// automaticReviews gives the automatic review step of each action generated for it (ADR 0130)
 	automaticReviews map[string]string
+	// gates are the gates of the processes (ADR 0132)
+	gates []GateInfo
 	// assessments are the compiled assessment views (ADR 0116); nil: the defaults
 	assessments *condition.AssessmentViews
 	// view is the shape of the activities as they are shown (ADR 0126 step 3), computed once at compilation
