@@ -55,7 +55,10 @@ const (
 	KeyAliases        = "aliases"
 	KeyTags           = "tags"
 	KeyLinkProperties = "linkProperties"
-	PropertyPrefix    = "prop_"
+	// KeyProvenance holds where the version comes from (graph.SnapshotProvenance): change, producer, and model: true when
+	// a model generated it (EU AI Act Art. 50(2)).
+	KeyProvenance  = "provenance"
+	PropertyPrefix = "prop_"
 )
 
 // LinkProperties are the properties of one outgoing link, in the front matter (`linkProperties`).
@@ -274,6 +277,9 @@ func frontMatter(s graph.Snapshot, e *entry, byKey map[string]*entry, inBody map
 			put(t, byType[t])
 		}
 	}
+	if n.Provenance != nil {
+		put(KeyProvenance, n.Provenance)
+	}
 	for _, k := range slices.Sorted(maps.Keys(n.Properties)) {
 		if inBody[k] {
 			continue
@@ -282,7 +288,7 @@ func frontMatter(s graph.Snapshot, e *entry, byKey map[string]*entry, inBody map
 		if v, ok := m.scalar(name); ok && v == n.Properties[k] {
 			continue // the same value is already there (the title)
 		}
-		if m.has(name) || name == KeyLinkProperties || strings.HasPrefix(name, PropertyPrefix) {
+		if m.has(name) || name == KeyLinkProperties || name == KeyProvenance || strings.HasPrefix(name, PropertyPrefix) {
 			name = PropertyPrefix + k
 		}
 		put(name, n.Properties[k])

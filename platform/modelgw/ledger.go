@@ -416,8 +416,14 @@ func (s *Service) Summary(ctx context.Context, f UsageFilter, group string, admi
 // ---- retention --------------------------------------------------------------
 
 // DefaultCallRetentionDays is how long the ledger keeps a call (GOAP_LLM_CALL_RETENTION_DAYS); 0 keeps them forever.
-// The quota counter is not the ledger and is not purged.
-const DefaultCallRetentionDays = 90
+// The quota counter is not the ledger and is not purged. It is MinAuditRetentionDays: the ledger is the record of what
+// the models did for whom, and the EU AI Act asks providers and deployers to keep such logs at least six months (Art. 19,
+// Art. 26(6)).
+const DefaultCallRetentionDays = MinAuditRetentionDays
+
+// MinAuditRetentionDays is the shortest retention that keeps the logs six months (EU AI Act Art. 19, 26(6)); a shorter
+// one is allowed, with a warning at start.
+const MinAuditRetentionDays = 183
 
 // PurgeCalls deletes the calls older than days days; it returns how many. days <= 0 deletes nothing.
 func (s *Service) PurgeCalls(ctx context.Context, days int) (int64, error) {
@@ -429,6 +435,13 @@ func (s *Service) PurgeCalls(ctx context.Context, days int) (int64, error) {
 
 // KeepCalls purges the ledger now and then every day until ctx ends. Run it in a goroutine.
 func (s *Service) KeepCalls(ctx context.Context, days int) {
+	if days > 0 && days < MinAuditRetentionDays {
+		s.Log.Warn("the ledger of model calls is kept less than six months, the minimum of the EU AI Act for its logs (Art. 19, 26(6))",
+			"retentionDays", days, "minimumDays", MinAuditRetentionDays)
+	}
+	if !s.CallPrompts {
+		s.Log.Warn("the exchanges of the model calls no change log keeps are not stored (GOAP_LLM_CALL_PROMPTS off): the ledger keeps counters only")
+	}
 	if days <= 0 {
 		return
 	}

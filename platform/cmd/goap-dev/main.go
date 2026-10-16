@@ -39,6 +39,8 @@ type config struct {
 	DockerHost       string // GOAP_DOCKER_HOST
 	ClaudeAgentDir   string // GOAP_CLAUDE_AGENT_DIR: the runner of the claude-coding-agent connector (ADR 0123)
 	ConnectorToken   string // GOAP_CONNECTOR_TOKEN (generated when empty)
+	ModelProxySecret string // GOAP_MODEL_PROXY_SECRET: the tokens of the gateway's Anthropic endpoint (ADR 0123 §6; generated when empty)
+	ModelProxyURL    string // GOAP_MODEL_PROXY_URL: that endpoint as the connectors reach it (default this process, /anthropic)
 	Dev              authz.Principal
 }
 
@@ -57,6 +59,8 @@ func loadConfig() config {
 		DockerHost:       platform.Env("GOAP_DOCKER_HOST", "unix:///var/run/docker.sock"),
 		ClaudeAgentDir:   platform.Env("GOAP_CLAUDE_AGENT_DIR", ".goap/claude-agent"),
 		ConnectorToken:   platform.Env("GOAP_CONNECTOR_TOKEN", ""),
+		ModelProxySecret: platform.Env("GOAP_MODEL_PROXY_SECRET", ""),
+		ModelProxyURL:    platform.Env("GOAP_MODEL_PROXY_URL", ""),
 		Dev: authz.Principal{
 			Subject: platform.Env("GOAP_DEV_SUBJECT", "dev"),
 			Org:     platform.Env("GOAP_DEV_ORG", "dev"),

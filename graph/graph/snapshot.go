@@ -42,6 +42,19 @@ type SnapshotNode struct {
 	Owner      string         `json:"owner,omitempty"`
 	Properties map[string]any `json:"props,omitempty"`
 	Links      []SnapshotLink `json:"links,omitempty"`
+	// Provenance says where the version exported comes from; informative, an import ignores it.
+	Provenance *SnapshotProvenance `json:"provenance,omitempty"`
+}
+
+// SnapshotProvenance is the origin of the version of a node of a snapshot: the change that wrote it, the action or
+// person that produced it, and whether the run that produced it called a model, the machine-readable mark of content an
+// AI generated (EU AI Act Art. 50(2)). The whole story is the change's PROV-O export (ADR 0057).
+type SnapshotProvenance struct {
+	Version    int    `json:"version" yaml:"version"`
+	Change     string `json:"change,omitempty" yaml:"change,omitempty"`
+	ProducedBy string `json:"producedBy,omitempty" yaml:"producedBy,omitempty"`
+	// Model is true when the action run that produced the version called a model.
+	Model bool `json:"model,omitempty" yaml:"model,omitempty"`
 }
 
 // SnapshotLink is an outgoing link of a node of a snapshot, to another node of the snapshot named by its key.
@@ -94,11 +107,12 @@ func (g *Graph) ExportSnapshot(ctx context.Context, namespace, branch string, ba
 		out[l.From.ID] = append(out[l.From.ID], SnapshotLink{Type: l.Type, To: to, Properties: l.Properties})
 	}
 	owners := g.keyReader(ctx)
+	provenance := g.provenanceReader(ctx)
 	for _, n := range nodes {
 		if n.Deleted {
 			continue
 		}
-		sn := SnapshotNode{Key: n.Key, Type: n.Type, State: n.State, Properties: n.Properties, Links: out[n.ID]}
+		sn := SnapshotNode{Key: n.Key, Type: n.Type, State: n.State, Properties: n.Properties, Links: out[n.ID], Provenance: provenance(n)}
 		if n.Owner != "" {
 			sn.Owner = owners(n.Owner)
 		}
@@ -127,6 +141,56 @@ func (g *Graph) keyReader(ctx context.Context) func(domain.NodeID) string {
 		}
 		cache[id] = k
 		return k
+	}
+}
+
+// provenanceReader returns the provenance of a version, reading the impacts and the model calls of each change once.
+func (g *Graph) provenanceReader(ctx context.Context) func(domain.Node) *SnapshotProvenance {
+	type origin struct {
+		impacts map[domain.ChangeImpactID]domain.ChangeImpact
+		models  map[string]bool // the executions that called a model
+	}
+	cache := map[domain.ChangeID]*origin{}
+	read := func(id domain.ChangeID) *origin {
+		if o, ok := cache[id]; ok {
+			return o
+		}
+		o := &origin{impacts: map[domain.ChangeImpactID]domain.ChangeImpact{}, models: map[string]bool{}}
+		_ = g.repo.InTx(ctx, func(tx Tx) error {
+			impacts, err := tx.ChangeImpacts(ctx, id)
+			if err != nil {
+				return err
+			}
+			for _, cn := range impacts {
+				o.impacts[cn.ID] = cn
+			}
+			entries, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: []string{domain.LogModel + "."}})
+			if err != nil {
+				return err
+			}
+			for _, e := range entries {
+				if e.Execution != "" {
+					o.models[e.Execution] = true
+				}
+			}
+			return nil
+		})
+		cache[id] = o
+		return o
+	}
+	return func(n domain.Node) *SnapshotProvenance {
+		if n.ChangeID == "" {
+			return nil
+		}
+		p := &SnapshotProvenance{Version: int(n.Version), Change: string(n.ChangeID)}
+		if n.ChangeImpact != "" {
+			o := read(n.ChangeID)
+			if cn, ok := o.impacts[n.ChangeImpact]; ok {
+				p.ProducedBy = cn.ProducedBy
+				p.Model = cn.Execution != "" && o.models[cn.Execution]
+			}
+		}
+		return p
 	}
 }
 

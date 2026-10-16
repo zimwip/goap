@@ -51,6 +51,11 @@ func main() {
 		Secrets:   mcpsvc.ResolveSecret(platform.NewSecrets()),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
+	// a connector calling a model by itself (the Claude coding agent) gets the gateway's Anthropic endpoint and a token
+	// of each call, so its calls are rows of the ledger (ADR 0123 §6)
+	if secret, u := platform.Env("GOAP_MODEL_PROXY_SECRET", ""), platform.Env("GOAP_MODEL_PROXY_URL", ""); secret != "" && u != "" {
+		svc.Models = &mcpsvc.ModelEndpoint{URL: u, Secret: []byte(secret)}
+	}
 	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, graphURL)})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)

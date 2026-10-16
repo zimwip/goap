@@ -53,6 +53,10 @@ type Engine struct {
 	// MaxSteps bounds the number of actions of a process (default 50); the runs of a scoped action for its subjects
 	// count once per action, each subject being given up after a few failures (ADR 0109 §3.5).
 	MaxSteps int
+	// PersonReviewsModelOutput is the oversight floor of the platform (EU AI Act Art. 14, engine/engine/oversight.go):
+	// an automated action may not accept a change impact a model produced, nor may a model accept any; a person does,
+	// whatever the methodology says (GOAP_PERSON_REVIEWS_MODEL_OUTPUT in the compositions, on by default there).
+	PersonReviewsModelOutput bool
 	// MaxParallel bounds the subjects a scoped action runs for at once (default 4; an action's `parallel` may ask
 	// for fewer, ADR 0109 §3.5).
 	MaxParallel int
@@ -1010,7 +1014,7 @@ func (e *Engine) settleAction(p *Process, m *methodology.Compiled, action method
 			Form: action.Form, Step: i, Context: sc}
 		return nil
 	}
-	ctx = withVerify(ctx, action)
+	ctx = withAutomated(withVerify(ctx, action), action)
 	ids, nodes, points, err := e.addItems(ctx, p, res.Items, action.Name, step.Execution, false, action.Name)
 	if err == nil {
 		var more []domain.ChangeImpactID

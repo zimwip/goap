@@ -33,6 +33,9 @@ message ConnectorInfo {
   // names of the secrets the connector needs (e.g. "api_key"); bound per organization
   repeated string secret_names = 5;
   repeated Operation operations = 6;
+  // the connector calls a model by itself (the Claude coding agent, ADR 0123 §6): the hub gives each of its calls an
+  // endpoint of the model gateway and a token for it (model_url, model_token), so the calls are rows of the ledger
+  bool calls_models = 7;
 }
 
 message DescribeRequest {}
@@ -53,6 +56,10 @@ message InvokeRequest {
   // a connector keeping state per change (a workspace) reads them, others ignore them
   string change_id = 6;
   string process_id = 7;
+  // for a connector that calls_models, when the hub knows the gateway: the base URL of its Anthropic Messages endpoint
+  // and a short-lived token of this call (lib/modeltoken), naming the person, the change and the process; never logged
+  string model_url = 8;
+  string model_token = 9;
 }
 
 message InvokeResponse {

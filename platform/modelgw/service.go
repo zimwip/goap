@@ -256,32 +256,42 @@ func (s *Service) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedRes
 // admit resolves a model and applies the catalog policy (availability, required roles, global quota); internal skips the
 // roles only (the gateway's own calibration calls).
 func (s *Service) admit(ctx context.Context, model string, internal bool) (Target, ModelEntry, string, error) {
-	snap, err := s.sync(ctx)
-	if err != nil {
+	if _, err := s.sync(ctx); err != nil {
 		return Target{}, ModelEntry{}, "", err
 	}
 	t, _, err := s.Router.Resolve(model)
 	if err != nil {
 		return Target{}, ModelEntry{}, "", fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
+	m, period, err := s.admitModel(ctx, t, authz.From(ctx), internal)
+	return t, m, period, err
+}
+
+// admitModel applies the catalog policy to a resolved model: enabled in the catalog, the roles held by who (unless
+// internal), the quota not exhausted. It returns the entry and the period of its quota.
+func (s *Service) admitModel(ctx context.Context, t Target, who authz.Principal, internal bool) (ModelEntry, string, error) {
+	snap, err := s.sync(ctx)
+	if err != nil {
+		return ModelEntry{}, "", err
+	}
 	m, ok := findModel(snap, t.Provider, t.Model)
 	if !ok || !m.Enabled {
-		return t, m, "", fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
+		return m, "", fmt.Errorf("%w: %s/%s is not in the platform catalog or is disabled", ErrModelDisabled, t.Provider, t.Model)
 	}
-	if !internal && !s.allowed(ctx, authz.From(ctx), m) {
-		return t, m, "", fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
+	if !internal && !s.allowed(ctx, who, m) {
+		return m, "", fmt.Errorf("%w: %s/%s requires one of the roles %s", ErrForbidden, t.Provider, t.Model, strings.Join(m.Roles, ", "))
 	}
 	period := PeriodKey(m.QuotaPeriod, s.now())
 	if m.QuotaTokens > 0 {
 		used, err := s.Store.Usage(ctx, m.Key(), period)
 		if err != nil {
-			return t, m, period, err
+			return m, period, err
 		}
 		if used >= m.QuotaTokens {
-			return t, m, period, fmt.Errorf("%w: %s/%s used %d of %d tokens (%s)", ErrQuotaExceeded, t.Provider, t.Model, used, m.QuotaTokens, m.QuotaPeriod)
+			return m, period, fmt.Errorf("%w: %s/%s used %d of %d tokens (%s)", ErrQuotaExceeded, t.Provider, t.Model, used, m.QuotaTokens, m.QuotaPeriod)
 		}
 	}
-	return t, m, period, nil
+	return m, period, nil
 }
 
 func (s *Service) recordUsage(ctx context.Context, t Target, m ModelEntry, period string, tokens int64) {

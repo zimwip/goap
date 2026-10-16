@@ -16,6 +16,8 @@ export interface ConnectorInfo {
   configSchema?: Struct;
   secretNames?: string[];
   operations?: ConnectorOperation[];
+  /** the connector calls a model by itself; the hub gives its calls the gateway's endpoint (ADR 0123 §6) */
+  callsModels?: boolean;
 }
 
 export interface Connector {

@@ -26,8 +26,8 @@ var ErrInvalid = errors.New("invalid journal")
 
 // Streams of the log of a change this package writes (the first part of an entry type, domain.LogEntry.Stream).
 const (
-	StreamJournal = "journal" // journal.<record kind>: journal.schedule, journal.tick, journal.action…
-	StreamModel   = "model"   // model.call: the request and the answer of one LLM call of an action run
+	StreamJournal = "journal"       // journal.<record kind>: journal.schedule, journal.tick, journal.action…
+	StreamModel   = domain.LogModel // model.call: the request and the answer of one LLM call of an action run
 )
 
 // Record kinds: every tick of the observe / plan / act loop, every action execution (with its model and tool calls)

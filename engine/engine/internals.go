@@ -70,6 +70,12 @@ func (Internals) WithVerify(ctx context.Context, a methodology.Action) context.C
 	return withVerify(ctx, a)
 }
 
+// WithAutomated marks ctx as running the operations of action a, an automated one unless it is human (the oversight
+// floor, PersonReviewsModelOutput).
+func (Internals) WithAutomated(ctx context.Context, a methodology.Action) context.Context {
+	return withAutomated(ctx, a)
+}
+
 // ExpireAllDerogations runs the builtin expiring the derogations.
 func (Internals) ExpireAllDerogations(ctx context.Context, ac ActionContext) (ActionResult, error) {
 	return expireAllDerogations(ctx, ac)

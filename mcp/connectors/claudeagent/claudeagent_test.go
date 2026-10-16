@@ -221,3 +221,14 @@ func toStrings(v any) []string {
 	}
 	return out
 }
+
+// When the hub gives the call an endpoint of the model gateway (ADR 0123 §6), the session calls the model there with
+// the token of the call, whatever the adapter's key and endpoint.
+func TestTheGatewayEndpointWins(t *testing.T) {
+	f := setup(t)
+	f.ctx = mcp.WithCall(f.ctx, mcp.CallContext{ModelURL: "http://modelgw/anthropic", ModelToken: "tok-1"})
+	p := played(t, f.call(t, OpRun, map[string]any{"task": "implement"}))
+	if p["key"] != "tok-1" || p["base"] != "http://modelgw/anthropic" {
+		t.Fatalf("session %v", p)
+	}
+}

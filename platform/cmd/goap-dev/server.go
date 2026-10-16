@@ -77,6 +77,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	}
 	mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: pp.hub, Authz: authorizer, Identity: ident, ConnectorToken: pp.connToken}, telemetry.HandlerOptions()...))
 	mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: pp.gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
+	srv.Mount(pp.models.Route()) // its own tokens, minted by the hub (ADR 0123 §6), not the sign-in's
 	mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: &prefssvc.Service{Store: st.prefs}, Identity: ident}, telemetry.HandlerOptions()...))
 	convs := &convsvc.Service{Store: st.convs}
 	mount(conversationsv1connect.NewConversationServiceHandler(&convsvc.Handler{Service: convs, Identity: ident}, telemetry.HandlerOptions()...))

@@ -92,8 +92,11 @@ type ConnectorInfo struct {
 	// JSON Schema of the per-organization configuration (root path, account, ...)
 	ConfigSchema *structpb.Struct `protobuf:"bytes,4,opt,name=config_schema,json=configSchema,proto3" json:"config_schema,omitempty"`
 	// names of the secrets the connector needs (e.g. "api_key"); bound per organization
-	SecretNames   []string     `protobuf:"bytes,5,rep,name=secret_names,json=secretNames,proto3" json:"secret_names,omitempty"`
-	Operations    []*Operation `protobuf:"bytes,6,rep,name=operations,proto3" json:"operations,omitempty"`
+	SecretNames []string     `protobuf:"bytes,5,rep,name=secret_names,json=secretNames,proto3" json:"secret_names,omitempty"`
+	Operations  []*Operation `protobuf:"bytes,6,rep,name=operations,proto3" json:"operations,omitempty"`
+	// the connector calls a model by itself (the Claude coding agent, ADR 0123 §6): the hub gives each of its calls an
+	// endpoint of the model gateway and a token for it (model_url, model_token), so the calls are rows of the ledger
+	CallsModels   bool `protobuf:"varint,7,opt,name=calls_models,json=callsModels,proto3" json:"calls_models,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -168,6 +171,13 @@ func (x *ConnectorInfo) GetOperations() []*Operation {
 		return x.Operations
 	}
 	return nil
+}
+
+func (x *ConnectorInfo) GetCallsModels() bool {
+	if x != nil {
+		return x.CallsModels
+	}
+	return false
 }
 
 type DescribeRequest struct {
@@ -261,8 +271,12 @@ type InvokeRequest struct {
 	OrgId   string            `protobuf:"bytes,5,opt,name=org_id,json=orgId,proto3" json:"org_id,omitempty"`
 	// what the call runs for (ADR 0028, 0118): the change and the process of the calling action, when there is one;
 	// a connector keeping state per change (a workspace) reads them, others ignore them
-	ChangeId      string `protobuf:"bytes,6,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
-	ProcessId     string `protobuf:"bytes,7,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	ChangeId  string `protobuf:"bytes,6,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	ProcessId string `protobuf:"bytes,7,opt,name=process_id,json=processId,proto3" json:"process_id,omitempty"`
+	// for a connector that calls_models, when the hub knows the gateway: the base URL of its Anthropic Messages endpoint
+	// and a short-lived token of this call (lib/modeltoken), naming the person, the change and the process; never logged
+	ModelUrl      string `protobuf:"bytes,8,opt,name=model_url,json=modelUrl,proto3" json:"model_url,omitempty"`
+	ModelToken    string `protobuf:"bytes,9,opt,name=model_token,json=modelToken,proto3" json:"model_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -346,6 +360,20 @@ func (x *InvokeRequest) GetProcessId() string {
 	return ""
 }
 
+func (x *InvokeRequest) GetModelUrl() string {
+	if x != nil {
+		return x.ModelUrl
+	}
+	return ""
+}
+
+func (x *InvokeRequest) GetModelToken() string {
+	if x != nil {
+		return x.ModelToken
+	}
+	return ""
+}
+
 type InvokeResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Result *structpb.Struct       `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
@@ -415,7 +443,7 @@ const file_goap_connector_v1_connector_proto_rawDesc = "" +
 	"\tOperation\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12:\n" +
-	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"\xfa\x01\n" +
+	"\finput_schema\x18\x03 \x01(\v2\x17.google.protobuf.StructR\vinputSchema\"\x9d\x02\n" +
 	"\rConnectorInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\tR\aversion\x12 \n" +
@@ -424,10 +452,11 @@ const file_goap_connector_v1_connector_proto_rawDesc = "" +
 	"\fsecret_names\x18\x05 \x03(\tR\vsecretNames\x12<\n" +
 	"\n" +
 	"operations\x18\x06 \x03(\v2\x1c.goap.connector.v1.OperationR\n" +
-	"operations\"\x11\n" +
+	"operations\x12!\n" +
+	"\fcalls_models\x18\a \x01(\bR\vcallsModels\"\x11\n" +
 	"\x0fDescribeRequest\"H\n" +
 	"\x10DescribeResponse\x124\n" +
-	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\"\xed\x02\n" +
+	"\x04info\x18\x01 \x01(\v2 .goap.connector.v1.ConnectorInfoR\x04info\"\xab\x03\n" +
 	"\rInvokeRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x125\n" +
 	"\targuments\x18\x02 \x01(\v2\x17.google.protobuf.StructR\targuments\x12/\n" +
@@ -436,7 +465,10 @@ const file_goap_connector_v1_connector_proto_rawDesc = "" +
 	"\x06org_id\x18\x05 \x01(\tR\x05orgId\x12\x1b\n" +
 	"\tchange_id\x18\x06 \x01(\tR\bchangeId\x12\x1d\n" +
 	"\n" +
-	"process_id\x18\a \x01(\tR\tprocessId\x1a:\n" +
+	"process_id\x18\a \x01(\tR\tprocessId\x12\x1b\n" +
+	"\tmodel_url\x18\b \x01(\tR\bmodelUrl\x12\x1f\n" +
+	"\vmodel_token\x18\t \x01(\tR\n" +
+	"modelToken\x1a:\n" +
 	"\fSecretsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"r\n" +

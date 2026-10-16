@@ -6,14 +6,17 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zimwip/goap/contracts/algo"
+	"github.com/zimwip/goap/contracts/authz"
 	connectorv1 "github.com/zimwip/goap/contracts/gen/goap/connector/v1"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graphsvc"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/adapter"
+	"github.com/zimwip/goap/lib/modeltoken"
 	"github.com/zimwip/goap/lib/pbconv"
 	"github.com/zimwip/goap/mcp/mcpsvc"
 	"github.com/zimwip/goap/platform/devseed"
@@ -373,5 +376,38 @@ func TestUnitRestrictsAnInheritedMCP(t *testing.T) {
 	}
 	if _, err := svc.CheckAdapter(ctx, adapter.Instance{Unit: "ORG-A1", MCP: "document-repository", Deny: []string{"delete"}}); !errors.Is(err, mcp.ErrInvalid) {
 		t.Fatalf("unknown tool restricted: %v", err)
+	}
+}
+
+// A connector that calls a model by itself gets the gateway's endpoint and a token of the call (ADR 0123 §6): a system
+// subject of the connector acting for the caller, for the change and the process of the call. Another connector gets
+// neither.
+func TestAConnectorCallingModelsGetsATokenOfTheCall(t *testing.T) {
+	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "hi"})}}
+	svc := newHub(t, world(t), inv)
+	svc.Models = &mcpsvc.ModelEndpoint{URL: "http://modelgw/anthropic", Secret: []byte("s3cret")}
+	ctx := mcp.WithCall(authz.With(context.Background(), authz.Principal{Subject: "alice", Project: "P1"}), mcp.CallContext{Change: "CH-1", Process: "proc-1"})
+	args := map[string]any{"path": "n.txt"}
+	if _, err := svc.Call(ctx, "ORG-A", "document-repository/read", args); err != nil {
+		t.Fatal(err)
+	}
+	if inv.last.ModelUrl != "" || inv.last.ModelToken != "" {
+		t.Fatalf("a connector that calls no model gets no token: %v", inv.last)
+	}
+	info := localfsInfo()
+	info.CallsModels = true
+	if _, err := svc.RegisterConnector(context.Background(), info, "http://localfs:8080"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.Call(ctx, "ORG-A", "document-repository/read", args); err != nil {
+		t.Fatal(err)
+	}
+	c, err := modeltoken.Verify([]byte("s3cret"), inv.last.ModelToken, time.Now())
+	if err != nil || inv.last.ModelUrl != "http://modelgw/anthropic" {
+		t.Fatalf("token %v %v", err, inv.last)
+	}
+	if c.Subject != "system:connector:localfs" || c.EndUser != "alice" || c.Project != "P1" || c.Org != "ORG-A" || c.Change != "CH-1" ||
+		c.Process != "proc-1" || c.Source != "connector:localfs" || time.Until(time.Unix(c.Expires, 0)) < 4*time.Hour {
+		t.Fatalf("claims %+v", c)
 	}
 }

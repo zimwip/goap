@@ -13,6 +13,8 @@ describe('source labels', () => {
       'Other',
     ]);
     expect(sourceLabel('mystery')).toBe('Other');
+    expect(sourceLabel('connector:claude-coding-agent')).toBe('Claude coding agent');
+    expect(sourceLabel('connector:other-agent')).toBe('Connector other-agent');
     expect(sourceLabel(undefined)).toBe('Other');
     expect(keyLabel('source', 'helper')).toBe('Helper');
     expect(keyLabel('alias', '')).toBe('—');

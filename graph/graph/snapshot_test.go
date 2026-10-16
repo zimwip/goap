@@ -27,6 +27,10 @@ func testSnapshotExportImport(t *testing.T, repo Repo) {
 	if l := s.Nodes[1].Links; len(l) != 1 || l[0].Type != "satisfies" || l[0].To != "NEED-1" {
 		t.Fatalf("links by key: %+v", l)
 	}
+	// each node says where its version comes from; no model wrote the fixture
+	if p := s.Nodes[1].Provenance; p == nil || p.Version < 1 || p.Change == "" || p.Model {
+		t.Fatalf("provenance: %+v", p)
+	}
 	// JSON round trip
 	data, err := json.Marshal(s)
 	if err != nil {

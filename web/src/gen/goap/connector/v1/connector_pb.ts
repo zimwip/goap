@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file goap/connector/v1/connector.proto.
  */
 export const file_goap_connector_v1_connector: GenFile = /*@__PURE__*/
-  fileDesc("CiFnb2FwL2Nvbm5lY3Rvci92MS9jb25uZWN0b3IucHJvdG8SEWdvYXAuY29ubmVjdG9yLnYxIl0KCU9wZXJhdGlvbhIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEi0KDGlucHV0X3NjaGVtYRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiuQEKDUNvbm5lY3RvckluZm8SCgoCaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIuCg1jb25maWdfc2NoZW1hGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIUCgxzZWNyZXRfbmFtZXMYBSADKAkSMAoKb3BlcmF0aW9ucxgGIAMoCzIcLmdvYXAuY29ubmVjdG9yLnYxLk9wZXJhdGlvbiIRCg9EZXNjcmliZVJlcXVlc3QiQgoQRGVzY3JpYmVSZXNwb25zZRIuCgRpbmZvGAEgASgLMiAuZ29hcC5jb25uZWN0b3IudjEuQ29ubmVjdG9ySW5mbyKeAgoNSW52b2tlUmVxdWVzdBIRCglvcGVyYXRpb24YASABKAkSKgoJYXJndW1lbnRzGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBInCgZjb25maWcYAyABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0Ej4KB3NlY3JldHMYBCADKAsyLS5nb2FwLmNvbm5lY3Rvci52MS5JbnZva2VSZXF1ZXN0LlNlY3JldHNFbnRyeRIOCgZvcmdfaWQYBSABKAkSEQoJY2hhbmdlX2lkGAYgASgJEhIKCnByb2Nlc3NfaWQYByABKAkaLgoMU2VjcmV0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiWgoOSW52b2tlUmVzcG9uc2USJwoGcmVzdWx0GAEgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIQCghpc19lcnJvchgCIAEoCBINCgVlcnJvchgDIAEoCTK2AQoQQ29ubmVjdG9yU2VydmljZRJTCghEZXNjcmliZRIiLmdvYXAuY29ubmVjdG9yLnYxLkRlc2NyaWJlUmVxdWVzdBojLmdvYXAuY29ubmVjdG9yLnYxLkRlc2NyaWJlUmVzcG9uc2USTQoGSW52b2tlEiAuZ29hcC5jb25uZWN0b3IudjEuSW52b2tlUmVxdWVzdBohLmdvYXAuY29ubmVjdG9yLnYxLkludm9rZVJlc3BvbnNlQtEBChVjb20uZ29hcC5jb25uZWN0b3IudjFCDkNvbm5lY3RvclByb3RvUAFaQmdpdGh1Yi5jb20vemltd2lwL2dvYXAvY29udHJhY3RzL2dlbi9nb2FwL2Nvbm5lY3Rvci92MTtjb25uZWN0b3J2MaICA0dDWKoCEUdvYXAuQ29ubmVjdG9yLlYxygIRR29hcFxDb25uZWN0b3JcVjHiAh1Hb2FwXENvbm5lY3RvclxWMVxHUEJNZXRhZGF0YeoCE0dvYXA6OkNvbm5lY3Rvcjo6VjFiBnByb3RvMw", [file_google_protobuf_struct]);
+  fileDesc("CiFnb2FwL2Nvbm5lY3Rvci92MS9jb25uZWN0b3IucHJvdG8SEWdvYXAuY29ubmVjdG9yLnYxIl0KCU9wZXJhdGlvbhIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEi0KDGlucHV0X3NjaGVtYRgDIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QizwEKDUNvbm5lY3RvckluZm8SCgoCaWQYASABKAkSDwoHdmVyc2lvbhgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIuCg1jb25maWdfc2NoZW1hGAQgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIUCgxzZWNyZXRfbmFtZXMYBSADKAkSMAoKb3BlcmF0aW9ucxgGIAMoCzIcLmdvYXAuY29ubmVjdG9yLnYxLk9wZXJhdGlvbhIUCgxjYWxsc19tb2RlbHMYByABKAgiEQoPRGVzY3JpYmVSZXF1ZXN0IkIKEERlc2NyaWJlUmVzcG9uc2USLgoEaW5mbxgBIAEoCzIgLmdvYXAuY29ubmVjdG9yLnYxLkNvbm5lY3RvckluZm8ixgIKDUludm9rZVJlcXVlc3QSEQoJb3BlcmF0aW9uGAEgASgJEioKCWFyZ3VtZW50cxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSJwoGY29uZmlnGAMgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBI+CgdzZWNyZXRzGAQgAygLMi0uZ29hcC5jb25uZWN0b3IudjEuSW52b2tlUmVxdWVzdC5TZWNyZXRzRW50cnkSDgoGb3JnX2lkGAUgASgJEhEKCWNoYW5nZV9pZBgGIAEoCRISCgpwcm9jZXNzX2lkGAcgASgJEhEKCW1vZGVsX3VybBgIIAEoCRITCgttb2RlbF90b2tlbhgJIAEoCRouCgxTZWNyZXRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJaCg5JbnZva2VSZXNwb25zZRInCgZyZXN1bHQYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EhAKCGlzX2Vycm9yGAIgASgIEg0KBWVycm9yGAMgASgJMrYBChBDb25uZWN0b3JTZXJ2aWNlElMKCERlc2NyaWJlEiIuZ29hcC5jb25uZWN0b3IudjEuRGVzY3JpYmVSZXF1ZXN0GiMuZ29hcC5jb25uZWN0b3IudjEuRGVzY3JpYmVSZXNwb25zZRJNCgZJbnZva2USIC5nb2FwLmNvbm5lY3Rvci52MS5JbnZva2VSZXF1ZXN0GiEuZ29hcC5jb25uZWN0b3IudjEuSW52b2tlUmVzcG9uc2VC0QEKFWNvbS5nb2FwLmNvbm5lY3Rvci52MUIOQ29ubmVjdG9yUHJvdG9QAVpCZ2l0aHViLmNvbS96aW13aXAvZ29hcC9jb250cmFjdHMvZ2VuL2dvYXAvY29ubmVjdG9yL3YxO2Nvbm5lY3RvcnYxogIDR0NYqgIRR29hcC5Db25uZWN0b3IuVjHKAhFHb2FwXENvbm5lY3RvclxWMeICHUdvYXBcQ29ubmVjdG9yXFYxXEdQQk1ldGFkYXRh6gITR29hcDo6Q29ubmVjdG9yOjpWMWIGcHJvdG8z", [file_google_protobuf_struct]);
 
 /**
  * @generated from message goap.connector.v1.Operation
@@ -104,6 +104,14 @@ export type ConnectorInfo = Message<"goap.connector.v1.ConnectorInfo"> & {
    * @generated from field: repeated goap.connector.v1.Operation operations = 6;
    */
   operations: Operation[];
+
+  /**
+   * the connector calls a model by itself (the Claude coding agent, ADR 0123 §6): the hub gives each of its calls an
+   * endpoint of the model gateway and a token for it (model_url, model_token), so the calls are rows of the ledger
+   *
+   * @generated from field: bool calls_models = 7;
+   */
+  callsModels: boolean;
 };
 
 /**
@@ -145,6 +153,14 @@ export type ConnectorInfoJson = {
    * @generated from field: repeated goap.connector.v1.Operation operations = 6;
    */
   operations?: OperationJson[];
+
+  /**
+   * the connector calls a model by itself (the Claude coding agent, ADR 0123 §6): the hub gives each of its calls an
+   * endpoint of the model gateway and a token for it (model_url, model_token), so the calls are rows of the ledger
+   *
+   * @generated from field: bool calls_models = 7;
+   */
+  callsModels?: boolean;
 };
 
 /**
@@ -245,6 +261,19 @@ export type InvokeRequest = Message<"goap.connector.v1.InvokeRequest"> & {
    * @generated from field: string process_id = 7;
    */
   processId: string;
+
+  /**
+   * for a connector that calls_models, when the hub knows the gateway: the base URL of its Anthropic Messages endpoint
+   * and a short-lived token of this call (lib/modeltoken), naming the person, the change and the process; never logged
+   *
+   * @generated from field: string model_url = 8;
+   */
+  modelUrl: string;
+
+  /**
+   * @generated from field: string model_token = 9;
+   */
+  modelToken: string;
 };
 
 /**
@@ -292,6 +321,19 @@ export type InvokeRequestJson = {
    * @generated from field: string process_id = 7;
    */
   processId?: string;
+
+  /**
+   * for a connector that calls_models, when the hub knows the gateway: the base URL of its Anthropic Messages endpoint
+   * and a short-lived token of this call (lib/modeltoken), naming the person, the change and the process; never logged
+   *
+   * @generated from field: string model_url = 8;
+   */
+  modelUrl?: string;
+
+  /**
+   * @generated from field: string model_token = 9;
+   */
+  modelToken?: string;
 };
 
 /**
