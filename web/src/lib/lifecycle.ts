@@ -169,6 +169,12 @@ export function birthStates(lifecycle: Lifecycle | undefined): string[] {
   );
 }
 
+/** The birth states a node created and landed at once (a change applied on main) may take: those it can land in. */
+export function landableBirthStates(lifecycle: Lifecycle | undefined): string[] {
+  const blocked = new Set((lifecycle?.states ?? []).filter((s) => s.notLandable).map((s) => s.name));
+  return birthStates(lifecycle).filter((s) => !blocked.has(s));
+}
+
 /** Rows of the nodes the change creates. */
 export function createdRows(cat: TypeCatalog, cns: ChangeImpact[], posts: PostVersions, scoped = false): LifecycleRow[] {
   const resolve = lifecycleResolver(cat);

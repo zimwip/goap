@@ -179,3 +179,17 @@ fields as JSON; `platform` 2.7.0) is a pattern of every methodology and node typ
 pattern…* in the designer writes the fields selected (or all of them) as one, *×* retires it, each through a change
 applied on main (`savePattern` / `retirePattern`, `web/src/lib/forms/patterns.svelte.ts`); a shared pattern shadows
 a shipped one of the same name.
+
+### 10. The form of a node type on the standard pages
+
+The form of a node type is the screen of the node wherever a person writes one, not only in the creation row of a
+change. The **node tab** edits a node through it when its type declares one (*Edit*: the form starts from the
+properties of the node and, for each link field, from its outgoing links of the field's link types, the fields naming
+none taking the others; `nodeFormValues` / `nodeEdit`, `web/src/lib/forms/nodeForm.ts`): saving writes, in the working
+change, the properties that differ (a shown string left blank is cleared, what the form hides or does not show is
+kept), the links added and the links removed, in one write (`writeNodeInChange`). The **New object** dialog
+(`ObjectDialog.svelte`, opened from the types of a published methodology) shows it under the key, its link fields
+offering the nodes at the head of the namespace, and creates the node with its links in the change it applies on main
+(`toKey`); since that change lands at once, the node is born in a landable state (`landableBirthStates`,
+`web/src/lib/lifecycle.ts`, a selector when there are several). Both offer the form to the assistant (`edit:<key>`,
+`create:<type>`). The renderer takes `initial` values over the defaults and a `submitLabel`.

@@ -24,6 +24,9 @@
   import LifecycleDiagram from '../../components/LifecycleDiagram.svelte';
   import NodeHistory from '../../components/NodeHistory.svelte';
   import NodePropertyForm from '../../components/NodePropertyForm.svelte';
+  import FormRenderer from '../../forms/FormRenderer.svelte';
+  import type { FormValues, NodeSource } from '../../forms/types';
+  import { nodeEdit, nodeFormValues, type CurrentLink } from '../../forms/nodeForm';
   import NodeLinks from '../../components/NodeLinks.svelte';
   import StatusBadge from '../../components/StatusBadge.svelte';
   import { openTab } from '../../shell/tabs.svelte';
@@ -266,6 +269,47 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
 
   const saveProps = (patch: Record<string, unknown>) => propose('edit', { props: patch }, `Edit ${stored?.key}`);
 
+  // The form of the node's type (ADR 0115 §10): when the type declares one, the node is edited through it, its link
+  // fields standing for the outgoing links of their types.
+  const typeForm = $derived(typeName ? typeCatalog.cat.type(typeName)?.form : undefined);
+  const formIndex = $derived(work?.index ?? head);
+  const keyOfId = (nid: string | undefined) => (nid ? (formIndex?.nodes.get(nid)?.key ?? head?.nodes.get(nid)?.key) : undefined);
+  const currentLinks = $derived<CurrentLink[]>(
+    outLinks.flatMap((l) => {
+      const to = keyOfId(l.to?.id);
+      return l.id && l.type && to ? [{ id: l.id, type: l.type, to }] : [];
+    }),
+  );
+  const formSource = $derived.by((): NodeSource => {
+    const cat = typeCatalog.cat;
+    return {
+      nodes: (formIndex?.list ?? [])
+        .filter((n) => n.key && n.id !== id)
+        .map((n) => ({ key: n.key!, type: n.type ?? '', state: n.state, namespace: n.namespace }))
+        .sort((a, b) => a.key.localeCompare(b.key)),
+      isA: (t, a) => t === a || cat.typesOf(t).includes(a),
+      linkTypesFrom: () => (typeName ? cat.linksFrom(typeName).map((l) => l.ref ?? '').filter(Boolean) : []),
+      linkLabel: (t) => cat.links.find((l) => l.ref === t)?.label ?? '',
+    };
+  });
+  let formError = $state('');
+  async function saveForm(values: FormValues) {
+    if (!typeForm) return;
+    formError = '';
+    const e = nodeEdit(typeForm, values, nodeProps, currentLinks);
+    const refOfKey = (k: string) => (formIndex?.list ?? []).find((n) => n.key === k);
+    const addLinks: LinkWrite[] = [];
+    for (const l of e.add) {
+      const n = refOfKey(l.to);
+      if (!n?.id) return void (formError = `No node ${l.to} to link to.`);
+      addLinks.push({ type: l.type, to: { id: n.id, version: n.version ?? 0 } });
+    }
+    if (!Object.keys(e.props).length && !addLinks.length && !e.remove.length) return void (editing = false);
+    const w = { ...(Object.keys(e.props).length ? { props: e.props } : {}), ...(addLinks.length ? { addLinks } : {}), ...(e.remove.length ? { removeLinks: e.remove } : {}) };
+    if (await propose('edit', w, `Edit ${stored?.key}`)) editing = false;
+    else formError = error;
+  }
+
   // The review is an explicit action (ADR 0079): an edit leaves the impact proposed.
   let reviewing = $state(false);
   let reviewComment = $state('');
@@ -425,7 +469,12 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
                 {/if}
               {/if}
             </div>
-            {#if editing}
+            {#if editing && typeForm}
+              <FormRenderer form={{ ...typeForm, title: undefined }} source={formSource} initial={nodeFormValues(typeForm, nodeProps, currentLinks)} busy={busy === 'edit'} serverError={formError}
+                submitLabel="Save" onsubmit={(v) => void saveForm(v)} assist={{ id: `edit:${stored.key}`, label: `Edit ${stored.key} (${typeName})` }}>
+                {#snippet actions()}<button type="button" class="ghost" onclick={() => (editing = false)}>Cancel</button>{/snippet}
+              </FormRenderer>
+            {:else if editing}
               <NodePropertyForm props={nodeProps} attributes={typeCatalog.cat.attributes(typeName)} {declared} {typeName} open={typeCatalog.cat.open(typeName)} busy={busy === 'edit'} onsave={saveProps} oncancel={() => (editing = false)} />
             {:else if propertyNames.length}
               <table class="props">
