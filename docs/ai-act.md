@@ -38,7 +38,7 @@ of Art. 8 to 17 and 43:
 
 - Assign the roles of each methodology to trained people on each project (Assignments, ADR 0043); they answer for the
   runs and review the change impacts.
-- Keep `GOAP_PERSON_REVIEWS_MODEL_OUTPUT` on (the default, ADR 0128): a change impact a model produced is accepted by a
+- Keep `GOAP_PERSON_REVIEWS_MODEL_OUTPUT` on (the default, ADR 0129): a change impact a model produced is accepted by a
   person only. Turning it off leaves oversight to each methodology.
 - Prefer methodologies whose gates and guardians (ADR 0058, 0106) need a decided decision point or a human step before
   a merge, and declare independent verification on actions whose output matters (`verify:`, ADR 0075).
@@ -55,7 +55,7 @@ of a change carries the whole story. Keep that mark when you publish content goa
 **Logs (Art. 12, Art. 19, Art. 26(6)).**
 
 - The change log (facts, journal of the runs, impact events, the request and answer of every model call of a run) is
-  insert-only; a change that recorded an execution is never purged (ADR 0128), only abandoned.
+  insert-only; a change that recorded an execution is never purged (ADR 0129), only abandoned.
 - The ledger of model calls (`llm_call`, ADR 0089) records every call with its caller and end user. Keep
   `GOAP_LLM_CALL_RETENTION_DAYS` at 183 or more (the default) and `GOAP_LLM_CALL_PROMPTS` on (the default); the gateway
   warns at start otherwise.
@@ -78,7 +78,7 @@ agents do, their limits and the settings above.
 | Design, architecture, components | `docs/architecture.md`, `docs/architecture-overview.html`, `docs/adr/` |
 | Logic of the system and its decisions | the methodologies (`methodologies/`, versioned graph nodes, ADR 0023), planners (`engine/goap`), conditions (ADR 0002, 0109) |
 | Models used | the model entries of the platform namespace (`platform@LlmModel`), the ledger per call |
-| Human oversight measures | ADR 0058, 0067, 0075, 0090, 0105, 0106, 0115, 0117, 0128 |
+| Human oversight measures | ADR 0058, 0067, 0075, 0090, 0105, 0106, 0115, 0117, 0129 |
 | Logging | ADR 0011, 0030, 0057, 0059, 0089, 0114 |
 | Accuracy, robustness, cybersecurity | ADR 0007 (sandbox), 0099 (evaluation), 0118 (workspace), 0020 / 0045 (access, sessions) |
 | Changes over the lifecycle | `git log`, the ADRs, the versions of methodologies and domains |

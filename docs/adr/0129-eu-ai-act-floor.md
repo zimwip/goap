@@ -1,4 +1,4 @@
-# ADR 0128 — An EU AI Act floor: disclosure, logs kept, provenance carried out, a person reviews model output
+# ADR 0129 — An EU AI Act floor: disclosure, logs kept, provenance carried out, a person reviews model output
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0030 (one change log), ADR 0057 (PROV-O),
 ADR 0059 (prompts in the log), ADR 0075 (review policy), ADR 0089 (ledger of model calls), ADR 0104 (snapshot export),

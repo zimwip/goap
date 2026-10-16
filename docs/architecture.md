@@ -486,7 +486,7 @@ A result produced is not a result accepted. Three small mechanisms, each placed 
 `graph/graph` and `contracts/domain` import none of these packages (`platform/layering`); `platform/cmd/graph` and `platform/cmd/goap-dev` plug the
 seams explicitly. Open points (web editors of the policies, sampling enforcement...) are in the ADR's "Not done".
 
-### 2.7c The EU AI Act floor ([ADR 0128](adr/0128-eu-ai-act-floor.md))
+### 2.7c The EU AI Act floor ([ADR 0129](adr/0129-eu-ai-act-floor.md))
 
 What goap is for, its excluded uses and how to operate it under the AI Act are in [docs/ai-act.md](ai-act.md). Four
 defaults hold whatever a methodology says: **a person reviews what a model produced** (`Engine.PersonReviewsModelOutput`,
