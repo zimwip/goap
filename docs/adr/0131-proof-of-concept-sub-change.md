@@ -1,4 +1,4 @@
-# ADR 0131 — Proof of concept: a risk mitigated by a relaxed build in a sub-change
+# ADR 0131 — Proofs of concept and prototypes: a relaxed build in a sub-change, to derisk or to explore the need
 
 **Status**: proposed · **Date**: 2026-10 · Builds on ADR 0036 (risks and actions, transverse risk management), 0075
 (criticality), 0103 (sub-changes on their own branch), 0106 (methodologies integrating methodologies), 0109 (scoped
@@ -263,6 +263,61 @@ Small, and generic:
    `change:lower-criticality`: it lands nothing.
 5. Web: *Propose a POC* on the Risks & actions pane (a selection of risks), the POC action row linking its sub-change
    and its verdicts; the rest is what sub-changes and assessments already show.
+
+### 7bis. A prototype during the framing: the same sub-change, checking the need
+
+A prototype answers an earlier question than a POC: not *does it work?* but *is this what we need, how could it
+work?* (a mock-up shown to the requester, a flow tried end to end, an API explored). The mechanism is the same: one
+methodology, `poc`, one kind of action, one way back. Only what it checks and where its verdict goes differ.
+
+**One generic subject: the hypothesis.** The POC no longer checks "risks" directly: it checks **hypotheses**, an item
+type the built-in methodology domain declares (`hypothesis`: `key` `HYP-n`, `statement`, `source`, `status`; ADR
+0128). Opening a POC writes one hypothesis per thing to check in the sub-change: for a risk, `"RSK-3 holds: the PSP SDK
+cannot refund partially"` with `source: RSK-3`; for the framing, a question about the need turned into a statement to
+confirm or refute, `"the requester can validate a voucher in the checkout without leaving the page"`, `source:
+framing`. The conditions of §6bis in the sub-change take scope `item` restricted to `self.type == "hypothesis"` instead
+of `risk`; the probes, the relaxed build, the verdicts (assessments of `item:HYP-n`) and `poc.concluded` are unchanged.
+
+**The action carries its purpose.** The POC action gains `purpose`: `derisk` (§1, `risks` set) or `explore`
+(`hypotheses`: the statements, no risk). An `explore` action is in the register of the change like any action (it is
+work the change commits to) but covers no risk.
+
+**Where it sits in `sdlc`.** The framing becomes:
+
+```yaml
+- name: framing
+  steps:
+    - name: review                 # automatic review of the description (ADR 0130), unchanged
+    - name: prototype              # optional: reactive, nothing to do while no prototype is proposed
+      on: [{event: change.item_added, filter: 'event.items.exists(i, i.type == "action" && i.data.kind == "poc")'},
+           {event: poc.concluded, from: integrated}]
+      actions: [open_poc, conclude_poc]
+    - name: confirmation
+      pre: {description_rated: true, prototypes_concluded: true}
+```
+
+| Condition (parent) | Expression (sketch) |
+|---|---|
+| `prototypes_concluded` | all `poc_settled` where `self.kind == "poc" && self.purpose == "explore"`, empty: true |
+| `pocs_concluded` (build gate, §3) | all `poc_settled` where `self.purpose == "derisk"`, empty: true |
+
+Who proposes it: the person framing the change (*Propose a prototype* on the framing, with the questions), or the
+description review, whose `rate_description` may answer, next to its findings, a `suggestion` of kind `prototype`
+with the questions it could not settle from the text (the bubble shows *Propose a prototype*; a person turns it into
+the action, never the model). Opening is the same human `open_poc`; at this stage no impact analysis exists, so its
+form takes the **repositories** to start from (or none: an empty workspace for a mock-up) instead of impacted
+components.
+
+**The way back to the framing.** `conclude_poc` for an `explore` POC writes on the parent an artifact
+`prototype_findings` (per hypothesis its verdict and findings, the branch, and a proposed wording of the intent built
+from them) and marks the action done. It does **not** edit the description (ADR 0110 §4: only a person applies a
+suggestion): the confirmation step shows the findings and the proposed wording, the person amends the intent if they
+take it, and the edit wakes the automatic review, which rates the new description by itself (ADR 0130). The analysis
+then starts from a need the prototype made concrete. A refuted hypothesis is as useful as a confirmed one: it is a
+scope the change leaves out, which the person writes into the intent.
+
+The delivery run waits at the confirmation while a prototype is open, exactly as it waits at the build for a POC
+(§6bis): `prototypes_concluded` is produced only by the reaction to `poc.concluded`.
 
 ### 8. Methodologies
 
