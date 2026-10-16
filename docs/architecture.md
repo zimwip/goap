@@ -867,6 +867,10 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 
 ### 3.0 Source components ([ADR 0125](adr/0125-source-components.md))
 
+The picture of this section and of the services is [architecture-overview.html](architecture-overview.html) (open
+it in a browser): the modules, the containers with their ports and calls, the deployment units and one step of a
+change end to end. It is kept in step with the code (CLAUDE.md, `TestArchitectureOverview`).
+
 The services are cut along components the sources follow too: a **contract** (protos, generated code, the pure
 model, `contracts/graphapi`: the requests, answers and errors of the graph's operations), the **graph**, the **engine**, the
 **MCP hub**, the **gateway** and the **platform** that composes them. The engine reaches the graph only through the

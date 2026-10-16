@@ -2,6 +2,7 @@
 
 - **English is the project's official language.** All code, comments, docs, commit messages, and UI text must be in English.
 - Architecture and concepts: `docs/architecture.md`. Keep it in sync with code changes.
+- Architecture overview: `docs/architecture-overview.html` (open it in a browser) draws the modules (logical), the services and their flows (physical: one container per binary of `platform/cmd`, with its port) and one step of a change end to end. Update it in the same change whenever you add, remove or rename a module, a binary, a compose service or a port, or change who calls whom (a new client, a new event on NATS, a route of the gateway): the boxes, the wires, the *Deployment units* table and the numbered run. `platform/layering` `TestArchitectureOverview` fails while a module (`data-module`), a binary (`data-binary`) or a compose service (`data-service`) is missing from it; the flows it cannot check, so read the page again when you touch them.
 
 ## Mental model: who, why, how, what, with what
 

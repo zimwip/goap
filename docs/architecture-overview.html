@@ -1,0 +1,313 @@
+<!doctype html>
+<!-- The architecture overview of GOAP: modules (logical) and services (physical). Keep it in step with the code
+     (CLAUDE.md, "Architecture overview"); platform/layering TestArchitectureOverview checks that it names every
+     module, binary and compose service. Open it in a browser; it needs no build. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GOAP Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
+<style>
+/* Layout: one reading column; a module map, a runtime diagram, a numbered run, a devlocal note. Module hues are reused everywhere a module appears. */
+:root {
+  --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5b6475; --line: #d5dae3; --wire: #7a8496;
+  --contracts: #5a6478; --lib: #0f766e; --graph: #1d4ed8; --engine: #b45309; --mcp: #be185d; --gateway: #15803d; --platform: #6d28d9;
+  --tint: 12%;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11151c; --surface: #181e27; --fg: #e4e8ef; --muted: #9aa3b4; --line: #2c3442; --wire: #8590a3;
+  --contracts: #9aa5ba; --lib: #2dd4bf; --graph: #7aa2ff; --engine: #f5a524; --mcp: #f472b6; --gateway: #4ade80; --platform: #b18cff;
+  --tint: 18%; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #11151c; --surface: #181e27; --fg: #e4e8ef; --muted: #9aa3b4; --line: #2c3442; --wire: #8590a3;
+  --contracts: #9aa5ba; --lib: #2dd4bf; --graph: #7aa2ff; --engine: #f5a524; --mcp: #f472b6; --gateway: #4ade80; --platform: #b18cff;
+  --tint: 18%; color-scheme: dark }
+
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.55 var(--sans); }
+.wrap { max-width: 1000px; margin: 0 auto; padding-block: 40px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 48px; }
+h1, h2 { font-family: var(--cond); font-weight: 600; text-wrap: balance; margin: 0; }
+h1 { font-size: 34px; line-height: 1.15; letter-spacing: -0.01em; }
+h2 { font-size: 22px; }
+p { margin: 0; max-width: 68ch; }
+.lede { color: var(--muted); font-size: 16px; margin-top: 10px; }
+.eyebrow { font: 500 12px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+code, .mono { font-family: var(--mono); font-size: 0.86em; }
+section { display: grid; gap: 16px; min-width: 0; }
+
+/* module colour plumbing */
+.m-contracts { --c: var(--contracts) } .m-lib { --c: var(--lib) } .m-graph { --c: var(--graph) } .m-engine { --c: var(--engine) }
+.m-mcp { --c: var(--mcp) } .m-gateway { --c: var(--gateway) } .m-platform { --c: var(--platform) }
+
+/* module map */
+.stack { display: grid; gap: 10px; }
+.tier { display: grid; gap: 10px; grid-template-columns: repeat(var(--n, 1), minmax(0, 1fr)); }
+.mod { background: color-mix(in srgb, var(--c) var(--tint), var(--surface)); border: 1px solid color-mix(in srgb, var(--c) 45%, var(--line));
+  border-radius: 6px; padding: 12px 14px; display: grid; gap: 6px; min-width: 0; }
+.mod h3 { margin: 0; font: 600 15px var(--mono); color: var(--c); display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.mod h3 span { font: 400 12px var(--sans); color: var(--muted); }
+.mod p { font-size: 13px; color: var(--fg); }
+.mod .pk { font: 12px/1.5 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+.arrowrow { text-align: center; font: 12px var(--mono); color: var(--muted); }
+.rule { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font: 13px var(--mono); }
+.chip { padding: 2px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--c) 50%, var(--line)); color: var(--c);
+  background: color-mix(in srgb, var(--c) var(--tint), var(--surface)); }
+@media (max-width: 720px) { .tier { grid-template-columns: minmax(0, 1fr) !important; } }
+
+/* diagram */
+.fig { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow-x: auto; }
+.fig svg { display: block; width: 100%; min-width: 760px; height: auto; }
+svg text { font-family: var(--sans); fill: var(--fg); }
+svg .t { font-size: 14px; font-weight: 600; }
+svg .s { font-size: 11.5px; fill: var(--muted); }
+svg .lbl { font: 11px var(--mono); fill: var(--muted); }
+svg .box { fill: color-mix(in srgb, var(--c) var(--tint), var(--surface)); stroke: var(--c); stroke-width: 1.4; }
+svg .ext { fill: var(--bg); stroke: var(--wire); stroke-width: 1.2; stroke-dasharray: 4 3; }
+svg .w { fill: none; stroke: var(--wire); stroke-width: 1.4; }
+svg .w.ev { stroke-dasharray: 5 4; }
+svg .bus { fill: color-mix(in srgb, var(--wire) 14%, var(--surface)); stroke: var(--wire); }
+svg marker path { fill: var(--wire); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 18px; border-top: 1.6px solid var(--wire); display: inline-block; }
+.legend i.d { border-top-style: dashed; }
+
+/* run */
+ol.run { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; counter-reset: s; }
+ol.run li { counter-increment: s; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
+ol.run li::before { content: counter(s); font: 500 13px var(--mono); color: var(--muted); padding-top: 2px; }
+ol.run b { font-weight: 600; }
+.who { font: 12px var(--mono); }
+.who .chip { font-size: 11.5px; }
+
+.two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 720px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.note { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; display: grid; gap: 8px; min-width: 0; }
+.note h3 { margin: 0; font: 600 15px var(--sans); }
+.note p, .note li { font-size: 14px; }
+.note ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 13.5px; }
+th, td { text-align: left; padding: 8px 12px; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: 0; font: 500 12px var(--mono); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+td.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .chip { font: 12px var(--mono); }
+pre { margin: 0; font: 12.5px/1.6 var(--mono); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; overflow-x: auto; }
+footer { font-size: 13px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">zimwip/goap · main · ADR 0125</div>
+    <h1>GOAP architecture</h1>
+    <p class="lede">Seven Go modules in one <code>go.work</code>, deployed as a dozen services behind one gateway. Organisations change the graph through changes; the engine runs the methodology that says how.</p>
+  </header>
+
+  <section>
+    <h2>Logical: modules and who may depend on whom</h2>
+    <p>Units of code and build, not of deployment. Each module is a directory at the repository root with its own <code>go.mod</code>; imports go downward only, and <code>platform/layering</code> checks every import, tests included, and each <code>go.mod</code>. A binary assembles several modules.</p>
+    <div class="stack">
+      <div class="tier">
+        <div class="mod m-platform" data-module="platform"><h3>platform <span>composition</span></h3>
+          <p>Every binary (<code>cmd/*</code>, <code>goap-dev</code> first), the methodology registry, model gateway, conversations and assistant, event stream, dev seeds, and the tests that need two modules.</p>
+          <div class="pk">cmd/* · registrysvc · modelgw · convsvc · assistantsvc · eventsvc · prefssvc · devseed · e2e/* · layering</div></div>
+      </div>
+      <div class="arrowrow">↓ may use any module below</div>
+      <div class="tier" style="--n:4">
+        <div class="mod m-graph" data-module="graph"><h3>graph <span>what</span></h3>
+          <p>The versioned graph, changes, drafts, baselines; the domain registry; search index.</p>
+          <div class="pk">graph · graphsvc · domainsvc · index · indexersvc · okf · prov</div></div>
+        <div class="mod m-engine" data-module="engine"><h3>engine <span>how</span></h3>
+          <p>Methodology compiler, planners, conditions, the run loop; sandboxes for scripts.</p>
+          <div class="pk">engine · methodology · goap · condition · enginesvc · sandbox · enginetel</div></div>
+        <div class="mod m-mcp" data-module="mcp"><h3>mcp <span>with what</span></h3>
+          <p>The MCP hub, the connector kit and the connectors (built-in, localfs, workspace, Claude agent).</p>
+          <div class="pk">mcpsvc · connectorkit · connectors/*</div></div>
+        <div class="mod m-gateway" data-module="gateway"><h3>gateway <span>edge</span></h3>
+          <p>HTTP entry, auth modes, sessions, routing to the services; password store.</p>
+          <div class="pk">gateway · credsvc</div></div>
+      </div>
+      <div class="arrowrow">↓ never each other: they meet through contracts and the generated clients</div>
+      <div class="tier">
+        <div class="mod m-lib" data-module="lib"><h3>lib <span>shared libraries</span></h3>
+          <p>Domain model, type catalogue, CEL guards, the DSL (goja, yaegi), access, adapters, built-in MCP definitions, service plumbing and the clients of the graph and domain registry.</p>
+          <div class="pk">def · typecat · guard · dsl · access · adapter · mcpbuiltin · llmcfg · platform · identity · telemetry · graphclient · domainclient</div></div>
+      </div>
+      <div class="arrowrow">↓</div>
+      <div class="tier">
+        <div class="mod m-contracts" data-module="contracts"><h3>contracts <span>depends on nothing</span></h3>
+          <p>Protos' generated Go (<code>gen</code>), the pure model, and the graph's contract <code>graphapi</code>: the port the engine and the built-in MCPs call.</p>
+          <div class="pk">gen · domain · graphapi · authz · mcp · llm · journal · operations · risk · assess · verify · review</div></div>
+      </div>
+    </div>
+    <div class="rule"><span class="chip m-contracts">contracts</span>←<span class="chip m-lib">lib</span>←<span class="chip m-graph">graph</span>/<span class="chip m-engine">engine</span>/<span class="chip m-mcp">mcp</span>/<span class="chip m-gateway">gateway</span>←<span class="chip m-platform">platform</span></div>
+  </section>
+
+  <section>
+    <h2>Physical: services at run time</h2>
+    <p>The compose stack: each box is a container running one binary, <code>platform/cmd/&lt;name&gt;</code>, with its host port. Boxes take the colour of the module whose service they run; every call is connect-rpc, and the graph's events go over NATS JetStream.</p>
+    <div class="fig">
+      <svg viewBox="0 0 940 600" role="img" aria-labelledby="rt-t rt-d">
+        <title id="rt-t">Runtime services and flows</title>
+        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. The graph publishes changes on NATS, read by the event stream, the indexer and the engine; the event stream pushes them to the browser.</desc>
+        <defs>
+          <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
+        </defs>
+
+        <!-- browser and gateway -->
+        <g><rect class="ext" x="350" y="16" width="240" height="46" rx="6"/>
+          <text class="t" x="470" y="36" text-anchor="middle">Web IDE</text>
+          <text class="s" x="470" y="53" text-anchor="middle">Svelte · Connect JSON · :5173</text></g>
+        <g class="m-gateway"><rect class="box" x="300" y="100" width="340" height="52" rx="6"/>
+          <text class="t" x="470" y="122" text-anchor="middle">gateway</text>
+          <text class="s" x="470" y="140" text-anchor="middle">auth (local / hs256 / none) · routes by service · :8080</text></g>
+        <path class="w" d="M470 62V96" marker-end="url(#a)"/>
+
+        <!-- service row -->
+        <g class="m-platform"><rect class="box" x="20" y="214" width="160" height="62" rx="6"/>
+          <text class="t" x="100" y="238" text-anchor="middle">registry</text>
+          <text class="s" x="100" y="256" text-anchor="middle">methodologies · :8082</text></g>
+        <g class="m-graph"><rect class="box" x="210" y="214" width="160" height="62" rx="6"/>
+          <text class="t" x="290" y="238" text-anchor="middle">graph</text>
+          <text class="s" x="290" y="256" text-anchor="middle">changes · domains · :8081</text></g>
+        <g class="m-engine"><rect class="box" x="400" y="214" width="160" height="62" rx="6"/>
+          <text class="t" x="480" y="238" text-anchor="middle">engine</text>
+          <text class="s" x="480" y="256" text-anchor="middle">plans and runs · :8083</text></g>
+        <g class="m-mcp"><rect class="box" x="590" y="214" width="160" height="62" rx="6"/>
+          <text class="t" x="670" y="238" text-anchor="middle">mcp hub</text>
+          <text class="s" x="670" y="256" text-anchor="middle">tools for the caller · :8085</text></g>
+        <g class="m-platform"><rect class="box" x="770" y="214" width="150" height="62" rx="6"/>
+          <text class="t" x="845" y="238" text-anchor="middle">modelgw</text>
+          <text class="s" x="845" y="256" text-anchor="middle">LLM calls · ledger · :8084</text></g>
+
+        <!-- gateway fan-out -->
+        <path class="w" d="M330 152V180H100V210" marker-end="url(#a)"/>
+        <path class="w" d="M290 152V210" marker-end="url(#a)"/>
+        <path class="w" d="M480 152V210" marker-end="url(#a)"/>
+        <path class="w" d="M590 152V180H670V210" marker-end="url(#a)"/>
+        <path class="w" d="M630 152V170H845V210" marker-end="url(#a)"/>
+
+        <!-- engine calls -->
+        <path class="w" d="M400 245H374" marker-end="url(#a)"/>
+        <path class="w" d="M560 245H586" marker-end="url(#a)"/>
+        <path class="w" d="M440 276V300H100V280" marker-end="url(#a)"/>
+        <text class="lbl" x="250" y="294">methodology</text>
+        <path class="w" d="M520 276V300H845V280" marker-end="url(#a)"/>
+        <text class="lbl" x="700" y="294">llm actions</text>
+        <!-- registry stores its nodes through the graph, reads domains -->
+        <path class="w" d="M180 236H206" marker-end="url(#a)"/>
+
+        <!-- second row -->
+        <g class="m-platform"><rect class="box" x="20" y="330" width="160" height="56" rx="6"/>
+          <text class="t" x="100" y="352" text-anchor="middle">conversations</text>
+          <text class="s" x="100" y="370" text-anchor="middle">assistant · :8090</text></g>
+        <g class="m-engine"><rect class="box" x="400" y="330" width="160" height="56" rx="6"/>
+          <text class="t" x="480" y="352" text-anchor="middle">sandbox</text>
+          <text class="s" x="480" y="370" text-anchor="middle">goap-runner image</text></g>
+        <g class="m-mcp"><rect class="box" x="590" y="330" width="160" height="56" rx="6"/>
+          <text class="t" x="670" y="352" text-anchor="middle">connectors</text>
+          <text class="s" x="670" y="370" text-anchor="middle">connector-localfs …</text></g>
+        <g class="m-graph"><rect class="box" x="770" y="330" width="150" height="56" rx="6"/>
+          <text class="t" x="845" y="352" text-anchor="middle">indexer</text>
+          <text class="s" x="845" y="370" text-anchor="middle">search · :8086</text></g>
+        <path class="w" d="M480 276V326" marker-end="url(#a)"/>
+        <path class="w" d="M670 276V326" marker-end="url(#a)"/>
+        <path class="w" d="M885 330V280" marker-end="url(#a)"/>
+        <text class="lbl" x="845" y="322" text-anchor="end">embed</text>
+        <path class="w" d="M180 358H260V280" marker-end="url(#a)"/>
+        <text class="lbl" x="186" y="350">as the caller</text>
+
+        <!-- bus -->
+        <rect class="bus" x="20" y="430" width="900" height="36" rx="18"/>
+        <text class="t" x="470" y="453" text-anchor="middle">NATS JetStream · goap.changed.&gt; · registry and index events</text>
+        <path class="w ev" d="M320 276V426" marker-end="url(#a)"/>
+        <text class="lbl" x="326" y="410">publishes</text>
+        <path class="w ev" d="M845 430V390" marker-end="url(#a)"/>
+        <path class="w ev" d="M575 430V262H564" marker-end="url(#a)"/>
+        <text class="lbl" x="581" y="414">triggers</text>
+
+        <g class="m-platform"><rect class="box" x="300" y="508" width="200" height="56" rx="6"/>
+          <text class="t" x="400" y="530" text-anchor="middle">events</text>
+          <text class="s" x="400" y="548" text-anchor="middle">one stream · presence · :8089</text></g>
+        <path class="w ev" d="M400 466V504" marker-end="url(#a)"/>
+        <path class="w ev" d="M300 536H8V40H346" marker-end="url(#a)"/>
+        <text class="lbl" x="14" y="80">live updates</text>
+
+        <!-- stores -->
+        <g><rect class="ext" x="560" y="508" width="360" height="56" rx="6"/>
+          <text class="t" x="740" y="530" text-anchor="middle">PostgreSQL + pgvector · Vault · OTel</text>
+          <text class="s" x="740" y="548" text-anchor="middle">a schema per service · secrets by reference · traces</text></g>
+      </svg>
+    </div>
+    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs</span></div>
+  </section>
+
+  <section>
+    <h2>Deployment units</h2>
+    <p>Every binary of <code>platform/cmd</code>. The first twelve are the containers of <code>deploy/compose/docker-compose.yml</code>; the module named is the one whose service the binary runs, and every binary also embeds <code>lib</code> and <code>contracts</code>.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Binary</th><th>Module</th><th>Port</th><th>What it runs</th></tr></thead>
+      <tbody>
+        <tr data-binary="gateway" data-service="gateway"><td><code>gateway</code></td><td><span class="chip m-gateway">gateway</span></td><td class="num">:8080</td><td>HTTP entry: sign-in, sessions, routing by service</td></tr>
+        <tr data-binary="graph" data-service="graph"><td><code>graph</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8081</td><td>the graph, changes, the domain registry; PostgreSQL</td></tr>
+        <tr data-binary="registry" data-service="registry"><td><code>registry</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8082</td><td>the methodology registry; reads the graph and its domains, no database</td></tr>
+        <tr data-binary="engine" data-service="engine"><td><code>engine</code></td><td><span class="chip m-engine">engine</span></td><td class="num">:8083</td><td>runs and plans processes; PostgreSQL; starts the sandboxes</td></tr>
+        <tr data-binary="modelgw" data-service="modelgw"><td><code>modelgw</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8084</td><td>every LLM call and its ledger; PostgreSQL</td></tr>
+        <tr data-binary="mcp" data-service="mcp"><td><code>mcp</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">:8085</td><td>the MCP hub with the built-in connectors; PostgreSQL</td></tr>
+        <tr data-binary="indexer" data-service="indexer"><td><code>indexer</code></td><td><span class="chip m-graph">graph</span></td><td class="num">:8086</td><td>search index of nodes and changes; PostgreSQL + pgvector</td></tr>
+        <tr data-binary="preferences" data-service="preferences"><td><code>preferences</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8087</td><td>per-user preferences; PostgreSQL</td></tr>
+        <tr data-binary="credentials" data-service="credentials"><td><code>credentials</code></td><td><span class="chip m-gateway">gateway</span></td><td class="num">:8088</td><td>password hashes and sessions; PostgreSQL</td></tr>
+        <tr data-binary="events" data-service="events"><td><code>events</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8089</td><td>the one event stream and presence; NATS</td></tr>
+        <tr data-binary="conversations" data-service="conversations"><td><code>conversations</code></td><td><span class="chip m-platform">platform</span></td><td class="num">:8090</td><td>conversations and the assistant; PostgreSQL</td></tr>
+        <tr data-binary="connector-localfs" data-service="connector-localfs"><td><code>connector-localfs</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>file connector; registers with the hub</td></tr>
+        <tr data-binary="connector-workspace"><td><code>connector-workspace</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>workspace of a change (git, commands); standalone, not in compose</td></tr>
+        <tr data-binary="connector-claude-coding-agent"><td><code>connector-claude-coding-agent</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>Claude Code sessions; standalone, not in compose</td></tr>
+        <tr data-binary="goap-runner"><td><code>goap-runner</code></td><td><span class="chip m-engine">engine</span></td><td class="num">—</td><td>sandbox image the engine runs scripts in (make runner-image)</td></tr>
+        <tr data-binary="goap-dev"><td><code>goap-dev</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>every service in one process on SQLite: make dev, make devlocal</td></tr>
+        <tr data-binary="goap-eval"><td><code>goap-eval</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>offline evaluation CLI (make eval)</td></tr>
+        <tr data-binary="goap-opgen"><td><code>goap-opgen</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>generator of the operations catalogue (make generate)</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>One step of a change, end to end</h2>
+    <ol class="run">
+      <li><div><b>The person starts a step.</b> The IDE calls <code>StartProcess</code>; the gateway checks the token and the active project, then forwards. <div class="who"><span class="chip m-gateway">gateway</span> → <span class="chip m-engine">engine</span></div></div></li>
+      <li><div><b>The engine loads how.</b> It asks the registry for the methodology version the change follows, compiled against the domains in force (refused if suspended). <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-platform">registry</span></div></div></li>
+      <li><div><b>It reads the blackboard.</b> Change, nodes, items, decision points and history come from the graph through <code>graphapi.Port</code>; conditions are evaluated on it and the planner picks the next action. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-graph">graph</span></div></div></li>
+      <li><div><b>The action runs.</b> An <code>llm</code> action goes through the model gateway (one ledger row per call); a <code>tool</code> action through the MCP hub, which resolves the unit's adapter and calls the connector; a <code>script</code> in the sandbox. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-platform">modelgw</span> · <span class="chip m-mcp">mcp hub</span> → connector</div></div></li>
+      <li><div><b>The result lands on the change.</b> Impacts become drafts and items on the change log; nothing is a version until review, commit and merge. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-graph">graph</span></div></div></li>
+      <li><div><b>Everyone sees it.</b> The graph publishes <code>change.updated</code>; the event stream pushes it to every open IDE, the indexer reindexes, and companion runs react. <div class="who"><span class="chip m-graph">graph</span> ⇢ NATS ⇢ <span class="chip m-platform">events</span> · <span class="chip m-graph">indexer</span> · <span class="chip m-engine">engine</span></div></div></li>
+    </ol>
+  </section>
+
+  <section class="two">
+    <div class="note">
+      <h3>devlocal: one process</h3>
+      <p><code>goap-dev</code> composes every service in process on SQLite (<code>.goap/goap.db</code>): no NATS, no Docker. Air rebuilds it on each Go change and Vite serves the IDE.</p>
+      <pre>make devlocal          # :5173 IDE, :8080 API
+.\make.ps1 devlocal   # Windows</pre>
+    </div>
+    <div class="note">
+      <h3>Working in the go.work</h3>
+      <ul>
+        <li><code>./...</code> at the root matches nothing: <code>make test</code>, <code>make lint</code> name the modules.</li>
+        <li><code>make tidy</code> after changing imports; lint refuses an untidy <code>go.mod</code>.</li>
+        <li>A test that needs two modules goes in <code>platform/e2e/&lt;name&gt;</code>.</li>
+        <li>Each module also builds alone: <code>GOWORK=off go build ./...</code>.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>Source: <code>docs/architecture-overview.html</code>, drawn from <code>deploy/compose/docker-compose.yml</code>, the gateway's routes and ADR 0125. Kept up to date with the code: a new module, binary or compose service fails <code>TestArchitectureOverview</code> until it is on this page.</footer>
+</div>
+</body>
+</html>

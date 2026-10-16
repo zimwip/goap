@@ -10,7 +10,7 @@ The engine's blackboard is the **change axis** of a versioned knowledge graph wh
 [CEL](https://cel.dev) expressions on the state of the change, hydrated with the domain
 elements it references.
 
-👉 **Read first: [docs/architecture.md](docs/architecture.md)** · decisions: [docs/adr](docs/adr)
+👉 **Read first: [docs/architecture.md](docs/architecture.md)** · the picture: [docs/architecture-overview.html](docs/architecture-overview.html) · decisions: [docs/adr](docs/adr)
 
 ## Quick start
 

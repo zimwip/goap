@@ -123,6 +123,12 @@ services:
   indexer:
     <<: *service
     build: {context: ../.., args: {SERVICE: indexer}}
+    environment:
+      <<: *env
+      GOAP_DB_DSN: postgres://index:index@postgres:5432/goap?sslmode=disable
+      GOAP_GRAPH_URL: http://graph:8080
+      GOAP_MODELGW_URL: http://modelgw:8080
+    ports: ["8086:8080"]
 
   events:
     <<: *service
@@ -131,12 +137,6 @@ services:
       <<: *env
       GOAP_GRAPH_URL: http://graph:8080
     ports: ["8089:8080"]
-    environment:
-      <<: *env
-      GOAP_DB_DSN: postgres://index:index@postgres:5432/goap?sslmode=disable
-      GOAP_GRAPH_URL: http://graph:8080
-      GOAP_MODELGW_URL: http://modelgw:8080
-    ports: ["8086:8080"]
 
   engine:
     <<: *service
