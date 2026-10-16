@@ -82,7 +82,8 @@ actions:
     language: javascript
     description: State the hypotheses the POC checks, from what the change that opened it asked
     pre: {poc_scoped: true}
-    effects: {hypotheses_stated: true}
+    # the hypotheses it states are the subjects the framing probes: the plan goes on with them
+    effects: {hypotheses_stated: true, "pending:propose_probe": true, "pending:write_probe": true}
     code: |
       function run(ctx) {
         const scopes = ctx.items("artifact").filter(a => a.target === "poc_scope");
@@ -280,9 +281,11 @@ processes:
       - name: scope
         description: State the hypotheses, the requirements of the POC
         action: state_hypotheses
+        done: {hypotheses_stated: true}
       - name: framing
         description: A probe per hypothesis, by a model first, by a person when no model can
         actions: [propose_probe, write_probe]
+        done: {hypotheses_probed: true}
       - name: confirmation
         description: A person confirms the probes before anything is built
         pre: {hypotheses_probed: true}
@@ -294,11 +297,12 @@ processes:
         pre: {"step:proof_of_concept/confirmation": true}
         steps:
           - {name: workspace, action: prepare_poc_workspace}
-          - {name: implement, description: Build each probe (three attempts at most), action: implement_probe}
-          - {name: check, description: Run the check of each probe, action: run_probe}
+          - {name: implement, description: Build each probe (three attempts at most), action: implement_probe, done: {probes_implemented: true}}
+          - {name: check, description: Run the check of each probe, action: run_probe, done: {probes_run: true}}
       - name: conclusion
         description: A verdict per hypothesis, drafted by a model, a person as the fallback
         actions: [draft_verdict, judge_by_hand]
+        done: {hypotheses_judged: true}
       - name: keep
         description: Keep the code of the probes on the branch of the POC
         action: keep_probes
