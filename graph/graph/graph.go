@@ -470,7 +470,7 @@ func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) ([]domain.Chan
 
 // UpdateChange patches a change header.
 func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePatch) (c domain.Change, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err = tx.Change(ctx, id)
 		if err != nil {
 			return err
@@ -540,7 +540,7 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		return nil, err
 	}
 	out := make([]domain.ChangeItem, 0, len(items))
-	err := g.repo.InTx(ctx, func(tx Tx) error {
+	err := g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err

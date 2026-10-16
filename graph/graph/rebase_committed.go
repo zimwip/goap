@@ -123,7 +123,7 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 // rebased onto the head of its target; a sub-change: rebased onto its parent), asked to the merge guards, then integrated
 // (a fast-forward; a target moving in between falls back to the three-way merge with the resolutions given).
 func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
@@ -141,7 +141,7 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		return c, err
 	}
 	var res RebaseResult
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		res, err = g.rebaseTx(ctx, tx, c)
 		return err
 	})
@@ -154,7 +154,7 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 	if err := g.checkMerge(ctx, id); err != nil {
 		return c, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}
@@ -164,6 +164,11 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		}
 		if !ok {
 			return fmt.Errorf("change %s has no branch of its own: %w", id, ErrInvalid)
+		}
+		// the head of the target is read under its lock: a merge landing meanwhile is seen, and this one merges after it
+		// (ADR 0127)
+		if err := tx.LockBranch(ctx, c.Namespace, domain.BranchOf(own.Parent)); err != nil {
+			return err
 		}
 		if c.ParentID == "" {
 			c, err = g.integrate(ctx, tx, c, own, resolutions)

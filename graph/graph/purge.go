@@ -13,7 +13,7 @@ import (
 // one, has not moved since it was forked.
 func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	var c domain.Change
-	err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+	err := g.changeTx(ctx, id, func(tx Tx) (err error) {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
 		}

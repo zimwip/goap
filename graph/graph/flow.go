@@ -30,7 +30,7 @@ func flowChange(ctx context.Context, tx Tx, id domain.ChangeID) (domain.Change, 
 // view) become stale until the branch is adopted. A change may have several
 // open flows: parallel alternatives, decided one by one.
 func (g *Graph) OpenFlow(ctx context.Context, id domain.ChangeID, in OpenFlowRequest) (f domain.Flow, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
 		if err != nil {
 			return err

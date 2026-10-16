@@ -51,7 +51,7 @@ func (g *Graph) MoveChange(ctx context.Context, id domain.ChangeID, project stri
 		}
 	}
 	var moved domain.Change
-	err := g.repo.InTx(ctx, func(tx Tx) error {
+	err := g.changeTx(ctx, id, func(tx Tx) error {
 		again, err := g.movable(ctx, tx, id, project)
 		if err != nil {
 			return err

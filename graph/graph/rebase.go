@@ -22,7 +22,7 @@ func (g *Graph) RebaseChange(ctx context.Context, id domain.ChangeID) (res Rebas
 	if err := g.allow(ctx, id, operations.ChangeRebase); err != nil {
 		return res, err
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err

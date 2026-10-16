@@ -114,7 +114,7 @@ func (g *Graph) EvaluateOption(ctx context.Context, id domain.ChangeID, option, 
 // SelectOption selects an open option: its flow is adopted (its drafts become the main flow's, ADR 0079) and
 // the other open options are rejected.
 func (g *Graph) SelectOption(ctx context.Context, id domain.ChangeID, option, by string) (f domain.Flow, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
 		if err != nil {
 			return err

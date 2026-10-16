@@ -49,7 +49,7 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 	if err != nil {
 		return d, fmt.Errorf("decision policy: %v: %w", err, ErrInvalid)
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
 		if err != nil {
 			return err
@@ -90,7 +90,7 @@ func (g *Graph) OpenDecision(ctx context.Context, id domain.ChangeID, in OpenDec
 // are answered.
 func (g *Graph) RuleDecision(ctx context.Context, id domain.ChangeID, in RuleRequest) (d domain.DecisionPoint, err error) {
 	in.Justification = strings.TrimSpace(in.Justification)
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
 		if err != nil {
 			return err
@@ -154,7 +154,7 @@ func (g *Graph) AnswerQuestion(ctx context.Context, id domain.ChangeID, question
 	if answer == "" {
 		return d, fmt.Errorf("an answer needs a text: %w", ErrInvalid)
 	}
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
 		if err != nil {
 			return err
@@ -187,7 +187,7 @@ func (g *Graph) AnswerQuestion(ctx context.Context, id domain.ChangeID, question
 // RatifyDecision accepts or refuses the ruling the policy did not settle (a person's act). Accepted, it decides the
 // point; refused, the point is open again (the policy may count it as a round).
 func (g *Graph) RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, by, comment string) (d domain.DecisionPoint, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := flowChange(ctx, tx, id)
 		if err != nil {
 			return err

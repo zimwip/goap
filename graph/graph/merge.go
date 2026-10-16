@@ -660,7 +660,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if err := tx.PutBaseline(ctx, res.Baseline); err != nil {
 		return res, err
 	}
-	if err := g.advanceBranch(ctx, tx, namespace, plan.Into, res.Baseline.ID); err != nil {
+	if err := g.advanceBranch(ctx, tx, namespace, plan.Into, res.Baseline); err != nil {
 		return res, err
 	}
 	c.Status, c.ResultBaselineID = domain.ChangeApplied, res.Baseline.ID

@@ -11,8 +11,23 @@ import (
 	"github.com/zimwip/goap/contracts/operations"
 )
 
-// changeOpen loads a change and checks that it still accepts change impacts.
+// changeTx runs fn in a transaction holding the lock of the tree of change id (ADR 0127): the operations that write a
+// change take it before they read what they check, so that it still holds when they write.
+func (g *Graph) changeTx(ctx context.Context, id domain.ChangeID, fn func(tx Tx) error) error {
+	return g.repo.InTx(ctx, func(tx Tx) error {
+		if err := tx.LockChange(ctx, id); err != nil {
+			return err
+		}
+		return fn(tx)
+	})
+}
+
+// changeOpen loads a change and checks that it still accepts change impacts. It is the start of a write: it takes the
+// lock of the change's tree first (ADR 0127).
 func changeOpen(ctx context.Context, tx Tx, id domain.ChangeID) (domain.Change, error) {
+	if err := tx.LockChange(ctx, id); err != nil {
+		return domain.Change{}, err
+	}
 	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return c, err
@@ -372,7 +387,7 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 		return nil, err
 	}
 	key := domain.ReviewRecordOf(it.Data).Key
-	err = g.repo.InTx(ctx, func(tx Tx) error {
+	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {
 			return err

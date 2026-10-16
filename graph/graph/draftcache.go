@@ -25,8 +25,8 @@ import (
 //     newer events directly and publishes nothing, so a rollback leaves no trace in the cache;
 //   - the cache is bounded (LRU of DraftCacheSize changes) and guarded by a mutex.
 //
-// Writers of one change are assumed serialized (the change_impact projection ADR 0029 maintained already needed it):
-// with seqs handed out in commit order, "everything up to seq S" is a stable prefix.
+// Writers of one change are serialized (ADR 0127: the lock of its tree, taken before the first append; the change_impact
+// projection of ADR 0029 needs it too): with seqs handed out in commit order, "everything up to seq S" is a stable prefix.
 
 // DefaultDraftCacheSize is the number of changes whose folded drafts the graph keeps in memory.
 const DefaultDraftCacheSize = 128
