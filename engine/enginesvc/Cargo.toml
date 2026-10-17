@@ -9,6 +9,8 @@ publish = false
 [dependencies]
 goap-gen = { workspace = true }
 goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-graphapi = { workspace = true }
 goap-condition = { workspace = true }
@@ -20,6 +22,18 @@ goap-identity = { workspace = true }
 goap-pbconv = { workspace = true }
 goap-platform = { workspace = true }
 goap-rpcerr = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+include_dir = { workspace = true }
+pbjson-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
 
 [dev-dependencies]
 goap-pgtest = { workspace = true }

@@ -1671,10 +1671,20 @@ dependencies = [
 name = "goap-cmd-goap-runner"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "goap-connect",
+ "goap-ctx",
+ "goap-dsl",
+ "goap-engine",
  "goap-gen",
  "goap-platform",
  "goap-sandbox",
  "goap-telemetry",
+ "parking_lot",
+ "reqwest",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2344,9 +2354,14 @@ dependencies = [
 name = "goap-enginesvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
  "goap-access",
  "goap-authz",
  "goap-condition",
+ "goap-connect",
+ "goap-ctx",
  "goap-domain",
  "goap-engine",
  "goap-gen",
@@ -2359,6 +2374,15 @@ dependencies = [
  "goap-platform",
  "goap-rpcerr",
  "goap-sqlschematest",
+ "include_dir",
+ "pbjson-types",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2391,8 +2415,13 @@ dependencies = [
 name = "goap-eventsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
  "goap-access",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-domain",
  "goap-engine",
  "goap-enginesvc",
@@ -2400,6 +2429,12 @@ dependencies = [
  "goap-identity",
  "goap-pbconv",
  "goap-platform",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -3031,9 +3066,25 @@ dependencies = [
 name = "goap-sandbox"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
+ "goap-connect",
+ "goap-ctx",
  "goap-dsl",
  "goap-engine",
  "goap-gen",
+ "goap-platform",
+ "nix",
+ "parking_lot",
+ "pbjson-types",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
