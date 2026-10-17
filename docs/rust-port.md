@@ -49,23 +49,30 @@ move to `CLAUDE.md`).
 |---|---|
 | protobuf + connect-go | prost + pbjson (`goap-gen`), a Connect layer of our own over axum (unary JSON and binary, server streaming, the Connect error format) in `lib/platform` |
 | echo | axum (+ tower-http) |
+| net/http client | `reqwest` |
 | cel-go | `cel` |
 | casbin | `casbin` (casbin-rs) |
 | yaml.v3 | `serde_yaml_ng` |
-| modernc sqlite | `rusqlite` (bundled, FTS5) |
-| pgx + pgvector | to be chosen with the execution model (`sqlx` or `postgres`) + `pgvector` |
+| modernc sqlite | `sqlx` (SQLite, bundled with FTS5) |
+| pgx + pgvector | `sqlx` (PostgreSQL) + `pgvector` |
 | nats.go | `async-nats` |
 | golang-jwt | `jsonwebtoken` |
 | x/crypto/bcrypt | `bcrypt` |
 | robfig/cron | `cron` |
 | google/uuid | `uuid` |
-| goja (JavaScript sandbox) | to be chosen (`boa_engine` or `rquickjs`) |
-| yaegi (Go scripts) | none in Rust: to be decided |
+| goja (JavaScript sandbox) | `boa_engine` (pure Rust, decided) |
+| yaegi (Go scripts) | none: the Go scripts of `domains/` and `methodologies/` are rewritten in JavaScript and the `go` language leaves the DSL (decided) |
 | OpenTelemetry | `opentelemetry` + `tracing` |
 
 ## Execution model
 
-To be decided (async tokio throughout, or a synchronous core with threads and async only at the HTTP edge).
+Async throughout, on tokio (decided). A Go function doing I/O (database, HTTP, NATS, a model, a connector, a lock) or
+waiting on one is an `async fn`; pure computation (the model of `contracts`, CEL evaluation, compilation, planning) stays
+synchronous and is called from async code as is. Traits whose implementations do I/O are `#[async_trait]` (the
+`async-trait` crate) so they can be held as `Arc<dyn Trait>`; a `go f()` is a `tokio::spawn`, a channel a
+`tokio::sync::mpsc` / `oneshot` / `broadcast`, a `sync.Mutex` held across an `.await` a `tokio::sync::Mutex` (otherwise
+`parking_lot::Mutex`), a `select` a `tokio::select!` (`ctx.done()` for `<-ctx.Done()`). A CPU-heavy section (a script
+sandbox, a large replay) runs under `tokio::task::spawn_blocking`. Tests that need the runtime are `#[tokio::test]`.
 
 ## Phases
 
