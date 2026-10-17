@@ -824,6 +824,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
 
 [[package]]
+name = "crc32fast"
+version = "1.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01a7799fd6b852db0e61728dde9a204c423b44d689dbd432522543614b490e78"
+dependencies = [
+ "cfg-if",
+]
+
+[[package]]
 name = "crossbeam-queue"
 version = "0.3.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1135,6 +1144,15 @@ name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
+
+[[package]]
+name = "flate2"
+version = "1.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
+dependencies = [
+ "zlib-rs",
+]
 
 [[package]]
 name = "float16"
@@ -2665,16 +2683,22 @@ dependencies = [
 name = "goap-graphsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
  "goap-access",
  "goap-adapter",
  "goap-authz",
+ "goap-connect",
  "goap-criticality",
+ "goap-ctx",
  "goap-decision",
  "goap-def",
  "goap-domain",
  "goap-events",
  "goap-gen",
  "goap-graph",
+ "goap-graphapi",
  "goap-graphclient",
  "goap-graphtest",
  "goap-identity",
@@ -2685,19 +2709,30 @@ dependencies = [
  "goap-okf",
  "goap-operations",
  "goap-pbconv",
+ "goap-platform",
  "goap-prov",
  "goap-review",
  "goap-risk",
  "goap-rpcerr",
  "goap-typecat",
+ "http",
+ "parking_lot",
+ "pbjson-types",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
 name = "goap-graphtest"
 version = "0.1.0"
 dependencies = [
+ "goap-ctx",
  "goap-domain",
  "goap-graph",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2991,10 +3026,16 @@ dependencies = [
 name = "goap-okf"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "goap-def",
  "goap-domain",
  "goap-graph",
  "goap-typecat",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "thiserror 2.0.21",
+ "zip",
 ]
 
 [[package]]
@@ -6144,6 +6185,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6af6ae20167a9ece4bcb41af5b80f8a1f1df981f6391189ce00fd257af04126a"
 
 [[package]]
+name = "typed-path"
+version = "0.12.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8e28f89b80c87b8fb0cf04ab448d5dd0dd0ade2f8891bae878de66a75a28600e"
+
+[[package]]
 name = "typenum"
 version = "1.20.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6760,6 +6807,27 @@ dependencies = [
  "quote",
  "syn 3.0.9",
 ]
+
+[[package]]
+name = "zip"
+version = "9.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e04976da629d3b04204ba8105b396a193af8ad2583b2c79bfb3ab8af580a11e"
+dependencies = [
+ "chrono",
+ "crc32fast",
+ "flate2",
+ "indexmap",
+ "memchr",
+ "nix",
+ "typed-path",
+]
+
+[[package]]
+name = "zlib-rs"
+version = "0.6.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112"
 
 [[package]]
 name = "zmij"

@@ -276,6 +276,7 @@ jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_r
 bcrypt = "0.19"
 cap-std = "4"
 nix = { version = "0.31", default-features = false, features = ["signal", "process", "user"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs", "chrono"] }
 
 [profile.dev]
 # a crate per package makes many test binaries: keep their debug info small

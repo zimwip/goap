@@ -7,8 +7,13 @@ license.workspace = true
 publish = false
 
 [dependencies]
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-graph = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
 
 [lints]
 workspace = true
