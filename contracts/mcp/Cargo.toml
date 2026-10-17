@@ -7,6 +7,11 @@ license.workspace = true
 publish = false
 
 [dependencies]
+goap-ctx = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
 
 [lints]
 workspace = true
