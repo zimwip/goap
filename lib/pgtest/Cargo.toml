@@ -5,9 +5,16 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
+description = "Test-only: throw-away migrated PostgreSQL schemas (enabled by GOAP_TEST_PG_DSN)"
 
 [dependencies]
+goap-ctx = { workspace = true }
 goap-platform = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+include_dir = { workspace = true }

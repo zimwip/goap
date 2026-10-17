@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "contracts/ctx",
     "contracts/gen",
+    "contracts/connect",
     "contracts/algo",
     "contracts/assess",
     "contracts/authz",
@@ -120,6 +121,7 @@ all = { level = "warn", priority = -1 }
 
 [workspace.dependencies]
 goap-gen = { path = "contracts/gen" }
+goap-connect = { path = "contracts/connect" }
 goap-ctx = { path = "contracts/ctx" }
 goap-algo = { path = "contracts/algo" }
 goap-assess = { path = "contracts/assess" }
@@ -241,8 +243,31 @@ sha2 = "0.11"
 base64 = "0.23"
 globset = "0.4"
 tracing = "0.1"
-tokio = "1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
 tokio-util = "0.7"
+syn = { version = "2", features = ["full", "visit"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+casbin = "2.20"
+axum = { version = "0.8", features = ["http2"] }
+http = "1"
+bytes = "1"
+futures = "0.3"
+http-body-util = "0.1"
+reqwest = { version = "0.13", default-features = false, features = ["http2", "stream", "json", "rustls"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["catch-panic", "request-id", "trace"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "sqlite", "chrono", "uuid", "json", "derive"] }
+async-nats = "0.50"
+include_dir = "0.7"
+hmac = "0.13"
+cel = "0.15"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+boa_engine = "0.22"
+opentelemetry = { version = "0.33", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.33", features = ["trace", "metrics"] }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["http-proto", "reqwest-blocking-client", "reqwest-rustls", "trace", "metrics"] }
+tracing-opentelemetry = "0.34"
 
 [profile.dev.package."*"]
 opt-level = 1
