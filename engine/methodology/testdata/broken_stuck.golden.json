@@ -1,0 +1,349 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "x",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "p/one",
+   "narrowed": false,
+   "pre": {
+    "c": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "p/one",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Step p/two",
+   "effects": {
+    "step:p/two": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "p/two",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "p/two",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "x",
+   "narrowed": false,
+   "pre": {
+    "c": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "p/one",
+    "p/two"
+   ],
+   "description": "",
+   "goals": [
+    "p"
+   ],
+   "name": "p",
+   "planner": "goap",
+   "process": "p",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "a",
+  "c",
+  "step:p/two"
+ ],
+ "graphs": {
+  "p": {
+   "process": "p",
+   "steps": [
+    {
+     "Path": "p/one",
+     "Name": "one",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "x",
+     "Entry": {
+      "c": true
+     },
+     "Exit": {
+      "a": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "p/two",
+     "Name": "two",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": {},
+     "Exit": {
+      "step:p/two": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  }
+ },
+ "issues": [
+  {
+   "path": "processes[0].steps[1].done",
+   "message": "a reactive step whose exit is only its own run holds once it ran: the events wake it for nothing",
+   "activity": "p/two",
+   "severity": "warning",
+   "hint": "state a done derived from what the events change"
+  }
+ ],
+ "levels": {
+  "p": [
+   {
+    "Path": "p",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {
+     "a": true,
+     "step:p/two": true
+    },
+    "Order": [
+     {
+      "Name": "one",
+      "Layer": 0
+     },
+     {
+      "Name": "two",
+      "Layer": 0
+     }
+    ],
+    "Gaps": [
+     {
+      "Step": "",
+      "Kind": "external",
+      "Missing": [
+       "c"
+      ],
+      "Message": "needed by the steps and established by none at this level: the context must provide it"
+     }
+    ],
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "one",
+      "Path": "p/one",
+      "Method": "action",
+      "Target": "x",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "c": true
+      },
+      "Exit": {
+       "a": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "two",
+      "Path": "p/two",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "step:p/two": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "p/one",
+    "Kind": "action",
+    "Inputs": {
+     "c": true
+    },
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "x",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "x",
+      "Path": "p/one/x",
+      "Method": "action",
+      "Target": "x",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "c": true
+      },
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ]
+ },
+ "reactions": [
+  {
+   "activity": "p/two",
+   "agent": "p",
+   "goal": "p/two",
+   "kind": "step",
+   "own": [
+    "p/two"
+   ],
+   "owner": "p"
+  }
+ ],
+ "stepDependencies": {},
+ "strictIssues": [
+  {
+   "path": "processes[0].steps[1].done",
+   "message": "a reactive step whose exit is only its own run holds once it ran: the events wake it for nothing",
+   "activity": "p/two",
+   "severity": "warning",
+   "hint": "state a done derived from what the events change"
+  }
+ ],
+ "view": {
+  "methodology": "stuck",
+  "goal": "p",
+  "processes": [
+   {
+    "name": "p",
+    "kind": "process",
+    "agent": "p",
+    "goal": "p",
+    "done": {
+     "a": true,
+     "step:p/two": true
+    },
+    "reactive": true,
+    "steps": [
+     {
+      "path": "p/one",
+      "name": "one",
+      "owner": "p",
+      "method": "action",
+      "target": "x",
+      "entry": {
+       "c": true
+      },
+      "exit": {
+       "a": true
+      },
+      "planned": [
+       "p/one"
+      ]
+     },
+     {
+      "path": "p/two",
+      "name": "two",
+      "owner": "p",
+      "method": "manual",
+      "exit": {
+       "step:p/two": true
+      },
+      "planned": [
+       "p/two"
+      ]
+     }
+    ]
+   }
+  ],
+  "conditions": {
+   "a": {
+    "producedBy": [
+     "p/one",
+     "x"
+    ]
+   },
+   "c": {},
+   "step:p/two": {
+    "description": "the step p/two has run, and what it did still stands",
+    "producedBy": [
+     "p/two"
+    ]
+   }
+  }
+ }
+}

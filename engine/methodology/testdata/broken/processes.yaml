@@ -1,0 +1,78 @@
+name: p
+version: 1.0.0
+namespace: alm
+lifecycle: work
+conditions:
+  - {name: a, expr: 'artifacts.exists(x, x.target == "a")'}
+  - {name: b, expr: 'artifacts.exists(x, x.target == "b")'}
+  - {name: c, expr: 'artifacts.exists(x, x.target == "c")'}
+  - {name: d, expr: 'artifacts.exists(x, x.target == "d")'}
+  - {name: per_impact, scope: impact, expr: 'self.key != ""'}
+  - {name: all_per, all: per_impact}
+  - {name: all_per_x, all: per_impact, where: 'self.key == "x"'}
+actions:
+  - {name: do_a, kind: human, effects: {a: true}}
+  - {name: do_b, kind: human, pre: {a: true}, effects: {b: true}}
+  - {name: do_c, kind: human, effects: {c: true}}
+  - {name: spec, kind: human, specializes: do_c}
+  - {name: per, kind: human, scope: impact, effects: {per_impact: true}}
+  - {name: react, kind: human, on: [{event: change.created}], effects: {d: true}}
+goals:
+  - {name: all, pre: {c: true}}
+agents:
+  - {name: worker, actions: [do_c], goals: [all]}
+methods:
+  - {name: by_worker, for: working, actions: [do_c], done: {c: true}}
+  - {name: worker, for: working, actions: [do_c], done: {c: true}}
+  - {name: Bad Method, for: working}
+  - {name: by_worker, for: working}
+  - {name: odd, for: "Bad For", actions: [nope], done: {nothing: true}, planner: weird, roles: {responsible: ghost}}
+  - {name: steps_done, for: other, done: {c: true}, steps: [{name: s, action: do_a}]}
+  - {name: all, for: other, actions: [do_a], done: {a: true}}
+  - {name: flow, for: other, actions: [do_a], done: {a: true}}
+  - name: reviewing
+    for: review_cap
+    on: [{event: change.created}]
+    persistent: {scope: "event.", memory: -1}
+    steps:
+      - {name: rate, action: do_a, review: {subject: description, automatic: true}}
+processes:
+  - name: flow
+    references: [{title: x}]
+    on: [{event: change.created, filter: 'event.type == "x"'}]
+    steps:
+      - {name: Bad}
+      - {name: one, action: do_a}
+      - {name: one, action: do_a}
+      - {name: two, action: do_a, method: working}
+      - {name: three, action: spec}
+      - {name: four, process: "a/b/c"}
+      - {name: five, groupBy: x}
+      - {name: six, foreach: "[1]", action: do_a}
+      - {name: seven, method: nothing}
+      - {name: eight, method: working, foreach: '[1]', groupBy: 'vars.item'}
+      - {name: nine, action: do_a, pre: {"state:analysing": true, "unknown_cond": true, a: false}}
+      - {name: ten, action: do_c, where: 'self.key == "y"'}
+      - {name: eleven, action: per, where: 'self.key == "x"'}
+      - {name: twelve, action: per, where: 'self.key == "x"', done: {all_per_x: true}}
+      - {name: thirteen, action: do_b, pre: {per_impact: true}}
+      - {name: fourteen, review: {subject: nonsense}}
+      - {name: fifteen, review: {subject: title, automatic: true}}
+      - {name: sixteen, action: do_c, review: {subject: "impact:x", automatic: true}}
+      - {name: seventeen, action: do_c, review: {subject: "intent", automatic: true}}
+      - {name: eighteen, on: [{event: change.edited, from: integrated}]}
+      - {name: nineteen, roles: {responsible: ghost, consulted: [ghost2]}, references: [{ref: " "}]}
+      - name: phase
+        pre: {d: true}
+        steps:
+          - {name: inner, action: do_b, pre: {a: false}}
+  - name: worker
+    steps: [{name: s}]
+  - name: all
+    steps: [{name: s}]
+  - name: "Bad P"
+    steps: [{name: s}]
+  - name: empty
+    steps: []
+  - name: other_ref
+    steps: [{name: s, process: other/thing}, {name: t, process: nonexistent}]

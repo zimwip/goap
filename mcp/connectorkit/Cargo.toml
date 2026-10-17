@@ -1,0 +1,26 @@
+[package]
+name = "goap-connectorkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-connect = { workspace = true }
+goap-gen = { workspace = true }
+goap-mcp = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-platform = { workspace = true }
+goap-telemetry = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+pbjson-types = { workspace = true }
+
+[lints]
+workspace = true

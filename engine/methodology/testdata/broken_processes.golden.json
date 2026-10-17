@@ -1,0 +1,4122 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "do_a",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "b": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "do_b",
+   "narrowed": false,
+   "pre": {
+    "a": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "c": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "do_c",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": {
+    "capability": "working",
+    "foreach": "[1]",
+    "groupBy": "vars.item"
+   },
+   "cost": 1,
+   "description": "",
+   "effects": {
+    "step:flow/eight": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "call",
+   "lifted": null,
+   "name": "flow/eight",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/eight",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Step flow/eighteen",
+   "effects": {
+    "step:flow/eighteen": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/eighteen",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/eighteen",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Step flow/fifteen",
+   "effects": {
+    "step:flow/fifteen": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/fifteen",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/fifteen",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Step flow/fourteen",
+   "effects": {
+    "step:flow/fourteen": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/fourteen",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/fourteen",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "do_a",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/nine",
+   "narrowed": false,
+   "pre": {
+    "a": false,
+    "state:analysing": true,
+    "unknown_cond": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/nine",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Step flow/nineteen",
+   "effects": {
+    "step:flow/nineteen": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/nineteen",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/nineteen",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "do_a",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/one",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/one",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "b": true
+   },
+   "implements": "do_b",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/phase/inner",
+   "narrowed": false,
+   "pre": {
+    "a": false,
+    "d": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/phase/inner",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "c": true
+   },
+   "implements": "do_c",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/seventeen",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/seventeen",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "c": true
+   },
+   "implements": "do_c",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/sixteen",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/sixteen",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "b": true
+   },
+   "implements": "do_b",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "flow/thirteen",
+   "narrowed": false,
+   "pre": {
+    "a": true,
+    "per_impact": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "flow/thirteen",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "all_per_x": true
+   },
+   "implements": "per",
+   "instructions": "",
+   "kind": "human",
+   "lifted": {
+    "all_per_x": true
+   },
+   "name": "flow/twelve",
+   "narrowed": true,
+   "pre": {
+    "pending:flow/twelve": true
+   },
+   "scopedEffects": {
+    "per_impact": true
+   },
+   "scopedPre": {},
+   "step": "flow/twelve",
+   "where": "self.key == \"x\""
+  },
+  {
+   "call": {
+    "methodology": "other",
+    "agent": "thing",
+    "goal": "thing"
+   },
+   "cost": 1,
+   "description": "",
+   "effects": {
+    "step:other_ref/s": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "call",
+   "lifted": null,
+   "name": "other_ref/s",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "other_ref/s",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "all_per": true,
+    "all_per_x": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": {
+    "all_per": true,
+    "all_per_x": true
+   },
+   "name": "per",
+   "narrowed": false,
+   "pre": {
+    "pending:per": true
+   },
+   "scopedEffects": {
+    "per_impact": true
+   },
+   "scopedPre": {},
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "d": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "react",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "do_a",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "reviewing/rate",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "reviewing/rate",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": null,
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "spec",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "do_a",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "steps_done/s",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "steps_done/s",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "do_c"
+   ],
+   "description": "",
+   "goals": [
+    "all"
+   ],
+   "name": "worker",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  },
+  {
+   "actions": [
+    "flow/one",
+    "flow/eight",
+    "flow/nine",
+    "flow/twelve",
+    "flow/thirteen",
+    "flow/fourteen",
+    "flow/fifteen",
+    "flow/sixteen",
+    "flow/seventeen",
+    "flow/eighteen",
+    "flow/nineteen",
+    "flow/phase/inner"
+   ],
+   "description": "",
+   "goals": [
+    "flow"
+   ],
+   "name": "flow",
+   "planner": "goap",
+   "process": "flow",
+   "role": ""
+  },
+  {
+   "actions": [
+    "other_ref/s"
+   ],
+   "description": "",
+   "goals": [
+    "other_ref"
+   ],
+   "name": "other_ref",
+   "planner": "goap",
+   "process": "other_ref",
+   "role": ""
+  },
+  {
+   "actions": [
+    "do_c"
+   ],
+   "description": "",
+   "goals": [
+    "by_worker"
+   ],
+   "name": "by_worker",
+   "planner": "goap",
+   "process": "by_worker",
+   "role": ""
+  },
+  {
+   "actions": [
+    "nope"
+   ],
+   "description": "",
+   "goals": [
+    "odd"
+   ],
+   "name": "odd",
+   "planner": "weird",
+   "process": "odd",
+   "role": "ghost"
+  },
+  {
+   "actions": [
+    "steps_done/s"
+   ],
+   "description": "",
+   "goals": [
+    "steps_done"
+   ],
+   "name": "steps_done",
+   "planner": "goap",
+   "process": "steps_done",
+   "role": ""
+  },
+  {
+   "actions": [
+    "reviewing/rate"
+   ],
+   "description": "",
+   "goals": [
+    "reviewing"
+   ],
+   "name": "reviewing",
+   "planner": "goap",
+   "process": "reviewing",
+   "role": ""
+  }
+ ],
+ "auto": {
+  "flow/fifteen": "flow/fifteen",
+  "flow/seventeen": "flow/seventeen",
+  "flow/sixteen": "flow/sixteen",
+  "reviewing/rate": "reviewing/rate"
+ },
+ "conditions": [
+  "a",
+  "all_per",
+  "all_per_x",
+  "b",
+  "c",
+  "d",
+  "pending:flow/twelve",
+  "pending:per",
+  "state:analysing",
+  "step:flow/eight",
+  "step:flow/eighteen",
+  "step:flow/fifteen",
+  "step:flow/fourteen",
+  "step:flow/nineteen",
+  "step:other_ref/s"
+ ],
+ "graphs": {
+  "Bad P": {
+   "process": "Bad P",
+   "steps": [
+    {
+     "Path": "Bad P/s",
+     "Name": "s",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": null,
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  },
+  "all": {
+   "process": "all",
+   "steps": [
+    {
+     "Path": "all/s",
+     "Name": "s",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": null,
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  },
+  "by_worker": {
+   "process": "by_worker",
+   "steps": null,
+   "edges": null
+  },
+  "empty": {
+   "process": "empty",
+   "steps": null,
+   "edges": null
+  },
+  "flow": {
+   "process": "flow",
+   "steps": [
+    {
+     "Path": "flow/Bad",
+     "Name": "Bad",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": null,
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/one",
+     "Name": "one",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_a",
+     "Entry": {},
+     "Exit": {
+      "a": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/one",
+     "Name": "one",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_a",
+     "Entry": {},
+     "Exit": {
+      "a": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/two",
+     "Name": "two",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_a",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "working",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/three",
+     "Name": "three",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "spec",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/four",
+     "Name": "four",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "process",
+     "Target": "a/b/c",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "a/b/c",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/five",
+     "Name": "five",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "x",
+     "Review": null
+    },
+    {
+     "Path": "flow/six",
+     "Name": "six",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_a",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "[1]",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/seven",
+     "Name": "seven",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "method",
+     "Target": "nothing",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "nothing",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/eight",
+     "Name": "eight",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "method",
+     "Target": "working",
+     "Entry": {},
+     "Exit": {
+      "step:flow/eight": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "working",
+     "Foreach": "[1]",
+     "GroupBy": "vars.item",
+     "Review": null
+    },
+    {
+     "Path": "flow/nine",
+     "Name": "nine",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_a",
+     "Entry": {
+      "a": false,
+      "state:analysing": true,
+      "unknown_cond": true
+     },
+     "Exit": {
+      "a": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/ten",
+     "Name": "ten",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_c",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/eleven",
+     "Name": "eleven",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "per",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/twelve",
+     "Name": "twelve",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "per",
+     "Entry": {
+      "pending:flow/twelve": true
+     },
+     "Exit": {
+      "all_per_x": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/thirteen",
+     "Name": "thirteen",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_b",
+     "Entry": {
+      "a": true,
+      "per_impact": true
+     },
+     "Exit": {
+      "b": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/fourteen",
+     "Name": "fourteen",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": {},
+     "Exit": {
+      "step:flow/fourteen": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": {
+      "subject": "nonsense"
+     }
+    },
+    {
+     "Path": "flow/fifteen",
+     "Name": "fifteen",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": {},
+     "Exit": {
+      "step:flow/fifteen": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": {
+      "subject": "title",
+      "automatic": true
+     }
+    },
+    {
+     "Path": "flow/sixteen",
+     "Name": "sixteen",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_c",
+     "Entry": {},
+     "Exit": {
+      "c": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": {
+      "subject": "impact:x",
+      "automatic": true
+     }
+    },
+    {
+     "Path": "flow/seventeen",
+     "Name": "seventeen",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_c",
+     "Entry": {},
+     "Exit": {
+      "c": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": {
+      "subject": "intent",
+      "automatic": true
+     }
+    },
+    {
+     "Path": "flow/eighteen",
+     "Name": "eighteen",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": {},
+     "Exit": {
+      "step:flow/eighteen": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/nineteen",
+     "Name": "nineteen",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": {},
+     "Exit": {
+      "step:flow/nineteen": true
+     },
+     "Roles": {
+      "responsible": "ghost",
+      "consulted": [
+       "ghost2"
+      ]
+     },
+     "Guidance": "",
+     "References": [
+      {
+       "ref": " "
+      }
+     ],
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/phase",
+     "Name": "phase",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": false,
+     "Method": "manual",
+     "Target": "",
+     "Entry": {
+      "d": true
+     },
+     "Exit": {
+      "b": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "flow/phase/inner",
+     "Name": "inner",
+     "Description": "",
+     "Parent": "flow/phase",
+     "Depth": 1,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_b",
+     "Entry": {
+      "a": false,
+      "d": true
+     },
+     "Exit": {
+      "b": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": [
+    {
+     "From": "flow/one",
+     "To": "flow/thirteen",
+     "Conditions": [
+      "a"
+     ]
+    },
+    {
+     "From": "flow/one",
+     "To": "flow/thirteen",
+     "Conditions": [
+      "a"
+     ]
+    },
+    {
+     "From": "flow/one",
+     "To": "flow/thirteen",
+     "Conditions": [
+      "a"
+     ]
+    },
+    {
+     "From": "flow/one",
+     "To": "flow/thirteen",
+     "Conditions": [
+      "a"
+     ]
+    },
+    {
+     "From": "flow/nine",
+     "To": "flow/thirteen",
+     "Conditions": [
+      "a"
+     ]
+    }
+   ],
+   "methods": [
+    {
+     "name": "by_worker",
+     "for": "working",
+     "actions": [
+      "do_c"
+     ],
+     "done": {
+      "c": true
+     },
+     "AgentGoal": "by_worker"
+    },
+    {
+     "name": "worker",
+     "for": "working",
+     "actions": [
+      "do_c"
+     ],
+     "done": {
+      "c": true
+     },
+     "AgentGoal": ""
+    },
+    {
+     "name": "Bad Method",
+     "for": "working",
+     "AgentGoal": ""
+    },
+    {
+     "name": "by_worker",
+     "for": "working",
+     "AgentGoal": "by_worker"
+    }
+   ],
+   "references": [
+    {
+     "title": "x",
+     "ref": ""
+    }
+   ],
+   "agents": [
+    {
+     "Name": "by_worker",
+     "Description": "",
+     "Planner": "goap",
+     "Goals": [
+      "by_worker"
+     ],
+     "Actions": [
+      {
+       "Name": "do_c",
+       "Kind": "human",
+       "Description": "",
+       "Pre": null,
+       "Effects": {
+        "c": true
+       }
+      }
+     ]
+    },
+    {
+     "Name": "worker",
+     "Description": "",
+     "Planner": "goap",
+     "Goals": [
+      "all"
+     ],
+     "Actions": [
+      {
+       "Name": "do_c",
+       "Kind": "human",
+       "Description": "",
+       "Pre": null,
+       "Effects": {
+        "c": true
+       }
+      }
+     ]
+    }
+   ]
+  },
+  "odd": {
+   "process": "odd",
+   "steps": null,
+   "edges": null
+  },
+  "other_ref": {
+   "process": "other_ref",
+   "steps": [
+    {
+     "Path": "other_ref/s",
+     "Name": "s",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "process",
+     "Target": "other/thing",
+     "Entry": {},
+     "Exit": {
+      "step:other_ref/s": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "other/thing",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "other_ref/t",
+     "Name": "t",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "process",
+     "Target": "nonexistent",
+     "Entry": {},
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "nonexistent",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  },
+  "reviewing": {
+   "process": "reviewing",
+   "steps": [
+    {
+     "Path": "reviewing/rate",
+     "Name": "rate",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_a",
+     "Entry": {},
+     "Exit": {
+      "a": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": {
+      "subject": "description",
+      "automatic": true
+     }
+    }
+   ],
+   "edges": null
+  },
+  "steps_done": {
+   "process": "steps_done",
+   "steps": [
+    {
+     "Path": "steps_done/s",
+     "Name": "s",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "do_a",
+     "Entry": {},
+     "Exit": {
+      "a": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  },
+  "worker": {
+   "process": "worker",
+   "steps": [
+    {
+     "Path": "worker/s",
+     "Name": "s",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "manual",
+     "Target": "",
+     "Entry": null,
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  }
+ },
+ "issues": [
+  {
+   "path": "methods[1].name",
+   "message": "worker is already an agent: the agent applying a method is generated, of the method's name",
+   "activity": "worker"
+  },
+  {
+   "path": "methods[2].name",
+   "message": "name required: lowercase letters, digits, '-' or '_', starting with a letter",
+   "activity": "Bad Method"
+  },
+  {
+   "path": "methods[3].name",
+   "message": "duplicate method by_worker",
+   "activity": "by_worker"
+  },
+  {
+   "path": "methods[4].actions[0]",
+   "message": "unknown action \"nope\"",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].done",
+   "message": "unknown condition \"nothing\"",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].for",
+   "message": "for names the capability the method provides: lowercase letters, digits, '-' or '_'",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].planner",
+   "message": "planner must be goap, utility, hybrid, llm or llm-scoring",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].roles.responsible",
+   "message": "unknown role \"ghost\" (declare it in roles)",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[5].done",
+   "message": "done applies to a method without steps: the exit criteria of a method composing steps are theirs",
+   "activity": "steps_done"
+  },
+  {
+   "path": "methods[6].name",
+   "message": "all is already a process: the agent applying a method is generated, of the method's name",
+   "activity": "all"
+  },
+  {
+   "path": "methods[7].name",
+   "message": "flow is already a process: the agent applying a method is generated, of the method's name",
+   "activity": "flow"
+  },
+  {
+   "path": "methods[8].persistent.memory",
+   "message": "memory is the number of exchanges kept, from 0 (the default, 6) to 20",
+   "activity": "reviewing"
+  },
+  {
+   "path": "methods[8].persistent.scope",
+   "message": "scope must be \"change\" or a path into the event (event.\u003cfield\u003e...), got \"event.\"",
+   "activity": "reviewing"
+  },
+  {
+   "path": "processes",
+   "message": "step flow/thirteen names per_impact, a condition of scope impact: name an aggregate of it (all, any, none)"
+  },
+  {
+   "path": "processes[0].references[0].ref",
+   "message": "a reference names its document (doc:\u003ckey\u003e, \u003cmcp\u003e:\u003cpath\u003e or a URL)",
+   "activity": "flow"
+  },
+  {
+   "path": "processes[0].steps[0].name",
+   "message": "step name required: lowercase letters, digits, '-' or '_', starting with a letter",
+   "activity": "flow/Bad"
+  },
+  {
+   "path": "processes[0].steps[10].done.a",
+   "message": "condition a is both an input and an output of the step flow/nine: an activity does not take what it makes true (drop it from the entry; what is already true is not planned again)",
+   "activity": "flow/nine"
+  },
+  {
+   "path": "processes[0].steps[10].pre.unknown_cond",
+   "message": "unknown condition \"unknown_cond\"",
+   "activity": "flow/nine"
+  },
+  {
+   "path": "processes[0].steps[11].where",
+   "message": "where applies to a step running a scoped action (scope)",
+   "activity": "flow/ten"
+  },
+  {
+   "path": "processes[0].steps[12].done",
+   "message": "a step narrowing the subjects of per states its exit criteria: the aggregates over its subjects",
+   "activity": "flow/eleven"
+  },
+  {
+   "path": "processes[0].steps[15].review.subject",
+   "message": "a review rates description, title, intent, impact:\u003cnode key\u003e or item:\u003crecord key or id\u003e, not \"nonsense\"",
+   "activity": "flow/fourteen"
+  },
+  {
+   "path": "processes[0].steps[16].done",
+   "message": "a reactive step whose exit is only its own run holds once it ran: the events wake it for nothing",
+   "activity": "flow/fifteen",
+   "severity": "warning",
+   "hint": "state a done derived from what the events change"
+  },
+  {
+   "path": "processes[0].steps[16].review.automatic",
+   "message": "an automatic review is done by an action or a method: a manual step waits for a person",
+   "activity": "flow/fifteen"
+  },
+  {
+   "path": "processes[0].steps[17].review.automatic",
+   "message": "an automatic review of \"impact:x\" starts on events the step declares (on): only the header subjects have default ones",
+   "activity": "flow/sixteen"
+  },
+  {
+   "path": "processes[0].steps[19].done",
+   "message": "a reactive step whose exit is only its own run holds once it ran: the events wake it for nothing",
+   "activity": "flow/eighteen",
+   "severity": "warning",
+   "hint": "state a done derived from what the events change"
+  },
+  {
+   "path": "processes[0].steps[19].on[0].from",
+   "message": "from \"integrated\" needs integrates: the methodology integrates no change",
+   "activity": "flow/eighteen"
+  },
+  {
+   "path": "processes[0].steps[20].references[0].ref",
+   "message": "a reference names its document (doc:\u003ckey\u003e, \u003cmcp\u003e:\u003cpath\u003e or a URL)",
+   "activity": "flow/nineteen"
+  },
+  {
+   "path": "processes[0].steps[20].roles.consulted",
+   "message": "unknown role \"ghost2\" (declare it in roles)",
+   "activity": "flow/nineteen"
+  },
+  {
+   "path": "processes[0].steps[20].roles.responsible",
+   "message": "unknown role \"ghost\" (declare it in roles)",
+   "activity": "flow/nineteen"
+  },
+  {
+   "path": "processes[0].steps[21].steps[0].action",
+   "message": "condition a is required both true and false",
+   "activity": "flow/phase/inner"
+  },
+  {
+   "path": "processes[0].steps[2].name",
+   "message": "duplicate step one",
+   "activity": "flow/one"
+  },
+  {
+   "path": "processes[0].steps[3]",
+   "message": "a step is made of one thing: sub-steps, an action, a process or a method",
+   "activity": "flow/two"
+  },
+  {
+   "path": "processes[0].steps[4].action",
+   "message": "\"spec\" is a specialization: name the action it specializes",
+   "activity": "flow/three"
+  },
+  {
+   "path": "processes[0].steps[5].process",
+   "message": "process must be \u003cprocess\u003e or \u003cmethodology\u003e/\u003cprocess\u003e",
+   "activity": "flow/four"
+  },
+  {
+   "path": "processes[0].steps[6].groupBy",
+   "message": "groupBy groups the elements of foreach: declare foreach",
+   "activity": "flow/five"
+  },
+  {
+   "path": "processes[0].steps[7].foreach",
+   "message": "foreach applies to a step naming a capability (method): each element is given the most specific method",
+   "activity": "flow/six"
+  },
+  {
+   "path": "processes[0].steps[8].method",
+   "message": "no valid method provides \"nothing\" (methods[].for)",
+   "activity": "flow/seven"
+  },
+  {
+   "path": "processes[1].name",
+   "message": "worker is already an agent: a process is run by an agent of its name",
+   "activity": "worker"
+  },
+  {
+   "path": "processes[2].name",
+   "message": "all is already a goal: a process reaches a goal of its name",
+   "activity": "all"
+  },
+  {
+   "path": "processes[3].name",
+   "message": "name must be lowercase letters, digits, '-' or '_' and start with a letter",
+   "activity": "Bad P"
+  },
+  {
+   "path": "processes[4].steps",
+   "message": "a process needs at least one step",
+   "activity": "empty"
+  },
+  {
+   "path": "processes[5].steps[1].process",
+   "message": "unknown process \"nonexistent\"",
+   "activity": "other_ref/t"
+  }
+ ],
+ "levels": {
+  "Bad P": [
+   {
+    "Path": "Bad P",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {},
+    "Order": [
+     {
+      "Name": "s",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "s",
+      "Path": "Bad P/s",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "all": [
+   {
+    "Path": "all",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {},
+    "Order": [
+     {
+      "Name": "s",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "s",
+      "Path": "all/s",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "by_worker": [
+   {
+    "Path": "by_worker",
+    "Kind": "method",
+    "Inputs": null,
+    "Outputs": {
+     "c": true
+    },
+    "Order": [
+     {
+      "Name": "do_c",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "by_worker",
+    "Goal": "by_worker",
+    "Steps": [
+     {
+      "Name": "do_c",
+      "Path": "by_worker/do_c",
+      "Method": "action",
+      "Target": "do_c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "c": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "empty": [
+   {
+    "Path": "empty",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {},
+    "Order": null,
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": null,
+    "Edges": null
+   }
+  ],
+  "flow": [
+   {
+    "Path": "flow",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {
+     "a": true,
+     "all_per_x": true,
+     "b": true,
+     "c": true,
+     "step:flow/eight": true,
+     "step:flow/eighteen": true,
+     "step:flow/fifteen": true,
+     "step:flow/fourteen": true,
+     "step:flow/nineteen": true
+    },
+    "Order": [
+     {
+      "Name": "Bad",
+      "Layer": 0
+     },
+     {
+      "Name": "one",
+      "Layer": 0
+     },
+     {
+      "Name": "one",
+      "Layer": 0
+     },
+     {
+      "Name": "two",
+      "Layer": 0
+     },
+     {
+      "Name": "three",
+      "Layer": 0
+     },
+     {
+      "Name": "four",
+      "Layer": 0
+     },
+     {
+      "Name": "five",
+      "Layer": 0
+     },
+     {
+      "Name": "six",
+      "Layer": 0
+     },
+     {
+      "Name": "seven",
+      "Layer": 0
+     },
+     {
+      "Name": "eight",
+      "Layer": 0
+     },
+     {
+      "Name": "nine",
+      "Layer": 0
+     },
+     {
+      "Name": "ten",
+      "Layer": 0
+     },
+     {
+      "Name": "eleven",
+      "Layer": 0
+     },
+     {
+      "Name": "twelve",
+      "Layer": 0
+     },
+     {
+      "Name": "fourteen",
+      "Layer": 0
+     },
+     {
+      "Name": "fifteen",
+      "Layer": 0
+     },
+     {
+      "Name": "sixteen",
+      "Layer": 0
+     },
+     {
+      "Name": "seventeen",
+      "Layer": 0
+     },
+     {
+      "Name": "eighteen",
+      "Layer": 0
+     },
+     {
+      "Name": "nineteen",
+      "Layer": 0
+     },
+     {
+      "Name": "phase",
+      "Layer": 0
+     },
+     {
+      "Name": "thirteen",
+      "Layer": 1
+     }
+    ],
+    "Gaps": [
+     {
+      "Step": "nine",
+      "Kind": "noop",
+      "Missing": [
+       "a"
+      ],
+      "Message": "inputs that are also outputs: an activity does not take what it makes true"
+     },
+     {
+      "Step": "",
+      "Kind": "external",
+      "Missing": [
+       "d",
+       "pending:flow/twelve",
+       "per_impact",
+       "state:analysing",
+       "unknown_cond"
+      ],
+      "Message": "needed by the steps and established by none at this level: the context must provide it"
+     },
+     {
+      "Step": "nine",
+      "Kind": "inner",
+      "Missing": null,
+      "Message": "not resolved inside: rework it, the process cannot run through it"
+     },
+     {
+      "Step": "phase",
+      "Kind": "inner",
+      "Missing": null,
+      "Message": "not resolved inside: rework it, the process cannot run through it"
+     }
+    ],
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "Bad",
+      "Path": "flow/Bad",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "one",
+      "Path": "flow/one",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "a": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "one",
+      "Path": "flow/one",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "a": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "two",
+      "Path": "flow/two",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "working",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "three",
+      "Path": "flow/three",
+      "Method": "action",
+      "Target": "spec",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "four",
+      "Path": "flow/four",
+      "Method": "process",
+      "Target": "a/b/c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "five",
+      "Path": "flow/five",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "x",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "six",
+      "Path": "flow/six",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "[1]",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "seven",
+      "Path": "flow/seven",
+      "Method": "method",
+      "Target": "nothing",
+      "Capability": "nothing",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "eight",
+      "Path": "flow/eight",
+      "Method": "method",
+      "Target": "working",
+      "Capability": "working",
+      "Foreach": "[1]",
+      "GroupBy": "vars.item",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "step:flow/eight": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 2
+     },
+     {
+      "Name": "nine",
+      "Path": "flow/nine",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "a": false,
+       "state:analysing": true,
+       "unknown_cond": true
+      },
+      "Exit": {
+       "a": true
+      },
+      "Composite": true,
+      "Broken": true,
+      "SubSteps": 1
+     },
+     {
+      "Name": "ten",
+      "Path": "flow/ten",
+      "Method": "action",
+      "Target": "do_c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "eleven",
+      "Path": "flow/eleven",
+      "Method": "action",
+      "Target": "per",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "twelve",
+      "Path": "flow/twelve",
+      "Method": "action",
+      "Target": "per",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "pending:flow/twelve": true
+      },
+      "Exit": {
+       "all_per_x": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "thirteen",
+      "Path": "flow/thirteen",
+      "Method": "action",
+      "Target": "do_b",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "a": true,
+       "per_impact": true
+      },
+      "Exit": {
+       "b": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "fourteen",
+      "Path": "flow/fourteen",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": {
+       "subject": "nonsense"
+      },
+      "Entry": {},
+      "Exit": {
+       "step:flow/fourteen": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "fifteen",
+      "Path": "flow/fifteen",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": {
+       "subject": "title",
+       "automatic": true
+      },
+      "Entry": {},
+      "Exit": {
+       "step:flow/fifteen": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "sixteen",
+      "Path": "flow/sixteen",
+      "Method": "action",
+      "Target": "do_c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": {
+       "subject": "impact:x",
+       "automatic": true
+      },
+      "Entry": {},
+      "Exit": {
+       "c": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "seventeen",
+      "Path": "flow/seventeen",
+      "Method": "action",
+      "Target": "do_c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": {
+       "subject": "intent",
+       "automatic": true
+      },
+      "Entry": {},
+      "Exit": {
+       "c": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "eighteen",
+      "Path": "flow/eighteen",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "step:flow/eighteen": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "nineteen",
+      "Path": "flow/nineteen",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "step:flow/nineteen": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "phase",
+      "Path": "flow/phase",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "a": false,
+       "d": true
+      },
+      "Exit": {
+       "b": true
+      },
+      "Composite": true,
+      "Broken": true,
+      "SubSteps": 1
+     }
+    ],
+    "Edges": [
+     {
+      "From": "flow/one",
+      "To": "flow/thirteen",
+      "Conditions": [
+       "a"
+      ]
+     },
+     {
+      "From": "flow/one",
+      "To": "flow/thirteen",
+      "Conditions": [
+       "a"
+      ]
+     },
+     {
+      "From": "flow/one",
+      "To": "flow/thirteen",
+      "Conditions": [
+       "a"
+      ]
+     },
+     {
+      "From": "flow/one",
+      "To": "flow/thirteen",
+      "Conditions": [
+       "a"
+      ]
+     },
+     {
+      "From": "flow/nine",
+      "To": "flow/thirteen",
+      "Conditions": [
+       "a"
+      ]
+     }
+    ]
+   },
+   {
+    "Path": "flow/one",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "do_a",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_a",
+      "Path": "flow/one/do_a",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/one",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "do_a",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_a",
+      "Path": "flow/one/do_a",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/two",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": null,
+    "Order": [
+     {
+      "Name": "do_a",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_a",
+      "Path": "flow/two/do_a",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/three",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": null,
+    "Order": [
+     {
+      "Name": "spec",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "spec",
+      "Path": "flow/three/spec",
+      "Method": "action",
+      "Target": "spec",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/six",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": null,
+    "Order": [
+     {
+      "Name": "do_a",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_a",
+      "Path": "flow/six/do_a",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/eight",
+    "Kind": "step",
+    "Inputs": {},
+    "Outputs": {
+     "step:flow/eight": true
+    },
+    "Order": [
+     {
+      "Name": "by_worker",
+      "Layer": 0
+     },
+     {
+      "Name": "by_worker",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "by_worker",
+      "Path": "flow/eight/by_worker",
+      "Method": "variant",
+      "Target": "always",
+      "Capability": "working",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "c": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "by_worker",
+      "Path": "flow/eight/by_worker",
+      "Method": "variant",
+      "Target": "always",
+      "Capability": "working",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "c": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/nine",
+    "Kind": "action",
+    "Inputs": {
+     "a": false,
+     "state:analysing": true,
+     "unknown_cond": true
+    },
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "do_a",
+      "Layer": 0
+     }
+    ],
+    "Gaps": [
+     {
+      "Step": "",
+      "Kind": "noop",
+      "Missing": [
+       "a"
+      ],
+      "Message": "inputs that are also outputs: an activity does not take what it makes true"
+     }
+    ],
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_a",
+      "Path": "flow/nine/do_a",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/ten",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": null,
+    "Order": [
+     {
+      "Name": "do_c",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_c",
+      "Path": "flow/ten/do_c",
+      "Method": "action",
+      "Target": "do_c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "c": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/eleven",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": null,
+    "Order": [
+     {
+      "Name": "per",
+      "Layer": 0
+     }
+    ],
+    "Gaps": [
+     {
+      "Step": "",
+      "Kind": "external",
+      "Missing": [
+       "pending:per"
+      ],
+      "Message": "needed by the steps and established by none at this level: the context must provide it"
+     }
+    ],
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "per",
+      "Path": "flow/eleven/per",
+      "Method": "action",
+      "Target": "per",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "pending:per": true
+      },
+      "Exit": {
+       "all_per": true,
+       "all_per_x": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/twelve",
+    "Kind": "action",
+    "Inputs": {
+     "pending:flow/twelve": true
+    },
+    "Outputs": {
+     "all_per_x": true
+    },
+    "Order": [
+     {
+      "Name": "per",
+      "Layer": 0
+     }
+    ],
+    "Gaps": [
+     {
+      "Step": "",
+      "Kind": "external",
+      "Missing": [
+       "pending:per"
+      ],
+      "Message": "needed by the steps and established by none at this level: the context must provide it"
+     }
+    ],
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "per",
+      "Path": "flow/twelve/per",
+      "Method": "action",
+      "Target": "per",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "pending:per": true
+      },
+      "Exit": {
+       "all_per": true,
+       "all_per_x": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/thirteen",
+    "Kind": "action",
+    "Inputs": {
+     "a": true,
+     "per_impact": true
+    },
+    "Outputs": {
+     "b": true
+    },
+    "Order": [
+     {
+      "Name": "do_b",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_b",
+      "Path": "flow/thirteen/do_b",
+      "Method": "action",
+      "Target": "do_b",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "a": true
+      },
+      "Exit": {
+       "b": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/sixteen",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "c": true
+    },
+    "Order": [
+     {
+      "Name": "do_c",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_c",
+      "Path": "flow/sixteen/do_c",
+      "Method": "action",
+      "Target": "do_c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "c": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/seventeen",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "c": true
+    },
+    "Order": [
+     {
+      "Name": "do_c",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_c",
+      "Path": "flow/seventeen/do_c",
+      "Method": "action",
+      "Target": "do_c",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "c": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/phase",
+    "Kind": "step",
+    "Inputs": {
+     "a": false,
+     "d": true
+    },
+    "Outputs": {
+     "b": true
+    },
+    "Order": [
+     {
+      "Name": "inner",
+      "Layer": 0
+     }
+    ],
+    "Gaps": [
+     {
+      "Step": "inner",
+      "Kind": "inner",
+      "Missing": null,
+      "Message": "not resolved inside: rework it, the process cannot run through it"
+     }
+    ],
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "inner",
+      "Path": "flow/phase/inner",
+      "Method": "action",
+      "Target": "do_b",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "a": false,
+       "d": true
+      },
+      "Exit": {
+       "b": true
+      },
+      "Composite": true,
+      "Broken": true,
+      "SubSteps": 1
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "flow/phase/inner",
+    "Kind": "action",
+    "Inputs": {
+     "a": false,
+     "d": true
+    },
+    "Outputs": {
+     "b": true
+    },
+    "Order": null,
+    "Gaps": [
+     {
+      "Step": "do_b",
+      "Kind": "blocked",
+      "Missing": [
+       "a"
+      ],
+      "Message": "cannot be entered: a never holds at this level"
+     },
+     {
+      "Step": "",
+      "Kind": "output",
+      "Missing": [
+       "b"
+      ],
+      "Message": "outputs not reached by the steps: b"
+     }
+    ],
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_b",
+      "Path": "flow/phase/inner/do_b",
+      "Method": "action",
+      "Target": "do_b",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "a": true
+      },
+      "Exit": {
+       "b": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "other_ref": [
+   {
+    "Path": "other_ref",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {
+     "step:other_ref/s": true
+    },
+    "Order": [
+     {
+      "Name": "s",
+      "Layer": 0
+     },
+     {
+      "Name": "t",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "s",
+      "Path": "other_ref/s",
+      "Method": "process",
+      "Target": "other/thing",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "step:other_ref/s": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "t",
+      "Path": "other_ref/t",
+      "Method": "process",
+      "Target": "nonexistent",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "reviewing": [
+   {
+    "Path": "reviewing",
+    "Kind": "method",
+    "Inputs": null,
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "rate",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "reviewing",
+    "Goal": "reviewing",
+    "Steps": [
+     {
+      "Name": "rate",
+      "Path": "reviewing/rate",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": {
+       "subject": "description",
+       "automatic": true
+      },
+      "Entry": {},
+      "Exit": {
+       "a": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "reviewing/rate",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "do_a",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_a",
+      "Path": "reviewing/rate/do_a",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "steps_done": [
+   {
+    "Path": "steps_done",
+    "Kind": "method",
+    "Inputs": null,
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "s",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "steps_done",
+    "Goal": "steps_done",
+    "Steps": [
+     {
+      "Name": "s",
+      "Path": "steps_done/s",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "a": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "steps_done/s",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "a": true
+    },
+    "Order": [
+     {
+      "Name": "do_a",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "do_a",
+      "Path": "steps_done/s/do_a",
+      "Method": "action",
+      "Target": "do_a",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "a": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "worker": [
+   {
+    "Path": "worker",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {},
+    "Order": [
+     {
+      "Name": "s",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "s",
+      "Path": "worker/s",
+      "Method": "manual",
+      "Target": "",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ]
+ },
+ "reactions": [
+  {
+   "activity": "flow",
+   "agent": "flow",
+   "goal": "flow",
+   "kind": "process",
+   "own": [
+    "do_a",
+    "do_b",
+    "do_c",
+    "flow",
+    "flow/eight",
+    "flow/eighteen",
+    "flow/fifteen",
+    "flow/fourteen",
+    "flow/nine",
+    "flow/nineteen",
+    "flow/one",
+    "flow/phase/inner",
+    "flow/seventeen",
+    "flow/sixteen",
+    "flow/thirteen",
+    "flow/twelve",
+    "per"
+   ],
+   "owner": "flow"
+  },
+  {
+   "activity": "flow/fifteen",
+   "agent": "flow",
+   "goal": "flow/fifteen",
+   "kind": "step",
+   "own": [
+    "flow/fifteen"
+   ],
+   "owner": "flow"
+  },
+  {
+   "activity": "flow/seventeen",
+   "agent": "flow",
+   "goal": "flow/seventeen",
+   "kind": "step",
+   "own": [
+    "do_c",
+    "flow/seventeen"
+   ],
+   "owner": "flow"
+  },
+  {
+   "activity": "flow/eighteen",
+   "agent": "flow",
+   "goal": "flow/eighteen",
+   "kind": "step",
+   "own": [
+    "flow/eighteen"
+   ],
+   "owner": "flow"
+  },
+  {
+   "activity": "reviewing",
+   "agent": "reviewing",
+   "goal": "reviewing",
+   "kind": "method",
+   "own": [
+    "do_a",
+    "reviewing",
+    "reviewing/rate"
+   ],
+   "owner": "reviewing"
+  },
+  {
+   "activity": "reviewing/rate",
+   "agent": "reviewing",
+   "goal": "reviewing/rate",
+   "kind": "step",
+   "own": [
+    "do_a",
+    "reviewing/rate"
+   ],
+   "owner": "reviewing"
+  },
+  {
+   "activity": "react",
+   "agent": "on.react",
+   "goal": "on.react",
+   "kind": "action",
+   "own": [
+    "react"
+   ],
+   "owner": ""
+  }
+ ],
+ "stepDependencies": {
+  "flow/thirteen": {
+   "flow/nine": true,
+   "flow/one": true,
+   "reviewing/rate": true,
+   "steps_done/s": true
+  }
+ },
+ "strictIssues": [
+  {
+   "path": "methods[1].name",
+   "message": "worker is already an agent: the agent applying a method is generated, of the method's name",
+   "activity": "worker"
+  },
+  {
+   "path": "methods[2].name",
+   "message": "name required: lowercase letters, digits, '-' or '_', starting with a letter",
+   "activity": "Bad Method"
+  },
+  {
+   "path": "methods[3].name",
+   "message": "duplicate method by_worker",
+   "activity": "by_worker"
+  },
+  {
+   "path": "methods[4].actions[0]",
+   "message": "unknown action \"nope\"",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].done",
+   "message": "unknown condition \"nothing\"",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].for",
+   "message": "for names the capability the method provides: lowercase letters, digits, '-' or '_'",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].planner",
+   "message": "planner must be goap, utility, hybrid, llm or llm-scoring",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[4].roles.responsible",
+   "message": "unknown role \"ghost\" (declare it in roles)",
+   "activity": "odd"
+  },
+  {
+   "path": "methods[5].done",
+   "message": "done applies to a method without steps: the exit criteria of a method composing steps are theirs",
+   "activity": "steps_done"
+  },
+  {
+   "path": "methods[6].name",
+   "message": "all is already a process: the agent applying a method is generated, of the method's name",
+   "activity": "all"
+  },
+  {
+   "path": "methods[7].name",
+   "message": "flow is already a process: the agent applying a method is generated, of the method's name",
+   "activity": "flow"
+  },
+  {
+   "path": "methods[8].persistent.memory",
+   "message": "memory is the number of exchanges kept, from 0 (the default, 6) to 20",
+   "activity": "reviewing"
+  },
+  {
+   "path": "methods[8].persistent.scope",
+   "message": "scope must be \"change\" or a path into the event (event.\u003cfield\u003e...), got \"event.\"",
+   "activity": "reviewing"
+  },
+  {
+   "path": "processes",
+   "message": "step flow/thirteen names per_impact, a condition of scope impact: name an aggregate of it (all, any, none)"
+  },
+  {
+   "path": "processes[0].references[0].ref",
+   "message": "a reference names its document (doc:\u003ckey\u003e, \u003cmcp\u003e:\u003cpath\u003e or a URL)",
+   "activity": "flow"
+  },
+  {
+   "path": "processes[0].steps[0].name",
+   "message": "step name required: lowercase letters, digits, '-' or '_', starting with a letter",
+   "activity": "flow/Bad"
+  },
+  {
+   "path": "processes[0].steps[10].done.a",
+   "message": "condition a is both an input and an output of the step flow/nine: an activity does not take what it makes true (drop it from the entry; what is already true is not planned again)",
+   "activity": "flow/nine"
+  },
+  {
+   "path": "processes[0].steps[10].pre.unknown_cond",
+   "message": "unknown condition \"unknown_cond\"",
+   "activity": "flow/nine"
+  },
+  {
+   "path": "processes[0].steps[11].where",
+   "message": "where applies to a step running a scoped action (scope)",
+   "activity": "flow/ten"
+  },
+  {
+   "path": "processes[0].steps[12].done",
+   "message": "a step narrowing the subjects of per states its exit criteria: the aggregates over its subjects",
+   "activity": "flow/eleven"
+  },
+  {
+   "path": "processes[0].steps[15].review.subject",
+   "message": "a review rates description, title, intent, impact:\u003cnode key\u003e or item:\u003crecord key or id\u003e, not \"nonsense\"",
+   "activity": "flow/fourteen"
+  },
+  {
+   "path": "processes[0].steps[16].done",
+   "message": "a reactive step whose exit is only its own run holds once it ran: the events wake it for nothing",
+   "activity": "flow/fifteen",
+   "severity": "warning",
+   "hint": "state a done derived from what the events change"
+  },
+  {
+   "path": "processes[0].steps[16].review.automatic",
+   "message": "an automatic review is done by an action or a method: a manual step waits for a person",
+   "activity": "flow/fifteen"
+  },
+  {
+   "path": "processes[0].steps[17].review.automatic",
+   "message": "an automatic review of \"impact:x\" starts on events the step declares (on): only the header subjects have default ones",
+   "activity": "flow/sixteen"
+  },
+  {
+   "path": "processes[0].steps[19].done",
+   "message": "a reactive step whose exit is only its own run holds once it ran: the events wake it for nothing",
+   "activity": "flow/eighteen",
+   "severity": "warning",
+   "hint": "state a done derived from what the events change"
+  },
+  {
+   "path": "processes[0].steps[19].on[0].from",
+   "message": "from \"integrated\" needs integrates: the methodology integrates no change",
+   "activity": "flow/eighteen"
+  },
+  {
+   "path": "processes[0].steps[20].references[0].ref",
+   "message": "a reference names its document (doc:\u003ckey\u003e, \u003cmcp\u003e:\u003cpath\u003e or a URL)",
+   "activity": "flow/nineteen"
+  },
+  {
+   "path": "processes[0].steps[20].roles.consulted",
+   "message": "unknown role \"ghost2\" (declare it in roles)",
+   "activity": "flow/nineteen"
+  },
+  {
+   "path": "processes[0].steps[20].roles.responsible",
+   "message": "unknown role \"ghost\" (declare it in roles)",
+   "activity": "flow/nineteen"
+  },
+  {
+   "path": "processes[0].steps[21].steps[0].action",
+   "message": "condition a is required both true and false",
+   "activity": "flow/phase/inner"
+  },
+  {
+   "path": "processes[0].steps[2].name",
+   "message": "duplicate step one",
+   "activity": "flow/one"
+  },
+  {
+   "path": "processes[0].steps[3]",
+   "message": "a step is made of one thing: sub-steps, an action, a process or a method",
+   "activity": "flow/two"
+  },
+  {
+   "path": "processes[0].steps[4].action",
+   "message": "\"spec\" is a specialization: name the action it specializes",
+   "activity": "flow/three"
+  },
+  {
+   "path": "processes[0].steps[5].process",
+   "message": "process must be \u003cprocess\u003e or \u003cmethodology\u003e/\u003cprocess\u003e",
+   "activity": "flow/four"
+  },
+  {
+   "path": "processes[0].steps[6].groupBy",
+   "message": "groupBy groups the elements of foreach: declare foreach",
+   "activity": "flow/five"
+  },
+  {
+   "path": "processes[0].steps[7].foreach",
+   "message": "foreach applies to a step naming a capability (method): each element is given the most specific method",
+   "activity": "flow/six"
+  },
+  {
+   "path": "processes[0].steps[8].method",
+   "message": "no valid method provides \"nothing\" (methods[].for)",
+   "activity": "flow/seven"
+  },
+  {
+   "path": "processes[1].name",
+   "message": "worker is already an agent: a process is run by an agent of its name",
+   "activity": "worker"
+  },
+  {
+   "path": "processes[2].name",
+   "message": "all is already a goal: a process reaches a goal of its name",
+   "activity": "all"
+  },
+  {
+   "path": "processes[3].name",
+   "message": "name must be lowercase letters, digits, '-' or '_' and start with a letter",
+   "activity": "Bad P"
+  },
+  {
+   "path": "processes[4].steps",
+   "message": "a process needs at least one step",
+   "activity": "empty"
+  },
+  {
+   "path": "processes[5].steps[1].process",
+   "message": "unknown process \"nonexistent\"",
+   "activity": "other_ref/t"
+  }
+ ],
+ "view": {
+  "methodology": "p",
+  "version": "1.0.0",
+  "goal": "all",
+  "processes": [
+   {
+    "name": "flow",
+    "kind": "process",
+    "agent": "flow",
+    "goal": "flow",
+    "done": {
+     "a": true,
+     "all_per_x": true,
+     "b": true,
+     "c": true,
+     "step:flow/eight": true,
+     "step:flow/eighteen": true,
+     "step:flow/fifteen": true,
+     "step:flow/fourteen": true,
+     "step:flow/nineteen": true
+    },
+    "reactive": true,
+    "references": [
+     {
+      "title": "x",
+      "ref": ""
+     }
+    ],
+    "steps": [
+     {
+      "path": "flow/Bad",
+      "name": "Bad",
+      "owner": "flow",
+      "method": "manual"
+     },
+     {
+      "path": "flow/one",
+      "name": "one",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_a",
+      "exit": {
+       "a": true
+      },
+      "planned": [
+       "flow/one"
+      ]
+     },
+     {
+      "path": "flow/one",
+      "name": "one",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_a",
+      "exit": {
+       "a": true
+      },
+      "planned": [
+       "flow/one"
+      ]
+     },
+     {
+      "path": "flow/two",
+      "name": "two",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_a",
+      "capability": "working"
+     },
+     {
+      "path": "flow/three",
+      "name": "three",
+      "owner": "flow",
+      "method": "action",
+      "target": "spec"
+     },
+     {
+      "path": "flow/four",
+      "name": "four",
+      "owner": "flow",
+      "method": "process",
+      "target": "a/b/c",
+      "process": "a/b/c"
+     },
+     {
+      "path": "flow/five",
+      "name": "five",
+      "owner": "flow",
+      "method": "manual",
+      "groupBy": "x"
+     },
+     {
+      "path": "flow/six",
+      "name": "six",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_a",
+      "foreach": "[1]"
+     },
+     {
+      "path": "flow/seven",
+      "name": "seven",
+      "owner": "flow",
+      "method": "method",
+      "target": "nothing",
+      "capability": "nothing"
+     },
+     {
+      "path": "flow/eight",
+      "name": "eight",
+      "owner": "flow",
+      "method": "method",
+      "target": "working",
+      "capability": "working",
+      "foreach": "[1]",
+      "groupBy": "vars.item",
+      "exit": {
+       "step:flow/eight": true
+      },
+      "planned": [
+       "flow/eight"
+      ]
+     },
+     {
+      "path": "flow/nine",
+      "name": "nine",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_a",
+      "entry": {
+       "a": false,
+       "state:analysing": true,
+       "unknown_cond": true
+      },
+      "exit": {
+       "a": true
+      },
+      "planned": [
+       "flow/nine"
+      ]
+     },
+     {
+      "path": "flow/ten",
+      "name": "ten",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_c"
+     },
+     {
+      "path": "flow/eleven",
+      "name": "eleven",
+      "owner": "flow",
+      "method": "action",
+      "target": "per"
+     },
+     {
+      "path": "flow/twelve",
+      "name": "twelve",
+      "owner": "flow",
+      "method": "action",
+      "target": "per",
+      "entry": {
+       "pending:flow/twelve": true
+      },
+      "exit": {
+       "all_per_x": true
+      },
+      "planned": [
+       "flow/twelve"
+      ]
+     },
+     {
+      "path": "flow/thirteen",
+      "name": "thirteen",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_b",
+      "entry": {
+       "a": true,
+       "per_impact": true
+      },
+      "exit": {
+       "b": true
+      },
+      "planned": [
+       "flow/thirteen"
+      ]
+     },
+     {
+      "path": "flow/fourteen",
+      "name": "fourteen",
+      "owner": "flow",
+      "method": "manual",
+      "review": {
+       "subject": "nonsense"
+      },
+      "exit": {
+       "step:flow/fourteen": true
+      },
+      "planned": [
+       "flow/fourteen"
+      ]
+     },
+     {
+      "path": "flow/fifteen",
+      "name": "fifteen",
+      "owner": "flow",
+      "method": "manual",
+      "review": {
+       "subject": "title",
+       "automatic": true
+      },
+      "exit": {
+       "step:flow/fifteen": true
+      },
+      "planned": [
+       "flow/fifteen"
+      ]
+     },
+     {
+      "path": "flow/sixteen",
+      "name": "sixteen",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_c",
+      "review": {
+       "subject": "impact:x",
+       "automatic": true
+      },
+      "exit": {
+       "c": true
+      },
+      "planned": [
+       "flow/sixteen"
+      ]
+     },
+     {
+      "path": "flow/seventeen",
+      "name": "seventeen",
+      "owner": "flow",
+      "method": "action",
+      "target": "do_c",
+      "review": {
+       "subject": "intent",
+       "automatic": true
+      },
+      "exit": {
+       "c": true
+      },
+      "planned": [
+       "flow/seventeen"
+      ]
+     },
+     {
+      "path": "flow/eighteen",
+      "name": "eighteen",
+      "owner": "flow",
+      "method": "manual",
+      "exit": {
+       "step:flow/eighteen": true
+      },
+      "planned": [
+       "flow/eighteen"
+      ]
+     },
+     {
+      "path": "flow/nineteen",
+      "name": "nineteen",
+      "owner": "flow",
+      "method": "manual",
+      "references": [
+       {
+        "ref": " "
+       }
+      ],
+      "roles": {
+       "responsible": "ghost",
+       "consulted": [
+        "ghost2"
+       ]
+      },
+      "exit": {
+       "step:flow/nineteen": true
+      },
+      "planned": [
+       "flow/nineteen"
+      ]
+     },
+     {
+      "path": "flow/phase",
+      "name": "phase",
+      "owner": "flow",
+      "method": "manual",
+      "entry": {
+       "d": true
+      },
+      "exit": {
+       "b": true
+      },
+      "steps": [
+       {
+        "path": "flow/phase/inner",
+        "name": "inner",
+        "owner": "flow",
+        "method": "action",
+        "target": "do_b",
+        "entry": {
+         "a": false,
+         "d": true
+        },
+        "exit": {
+         "b": true
+        },
+        "planned": [
+         "flow/phase/inner"
+        ]
+       }
+      ]
+     }
+    ]
+   },
+   {
+    "name": "worker",
+    "kind": "process",
+    "steps": [
+     {
+      "path": "worker/s",
+      "name": "s",
+      "owner": "worker",
+      "method": "manual"
+     }
+    ]
+   },
+   {
+    "name": "all",
+    "kind": "process",
+    "goal": "all",
+    "done": {
+     "c": true
+    },
+    "steps": [
+     {
+      "path": "all/s",
+      "name": "s",
+      "owner": "all",
+      "method": "manual"
+     }
+    ]
+   },
+   {
+    "name": "Bad P",
+    "kind": "process",
+    "steps": [
+     {
+      "path": "Bad P/s",
+      "name": "s",
+      "owner": "Bad P",
+      "method": "manual"
+     }
+    ]
+   },
+   {
+    "name": "empty",
+    "kind": "process"
+   },
+   {
+    "name": "other_ref",
+    "kind": "process",
+    "agent": "other_ref",
+    "goal": "other_ref",
+    "done": {
+     "step:other_ref/s": true
+    },
+    "steps": [
+     {
+      "path": "other_ref/s",
+      "name": "s",
+      "owner": "other_ref",
+      "method": "process",
+      "target": "other/thing",
+      "process": "other/thing",
+      "exit": {
+       "step:other_ref/s": true
+      },
+      "planned": [
+       "other_ref/s"
+      ]
+     },
+     {
+      "path": "other_ref/t",
+      "name": "t",
+      "owner": "other_ref",
+      "method": "process",
+      "target": "nonexistent",
+      "process": "nonexistent"
+     }
+    ]
+   }
+  ],
+  "methods": [
+   {
+    "name": "by_worker",
+    "kind": "method",
+    "agent": "by_worker",
+    "goal": "by_worker",
+    "done": {
+     "c": true
+    },
+    "for": "working",
+    "actions": [
+     "do_c"
+    ]
+   },
+   {
+    "name": "worker",
+    "kind": "method",
+    "agent": "worker",
+    "for": "working",
+    "actions": [
+     "do_c"
+    ]
+   },
+   {
+    "name": "Bad Method",
+    "kind": "method",
+    "agent": "Bad Method",
+    "for": "working"
+   },
+   {
+    "name": "by_worker",
+    "kind": "method",
+    "agent": "by_worker",
+    "goal": "by_worker",
+    "done": {
+     "c": true
+    },
+    "for": "working"
+   },
+   {
+    "name": "odd",
+    "kind": "method",
+    "agent": "odd",
+    "goal": "odd",
+    "done": {
+     "nothing": true
+    },
+    "for": "Bad For",
+    "roles": {
+     "responsible": "ghost"
+    },
+    "actions": [
+     "nope"
+    ]
+   },
+   {
+    "name": "steps_done",
+    "kind": "method",
+    "agent": "steps_done",
+    "goal": "steps_done",
+    "done": {
+     "a": true
+    },
+    "for": "other",
+    "steps": [
+     {
+      "path": "steps_done/s",
+      "name": "s",
+      "owner": "steps_done",
+      "method": "action",
+      "target": "do_a",
+      "exit": {
+       "a": true
+      },
+      "planned": [
+       "steps_done/s"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "all",
+    "kind": "method",
+    "agent": "all",
+    "for": "other",
+    "actions": [
+     "do_a"
+    ]
+   },
+   {
+    "name": "flow",
+    "kind": "method",
+    "agent": "flow",
+    "reactive": true,
+    "for": "other",
+    "actions": [
+     "do_a"
+    ]
+   },
+   {
+    "name": "reviewing",
+    "kind": "method",
+    "agent": "reviewing",
+    "goal": "reviewing",
+    "done": {
+     "a": true
+    },
+    "reactive": true,
+    "for": "review_cap",
+    "steps": [
+     {
+      "path": "reviewing/rate",
+      "name": "rate",
+      "owner": "reviewing",
+      "method": "action",
+      "target": "do_a",
+      "review": {
+       "subject": "description",
+       "automatic": true
+      },
+      "exit": {
+       "a": true
+      },
+      "planned": [
+       "reviewing/rate"
+      ]
+     }
+    ]
+   }
+  ],
+  "conditions": {
+   "a": {
+    "producedBy": [
+     "do_a",
+     "flow/nine",
+     "flow/one",
+     "reviewing/rate",
+     "steps_done/s"
+    ]
+   },
+   "all_per_x": {
+    "producedBy": [
+     "flow/twelve",
+     "per"
+    ]
+   },
+   "b": {
+    "producedBy": [
+     "do_b",
+     "flow/phase/inner",
+     "flow/thirteen"
+    ]
+   },
+   "c": {
+    "producedBy": [
+     "do_c",
+     "flow/seventeen",
+     "flow/sixteen"
+    ]
+   },
+   "d": {
+    "producedBy": [
+     "react"
+    ]
+   },
+   "nothing": {},
+   "pending:flow/twelve": {
+    "description": "the action flow/twelve is still to be done for some impact"
+   },
+   "per_impact": {},
+   "state:analysing": {
+    "description": "the change is in the state analysing of its lifecycle"
+   },
+   "step:flow/eight": {
+    "description": "the step flow/eight has run, and what it did still stands",
+    "producedBy": [
+     "flow/eight"
+    ]
+   },
+   "step:flow/eighteen": {
+    "description": "the step flow/eighteen has run, and what it did still stands",
+    "producedBy": [
+     "flow/eighteen"
+    ]
+   },
+   "step:flow/fifteen": {
+    "description": "the step flow/fifteen has run, and what it did still stands",
+    "producedBy": [
+     "flow/fifteen"
+    ]
+   },
+   "step:flow/fourteen": {
+    "description": "the step flow/fourteen has run, and what it did still stands",
+    "producedBy": [
+     "flow/fourteen"
+    ]
+   },
+   "step:flow/nineteen": {
+    "description": "the step flow/nineteen has run, and what it did still stands",
+    "producedBy": [
+     "flow/nineteen"
+    ]
+   },
+   "step:other_ref/s": {
+    "description": "the step other_ref/s has run, and what it did still stands",
+    "producedBy": [
+     "other_ref/s"
+    ]
+   },
+   "unknown_cond": {}
+  }
+ }
+}

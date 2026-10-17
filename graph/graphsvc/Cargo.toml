@@ -1,0 +1,54 @@
+[package]
+name = "goap-graphsvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+goap-authz = { workspace = true }
+goap-criticality = { workspace = true }
+goap-domain = { workspace = true }
+goap-events = { workspace = true }
+goap-journal = { workspace = true }
+goap-mcp = { workspace = true }
+goap-review = { workspace = true }
+goap-risk = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-okf = { workspace = true }
+goap-prov = { workspace = true }
+goap-access = { workspace = true }
+goap-adapter = { workspace = true }
+goap-identity = { workspace = true }
+goap-llmcfg = { workspace = true }
+goap-mcpbuiltin = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-platform = { workspace = true }
+goap-rpcerr = { workspace = true }
+goap-typecat = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+parking_lot = { workspace = true }
+pbjson-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+goap-decision = { workspace = true }
+goap-operations = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-def = { workspace = true }
+goap-graphclient = { workspace = true }
+zip = { workspace = true }
+
+[lints]
+workspace = true

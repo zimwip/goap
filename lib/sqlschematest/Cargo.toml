@@ -1,0 +1,14 @@
+[package]
+name = "goap-sqlschematest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Test-only: checks that the PostgreSQL and the SQLite migrations of a service describe the same schema (ADR 0074)"
+
+[dependencies]
+regex = { workspace = true }
+
+[lints]
+workspace = true

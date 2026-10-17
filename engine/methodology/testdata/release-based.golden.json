@@ -1,0 +1,1144 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Note what the move of an integrated change means for the release",
+   "effects": {
+    "candidates_followed": true
+   },
+   "implements": "follow_candidate",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "candidates/follow",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "candidates/follow",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Land the release (new baseline, tagged with its name)",
+   "effects": {
+    "delivered": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "deliver_release",
+   "narrowed": false,
+   "pre": {
+    "integrated": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Take the last move of an integrated change into account",
+   "effects": {
+    "candidates_followed": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "follow_candidate",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 3,
+   "description": "Merge the selected changes into the release, in order",
+   "effects": {
+    "integrated": true
+   },
+   "implements": "",
+   "instructions": "Merge each attached change into the release once it is ready (its own guardian lets it merge, and the release integrates), in the order of the release; detach the ones that will not make it. Submit an artifact integration (data.merged, data.detached), then move the release to delivered.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "integrate_changes",
+   "narrowed": false,
+   "pre": {
+    "selected": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Land the release",
+   "effects": {
+    "delivered": true
+   },
+   "implements": "deliver_release",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "release/delivery",
+   "narrowed": false,
+   "pre": {
+    "integrated": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "release/delivery",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 3,
+   "description": "Merge the selected changes into the release",
+   "effects": {
+    "integrated": true
+   },
+   "implements": "integrate_changes",
+   "instructions": "Merge each attached change into the release once it is ready (its own guardian lets it merge, and the release integrates), in the order of the release; detach the ones that will not make it. Submit an artifact integration (data.merged, data.detached), then move the release to delivered.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "release/integration",
+   "narrowed": false,
+   "pre": {
+    "selected": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "release/integration",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 2,
+   "description": "Scope and target of the release",
+   "effects": {
+    "scoped": true
+   },
+   "implements": "scope_release",
+   "instructions": "Say what the release delivers and when (an artifact release_scope: data.scope, data.target), then move the release to screening.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "release/planning",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "release/planning",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Screen the open changes of the project for candidates",
+   "effects": {
+    "screened": true
+   },
+   "implements": "screen_candidates",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "release/screening",
+   "narrowed": false,
+   "pre": {
+    "scoped": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "release/screening",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 2,
+   "description": "Attach the selected candidates, set the others aside",
+   "effects": {
+    "selected": true
+   },
+   "implements": "select_candidates",
+   "instructions": "For each candidate of the screening, attach the change to the release (Attach) or set it aside, then submit an artifact selection (data.attached, data.setAside) and move the release to integrating.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "release/selection",
+   "narrowed": false,
+   "pre": {
+    "screened": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "release/selection",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 2,
+   "description": "Write the scope and the target of the release",
+   "effects": {
+    "scoped": true
+   },
+   "implements": "",
+   "instructions": "Say what the release delivers and when (an artifact release_scope: data.scope, data.target), then move the release to screening.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "scope_release",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Screen the open changes of the project for the candidates of the release",
+   "effects": {
+    "screened": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "screen_candidates",
+   "narrowed": false,
+   "pre": {
+    "scoped": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 2,
+   "description": "Select the candidates and attach them to the release",
+   "effects": {
+    "selected": true
+   },
+   "implements": "",
+   "instructions": "For each candidate of the screening, attach the change to the release (Attach) or set it aside, then submit an artifact selection (data.attached, data.setAside) and move the release to integrating.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "select_candidates",
+   "narrowed": false,
+   "pre": {
+    "screened": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "release/planning",
+    "release/screening",
+    "release/selection",
+    "release/integration",
+    "release/delivery"
+   ],
+   "description": "Plan the release, screen and select its candidates, integrate them, deliver",
+   "goals": [
+    "release"
+   ],
+   "name": "release",
+   "planner": "goap",
+   "process": "release",
+   "role": ""
+  },
+  {
+   "actions": [
+    "candidates/follow"
+   ],
+   "description": "Follow the integrated changes as they move (an event of one of them wakes it)",
+   "goals": [
+    "candidates"
+   ],
+   "name": "candidates",
+   "planner": "goap",
+   "process": "candidates",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "candidates_followed",
+  "delivered",
+  "integrated",
+  "scoped",
+  "screened",
+  "selected"
+ ],
+ "graphs": {
+  "candidates": {
+   "process": "candidates",
+   "description": "Follow the integrated changes as they move (an event of one of them wakes it)",
+   "steps": [
+    {
+     "Path": "candidates/follow",
+     "Name": "follow",
+     "Description": "Note what the move of an integrated change means for the release",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "follow_candidate",
+     "Entry": {},
+     "Exit": {
+      "candidates_followed": true
+     },
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  },
+  "release": {
+   "process": "release",
+   "description": "Plan the release, screen and select its candidates, integrate them, deliver",
+   "steps": [
+    {
+     "Path": "release/planning",
+     "Name": "planning",
+     "Description": "Scope and target of the release",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "scope_release",
+     "Entry": {},
+     "Exit": {
+      "scoped": true
+     },
+     "Roles": {
+      "responsible": "release_manager"
+     },
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "release/screening",
+     "Name": "screening",
+     "Description": "Screen the open changes of the project for candidates",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "screen_candidates",
+     "Entry": {
+      "scoped": true
+     },
+     "Exit": {
+      "screened": true
+     },
+     "Roles": {
+      "responsible": "release_manager"
+     },
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "release/selection",
+     "Name": "selection",
+     "Description": "Attach the selected candidates, set the others aside",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "select_candidates",
+     "Entry": {
+      "screened": true
+     },
+     "Exit": {
+      "selected": true
+     },
+     "Roles": {
+      "responsible": "release_manager",
+      "accountable": "release_manager"
+     },
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "release/integration",
+     "Name": "integration",
+     "Description": "Merge the selected changes into the release",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "integrate_changes",
+     "Entry": {
+      "selected": true
+     },
+     "Exit": {
+      "integrated": true
+     },
+     "Roles": {
+      "responsible": "integrator",
+      "accountable": "release_manager"
+     },
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "release/delivery",
+     "Name": "delivery",
+     "Description": "Land the release",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "deliver_release",
+     "Entry": {
+      "integrated": true
+     },
+     "Exit": {
+      "delivered": true
+     },
+     "Roles": {
+      "responsible": "release_manager"
+     },
+     "Guidance": "",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": [
+    {
+     "From": "release/planning",
+     "To": "release/screening",
+     "Conditions": [
+      "scoped"
+     ]
+    },
+    {
+     "From": "release/screening",
+     "To": "release/selection",
+     "Conditions": [
+      "screened"
+     ]
+    },
+    {
+     "From": "release/selection",
+     "To": "release/integration",
+     "Conditions": [
+      "selected"
+     ]
+    },
+    {
+     "From": "release/integration",
+     "To": "release/delivery",
+     "Conditions": [
+      "integrated"
+     ]
+    }
+   ]
+  }
+ },
+ "issues": null,
+ "levels": {
+  "candidates": [
+   {
+    "Path": "candidates",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {
+     "candidates_followed": true
+    },
+    "Order": [
+     {
+      "Name": "follow",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "follow",
+      "Path": "candidates/follow",
+      "Method": "action",
+      "Target": "follow_candidate",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "candidates_followed": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "candidates/follow",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "candidates_followed": true
+    },
+    "Order": [
+     {
+      "Name": "follow_candidate",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "follow_candidate",
+      "Path": "candidates/follow/follow_candidate",
+      "Method": "action",
+      "Target": "follow_candidate",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "candidates_followed": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "release": [
+   {
+    "Path": "release",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {
+     "delivered": true,
+     "integrated": true,
+     "scoped": true,
+     "screened": true,
+     "selected": true
+    },
+    "Order": [
+     {
+      "Name": "planning",
+      "Layer": 0
+     },
+     {
+      "Name": "screening",
+      "Layer": 1
+     },
+     {
+      "Name": "selection",
+      "Layer": 2
+     },
+     {
+      "Name": "integration",
+      "Layer": 3
+     },
+     {
+      "Name": "delivery",
+      "Layer": 4
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "planning",
+      "Path": "release/planning",
+      "Method": "action",
+      "Target": "scope_release",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "scoped": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "screening",
+      "Path": "release/screening",
+      "Method": "action",
+      "Target": "screen_candidates",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "scoped": true
+      },
+      "Exit": {
+       "screened": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "selection",
+      "Path": "release/selection",
+      "Method": "action",
+      "Target": "select_candidates",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "screened": true
+      },
+      "Exit": {
+       "selected": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "integration",
+      "Path": "release/integration",
+      "Method": "action",
+      "Target": "integrate_changes",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "selected": true
+      },
+      "Exit": {
+       "integrated": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     },
+     {
+      "Name": "delivery",
+      "Path": "release/delivery",
+      "Method": "action",
+      "Target": "deliver_release",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "integrated": true
+      },
+      "Exit": {
+       "delivered": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 1
+     }
+    ],
+    "Edges": [
+     {
+      "From": "release/planning",
+      "To": "release/screening",
+      "Conditions": [
+       "scoped"
+      ]
+     },
+     {
+      "From": "release/screening",
+      "To": "release/selection",
+      "Conditions": [
+       "screened"
+      ]
+     },
+     {
+      "From": "release/selection",
+      "To": "release/integration",
+      "Conditions": [
+       "selected"
+      ]
+     },
+     {
+      "From": "release/integration",
+      "To": "release/delivery",
+      "Conditions": [
+       "integrated"
+      ]
+     }
+    ]
+   },
+   {
+    "Path": "release/planning",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "scoped": true
+    },
+    "Order": [
+     {
+      "Name": "scope_release",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "scope_release",
+      "Path": "release/planning/scope_release",
+      "Method": "action",
+      "Target": "scope_release",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "scoped": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "release/screening",
+    "Kind": "action",
+    "Inputs": {
+     "scoped": true
+    },
+    "Outputs": {
+     "screened": true
+    },
+    "Order": [
+     {
+      "Name": "screen_candidates",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "screen_candidates",
+      "Path": "release/screening/screen_candidates",
+      "Method": "action",
+      "Target": "screen_candidates",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "scoped": true
+      },
+      "Exit": {
+       "screened": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "release/selection",
+    "Kind": "action",
+    "Inputs": {
+     "screened": true
+    },
+    "Outputs": {
+     "selected": true
+    },
+    "Order": [
+     {
+      "Name": "select_candidates",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "select_candidates",
+      "Path": "release/selection/select_candidates",
+      "Method": "action",
+      "Target": "select_candidates",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "screened": true
+      },
+      "Exit": {
+       "selected": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "release/integration",
+    "Kind": "action",
+    "Inputs": {
+     "selected": true
+    },
+    "Outputs": {
+     "integrated": true
+    },
+    "Order": [
+     {
+      "Name": "integrate_changes",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "integrate_changes",
+      "Path": "release/integration/integrate_changes",
+      "Method": "action",
+      "Target": "integrate_changes",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "selected": true
+      },
+      "Exit": {
+       "integrated": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "release/delivery",
+    "Kind": "action",
+    "Inputs": {
+     "integrated": true
+    },
+    "Outputs": {
+     "delivered": true
+    },
+    "Order": [
+     {
+      "Name": "deliver_release",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "deliver_release",
+      "Path": "release/delivery/deliver_release",
+      "Method": "action",
+      "Target": "deliver_release",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "integrated": true
+      },
+      "Exit": {
+       "delivered": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ]
+ },
+ "reactions": null,
+ "stepDependencies": {
+  "release/delivery": {
+   "release/integration": true,
+   "release/planning": true,
+   "release/screening": true,
+   "release/selection": true
+  },
+  "release/integration": {
+   "release/planning": true,
+   "release/screening": true,
+   "release/selection": true
+  },
+  "release/screening": {
+   "release/planning": true
+  },
+  "release/selection": {
+   "release/planning": true,
+   "release/screening": true
+  }
+ },
+ "strictIssues": null,
+ "view": {
+  "methodology": "release-based",
+  "version": "0.1.1",
+  "goal": "release",
+  "processes": [
+   {
+    "name": "release",
+    "kind": "process",
+    "description": "Plan the release, screen and select its candidates, integrate them, deliver",
+    "agent": "release",
+    "goal": "release",
+    "done": {
+     "delivered": true,
+     "integrated": true,
+     "scoped": true,
+     "screened": true,
+     "selected": true
+    },
+    "steps": [
+     {
+      "path": "release/planning",
+      "name": "planning",
+      "owner": "release",
+      "method": "action",
+      "target": "scope_release",
+      "description": "Scope and target of the release",
+      "roles": {
+       "responsible": "release_manager"
+      },
+      "exit": {
+       "scoped": true
+      },
+      "planned": [
+       "release/planning"
+      ]
+     },
+     {
+      "path": "release/screening",
+      "name": "screening",
+      "owner": "release",
+      "method": "action",
+      "target": "screen_candidates",
+      "description": "Screen the open changes of the project for candidates",
+      "roles": {
+       "responsible": "release_manager"
+      },
+      "entry": {
+       "scoped": true
+      },
+      "exit": {
+       "screened": true
+      },
+      "planned": [
+       "release/screening"
+      ]
+     },
+     {
+      "path": "release/selection",
+      "name": "selection",
+      "owner": "release",
+      "method": "action",
+      "target": "select_candidates",
+      "description": "Attach the selected candidates, set the others aside",
+      "roles": {
+       "responsible": "release_manager",
+       "accountable": "release_manager"
+      },
+      "entry": {
+       "screened": true
+      },
+      "exit": {
+       "selected": true
+      },
+      "planned": [
+       "release/selection"
+      ]
+     },
+     {
+      "path": "release/integration",
+      "name": "integration",
+      "owner": "release",
+      "method": "action",
+      "target": "integrate_changes",
+      "description": "Merge the selected changes into the release",
+      "roles": {
+       "responsible": "integrator",
+       "accountable": "release_manager"
+      },
+      "entry": {
+       "selected": true
+      },
+      "exit": {
+       "integrated": true
+      },
+      "planned": [
+       "release/integration"
+      ]
+     },
+     {
+      "path": "release/delivery",
+      "name": "delivery",
+      "owner": "release",
+      "method": "action",
+      "target": "deliver_release",
+      "description": "Land the release",
+      "roles": {
+       "responsible": "release_manager"
+      },
+      "entry": {
+       "integrated": true
+      },
+      "exit": {
+       "delivered": true
+      },
+      "planned": [
+       "release/delivery"
+      ]
+     }
+    ]
+   },
+   {
+    "name": "candidates",
+    "kind": "process",
+    "description": "Follow the integrated changes as they move (an event of one of them wakes it)",
+    "agent": "candidates",
+    "goal": "candidates",
+    "done": {
+     "candidates_followed": true
+    },
+    "steps": [
+     {
+      "path": "candidates/follow",
+      "name": "follow",
+      "owner": "candidates",
+      "method": "action",
+      "target": "follow_candidate",
+      "description": "Note what the move of an integrated change means for the release",
+      "exit": {
+       "candidates_followed": true
+      },
+      "planned": [
+       "candidates/follow"
+      ]
+     }
+    ]
+   }
+  ],
+  "conditions": {
+   "candidates_followed": {
+    "description": "The last move of an integrated change was taken into account",
+    "producedBy": [
+     "candidates/follow",
+     "follow_candidate"
+    ]
+   },
+   "delivered": {
+    "description": "The release landed",
+    "producedBy": [
+     "deliver_release",
+     "release/delivery"
+    ]
+   },
+   "integrated": {
+    "description": "The selected changes merged into the release",
+    "producedBy": [
+     "integrate_changes",
+     "release/integration"
+    ]
+   },
+   "scoped": {
+    "description": "The scope and the target of the release are written down",
+    "producedBy": [
+     "release/planning",
+     "scope_release"
+    ]
+   },
+   "screened": {
+    "description": "The open changes of the project were screened for candidates",
+    "producedBy": [
+     "release/screening",
+     "screen_candidates"
+    ]
+   },
+   "selected": {
+    "description": "The candidates are selected (attached) or set aside, by a decision of the release manager",
+    "producedBy": [
+     "release/selection",
+     "select_candidates"
+    ]
+   }
+  }
+ }
+}

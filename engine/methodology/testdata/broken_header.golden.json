@@ -1,0 +1,378 @@
+{
+ "issues": [
+  {
+   "path": "",
+   "message": "condition \"subject:scoped\" reads \"per_impact\" on its subject: not a scoped condition"
+  }
+ ],
+ "strictIssues": [
+  {
+   "path": "actions[0].effects.ghost",
+   "message": "unknown condition \"ghost\""
+  },
+  {
+   "path": "actions[0].emits[0]",
+   "message": "unknown event \"nothing\": an action emits an event of the methodology (events)"
+  },
+  {
+   "path": "actions[0].mcps",
+   "message": "invalid MCP name \"Bad MCP\""
+  },
+  {
+   "path": "actions[0].permission",
+   "message": "permission must be \u003cresource\u003e:\u003caction\u003e"
+  },
+  {
+   "path": "actions[0].prompt",
+   "message": "llm action requires a prompt"
+  },
+  {
+   "path": "actions[10].kind",
+   "message": "a specialization must be implemented"
+  },
+  {
+   "path": "actions[10].pre.ok",
+   "message": "condition ok is both an input and an output of the action sp: an activity does not take what it makes true (drop it from the entry; what is already true is not planned again)"
+  },
+  {
+   "path": "actions[10].specializes",
+   "message": "specializes must be \u003caction\u003e or \u003cmethodology\u003e/\u003caction\u003e"
+  },
+  {
+   "path": "actions[10].specializes",
+   "message": "a specialization inherits pre, effects and expects from the action it specializes"
+  },
+  {
+   "path": "actions[11].specializes",
+   "message": "unknown action \"ghost_action\""
+  },
+  {
+   "path": "actions[12].specializes",
+   "message": "cannot specialize the specialization \"sp2\""
+  },
+  {
+   "path": "actions[13].when",
+   "message": "when and priority apply to specializations only"
+  },
+  {
+   "path": "actions[14].verify.oracle",
+   "message": "unknown oracle \"crystal\": tool, human or model"
+  },
+  {
+   "path": "actions[15].code",
+   "message": "the code of a human action runs on the values of its form: declare a form"
+  },
+  {
+   "path": "actions[15].language",
+   "message": "script language must be javascript or go"
+  },
+  {
+   "path": "actions[16].form",
+   "message": "a form belongs to a human action"
+  },
+  {
+   "path": "actions[17].pre.ok",
+   "message": "condition ok is both an input and an output of the action io: an activity does not take what it makes true (drop it from the entry; what is already true is not planned again)"
+  },
+  {
+   "path": "actions[18].pre.per_impact",
+   "message": "per_impact is a condition of scope impact: name it in an action of that scope (scope: impact), or name an aggregate of it"
+  },
+  {
+   "path": "actions[1].name",
+   "message": "duplicate action a"
+  },
+  {
+   "path": "actions[20].scope",
+   "message": "unknown scope \"nowhere\" (one of impact, item, risk, action, step)"
+  },
+  {
+   "path": "actions[21].effects",
+   "message": "a scoped action makes conditions of its scope (impact) true on its subject: declare them in its effects"
+  },
+  {
+   "path": "actions[22].where",
+   "message": "where applies to a scoped action (scope)"
+  },
+  {
+   "path": "actions[23].loop",
+   "message": "loop is the budget of the tool loop of an llm action"
+  },
+  {
+   "path": "actions[23].loop",
+   "message": "loop.maxRounds must be between 0 and 500"
+  },
+  {
+   "path": "actions[23].loop",
+   "message": "loop.maxToolResultBytes must be between 0 and 200000"
+  },
+  {
+   "path": "actions[23].loop",
+   "message": "loop.compactBytes must be between 0 and 4194304"
+  },
+  {
+   "path": "actions[23].loop",
+   "message": "loop.maxTokens must not be negative"
+  },
+  {
+   "path": "actions[23].loop",
+   "message": "loop.timeout must be positive and at most 4h0m0s"
+  },
+  {
+   "path": "actions[24].roles[0]",
+   "message": "unknown role \"ghost\" (declare it in roles)"
+  },
+  {
+   "path": "actions[2].name",
+   "message": "name required"
+  },
+  {
+   "path": "actions[3].kind",
+   "message": "kind \"call\" is generated for the steps of a process: declare a process step or a method instead"
+  },
+  {
+   "path": "actions[4].mcps",
+   "message": "mcps apply to llm and script actions (a tool action names its tool)"
+  },
+  {
+   "path": "actions[4].tool",
+   "message": "tool must be \u003cmcp\u003e/\u003ctool\u003e"
+  },
+  {
+   "path": "actions[5].tool",
+   "message": "tool action requires a tool"
+  },
+  {
+   "path": "actions[6].builtin",
+   "message": "builtin action requires a builtin"
+  },
+  {
+   "path": "actions[7].builtin",
+   "message": "unknown builtin \"nosuchbuiltin\""
+  },
+  {
+   "path": "actions[8].code",
+   "message": "script action requires code"
+  },
+  {
+   "path": "actions[8].language",
+   "message": "script language must be javascript or go"
+  },
+  {
+   "path": "actions[9].language",
+   "message": "script language must be javascript or go"
+  },
+  {
+   "path": "agents[0].model",
+   "message": "model is required for the llm planner"
+  },
+  {
+   "path": "agents[0].name",
+   "message": "name must be lowercase letters, digits, '-' or '_'"
+  },
+  {
+   "path": "agents[1].actions[0]",
+   "message": "unknown action \"nope\""
+  },
+  {
+   "path": "agents[1].actions[1]",
+   "message": "\"sp2\" is a specialization: list the action it specializes"
+  },
+  {
+   "path": "agents[1].goals[0]",
+   "message": "unknown goal \"nogoal\""
+  },
+  {
+   "path": "agents[1].mcps",
+   "message": "invalid MCP name \"$\""
+  },
+  {
+   "path": "agents[1].planner",
+   "message": "planner must be goap, utility, hybrid, llm or llm-scoring"
+  },
+  {
+   "path": "agents[1].roles[0]",
+   "message": "unknown role \"ghost\" (declare it in roles)"
+  },
+  {
+   "path": "agents[2].name",
+   "message": "duplicate agent two"
+  },
+  {
+   "path": "agents[2].persistent.memory",
+   "message": "memory is the number of exchanges kept, from 0 (the default, 6) to 20"
+  },
+  {
+   "path": "agents[2].persistent.scope",
+   "message": "scope must be \"change\" or a path into the event (event.\u003cfield\u003e...), got \"foo\""
+  },
+  {
+   "path": "agents[2].persistent.until.nothing",
+   "message": "unknown condition \"nothing\""
+  },
+  {
+   "path": "agents[2].triggers[0].event",
+   "message": "unknown event \"no.such.event\": one of the standard events (change.created, change.applied, change.item_added, change.signal, change.transitioned, change.committed, change.attached, change.detached, change.edited, process.completed, process.failed, process.stuck, process.attached, step.completed, methodology.published) or an event the methodology declares (events)"
+  },
+  {
+   "path": "agents[2].triggers[1].name",
+   "message": "duplicate trigger t1"
+  },
+  {
+   "path": "agents[2].triggers[1].schedule",
+   "message": "invalid cron expression: expected exactly 5 fields, found 3: [not a cron]"
+  },
+  {
+   "path": "agents[2].triggers[2].name",
+   "message": "name required"
+  },
+  {
+   "path": "agents[2].triggers[2].target",
+   "message": "target must be new_change or event_change"
+  },
+  {
+   "path": "agents[2].triggers[2].type",
+   "message": "type must be event or schedule"
+  },
+  {
+   "path": "agents[2].triggers[3].goal",
+   "message": "unknown goal \"nogoal\""
+  },
+  {
+   "path": "agents[2].triggers[3].target",
+   "message": "event_change requires a change.* or process.* event"
+  },
+  {
+   "path": "appliesTo",
+   "message": "a transverse methodology runs its processes alongside the changes: declare at least one process"
+  },
+  {
+   "path": "appliesTo[0]",
+   "message": "appliesTo names methodologies"
+  },
+  {
+   "path": "appliesTo[1]",
+   "message": "appliesTo names methodologies"
+  },
+  {
+   "path": "assessments[0].states[0].conditions.ghost",
+   "message": "unknown condition \"ghost\""
+  },
+  {
+   "path": "assessments[0].states[0].tone",
+   "message": "unknown tone \"blue\" (one of ok, warn, danger, info, neutral)"
+  },
+  {
+   "path": "assessments[1].states",
+   "message": "at least one state required"
+  },
+  {
+   "path": "conditions",
+   "message": "condition \"all_bad\": all \"nothing\": not a scoped condition"
+  },
+  {
+   "path": "conditions[1].name",
+   "message": "duplicate condition ok"
+  },
+  {
+   "path": "conditions[2].name",
+   "message": "name required"
+  },
+  {
+   "path": "conditions[4].all",
+   "message": "all \"nothing\": name a scoped condition (scope: impact, item, ...)"
+  },
+  {
+   "path": "conditions[6].scope",
+   "message": "unknown scope \"galaxy\" (one of change, impact, item, risk, action, step)"
+  },
+  {
+   "path": "criticality",
+   "message": "unknown criticality \"C9\": C1, C2 or C3"
+  },
+  {
+   "path": "events[0].name",
+   "message": "\"change.mine\" takes a prefix of the standard events (change. process. step. methodology.): name it after the methodology's own vocabulary"
+  },
+  {
+   "path": "events[1].name",
+   "message": "an event name is lower case words separated by dots (^[a-z][a-z0-9_-]*(\\.[a-z0-9_-]+)*$)"
+  },
+  {
+   "path": "events[3].name",
+   "message": "event \"work.done\" is declared twice"
+  },
+  {
+   "path": "goal",
+   "message": "unknown goal \"nowhere\": name a goal or a process of the methodology"
+  },
+  {
+   "path": "goals[0].pre",
+   "message": "a goal needs at least one condition"
+  },
+  {
+   "path": "goals[1].name",
+   "message": "duplicate goal g"
+  },
+  {
+   "path": "goals[1].pre.nope",
+   "message": "unknown condition \"nope\""
+  },
+  {
+   "path": "goals[2].name",
+   "message": "name required"
+  },
+  {
+   "path": "goals[2].pre.per_impact",
+   "message": "per_impact is a condition of scope impact: a goal names conditions of the change (an aggregate of it)"
+  },
+  {
+   "path": "imports[1]",
+   "message": "unknown condition library \"nope\" (one of decisions, risks, verification, derogations, dependencies, assessments)"
+  },
+  {
+   "path": "imports[2]",
+   "message": "library risks imported twice"
+  },
+  {
+   "path": "integrates[0].methodologies",
+   "message": "name the methodologies whose changes this one integrates (or \"*\")"
+  },
+  {
+   "path": "integrates[1].attach",
+   "message": "attach must be decision or auto"
+  },
+  {
+   "path": "integrates[1].methodologies[0]",
+   "message": "integrates names methodologies"
+  },
+  {
+   "path": "name",
+   "message": "name must be lowercase letters, digits, '-' or '_' and start with a letter"
+  },
+  {
+   "path": "namespace",
+   "message": "namespace must be lowercase letters, digits, '-' or '_' and start with a letter"
+  },
+  {
+   "path": "on[0].from",
+   "message": "from must be self, integrated, integrator or dependency"
+  },
+  {
+   "path": "on[1].event",
+   "message": "unknown event \"nope.event\": one of the standard events (change.created, change.applied, change.item_added, change.signal, change.transitioned, change.committed, change.attached, change.detached, change.edited, process.completed, process.failed, process.stuck, process.attached, step.completed, methodology.published) or an event the methodology declares (events)"
+  },
+  {
+   "path": "roles[1].name",
+   "message": "duplicate role dev"
+  },
+  {
+   "path": "roles[2].name",
+   "message": "role name required: lowercase letters, digits, '-' or '_', starting with a letter"
+  },
+  {
+   "path": "roles[2].operations[0]",
+   "message": "unknown operation \"impact.approve\" (a code of the catalogue, or doer / reviewer)"
+  }
+ ]
+}

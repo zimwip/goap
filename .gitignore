@@ -12,3 +12,6 @@
 # compiled binaries (built by `go build ./platform/cmd/<name>` at the root)
 /goap-dev
 /registry
+
+# the Rust workspace build (cargo)
+/target/

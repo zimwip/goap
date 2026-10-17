@@ -1,0 +1,54 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Bind the process to a change (stands in for goap-scheduler/attach)",
+   "effects": {
+    "change_bound": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "bind",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "bind"
+   ],
+   "description": "Defers binding until its own action runs",
+   "goals": [
+    "bound"
+   ],
+   "name": "intake",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "change_bound"
+ ],
+ "graphs": {},
+ "issues": null,
+ "levels": {},
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": null,
+ "view": {
+  "methodology": "deferred-bind",
+  "version": "0.1.0",
+  "goal": "bound",
+  "processes": []
+ }
+}

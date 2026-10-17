@@ -1,0 +1,4 @@
+# the toolchain of the workspace: rustup installs it on the first cargo call (`make toolchain` installs rustup itself)
+[toolchain]
+channel = "stable"
+components = ["rustfmt", "clippy"]

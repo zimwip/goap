@@ -1,0 +1,2 @@
+CREATE TABLE t (id text PRIMARY KEY);
+INSERT INTO t VALUES ('x');

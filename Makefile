@@ -3,11 +3,33 @@ COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
-export PATH := $(PATH):$(shell go env GOPATH)/bin
+export PATH := $(PATH):$(shell go env GOPATH 2>/dev/null)/bin:$(HOME)/.cargo/bin
+# the Rust port (docs/rust-port.md): one Cargo workspace, a crate per package; the toolchain is pinned by rust-toolchain.toml
+CARGO    ?= cargo
 
-.PHONY: all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
+.PHONY: toolchain rs-build rs-test rs-lint all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
 
 all: generate build test
+
+toolchain: ## install what building needs when it is missing: rustup + the pinned Rust toolchain (rust-toolchain.toml), checks node / npm for the web
+	@if ! command -v rustup >/dev/null 2>&1; then \
+	  echo "rustup not found: installing it (https://rustup.rs)"; \
+	  command -v curl >/dev/null 2>&1 || { echo "curl is needed to install rustup"; exit 1; }; \
+	  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain none || exit 1; \
+	fi
+	@rustup show active-toolchain >/dev/null 2>&1 || rustup toolchain install
+	@rustup show active-toolchain
+	@command -v node >/dev/null 2>&1 || echo "warning: node / npm not found, needed for the web (web/) and make generate: https://nodejs.org"
+
+rs-build: toolchain ## build the Rust workspace (transition, docs/rust-port.md)
+	$(CARGO) build --workspace
+
+rs-test: toolchain ## test the Rust workspace (transition)
+	$(CARGO) test --workspace
+
+rs-lint: toolchain ## rustfmt + clippy of the Rust workspace (transition)
+	$(CARGO) fmt --all --check
+	$(CARGO) clippy --workspace --all-targets -- -D warnings
 
 tools: ## install code generators
 	go install github.com/bufbuild/buf/cmd/buf@latest

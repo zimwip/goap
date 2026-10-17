@@ -1,0 +1,32 @@
+[package]
+name = "goap-cmd-goap-runner"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "goap-runner"
+path = "src/main.rs"
+
+[dependencies]
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+goap-gen = { workspace = true }
+goap-sandbox = { workspace = true }
+goap-platform = { workspace = true }
+goap-telemetry = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+async-trait = { workspace = true }
+axum = { workspace = true }
+goap-dsl = { workspace = true }
+goap-engine = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

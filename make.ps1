@@ -23,8 +23,13 @@ $Compose = @('compose', '-f', 'deploy/compose/docker-compose.yml')
 $Exe = if ($env:OS -eq 'Windows_NT') { '.exe' } else { '' }
 
 # generators installed by `tools` live in GOPATH/bin
-$gobin = Join-Path (& go env GOPATH) 'bin'
-$env:PATH = "$env:PATH$([IO.Path]::PathSeparator)$gobin"
+if (Get-Command go -ErrorAction SilentlyContinue) {
+    $gobin = Join-Path (& go env GOPATH) 'bin'
+    $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)$gobin"
+}
+# rustup installs cargo in ~/.cargo/bin (the Rust port, docs/rust-port.md)
+$cargobin = Join-Path $HOME '.cargo/bin'
+if (Test-Path $cargobin) { $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)$cargobin" }
 
 # Run a native command and stop on a non-zero exit code.
 function Run {
@@ -39,6 +44,35 @@ function InDir($dir, [scriptblock]$block) {
     try { & $block }
     finally { Pop-Location }
 }
+
+# Install what building needs when it is missing: rustup + the toolchain pinned by rust-toolchain.toml; checks node.
+function Toolchain {
+    if (-not (Get-Command rustup -ErrorAction SilentlyContinue)) {
+        Write-Host 'rustup not found: installing it (https://rustup.rs)'
+        if ($env:OS -eq 'Windows_NT') {
+            $installer = Join-Path ([IO.Path]::GetTempPath()) 'rustup-init.exe'
+            $arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'aarch64' } else { 'x86_64' }
+            Invoke-WebRequest -UseBasicParsing "https://static.rust-lang.org/rustup/dist/$arch-pc-windows-msvc/rustup-init.exe" -OutFile $installer
+            Run $installer -y --profile minimal --default-toolchain none
+        } else {
+            $script = Join-Path ([IO.Path]::GetTempPath()) 'rustup-init.sh'
+            Invoke-WebRequest -UseBasicParsing 'https://sh.rustup.rs' -OutFile $script
+            Run sh $script -y --profile minimal --default-toolchain none
+        }
+        $env:PATH = "$env:PATH$([IO.Path]::PathSeparator)$cargobin"
+    }
+    & rustup show active-toolchain *> $null
+    if ($LASTEXITCODE -ne 0) { Run rustup toolchain install }
+    Run rustup show active-toolchain
+    if ($env:OS -eq 'Windows_NT' -and -not (Get-Command link.exe -ErrorAction SilentlyContinue) -and -not (Test-Path "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe")) {
+        Write-Warning 'the MSVC linker was not found: install the Visual Studio Build Tools (C++ workload), e.g. winget install Microsoft.VisualStudio.2022.BuildTools'
+    }
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Write-Warning 'node / npm not found, needed for the web (web\) and generate: https://nodejs.org' }
+}
+
+function RsBuild { Toolchain; Run cargo build --workspace }
+function RsTest { Toolchain; Run cargo test --workspace }
+function RsLint { Toolchain; Run cargo fmt --all --check; Run cargo clippy --workspace --all-targets -- -D warnings }
 
 function Tools {
     Run go install github.com/bufbuild/buf/cmd/buf@latest
@@ -162,6 +196,8 @@ function Help {
     @'
 Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
 
+  toolchain         install rustup and the pinned Rust toolchain when missing (rust-toolchain.toml), check node
+  rs-build | rs-test | rs-lint   build, test, rustfmt + clippy of the Rust workspace (transition)
   all               generate, build, test
   tools             install code generators (and air)
   generate          regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/,
@@ -189,6 +225,10 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
 }
 
 switch ($Target) {
+    'toolchain'        { Toolchain }
+    'rs-build'         { RsBuild }
+    'rs-test'          { RsTest }
+    'rs-lint'          { RsLint }
     'all'              { Generate; Build; Test }
     'tools'            { Tools }
     'generate'         { Generate }

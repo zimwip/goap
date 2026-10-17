@@ -1,0 +1,6 @@
+name: stuck
+namespace: alm
+goal: p
+conditions: [{name: a, expr: "false"}, {name: c, expr: "false"}]
+actions: [{name: x, kind: human, pre: {c: true}, effects: {a: true}}]
+processes: [{name: p, steps: [{name: one, action: x}, {name: two, on: [{event: change.created}]}]}]

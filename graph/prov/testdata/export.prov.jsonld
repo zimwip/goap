@@ -1,0 +1,1204 @@
+{
+  "@context": {
+    "data": {
+      "@id": "goap:data",
+      "@type": "@json"
+    },
+    "goap": "https://github.com/zimwip/goap/ns/prov#",
+    "label": "rdfs:label",
+    "prov": "http://www.w3.org/ns/prov#",
+    "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
+    "record": {
+      "@id": "goap:record",
+      "@type": "@json"
+    },
+    "xsd": "http://www.w3.org/2001/XMLSchema#"
+  },
+  "@graph": [
+    {
+      "@id": "urn:goap:change:c%2F1%20x",
+      "@type": [
+        "prov:Activity",
+        "goap:Change"
+      ],
+      "goap:branch": "chg-c1",
+      "goap:data": {
+        "criticality": "C2",
+        "n": 1.5
+      },
+      "goap:goal": "release",
+      "goap:intent": "why",
+      "goap:methodology": "sdlc",
+      "goap:namespace": "alm",
+      "goap:partOf": {
+        "@id": "urn:goap:change:c0"
+      },
+      "goap:project": "PROJ-1",
+      "goap:status": "active",
+      "label": "Rework \u003clogin\u003e \u0026 co",
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:used": {
+        "@id": "urn:goap:baseline:b1"
+      },
+      "prov:wasAssociatedWith": {
+        "@id": "urn:goap:unit:ORG-A"
+      }
+    },
+    {
+      "@id": "urn:goap:unit:ORG-A",
+      "@type": [
+        "prov:Agent",
+        "prov:Organization"
+      ],
+      "label": "ORG-A"
+    },
+    {
+      "@id": "urn:goap:baseline:b1",
+      "@type": [
+        "prov:Entity",
+        "prov:Collection",
+        "goap:Baseline"
+      ]
+    },
+    {
+      "@id": "urn:goap:baseline:b2",
+      "@type": [
+        "prov:Entity",
+        "prov:Collection",
+        "goap:Baseline"
+      ],
+      "prov:hadMember": {
+        "@id": "urn:goap:node:n1@v3"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "prov:wasRevisionOf": {
+        "@id": "urn:goap:baseline:b1"
+      }
+    },
+    {
+      "@id": "urn:goap:execution:r1",
+      "@type": [
+        "prov:Activity",
+        "goap:Execution"
+      ],
+      "goap:action": "rate",
+      "goap:actionKind": "llm",
+      "goap:activity": "proc/step",
+      "goap:error": "oops",
+      "goap:kind": "action",
+      "goap:logType": "journal.action",
+      "goap:parentProcess": "p0",
+      "goap:partOf": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "goap:process": "p1",
+      "goap:seq": 1,
+      "goap:status": "done",
+      "goap:traceId": "tr",
+      "label": "action rate",
+      "prov:endedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:08.12Z"
+      },
+      "prov:qualifiedAssociation": {
+        "@type": "prov:Association",
+        "prov:agent": {
+          "@id": "urn:goap:agent:sdlc%2Fanalyst"
+        },
+        "prov:hadPlan": {
+          "@id": "urn:goap:plan:sdlc@0.9.0%23rate"
+        }
+      },
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:used": {
+        "@id": "urn:goap:node:n1@v1"
+      },
+      "prov:wasAssociatedWith": [
+        {
+          "@id": "urn:goap:agent:sdlc%2Fanalyst"
+        },
+        {
+          "@id": "urn:goap:model:anthropic%2Fm"
+        },
+        {
+          "@id": "urn:goap:tool:goap-graph%2Fread"
+        }
+      ],
+      "record": {
+        "action": "rate",
+        "actionKind": "llm",
+        "activityRef": "proc/step",
+        "agent": "analyst",
+        "boardAfter": 0,
+        "boardBefore": 0,
+        "changeId": "c/1 x",
+        "endedAt": "2026-03-04T05:06:08.12Z",
+        "error": "oops",
+        "id": "r1",
+        "kind": "action",
+        "methodology": "sdlc",
+        "methodologyVersion": "0.9.0",
+        "modelCalls": [
+          {
+            "durationMs": 0,
+            "inputTokens": 0,
+            "model": "m",
+            "outputTokens": 0,
+            "provider": "anthropic"
+          },
+          {
+            "durationMs": 0,
+            "inputTokens": 0,
+            "outputTokens": 0
+          }
+        ],
+        "parentProcessId": "p0",
+        "planner": "goap",
+        "processId": "p1",
+        "reads": [
+          {
+            "id": "n1",
+            "version": 1
+          }
+        ],
+        "seq": 0,
+        "startedAt": "2026-03-04T05:06:07.12Z",
+        "status": "done",
+        "step": 0,
+        "toolCalls": [
+          {
+            "durationMs": 0,
+            "name": "goap-graph/read"
+          }
+        ],
+        "traceId": "tr"
+      }
+    },
+    {
+      "@id": "urn:goap:agent:sdlc%2Fanalyst",
+      "@type": [
+        "prov:Agent",
+        "prov:SoftwareAgent",
+        "goap:MethodologyAgent"
+      ],
+      "goap:planner": "goap",
+      "label": "analyst"
+    },
+    {
+      "@id": "urn:goap:plan:sdlc@0.9.0%23rate",
+      "@type": [
+        "prov:Entity",
+        "prov:Plan",
+        "goap:Action"
+      ],
+      "goap:methodology": "sdlc",
+      "goap:methodologyVersion": "0.9.0",
+      "label": "rate"
+    },
+    {
+      "@id": "urn:goap:model:anthropic%2Fm",
+      "@type": [
+        "prov:Agent",
+        "prov:SoftwareAgent",
+        "goap:Model"
+      ],
+      "label": "anthropic/m"
+    },
+    {
+      "@id": "urn:goap:tool:goap-graph%2Fread",
+      "@type": [
+        "prov:Agent",
+        "prov:SoftwareAgent",
+        "goap:Tool"
+      ],
+      "label": "goap-graph/read"
+    },
+    {
+      "@id": "urn:goap:node:n1@v1",
+      "@type": [
+        "prov:Entity",
+        "goap:NodeVersion"
+      ],
+      "label": "n1@v1",
+      "prov:specializationOf": {
+        "@id": "urn:goap:node:n1"
+      }
+    },
+    {
+      "@id": "urn:goap:node:n1",
+      "@type": [
+        "prov:Entity",
+        "goap:Node"
+      ],
+      "goap:key": "REQ-1",
+      "goap:type": "alm@Requirement",
+      "label": "n1"
+    },
+    {
+      "@id": "urn:goap:exchange:r1%2F0",
+      "@type": [
+        "prov:Entity",
+        "goap:ModelExchange"
+      ],
+      "goap:logType": "model.call",
+      "goap:response": "ok",
+      "goap:seq": 2,
+      "goap:system": "sys",
+      "label": "model call 0",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:analyst"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:execution:r1"
+      },
+      "record": {
+        "call": 0,
+        "response": "ok",
+        "step": 0,
+        "system": "sys"
+      }
+    },
+    {
+      "@id": "urn:goap:principal:analyst",
+      "@type": "prov:Agent",
+      "label": "analyst"
+    },
+    {
+      "@id": "urn:goap:execution:r2",
+      "@type": [
+        "prov:Activity",
+        "goap:Execution"
+      ],
+      "goap:action": "confirm",
+      "goap:kind": "action",
+      "goap:logType": "journal.action",
+      "goap:partOf": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "goap:process": "p1",
+      "goap:seq": 3,
+      "label": "action confirm",
+      "prov:qualifiedAssociation": {
+        "@type": "prov:Association",
+        "prov:agent": {
+          "@id": "urn:goap:principal:alice"
+        },
+        "prov:hadPlan": {
+          "@id": "urn:goap:plan:sdlc%23confirm"
+        }
+      },
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAssociatedWith": {
+        "@id": "urn:goap:principal:alice"
+      },
+      "record": {
+        "action": "confirm",
+        "actor": "alice",
+        "boardAfter": 0,
+        "boardBefore": 0,
+        "changeId": "c/1 x",
+        "endedAt": "0001-01-01T00:00:00Z",
+        "id": "r2",
+        "kind": "action",
+        "methodology": "sdlc",
+        "processId": "p1",
+        "seq": 0,
+        "startedAt": "2026-03-04T05:06:07.12Z",
+        "step": 0
+      }
+    },
+    {
+      "@id": "urn:goap:principal:alice",
+      "@type": [
+        "prov:Agent",
+        "prov:Person"
+      ],
+      "label": "alice"
+    },
+    {
+      "@id": "urn:goap:plan:sdlc%23confirm",
+      "@type": [
+        "prov:Entity",
+        "prov:Plan",
+        "goap:Action"
+      ],
+      "goap:methodology": "sdlc",
+      "label": "confirm"
+    },
+    {
+      "@id": "urn:goap:header:h1",
+      "@type": [
+        "prov:Activity",
+        "goap:HeaderEdit"
+      ],
+      "goap:logType": "change.updated",
+      "goap:seq": 4,
+      "label": "edit title",
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:used": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "prov:wasAssociatedWith": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "record": {
+        "fields": {
+          "title": {
+            "from": "a",
+            "to": "b"
+          }
+        }
+      }
+    },
+    {
+      "@id": "urn:goap:principal:bob",
+      "@type": "prov:Agent",
+      "label": "bob"
+    },
+    {
+      "@id": "urn:goap:item:it1",
+      "@type": [
+        "prov:Entity",
+        "goap:Item"
+      ],
+      "data": {
+        "x": "\u003cy\u003e"
+      },
+      "goap:kind": "artifact",
+      "goap:logType": "fact.artifact",
+      "goap:seq": 5,
+      "goap:status": "proposed",
+      "goap:type": "report",
+      "label": "artifact report",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "prov:wasDerivedFrom": {
+        "@id": "urn:goap:item:it0"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:execution:r1"
+      },
+      "prov:wasRevisionOf": {
+        "@id": "urn:goap:item:it00"
+      },
+      "record": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "x": "\u003cy\u003e"
+        },
+        "derivedFrom": [
+          "it0"
+        ],
+        "execution": "r1",
+        "id": "it1",
+        "producedBy": "bob",
+        "status": "proposed",
+        "supersedes": [
+          "it00"
+        ],
+        "target": "report",
+        "type": "artifact"
+      }
+    },
+    {
+      "@id": "urn:goap:item:it2",
+      "@type": [
+        "prov:Entity",
+        "goap:Item"
+      ],
+      "data": {
+        "decision": "dp1"
+      },
+      "goap:kind": "transition",
+      "goap:logType": "fact.transition",
+      "goap:seq": 6,
+      "goap:status": "proposed",
+      "label": "transition",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "prov:wasInfluencedBy": {
+        "@id": "urn:goap:item:dp1"
+      },
+      "record": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "decision": "dp1"
+        },
+        "id": "it2",
+        "status": "proposed",
+        "type": "transition"
+      }
+    },
+    {
+      "@id": "urn:goap:item:it3",
+      "@type": [
+        "prov:Entity",
+        "goap:Item",
+        "goap:Verification"
+      ],
+      "data": {
+        "by": "carol",
+        "impact": "i1",
+        "impacts": [
+          "i1",
+          "i2"
+        ],
+        "oracle": "tests",
+        "state": "verified"
+      },
+      "goap:kind": "verification",
+      "goap:logType": "fact.verification",
+      "goap:oracle": "tests",
+      "goap:seq": 7,
+      "goap:state": "verified",
+      "goap:status": "proposed",
+      "label": "verification verified",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:carol"
+      },
+      "prov:wasDerivedFrom": [
+        {
+          "@id": "urn:goap:impact:i1"
+        },
+        {
+          "@id": "urn:goap:impact:i2"
+        }
+      ],
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "record": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "by": "carol",
+          "impact": "i1",
+          "impacts": [
+            "i1",
+            "i2"
+          ],
+          "oracle": "tests",
+          "state": "verified"
+        },
+        "id": "it3",
+        "status": "proposed",
+        "type": "verification"
+      }
+    },
+    {
+      "@id": "urn:goap:principal:carol",
+      "@type": "prov:Agent",
+      "label": "carol"
+    },
+    {
+      "@id": "urn:goap:item:it4",
+      "@type": [
+        "prov:Entity",
+        "goap:Item",
+        "goap:Derogation"
+      ],
+      "data": {
+        "expires": "2030-01-01T00:00:00Z",
+        "key": "DRG-1",
+        "rule": "r",
+        "signatory": "alice",
+        "status": "open",
+        "target": "REQ-1"
+      },
+      "goap:derogationStatus": "open",
+      "goap:expires": "2030-01-01T00:00:00Z",
+      "goap:kind": "derogation",
+      "goap:logType": "fact.derogation",
+      "goap:rule": "r",
+      "goap:seq": 8,
+      "goap:status": "proposed",
+      "goap:target": "REQ-1",
+      "label": "derogation DRG-1",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:alice"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "record": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "expires": "2030-01-01T00:00:00Z",
+          "key": "DRG-1",
+          "rule": "r",
+          "signatory": "alice",
+          "status": "open",
+          "target": "REQ-1"
+        },
+        "id": "it4",
+        "status": "proposed",
+        "type": "derogation"
+      }
+    },
+    {
+      "@id": "urn:goap:item:it5",
+      "@type": [
+        "prov:Entity",
+        "goap:Item",
+        "goap:ReviewRecord"
+      ],
+      "data": {
+        "by": "alice",
+        "comment": "fine",
+        "entries": [
+          {
+            "impact": "i1",
+            "outcome": "accept"
+          }
+        ],
+        "key": "REV-1",
+        "status": "submitted",
+        "submittedAt": "2026-03-04T05:06:07.12Z"
+      },
+      "goap:kind": "review",
+      "goap:logType": "fact.review",
+      "goap:reviewOf": {
+        "@id": "urn:goap:review-object:REV-1"
+      },
+      "goap:seq": 9,
+      "goap:status": "proposed",
+      "label": "review REV-1 submitted",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:alice"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "record": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "by": "alice",
+          "comment": "fine",
+          "entries": [
+            {
+              "impact": "i1",
+              "outcome": "accept"
+            }
+          ],
+          "key": "REV-1",
+          "status": "submitted",
+          "submittedAt": "2026-03-04T05:06:07.12Z"
+        },
+        "id": "it5",
+        "producedBy": "alice",
+        "status": "proposed",
+        "type": "review"
+      }
+    },
+    {
+      "@id": "urn:goap:review-object:REV-1",
+      "@type": [
+        "prov:Activity",
+        "goap:ReviewObject"
+      ],
+      "goap:about": {
+        "@id": "urn:goap:impact:i1"
+      },
+      "goap:partOf": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "goap:reviewKey": "REV-1",
+      "goap:status": "submitted",
+      "label": "review REV-1",
+      "prov:endedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAssociatedWith": {
+        "@id": "urn:goap:principal:alice"
+      },
+      "rdfs:comment": "fine"
+    },
+    {
+      "@id": "urn:goap:item:it6",
+      "@type": [
+        "prov:Entity",
+        "goap:Item"
+      ],
+      "goap:accept": true,
+      "goap:decides": {
+        "@id": "urn:goap:item:it1"
+      },
+      "goap:kind": "artifact",
+      "goap:logType": "fact.artifact",
+      "goap:seq": 10,
+      "goap:status": "proposed",
+      "label": "artifact",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "rdfs:comment": "ok",
+      "record": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "decision": {
+          "accept": true,
+          "comment": "ok",
+          "item": "it1"
+        },
+        "id": "it6",
+        "status": "proposed",
+        "type": "artifact"
+      }
+    },
+    {
+      "@id": "urn:goap:impact:i1",
+      "@type": [
+        "prov:Entity",
+        "goap:ChangeImpact"
+      ],
+      "goap:causation": "it5",
+      "goap:change": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "goap:intent": "modified",
+      "goap:key": "REQ-1",
+      "goap:landed": {
+        "@id": "urn:goap:node:n1@v3"
+      },
+      "goap:logType": [
+        "impact.proposed",
+        "impact.rebased",
+        "impact.checkedOut",
+        "impact.transitioned",
+        "impact.reviewed",
+        "impact.landed"
+      ],
+      "goap:post": {
+        "@id": "urn:goap:node:n1@v0"
+      },
+      "goap:pre": {
+        "@id": "urn:goap:node:n1@v1"
+      },
+      "goap:rationale": "because",
+      "goap:rebasedOn": {
+        "@id": "urn:goap:node:n1@v2"
+      },
+      "goap:seq": [
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
+      "goap:type": "alm@Requirement",
+      "label": "REQ-1",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "prov:wasDerivedFrom": [
+        {
+          "@id": "urn:goap:item:it1"
+        },
+        {
+          "@id": "urn:goap:item:it2"
+        }
+      ],
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:execution:r1"
+      },
+      "record": [
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "by": "bob",
+          "changeId": "c/1 x",
+          "execution": "r1",
+          "id": "v1",
+          "impactId": "i1",
+          "op": "proposed",
+          "seq": 0,
+          "state": {
+            "createdAt": "0001-01-01T00:00:00Z",
+            "derivedFrom": [
+              "it1"
+            ],
+            "id": "i1",
+            "intent": "modified",
+            "items": [
+              "it2"
+            ],
+            "key": "REQ-1",
+            "pre": {
+              "id": "n1",
+              "version": 1
+            },
+            "rationale": "because",
+            "review": "",
+            "type": "alm@Requirement"
+          }
+        },
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "changeId": "c/1 x",
+          "id": "v2",
+          "impactId": "i1",
+          "op": "rebased",
+          "pre": {
+            "id": "n1",
+            "version": 2
+          },
+          "seq": 0
+        },
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "by": "bob",
+          "changeId": "c/1 x",
+          "draft": {
+            "changeId": "",
+            "impactId": "",
+            "key": "REQ-1",
+            "node": "n1",
+            "type": "alm@Requirement"
+          },
+          "id": "v3",
+          "impactId": "i1",
+          "op": "checkedOut",
+          "post": {
+            "id": "n1",
+            "version": 0
+          },
+          "seq": 0
+        },
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "changeId": "c/1 x",
+          "id": "v3b",
+          "impactId": "i1",
+          "op": "transitioned",
+          "post": {
+            "id": "n1",
+            "version": 0
+          },
+          "seq": 0
+        },
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "by": "alice",
+          "causation": "it5",
+          "changeId": "c/1 x",
+          "id": "v4",
+          "impactId": "i1",
+          "op": "reviewed",
+          "review": {
+            "at": "2026-03-04T05:06:07.12Z",
+            "by": "alice",
+            "comment": "fine",
+            "reviewId": "REV-1",
+            "status": "accepted"
+          },
+          "seq": 0
+        },
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "baseline": "b2",
+          "changeId": "c/1 x",
+          "id": "v5",
+          "impactId": "i1",
+          "landed": {
+            "id": "n1",
+            "version": 3
+          },
+          "op": "landed",
+          "seq": 0
+        }
+      ]
+    },
+    {
+      "@id": "urn:goap:node:n1@v2",
+      "@type": [
+        "prov:Entity",
+        "goap:NodeVersion"
+      ],
+      "label": "n1@v2",
+      "prov:specializationOf": {
+        "@id": "urn:goap:node:n1"
+      }
+    },
+    {
+      "@id": "urn:goap:node:n1@v0",
+      "@type": [
+        "prov:Entity",
+        "goap:NodeVersion",
+        "goap:NodeDraft"
+      ],
+      "label": "REQ-1 (draft)",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:specializationOf": {
+        "@id": "urn:goap:node:n1"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "prov:wasRevisionOf": {
+        "@id": "urn:goap:node:n1@v2"
+      }
+    },
+    {
+      "@id": "urn:goap:review:v4",
+      "@type": [
+        "prov:Activity",
+        "goap:Review"
+      ],
+      "goap:about": {
+        "@id": "urn:goap:impact:i1"
+      },
+      "goap:causation": "it5",
+      "goap:logType": "impact.reviewed",
+      "goap:op": "reviewed",
+      "goap:partOf": [
+        {
+          "@id": "urn:goap:change:c%2F1%20x"
+        },
+        {
+          "@id": "urn:goap:review-object:REV-1"
+        }
+      ],
+      "goap:seq": 15,
+      "goap:status": "accepted",
+      "label": "reviewed accepted",
+      "prov:endedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:used": {
+        "@id": "urn:goap:node:n1@v0"
+      },
+      "prov:wasAssociatedWith": {
+        "@id": "urn:goap:principal:alice"
+      },
+      "prov:wasInformedBy": {
+        "@id": "urn:goap:review-object:REV-1"
+      },
+      "rdfs:comment": "fine",
+      "record": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "alice",
+        "causation": "it5",
+        "changeId": "c/1 x",
+        "id": "v4",
+        "impactId": "i1",
+        "op": "reviewed",
+        "review": {
+          "at": "2026-03-04T05:06:07.12Z",
+          "by": "alice",
+          "comment": "fine",
+          "reviewId": "REV-1",
+          "status": "accepted"
+        },
+        "seq": 0
+      }
+    },
+    {
+      "@id": "urn:goap:node:n1@v3",
+      "@type": [
+        "prov:Entity",
+        "goap:NodeVersion"
+      ],
+      "label": "n1@v3",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:specializationOf": {
+        "@id": "urn:goap:node:n1"
+      },
+      "prov:wasDerivedFrom": {
+        "@id": "urn:goap:node:n1@v0"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      }
+    },
+    {
+      "@id": "urn:goap:impact:i9",
+      "@type": [
+        "prov:Entity",
+        "goap:ChangeImpact"
+      ],
+      "goap:change": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "goap:intent": "created",
+      "goap:key": "REQ-9",
+      "goap:logType": [
+        "impact.created",
+        "impact.discarded"
+      ],
+      "goap:post": {
+        "@id": "urn:goap:node:n9@v0"
+      },
+      "goap:seq": [
+        17,
+        19
+      ],
+      "goap:type": "alm@Requirement",
+      "label": "REQ-9",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "record": [
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "by": "bob",
+          "changeId": "c/1 x",
+          "draft": {
+            "changeId": "",
+            "impactId": "",
+            "key": "REQ-9",
+            "node": "n9",
+            "type": "alm@Requirement"
+          },
+          "id": "v6",
+          "impactId": "i9",
+          "op": "created",
+          "patch": {
+            "origins": [
+              {
+                "id": "n5",
+                "key": "REQ-5",
+                "version": 2
+              }
+            ]
+          },
+          "post": {
+            "id": "n9",
+            "version": 0
+          },
+          "seq": 0,
+          "state": {
+            "createdAt": "0001-01-01T00:00:00Z",
+            "id": "i9",
+            "intent": "created",
+            "key": "REQ-9",
+            "rationale": "",
+            "review": "",
+            "type": "alm@Requirement"
+          }
+        },
+        {
+          "at": "2026-03-04T05:06:07.12Z",
+          "by": "bob",
+          "changeId": "c/1 x",
+          "id": "v8",
+          "impactId": "i9",
+          "op": "discarded",
+          "seq": 0
+        }
+      ]
+    },
+    {
+      "@id": "urn:goap:node:n9@v0",
+      "@type": [
+        "prov:Entity",
+        "goap:NodeVersion",
+        "goap:NodeDraft"
+      ],
+      "label": "REQ-9 (draft)",
+      "prov:generatedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:specializationOf": {
+        "@id": "urn:goap:node:n9"
+      },
+      "prov:wasAttributedTo": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "prov:wasDerivedFrom": {
+        "@id": "urn:goap:node:n5@v2"
+      },
+      "prov:wasGeneratedBy": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      }
+    },
+    {
+      "@id": "urn:goap:node:n9",
+      "@type": [
+        "prov:Entity",
+        "goap:Node"
+      ],
+      "goap:key": "REQ-9",
+      "goap:type": "alm@Requirement",
+      "label": "n9"
+    },
+    {
+      "@id": "urn:goap:node:n5@v2",
+      "@type": [
+        "prov:Entity",
+        "goap:NodeVersion"
+      ],
+      "label": "n5@v2",
+      "prov:specializationOf": {
+        "@id": "urn:goap:node:n5"
+      }
+    },
+    {
+      "@id": "urn:goap:node:n5",
+      "@type": [
+        "prov:Entity",
+        "goap:Node"
+      ],
+      "goap:key": "REQ-5",
+      "goap:type": "alm@Requirement",
+      "label": "n5"
+    },
+    {
+      "@id": "urn:goap:adoption:v7",
+      "@type": [
+        "prov:Activity",
+        "goap:Adoption"
+      ],
+      "goap:flow": "f1",
+      "goap:logType": "impact.adopted",
+      "goap:partOf": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "goap:replaces": [
+        {
+          "@id": "urn:goap:execution:e0"
+        },
+        {
+          "@id": "urn:goap:execution:e1"
+        }
+      ],
+      "goap:seq": 18,
+      "label": "adopt f1",
+      "prov:endedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:wasAssociatedWith": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "record": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "bob",
+        "changeId": "c/1 x",
+        "flow": "f1",
+        "id": "v7",
+        "op": "adopted",
+        "seq": 0,
+        "stale": [
+          "e0",
+          "e1"
+        ]
+      }
+    },
+    {
+      "@id": "urn:goap:review:v8",
+      "@type": [
+        "prov:Activity",
+        "goap:Review"
+      ],
+      "goap:about": {
+        "@id": "urn:goap:impact:i9"
+      },
+      "goap:logType": "impact.discarded",
+      "goap:op": "discarded",
+      "goap:partOf": {
+        "@id": "urn:goap:change:c%2F1%20x"
+      },
+      "goap:seq": 19,
+      "prov:endedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:startedAtTime": {
+        "@type": "xsd:dateTime",
+        "@value": "2026-03-04T05:06:07.12Z"
+      },
+      "prov:used": {
+        "@id": "urn:goap:node:n9@v0"
+      },
+      "prov:wasAssociatedWith": {
+        "@id": "urn:goap:principal:bob"
+      },
+      "record": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "bob",
+        "changeId": "c/1 x",
+        "id": "v8",
+        "impactId": "i9",
+        "op": "discarded",
+        "seq": 0
+      }
+    }
+  ]
+}

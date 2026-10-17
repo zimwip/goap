@@ -1,0 +1,45 @@
+[package]
+name = "goap-mcpsvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-algo = { workspace = true }
+goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-graphsnap = { workspace = true }
+goap-mcp = { workspace = true }
+goap-access = { workspace = true }
+goap-adapter = { workspace = true }
+goap-dsl = { workspace = true }
+goap-identity = { workspace = true }
+goap-mcpbuiltin = { workspace = true }
+goap-modeltoken = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-platform = { workspace = true }
+goap-connectorkit = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+http = { workspace = true }
+include_dir = { workspace = true }
+parking_lot = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+goap-pgtest = { workspace = true }
+goap-sqlschematest = { workspace = true }
+pbjson-types = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,31 @@
+[package]
+name = "goap-credsvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+async-trait = { workspace = true }
+bcrypt = { workspace = true }
+chrono = { workspace = true }
+http = { workspace = true }
+include_dir = { workspace = true }
+parking_lot = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+uuid = { workspace = true }
+
+[dev-dependencies]
+goap-pgtest = { workspace = true }
+goap-platform = { workspace = true }
+goap-sqlschematest = { workspace = true }
+axum = { workspace = true }
+
+[lints]
+workspace = true

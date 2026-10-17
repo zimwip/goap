@@ -1,0 +1,195 @@
+{
+ "actions": null,
+ "agents": null,
+ "auto": null,
+ "conditions": [],
+ "graphs": {
+  "x": {
+   "process": "x",
+   "steps": [
+    {
+     "Path": "x/s",
+     "Name": "s",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "process",
+     "Target": "y",
+     "Entry": null,
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "y",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  },
+  "y": {
+   "process": "y",
+   "steps": [
+    {
+     "Path": "y/s",
+     "Name": "s",
+     "Description": "",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "process",
+     "Target": "x",
+     "Entry": null,
+     "Exit": null,
+     "Roles": null,
+     "Guidance": "",
+     "References": null,
+     "Process": "x",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": null
+  }
+ },
+ "issues": [
+  {
+   "path": "processes[0].steps",
+   "message": "process x nests itself",
+   "activity": "x"
+  },
+  {
+   "path": "processes[1].steps",
+   "message": "process y nests itself",
+   "activity": "y"
+  }
+ ],
+ "levels": {
+  "x": [
+   {
+    "Path": "x",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {},
+    "Order": [
+     {
+      "Name": "s",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "s",
+      "Path": "x/s",
+      "Method": "process",
+      "Target": "y",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ],
+  "y": [
+   {
+    "Path": "y",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {},
+    "Order": [
+     {
+      "Name": "s",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "s",
+      "Path": "y/s",
+      "Method": "process",
+      "Target": "x",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": null,
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ]
+ },
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": [
+  {
+   "path": "processes[0].steps",
+   "message": "process x nests itself",
+   "activity": "x"
+  },
+  {
+   "path": "processes[1].steps",
+   "message": "process y nests itself",
+   "activity": "y"
+  }
+ ],
+ "view": {
+  "methodology": "cyc",
+  "version": "1.0.0",
+  "goal": "x",
+  "processes": [
+   {
+    "name": "x",
+    "kind": "process",
+    "nested": true,
+    "steps": [
+     {
+      "path": "x/s",
+      "name": "s",
+      "owner": "x",
+      "method": "process",
+      "target": "y",
+      "process": "y"
+     }
+    ]
+   },
+   {
+    "name": "y",
+    "kind": "process",
+    "nested": true,
+    "steps": [
+     {
+      "path": "y/s",
+      "name": "s",
+      "owner": "y",
+      "method": "process",
+      "target": "x",
+      "process": "x"
+     }
+    ]
+   }
+  ]
+ }
+}

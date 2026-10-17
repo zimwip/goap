@@ -1,0 +1,289 @@
+[workspace]
+resolver = "3"
+members = [
+    "contracts/ctx",
+    "contracts/gen",
+    "contracts/connect",
+    "contracts/algo",
+    "contracts/assess",
+    "contracts/authz",
+    "contracts/builtins",
+    "contracts/criticality",
+    "contracts/decision",
+    "contracts/domain",
+    "contracts/events",
+    "contracts/form",
+    "contracts/graphapi",
+    "contracts/journal",
+    "contracts/llm",
+    "contracts/mcp",
+    "contracts/operations",
+    "contracts/review",
+    "contracts/risk",
+    "contracts/verify",
+    "engine/condition",
+    "engine/engine",
+    "engine/enginesvc",
+    "engine/enginetel",
+    "engine/eval",
+    "engine/goap",
+    "engine/intent",
+    "engine/methodology",
+    "engine/observe",
+    "engine/sandbox",
+    "engine/selfimprove",
+    "gateway/credsvc",
+    "gateway/gateway",
+    "graph/domainsvc",
+    "graph/graph",
+    "graph/graph/graphtest",
+    "graph/graphsvc",
+    "graph/index",
+    "graph/indexersvc",
+    "graph/okf",
+    "graph/prov",
+    "lib/access",
+    "lib/adapter",
+    "lib/brief",
+    "lib/def",
+    "lib/domainclient",
+    "lib/domainpb",
+    "lib/domains/builtin",
+    "lib/dsl",
+    "lib/graphclient",
+    "lib/graphsnap",
+    "lib/guard",
+    "lib/identity",
+    "lib/llmcfg",
+    "lib/mcpbuiltin",
+    "lib/modeltoken",
+    "lib/pbconv",
+    "lib/pgtest",
+    "lib/platform",
+    "lib/rpcerr",
+    "lib/sqlschematest",
+    "lib/startingpoint",
+    "lib/telemetry",
+    "lib/typecat",
+    "mcp/connectorkit",
+    "mcp/connectors/builtin",
+    "mcp/connectors/claudeagent",
+    "mcp/connectors/localfs",
+    "mcp/connectors/workspace",
+    "mcp/mcpsvc",
+    "platform/assistantsvc",
+    "platform/cmd/connector-claude-coding-agent",
+    "platform/cmd/connector-localfs",
+    "platform/cmd/connector-workspace",
+    "platform/cmd/conversations",
+    "platform/cmd/credentials",
+    "platform/cmd/engine",
+    "platform/cmd/events",
+    "platform/cmd/gateway",
+    "platform/cmd/goap-dev",
+    "platform/cmd/goap-eval",
+    "platform/cmd/goap-opgen",
+    "platform/cmd/goap-runner",
+    "platform/cmd/graph",
+    "platform/cmd/indexer",
+    "platform/cmd/mcp",
+    "platform/cmd/modelgw",
+    "platform/cmd/preferences",
+    "platform/cmd/registry",
+    "platform/convsvc",
+    "platform/devseed",
+    "platform/e2e/access",
+    "platform/e2e/builtin",
+    "platform/e2e/condition",
+    "platform/e2e/connectorkit",
+    "platform/e2e/engine",
+    "platform/e2e/enginesvc",
+    "platform/e2e/mcpsvc",
+    "platform/e2e/selfimprove",
+    "platform/eventsvc",
+    "platform/layering",
+    "platform/modelgw",
+    "platform/opgen",
+    "platform/prefssvc",
+    "platform/registrysvc",
+]
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97"
+license = "UNLICENSED"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[workspace.dependencies]
+goap-gen = { path = "contracts/gen" }
+goap-connect = { path = "contracts/connect" }
+goap-ctx = { path = "contracts/ctx" }
+goap-algo = { path = "contracts/algo" }
+goap-assess = { path = "contracts/assess" }
+goap-authz = { path = "contracts/authz" }
+goap-builtins = { path = "contracts/builtins" }
+goap-criticality = { path = "contracts/criticality" }
+goap-decision = { path = "contracts/decision" }
+goap-domain = { path = "contracts/domain" }
+goap-events = { path = "contracts/events" }
+goap-form = { path = "contracts/form" }
+goap-graphapi = { path = "contracts/graphapi" }
+goap-journal = { path = "contracts/journal" }
+goap-llm = { path = "contracts/llm" }
+goap-mcp = { path = "contracts/mcp" }
+goap-operations = { path = "contracts/operations" }
+goap-review = { path = "contracts/review" }
+goap-risk = { path = "contracts/risk" }
+goap-verify = { path = "contracts/verify" }
+goap-condition = { path = "engine/condition" }
+goap-engine = { path = "engine/engine" }
+goap-enginesvc = { path = "engine/enginesvc" }
+goap-enginetel = { path = "engine/enginetel" }
+goap-eval = { path = "engine/eval" }
+goap-goap = { path = "engine/goap" }
+goap-intent = { path = "engine/intent" }
+goap-methodology = { path = "engine/methodology" }
+goap-observe = { path = "engine/observe" }
+goap-sandbox = { path = "engine/sandbox" }
+goap-selfimprove = { path = "engine/selfimprove" }
+goap-credsvc = { path = "gateway/credsvc" }
+goap-gateway = { path = "gateway/gateway" }
+goap-domainsvc = { path = "graph/domainsvc" }
+goap-graph = { path = "graph/graph" }
+goap-graphtest = { path = "graph/graph/graphtest" }
+goap-graphsvc = { path = "graph/graphsvc" }
+goap-index = { path = "graph/index" }
+goap-indexersvc = { path = "graph/indexersvc" }
+goap-okf = { path = "graph/okf" }
+goap-prov = { path = "graph/prov" }
+goap-access = { path = "lib/access" }
+goap-adapter = { path = "lib/adapter" }
+goap-brief = { path = "lib/brief" }
+goap-def = { path = "lib/def" }
+goap-domainclient = { path = "lib/domainclient" }
+goap-domainpb = { path = "lib/domainpb" }
+goap-domains-builtin = { path = "lib/domains/builtin" }
+goap-dsl = { path = "lib/dsl" }
+goap-graphclient = { path = "lib/graphclient" }
+goap-graphsnap = { path = "lib/graphsnap" }
+goap-guard = { path = "lib/guard" }
+goap-identity = { path = "lib/identity" }
+goap-llmcfg = { path = "lib/llmcfg" }
+goap-mcpbuiltin = { path = "lib/mcpbuiltin" }
+goap-modeltoken = { path = "lib/modeltoken" }
+goap-pbconv = { path = "lib/pbconv" }
+goap-pgtest = { path = "lib/pgtest" }
+goap-platform = { path = "lib/platform" }
+goap-rpcerr = { path = "lib/rpcerr" }
+goap-sqlschematest = { path = "lib/sqlschematest" }
+goap-startingpoint = { path = "lib/startingpoint" }
+goap-telemetry = { path = "lib/telemetry" }
+goap-typecat = { path = "lib/typecat" }
+goap-connectorkit = { path = "mcp/connectorkit" }
+goap-connector-builtin = { path = "mcp/connectors/builtin" }
+goap-connector-claudeagent = { path = "mcp/connectors/claudeagent" }
+goap-connector-localfs = { path = "mcp/connectors/localfs" }
+goap-connector-workspace = { path = "mcp/connectors/workspace" }
+goap-mcpsvc = { path = "mcp/mcpsvc" }
+goap-assistantsvc = { path = "platform/assistantsvc" }
+goap-cmd-connector-claude-coding-agent = { path = "platform/cmd/connector-claude-coding-agent" }
+goap-cmd-connector-localfs = { path = "platform/cmd/connector-localfs" }
+goap-cmd-connector-workspace = { path = "platform/cmd/connector-workspace" }
+goap-cmd-conversations = { path = "platform/cmd/conversations" }
+goap-cmd-credentials = { path = "platform/cmd/credentials" }
+goap-cmd-engine = { path = "platform/cmd/engine" }
+goap-cmd-events = { path = "platform/cmd/events" }
+goap-cmd-gateway = { path = "platform/cmd/gateway" }
+goap-cmd-goap-dev = { path = "platform/cmd/goap-dev" }
+goap-cmd-goap-eval = { path = "platform/cmd/goap-eval" }
+goap-cmd-goap-opgen = { path = "platform/cmd/goap-opgen" }
+goap-cmd-goap-runner = { path = "platform/cmd/goap-runner" }
+goap-cmd-graph = { path = "platform/cmd/graph" }
+goap-cmd-indexer = { path = "platform/cmd/indexer" }
+goap-cmd-mcp = { path = "platform/cmd/mcp" }
+goap-cmd-modelgw = { path = "platform/cmd/modelgw" }
+goap-cmd-preferences = { path = "platform/cmd/preferences" }
+goap-cmd-registry = { path = "platform/cmd/registry" }
+goap-convsvc = { path = "platform/convsvc" }
+goap-devseed = { path = "platform/devseed" }
+goap-e2e-access = { path = "platform/e2e/access" }
+goap-e2e-builtin = { path = "platform/e2e/builtin" }
+goap-e2e-condition = { path = "platform/e2e/condition" }
+goap-e2e-connectorkit = { path = "platform/e2e/connectorkit" }
+goap-e2e-engine = { path = "platform/e2e/engine" }
+goap-e2e-enginesvc = { path = "platform/e2e/enginesvc" }
+goap-e2e-mcpsvc = { path = "platform/e2e/mcpsvc" }
+goap-e2e-selfimprove = { path = "platform/e2e/selfimprove" }
+goap-eventsvc = { path = "platform/eventsvc" }
+goap-layering = { path = "platform/layering" }
+goap-modelgw = { path = "platform/modelgw" }
+goap-opgen = { path = "platform/opgen" }
+goap-prefssvc = { path = "platform/prefssvc" }
+goap-registrysvc = { path = "platform/registrysvc" }
+# third-party
+prost = "0.14"
+prost-types = "0.14"
+pbjson = "0.9"
+pbjson-types = "0.9"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml_ng = "0.10"
+thiserror = "2"
+anyhow = "1"
+uuid = { version = "1", features = ["v4", "v7", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1"
+parking_lot = "0.12"
+sha2 = "0.11"
+base64 = "0.23"
+globset = "0.4"
+tracing = "0.1"
+tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
+tokio-util = "0.7"
+syn = { version = "2", features = ["full", "visit"] }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+casbin = "2.20"
+axum = { version = "0.8", features = ["http2"] }
+http = "1"
+bytes = "1"
+futures = "0.3"
+http-body-util = "0.1"
+reqwest = { version = "0.13", default-features = false, features = ["http2", "stream", "json", "rustls"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["catch-panic", "request-id", "trace"] }
+sqlx = { version = "0.9", default-features = false, features = ["runtime-tokio", "postgres", "sqlite", "chrono", "uuid", "json", "derive"] }
+async-nats = "0.50"
+include_dir = "0.7"
+hmac = "0.13"
+cel = "0.15"
+tracing-subscriber = { version = "0.3", features = ["json", "env-filter"] }
+boa_engine = "0.22"
+opentelemetry = { version = "0.33", features = ["trace", "metrics"] }
+opentelemetry_sdk = { version = "0.33", features = ["trace", "metrics"] }
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["http-proto", "reqwest-blocking-client", "reqwest-rustls", "trace", "metrics"] }
+tracing-opentelemetry = "0.34"
+unicode-normalization = "0.1"
+unicode-properties = "0.1"
+
+serde_ignored = "0.1"
+jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs"] }
+bcrypt = "0.19"
+cap-std = "4"
+nix = { version = "0.31", default-features = false, features = ["signal", "process", "user"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs", "chrono"] }
+
+[profile.dev]
+# a crate per package makes many test binaries: keep their debug info small
+debug = "line-tables-only"
+# incremental caches grow to tens of gigabytes over the workspace
+incremental = false
+
+[profile.dev.package."*"]
+opt-level = 1
+debug = false

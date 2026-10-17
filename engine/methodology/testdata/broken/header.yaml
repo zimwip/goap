@@ -1,0 +1,74 @@
+name: Bad Name
+namespace: Alm
+criticality: C9
+goal: nowhere
+imports: [risks, nope, risks]
+events:
+  - {name: change.mine}
+  - {name: Bad.Event}
+  - {name: work.done}
+  - {name: work.done}
+conditions:
+  - {name: ok, expr: "size(changeImpacts) > 0"}
+  - {name: ok, expr: "true"}
+  - {expr: "true"}
+  - {name: per_impact, scope: impact, expr: 'self.key != ""'}
+  - {name: all_bad, all: nothing}
+  - {name: all_per, all: per_impact}
+  - {name: weird, scope: galaxy, expr: "true"}
+actions:
+  - {name: a, kind: llm, effects: {ok: true, ghost: true}, emits: [nothing], mcps: ["Bad MCP"], permission: nocolon}
+  - {name: a, kind: human, effects: {ok: true}}
+  - {kind: human}
+  - {name: g, kind: call, effects: {ok: true}}
+  - {name: t, kind: tool, tool: notool, effects: {ok: true}, mcps: [x]}
+  - {name: t2, kind: tool, effects: {ok: true}}
+  - {name: b, kind: builtin, effects: {ok: true}}
+  - {name: b2, kind: builtin, builtin: nosuchbuiltin, effects: {ok: true}}
+  - {name: s, kind: script, effects: {ok: true}}
+  - {name: s2, kind: script, language: python, code: "x", effects: {ok: true}}
+  - {name: sp, kind: abstract, specializes: a/b/c, pre: {ok: true}, effects: {ok: true}}
+  - {name: sp2, kind: human, specializes: ghost_action}
+  - {name: sp3, kind: human, specializes: sp2}
+  - {name: w, kind: human, when: "true", priority: 3, effects: {ok: true}}
+  - {name: v, kind: human, verify: {oracle: crystal}, effects: {ok: true}}
+  - {name: h, kind: human, code: "x", effects: {ok: true}}
+  - {name: f, kind: llm, prompt: x, form: {fields: []}, effects: {ok: true}}
+  - {name: io, kind: human, pre: {ok: false}, effects: {ok: true}}
+  - {name: sc, kind: human, pre: {per_impact: true}, effects: {ok: true}}
+  - {name: scoped, kind: human, scope: impact, effects: {per_impact: true}}
+  - {name: scoped2, kind: human, scope: nowhere, effects: {ok: true}}
+  - {name: scoped3, kind: human, scope: impact, effects: {ok: true}}
+  - {name: wh, kind: human, where: "true", effects: {ok: true}}
+  - {name: loopy, kind: human, loop: {maxRounds: -1, maxToolResultBytes: 999999999, compactBytes: -2, maxTokens: -3, timeout: "9h"}, effects: {ok: true}}
+  - {name: pr, kind: human, roles: [ghost], effects: {ok: true}}
+goals:
+  - {name: g, pre: {}}
+  - {name: g, pre: {nope: true}}
+  - {pre: {per_impact: true}}
+agents:
+  - {name: Bad, planner: llm}
+  - {name: two, planner: magic, mcps: ["$"], actions: [nope, sp2], goals: [nogoal], roles: [ghost]}
+  - name: two
+    persistent: {scope: "foo", until: {nothing: true}, memory: 99}
+    triggers:
+      - {name: t1, type: event, event: no.such.event}
+      - {name: t1, type: schedule, schedule: "not a cron"}
+      - {type: weird, target: somewhere}
+      - {name: t3, type: event, event: step.completed, target: event_change, goal: nogoal}
+      - {name: t4, type: event, event: change.created, goal: g}
+appliesTo: [Bad, Bad-name]
+on:
+  - {event: change.created, from: somewhere}
+  - {event: nope.event, from: integrated}
+integrates:
+  - {methodologies: []}
+  - {methodologies: ["Bad Name", "*"], attach: later}
+guardian: {merge: "integrator.attached"}
+roles:
+  - {name: dev}
+  - {name: dev}
+  - {name: "Bad", operations: [impact.approve, reviewer]}
+assessments:
+  - {subject: description, states: [{conditions: {ghost: true}, tone: blue}]}
+  - {subject: description, states: []}

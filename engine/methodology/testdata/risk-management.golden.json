@@ -1,0 +1,564 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Identify and assess the risks of the change",
+   "effects": {
+    "risks_reviewed": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "identify_risks",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 6,
+   "description": "Define the mitigation of the high risks by hand",
+   "effects": {
+    "risks_under_control": true
+   },
+   "implements": "",
+   "instructions": "For every live risk of score 9 or more without an action, add an action on the Risks \u0026 actions pane (for the risk), or accept the risk.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "mitigate_by_hand",
+   "narrowed": false,
+   "pre": {
+    "risks_reviewed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Define the mitigation actions of the high risks",
+   "effects": {
+    "risks_under_control": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "plan_mitigation",
+   "narrowed": false,
+   "pre": {
+    "risks_reviewed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 6,
+   "description": "Review the risks of the change by hand",
+   "effects": {
+    "risks_reviewed": true
+   },
+   "implements": "",
+   "instructions": "Raise or update the risks the last move of the change introduces (its Risks \u0026 actions pane), then submit this task with an artifact risk_review (its summary in data.summary).\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "review_risks",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Identify and assess the risks of the change as it is",
+   "effects": {
+    "risks_reviewed": true
+   },
+   "implements": "identify_risks",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "risk_management/identification:identify_risks",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "risk_management/identification",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 6,
+   "description": "Identify and assess the risks of the change as it is",
+   "effects": {
+    "risks_reviewed": true
+   },
+   "implements": "review_risks",
+   "instructions": "Raise or update the risks the last move of the change introduces (its Risks \u0026 actions pane), then submit this task with an artifact risk_review (its summary in data.summary).\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "risk_management/identification:review_risks",
+   "narrowed": false,
+   "pre": {},
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "risk_management/identification",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 6,
+   "description": "An action for every high risk, or its acceptance",
+   "effects": {
+    "risks_under_control": true
+   },
+   "implements": "mitigate_by_hand",
+   "instructions": "For every live risk of score 9 or more without an action, add an action on the Risks \u0026 actions pane (for the risk), or accept the risk.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "risk_management/mitigation:mitigate_by_hand",
+   "narrowed": false,
+   "pre": {
+    "risks_reviewed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "risk_management/mitigation",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "An action for every high risk, or its acceptance",
+   "effects": {
+    "risks_under_control": true
+   },
+   "implements": "plan_mitigation",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "risk_management/mitigation:plan_mitigation",
+   "narrowed": false,
+   "pre": {
+    "risks_reviewed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "risk_management/mitigation",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "risk_management/identification:identify_risks",
+    "risk_management/identification:review_risks",
+    "risk_management/mitigation:plan_mitigation",
+    "risk_management/mitigation:mitigate_by_hand"
+   ],
+   "description": "Risks of the change — identification and assessment, then mitigation of the high ones — as the change goes",
+   "goals": [
+    "risk_management"
+   ],
+   "name": "risk_management",
+   "planner": "goap",
+   "process": "risk_management",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "no_open_actions",
+  "open_actions",
+  "open_risks",
+  "risks_reviewed",
+  "risks_under_control",
+  "unmitigated_risks"
+ ],
+ "graphs": {
+  "risk_management": {
+   "process": "risk_management",
+   "description": "Risks of the change — identification and assessment, then mitigation of the high ones — as the change goes",
+   "steps": [
+    {
+     "Path": "risk_management/identification",
+     "Name": "identification",
+     "Description": "Identify and assess the risks of the change as it is",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "identify_risks | review_risks",
+     "Entry": {},
+     "Exit": {
+      "risks_reviewed": true
+     },
+     "Roles": {
+      "responsible": "risk_manager",
+      "accountable": "product_owner"
+     },
+     "Guidance": "Probability and impact from 1 (rare, negligible) to 5 (almost certain, critical); the score is their product. Look at what the change touches (its impacts) and at what it decided.\n",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    },
+    {
+     "Path": "risk_management/mitigation",
+     "Name": "mitigation",
+     "Description": "An action for every high risk, or its acceptance",
+     "Parent": "",
+     "Depth": 0,
+     "Leaf": true,
+     "Method": "action",
+     "Target": "plan_mitigation | mitigate_by_hand",
+     "Entry": {
+      "risks_reviewed": true
+     },
+     "Exit": {
+      "risks_under_control": true
+     },
+     "Roles": {
+      "responsible": "risk_manager",
+      "accountable": "product_owner",
+      "informed": [
+       "product_owner"
+      ]
+     },
+     "Guidance": "A high risk (score \u003e= 9) has an action that reduces its probability or its impact, owned by a role; a risk may be accepted instead, by whoever answers for the change.\n",
+     "References": null,
+     "Process": "",
+     "Capability": "",
+     "Foreach": "",
+     "GroupBy": "",
+     "Review": null
+    }
+   ],
+   "edges": [
+    {
+     "From": "risk_management/identification",
+     "To": "risk_management/mitigation",
+     "Conditions": [
+      "risks_reviewed"
+     ]
+    }
+   ],
+   "references": [
+    {
+     "title": "Risk management policy",
+     "ref": "document-repository:governance/risk-management-policy.md"
+    }
+   ]
+  }
+ },
+ "issues": null,
+ "levels": {
+  "risk_management": [
+   {
+    "Path": "risk_management",
+    "Kind": "process",
+    "Inputs": null,
+    "Outputs": {
+     "risks_reviewed": true,
+     "risks_under_control": true
+    },
+    "Order": [
+     {
+      "Name": "identification",
+      "Layer": 0
+     },
+     {
+      "Name": "mitigation",
+      "Layer": 1
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "identification",
+      "Path": "risk_management/identification",
+      "Method": "action",
+      "Target": "identify_risks, review_risks",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {},
+      "Exit": {
+       "risks_reviewed": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 2
+     },
+     {
+      "Name": "mitigation",
+      "Path": "risk_management/mitigation",
+      "Method": "action",
+      "Target": "plan_mitigation, mitigate_by_hand",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "risks_reviewed": true
+      },
+      "Exit": {
+       "risks_under_control": true
+      },
+      "Composite": true,
+      "Broken": false,
+      "SubSteps": 2
+     }
+    ],
+    "Edges": [
+     {
+      "From": "risk_management/identification",
+      "To": "risk_management/mitigation",
+      "Conditions": [
+       "risks_reviewed"
+      ]
+     }
+    ]
+   },
+   {
+    "Path": "risk_management/identification",
+    "Kind": "action",
+    "Inputs": {},
+    "Outputs": {
+     "risks_reviewed": true
+    },
+    "Order": [
+     {
+      "Name": "identify_risks",
+      "Layer": 0
+     },
+     {
+      "Name": "review_risks",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "identify_risks",
+      "Path": "risk_management/identification/identify_risks",
+      "Method": "action",
+      "Target": "identify_risks",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "risks_reviewed": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "review_risks",
+      "Path": "risk_management/identification/review_risks",
+      "Method": "action",
+      "Target": "review_risks",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": null,
+      "Exit": {
+       "risks_reviewed": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   },
+   {
+    "Path": "risk_management/mitigation",
+    "Kind": "action",
+    "Inputs": {
+     "risks_reviewed": true
+    },
+    "Outputs": {
+     "risks_under_control": true
+    },
+    "Order": [
+     {
+      "Name": "plan_mitigation",
+      "Layer": 0
+     },
+     {
+      "Name": "mitigate_by_hand",
+      "Layer": 0
+     }
+    ],
+    "Gaps": null,
+    "Agent": "",
+    "Goal": "",
+    "Steps": [
+     {
+      "Name": "plan_mitigation",
+      "Path": "risk_management/mitigation/plan_mitigation",
+      "Method": "action",
+      "Target": "plan_mitigation",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "risks_reviewed": true
+      },
+      "Exit": {
+       "risks_under_control": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     },
+     {
+      "Name": "mitigate_by_hand",
+      "Path": "risk_management/mitigation/mitigate_by_hand",
+      "Method": "action",
+      "Target": "mitigate_by_hand",
+      "Capability": "",
+      "Foreach": "",
+      "GroupBy": "",
+      "Review": null,
+      "Entry": {
+       "risks_reviewed": true
+      },
+      "Exit": {
+       "risks_under_control": true
+      },
+      "Composite": false,
+      "Broken": false,
+      "SubSteps": 0
+     }
+    ],
+    "Edges": null
+   }
+  ]
+ },
+ "reactions": null,
+ "stepDependencies": {
+  "risk_management/mitigation": {
+   "risk_management/identification": true
+  }
+ },
+ "strictIssues": null,
+ "view": {
+  "methodology": "risk-management",
+  "version": "1.1.0",
+  "goal": "risk_management",
+  "processes": [
+   {
+    "name": "risk_management",
+    "kind": "process",
+    "description": "Risks of the change — identification and assessment, then mitigation of the high ones — as the change goes",
+    "agent": "risk_management",
+    "goal": "risk_management",
+    "done": {
+     "risks_reviewed": true,
+     "risks_under_control": true
+    },
+    "references": [
+     {
+      "title": "Risk management policy",
+      "ref": "document-repository:governance/risk-management-policy.md"
+     }
+    ],
+    "steps": [
+     {
+      "path": "risk_management/identification",
+      "name": "identification",
+      "owner": "risk_management",
+      "method": "action",
+      "target": "identify_risks | review_risks",
+      "description": "Identify and assess the risks of the change as it is",
+      "guidance": "Probability and impact from 1 (rare, negligible) to 5 (almost certain, critical); the score is their product. Look at what the change touches (its impacts) and at what it decided.\n",
+      "roles": {
+       "responsible": "risk_manager",
+       "accountable": "product_owner"
+      },
+      "exit": {
+       "risks_reviewed": true
+      },
+      "planned": [
+       "risk_management/identification:identify_risks",
+       "risk_management/identification:review_risks"
+      ]
+     },
+     {
+      "path": "risk_management/mitigation",
+      "name": "mitigation",
+      "owner": "risk_management",
+      "method": "action",
+      "target": "plan_mitigation | mitigate_by_hand",
+      "description": "An action for every high risk, or its acceptance",
+      "guidance": "A high risk (score \u003e= 9) has an action that reduces its probability or its impact, owned by a role; a risk may be accepted instead, by whoever answers for the change.\n",
+      "roles": {
+       "responsible": "risk_manager",
+       "accountable": "product_owner",
+       "informed": [
+        "product_owner"
+       ]
+      },
+      "entry": {
+       "risks_reviewed": true
+      },
+      "exit": {
+       "risks_under_control": true
+      },
+      "planned": [
+       "risk_management/mitigation:plan_mitigation",
+       "risk_management/mitigation:mitigate_by_hand"
+      ]
+     }
+    ]
+   }
+  ],
+  "conditions": {
+   "risks_reviewed": {
+    "description": "The risks were reviewed since the change last moved (the step that completed, the risk that was raised)",
+    "producedBy": [
+     "identify_risks",
+     "review_risks",
+     "risk_management/identification:identify_risks",
+     "risk_management/identification:review_risks"
+    ]
+   },
+   "risks_under_control": {
+    "description": "every high risk has a mitigation action",
+    "producedBy": [
+     "mitigate_by_hand",
+     "plan_mitigation",
+     "risk_management/mitigation:mitigate_by_hand",
+     "risk_management/mitigation:plan_mitigation"
+    ]
+   }
+  }
+ }
+}

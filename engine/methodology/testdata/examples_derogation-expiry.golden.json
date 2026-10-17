@@ -1,0 +1,54 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Close the open derogations that ran out and reopen the review of the effects they covered",
+   "effects": {
+    "derogations_swept": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "expire_derogations",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "expire_derogations"
+   ],
+   "description": "Applies the expiry of the derogations",
+   "goals": [
+    "expired_derogations_closed"
+   ],
+   "name": "derogation-keeper",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "derogations_swept"
+ ],
+ "graphs": {},
+ "issues": null,
+ "levels": {},
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": null,
+ "view": {
+  "methodology": "derogation-expiry",
+  "version": "1.0.0",
+  "goal": "expired_derogations_closed",
+  "processes": []
+ }
+}

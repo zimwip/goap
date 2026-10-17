@@ -1,0 +1,152 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Analyze the observed run: execution journal of the change (and its sub-agents), OpenTelemetry spans of its trace; per-action statistics and findings.\n",
+   "effects": {
+    "analyzed": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "analyze_run",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Create the new draft version of the methodology with the accepted proposals",
+   "effects": {
+    "drafted": true,
+    "settled": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "draft_methodology",
+   "narrowed": false,
+   "pre": {
+    "reviewed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Rules: specialize a regular-output LLM action with a script, use a faster model for a costly LLM action, raise the cost of a looping action, remove a disabled action from an agent, request an MCP tool for a slow point.\n",
+   "effects": null,
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "propose_by_rules",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Propose improvements to the methodology from the findings (change impacts on its elements)",
+   "effects": {
+    "proposed": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "abstract",
+   "lifted": null,
+   "name": "propose_improvements",
+   "narrowed": false,
+   "pre": {
+    "analyzed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "LLM analysis of the cost report (enable with the llm_review variable)",
+   "effects": null,
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "propose_with_llm",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Review of improvement proposals by a methodologist",
+   "effects": {
+    "reviewed": true
+   },
+   "implements": "",
+   "instructions": "Accept or reject each improvement (a comment is required). Accepted improvements will be integrated into a new draft version of the methodology, to be published from the editor.\n",
+   "kind": "human",
+   "lifted": null,
+   "name": "review_improvements",
+   "narrowed": false,
+   "pre": {
+    "proposed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": null,
+   "description": "Observes completed runs and proposes to improve their methodology",
+   "goals": null,
+   "name": "observer",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "analyzed",
+  "drafted",
+  "proposed",
+  "reviewed",
+  "settled"
+ ],
+ "graphs": {},
+ "issues": null,
+ "levels": {},
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": null,
+ "view": {
+  "methodology": "methodology-improvement",
+  "version": "1.5.1",
+  "goal": "improve_methodology",
+  "processes": []
+ }
+}

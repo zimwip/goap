@@ -1,0 +1,32 @@
+[package]
+name = "goap-cmd-conversations"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "conversations"
+path = "src/main.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-gen = { workspace = true }
+goap-methodology = { workspace = true }
+goap-access = { workspace = true }
+goap-graphclient = { workspace = true }
+goap-identity = { workspace = true }
+goap-platform = { workspace = true }
+goap-telemetry = { workspace = true }
+goap-assistantsvc = { workspace = true }
+goap-convsvc = { workspace = true }
+goap-modelgw = { workspace = true }
+goap-registrysvc = { workspace = true }
+
+[lints]
+workspace = true

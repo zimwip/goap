@@ -1,0 +1,29 @@
+[package]
+name = "goap-e2e-enginesvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+
+[dev-dependencies]
+goap-authz = { workspace = true }
+goap-engine = { workspace = true }
+goap-enginesvc = { workspace = true }
+goap-methodology = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-access = { workspace = true }
+goap-identity = { workspace = true }
+goap-startingpoint = { workspace = true }
+goap-registrysvc = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true
