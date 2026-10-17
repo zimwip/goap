@@ -1,13 +1,16 @@
 SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace connector-claude-coding-agent goap-dev goap-runner goap-eval
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
-# the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
-MODULES  := contracts lib graph engine mcp gateway platform
-PKGS     := $(foreach m,$(MODULES),./$(m)/...)
-export PATH := $(PATH):$(shell go env GOPATH 2>/dev/null)/bin:$(HOME)/.cargo/bin
-# the Rust port (docs/rust-port.md): one Cargo workspace, a crate per package; the toolchain is pinned by rust-toolchain.toml
+# one Cargo workspace at the root, a crate per package (CLAUDE.md, "Rust conventions"); the toolchain is pinned by
+# rust-toolchain.toml and installed by `make toolchain`
+export PATH := $(HOME)/.cargo/bin:$(PATH)
 CARGO    ?= cargo
+# extra arguments of the workspace commands, e.g. CARGO_EXCLUDE="--exclude goap-e2e-engine"
+CARGO_EXCLUDE ?=
+# buf lints the protos and writes the web's TypeScript (web/src/gen); the one on the PATH, else the npm package
+BUF_VERSION ?= 1.50.0
+BUF      ?= $(shell command -v buf 2>/dev/null || echo npx --yes @bufbuild/buf@$(BUF_VERSION))
 
-.PHONY: toolchain rs-build rs-test rs-lint all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
+.PHONY: toolchain watch-tool rs-build rs-test rs-lint all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
 
 all: generate build test
 
@@ -21,37 +24,34 @@ toolchain: ## install what building needs when it is missing: rustup + the pinne
 	@rustup show active-toolchain
 	@command -v node >/dev/null 2>&1 || echo "warning: node / npm not found, needed for the web (web/) and make generate: https://nodejs.org"
 
-rs-build: toolchain ## build the Rust workspace (transition, docs/rust-port.md)
-	$(CARGO) build --workspace
+watch-tool: toolchain ## install watchexec (devlocal's rebuild on change) when it is missing
+	@command -v watchexec >/dev/null 2>&1 || $(CARGO) install --locked watchexec-cli
 
-rs-test: toolchain ## test the Rust workspace (transition)
-	$(CARGO) test --workspace
+# the former names of the Rust targets, kept as aliases
+rs-build: build
+rs-test: test
+rs-lint: lint
 
-rs-lint: toolchain ## rustfmt + clippy of the Rust workspace (transition)
-	$(CARGO) fmt --all --check
-	$(CARGO) clippy --workspace --all-targets -- -D warnings
+tools: watch-tool ## install the development tools: watchexec, and buf when it is not on the PATH (npm)
+	@command -v buf >/dev/null 2>&1 || npm install -g @bufbuild/buf@$(BUF_VERSION)
 
-tools: ## install code generators
-	go install github.com/bufbuild/buf/cmd/buf@latest
-	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-	go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
-	go install github.com/air-verse/air@latest
-
-generate: ## regenerate connect-rpc code and the web's TypeScript (web/src/gen) from proto/, and the catalogue of operations (contracts/operations)
+generate: toolchain ## regenerate the web's TypeScript (web/src/gen) from proto/, the catalogue of operations (contracts/operations) and the form widget catalogue of the web
 	@test -x web/node_modules/.bin/protoc-gen-es || (cd web && npm ci --ignore-scripts)
-	buf lint
-	buf generate
-	go generate ./contracts/operations/
+	$(BUF) lint
+	$(BUF) generate
+	GOAP_UPDATE_OPERATIONS=1 $(CARGO) test -p goap-opgen --lib catalogue_is_current
+	GOAP_UPDATE_WEB=1 $(CARGO) test -p goap-form --test catalog
 
-build:
+build: toolchain ## build the workspace, and the services into bin/
+	$(CARGO) build --workspace $(CARGO_EXCLUDE)
 	@mkdir -p bin
-	@for s in $(SERVICES); do go build -o bin/$$s ./platform/cmd/$$s || exit 1; done
+	@for s in $(SERVICES); do cp target/debug/$$s bin/$$s || exit 1; done
 
-test:
-	go test $(PKGS)
+test: toolchain
+	$(CARGO) test --workspace $(CARGO_EXCLUDE)
 
-tidy: ## go mod tidy in every module
-	@for m in $(MODULES); do (cd $$m && go mod tidy) || exit 1; done
+tidy: toolchain ## bring Cargo.lock in line with the manifests of the workspace
+	$(CARGO) update --workspace
 
 web-test: ## unit tests of the web (needs npm install in web/)
 	cd web && npm test
@@ -59,36 +59,38 @@ web-test: ## unit tests of the web (needs npm install in web/)
 PGTEST_IMAGE ?= pgvector/pgvector:pg17
 PGTEST_PORT  ?= 55432
 
-test-pg: ## every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away pgvector container on $(PGTEST_PORT))
-	@if [ -n "$$GOAP_TEST_PG_DSN" ]; then go test -count=1 $(PKGS); else \
+test-pg: toolchain ## every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away pgvector container on $(PGTEST_PORT))
+	@if [ -n "$$GOAP_TEST_PG_DSN" ]; then $(CARGO) test --workspace $(CARGO_EXCLUDE); else \
 	  c=$$(docker run -d --rm -e POSTGRES_USER=goap -e POSTGRES_PASSWORD=goap -e POSTGRES_DB=goap -p $(PGTEST_PORT):5432 $(PGTEST_IMAGE)) || exit 1; \
 	  trap "docker stop $$c >/dev/null" EXIT; \
 	  until [ "$$(docker logs $$c 2>&1 | grep -c 'ready to accept connections')" -ge 2 ]; do sleep 1; done; \
-	  GOAP_TEST_PG_DSN="postgres://goap:goap@localhost:$(PGTEST_PORT)/goap?sslmode=disable" go test -count=1 $(PKGS); fi
+	  GOAP_TEST_PG_DSN="postgres://goap:goap@localhost:$(PGTEST_PORT)/goap?sslmode=disable" $(CARGO) test --workspace $(CARGO_EXCLUDE); fi
 
 # offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
 EVAL ?= evals
-eval:
-	go run ./platform/cmd/goap-eval $(EVAL)
+eval: toolchain
+	$(CARGO) run -q -p goap-cmd-goap-eval -- $(EVAL)
 
-lint:
-	go vet $(PKGS)
-	gofmt -l $(MODULES) | (! grep .)
-	@for m in $(MODULES); do (cd $$m && go mod tidy -diff >/dev/null) || { echo "$$m/go.mod is not tidy: make tidy"; exit 1; }; done
+lint: toolchain ## rustfmt + clippy (warnings refused) + Cargo.lock in line with the manifests + dsl.md sync check
+	$(CARGO) fmt --all --check
+	$(CARGO) clippy --workspace $(CARGO_EXCLUDE) --all-targets -- -D warnings
+	@$(CARGO) metadata --locked --format-version 1 >/dev/null || { echo "Cargo.lock is not in line with the manifests: make tidy"; exit 1; }
 	@cmp -s docs/dsl.md web/src/lib/help/dsl.md || (echo 'web/src/lib/help/dsl.md is out of sync with docs/dsl.md' && exit 1)
 
-dev: ## single process, in-memory, demo data: http://localhost:8080
-	go run ./platform/cmd/goap-dev
+dev: toolchain ## single process, in-memory, demo data: http://localhost:8080
+	$(CARGO) run -p goap-cmd-goap-dev
 
-devlocal: ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
-	@command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@latest
+devlocal: watch-tool ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
 	@trap 'kill 0' EXIT INT TERM; \
 	$(MAKE) devlocal-backend & \
 	$(MAKE) devlocal-web & \
 	wait
 
-devlocal-backend: ## SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080
-	air -c .air.toml
+# what a change of rebuilds the backend: the crates, the protos, the manifests (not web/, .goap/, target/, deploy/)
+WATCH := -w contracts -w lib -w graph -w engine -w mcp -w gateway -w platform -w proto -w Cargo.toml -w Cargo.lock -e rs,toml,lock,sql,proto,yaml,mjs,json
+
+devlocal-backend: watch-tool ## SQLite backend only, rebuilt and restarted by watchexec on source changes: http://localhost:8080
+	GOAP_STORE=sqlite watchexec -r --stop-signal SIGINT $(WATCH) -- $(CARGO) run -p goap-cmd-goap-dev
 
 devlocal-web: ## IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
 	cd web && npm install --no-audit --no-fund && npm run dev
@@ -105,8 +107,8 @@ web: devlocal-web
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
 
-claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
-	go run ./platform/cmd/connector-claude-coding-agent install
+claude-agent-runner: toolchain ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
+	$(CARGO) run -q -p goap-cmd-connector-claude-coding-agent -- install
 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)

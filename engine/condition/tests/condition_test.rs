@@ -371,6 +371,7 @@ fn explain() {
 // gate_history_test.go
 
 #[test]
+#[allow(clippy::field_reassign_with_default)] // StepRun has a private field
 fn guard_reads_the_history() {
     let expr = r#""intake/collect" in history.last && history.last["intake/collect"].current"#;
     let bb = Blackboard::default();

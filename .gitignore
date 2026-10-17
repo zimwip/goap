@@ -6,10 +6,9 @@
 .env*
 !.env.example
 /.goap/
-/.air/
 /web/.vitest/
 
-# compiled binaries (built by `go build ./platform/cmd/<name>` at the root)
+# compiled binaries (copied into bin/ by `make build`)
 /goap-dev
 /registry
 

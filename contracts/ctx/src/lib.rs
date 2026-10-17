@@ -50,7 +50,10 @@ impl Default for Ctx {
 
 impl fmt::Debug for Ctx {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Ctx").field("done", &self.is_done()).field("deadline", &self.0.deadline).finish()
+        f.debug_struct("Ctx")
+            .field("done", &self.is_done())
+            .field("deadline", &self.0.deadline)
+            .finish()
     }
 }
 
@@ -67,16 +70,35 @@ impl CancelHandle {
 impl Ctx {
     /// The root context: no value, never cancelled.
     pub fn background() -> Self {
-        Ctx(Arc::new(Inner { parent: None, value: None, token: CancellationToken::new(), deadline: None }))
+        Ctx(Arc::new(Inner {
+            parent: None,
+            value: None,
+            token: CancellationToken::new(),
+            deadline: None,
+        }))
     }
 
-    fn child(&self, value: Option<(TypeId, Arc<dyn Any + Send + Sync>)>, token: CancellationToken, deadline: Option<Instant>) -> Self {
-        Ctx(Arc::new(Inner { parent: Some(self.clone()), value, token, deadline }))
+    fn child(
+        &self,
+        value: Option<(TypeId, Arc<dyn Any + Send + Sync>)>,
+        token: CancellationToken,
+        deadline: Option<Instant>,
+    ) -> Self {
+        Ctx(Arc::new(Inner {
+            parent: Some(self.clone()),
+            value,
+            token,
+            deadline,
+        }))
     }
 
     /// A child carrying `v`, found by [`Ctx::value`] under its type.
     pub fn with<T: Any + Send + Sync>(&self, v: T) -> Self {
-        self.child(Some((TypeId::of::<T>(), Arc::new(v))), self.0.token.clone(), self.0.deadline)
+        self.child(
+            Some((TypeId::of::<T>(), Arc::new(v))),
+            self.0.token.clone(),
+            self.0.deadline,
+        )
     }
 
     /// The nearest value of type `T`.
@@ -96,7 +118,10 @@ impl Ctx {
     /// A child that `cancel` cancels, as the parent's cancellation does.
     pub fn with_cancel(&self) -> (Self, CancelHandle) {
         let t = self.0.token.child_token();
-        (self.child(None, t.clone(), self.0.deadline), CancelHandle(t))
+        (
+            self.child(None, t.clone(), self.0.deadline),
+            CancelHandle(t),
+        )
     }
 
     /// A child done after `d` (or when the parent is).

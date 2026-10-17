@@ -1,23 +1,23 @@
 # syntax=docker/dockerfile:1
 # One image per service: docker build --build-arg SERVICE=graph .
-FROM golang:1.26-alpine AS build
+# SERVICE is a binary of platform/cmd (crate goap-cmd-<SERVICE>, binary <SERVICE>).
+FROM rust:1.97-slim AS build
+# the C parts of the dependencies (bundled SQLite, aws-lc): a C compiler comes with the image, cmake for aws-lc
+RUN apt-get update && apt-get install -y --no-install-recommends cmake && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
-# the modules of the go.work (ADR 0125): their go.mod / go.sum first, so the download layer is cached
-COPY go.work go.work.sum ./
-COPY contracts/go.mod contracts/go.sum contracts/
-COPY lib/go.mod lib/go.sum lib/
-COPY graph/go.mod graph/go.sum graph/
-COPY engine/go.mod engine/go.sum engine/
-COPY mcp/go.mod mcp/go.sum mcp/
-COPY gateway/go.mod gateway/go.sum gateway/
-COPY platform/go.mod platform/go.sum platform/
-RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
+# the image's toolchain builds: rust-toolchain.toml would have rustup fetch the stable channel again
+RUN rm rust-toolchain.toml
 ARG SERVICE
-RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/service ./platform/cmd/${SERVICE}
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/src/target \
+    cargo build --release --locked -p goap-cmd-${SERVICE} \
+    && install -D target/release/${SERVICE} /out/service
 
-FROM gcr.io/distroless/static-debian12:nonroot
+FROM debian:trixie-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 65532 --no-create-home nonroot
 COPY --from=build /out/service /service
 COPY methodologies /methodologies
 COPY domains /domains

@@ -107,12 +107,12 @@ footer { font-size: 13px; color: var(--muted); }
   <header>
     <div class="eyebrow">zimwip/goap · main · ADR 0125</div>
     <h1>GOAP architecture</h1>
-    <p class="lede">Seven Go modules in one <code>go.work</code>, deployed as a dozen services behind one gateway. Organisations change the graph through changes; the engine runs the methodology that says how.</p>
+    <p class="lede">Seven modules in one Cargo workspace, deployed as a dozen services behind one gateway. Organisations change the graph through changes; the engine runs the methodology that says how.</p>
   </header>
 
   <section>
     <h2>Logical: modules and who may depend on whom</h2>
-    <p>Units of code and build, not of deployment. Each module is a directory at the repository root with its own <code>go.mod</code>; imports go downward only, and <code>platform/layering</code> checks every import, tests included, and each <code>go.mod</code>. A binary assembles several modules.</p>
+    <p>Units of code and build, not of deployment. Each module is a directory at the repository root holding one crate per package (<code>goap-&lt;package&gt;</code>); dependencies go downward only, and <code>platform/layering</code> checks the dependencies of every crate over <code>cargo metadata</code>, dev-dependencies included. A binary assembles several modules.</p>
     <div class="stack">
       <div class="tier">
         <div class="mod m-platform" data-module="platform"><h3>platform <span>composition</span></h3>
@@ -137,13 +137,13 @@ footer { font-size: 13px; color: var(--muted); }
       <div class="arrowrow">↓ never each other: they meet through contracts and the generated clients</div>
       <div class="tier">
         <div class="mod m-lib" data-module="lib"><h3>lib <span>shared libraries</span></h3>
-          <p>Domain model, type catalogue, CEL guards, the DSL (goja, yaegi), access, adapters, built-in MCP definitions, service plumbing and the clients of the graph and domain registry.</p>
+          <p>Domain model, type catalogue, CEL guards, the DSL (JavaScript, boa_engine), access, adapters, built-in MCP definitions, service plumbing and the clients of the graph and domain registry.</p>
           <div class="pk">def · typecat · guard · dsl · access · adapter · mcpbuiltin · llmcfg · platform · identity · telemetry · graphclient · domainclient</div></div>
       </div>
       <div class="arrowrow">↓</div>
       <div class="tier">
         <div class="mod m-contracts" data-module="contracts"><h3>contracts <span>depends on nothing</span></h3>
-          <p>Protos' generated Go (<code>gen</code>), the pure model, and the graph's contract <code>graphapi</code>: the port the engine and the built-in MCPs call.</p>
+          <p>Protos' generated Rust (<code>gen</code>, built from <code>proto/</code> at compile time), the pure model, and the graph's contract <code>graphapi</code>: the port the engine and the built-in MCPs call.</p>
           <div class="pk">gen · domain · graphapi · authz · mcp · llm · journal · operations · risk · assess · verify · review</div></div>
       </div>
     </div>
@@ -295,22 +295,22 @@ footer { font-size: 13px; color: var(--muted); }
   <section class="two">
     <div class="note">
       <h3>devlocal: one process</h3>
-      <p><code>goap-dev</code> composes every service in process on SQLite (<code>.goap/goap.db</code>): no NATS, no Docker. Air rebuilds it on each Go change and Vite serves the IDE.</p>
+      <p><code>goap-dev</code> composes every service in process on SQLite (<code>.goap/goap.db</code>): no NATS, no Docker. watchexec rebuilds and restarts it on each source change and Vite serves the IDE.</p>
       <pre>make devlocal          # :5173 IDE, :8080 API
 .\make.ps1 devlocal   # Windows</pre>
     </div>
     <div class="note">
-      <h3>Working in the go.work</h3>
+      <h3>Working in the workspace</h3>
       <ul>
-        <li><code>./...</code> at the root matches nothing: <code>make test</code>, <code>make lint</code> name the modules.</li>
-        <li><code>make tidy</code> after changing imports; lint refuses an untidy <code>go.mod</code>.</li>
+        <li><code>make build</code>, <code>make test</code>, <code>make lint</code> run cargo over the whole workspace; one crate: <code>cargo test -p &lt;crate&gt;</code>.</li>
+        <li>A dependency is a <code>[workspace.dependencies]</code> entry, used with <code>{ workspace = true }</code>; <code>make tidy</code> after changing a manifest, lint refuses a <code>Cargo.lock</code> out of line.</li>
         <li>A test that needs two modules goes in <code>platform/e2e/&lt;name&gt;</code>.</li>
-        <li>Each module also builds alone: <code>GOWORK=off go build ./...</code>.</li>
+        <li>The toolchain is pinned by <code>rust-toolchain.toml</code>: <code>make toolchain</code> installs it.</li>
       </ul>
     </div>
   </section>
 
-  <footer>Source: <code>docs/architecture-overview.html</code>, drawn from <code>deploy/compose/docker-compose.yml</code>, the gateway's routes and ADR 0125. Kept up to date with the code: a new module, binary or compose service fails <code>TestArchitectureOverview</code> until it is on this page.</footer>
+  <footer>Source: <code>docs/architecture-overview.html</code>, drawn from <code>deploy/compose/docker-compose.yml</code>, the gateway's routes and ADR 0125. Kept up to date with the code: a new module, binary or compose service fails <code>platform/layering</code> <code>architecture_overview</code> until it is on this page.</footer>
 </div>
 </body>
 </html>
