@@ -7,8 +7,15 @@ license.workspace = true
 publish = false
 
 [dependencies]
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-graphapi = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+tokio = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
 
 [lints]
 workspace = true

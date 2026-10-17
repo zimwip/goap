@@ -1,0 +1,5 @@
+NODE REQ-2 other@T modified review=accepted
+declared by ? — 
+from it-art-0 artifact/analysis [accepted] by agent run exec-123 — the summary
+written N2@v3
+landed N2@v3

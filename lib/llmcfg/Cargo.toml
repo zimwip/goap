@@ -7,10 +7,20 @@ license.workspace = true
 publish = false
 
 [dependencies]
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-graphapi = { workspace = true }
 goap-llm = { workspace = true }
 goap-graphsnap = { workspace = true }
+async-trait = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
 
 [lints]
 workspace = true
