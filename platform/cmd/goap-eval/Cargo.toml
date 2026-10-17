@@ -1,0 +1,18 @@
+[package]
+name = "goap-cmd-goap-eval"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "goap-eval"
+path = "src/main.rs"
+
+[dependencies]
+goap-eval = { workspace = true }
+goap-modelgw = { workspace = true }
+
+[lints]
+workspace = true

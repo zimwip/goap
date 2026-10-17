@@ -1,0 +1,27 @@
+[package]
+name = "goap-e2e-selfimprove"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+goap-authz = { workspace = true }
+goap-domain = { workspace = true }
+goap-journal = { workspace = true }
+goap-llm = { workspace = true }
+goap-engine = { workspace = true }
+goap-intent = { workspace = true }
+goap-methodology = { workspace = true }
+goap-observe = { workspace = true }
+goap-selfimprove = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-def = { workspace = true }
+goap-dsl = { workspace = true }
+
+[lints]
+workspace = true

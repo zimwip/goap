@@ -1,0 +1,18 @@
+[package]
+name = "goap-access"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-authz = { workspace = true }
+goap-criticality = { workspace = true }
+goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-graphsnap = { workspace = true }
+goap-typecat = { workspace = true }
+
+[lints]
+workspace = true

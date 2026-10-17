@@ -1,0 +1,18 @@
+[package]
+name = "goap-def"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-algo = { workspace = true }
+goap-domain = { workspace = true }
+goap-form = { workspace = true }
+goap-domains-builtin = { workspace = true }
+goap-dsl = { workspace = true }
+goap-guard = { workspace = true }
+
+[lints]
+workspace = true

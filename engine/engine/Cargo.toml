@@ -1,0 +1,31 @@
+[package]
+name = "goap-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-assess = { workspace = true }
+goap-authz = { workspace = true }
+goap-builtins = { workspace = true }
+goap-domain = { workspace = true }
+goap-events = { workspace = true }
+goap-form = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-journal = { workspace = true }
+goap-llm = { workspace = true }
+goap-mcp = { workspace = true }
+goap-risk = { workspace = true }
+goap-verify = { workspace = true }
+goap-condition = { workspace = true }
+goap-goap = { workspace = true }
+goap-intent = { workspace = true }
+goap-methodology = { workspace = true }
+goap-brief = { workspace = true }
+goap-def = { workspace = true }
+goap-dsl = { workspace = true }
+
+[lints]
+workspace = true

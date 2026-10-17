@@ -1,0 +1,19 @@
+[package]
+name = "goap-condition"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-assess = { workspace = true }
+goap-criticality = { workspace = true }
+goap-domain = { workspace = true }
+goap-journal = { workspace = true }
+goap-risk = { workspace = true }
+goap-verify = { workspace = true }
+goap-guard = { workspace = true }
+
+[lints]
+workspace = true

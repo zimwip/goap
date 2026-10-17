@@ -1,0 +1,14 @@
+[package]
+name = "goap-review"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-authz = { workspace = true }
+goap-domain = { workspace = true }
+
+[lints]
+workspace = true

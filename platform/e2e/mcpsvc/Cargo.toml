@@ -1,0 +1,27 @@
+[package]
+name = "goap-e2e-mcpsvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+
+[dev-dependencies]
+goap-algo = { workspace = true }
+goap-authz = { workspace = true }
+goap-mcp = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphsvc = { workspace = true }
+goap-access = { workspace = true }
+goap-adapter = { workspace = true }
+goap-identity = { workspace = true }
+goap-modeltoken = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-mcpsvc = { workspace = true }
+goap-devseed = { workspace = true }
+
+[lints]
+workspace = true

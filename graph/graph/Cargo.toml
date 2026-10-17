@@ -1,0 +1,29 @@
+[package]
+name = "goap-graph"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-algo = { workspace = true }
+goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-operations = { workspace = true }
+goap-def = { workspace = true }
+goap-dsl = { workspace = true }
+goap-guard = { workspace = true }
+goap-typecat = { workspace = true }
+
+[dev-dependencies]
+goap-decision = { workspace = true }
+goap-journal = { workspace = true }
+goap-review = { workspace = true }
+goap-risk = { workspace = true }
+goap-prov = { workspace = true }
+goap-platform = { workspace = true }
+goap-sqlschematest = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,27 @@
+[package]
+name = "goap-e2e-connectorkit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+
+[dev-dependencies]
+goap-authz = { workspace = true }
+goap-mcp = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphsvc = { workspace = true }
+goap-access = { workspace = true }
+goap-identity = { workspace = true }
+goap-mcpbuiltin = { workspace = true }
+goap-connectorkit = { workspace = true }
+goap-connector-localfs = { workspace = true }
+goap-connector-workspace = { workspace = true }
+goap-mcpsvc = { workspace = true }
+goap-devseed = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+[package]
+name = "goap-methodology"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-builtins = { workspace = true }
+goap-domain = { workspace = true }
+goap-events = { workspace = true }
+goap-form = { workspace = true }
+goap-mcp = { workspace = true }
+goap-operations = { workspace = true }
+goap-condition = { workspace = true }
+goap-def = { workspace = true }
+goap-guard = { workspace = true }
+
+[dev-dependencies]
+goap-goap = { workspace = true }
+
+[lints]
+workspace = true

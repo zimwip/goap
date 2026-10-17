@@ -1,0 +1,18 @@
+[package]
+name = "goap-domainpb"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-algo = { workspace = true }
+goap-domain = { workspace = true }
+goap-def = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-typecat = { workspace = true }
+
+[lints]
+workspace = true

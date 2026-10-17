@@ -1,0 +1,39 @@
+[package]
+name = "goap-graphsvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-criticality = { workspace = true }
+goap-domain = { workspace = true }
+goap-events = { workspace = true }
+goap-journal = { workspace = true }
+goap-mcp = { workspace = true }
+goap-review = { workspace = true }
+goap-risk = { workspace = true }
+goap-graph = { workspace = true }
+goap-okf = { workspace = true }
+goap-prov = { workspace = true }
+goap-access = { workspace = true }
+goap-adapter = { workspace = true }
+goap-identity = { workspace = true }
+goap-llmcfg = { workspace = true }
+goap-mcpbuiltin = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-rpcerr = { workspace = true }
+goap-typecat = { workspace = true }
+
+[dev-dependencies]
+goap-decision = { workspace = true }
+goap-operations = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-def = { workspace = true }
+goap-graphclient = { workspace = true }
+
+[lints]
+workspace = true

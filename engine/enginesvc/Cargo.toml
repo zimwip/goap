@@ -1,0 +1,29 @@
+[package]
+name = "goap-enginesvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-condition = { workspace = true }
+goap-engine = { workspace = true }
+goap-intent = { workspace = true }
+goap-methodology = { workspace = true }
+goap-access = { workspace = true }
+goap-identity = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-platform = { workspace = true }
+goap-rpcerr = { workspace = true }
+
+[dev-dependencies]
+goap-pgtest = { workspace = true }
+goap-sqlschematest = { workspace = true }
+
+[lints]
+workspace = true

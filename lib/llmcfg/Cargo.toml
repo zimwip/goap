@@ -1,0 +1,16 @@
+[package]
+name = "goap-llmcfg"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-llm = { workspace = true }
+goap-graphsnap = { workspace = true }
+
+[lints]
+workspace = true

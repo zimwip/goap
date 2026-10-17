@@ -1,0 +1,38 @@
+[package]
+name = "goap-registrysvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-builtins = { workspace = true }
+goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-mcp = { workspace = true }
+goap-condition = { workspace = true }
+goap-engine = { workspace = true }
+goap-methodology = { workspace = true }
+goap-selfimprove = { workspace = true }
+goap-def = { workspace = true }
+goap-domainpb = { workspace = true }
+goap-graphsnap = { workspace = true }
+goap-identity = { workspace = true }
+goap-llmcfg = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-typecat = { workspace = true }
+
+[dev-dependencies]
+goap-assess = { workspace = true }
+goap-decision = { workspace = true }
+goap-risk = { workspace = true }
+goap-verify = { workspace = true }
+goap-domainsvc = { workspace = true }
+goap-graph = { workspace = true }
+goap-mcpbuiltin = { workspace = true }
+
+[lints]
+workspace = true

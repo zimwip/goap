@@ -1,0 +1,17 @@
+[package]
+name = "goap-adapter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-algo = { workspace = true }
+goap-mcp = { workspace = true }
+
+[dev-dependencies]
+goap-dsl = { workspace = true }
+
+[lints]
+workspace = true

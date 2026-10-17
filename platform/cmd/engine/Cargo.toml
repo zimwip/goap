@@ -1,0 +1,41 @@
+[package]
+name = "goap-cmd-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "engine"
+path = "src/main.rs"
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-assess = { workspace = true }
+goap-domain = { workspace = true }
+goap-events = { workspace = true }
+goap-llm = { workspace = true }
+goap-risk = { workspace = true }
+goap-verify = { workspace = true }
+goap-engine = { workspace = true }
+goap-enginesvc = { workspace = true }
+goap-enginetel = { workspace = true }
+goap-intent = { workspace = true }
+goap-methodology = { workspace = true }
+goap-sandbox = { workspace = true }
+goap-selfimprove = { workspace = true }
+goap-access = { workspace = true }
+goap-def = { workspace = true }
+goap-domainclient = { workspace = true }
+goap-graphclient = { workspace = true }
+goap-identity = { workspace = true }
+goap-platform = { workspace = true }
+goap-telemetry = { workspace = true }
+goap-typecat = { workspace = true }
+goap-mcpsvc = { workspace = true }
+goap-modelgw = { workspace = true }
+goap-registrysvc = { workspace = true }
+
+[lints]
+workspace = true

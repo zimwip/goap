@@ -1,0 +1,20 @@
+[package]
+name = "goap-prefssvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-identity = { workspace = true }
+
+[dev-dependencies]
+goap-pgtest = { workspace = true }
+goap-platform = { workspace = true }
+goap-sqlschematest = { workspace = true }
+
+[lints]
+workspace = true

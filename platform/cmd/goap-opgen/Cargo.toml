@@ -1,0 +1,17 @@
+[package]
+name = "goap-cmd-goap-opgen"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "goap-opgen"
+path = "src/main.rs"
+
+[dependencies]
+goap-opgen = { workspace = true }
+
+[lints]
+workspace = true

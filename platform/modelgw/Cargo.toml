@@ -1,0 +1,33 @@
+[package]
+name = "goap-modelgw"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-journal = { workspace = true }
+goap-llm = { workspace = true }
+goap-graphsvc = { workspace = true }
+goap-identity = { workspace = true }
+goap-llmcfg = { workspace = true }
+goap-modeltoken = { workspace = true }
+goap-platform = { workspace = true }
+
+[dev-dependencies]
+goap-domain = { workspace = true }
+goap-engine = { workspace = true }
+goap-intent = { workspace = true }
+goap-methodology = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-pgtest = { workspace = true }
+goap-sqlschematest = { workspace = true }
+goap-telemetry = { workspace = true }
+goap-typecat = { workspace = true }
+
+[lints]
+workspace = true

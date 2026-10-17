@@ -1,0 +1,20 @@
+[package]
+name = "goap-graphclient"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-access = { workspace = true }
+goap-identity = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-rpcerr = { workspace = true }
+
+[lints]
+workspace = true

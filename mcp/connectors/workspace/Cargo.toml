@@ -1,0 +1,18 @@
+[package]
+name = "goap-connector-workspace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-mcp = { workspace = true }
+goap-connectorkit = { workspace = true }
+
+[dev-dependencies]
+goap-mcpbuiltin = { workspace = true }
+
+[lints]
+workspace = true

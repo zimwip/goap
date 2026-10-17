@@ -1,0 +1,18 @@
+[package]
+name = "goap-cmd-connector-localfs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "connector-localfs"
+path = "src/main.rs"
+
+[dependencies]
+goap-connectorkit = { workspace = true }
+goap-connector-localfs = { workspace = true }
+
+[lints]
+workspace = true

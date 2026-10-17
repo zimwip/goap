@@ -1,0 +1,26 @@
+[package]
+name = "goap-indexersvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-domain = { workspace = true }
+goap-llm = { workspace = true }
+goap-index = { workspace = true }
+goap-access = { workspace = true }
+goap-identity = { workspace = true }
+goap-rpcerr = { workspace = true }
+
+[dev-dependencies]
+goap-graph = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-def = { workspace = true }
+goap-typecat = { workspace = true }
+
+[lints]
+workspace = true

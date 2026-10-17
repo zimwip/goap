@@ -1,0 +1,14 @@
+[package]
+name = "goap-graphtest"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-domain = { workspace = true }
+goap-graph = { workspace = true }
+
+[lints]
+workspace = true
