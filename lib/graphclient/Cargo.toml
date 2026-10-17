@@ -15,6 +15,13 @@ goap-access = { workspace = true }
 goap-identity = { workspace = true }
 goap-pbconv = { workspace = true }
 goap-rpcerr = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+axum = { workspace = true }
 
 [lints]
 workspace = true

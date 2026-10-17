@@ -11,6 +11,11 @@ goap-gen = { workspace = true }
 goap-def = { workspace = true }
 goap-domainpb = { workspace = true }
 goap-pbconv = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+goap-typecat = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
 
-[lints]
-workspace = true
