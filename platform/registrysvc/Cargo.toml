@@ -40,6 +40,8 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+goap-decision = { workspace = true }
+goap-graph = { workspace = true }
 goap-domainsvc = { workspace = true }
 goap-assess = { workspace = true }
 goap-risk = { workspace = true }

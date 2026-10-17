@@ -24,7 +24,7 @@ use crate::sqlstore::{MIGRATIONS, SQLITE_MIGRATIONS, SqlStore};
 use crate::store::{AliasEntry, MemoryStore, ModelEntry, PERIOD_TOTAL, ProviderRecord, Store};
 
 /// FakeGraph is the head of the platform namespace: its nodes, a new baseline at every edit (the Go tests run on a
-/// real graph and seed it with graphsvc.SeedModels, neither of which is ported yet). It also holds the environment the
+/// real graph and seed it with graphsvc.SeedModels, not ported yet). It also holds the environment the
 /// secrets resolve `env:` references from, so the tests set no process variable.
 #[derive(Default)]
 pub(crate) struct FakeGraph {

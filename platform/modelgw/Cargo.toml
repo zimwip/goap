@@ -37,6 +37,11 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+goap-engine = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-intent = { workspace = true }
+goap-methodology = { workspace = true }
 goap-domain = { workspace = true }
 goap-graphapi = { workspace = true }
 goap-graphsnap = { workspace = true }

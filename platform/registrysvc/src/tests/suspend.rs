@@ -8,7 +8,7 @@ use goap_def::{Domain, LinkType, NodeType, Schema};
 use goap_engine::{Payload, Publisher};
 use goap_methodology::{Action, Condition, Goal, KIND_HUMAN, Methodology};
 
-use super::{FakeGraph, as_, must_yaml, registry, ticking_clock};
+use super::{as_, must_yaml, registry, ticking_clock};
 use crate::graphstore::GraphStore;
 
 pub(crate) fn alm_domain(version: &str) -> Domain {
@@ -103,7 +103,11 @@ impl Subjects {
 // the versions it was published against (ADR 0113), and lists as a user of the domain.
 #[tokio::test]
 async fn methodologies_follow_the_domain_registry() {
-    let (s, d) = registry(Arc::new(GraphStore::new(FakeGraph::new())), true, |_| {});
+    let (s, d) = registry(
+        Arc::new(GraphStore::new(super::realgraph::real())),
+        true,
+        |_| {},
+    );
     let ctx = as_(&["admin"]);
     d.save_domain(&ctx, alm_domain("1"))
         .await

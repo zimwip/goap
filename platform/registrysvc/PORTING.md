@@ -1,38 +1,34 @@
 # Porting `platform/registrysvc` to Rust (`goap-registrysvc`)
 
-The crate does not depend on `goap-graph`. Where Go's tests run the registry over the real graph, the Rust tests use
-`src/tests/fakegraph.rs` (`FakeGraph`, an in-memory implementation of the `StoreGraph` port; `FakeGraph::typed()` is
-strict about attributes and link types, as `typecat::builtin()` says). The tests below need the real graph, so they
-are not ported yet. They are to be ported once `goap-graph` is available, in an e2e crate (`platform/e2e/*`) or here as
-a dev-dependency.
+Every Go test is ported (`src/tests/`). The Go package imports `graph/graph` only in its tests, so `goap-graph` is a
+dev-dependency and the crate's own code does not depend on it.
 
-## Tests left (they need `goap-graph`)
+## Tests over the graph
 
-- `TestChangeLifecycleGate` (`changelifecycle_test.go`): `Graph.TransitionChange` gated by the registry as
-  `ChangeLifecycles`.
-- `TestActivityGoalsMetGatesApply` (`activitygoals_test.go`): the part that goes through `Graph.Apply` / the merge
-  of a real change. The decision itself is ported as `activity_goals_met_decides_the_merge`, which calls `Service::merge`
-  directly.
-- `TestActivityGoalsMetRefusesAnUnresolvableRef`: same split. The direct check is ported, the `Apply` path is not.
-- `TestSubChangeActivityCascade` (`subactivity_test.go`): the part wired through `Graph.CreateChange` with
-  `SubChangeValidator`. `sub_change_validator` itself is ported (`sub_change_activity_cascade`).
-- `TestGraphStore*`, `TestReferencesAreLinks`, `TestImportPublishedIsOneChange`, `TestPublishStubsMissingAlias*`:
-  ported over `FakeGraph`. Run them again over `goap_graph::Graph` once it implements `StoreGraph`, to check the
-  versioning and conflict semantics the fake only imitates.
+- `src/tests/realgraph.rs` holds what the tests need of the real graph: `impl StoreGraph for goap_graph::Graph`,
+  `Late` (the registry plugged as the graph's `ChangeLifecycles` and `SubChangeValidator`, bound once the registry over
+  a store over that graph exists: Go sets `g.Lifecycles = reg` afterwards) and `Probe` (what a test reads of a graph,
+  for both the real graph and `FakeGraph`).
+- Over the real graph only (as in Go): `TestChangeLifecycleGate`, the `Apply` paths of `TestActivityGoalsMetGatesApply`
+  / `TestActivityGoalsMetRefusesAnUnresolvableRef` and the `CreateChange` path of `TestSubChangeActivityCascade`
+  (`src/tests/changelifecycle.rs`), `TestGuardianChain`, `versions_test.go`, `suspend_test.go`.
+- Over both `FakeGraph` and the real graph: `TestGraphStore*`, `TestReferencesAreLinks` (both typed by the built-in
+  meta-domain), `TestImportPublishedIsOneChange`, `TestPublishStubsMissingAlias*`, and the tests over `stores()`
+  (memory, the fake, the real graph).
+- The direct checks of the registry (`activity_goals_met_decides_the_merge`, `sub_change_activity_cascade`, ...) stay,
+  on hand-made blackboards over `FakeGraph`.
 
 `TestClientActivatesAsTheRegistry` is ported in process (the `Client` over the `Handler` through `Client::with_service`),
 with no HTTP server.
 
-## Code left (it needs `goap-graph`)
+## Left to the compositions (goap-dev, cmd/registry)
 
-- `impl goap_graph::ChangeLifecycles for Service`. Because of the orphan rule it must live in this crate. Until then the
-  methods are inherent on `Service` (`lifecycle`, `merge`, `guardians`, `check_guardians`, `integrates`,
-  `default_goal`, `methodology_version`, `operation_roles`, ...), and `Error::into_graph()` is ready for the mapping of
-  their errors.
-- `impl StoreGraph for goap_graph::Graph`, so that `GraphStore` runs in process (it runs over `goap_graphclient::Client`
-  today).
-- `Service::sub_change_validator` and `merge` are to be plugged as `Graph.SubChangeValidator` / the guardian by the
-  compositions.
+Go's `Service` satisfies `graph.ChangeLifecycles` structurally, and `*graph.Graph` satisfies `StoreGraph`. In Rust a
+composition running the registry over the graph in process wraps them in newtypes (the orphan rule, and no normal
+dependency on `goap-graph` here): the registry as `goap_graph::ChangeLifecycles` / `SubChangeValidator` (the inherent
+methods `lifecycle`, `merge`, `guardians`, `check_guardians`, `integrates`, `default_goal`, `methodology_version`,
+`guard`, `gate`, `sub_change_validator`, errors mapped with `Error::into_graph`), and the graph as `StoreGraph`.
+`src/tests/realgraph.rs` is the model of both. `GraphStore` over `goap_graphclient::Client` needs nothing.
 
 ## Layering (ADR 0125 §3)
 

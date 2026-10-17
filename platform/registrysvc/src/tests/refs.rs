@@ -1,4 +1,4 @@
-//! refs_test.go, over the typed graph in memory of the tests (strict attributes and link types of the built-in
+//! refs_test.go, over the typed graph in memory of the tests and over the real graph typed the same way (strict attributes and link types of the built-in
 //! meta-domain).
 
 use std::collections::HashMap;
@@ -7,6 +7,7 @@ use std::sync::Arc;
 use goap_methodology::Methodology;
 use serde_json::Value;
 
+use super::realgraph::{Probe, real_typed};
 use super::{FakeGraph, at, bg, canon};
 use crate::graphstore::{GraphStore, LINK_DEFINES, NAMESPACE_METHODOLOGY, methodology_version_key};
 use crate::store::{Record, STATUS_DRAFT, Store};
@@ -37,8 +38,8 @@ processes:
 
 /// linksOf lists the reference links leaving a node of the head of the methodology namespace, suspect ones
 /// included, as "<type> <target key relative to the version> <attributes>".
-fn links_of(g: &FakeGraph, hk: &str, from: &str) -> Vec<String> {
-    let (nodes, links) = g.head_graph(NAMESPACE_METHODOLOGY);
+async fn links_of<G: Probe>(g: &G, hk: &str, from: &str) -> Vec<String> {
+    let (nodes, links) = g.head_graph(NAMESPACE_METHODOLOGY).await;
     let mut keys = HashMap::new();
     let mut src = None;
     for n in &nodes {
@@ -69,8 +70,9 @@ fn links_of(g: &FakeGraph, hk: &str, from: &str) -> Vec<String> {
     out
 }
 
-fn props(g: &FakeGraph, key: &str) -> serde_json::Map<String, Value> {
-    g.node_by_key(NAMESPACE_METHODOLOGY, key)
+async fn props<G: Probe>(g: &G, key: &str) -> serde_json::Map<String, Value> {
+    g.find(NAMESPACE_METHODOLOGY, key)
+        .await
         .unwrap_or_else(|| panic!("{key}"))
         .properties
 }
@@ -80,9 +82,13 @@ fn props(g: &FakeGraph, key: &str) -> serde_json::Map<String, Value> {
 // properties; the definition reads back as it was saved.
 #[tokio::test]
 async fn references_are_links() {
+    references_are_links_over(FakeGraph::typed()).await;
+    references_are_links_over(real_typed()).await;
+}
+
+async fn references_are_links_over<G: Probe + 'static>(g: Arc<G>) {
     let ctx = bg();
-    let g = FakeGraph::typed();
-    let s = GraphStore::new(g.clone() as Arc<_>);
+    let s = GraphStore::new(g.clone());
     let mut m = Methodology::parse(REFS_YAML.as_bytes()).expect("parse");
     let now = at(2026, 10, 15, 8, 0);
     let save = |m: Methodology| {
@@ -111,8 +117,8 @@ async fn references_are_links() {
     };
     save(m.clone()).await;
     let hk = methodology_version_key(&m.name, &m.version);
-    let expect = |from: &str, want: &[&str]| {
-        assert_eq!(links_of(&g, &hk, from), want, "links of {from}");
+    let expect = async |from: &str, want: &[&str]| {
+        assert_eq!(links_of(&*g, &hk, from).await, want, "links of {from}");
     };
     expect(
         "action/frame",
@@ -120,7 +126,8 @@ async fn references_are_links() {
             r#"assigns role/analyst {"as":"run","position":0}"#,
             r#"produces condition/framed {"value":true}"#,
         ],
-    );
+    )
+    .await;
     expect(
         "action/analyse",
         &[
@@ -128,11 +135,13 @@ async fn references_are_links() {
             r#"produces condition/analysed {"value":true}"#,
             r#"requires condition/framed {"value":true}"#,
         ],
-    );
+    )
+    .await;
     expect(
         "goal/done",
         &[r#"requires condition/analysed {"value":true}"#],
-    );
+    )
+    .await;
     expect(
         "agent/a",
         &[
@@ -140,46 +149,51 @@ async fn references_are_links() {
             r#"uses action/analyse {"position":0}"#,
             r#"uses action/frame {"position":2}"#,
         ],
-    );
+    )
+    .await;
     expect(
         "condition/all_ok",
         &[r#"aggregates condition/impact_ok {"as":"all"}"#],
-    );
+    )
+    .await;
     expect(
         "process/deliver",
         &[
             "sub_activity step/deliver/analysis null",
             "sub_activity step/deliver/framing null",
         ],
-    );
+    )
+    .await;
     expect(
         "step/deliver/framing",
         &[
             r#"assigns role/analyst {"as":"responsible"}"#,
             r#"performed_by action/frame {"as":"action"}"#,
         ],
-    );
+    )
+    .await;
     expect(
         "step/deliver/analysis",
         &[
             r#"performed_by action/analyse {"as":"alternative","position":0}"#,
             r#"produces condition/analysed {"value":true}"#,
         ],
-    );
-    expect("", &["main_goal goal/done null"]);
+    )
+    .await;
+    expect("", &["main_goal goal/done null"]).await;
 
     // what names nothing of the version stays a property
-    let p = props(&g, &format!("{hk}/action/analyse"));
+    let p = props(&*g, &format!("{hk}/action/analyse")).await;
     assert!(
         canon(&p.get("pre")) == r#"{"state:open":true}"# && p.get("effects").is_none(),
         "the action keeps only the names it cannot link: {p:?}"
     );
-    let p = props(&g, &format!("{hk}/agent/a"));
+    let p = props(&*g, &format!("{hk}/agent/a")).await;
     assert!(
         canon(&p.get("actions")) == r#"["other/x"]"# && p.get("goals").is_none(),
         "the agent keeps only the names it cannot link: {p:?}"
     );
-    let p = props(&g, &format!("{hk}/process/deliver"));
+    let p = props(&*g, &format!("{hk}/process/deliver")).await;
     assert!(
         p.get("steps").is_none(),
         "the steps of a process are nodes: {p:?}"
@@ -201,20 +215,22 @@ async fn references_are_links() {
             r#"produces condition/analysed {"value":true}"#,
             r#"requires condition/framed {"value":false}"#,
         ],
-    );
+    )
+    .await;
     expect(
         "action/frame",
         &[
             r#"assigns role/analyst {"as":"run","position":0}"#,
             r#"produces condition/framed {"value":true}"#,
         ],
-    );
+    )
+    .await;
 
     // an element that leaves the definition drops its links, and the names of it become properties again
     m.conditions.remove(0);
     save(m.clone()).await;
-    expect("condition/framed", &[]);
-    let p = props(&g, &format!("{hk}/action/frame"));
+    expect("condition/framed", &[]).await;
+    let p = props(&*g, &format!("{hk}/action/frame")).await;
     assert_eq!(
         canon(&p.get("effects")),
         r#"{"framed":true}"#,

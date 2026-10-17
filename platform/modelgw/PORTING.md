@@ -7,23 +7,24 @@ Anthropic proxy, the helper (`Suggest`), the Connect handler and client of `mode
 
 ## Tests not ported
 
-These Go tests need the real graph, `graphtest` or `graphsvc`, none of which is ported yet:
+This Go test needs `graphsvc`, not ported yet:
 
-- `TestEngineRowsFindTheirExchangeInTheChangeLog` (`exchange_test.go`): it runs the engine (`engine.Engine`,
-  `methodology.LoadFile`) on a `graph.Graph` seeded with `graphtest`, through the gateway.
 - The re-seed assertion of `TestDefaultConfigIsSeededOnce` (`service_test.go`): "an administered graph must not be
   re-seeded" checks `graphsvc.SeedModels`. The rest of that test is ported.
+
+`TestEngineRowsFindTheirExchangeInTheChangeLog` (`exchange_test.go`) is ported in `src/tests/exchange.rs` over the
+real graph (`goap-graph`, `goap-graphtest`) and the engine (dev-dependencies, as in Go).
 
 ## Tests ported on a fake graph
 
 Every other Go test is ported (`src/tests/`). The Go tests read the configuration from a `graph.Graph` seeded with
-`graphsvc.SeedModels` and edited with `graph.Commit`. Neither is ported, so the Rust tests use a fake instead:
+`graphsvc.SeedModels` and edited with `graph.Commit`. `graphsvc` is not ported, so the Rust tests use a fake instead:
 `tests/helpers.rs` `FakeGraph`, which implements `goap_graphsnap::Graph`. It gives a new baseline at every edit and
 keeps the nodes of the platform namespace. `seed` stands in for `SeedModels`: it seeds when no provider node exists.
 `update` and `retire` stand in for the edits and the move to `retired`. The fake also holds the `env:` values that
 the test secrets resolve, so no test sets a process variable.
 
-Once graph/graph and graph/graphsvc are ported, run these tests again on the real graph:
+Once graph/graphsvc is ported, run these tests again on the real graph:
 
 - `service.rs`: `test_service_policy`, `test_provider_key_is_a_reference`, `test_default_config_is_seeded_once`,
   `test_embed`

@@ -279,3 +279,204 @@ async fn test_exchange_is_purged_with_its_row() {
         assert_eq!(x.response, "recent", "{name}");
     }
 }
+
+/// The rows of the engine's calls of a change find their exchange in the change log, one each (ADR 0089, 0059).
+#[tokio::test]
+async fn test_engine_rows_find_their_exchange_in_the_change_log() {
+    use goap_engine as engine;
+    use goap_graph::LinkWrite;
+    use goap_graphtest as graphtest;
+    use goap_methodology as methodology;
+
+    let ctx = Ctx::background();
+    let (mut svc, cfg) = super::helpers::new_service(memory());
+    cfg.seed(
+        &[super::helpers::fake_provider()],
+        &[super::helpers::model("fake", "echo")],
+        &[
+            super::helpers::alias("default", "fake/echo"),
+            super::helpers::alias("fast", "fake/echo"),
+        ],
+    );
+    svc.router.instrument = Some(Arc::new(|_ctx, _p, _m, req: llm::Request, _call| {
+        Box::pin(async move {
+            let p = req.messages[0].content.clone();
+            let out = if p.contains("DIRECTLY impacted") {
+                r#"{"items":[{"type":"changeImpact","changeImpact":{"op":"declare","intent":"modified","key":"REQ-1","rationale":"PSP API change"}}]}"#
+            } else if p.contains("new version") {
+                r#"{"items":[{"type":"changeImpact","changeImpact":{"op":"write","node":"REQ-1","props":{"title":"Use PSP v2"}}}]}"#
+            } else if p.contains("test case") {
+                r##"{"items":[{"type":"changeImpact","changeImpact":{"op":"declare","ref":"#t1","intent":"created","type":"TestCase","key":"TST-9","rationale":"cover REQ-1"}},
+			{"type":"changeImpact","changeImpact":{"op":"write","node":"#t1","props":{"title":"PSP v2 test"},"links":[{"type":"verifies","to":"REQ-1"}]}}]}"##
+            } else if p.contains("report") {
+                r##"{"items":[{"type":"artifact","target":"report","data":{"markdown":"# Impact"}}]}"##
+            } else {
+                panic!("unexpected prompt {p}")
+            };
+            Ok(llm::Response {
+                text: out.into(),
+                usage: llm::Usage {
+                    input_tokens: 3,
+                    output_tokens: 4,
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+        })
+    }));
+    let svc = svc.shared();
+
+    let m = methodology::load_file(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../methodologies/examples/impact-analysis.yaml"
+    ))
+    .unwrap();
+    let cm = Arc::new(m.compile().unwrap());
+    let g = Arc::new(goap_graph::Graph::new(Arc::new(goap_graph::Memory::new())));
+    graphtest::project(&ctx, &g, "PROJ-TEST", "Test")
+        .await
+        .unwrap();
+    let obj = |v: serde_json::Value| v.as_object().unwrap().clone();
+    let node =
+        |key: &str, typ: &str, props: serde_json::Value, links: Vec<LinkWrite>| graphtest::Node {
+            namespace: "alm".into(),
+            key: key.into(),
+            r#type: typ.into(),
+            properties: obj(props),
+            links,
+            ..Default::default()
+        };
+    let link = |typ: &str, to: &goap_domain::Node| LinkWrite {
+        r#type: typ.into(),
+        to: to.r#ref(),
+        ..Default::default()
+    };
+    let need = graphtest::import(
+        &ctx,
+        &g,
+        node(
+            "NEED-1",
+            "alm@Need",
+            serde_json::json!({"title": "Pay online"}),
+            vec![],
+        ),
+    )
+    .await
+    .unwrap();
+    let req = graphtest::import(
+        &ctx,
+        &g,
+        node(
+            "REQ-1",
+            "alm@Requirement",
+            serde_json::json!({"title": "Use PSP v1"}),
+            vec![link("alm@satisfies", &need)],
+        ),
+    )
+    .await
+    .unwrap();
+    for (key, typ, l) in [
+        ("TST-1", "alm@TestCase", "alm@verifies"),
+        ("CMP-1", "alm@Component", "alm@implements"),
+    ] {
+        graphtest::import(
+            &ctx,
+            &g,
+            node(key, typ, serde_json::json!({}), vec![link(l, &req)]),
+        )
+        .await
+        .unwrap();
+    }
+    let b = g
+        .branch_head(&ctx, "alm", goap_domain::MAIN_BRANCH)
+        .await
+        .unwrap();
+
+    let mut ms = engine::StaticMethodologies::new();
+    ms.insert(cm.name(), cm.clone());
+    let mut e = engine::Engine::new(
+        g.clone(),
+        Arc::new(ms),
+        Arc::new(engine::MemoryStore::new()),
+    );
+    let client: Arc<dyn llm::Client> = svc.clone();
+    e.executors.insert(
+        methodology::KIND_LLM.into(),
+        Arc::new(engine::LLMExecutor {
+            client: Some(client),
+        }),
+    );
+    e.executors.insert(
+        methodology::KIND_HUMAN.into(),
+        Arc::new(engine::HumanExecutor),
+    );
+    e.executors.insert(
+        methodology::KIND_BUILTIN.into(),
+        Arc::new(engine::default_builtins()),
+    );
+    e.intent = Some(goap_intent::Resolver::new(Arc::new(goap_intent::Lexical)));
+    let e = Arc::new(e);
+    let p = e
+        .start(
+            &ctx,
+            engine::StartRequest {
+                methodology: "impact-analysis".into(),
+                baseline_id: b.id.clone(),
+                project_id: "PROJ-TEST".into(),
+                intent: "The PSP changes its API, what does this break?".into(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let p = e.run(&ctx, &p.id).await.unwrap();
+    assert_eq!(p.status.as_str(), engine::STATUS_COMPLETED, "run: {p:?}");
+
+    let rows = calls(
+        &svc,
+        UsageFilter {
+            source: llm::SOURCE_ENGINE.into(),
+            ..Default::default()
+        },
+    )
+    .await;
+    let (entries, _) = g
+        .change_log(
+            &ctx,
+            &goap_domain::LogFilter {
+                change: p.change_id.clone(),
+                types: vec![format!("{}.call", goap_journal::STREAM_MODEL)],
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        !rows.is_empty() && rows.len() == entries.len(),
+        "{} ledger rows, {} exchanges in the change log",
+        rows.len(),
+        entries.len()
+    );
+    for r in &rows {
+        assert!(
+            !r.has_exchange && r.change_id == p.change_id.as_str() && r.process_id == p.id,
+            "an engine call of a change keeps its exchange in the change log, not in the ledger: {r:?}"
+        );
+        let mut found = 0;
+        for en in &entries {
+            let ex = goap_journal::decode_exchange(en).unwrap();
+            if en.process == r.process_id && ex.step == r.step && ex.call == r.call_index {
+                found += 1;
+                assert!(
+                    !ex.messages.is_empty() && !ex.response.is_empty(),
+                    "empty exchange for {r:?}: {ex:?}"
+                );
+            }
+        }
+        assert_eq!(
+            found, 1,
+            "row seq {} (step {} call {} {}): {found} exchanges",
+            r.seq, r.step, r.call_index, r.action
+        );
+    }
+}

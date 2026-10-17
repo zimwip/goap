@@ -1,10 +1,11 @@
-//! importchange_test.go, over the graph in memory of the tests.
+//! importchange_test.go, over the graph in memory of the tests and over the real graph.
 
 use std::sync::Arc;
 
 use goap_authz::{Principal, with_principal};
 use goap_ctx::Ctx;
 
+use super::realgraph::real;
 use super::{FakeGraph, registry};
 use crate::graphstore::{GraphStore, StoreGraph};
 use crate::store::STATUS_PUBLISHED;
@@ -12,6 +13,11 @@ use crate::store::STATUS_PUBLISHED;
 // Importing a methodology and publishing it is one change, and the aliases it needs are proposed in one change.
 #[tokio::test]
 async fn import_published_is_one_change() {
+    import_published_is_one_change_over(FakeGraph::new()).await;
+    Box::pin(import_published_is_one_change_over(real())).await;
+}
+
+async fn import_published_is_one_change_over<G: StoreGraph + 'static>(g: Arc<G>) {
     super::setup();
     let ctx = with_principal(
         &Ctx::background(),
@@ -21,7 +27,6 @@ async fn import_published_is_one_change() {
             ..Principal::default()
         },
     );
-    let g = FakeGraph::new();
     let (reg, d) = registry(Arc::new(GraphStore::new(g.clone())), false, |_| {});
     d.seed_domains(&ctx, "../../domains").await.expect("seed");
     let src = br#"

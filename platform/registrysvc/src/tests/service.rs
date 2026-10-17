@@ -6,6 +6,7 @@ use goap_domain::ChangeImpact;
 use goap_llmcfg::{NAMESPACE_PLATFORM, NODE_TYPE_ALIAS, alias_key};
 use goap_methodology::{Agent, Methodology, PLANNER_LLM_SCORING};
 
+use super::realgraph::real;
 use super::{FakeGraph, as_, bg, canon, example, registry, stores, with_alm};
 use crate::graphstore::{GraphStore, StoreGraph};
 use crate::store::{STATUS_ARCHIVED, STATUS_PUBLISHED};
@@ -133,7 +134,7 @@ async fn agents_and_scripts_round_trip() {
     }
 }
 
-async fn pending_alias_impacts(g: &FakeGraph, alias: &str) -> Vec<ChangeImpact> {
+async fn pending_alias_impacts<G: StoreGraph + ?Sized>(g: &G, alias: &str) -> Vec<ChangeImpact> {
     let changes = g.changes(&bg()).await.expect("changes");
     let key = alias_key(alias);
     changes
@@ -158,14 +159,18 @@ fn with_model(name: &str, version: &str, model: &str) -> Methodology {
 
 #[tokio::test]
 async fn publish_stubs_missing_alias() {
-    let g = FakeGraph::new();
+    publish_stubs_missing_alias_over(FakeGraph::new()).await;
+    Box::pin(publish_stubs_missing_alias_over(real())).await;
+}
+
+async fn publish_stubs_missing_alias_over<G: StoreGraph + 'static>(g: Arc<G>) {
     let (s, d) = registry(Arc::new(GraphStore::new(g.clone())), false, |_| {});
     with_alm(&d).await;
     let ctx = as_(&["admin"]);
     let m = with_model(&example().name, "9.0.0", "unconfigured-test-alias");
     let src = m.yaml().expect("yaml");
     s.import(&ctx, src.as_bytes(), true).await.expect("import");
-    let impacts = pending_alias_impacts(&g, "unconfigured-test-alias").await;
+    let impacts = pending_alias_impacts(&*g, "unconfigured-test-alias").await;
     assert!(
         impacts.len() == 1
             && impacts[0].review == goap_domain::REVIEW_PROPOSED
@@ -178,14 +183,18 @@ async fn publish_stubs_missing_alias() {
     m2.version = "9.1.0".into();
     let src2 = m2.yaml().expect("yaml");
     s.import(&ctx, src2.as_bytes(), true).await.expect("import");
-    let impacts = pending_alias_impacts(&g, "unconfigured-test-alias").await;
+    let impacts = pending_alias_impacts(&*g, "unconfigured-test-alias").await;
     assert_eq!(impacts.len(), 1, "the pending stub is not duplicated");
 }
 
 // Two methodologies referencing the same missing alias, published concurrently, leave exactly one open stub.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn publish_stubs_missing_alias_once() {
-    let g = FakeGraph::new();
+    publish_stubs_missing_alias_once_over(FakeGraph::new()).await;
+    Box::pin(publish_stubs_missing_alias_once_over(real())).await;
+}
+
+async fn publish_stubs_missing_alias_once_over<G: StoreGraph + 'static>(g: Arc<G>) {
     let (s, d) = registry(Arc::new(GraphStore::new(g.clone())), false, |_| {});
     with_alm(&d).await;
     let mut tasks = Vec::new();
@@ -201,6 +210,6 @@ async fn publish_stubs_missing_alias_once() {
     for t in tasks {
         t.await.expect("join").expect("import");
     }
-    let impacts = pending_alias_impacts(&g, "shared-test-alias").await;
+    let impacts = pending_alias_impacts(&*g, "shared-test-alias").await;
     assert_eq!(impacts.len(), 1, "exactly one open stub: {impacts:?}");
 }

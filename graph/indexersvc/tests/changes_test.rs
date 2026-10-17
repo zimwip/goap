@@ -3,21 +3,152 @@ mod common;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use common::{BagEmbedder, DenyType, FakeAccess, as_, service};
+use common::{
+    BagEmbedder, DenyType, FakeAccess, as_, docs_graph, republish_from, service, wait_for,
+};
 use goap_connect::{Code, Request};
 use goap_ctx::Ctx;
 use goap_domain::{
     CHANGE_ACTIVE, CHANGE_DRAFT, ChangeDocEvent, ChangeID, NodeEvent, NodeID,
     subject_change_indexed, subject_node_written,
 };
+use goap_domain::{MAIN_BRANCH, STRUCTURE_PROJECT};
 use goap_gen::index::v1::{self as pb, IndexService};
+use goap_graph::{ChangePatch, NewChange, NodeCreate};
 use goap_index::{
     FACET_KIND, FACET_PROJECT, FACET_STATUS, Filter, KIND_CHANGE, KIND_NODE, MODE_LEXICAL, Query,
     Ref,
 };
 use goap_indexersvc::{Handler, Service};
 
-// TestChangesFollowTheGraph runs the graph (goap-graph, goap-graphtest): not ported yet, see the report.
+/// The documents of the changes follow the graph through the in-process sink (the path of goap-dev): a created change,
+/// a reformulated one, the impacts it gains, a move to another project, a purge, and a republish after a reset.
+#[tokio::test]
+async fn changes_follow_the_graph() {
+    let (ctx, _cancel) = Ctx::background().with_cancel();
+    let svc = Arc::new(service(Some(Arc::new(BagEmbedder::default())), None));
+    let g = Arc::new(docs_graph(
+        &ctx,
+        &svc,
+        r#"
+name: docs
+version: 1.0.0
+nodeTypes:
+  - {name: Requirement, attributes: [title], search: [{property: title, text: true}]}
+"#,
+    ));
+    let root = g.structure(STRUCTURE_PROJECT).root;
+    let head = g.branch_head(&ctx, "docs", MAIN_BRANCH).await.unwrap();
+    let c = g
+        .create_change(
+            &ctx,
+            NewChange {
+                namespace: "docs".into(),
+                title: "Reset the password".into(),
+                intent: "Users reset it by mail".into(),
+                methodology: "sdlc".into(),
+                baseline_id: head.id.clone(),
+                own_branch: true,
+                project_id: root.clone(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let q = |text: &str, mut f: Filter| {
+        f.kind = vec![KIND_CHANGE.into()];
+        Query {
+            text: text.into(),
+            mode: MODE_LEXICAL.into(),
+            filter: f,
+            ..Query::default()
+        }
+    };
+    let in_project = |p: &str| Filter {
+        project: vec![p.to_string()],
+        ..Filter::default()
+    };
+    let res = wait_for(&svc, &ctx, &q("password", Filter::default()), 1).await;
+    let h = &res.hits[0];
+    assert!(
+        h.id.as_str() == c.id.as_str()
+            && h.title == "Reset the password"
+            && h.project == root
+            && h.methodology == "sdlc"
+            && h.status == c.status.as_str()
+            && h.namespace == "docs",
+        "hit {h:?}"
+    );
+    assert!(!h.owner.is_empty(), "the holding unit is indexed: {h:?}");
+
+    // reformulated
+    g.update_change(
+        &ctx,
+        &c.id,
+        &ChangePatch {
+            title: Some("Passkeys everywhere".into()),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    wait_for(&svc, &ctx, &q("passkeys", Filter::default()), 1).await;
+    wait_for(&svc, &ctx, &q("reset", Filter::default()), 1).await; // the intent still says reset
+
+    // the keys of its impacts, published without the header (the impacts alone were written)
+    g.impact_node_create(
+        &ctx,
+        &c.id,
+        NodeCreate {
+            key: "ALPHAKEY".into(),
+            r#type: "docs@Requirement".into(),
+            properties: serde_json::json!({"title": "x"})
+                .as_object()
+                .unwrap()
+                .clone(),
+            rationale: "r".into(),
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+    wait_for(&svc, &ctx, &q("alphakey", Filter::default()), 1).await;
+
+    // moved to another project (ADR 0091)
+    goap_graphtest::project(&ctx, &g, "P-NEW", "New project")
+        .await
+        .unwrap();
+    g.move_change(&ctx, &c.id, "P-NEW").await.unwrap();
+    wait_for(&svc, &ctx, &q("passkeys", in_project("P-NEW")), 1).await;
+    wait_for(&svc, &ctx, &q("passkeys", in_project(&root)), 0).await;
+
+    // a reindex publishes the headers again
+    republish_from(&svc, &g);
+    let n = svc.reindex(&ctx).await.unwrap();
+    assert!(n > 0, "reindex {n}");
+    wait_for(&svc, &ctx, &q("passkeys", in_project("P-NEW")), 1).await;
+    wait_for(&svc, &ctx, &q("alphakey", Filter::default()), 1).await;
+    assert!(svc.status().changes > 0, "status counts the changes");
+
+    // a change that landed nothing is purged with its document
+    let other = g
+        .create_change(
+            &ctx,
+            NewChange {
+                namespace: "docs".into(),
+                title: "Scratch".into(),
+                intent: "scratch".into(),
+                baseline_id: head.id.clone(),
+                project_id: root.clone(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    wait_for(&svc, &ctx, &q("scratch", Filter::default()), 1).await;
+    g.purge_change(&ctx, &other.id).await.unwrap();
+    wait_for(&svc, &ctx, &q("scratch", Filter::default()), 0).await;
+}
 
 async fn publish<T: serde::Serialize>(svc: &Service, subject: &str, v: &T) {
     let data = serde_json::to_vec(v).unwrap();

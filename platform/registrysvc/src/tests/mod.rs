@@ -1,5 +1,5 @@
-//! Tests of the registry: ports of the `*_test.go` files that need no goap-graph (a [`FakeGraph`] stands in for
-//! it). What needs the real graph is listed in PORTING.md.
+//! Tests of the registry: ports of the `*_test.go` files. They run over a [`FakeGraph`], and the ones the graph
+//! decides over the real graph too (`realgraph`, goap-graph as a dev-dependency).
 
 // the definition structs keep private fields, so the tests build them by assignment over a default
 #![allow(
@@ -12,6 +12,7 @@ mod activate;
 mod activitygoals;
 mod attributes;
 mod builtins;
+mod changelifecycle;
 mod compilecache;
 mod convert;
 mod fakegraph;
@@ -19,6 +20,7 @@ mod graphstore;
 mod guardians;
 mod importchange;
 mod preview;
+mod realgraph;
 mod refs;
 mod scopes;
 mod service;
@@ -83,6 +85,7 @@ pub(crate) fn stores() -> Vec<(&'static str, Arc<dyn Store>)> {
     vec![
         ("memory", Arc::new(MemoryStore::new())),
         ("graph", Arc::new(GraphStore::new(FakeGraph::new()))),
+        ("real graph", Arc::new(GraphStore::new(realgraph::real()))),
     ]
 }
 

@@ -103,3 +103,67 @@ pub fn as_(subject: &str) -> Ctx {
         },
     )
 }
+
+/// The sink of the indexer as the graph's event sink (Go's `Sink` satisfies `graph.EventSink` structurally; the crate
+/// does not depend on the graph, so the tests adapt it).
+pub struct GraphSink(pub goap_indexersvc::Sink);
+
+#[async_trait]
+impl goap_graph::EventSink for GraphSink {
+    async fn publish(
+        &self,
+        ctx: &Ctx,
+        subject: &str,
+        ev: &goap_graph::GraphEvent,
+    ) -> goap_graph::Result<()> {
+        self.0
+            .publish(ctx, subject, ev)
+            .await
+            .map_err(goap_graph::Error::from)
+    }
+}
+
+/// A graph over memory typed by one domain, its events going to `svc`.
+pub fn docs_graph(ctx: &Ctx, svc: &Arc<Service>, domain: &str) -> goap_graph::Graph {
+    let d = goap_def::parse_domain(domain.as_bytes()).unwrap();
+    let cat: Arc<dyn goap_graph::TypeCatalog> = Arc::new(goap_typecat::Catalog::new(&[d]).unwrap());
+    let mut g = goap_graph::Graph::new(Arc::new(goap_graph::Memory::new()));
+    g.set_types(move || Some(cat.clone()));
+    g.observe(Arc::new(GraphSink(goap_indexersvc::Sink::new(
+        ctx,
+        svc.clone(),
+    ))));
+    g
+}
+
+/// Makes the service reindex by republishing the graph into a new sink.
+pub fn republish_from(svc: &Arc<Service>, g: &Arc<goap_graph::Graph>) {
+    let (svc2, g) = (svc.clone(), g.clone());
+    svc.set_republish(Some(goap_indexersvc::republish_fn(move |ctx: Ctx| {
+        let (svc, g) = (svc2.clone(), g.clone());
+        async move {
+            let sink = GraphSink(goap_indexersvc::Sink::new(&ctx, svc));
+            g.republish(&ctx, &sink)
+                .await
+                .map_err(|e| Box::new(e) as goap_indexersvc::BoxError)
+        }
+    })));
+}
+
+/// Polls until the search returns want hits (the sink is asynchronous).
+pub async fn wait_for(
+    svc: &Service,
+    ctx: &Ctx,
+    q: &goap_index::Query,
+    want: usize,
+) -> goap_index::SearchResult {
+    let mut res = goap_index::SearchResult::default();
+    for _ in 0..200 {
+        res = svc.searcher.search(ctx, q.clone()).await.unwrap();
+        if res.total == want {
+            return res;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    panic!("want {want} hits, got {} ({:?})", res.total, res.hits);
+}

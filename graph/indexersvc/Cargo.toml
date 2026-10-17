@@ -25,6 +25,10 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+goap-graph = { workspace = true }
+goap-graphtest = { workspace = true }
+goap-def = { workspace = true }
+goap-typecat = { workspace = true }
 
 [lints]
 workspace = true

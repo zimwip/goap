@@ -3,15 +3,137 @@ mod common;
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use common::{BagEmbedder, bag, service};
+use common::{BagEmbedder, DenyType, bag, docs_graph, republish_from, service, wait_for};
+use goap_authz::Principal;
 use goap_ctx::Ctx;
+use goap_domain::MAIN_BRANCH;
 use goap_domain::{NodeEvent, NodeID};
 use goap_index::{Embedder as _, Query};
+use goap_index::{FACET_TYPE, Filter};
 use goap_indexersvc::Embedder;
 use goap_llm as llm;
 use parking_lot::Mutex;
+use serde_json::json;
 
-// TestGraphToSearch runs the graph (goap-graph, goap-graphtest): not ported yet, see the report.
+#[tokio::test]
+async fn graph_to_search() {
+    let (ctx, _cancel) = Ctx::background().with_cancel();
+    let svc = Arc::new(service(
+        Some(Arc::new(BagEmbedder::default())),
+        Some(Arc::new(DenyType("docs@Secret"))),
+    ));
+    let g = docs_graph(
+        &ctx,
+        &svc,
+        r#"
+name: docs
+version: 1.0.0
+nodeTypes:
+  - {name: Requirement, attributes: [title, priority], search: [{property: title, text: true}, {property: priority, facet: true}]}
+  - {name: Secret, attributes: [title], search: [{property: title, text: true}]}
+"#,
+    );
+    let g = Arc::new(g);
+    g.branch_head(&ctx, "docs", MAIN_BRANCH).await.unwrap();
+    let mk = async |key: &str, typ: &str, props: serde_json::Value| {
+        goap_graphtest::import(
+            &ctx,
+            &g,
+            goap_graphtest::Node {
+                namespace: "docs".into(),
+                key: key.into(),
+                r#type: typ.into(),
+                properties: props.as_object().unwrap().clone(),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap()
+    };
+    let r1 = mk(
+        "REQ-1",
+        "docs@Requirement",
+        json!({"title": "Users reset their password", "priority": "high"}),
+    )
+    .await;
+    mk(
+        "REQ-2",
+        "docs@Requirement",
+        json!({"title": "Export a report", "priority": "low"}),
+    )
+    .await;
+    mk("SEC-1", "docs@Secret", json!({"title": "password vault"})).await;
+    g.branch_head(&ctx, "docs", MAIN_BRANCH).await.unwrap();
+
+    let user = goap_authz::with_principal(
+        &ctx,
+        Principal {
+            subject: "u".into(),
+            roles: vec!["contributor".into()],
+            ..Principal::default()
+        },
+    );
+    let main = |text: &str| Query {
+        text: text.into(),
+        filter: Filter {
+            main: Some(true),
+            ..Filter::default()
+        },
+        ..Query::default()
+    };
+    let q = Query {
+        facets: vec!["priority".into(), FACET_TYPE.into()],
+        ..main("password")
+    };
+    // the secret is filtered by ABAC, before counting
+    let res = wait_for(&svc, &user, &q, 1).await;
+    assert!(
+        res.hits[0].key == "REQ-1"
+            && res.semantic
+            && res.facets[FACET_TYPE][0].value == "docs@Requirement",
+        "res = {res:?}"
+    );
+    // an internal caller (no identity) sees both
+    wait_for(&svc, &ctx, &q, 2).await;
+
+    // a new version on main moves the flag; the old version stays searchable off main
+    goap_graphtest::edit(
+        &ctx,
+        &g,
+        &r1.id,
+        json!({"title": "Users reset their passkey", "priority": "high"})
+            .as_object()
+            .unwrap()
+            .clone(),
+        &[],
+    )
+    .await
+    .unwrap();
+    g.branch_head(&ctx, "docs", MAIN_BRANCH).await.unwrap();
+    wait_for(&svc, &ctx, &main("passkey"), 1).await;
+    wait_for(&svc, &ctx, &main("password"), 1).await; // SEC-1 only
+    let reqs = Query {
+        text: "reset".into(),
+        filter: Filter {
+            r#type: vec!["docs@Requirement".into()],
+            ..Filter::default()
+        },
+        ..Query::default()
+    };
+    let all = wait_for(&svc, &ctx, &reqs, 2).await;
+    assert!(
+        all.hits[0].key.contains("REQ-1") && all.hits[0].version + all.hits[1].version == 3,
+        "both versions of REQ-1 expected: {:?}",
+        all.hits
+    );
+
+    // reindex: the graph publishes again, the index converges to the same content
+    republish_from(&svc, &g);
+    let n = svc.reindex(&ctx).await.unwrap();
+    assert!(n > 0, "reindex: {n}");
+    wait_for(&svc, &ctx, &reqs, 2).await;
+    wait_for(&svc, &ctx, &main("passkey"), 1).await;
+}
 
 #[tokio::test]
 async fn embedding_unavailable_degrades_to_text() {

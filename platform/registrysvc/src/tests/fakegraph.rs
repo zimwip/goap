@@ -1,4 +1,4 @@
-//! A versioned graph in memory, standing in for goap-graph (not a dependency of this crate yet): node versions,
+//! A versioned graph in memory, a light stand-in for goap-graph (the tests run over both, realgraph.rs): node versions,
 //! links between exact versions (a link to a version a node has moved on from is suspect), one baseline per commit
 //! per namespace, changes and their created impacts. With a type catalogue it checks the attributes of the nodes and
 //! the link types as the typed graph does (strict attributes, ADR 0055).

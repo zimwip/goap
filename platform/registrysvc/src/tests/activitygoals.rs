@@ -1,5 +1,5 @@
 //! The parts of activitygoals_test.go that need no graph: the activity goal of a change evaluated by the registry
-//! (Service::merge, activity_goals_met), on blackboards made by hand. The gate at Apply is graph-side (PORTING.md).
+//! (Service::merge, activity_goals_met), on blackboards made by hand. The gate at Apply is in changelifecycle.rs.
 
 use std::sync::Arc;
 

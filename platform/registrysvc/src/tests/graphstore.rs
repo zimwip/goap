@@ -1,13 +1,16 @@
-//! graphstore_test.go, over the graph in memory of the tests.
+//! graphstore_test.go, over the graph in memory of the tests and over the real graph (goap-graph).
 
 use chrono::Utc;
 use goap_domain::MAIN_BRANCH;
 use goap_methodology::{Method, Methodology, Process, Role, Step};
 
+use std::sync::Arc;
+
+use super::realgraph::{Probe, real};
 use super::{FakeGraph, at, bg, canon, example};
 use crate::graphstore::{
-    GraphStore, LINK_DEFINES, LINK_SUB_ACTIVITY, NAMESPACE_METHODOLOGY, StoreGraph,
-    TYPE_METHODOLOGY_VERSION, methodology_version_key,
+    GraphStore, LINK_DEFINES, LINK_SUB_ACTIVITY, NAMESPACE_METHODOLOGY, TYPE_METHODOLOGY_VERSION,
+    methodology_version_key,
 };
 use crate::store::{Record, STATUS_DRAFT, Store};
 
@@ -27,8 +30,15 @@ fn draft(
 
 #[tokio::test]
 async fn graph_store_round_trips_every_methodology_of_the_repository() {
+    graph_store_round_trips_every_methodology_of_the_repository_over(FakeGraph::new()).await;
+    graph_store_round_trips_every_methodology_of_the_repository_over(real()).await;
+}
+
+async fn graph_store_round_trips_every_methodology_of_the_repository_over<G: Probe + 'static>(
+    g: Arc<G>,
+) {
     let ctx = bg();
-    let s = GraphStore::new(FakeGraph::new());
+    let s = GraphStore::new(g);
     let now = at(2026, 9, 26, 10, 0);
     let mut files: Vec<_> = std::fs::read_dir("../../methodologies")
         .expect("dir")
@@ -54,28 +64,33 @@ async fn graph_store_round_trips_every_methodology_of_the_repository() {
 
 #[tokio::test]
 async fn graph_store_edits_elements_not_documents() {
+    graph_store_edits_elements_not_documents_over(FakeGraph::new()).await;
+    graph_store_edits_elements_not_documents_over(real()).await;
+}
+
+async fn graph_store_edits_elements_not_documents_over<G: Probe + 'static>(g: Arc<G>) {
     let ctx = bg();
-    let g = FakeGraph::new();
     let s = GraphStore::new(g.clone());
     let now = Utc::now();
     let mut m = example();
     m.version = "9.0.0".into();
     s.save(&ctx, draft(&m, Some(now), now)).await.expect("save");
-    let version = |k: &str| {
-        g.node_by_key(NAMESPACE_METHODOLOGY, k)
+    let version = async |k: &str| {
+        g.find(NAMESPACE_METHODOLOGY, k)
+            .await
             .unwrap_or_else(|| panic!("{k}"))
             .version
     };
     let hk = methodology_version_key(&m.name, &m.version);
     let ak = format!("{hk}/action/{}", m.actions[0].name);
     let other = format!("{hk}/action/{}", m.actions[1].name);
-    let (a0, o0) = (version(&ak), version(&other));
+    let (a0, o0) = (version(&ak).await, version(&other).await);
 
     // editing one action gives a new version of that node only
     m.actions[0].description = "edited".into();
     s.save(&ctx, draft(&m, None, now)).await.expect("save");
     assert!(
-        version(&ak) == a0 + 1 && version(&other) == o0,
+        version(&ak).await == a0 + 1 && version(&other).await == o0,
         "only the edited action must move"
     );
     // unchanged content changes nothing
@@ -128,17 +143,21 @@ async fn graph_store_edits_elements_not_documents() {
 
 #[tokio::test]
 async fn graph_store_keeps_methodologies_in_their_namespace() {
+    graph_store_keeps_methodologies_in_their_namespace_over(FakeGraph::new()).await;
+    graph_store_keeps_methodologies_in_their_namespace_over(real()).await;
+}
+
+async fn graph_store_keeps_methodologies_in_their_namespace_over<G: Probe + 'static>(g: Arc<G>) {
     let ctx = bg();
-    let g = FakeGraph::new();
     let s = GraphStore::new(g.clone());
     let now = Utc::now();
     let m = example();
     s.save(&ctx, draft(&m, Some(now), now)).await.expect("save");
     let k = methodology_version_key(&m.name, &m.version);
-    let mh = g.node_by_key(NAMESPACE_METHODOLOGY, &k).expect("header");
+    let mh = g.find(NAMESPACE_METHODOLOGY, &k).await.expect("header");
     assert_eq!(mh.r#type, TYPE_METHODOLOGY_VERSION);
     assert!(
-        g.node_by_key("platform", &k).is_none(),
+        g.find("platform", &k).await.is_none(),
         "nothing of the registry's storage belongs to the platform namespace"
     );
 }
@@ -146,8 +165,12 @@ async fn graph_store_keeps_methodologies_in_their_namespace() {
 // A methodology's declared roles materialize as their own methodology@Role nodes (ADR 0035 §2 / ADR 0039).
 #[tokio::test]
 async fn graph_store_materializes_roles() {
+    graph_store_materializes_roles_over(FakeGraph::new()).await;
+    graph_store_materializes_roles_over(real()).await;
+}
+
+async fn graph_store_materializes_roles_over<G: Probe + 'static>(g: Arc<G>) {
     let ctx = bg();
-    let g = FakeGraph::new();
     let s = GraphStore::new(g.clone());
     let now = Utc::now();
     let mut m = example();
@@ -163,7 +186,8 @@ async fn graph_store_materializes_roles() {
         methodology_version_key(&m.name, &m.version)
     );
     let n = g
-        .node_by_key(NAMESPACE_METHODOLOGY, &key)
+        .find(NAMESPACE_METHODOLOGY, &key)
+        .await
         .expect("role node");
     assert_eq!(n.r#type, "methodology@Role");
     assert_eq!(
@@ -174,16 +198,16 @@ async fn graph_store_materializes_roles() {
     assert!(got.methodology.roles.len() == 1 && got.methodology.roles[0].name == "developer");
 }
 
-fn has_link(
-    g: &FakeGraph,
+async fn has_link<G: Probe>(
+    g: &G,
     links: &[goap_domain::Link],
     typ: &str,
     from_key: &str,
     to_key: &str,
 ) -> bool {
     let (Some(from), Some(to)) = (
-        g.node_by_key(NAMESPACE_METHODOLOGY, from_key),
-        g.node_by_key(NAMESPACE_METHODOLOGY, to_key),
+        g.find(NAMESPACE_METHODOLOGY, from_key).await,
+        g.find(NAMESPACE_METHODOLOGY, to_key).await,
     ) else {
         return false;
     };
@@ -195,8 +219,12 @@ fn has_link(
 // A process's steps and sub-steps materialize as their own methodology@Step nodes, and only there (ADR 0120).
 #[tokio::test]
 async fn graph_store_materializes_steps() {
+    graph_store_materializes_steps_over(FakeGraph::new()).await;
+    graph_store_materializes_steps_over(real()).await;
+}
+
+async fn graph_store_materializes_steps_over<G: Probe + 'static>(g: Arc<G>) {
     let ctx = bg();
-    let g = FakeGraph::new();
     let s = GraphStore::new(g.clone());
     let now = Utc::now();
     let mut m = example();
@@ -215,10 +243,11 @@ async fn graph_store_materializes_steps() {
     s.save(&ctx, draft(&m, Some(now), now)).await.expect("save");
     let hk = methodology_version_key(&m.name, &m.version);
     let n = g
-        .node_by_key(
+        .find(
             NAMESPACE_METHODOLOGY,
             &format!("{hk}/step/deliver/analysis"),
         )
+        .await
         .expect("step node");
     assert_eq!(n.r#type, "methodology@Step");
     assert_eq!(
@@ -231,10 +260,11 @@ async fn graph_store_materializes_steps() {
         "nested steps are not duplicated onto the step node"
     );
     let sub = g
-        .node_by_key(
+        .find(
             NAMESPACE_METHODOLOGY,
             &format!("{hk}/step/deliver/analysis/scope"),
         )
+        .await
         .expect("sub-step node");
     assert_eq!(
         sub.properties.get("action").and_then(|v| v.as_str()),
@@ -247,22 +277,24 @@ async fn graph_store_materializes_steps() {
     let (_, links) = g.baseline_graph(&ctx, &head.id).await.expect("graph");
     assert!(
         has_link(
-            &g,
+            &*g,
             &links,
             LINK_SUB_ACTIVITY,
             &format!("{hk}/process/deliver"),
             &format!("{hk}/step/deliver/analysis")
-        ),
+        )
+        .await,
         "process -> step sub_activity link missing"
     );
     assert!(
         has_link(
-            &g,
+            &*g,
             &links,
             LINK_SUB_ACTIVITY,
             &format!("{hk}/step/deliver/analysis"),
             &format!("{hk}/step/deliver/analysis/scope")
-        ),
+        )
+        .await,
         "step -> sub-step sub_activity link missing"
     );
     // the steps read back from their nodes: the methodology round-trips to exactly what was saved
@@ -273,8 +305,12 @@ async fn graph_store_materializes_steps() {
 // A method composing its own steps materializes methodology@MethodStep nodes.
 #[tokio::test]
 async fn graph_store_materializes_method_steps() {
+    graph_store_materializes_method_steps_over(FakeGraph::new()).await;
+    graph_store_materializes_method_steps_over(real()).await;
+}
+
+async fn graph_store_materializes_method_steps_over<G: Probe + 'static>(g: Arc<G>) {
     let ctx = bg();
-    let g = FakeGraph::new();
     let s = GraphStore::new(g.clone());
     let now = Utc::now();
     let mut m = example();
@@ -293,10 +329,11 @@ async fn graph_store_materializes_method_steps() {
     s.save(&ctx, draft(&m, Some(now), now)).await.expect("save");
     let hk = methodology_version_key(&m.name, &m.version);
     let n = g
-        .node_by_key(
+        .find(
             NAMESPACE_METHODOLOGY,
             &format!("{hk}/methodStep/inspect/note"),
         )
+        .await
         .expect("method step node");
     assert_eq!(n.r#type, "methodology@MethodStep");
     assert_eq!(
@@ -310,12 +347,13 @@ async fn graph_store_materializes_method_steps() {
     let (_, links) = g.baseline_graph(&ctx, &head.id).await.expect("graph");
     assert!(
         has_link(
-            &g,
+            &*g,
             &links,
             LINK_SUB_ACTIVITY,
             &format!("{hk}/method/inspect"),
             &format!("{hk}/methodStep/inspect/note")
-        ),
+        )
+        .await,
         "method -> method step sub_activity link missing"
     );
     let got = s.get(&ctx, &m.name, &m.version).await.expect("get");
@@ -325,8 +363,15 @@ async fn graph_store_materializes_method_steps() {
 // Saving a methodology again, with a change to one element, only touches what changed.
 #[tokio::test]
 async fn graph_store_resave_with_steps_changes_only_what_changed() {
+    graph_store_resave_with_steps_changes_only_what_changed_over(FakeGraph::typed()).await;
+    graph_store_resave_with_steps_changes_only_what_changed_over(real()).await;
+}
+
+async fn graph_store_resave_with_steps_changes_only_what_changed_over<G: Probe + 'static>(
+    g: Arc<G>,
+) {
     let ctx = bg();
-    let s = GraphStore::new(FakeGraph::typed());
+    let s = GraphStore::new(g);
     let now = at(2026, 9, 26, 10, 0);
     let m = goap_methodology::load_file("../../methodologies/sdlc.yaml").expect("sdlc");
     s.save(&ctx, draft(&m, Some(now), now)).await.expect("save");

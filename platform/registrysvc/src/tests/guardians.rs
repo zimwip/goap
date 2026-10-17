@@ -1,4 +1,4 @@
-//! guardians_test.go, over the graph in memory of the tests.
+//! guardians_test.go, over the real graph in memory (goap-graph), as in Go.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
@@ -8,7 +8,7 @@ use goap_methodology::{
     FROM_INTEGRATED, Guardian, Integration, Methodology, Process, Step, Subscription,
 };
 
-use super::{FakeGraph, bg};
+use super::bg;
 use crate::graphstore::GraphStore;
 use crate::service::{Service, applicable_fn};
 use crate::store::{Record, STATUS_PUBLISHED, Store};
@@ -48,7 +48,7 @@ fn change(id: &str, methodology: &str, state: &str) -> Change {
 #[tokio::test]
 async fn guardian_chain() {
     let ctx = bg();
-    let store = Arc::new(GraphStore::new(FakeGraph::new()));
+    let store = Arc::new(GraphStore::new(super::realgraph::real()));
     let mut reg = Service::new(store.clone());
     reg.applicable = Some(applicable_fn(|_, _| async {
         Ok(vec!["portfolio".into(), "release".into(), "work".into()])

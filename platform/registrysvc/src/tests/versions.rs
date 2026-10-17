@@ -5,15 +5,17 @@ use std::sync::Arc;
 use goap_def::NodeType;
 
 use super::suspend::{alm_domain, ref_meth};
-use super::{FakeGraph, as_, must_yaml, registry, ticking_clock};
+use super::{as_, must_yaml, registry, ticking_clock};
 use crate::graphstore::GraphStore;
 use crate::service::Service;
 use crate::store::{Record, STATUS_PUBLISHED};
 
 pub(crate) fn versioned() -> (Arc<Service>, Arc<goap_domainsvc::Service>) {
-    registry(Arc::new(GraphStore::new(FakeGraph::new())), true, |s| {
-        s.now = Some(ticking_clock())
-    })
+    registry(
+        Arc::new(GraphStore::new(super::realgraph::real())),
+        true,
+        |s| s.now = Some(ticking_clock()),
+    )
 }
 
 // A new change takes the latest published version of its methodology, a change keeps the version it names (ADR 0113).

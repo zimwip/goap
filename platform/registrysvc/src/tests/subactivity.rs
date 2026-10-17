@@ -1,5 +1,5 @@
 //! subactivity_test.go: the cascade of the activity of a sub-change, asked of the registry directly (the graph asks
-//! it at CreateChange, PORTING.md).
+//! it at CreateChange: changelifecycle.rs).
 
 use std::sync::Arc;
 
