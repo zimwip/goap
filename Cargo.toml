@@ -272,6 +272,8 @@ unicode-normalization = "0.1"
 unicode-properties = "0.1"
 
 serde_ignored = "0.1"
+jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs"] }
+bcrypt = "0.19"
 
 [profile.dev]
 # a crate per package makes many test binaries: keep their debug info small

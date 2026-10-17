@@ -164,6 +164,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "faac5829c2b74c28f830747e7818ccfb684261b5f48a1118b1e2a13d36dfab13"
 dependencies = [
  "aws-lc-sys",
+ "untrusted 0.7.1",
  "zeroize",
 ]
 
@@ -251,6 +252,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
 
 [[package]]
+name = "bcrypt"
+version = "0.19.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a0cd0bd35a28836d528d2b58ad499bc3c5641d59379421b1be9eeb0c2f2b912a"
+dependencies = [
+ "base64 0.23.1",
+ "blowfish",
+ "getrandom 0.4.3",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -294,6 +308,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
 dependencies = [
  "hybrid-array",
+]
+
+[[package]]
+name = "blowfish"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "62ce3946557b35e71d1bbe07ec385073ce9eda05043f95de134eb578fcf1a298"
+dependencies = [
+ "byteorder",
+ "cipher",
 ]
 
 [[package]]
@@ -621,6 +645,16 @@ checksum = "a6139a8597ed92cf816dfb33f5dd6cf0bb93a6adc938f11039f371bc5bcd26c3"
 dependencies = [
  "chrono",
  "phf 0.12.1",
+]
+
+[[package]]
+name = "cipher"
+version = "0.5.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e8cf2a2c93cd704877c0858356ed03480ff301ee950b43f1cbe4573b088bfa6c"
+dependencies = [
+ "crypto-common 0.2.2",
+ "inout",
 ]
 
 [[package]]
@@ -1300,12 +1334,22 @@ dependencies = [
 name = "goap-access"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-authz",
  "goap-criticality",
+ "goap-ctx",
  "goap-domain",
  "goap-graphapi",
  "goap-graphsnap",
  "goap-typecat",
+ "parking_lot",
+ "regex",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -1673,6 +1717,8 @@ dependencies = [
 name = "goap-condition"
 version = "0.1.0"
 dependencies = [
+ "cel",
+ "chrono",
  "goap-assess",
  "goap-criticality",
  "goap-domain",
@@ -1680,6 +1726,10 @@ dependencies = [
  "goap-journal",
  "goap-risk",
  "goap-verify",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -1767,22 +1817,49 @@ dependencies = [
 name = "goap-convsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-gen",
  "goap-identity",
  "goap-pgtest",
  "goap-platform",
  "goap-sqlschematest",
+ "include_dir",
+ "parking_lot",
+ "pbjson-types",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
 name = "goap-credsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "bcrypt",
+ "chrono",
+ "goap-connect",
+ "goap-ctx",
  "goap-gen",
  "goap-pgtest",
  "goap-platform",
  "goap-sqlschematest",
+ "http",
+ "include_dir",
+ "parking_lot",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -1870,10 +1947,17 @@ dependencies = [
 name = "goap-domainclient"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "goap-connect",
+ "goap-ctx",
  "goap-def",
  "goap-domainpb",
  "goap-gen",
  "goap-pbconv",
+ "goap-typecat",
+ "parking_lot",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -2189,9 +2273,26 @@ dependencies = [
 name = "goap-gateway"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "bytes",
+ "chrono",
+ "futures",
  "goap-authz",
+ "goap-connect",
  "goap-credsvc",
+ "goap-ctx",
  "goap-identity",
+ "http",
+ "jsonwebtoken",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tower-http",
+ "tracing",
 ]
 
 [[package]]
@@ -2226,7 +2327,10 @@ dependencies = [
 name = "goap-graph"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-algo",
+ "goap-ctx",
  "goap-decision",
  "goap-def",
  "goap-domain",
@@ -2235,12 +2339,20 @@ dependencies = [
  "goap-guard",
  "goap-journal",
  "goap-operations",
+ "goap-pgtest",
  "goap-platform",
  "goap-prov",
  "goap-review",
  "goap-risk",
  "goap-sqlschematest",
  "goap-typecat",
+ "include_dir",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -2259,14 +2371,19 @@ dependencies = [
 name = "goap-graphclient"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "goap-access",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-domain",
  "goap-gen",
  "goap-graphapi",
  "goap-identity",
  "goap-pbconv",
  "goap-rpcerr",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2348,9 +2465,21 @@ dependencies = [
 name = "goap-index"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
+ "goap-ctx",
  "goap-domain",
  "goap-pgtest",
  "goap-platform",
+ "include_dir",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
+ "unicode-properties",
 ]
 
 [[package]]
@@ -2485,8 +2614,10 @@ dependencies = [
 name = "goap-methodology"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "goap-builtins",
  "goap-condition",
+ "goap-decision",
  "goap-def",
  "goap-domain",
  "goap-events",
@@ -2495,6 +2626,12 @@ dependencies = [
  "goap-guard",
  "goap-mcp",
  "goap-operations",
+ "regex",
+ "serde",
+ "serde_ignored",
+ "serde_json",
+ "serde_yaml_ng",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2542,6 +2679,9 @@ dependencies = [
  "goap-domain",
  "goap-journal",
  "goap-methodology",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2572,6 +2712,7 @@ dependencies = [
 name = "goap-pbconv"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "goap-domain",
  "goap-form",
  "goap-gen",
@@ -2579,6 +2720,8 @@ dependencies = [
  "goap-journal",
  "goap-review",
  "goap-typecat",
+ "pbjson-types",
+ "serde_json",
 ]
 
 [[package]]
@@ -2620,23 +2763,39 @@ dependencies = [
 name = "goap-prefssvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-gen",
  "goap-identity",
  "goap-pgtest",
  "goap-platform",
  "goap-sqlschematest",
+ "include_dir",
+ "parking_lot",
+ "pbjson-types",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
 name = "goap-prov"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "goap-domain",
  "goap-journal",
  "goap-review",
  "goap-risk",
  "goap-verify",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2770,13 +2929,19 @@ dependencies = [
 name = "goap-typecat"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-algo",
  "goap-assess",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-form",
  "goap-risk",
  "goap-verify",
+ "parking_lot",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -3214,6 +3379,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "inout"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3ce983bb6fb399067d101fbfc9e74174e07e9f29a2bc679efefeb8c645819c3f"
+dependencies = [
+ "hybrid-array",
+]
+
+[[package]]
 name = "intrusive-collections"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3323,6 +3497,22 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "jsonwebtoken"
+version = "11.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e75fe14a82d81e5f5af639997db37d8b96045938a7ac6ab18cdbe1c7467e05e1"
+dependencies = [
+ "aws-lc-rs",
+ "base64 0.22.1",
+ "getrandom 0.2.17",
+ "js-sys",
+ "serde",
+ "serde_json",
+ "signature",
+ "zeroize",
 ]
 
 [[package]]
@@ -4390,7 +4580,7 @@ dependencies = [
  "cfg-if",
  "getrandom 0.2.17",
  "libc",
- "untrusted",
+ "untrusted 0.9.0",
  "windows-sys 0.52.0",
 ]
 
@@ -4495,7 +4685,7 @@ dependencies = [
  "aws-lc-rs",
  "ring",
  "rustls-pki-types",
- "untrusted",
+ "untrusted 0.9.0",
 ]
 
 [[package]]
@@ -5609,6 +5799,12 @@ checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
 
 [[package]]
 name = "untrusted"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
+
+[[package]]
+name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
@@ -6114,6 +6310,20 @@ name = "zeroize"
 version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
+dependencies = [
+ "zeroize_derive",
+]
+
+[[package]]
+name = "zeroize_derive"
+version = "1.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c50655cbb0fe3fc43170059e702f1ce5e19b84cec58dc87b037a09935c2f328"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
 
 [[package]]
 name = "zerotrie"

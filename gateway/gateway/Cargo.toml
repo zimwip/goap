@@ -8,7 +8,24 @@ publish = false
 
 [dependencies]
 goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-identity = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+http = { workspace = true }
+jsonwebtoken = { workspace = true }
+parking_lot = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tower-http = { workspace = true, features = ["cors"] }
+tracing = { workspace = true }
 
 [dev-dependencies]
 goap-credsvc = { workspace = true }
