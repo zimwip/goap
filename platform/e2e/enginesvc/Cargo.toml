@@ -20,6 +20,10 @@ goap-access = { workspace = true }
 goap-identity = { workspace = true }
 goap-startingpoint = { workspace = true }
 goap-registrysvc = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+async-trait = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

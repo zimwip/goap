@@ -13,6 +13,9 @@ goap-domain = { workspace = true }
 goap-condition = { workspace = true }
 goap-graph = { workspace = true }
 goap-graphtest = { workspace = true }
+goap-ctx = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

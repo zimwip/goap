@@ -2282,9 +2282,12 @@ name = "goap-e2e-condition"
 version = "0.1.0"
 dependencies = [
  "goap-condition",
+ "goap-ctx",
  "goap-domain",
  "goap-graph",
  "goap-graphtest",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2343,8 +2346,11 @@ dependencies = [
 name = "goap-e2e-enginesvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-access",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-engine",
  "goap-enginesvc",
  "goap-gen",
@@ -2354,6 +2360,7 @@ dependencies = [
  "goap-methodology",
  "goap-registrysvc",
  "goap-startingpoint",
+ "tokio",
 ]
 
 [[package]]
@@ -2379,7 +2386,9 @@ dependencies = [
 name = "goap-e2e-selfimprove"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-authz",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-dsl",
@@ -2392,6 +2401,9 @@ dependencies = [
  "goap-methodology",
  "goap-observe",
  "goap-selfimprove",
+ "parking_lot",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2789,12 +2801,16 @@ dependencies = [
  "goap-authz",
  "goap-connect",
  "goap-ctx",
+ "goap-def",
  "goap-domain",
  "goap-gen",
+ "goap-graph",
+ "goap-graphtest",
  "goap-identity",
  "goap-index",
  "goap-llm",
  "goap-rpcerr",
+ "goap-typecat",
  "parking_lot",
  "serde",
  "serde_json",
@@ -2967,13 +2983,18 @@ dependencies = [
  "goap-connect",
  "goap-ctx",
  "goap-domain",
+ "goap-engine",
  "goap-gen",
+ "goap-graph",
  "goap-graphapi",
  "goap-graphsnap",
+ "goap-graphtest",
  "goap-identity",
+ "goap-intent",
  "goap-journal",
  "goap-llm",
  "goap-llmcfg",
+ "goap-methodology",
  "goap-modeltoken",
  "goap-pgtest",
  "goap-platform",
