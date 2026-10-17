@@ -8,8 +8,10 @@
 //! The OpenTelemetry context travels in the [`goap_ctx::Ctx`] of a call ([`with_otel`] / [`otel_from`]), the way
 //! Go's `context.Context` carried it.
 
+mod connect;
 mod genai;
 mod telemetry;
 
+pub use connect::*;
 pub use genai::*;
 pub use telemetry::*;

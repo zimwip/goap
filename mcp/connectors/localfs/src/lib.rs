@@ -4,6 +4,5 @@
 //! is configured per organization ("root"), and every path is confined under it, symbolic links included.
 
 mod localfs;
-mod root;
 
 pub use localfs::*;

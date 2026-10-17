@@ -41,6 +41,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
 
 [[package]]
+name = "ambient-authority"
+version = "0.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e9d4ee0d472d1cd2e28c97dfa124b3d8d992e10eb0a035f33f5d12e3a177ba3b"
+
+[[package]]
 name = "android_system_properties"
 version = "0.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -540,6 +546,36 @@ checksum = "5abbd6eeda6885048d357edc66748eea6e0268e3dd11f326fff5bd248d779c26"
 dependencies = [
  "core_maths",
  "displaydoc",
+]
+
+[[package]]
+name = "cap-primitives"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b5f74729fd2f44701d1a8eb47e906cdb3ccd9ec0f02baad85a744b791940b18"
+dependencies = [
+ "ambient-authority",
+ "fs-set-times",
+ "io-extras",
+ "io-lifetimes 3.0.1",
+ "ipnet",
+ "maybe-owned",
+ "rustix",
+ "rustix-linux-procfs",
+ "windows-sys 0.61.2",
+ "winx",
+]
+
+[[package]]
+name = "cap-std"
+version = "4.0.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c1ec78e242cfa2cfe276807ac2ecc00315a6c97786977414bcd1c3963b6c91b8"
+dependencies = [
+ "cap-primitives",
+ "io-extras",
+ "io-lifetimes 3.0.1",
+ "rustix",
 ]
 
 [[package]]
@@ -1146,6 +1182,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
 dependencies = [
  "percent-encoding",
+]
+
+[[package]]
+name = "fs-set-times"
+version = "0.20.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "94e7099f6313ecacbe1256e8ff9d617b75d1bcb16a6fddef94866d225a01a14a"
+dependencies = [
+ "io-lifetimes 2.0.4",
+ "rustix",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]
@@ -1778,39 +1825,80 @@ dependencies = [
 name = "goap-connector-claudeagent"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "goap-connect",
  "goap-connector-workspace",
  "goap-connectorkit",
+ "goap-ctx",
  "goap-gen",
  "goap-mcp",
+ "goap-pbconv",
+ "nix",
+ "parking_lot",
+ "pbjson-types",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
 name = "goap-connector-localfs"
 version = "0.1.0"
 dependencies = [
+ "cap-std",
+ "goap-connect",
  "goap-connectorkit",
  "goap-gen",
+ "goap-pbconv",
+ "pbjson-types",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
 name = "goap-connector-workspace"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "base64 0.23.1",
+ "bytes",
+ "cap-std",
+ "chrono",
+ "futures",
+ "goap-connect",
  "goap-connectorkit",
+ "goap-ctx",
  "goap-gen",
  "goap-mcp",
  "goap-mcpbuiltin",
+ "goap-pbconv",
+ "nix",
+ "parking_lot",
+ "pbjson-types",
+ "regex",
+ "reqwest",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
 name = "goap-connectorkit"
 version = "0.1.0"
 dependencies = [
+ "goap-connect",
  "goap-gen",
  "goap-mcp",
  "goap-pbconv",
  "goap-platform",
  "goap-telemetry",
+ "pbjson-types",
+ "reqwest",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1980,8 +2068,13 @@ version = "0.1.0"
 name = "goap-domainsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
  "goap-algo",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-domainclient",
@@ -1995,6 +2088,14 @@ dependencies = [
  "goap-platform",
  "goap-sqlschematest",
  "goap-typecat",
+ "include_dir",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -2176,11 +2277,15 @@ dependencies = [
 name = "goap-engine"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
  "goap-assess",
  "goap-authz",
  "goap-brief",
  "goap-builtins",
  "goap-condition",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-dsl",
@@ -2195,6 +2300,16 @@ dependencies = [
  "goap-methodology",
  "goap-risk",
  "goap-verify",
+ "parking_lot",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
 ]
 
 [[package]]
@@ -2486,18 +2601,22 @@ dependencies = [
 name = "goap-indexersvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-access",
  "goap-authz",
- "goap-def",
+ "goap-connect",
+ "goap-ctx",
  "goap-domain",
  "goap-gen",
- "goap-graph",
- "goap-graphtest",
  "goap-identity",
  "goap-index",
  "goap-llm",
  "goap-rpcerr",
- "goap-typecat",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2591,15 +2710,20 @@ dependencies = [
 name = "goap-mcpsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-access",
  "goap-adapter",
  "goap-algo",
  "goap-authz",
+ "goap-connect",
  "goap-connectorkit",
+ "goap-ctx",
  "goap-domain",
  "goap-dsl",
  "goap-gen",
  "goap-graphapi",
+ "goap-graphsnap",
  "goap-identity",
  "goap-mcp",
  "goap-mcpbuiltin",
@@ -2608,6 +2732,15 @@ dependencies = [
  "goap-pgtest",
  "goap-platform",
  "goap-sqlschematest",
+ "http",
+ "include_dir",
+ "parking_lot",
+ "pbjson-types",
+ "reqwest",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -2910,12 +3043,14 @@ dependencies = [
 name = "goap-telemetry"
 version = "0.1.0"
 dependencies = [
+ "goap-connect",
  "goap-ctx",
  "goap-llm",
  "http",
  "opentelemetry",
  "opentelemetry-otlp",
  "opentelemetry_sdk",
+ "pbjson-types",
  "serde",
  "serde_json",
  "tokio",
@@ -3394,6 +3529,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4275b20e6057cd7733fd8df8a5a31701e4fe44497dad0f3fa0e1c4fb971506be"
 
 [[package]]
+name = "io-extras"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "20fd6de4ccfcc187e38bc21cfa543cb5a302cb86a8b114eb7f0bf0dc9f8ac00f"
+dependencies = [
+ "io-lifetimes 3.0.1",
+ "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "io-lifetimes"
+version = "2.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06432fb54d3be7964ecd3649233cddf80db2832f47fec34c01f65b3d9d774983"
+
+[[package]]
+name = "io-lifetimes"
+version = "3.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2f0fb0570afe1fed943c5c3d4102d5358592d8625fda6a0007fdbe65a92fba96"
+
+[[package]]
 name = "ipnet"
 version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3625,6 +3782,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
 
 [[package]]
+name = "maybe-owned"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4facc753ae494aeb6e3c22f839b158aebd4f9270f55cd3c79906c45476c47ab4"
+
+[[package]]
 name = "md-5"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3708,6 +3871,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a198f9589efc03f544388dfc4a19fe8af4323662b62f598b8dcfdac62c14771c"
 dependencies = [
  "byteorder",
+]
+
+[[package]]
+name = "nix"
+version = "0.31.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf20d2fde8ff38632c426f1165ed7436270b44f199fc55284c38276f9db47c3d"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
+ "libc",
 ]
 
 [[package]]
@@ -4610,6 +4785,16 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "rustix-linux-procfs"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2fc84bf7e9aa16c4f2c758f27412dc9841341e16aa682d9c7ac308fe3ee12056"
+dependencies = [
+ "once_cell",
+ "rustix",
 ]
 
 [[package]]
@@ -6215,6 +6400,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "winx"
+version = "0.36.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f3fd376f71958b862e7afb20cfe5a22830e1963462f3a17f49d82a6c1d1f42d"
+dependencies = [
+ "bitflags",
+ "windows-sys 0.52.0",
 ]
 
 [[package]]

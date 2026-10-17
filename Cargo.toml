@@ -274,6 +274,8 @@ unicode-properties = "0.1"
 serde_ignored = "0.1"
 jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs"] }
 bcrypt = "0.19"
+cap-std = "4"
+nix = { version = "0.31", default-features = false, features = ["signal", "process", "user"] }
 
 [profile.dev]
 # a crate per package makes many test binaries: keep their debug info small

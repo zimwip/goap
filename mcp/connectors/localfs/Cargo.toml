@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+cap-std = { workspace = true }
 goap-connect = { workspace = true }
 goap-gen = { workspace = true }
 goap-connectorkit = { workspace = true }

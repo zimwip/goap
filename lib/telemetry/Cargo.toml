@@ -7,6 +7,7 @@ license.workspace = true
 publish = false
 
 [dependencies]
+goap-connect = { workspace = true }
 goap-ctx = { workspace = true }
 goap-llm = { workspace = true }
 opentelemetry = { workspace = true }
@@ -23,6 +24,7 @@ serde_json = { workspace = true }
 [dev-dependencies]
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 tokio = { workspace = true }
+pbjson-types = { workspace = true }
 
 [lints]
 workspace = true

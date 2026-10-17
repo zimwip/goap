@@ -9,8 +9,21 @@ publish = false
 [dependencies]
 goap-gen = { workspace = true }
 goap-mcp = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-connectorkit = { workspace = true }
 goap-connector-workspace = { workspace = true }
+goap-pbconv = { workspace = true }
+pbjson-types = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
 
 [lints]
 workspace = true

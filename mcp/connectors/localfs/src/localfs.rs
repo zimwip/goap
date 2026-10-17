@@ -3,12 +3,13 @@
 use std::collections::HashMap;
 use std::io::Write;
 
+use cap_std::ambient_authority;
+use cap_std::fs::{Dir, OpenOptions};
+
 use goap_connect::{Ctx, async_trait};
 use goap_connectorkit::{Connector as KitConnector, ErrUnknownOperation, InvokeError};
 use goap_gen::connector::v1::{ConnectorInfo, Operation};
 use serde_json::{Map, Value, json};
-
-use crate::root::Root;
 
 /// MaxFileSize bounds what read_file returns.
 pub const MAX_FILE_SIZE: u64 = 1 << 20;
@@ -26,7 +27,9 @@ fn schema(v: Value) -> Option<pbjson_types::Struct> {
 }
 
 impl Connector {
-    fn root(&self, config: &Map<String, Value>) -> Result<Root, InvokeError> {
+    /// The root directory of the organization, every path confined under it, symbolic links included (Go's
+    /// `os.OpenRoot`: a capability on the directory, `cap_std::fs::Dir`).
+    fn root(&self, config: &Map<String, Value>) -> Result<Dir, InvokeError> {
         let dir = config.get("root").and_then(Value::as_str).unwrap_or("");
         if dir.is_empty() {
             return Err("the binding has no \"root\" configured".into());
@@ -34,7 +37,7 @@ impl Connector {
         if !self.roots.is_empty() && !self.roots.iter().any(|allowed| within(allowed, dir)) {
             return Err(format!("root {dir:?} is not allowed on this connector").into());
         }
-        Ok(Root::open(dir)?)
+        Dir::open_ambient_dir(dir, ambient_authority()).map_err(|e| err_at("openat", dir, e))
     }
 }
 
@@ -113,8 +116,8 @@ fn invoke_sync(
     };
     match op {
         "list_dir" => {
-            let host = root.resolve(&p)?;
-            let mut ents: Vec<std::fs::DirEntry> = std::fs::read_dir(&host)
+            let mut ents: Vec<cap_std::fs::DirEntry> = root
+                .read_dir(&p)
                 .map_err(|e| err_at("readdir", &p, e))?
                 .collect::<Result<_, _>>()?;
             ents.sort_by_key(|e| e.file_name());
@@ -129,15 +132,14 @@ fn invoke_sync(
             Ok(obj(json!({ "entries": list })))
         }
         "read_file" => {
-            let host = root.resolve(&p)?;
-            let st = std::fs::metadata(&host).map_err(|e| err_at("statat", &p, e))?;
+            let st = root.metadata(&p).map_err(|e| err_at("statat", &p, e))?;
             if st.is_dir() {
                 return Err(format!("{p} is a directory").into());
             }
             if st.len() > MAX_FILE_SIZE {
                 return Err(format!("{p} is larger than {MAX_FILE_SIZE} bytes").into());
             }
-            let b = std::fs::read(&host).map_err(|e| err_at("open", &p, e))?;
+            let b = root.read(&p).map_err(|e| err_at("open", &p, e))?;
             Ok(obj(json!({ "text": String::from_utf8_lossy(&b) })))
         }
         "write_file" => {
@@ -147,15 +149,14 @@ fn invoke_sync(
             }
             let dir = dir_of(&p);
             if dir != "." {
-                let host = root.resolve(&dir)?;
-                std::fs::create_dir_all(&host).map_err(|e| err_at("mkdirat", &dir, e))?;
+                root.create_dir_all(&dir)
+                    .map_err(|e| err_at("mkdirat", &dir, e))?;
             }
-            let host = root.resolve(&p)?;
-            let mut f = std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(&host)
+            let mut f = root
+                .open_with(
+                    &p,
+                    OpenOptions::new().write(true).create(true).truncate(true),
+                )
                 .map_err(|e| err_at("openat", &p, e))?;
             f.write_all(content.as_bytes())?;
             Ok(obj(json!({"path": p, "bytes": content.len()})))

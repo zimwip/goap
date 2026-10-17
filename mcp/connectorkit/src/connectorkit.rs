@@ -191,8 +191,7 @@ pub async fn register(
     }
 }
 
-/// Run serves the connector and registers it with the hub. It returns when the server stops (Connect handler
-/// options of the telemetry are not reproduced: the Rust telemetry crate offers no Connect interceptor yet).
+/// Run serves the connector and registers it with the hub. It returns when the server stops.
 pub async fn run(name: &str, c: Arc<dyn Connector>) {
     goap_platform::logger(name);
     let bg = Ctx::background();
@@ -200,7 +199,11 @@ pub async fn run(name: &str, c: Arc<dyn Connector>) {
     let token = std::env::var("GOAP_CONNECTOR_TOKEN").unwrap_or_default();
     let addr = goap_platform::env("GOAP_HTTP_ADDR", ":8080");
     let mut srv = goap_platform::Server::new(&addr);
-    srv.mount(handler(c.clone(), &token, Interceptors::none()));
+    srv.mount(handler(
+        c.clone(),
+        &token,
+        goap_telemetry::handler_options(),
+    ));
     let (ctx, cancel) = bg.with_cancel();
     let hub_url = goap_platform::env("GOAP_MCP_URL", "http://localhost:8085");
     let endpoint = advertised(&addr);
