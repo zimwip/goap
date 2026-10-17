@@ -7,8 +7,13 @@ license.workspace = true
 publish = false
 
 [dependencies]
+goap-connect = { workspace = true }
 goap-gen = { workspace = true }
 goap-connectorkit = { workspace = true }
+goap-pbconv = { workspace = true }
+pbjson-types = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
