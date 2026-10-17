@@ -8,6 +8,17 @@ publish = false
 
 [dependencies]
 goap-llm = { workspace = true }
+goap-ctx = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+unicode-normalization = { workspace = true }
+unicode-properties = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
+parking_lot = { workspace = true }
 
 [lints]
 workspace = true

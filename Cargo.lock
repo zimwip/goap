@@ -1313,9 +1313,12 @@ name = "goap-adapter"
 version = "0.1.0"
 dependencies = [
  "goap-algo",
+ "goap-ctx",
+ "goap-dsl",
  "goap-mcp",
  "serde",
  "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -1820,12 +1823,19 @@ dependencies = [
 name = "goap-def"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "goap-algo",
  "goap-domain",
  "goap-domains-builtin",
  "goap-dsl",
  "goap-form",
  "goap-guard",
+ "regex",
+ "serde",
+ "serde_ignored",
+ "serde_json",
+ "serde_yaml_ng",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2206,6 +2216,11 @@ dependencies = [
 [[package]]
 name = "goap-goap"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "goap-graph"
@@ -2318,8 +2333,15 @@ dependencies = [
 name = "goap-identity"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-platform",
+ "http-body-util",
+ "serde_json",
+ "tokio",
+ "tower",
 ]
 
 [[package]]
@@ -2353,7 +2375,16 @@ dependencies = [
 name = "goap-intent"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "goap-ctx",
  "goap-llm",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "unicode-normalization",
+ "unicode-properties",
 ]
 
 [[package]]
@@ -2669,8 +2700,11 @@ name = "goap-rpcerr"
 version = "0.1.0"
 dependencies = [
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-graphapi",
  "goap-review",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -4563,6 +4597,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "serde_ignored"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "115dffd5f3853e06e746965a20dcbae6ee747ae30b543d91b0e089668bb07798"
+dependencies = [
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
