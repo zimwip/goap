@@ -58,7 +58,7 @@ pub struct SearchProperty {
 
 /// NodeEvent is published when a node version is written (on any branch), after the commit. Text and Facets are the
 /// searchable properties of the node type, already resolved.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct NodeEvent {
     pub id: NodeID,
@@ -92,9 +92,31 @@ pub struct NodeEvent {
     pub time: DateTime<Utc>,
 }
 
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for NodeEvent {
+    fn default() -> Self {
+        NodeEvent {
+            id: Default::default(),
+            version: Default::default(),
+            branch: Default::default(),
+            namespace: Default::default(),
+            key: Default::default(),
+            r#type: Default::default(),
+            state: Default::default(),
+            deleted: Default::default(),
+            project: Default::default(),
+            owner: Default::default(),
+            change_id: Default::default(),
+            text: Default::default(),
+            facets: Default::default(),
+            time: gotime::zero(),
+        }
+    }
+}
+
 /// BaselineEvent is published when a baseline is created: the diff with its parent tells which node versions became
 /// the head of the branch.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BaselineEvent {
     pub id: BaselineID,
@@ -115,9 +137,23 @@ pub struct BaselineEvent {
     pub time: DateTime<Utc>,
 }
 
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for BaselineEvent {
+    fn default() -> Self {
+        BaselineEvent {
+            id: Default::default(),
+            branch: Default::default(),
+            parent: Default::default(),
+            set: Default::default(),
+            removed: Default::default(),
+            time: gotime::zero(),
+        }
+    }
+}
+
 /// ChangeDocEvent is what the index needs to know of a change (ADR 0095): the header fields it searches and filters
 /// on and the keys of the nodes the change acts on, not its items, decisions, reviews or drafts. Deleted is a purge.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ChangeDocEvent {
     pub id: ChangeID,
@@ -153,6 +189,29 @@ pub struct ChangeDocEvent {
     /// CreatedAt is always written (Go's omitempty has no effect on a time).
     #[serde(with = "gotime", default = "gotime::zero")]
     pub created_at: DateTime<Utc>,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for ChangeDocEvent {
+    fn default() -> Self {
+        ChangeDocEvent {
+            id: Default::default(),
+            deleted: Default::default(),
+            title: Default::default(),
+            intent: Default::default(),
+            goal: Default::default(),
+            methodology: Default::default(),
+            namespace: Default::default(),
+            status: Default::default(),
+            state: Default::default(),
+            project_id: Default::default(),
+            owner_org: Default::default(),
+            parent_id: Default::default(),
+            branch: Default::default(),
+            impacts: Default::default(),
+            created_at: gotime::zero(),
+        }
+    }
 }
 
 /// ChangeDocRef names a node a change acts on.

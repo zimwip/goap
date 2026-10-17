@@ -141,7 +141,7 @@ pub(crate) fn validate_decision_event(e: Option<&DecisionEvent>) -> Result<(), E
 }
 
 /// Question is a question raised by an undecidable ruling: it blocks its decision point until answered.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Question {
     pub id: String,
@@ -158,8 +158,24 @@ pub struct Question {
     pub asked_at: DateTime<Utc>,
 }
 
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Question {
+    fn default() -> Self {
+        Question {
+            id: Default::default(),
+            point: Default::default(),
+            text: Default::default(),
+            status: Default::default(),
+            answer: Default::default(),
+            answered_by: Default::default(),
+            process: Default::default(),
+            asked_at: gotime::zero(),
+        }
+    }
+}
+
 /// Ruling is the last ruling of a decision point.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Ruling {
     pub outcome: String,
@@ -177,8 +193,23 @@ pub struct Ruling {
     pub at: DateTime<Utc>,
 }
 
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Ruling {
+    fn default() -> Self {
+        Ruling {
+            outcome: Default::default(),
+            option: Default::default(),
+            confidence: Default::default(),
+            justification: Default::default(),
+            by: Default::default(),
+            human: Default::default(),
+            at: gotime::zero(),
+        }
+    }
+}
+
 /// DecisionPoint is a decision point, replayed from its events.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct DecisionPoint {
     pub id: String,
@@ -225,6 +256,29 @@ pub struct DecisionPoint {
     pub decided_at: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub decided_by: String,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for DecisionPoint {
+    fn default() -> Self {
+        DecisionPoint {
+            id: Default::default(),
+            question: Default::default(),
+            options: Default::default(),
+            criteria: Default::default(),
+            policy: Default::default(),
+            opened_at: gotime::zero(),
+            opened_by: Default::default(),
+            status: Default::default(),
+            questions: Default::default(),
+            ruling: Default::default(),
+            human_only: Default::default(),
+            escalation: Default::default(),
+            option: Default::default(),
+            decided_at: Default::default(),
+            decided_by: Default::default(),
+        }
+    }
 }
 
 impl DecisionPoint {

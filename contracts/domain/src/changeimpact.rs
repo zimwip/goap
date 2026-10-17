@@ -33,7 +33,7 @@ pub const REVIEW_ACCEPTED: NodeReview = NodeReview::from_static("accepted");
 pub const REVIEW_REJECTED: NodeReview = NodeReview::from_static("rejected");
 
 /// Review is one entry of the review history of a change impact.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Review {
     pub status: NodeReview,
@@ -57,10 +57,26 @@ pub struct Review {
     pub review_id: String,
 }
 
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Review {
+    fn default() -> Self {
+        Review {
+            status: Default::default(),
+            by: Default::default(),
+            comment: Default::default(),
+            at: gotime::zero(),
+            flow: Default::default(),
+            execution: Default::default(),
+            superseded: Default::default(),
+            review_id: Default::default(),
+        }
+    }
+}
+
 /// ChangeImpact is the link from a change to a node: the node version the change reads (Pre), the version it produces
 /// on the change branch (Post, empty until realized) and the one that landed on the target branch (Landed), with the
 /// reason why (Rationale).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ChangeImpact {
     pub id: ChangeImpactID,
@@ -119,6 +135,34 @@ pub struct ChangeImpact {
     /// event carries it. None: not checked, or nothing to check (no draft).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub validation: Option<ImpactValidation>,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for ChangeImpact {
+    fn default() -> Self {
+        ChangeImpact {
+            id: Default::default(),
+            key: Default::default(),
+            r#type: Default::default(),
+            intent: Default::default(),
+            rationale: Default::default(),
+            pre: Default::default(),
+            post: Default::default(),
+            landed: Default::default(),
+            review: Default::default(),
+            reviews: Default::default(),
+            via: Default::default(),
+            recheck: Default::default(),
+            produced_by: Default::default(),
+            derived_from: Default::default(),
+            execution: Default::default(),
+            items: Default::default(),
+            flow: Default::default(),
+            superseded: Default::default(),
+            created_at: gotime::zero(),
+            validation: Default::default(),
+        }
+    }
 }
 
 /// ImpactValidation is the outcome of checking a draft as an accepted review would: Valid, or the first failure.

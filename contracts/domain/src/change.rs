@@ -61,7 +61,7 @@ pub const DATA_CRITICALITY: &str = "criticality";
 
 /// Change describes a modification of the domain graph. It starts from a reference baseline and accumulates items.
 /// It is the blackboard of a process.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Change {
     pub id: ChangeID,
@@ -151,6 +151,37 @@ pub struct Change {
     #[doc(hidden)]
     #[serde(skip)]
     pub flx: FlowCache,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Change {
+    fn default() -> Self {
+        Change {
+            id: Default::default(),
+            title: Default::default(),
+            intent: Default::default(),
+            methodology: Default::default(),
+            methodology_version: Default::default(),
+            namespace: Default::default(),
+            parent_id: Default::default(),
+            owner_org: Default::default(),
+            project_id: Default::default(),
+            lifecycle: Default::default(),
+            state: Default::default(),
+            goal: Default::default(),
+            guardians: Default::default(),
+            depends_on: Default::default(),
+            status: Default::default(),
+            baseline_id: Default::default(),
+            branch: Default::default(),
+            result_baseline_id: Default::default(),
+            data: Default::default(),
+            items: Default::default(),
+            nodes: Default::default(),
+            created_at: gotime::zero(),
+            flx: Default::default(),
+        }
+    }
 }
 
 impl Change {
@@ -296,7 +327,7 @@ pub const ITEM_CANDIDATE: ItemStatus = ItemStatus::from_static("candidate");
 pub const ITEM_STALE: ItemStatus = ItemStatus::from_static("stale");
 
 /// ChangeItem is one fact on the blackboard: an artifact, a decision, a merge or a flow event.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ChangeItem {
     pub id: ItemID,
@@ -342,6 +373,29 @@ pub struct ChangeItem {
     pub execution: String,
     #[serde(with = "gotime", default = "gotime::zero")]
     pub created_at: DateTime<Utc>,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for ChangeItem {
+    fn default() -> Self {
+        ChangeItem {
+            id: Default::default(),
+            r#type: Default::default(),
+            target: Default::default(),
+            status: Default::default(),
+            flow: Default::default(),
+            flow_event: Default::default(),
+            decision_event: Default::default(),
+            decision: Default::default(),
+            recipient: Default::default(),
+            data: Default::default(),
+            produced_by: Default::default(),
+            derived_from: Default::default(),
+            supersedes: Default::default(),
+            execution: Default::default(),
+            created_at: gotime::zero(),
+        }
+    }
 }
 
 /// Decision accepts or rejects another item.
@@ -547,6 +601,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn default_times_are_go_zero() {
+        assert!(gotime::is_zero(&ChangeItem::default().created_at));
+        assert!(gotime::is_zero(&Change::default().created_at));
+    }
+
+    #[test]
     fn change_item_validate_signal() {
         let valid = ChangeItem {
             r#type: TYPE_SIGNAL,
@@ -603,7 +663,7 @@ mod tests {
         let s = serde_json::to_string(&c).unwrap();
         assert_eq!(
             s,
-            r#"{"id":"C1","title":"","intent":"","status":"active","baselineId":"","items":[],"createdAt":"1970-01-01T00:00:00Z"}"#
+            r#"{"id":"C1","title":"","intent":"","status":"active","baselineId":"","items":[],"createdAt":"0001-01-01T00:00:00Z"}"#
         );
         let back: Change =
             serde_json::from_str(r#"{"id":"C1","items":null,"createdAt":"0001-01-01T00:00:00Z"}"#)

@@ -108,7 +108,7 @@ pub fn branch_of(b: &str) -> &str {
 /// Draft::as_node). Versions are numbered per node across all branches; Parents link a version to the one(s) it comes
 /// from. A version is written on one branch (Branch, never changed) and may join other branches when a merge lands it
 /// there as is (Joined, ADR 0032).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Node {
     pub id: NodeID,
@@ -177,6 +177,34 @@ pub struct Node {
     pub created_at: DateTime<Utc>,
 }
 
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Node {
+    fn default() -> Self {
+        Node {
+            id: Default::default(),
+            version: Default::default(),
+            branch: Default::default(),
+            joined: Default::default(),
+            parents: Default::default(),
+            reason: Default::default(),
+            namespace: Default::default(),
+            key: Default::default(),
+            r#type: Default::default(),
+            properties: Default::default(),
+            deleted: Default::default(),
+            state: Default::default(),
+            change_id: Default::default(),
+            owner: Default::default(),
+            project: Default::default(),
+            change_impact: Default::default(),
+            comment: Default::default(),
+            execution: Default::default(),
+            origins: Default::default(),
+            created_at: gotime::zero(),
+        }
+    }
+}
+
 impl Node {
     /// Ref returns the exact reference of this node version.
     pub fn r#ref(&self) -> NodeRef {
@@ -228,7 +256,7 @@ string_type!(
 
 /// Baseline is a consistent snapshot of the domain graph: which version of each node is part of it. Links belong to
 /// a baseline when both endpoints do.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Baseline {
     pub id: BaselineID,
@@ -266,6 +294,26 @@ pub struct Baseline {
     pub created_at: DateTime<Utc>,
 }
 
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Baseline {
+    fn default() -> Self {
+        Baseline {
+            id: Default::default(),
+            name: Default::default(),
+            namespace: Default::default(),
+            branch: Default::default(),
+            parent_id: Default::default(),
+            merged_from: Default::default(),
+            rebased_from: Default::default(),
+            change_id: Default::default(),
+            kind: Default::default(),
+            gap: Default::default(),
+            nodes: Default::default(),
+            created_at: gotime::zero(),
+        }
+    }
+}
+
 /// BaselineCommit is the state a change leaves on its own branch when it is committed.
 pub const BASELINE_COMMIT: &str = "commit";
 /// BaselineMerge is the state of a branch after a 3-way merge into it.
@@ -296,7 +344,7 @@ string_type!(
 /// Tag is a name given to the state a change leaves (ADR 0056): it labels the change that produced the state, and
 /// the materialised baseline of that change when one is kept, never a baseline of its own. Tags are not unique: one
 /// name may label several changes (a "release" per product line), and a change may carry several names.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Tag {
     pub id: TagID,
@@ -311,6 +359,21 @@ pub struct Tag {
     pub by: String,
     #[serde(with = "gotime", default = "gotime::zero")]
     pub created_at: DateTime<Utc>,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Tag {
+    fn default() -> Self {
+        Tag {
+            id: Default::default(),
+            name: Default::default(),
+            namespace: Default::default(),
+            change_id: Default::default(),
+            baseline_id: Default::default(),
+            by: Default::default(),
+            created_at: gotime::zero(),
+        }
+    }
 }
 
 /// TagFilter selects tags; an empty field matches every value.
@@ -335,7 +398,7 @@ pub const BRANCH_ABANDONED: &str = "abandoned";
 
 /// Branch is a line of versions parallel to main (an option of a change, a maintenance line…). Its head is its most
 /// recent baseline.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Branch {
     pub name: String,
@@ -363,6 +426,25 @@ pub struct Branch {
     pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub description: String,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Branch {
+    fn default() -> Self {
+        Branch {
+            name: Default::default(),
+            namespace: Default::default(),
+            parent: Default::default(),
+            fork_baseline: Default::default(),
+            head: Default::default(),
+            rebased_from: Default::default(),
+            origin: Default::default(),
+            intent: Default::default(),
+            status: Default::default(),
+            created_at: gotime::zero(),
+            description: Default::default(),
+        }
+    }
 }
 
 /// AttributeCheck is what the graph needs of an attribute of a node type to judge the value of a property: its type

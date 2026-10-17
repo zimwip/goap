@@ -134,7 +134,7 @@ pub(crate) fn validate_flow_event(e: Option<&FlowEvent>) -> Result<(), Error> {
 }
 
 /// Flow is a flow branch, replayed from its events.
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct Flow {
     pub id: String,
@@ -184,6 +184,29 @@ pub struct Flow {
     /// Active tells the option is the one the change works on (ADR 0032 §6).
     #[serde(skip_serializing_if = "is_false")]
     pub active: bool,
+}
+
+/// Default is Go's zero value: its times are Go's zero time, not the Unix epoch.
+impl Default for Flow {
+    fn default() -> Self {
+        Flow {
+            id: Default::default(),
+            parent: Default::default(),
+            fork_after: Default::default(),
+            status: Default::default(),
+            stale: Default::default(),
+            stale_runs: Default::default(),
+            origin: Default::default(),
+            opened_at: gotime::zero(),
+            decided_at: Default::default(),
+            decided_by: Default::default(),
+            competes_with: Default::default(),
+            option: Default::default(),
+            evaluation: Default::default(),
+            evaluated: Default::default(),
+            active: Default::default(),
+        }
+    }
 }
 
 impl Flow {
@@ -537,6 +560,7 @@ mod tests {
                 stale: stale.iter().map(|s| ItemID::from(*s)).collect(),
                 ..Default::default()
             }),
+            created_at: Utc::now(),
             ..Default::default()
         }
     }

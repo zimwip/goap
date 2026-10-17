@@ -2,7 +2,7 @@
 
 use std::{borrow::Cow, collections::BTreeMap, fmt, sync::Arc};
 
-use chrono::{DateTime, SecondsFormat, TimeDelta, Utc};
+use chrono::{SecondsFormat, TimeDelta, Utc};
 use goap_ctx::Ctx;
 use goap_domain::{Change, ChangeItem, DATA_CRITICALITY, gotime};
 use goap_risk::{DEROGATION_CLOSED, TYPE_DEROGATION, parse_expiry};
@@ -281,13 +281,11 @@ impl ItemPolicy {
             let Ok(t) = parse_expiry(str_of("expires")) else {
                 return Ok(()); // validate_derogation says so
             };
-            // unset: Go's zero time, or the Unix epoch of a `ChangeItem::default()` (chrono's default)
-            let at =
-                if gotime::is_zero(&it.created_at) || it.created_at == DateTime::<Utc>::default() {
-                    Utc::now()
-                } else {
-                    it.created_at
-                };
+            let at = if gotime::is_zero(&it.created_at) {
+                Utc::now()
+            } else {
+                it.created_at
+            };
             if t - at > p.max_derogation {
                 return Err(Error::Refused(format!(
                     "a derogation on a {lvl} change lasts {} at most (policy of the organisation), not until {}",
