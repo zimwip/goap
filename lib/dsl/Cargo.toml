@@ -5,10 +5,25 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
+description = "The DSL of the scripts (actions, algorithms, adapters): the ctx objects and the JavaScript engine behind ScriptEngine"
 
 [dependencies]
 goap-algo = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
+async-trait = { workspace = true }
+boa_engine = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+
+[dev-dependencies]
+serde_yaml_ng = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [lints]
 workspace = true
