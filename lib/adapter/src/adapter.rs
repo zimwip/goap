@@ -537,8 +537,9 @@ mod tests {
             ..Default::default()
         };
         d.validate().unwrap();
-        // The Go test also compiles the generated code with dsl.CheckAlgorithmCode: that check waits for goap-dsl
-        // (see the report of the port).
+        if let Err(e) = goap_dsl::check_algorithm_code(algo::JAVASCRIPT, &d.code) {
+            panic!("the generated code does not compile: {e}\n{}", d.code);
+        }
     }
 
     #[test]
@@ -621,8 +622,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn secret_params_are_not_readable_by_the_script() {
+    #[tokio::test]
+    async fn secret_params_are_not_readable_by_the_script() {
         let mut d = def(
             "a",
             "docs",
@@ -644,8 +645,31 @@ mod tests {
                 && secrets.len() == 1,
             "resolve = {config:?} {secrets:?}"
         );
-        // The Go test then runs the script through dsl.RunAdapter with the configuration only and checks it sees
-        // no secret: that part waits for goap-dsl (see the report of the port).
+        // the hub binds only the configuration
+        let b = algo::Bound {
+            instance: "test".into(),
+            algorithm: d.name.clone(),
+            language: d.language.clone(),
+            code: d.code.clone(),
+            params: config,
+            ..Default::default()
+        };
+        let out = goap_dsl::run_adapter(
+            &goap_ctx::Ctx::background(),
+            &b,
+            goap_dsl::AdapterInput::default(),
+        )
+        .await;
+        let seen = out
+            .as_ref()
+            .ok()
+            .and_then(|o| o.result.as_ref())
+            .and_then(|r| r.get("seen").cloned());
+        assert!(
+            seen == Some(Value::String("null".into())),
+            "script sees the secret: {:?}",
+            out.as_ref().map(|o| &o.result).map_err(|e| e.to_string())
+        );
     }
 
     #[test]

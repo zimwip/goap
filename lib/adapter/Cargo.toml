@@ -12,5 +12,10 @@ goap-mcp = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 
+[dev-dependencies]
+goap-ctx = { workspace = true }
+goap-dsl = { workspace = true }
+tokio = { workspace = true }
+
 [lints]
 workspace = true

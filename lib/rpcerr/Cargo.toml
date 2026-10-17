@@ -8,8 +8,11 @@ publish = false
 
 [dependencies]
 goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-graphapi = { workspace = true }
 goap-review = { workspace = true }
+thiserror = { workspace = true }
 
 [lints]
 workspace = true
