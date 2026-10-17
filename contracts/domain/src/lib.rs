@@ -68,5 +68,6 @@ pub use reviewrecord::{
 };
 pub use serde_util::json_equal;
 pub use structure::*;
+pub use transition::*;
 pub use typeref::*;
 pub use validate::*;

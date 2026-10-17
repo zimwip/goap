@@ -18,7 +18,7 @@ use goap_journal::Record;
 use goap_methodology::{
     Action, Agent, Compiled, Goal, KIND_ABSTRACT, KIND_CALL, KIND_HUMAN, KIND_TOOL,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tokio::sync::Notify;
 
@@ -332,7 +332,7 @@ pub(crate) fn conversation_of(p: &Process) -> String {
 }
 
 /// ProcessEvent is published on every process save, and for log lines.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProcessEvent {
     pub event: String,
     #[serde(skip_serializing_if = "Option::is_none")]
