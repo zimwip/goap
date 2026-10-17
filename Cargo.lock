@@ -2271,11 +2271,15 @@ dependencies = [
 name = "goap-e2e-builtin"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-access",
  "goap-adapter",
  "goap-assess",
  "goap-authz",
+ "goap-connect",
  "goap-connector-builtin",
+ "goap-ctx",
  "goap-def",
  "goap-devseed",
  "goap-domain",
@@ -2289,6 +2293,10 @@ dependencies = [
  "goap-risk",
  "goap-typecat",
  "goap-verify",
+ "http",
+ "parking_lot",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

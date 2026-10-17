@@ -10,8 +10,12 @@ publish = false
 goap-gen = { workspace = true }
 
 [dev-dependencies]
+async-trait = { workspace = true }
+chrono = { workspace = true }
 goap-assess = { workspace = true }
 goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-mcp = { workspace = true }
 goap-risk = { workspace = true }
@@ -27,6 +31,10 @@ goap-typecat = { workspace = true }
 goap-connector-builtin = { workspace = true }
 goap-mcpsvc = { workspace = true }
 goap-devseed = { workspace = true }
+http = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

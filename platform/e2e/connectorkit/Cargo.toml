@@ -11,6 +11,8 @@ goap-gen = { workspace = true }
 
 [dev-dependencies]
 goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-mcp = { workspace = true }
 goap-graph = { workspace = true }
 goap-graphsvc = { workspace = true }
@@ -22,6 +24,9 @@ goap-connector-localfs = { workspace = true }
 goap-connector-workspace = { workspace = true }
 goap-mcpsvc = { workspace = true }
 goap-devseed = { workspace = true }
+reqwest = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
