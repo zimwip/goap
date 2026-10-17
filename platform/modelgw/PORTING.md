@@ -47,6 +47,4 @@ Once graph/graph and graph/graphsvc are ported, run these tests again on the rea
   Only a shared service runs the background calibrations. The fields are set before sharing it.
 - Logging goes through `tracing`; there is no `Log` field.
 - The guard `TestEveryModelCallGoesThroughTheLedger` (`tests/ledger_guard.rs`) reads the workspace's `.rs` files with
-  `syn`. It skips test code (`#[cfg(test)]`, `tests/`, `tests.rs`, `*_test.rs`). It also allows
-  `platform/cmd/goap-eval`'s own `Client`, an RPC client to the gateway that its sources mark as temporary until it
-  uses `goap_modelgw::Client`.
+  `syn`. It skips test code (`#[cfg(test)]`, `tests/`, `tests.rs`, `*_test.rs`).

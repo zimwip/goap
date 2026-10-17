@@ -11,6 +11,14 @@ name = "indexer"
 path = "src/main.rs"
 
 [dependencies]
+bytes = { workspace = true }
+http = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-llm = { workspace = true }
 goap-gen = { workspace = true }
 goap-authz = { workspace = true }
 goap-index = { workspace = true }

@@ -10,14 +10,12 @@ use std::path::{Path, PathBuf};
 use syn::visit::Visit;
 
 /// The implementations of llm::Client / llm::Embedder: the ledger-backed service, the RPC client to it, the router
-/// below the ledger (only the service calls it), the instrumenting wrapper of the engine's client, and the client of
-/// goap-eval, its own RPC client to the gateway until it uses this crate's Client (its sources say so).
+/// below the ledger (only the service calls it) and the instrumenting wrapper of the engine's client.
 const IMPLEMENTATIONS: &[(&str, &str)] = &[
     ("platform/modelgw", "Service"),
     ("platform/modelgw", "Client"),
     ("platform/modelgw", "Router"),
     ("engine/enginetel", "LLMClient"),
-    ("platform/cmd/goap-eval", "Client"),
 ];
 
 const SKIP_DIRS: &[&str] = &[

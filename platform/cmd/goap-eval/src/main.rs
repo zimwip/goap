@@ -7,8 +7,6 @@
 //!
 //! The exit status is 1 when a case does not reach its pass rate, 2 on a usage or loading error.
 
-mod gateway;
-
 use std::io::Write;
 use std::sync::Arc;
 use std::time::Duration;
@@ -190,7 +188,7 @@ async fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         .timeout(Duration::from_secs(10 * 60))
         .build()
         .unwrap_or_default();
-    let client = gateway::Client::new(http, f.url.trim_end_matches('/'), &f.token);
+    let client = gateway(http, f.url.trim_end_matches('/'), &f.token);
     let (ctx, _cancel) = Ctx::background().with_timeout(f.timeout);
     let mut runner = Runner::new(Arc::new(client));
     runner.model = f.model;
@@ -208,6 +206,16 @@ async fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         return 1;
     }
     0
+}
+
+/// The model gateway at `base_url` as an `llm::Client`, sending `token` (when not empty) as a bearer token (Go's
+/// `modelgw.NewClient` over a client adding the `Authorization` header).
+fn gateway(http: reqwest::Client, base_url: &str, token: &str) -> goap_modelgw::Client {
+    let mut b = goap_connect::Client::builder(base_url).http(http);
+    if !token.is_empty() {
+        b = b.header("authorization", &format!("Bearer {token}"));
+    }
+    goap_modelgw::Client::new(b.build())
 }
 
 /// Writes the rows of `rows` aligned the way `text/tabwriter` (padding 2, spaces) does: every cell but the last of

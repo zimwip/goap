@@ -1435,14 +1435,19 @@ dependencies = [
 name = "goap-assistantsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "chrono",
  "goap-access",
  "goap-authz",
  "goap-condition",
+ "goap-connect",
  "goap-convsvc",
+ "goap-ctx",
  "goap-domain",
  "goap-engine",
  "goap-gen",
- "goap-graph",
+ "goap-graphapi",
  "goap-identity",
  "goap-llm",
  "goap-llmcfg",
@@ -1450,6 +1455,16 @@ dependencies = [
  "goap-modelgw",
  "goap-pbconv",
  "goap-startingpoint",
+ "goap-telemetry",
+ "opentelemetry",
+ "opentelemetry_sdk",
+ "parking_lot",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1543,8 +1558,13 @@ dependencies = [
 name = "goap-cmd-engine"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "bytes",
+ "chrono",
  "goap-access",
  "goap-assess",
+ "goap-connect",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-domainclient",
@@ -1557,6 +1577,7 @@ dependencies = [
  "goap-identity",
  "goap-intent",
  "goap-llm",
+ "goap-mcp",
  "goap-mcpsvc",
  "goap-methodology",
  "goap-modelgw",
@@ -1568,6 +1589,10 @@ dependencies = [
  "goap-telemetry",
  "goap-typecat",
  "goap-verify",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1659,13 +1684,12 @@ dependencies = [
 name = "goap-cmd-goap-eval"
 version = "0.1.0"
 dependencies = [
- "async-trait",
  "axum",
  "goap-connect",
  "goap-ctx",
  "goap-eval",
  "goap-gen",
- "goap-llm",
+ "goap-modelgw",
  "reqwest",
  "serde_json",
  "tokio",
@@ -1728,16 +1752,24 @@ dependencies = [
 name = "goap-cmd-indexer"
 version = "0.1.0"
 dependencies = [
+ "bytes",
  "goap-access",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-gen",
  "goap-graphclient",
  "goap-identity",
  "goap-index",
  "goap-indexersvc",
+ "goap-llm",
  "goap-modelgw",
  "goap-platform",
  "goap-telemetry",
+ "http",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1766,12 +1798,16 @@ name = "goap-cmd-modelgw"
 version = "0.1.0"
 dependencies = [
  "goap-access",
+ "goap-ctx",
  "goap-gen",
  "goap-graphclient",
  "goap-llmcfg",
  "goap-modelgw",
  "goap-platform",
  "goap-telemetry",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

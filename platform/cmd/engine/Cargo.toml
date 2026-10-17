@@ -11,6 +11,16 @@ name = "engine"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = { workspace = true }
+bytes = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-mcp = { workspace = true }
 goap-gen = { workspace = true }
 goap-assess = { workspace = true }
 goap-domain = { workspace = true }

@@ -11,6 +11,10 @@ name = "modelgw"
 path = "src/main.rs"
 
 [dependencies]
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+goap-ctx = { workspace = true }
 goap-gen = { workspace = true }
 goap-access = { workspace = true }
 goap-graphclient = { workspace = true }
