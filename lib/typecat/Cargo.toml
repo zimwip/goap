@@ -8,14 +8,21 @@ publish = false
 
 [dependencies]
 goap-algo = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-form = { workspace = true }
 goap-def = { workspace = true }
+async-trait = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 goap-assess = { workspace = true }
 goap-risk = { workspace = true }
 goap-verify = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
 
 [lints]
 workspace = true
