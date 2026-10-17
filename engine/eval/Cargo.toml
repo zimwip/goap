@@ -7,8 +7,18 @@ license.workspace = true
 publish = false
 
 [dependencies]
+goap-ctx = { workspace = true }
 goap-llm = { workspace = true }
 goap-engine = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+parking_lot = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

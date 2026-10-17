@@ -9,13 +9,22 @@ publish = false
 [dependencies]
 goap-authz = { workspace = true }
 goap-builtins = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
+goap-graphapi = { workspace = true }
 goap-journal = { workspace = true }
 goap-engine = { workspace = true }
 goap-methodology = { workspace = true }
 goap-observe = { workspace = true }
 goap-def = { workspace = true }
 goap-dsl = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
 
 [lints]
 workspace = true

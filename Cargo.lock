@@ -1656,8 +1656,16 @@ dependencies = [
 name = "goap-cmd-goap-eval"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "goap-connect",
+ "goap-ctx",
  "goap-eval",
- "goap-modelgw",
+ "goap-gen",
+ "goap-llm",
+ "reqwest",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2389,19 +2397,38 @@ dependencies = [
 name = "goap-enginetel"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "goap-connect",
+ "goap-ctx",
+ "goap-dsl",
  "goap-engine",
  "goap-llm",
  "goap-observe",
  "goap-selfimprove",
  "goap-telemetry",
+ "opentelemetry",
+ "opentelemetry_sdk",
+ "parking_lot",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
 name = "goap-eval"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "goap-ctx",
  "goap-engine",
  "goap-llm",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]
@@ -2834,25 +2861,43 @@ dependencies = [
 name = "goap-modelgw"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "axum",
+ "bytes",
+ "chrono",
+ "futures",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-domain",
- "goap-engine",
  "goap-gen",
- "goap-graph",
- "goap-graphsvc",
- "goap-graphtest",
+ "goap-graphapi",
+ "goap-graphsnap",
  "goap-identity",
- "goap-intent",
  "goap-journal",
  "goap-llm",
  "goap-llmcfg",
- "goap-methodology",
  "goap-modeltoken",
  "goap-pgtest",
  "goap-platform",
  "goap-sqlschematest",
  "goap-telemetry",
- "goap-typecat",
+ "http",
+ "include_dir",
+ "opentelemetry",
+ "opentelemetry_sdk",
+ "parking_lot",
+ "pbjson-types",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sqlx",
+ "syn 2.0.119",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2998,19 +3043,24 @@ dependencies = [
 name = "goap-registrysvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-assess",
  "goap-authz",
  "goap-builtins",
  "goap-condition",
+ "goap-connect",
+ "goap-ctx",
  "goap-decision",
  "goap-def",
  "goap-domain",
+ "goap-domainclient",
  "goap-domainpb",
  "goap-domainsvc",
  "goap-engine",
  "goap-gen",
- "goap-graph",
  "goap-graphapi",
+ "goap-graphclient",
  "goap-graphsnap",
  "goap-identity",
  "goap-llmcfg",
@@ -3022,6 +3072,15 @@ dependencies = [
  "goap-selfimprove",
  "goap-typecat",
  "goap-verify",
+ "parking_lot",
+ "pbjson-types",
+ "serde",
+ "serde_json",
+ "serde_yaml_ng",
+ "sha2 0.11.1",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

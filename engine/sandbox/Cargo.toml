@@ -8,8 +8,28 @@ publish = false
 
 [dependencies]
 goap-gen = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-engine = { workspace = true }
 goap-dsl = { workspace = true }
+goap-platform = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+pbjson-types = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+nix = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
 
 [lints]
 workspace = true
