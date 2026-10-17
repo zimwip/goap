@@ -3091,15 +3091,22 @@ dependencies = [
 name = "goap-selfimprove"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-authz",
  "goap-builtins",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-dsl",
  "goap-engine",
+ "goap-graphapi",
  "goap-journal",
  "goap-methodology",
  "goap-observe",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]

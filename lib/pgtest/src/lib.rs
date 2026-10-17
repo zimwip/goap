@@ -62,6 +62,14 @@ impl Drop for PgTest {
             };
             rt.block_on(async move {
                 if let Ok(admin) = goap_platform::open_postgres(&Ctx::background(), &dsn).await {
+                    // a transaction the test left open (a rollback spawned on the blocked runtime) would hold
+                    // its locks and stall the drop: end the schema's connections first
+                    let _ = sqlx::query(
+                        "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE application_name = $1",
+                    )
+                    .bind(&schema)
+                    .execute(&admin)
+                    .await;
                     let _ = sqlx::raw_sql(AssertSqlSafe(format!("DROP SCHEMA {schema} CASCADE")))
                         .execute(&admin)
                         .await;
@@ -100,7 +108,8 @@ pub async fn pool_with(dsn: &str, migrations: Option<&Dir<'_>>) -> PgTest {
     admin.close().await;
     let opts = goap_platform::pg_connect_options(dsn)
         .unwrap_or_else(|e| panic!("{e}"))
-        .options([("search_path", schema.as_str())]);
+        .options([("search_path", schema.as_str())])
+        .application_name(&schema);
     let pool = PgPoolOptions::new()
         .connect_with(opts)
         .await
