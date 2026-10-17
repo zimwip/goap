@@ -1575,11 +1575,14 @@ name = "goap-cmd-events"
 version = "0.1.0"
 dependencies = [
  "goap-access",
+ "goap-ctx",
  "goap-eventsvc",
  "goap-gen",
  "goap-graphclient",
  "goap-platform",
  "goap-telemetry",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2744,6 +2747,10 @@ dependencies = [
 [[package]]
 name = "goap-layering"
 version = "0.1.0"
+dependencies = [
+ "regex",
+ "serde_json",
+]
 
 [[package]]
 name = "goap-llm"
