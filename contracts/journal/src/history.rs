@@ -94,7 +94,7 @@ pub struct StepRun {
     pub stale_by: String,
     /// children are the processes the step started (sub-agents), whose writes are the step's.
     #[serde(skip)]
-    children: Vec<String>,
+    pub children: Vec<String>,
 }
 
 /// History is the history of a change.

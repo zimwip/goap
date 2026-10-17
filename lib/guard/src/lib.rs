@@ -242,9 +242,9 @@ impl Guard {
         let integrator = f.integrator.clone().unwrap_or_else(no_integrator);
         let history = f.history.clone().unwrap_or_else(no_history);
         let mut ctx = Context::with_env(ENV.clone());
-        let mut add = |name: &str, v: Value| {
-            ctx.add_variable(name, v)
-                .map_err(|e| GuardError::Eval(e.to_string()))
+        let mut add = |name: &str, v: Value| -> Result<(), GuardError> {
+            ctx.add_variable_from_value(name, json_to_cel(&v));
+            Ok(())
         };
         add("integrator", Value::Object(integrator))?;
         add("node", Value::Object(node.clone()))?;
@@ -276,6 +276,40 @@ impl Guard {
     }
 }
 
+/// A JSON value as CEL sees it, as cel-go adapts an activation: a whole number is an int (an uint beyond the int
+/// range), any other number a double. (Binding through serde would make every positive integer an uint, and
+/// `x - 1` then fails on mixed uint / int operands.)
+pub fn json_to_cel(v: &Value) -> CelValue {
+    use std::{collections::HashMap, sync::Arc};
+    match v {
+        Value::Null => CelValue::Null,
+        Value::Bool(b) => CelValue::Bool(*b),
+        Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                CelValue::Int(i)
+            } else if let Some(u) = n.as_u64() {
+                CelValue::UInt(u)
+            } else {
+                CelValue::Float(n.as_f64().unwrap_or(f64::NAN))
+            }
+        }
+        Value::String(s) => CelValue::String(Arc::new(s.clone())),
+        Value::Array(a) => CelValue::List(Arc::new(a.iter().map(json_to_cel).collect())),
+        Value::Object(m) => {
+            let map: HashMap<cel::objects::Key, CelValue> = m
+                .iter()
+                .map(|(k, v)| {
+                    (
+                        cel::objects::Key::String(Arc::new(k.clone())),
+                        json_to_cel(v),
+                    )
+                })
+                .collect();
+            CelValue::Map(cel::objects::Map { map: Arc::new(map) })
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -287,6 +321,16 @@ mod tests {
             Value::Object(m) => m,
             _ => panic!("not an object"),
         }
+    }
+
+    #[test]
+    fn whole_numbers_are_ints() {
+        let g = compile("criticalityPolicy.maxDerogationHours - 1 == 335").unwrap();
+        let f = Facts {
+            criticality_policy: Some(obj(json!({"maxDerogationHours": 336}))),
+            ..Default::default()
+        };
+        assert!(g.check_change(&Map::new(), &f, &BTreeMap::new()).unwrap());
     }
 
     #[test]
