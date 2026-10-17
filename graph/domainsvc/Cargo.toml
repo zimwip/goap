@@ -10,20 +10,33 @@ publish = false
 goap-gen = { workspace = true }
 goap-algo = { workspace = true }
 goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-def = { workspace = true }
 goap-domainpb = { workspace = true }
 goap-dsl = { workspace = true }
 goap-identity = { workspace = true }
 goap-pbconv = { workspace = true }
+goap-platform = { workspace = true }
 goap-typecat = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+include_dir = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+sqlx = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 goap-domainclient = { workspace = true }
 goap-domains-builtin = { workspace = true }
 goap-pgtest = { workspace = true }
-goap-platform = { workspace = true }
 goap-sqlschematest = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
