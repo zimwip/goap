@@ -12,6 +12,10 @@ goap-journal = { workspace = true }
 goap-review = { workspace = true }
 goap-risk = { workspace = true }
 goap-verify = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
 
 [lints]
 workspace = true
