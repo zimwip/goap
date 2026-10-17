@@ -11,7 +11,13 @@ name = "conversations"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
 goap-gen = { workspace = true }
+goap-methodology = { workspace = true }
 goap-access = { workspace = true }
 goap-graphclient = { workspace = true }
 goap-identity = { workspace = true }

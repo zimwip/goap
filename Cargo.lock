@@ -1528,16 +1528,22 @@ dependencies = [
 name = "goap-cmd-conversations"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-access",
  "goap-assistantsvc",
+ "goap-connect",
  "goap-convsvc",
+ "goap-ctx",
  "goap-gen",
  "goap-graphclient",
  "goap-identity",
+ "goap-methodology",
  "goap-modelgw",
  "goap-platform",
  "goap-registrysvc",
  "goap-telemetry",
+ "sqlx",
+ "tokio",
 ]
 
 [[package]]
