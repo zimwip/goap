@@ -93,12 +93,23 @@ Tests are unit tests (`src/tests/*.rs`), so they reach `pub(crate)` items. Reuse
 - `must`, `assert_kind`, `ctx()`, `props`, `root_org`, `root_project`, the organisation names (`NODE_TYPE_*`,
   `LINK_*`).
 - Fixtures: `seed_node` (a version written directly in a change of its own), `pin_baseline`, `test_change`,
-  `new_fixture` (NEED-1, REQ-1, TST-1 and their links, like Go's `newFixture`), and `land(g, ns, &[Landing])`.
-  `land` is a stand-in for Commit / Apply: one applied change, the versions, a `proposed` and a `landed` event per
-  node, a commit baseline, the head moved. Once `apply.rs` is ported, replace its body by a real commit (or keep it
-  for the tests that only need a world) and port the Go tests that need Commit.
-- `TestTypes` / `TestType` (Go's `testTypes`) and `use_types(&mut g, Arc<dyn TypeCatalog>)`.
-- `check_impact_logs` does not yet compare the drafts with a fold from scratch (ADR 0079): add it with draftcache.rs.
+  `new_fixture` (NEED-1, REQ-1, TST-1 and their links, like Go's `newFixture`, now landed through `import_node` /
+  `import_link`), and `land(g, ns, &[Landing])` (one applied change written directly, for G1's world tests).
+- G2 stand-ins for the commit and the merge (testsupport.rs, section "G2"): `commit_change(g, id, name)` (Go's
+  `CommitChange`: own branch, `Applier::prepare_change_impacts`, `withdrawn_since`, `walk_change_impacts`,
+  `run_node_validators`, a commit / revert baseline, `advance_branch`, a `landed` event per impact),
+  `integrate_change(g, id)` (Go's `IntegrateChange` of a root change: `unsettled`, `has_commits`, `check_merge`, then a
+  fast-forward and `land_impacts`; a target that moved since the fork is a Conflict, a sub-change is refused) and
+  `apply(g, id, name)` (both). G3 replaces their bodies by calls to the real `commit_change` / `integrate_change` /
+  `apply` of `Graph` (keep the helper names, every G2 test calls them).
+- tests/helpers.rs holds the fixtures of Go's checkout_helpers_test.go (`ImportNode` / `import_node`, `import_link`,
+  `import_props`, `Edit` / `edit`, `accept`, `accept_on`, `accept_all`, `accept_impact`, `propose_or_create`,
+  `draft_of`, `seen_impact`, `checked_out`, `version_count`, `touch`, `assert_err`, `state_of`); the worlds of the
+  test files are `pub(crate)` for reuse: `LcWorld` (tests/lifecycle.rs), `AlgoWorld` (tests/freeze.rs), `FlowWorld`
+  (tests/flownodes.rs), `Docs` (tests/restructure.rs), `Lifecycles` (tests/transition.rs, Go's `lifecycles`),
+  `MergeGate` (tests/lifecycle.rs).
+- `check_impact_logs` compares the drafts of a cold graph with `fold_drafts` from scratch (ADR 0079) and checks the
+  verdict causes.
 - Tests changing `CHECKPOINT_EVERY` hold `baselinedelta::CHECKPOINT_LOCK` (`set_checkpoint_every`, test only).
 
 ## Operation annotations: warning for the later slices
@@ -109,26 +120,70 @@ a ported operation as `/// pending goap:operation <code> <doer|reviewer>` and st
 `self.allow(ctx, id, goap_operations::CONST).await?` first; switch every placeholder to `/// goap:operation ...` in
 the slice that completes the catalogue, then run `go generate ./contracts/operations/` (or its Rust twin).
 
-## Go files left, and where each plugs in
+## Slice G2: the work on a change before it lands (done)
+
+| Go | Rust | Notes |
+|---|---|---|
+| draft.go | draft.rs | `draftReader` (`new_draft_reader`), `seen_drafts` / `seen_draft`, `change_node_view` / `change_node` / `change_node_view_by_key`, `fork_draft`, `new_draft_link` |
+| draftcache.go | draftcache.rs | `DraftCache` (LRU, `draft_cache_size`, default 128), `Graph::draft_state`, `Graph::drafts`; a transaction that appended to the log publishes nothing |
+| checkout.go | checkout.rs | create / checkout / update / link create-update-delete / cancel / transition / withdraw; `check_accepted`, `edited_again` |
+| changeimpact.go | changeimpact.rs | `propose_impact`, reviews (`review_tx`, `impact_node_review_batch`, `put_review_record`), `reopen_impacts`, `check_modifies` |
+| changeimpact_apply.go | changeimpact_apply.rs | `Applier::prepare_change_impacts`, `write_version`, `walk_change_impacts`, `walk_transitions`, `Graph::land_impacts` (Go's `land`) |
+| modification.go, impactvalidation.go | modification.rs, impactvalidation.rs | `draft_modifies`, `impact_validations` |
+| lifecycle.go (rest), transition.go (rest) | lifecycle.rs, transition.rs | `check_transition`, `child_of`; `transition_change`, gates, phases and freeze, `check_guardians` |
+| restructure.go | restructure.rs | `impact_node_merge` / `impact_node_split`, `check_origins`, `derived_nodes`; the gate is `GateFn` (synchronous) |
+| flownodes.go (rest), flow.go, flowdiff.go | flownodes.rs, flow.rs, flowdiff.rs | `FlowNodes` adopt / discard, `open_flow`, `adopt_flow`, `discard_flow`, `flows`, `diff_flows` |
+| option.go (rest), decision.go | option.rs, decision.rs | options, `blackboard` / `blackboard_in`, `change_graph`, `compare_options`; decision points through `decision_policy` |
+| changeview.go, browse.go | changeview.rs, browse.rs | `change_view` (`VIEW_WRITTEN` / `VIEW_ACCEPTED` / `VIEW_LANDED`), `baseline_nodes`, `baseline_links`, `node_neighbourhood`, `namespaces` |
+
+Ported ahead of G3 because G2's views and stand-ins need them (complete, from their Go files):
+
+- mergecheck.rs: the whole of mergecheck.go (`check_merge`, `own_guardian_merge`, `merge_blackboard`,
+  `main_impacts_of`).
+- dependency.rs: `check_dependencies` (with G1's `dependency_of`, `dependencies_of`); `SetChangeDependencies` and
+  `ChangeDependencies` are G3's.
+- rebase.rs: `has_commits`, `Graph::withdrawn_since`, `Graph::unsettled` from rebase_committed.go (the rest of that
+  file is G3's).
+
+Operation annotations: every operation method of the G2 files carries `/// pending goap:operation <code> <kind>`
+(checkout.rs 9, changeimpact.rs 2, restructure.rs 2, as in Go) and calls `self.allow(...)` first.
+
+Tests: every *_test.go of the G2 files is ported under `src/tests/` with the same test names in snake case, over
+every repository (`for_each_repo` and its after-test checks): draft, draftcache, checkout, changeimpact,
+modification, impactvalidation (memory only, like Go), lifecycle, transition, freeze, restructure, review,
+flownodes, flow, flowdiff, option, decision, changeview, browse, planned, resolve. They pass on memory, SQLite and
+PostgreSQL, and with `GOAP_MATERIALIZE_EVERY` 1, 3 and 100000.
+
+Differences from Go:
+
+- The tests land through the stand-ins `commit_change` / `integrate_change` / `apply` of testsupport.rs. The race of
+  the lifecycle test (`lifecycle.rs`, two changes landing the same node) conflicts because the target moved since
+  the fork, where Go conflicts in the rebase: the outcome checked is the same.
+- The Go validators and actions of the tests are written in JavaScript (the Rust DSL runs no Go scripts).
+- `BenchmarkDraftRead` (draftcache_test.go) is not ported (no benchmark harness in the crate).
+- `goap_domain` does not export the type `StateMove` (`Change::state_moves` returns it): a need of goap-domain
+  (`pub use transition::*`), not blocking.
+
+Deferred to G3 (they need the rebase, `CommitState` or the merge of a sub-change):
+
+- `TestChangeImpactsMerge` (changeimpact_test.go): the rebase, `SharedNodes`, the settle of a conflict.
+- `TestWithdrawACommittedImpact` (modification_test.go): `CommitState` (rebase_committed.go).
+
+## Slice G3: what is left, and where each plugs in
 
 | Go file | Plugs in |
 |---|---|
-| draft.go, draftcache.go | `Graph::drafts` (per-change cache over the log, validated by its last seq; field `draft_cache_size` is there), `draftReader`; complete `check_impact_logs` with the draft fold |
-| checkout.go, modification.go, impactvalidation.go | `impl Graph` over `change_tx` + `emit`; `ImpactValidation`, `draft_modifies` |
-| changeimpact.go, changeimpact_apply.go | changeimpact.rs (has `change_open`, `find_change_impact`); `ProposeImpact`, reviews (`reviewTx`, `ImpactNodeReviewBatch`), withdraw; uses `Cpost` and `run_node_validators` |
-| commit.go, apply.go, mergecheck.go | apply.rs (has `advance_branch`, `next_version`); `CommitChange` / `IntegrateChange` / `Apply`, `writeVersion`, `checkMerge`; replaces the `land` stand-in |
-| merge.go, rebase.go, rebase_committed.go | merge.rs (has `branch_head`); `MergeBranch`, `rebaseCommittedTx`, `RebaseChange` |
+| commit.go (`Commit`, `CommitEdits`), graph.go's callers of them | new commit.rs; `checkRequiredParent` (subchange.go) and `checkRequiredLinks` are not ported yet and belong with it |
+| apply.go | apply.rs (has `advance_branch`, `next_version`, `Cpost`, the applier of changeimpact_apply.rs); `CommitChange` / `IntegrateChange` / `Apply`, fast-forward, `land_impacts`; then point the stand-ins of testsupport.rs at them |
+| merge.go, rebase.go, rebase_committed.go (rest) | merge.rs (has `branch_head`, `versions`), rebase.rs (has `has_commits`, `withdrawn_since`, `unsettled`, `check_settled`, `impact_node_resolve`); `MergeBranch`, `rebaseCommittedTx`, `RebaseChange`, `CommitState` |
 | changebranch.go (integrate) | changebranch.rs |
-| subchange.go (rest), attach.go, dependency.go, move.go | subchange.rs; new attach.rs, dependency.rs, move.rs; gates through the seams already on `Graph` (`project_move_gate`, `lifecycles`) |
-| option.go (rest), flow.go, flowdiff.go, flownodes.go (rest) | option.rs, flownodes.rs; new flow.rs, flowdiff.rs |
-| decision.go | new decision.rs, through `decision_policy` |
-| transition.go (rest), lifecycle.go (checkTransition) | transition.rs, lifecycle.rs; `run_guards` / `run_actions` / `TransitionEnv` of algorithms.rs |
-| restructure.go | new restructure.rs (merge / split) |
-| snapshot.go, browse.go, changeview.go | new modules, read-only, over `begin` |
-| purge.go, tag.go, upgrade.go | new modules over `change_tx` |
+| subchange.go (rest), attach.go, dependency.go (rest), move.go | subchange.rs, dependency.rs; new attach.rs, move.rs; gates through `project_move_gate`, `lifecycles` |
+| purge.go, tag.go, upgrade.go, snapshot.go | new modules over `change_tx` / `begin` |
 
-The Go tests left follow their files (checkout_test.go with checkout.go, and so on); repos_test.go,
-sqlbuild_test.go, guard_test.go, changelog_test.go, baselinedelta_test.go, baselinediff_test.go, structure_test.go,
-events_test.go, schema_test.go, namespace_test.go, algorithms_test.go, operation_test.go, itemtypes_test.go and
-validate_test.go are ported, the parts needing a later slice (Commit, ProposeImpact, flows) noted in each test
-module.
+The Go tests left are those of these files (attach, branches, changebranch, commit, commitcycle, concurrency,
+dependency, landed, move, purge, rebase_root, snapshot, subchange, subchange_nested, tag, upgrade) plus the two
+deferred above and the test files no slice listed yet (attrcheck, domainrules, facet, journal_log, logfacet,
+parenting, prov, strictattrs, typecat, validators_levels: most need `Commit` / `CommitEdits`). When G3 is done:
+switch every `/// pending goap:operation` to `/// goap:operation`, regenerate the operation catalogue, and remove
+`#![allow(dead_code)]` from lib.rs (its remaining unused items are G3 callers: the applier, `check_merge`,
+`unsettled`, `withdrawn_since`, `has_commits`, `check_dependencies`, `land_impacts`, `run_node_validators`, ...).

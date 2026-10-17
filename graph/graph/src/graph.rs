@@ -294,13 +294,16 @@ pub struct Graph {
     /// MaterializeEvery is how many baselines of a chain pass between two that are materialised (ADR 0056). 0:
     /// DEFAULT_MATERIALIZE_EVERY.
     pub materialize_every: usize,
-    /// DraftCacheSize is how many changes keep their folded drafts in memory (ADR 0079 §2). 0: the default (the draft
-    /// cache is a later slice).
+    /// DraftCacheSize is how many changes keep their folded drafts in memory (ADR 0079 §2). 0: DEFAULT_DRAFT_CACHE_SIZE.
     pub draft_cache_size: usize,
     /// booted is set once the roots of the structures are known to exist (Bootstrap).
     pub(crate) booted: AtomicBool,
     /// states caches the states computed for baselines kept as a header only.
     pub(crate) states: StateCache,
+    /// draft_states caches the drafts folded from the impact log of the changes (ADR 0079 §2, draftcache.rs).
+    pub(crate) draft_states: crate::draftcache::DraftCache,
+    /// validations caches the validations of the change impacts of the views (impactvalidation.rs).
+    pub(crate) validations: crate::impactvalidation::ValidationCache,
 }
 
 impl Graph {
@@ -331,6 +334,8 @@ impl Graph {
             draft_cache_size: 0,
             booted: AtomicBool::new(false),
             states: StateCache::default(),
+            draft_states: Default::default(),
+            validations: Default::default(),
         }
     }
 
@@ -855,7 +860,12 @@ impl Graph {
 
     /// authorizeItems asks ItemAuthorizer about the items of kinds that ask a permission, and ItemPolicy about every
     /// item, before any transaction.
-    async fn authorize_items(&self, ctx: &Ctx, id: &ChangeID, items: &[ChangeItem]) -> Result<()> {
+    pub(crate) async fn authorize_items(
+        &self,
+        ctx: &Ctx,
+        id: &ChangeID,
+        items: &[ChangeItem],
+    ) -> Result<()> {
         if self.item_authorizer.is_none() && self.item_policy.is_none() {
             return Ok(());
         }

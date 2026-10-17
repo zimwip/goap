@@ -117,3 +117,133 @@ pub(crate) fn draft_view(d: Option<&Draft>) -> Value {
     json!({"key": d.key, "type": d.r#type, "state": d.state, "props": Value::Object(d.properties.clone()),
         "owner": d.owner.to_string(), "links": links, "base": base, "new": d.base.is_none()})
 }
+
+// ---- the checks of a transition ----------------------------------------------------------------------------------
+
+impl crate::apply::Applier<'_> {
+    /// childOf is the node a link of a draft to a part of it targets as the flow sees it: the draft of the child, else
+    /// the version of the view of the namespace (None: the node is not in it).
+    pub(crate) async fn child_of(
+        &self,
+        ctx: &goap_ctx::Ctx,
+        tx: &mut dyn crate::repo::Tx,
+        l: &goap_domain::Link,
+    ) -> Result<Option<Node>> {
+        if let Some(r) = &self.drafts
+            && let Some(d) = r.draft(&r.normalize(&l.to))
+        {
+            return Ok(Some(crate::draft::draft_node(&self.change, d)));
+        }
+        let Some(v) = self.target.get(&l.to.id) else {
+            return Ok(None);
+        };
+        let c = tx
+            .node(
+                ctx,
+                &goap_domain::NodeRef {
+                    id: l.to.id.clone(),
+                    version: *v,
+                },
+            )
+            .await?;
+        Ok(Some(c))
+    }
+
+    /// checkTransition checks a transition against the node as it stands (n, the state it leaves) and its outgoing
+    /// links (out): the attributes and links it requires, the states of the parts of a document, its guard (CEL: node,
+    /// children, change, impact, draft) and its guard algorithms. self.draft is the draft in the state the move goes
+    /// to.
+    pub(crate) async fn check_transition(
+        &self,
+        ctx: &goap_ctx::Ctx,
+        tx: &mut dyn crate::repo::Tx,
+        n: &Node,
+        out: &[goap_domain::Link],
+        t: &goap_domain::Transition,
+    ) -> Result<Vec<Node>> {
+        for k in &t.requires.attributes {
+            let missing = match n.properties.get(k) {
+                None | Some(Value::Null) => true,
+                Some(Value::String(s)) => s.is_empty(),
+                _ => false,
+            };
+            if missing {
+                return Err(invalidf(format!(
+                    "{} ({}) cannot take {}: attribute {k:?} is required",
+                    n.key, n.r#type, t.name
+                )));
+            }
+        }
+        for typ in &t.requires.outgoing_links {
+            if !out.iter().any(|l| &l.r#type == typ) {
+                return Err(invalidf(format!(
+                    "{} ({}) cannot take {}: an outgoing {typ:?} link is required",
+                    n.key, n.r#type, t.name
+                )));
+            }
+        }
+        let mut children = Vec::new();
+        if t.children.is_some()
+            || !t.guard.is_empty()
+            || !t.guard_algos.is_empty()
+            || !t.action_algos.is_empty()
+        {
+            for l in out {
+                if !goap_domain::is_contains(&l.r#type) {
+                    continue;
+                }
+                let Some(c) = self.child_of(ctx, tx, l).await? else {
+                    continue;
+                };
+                if let Some(rule) = &t.children
+                    && !rule.states.contains(&c.state)
+                {
+                    let got = if c.state.is_empty() {
+                        "no state".to_string()
+                    } else {
+                        c.state.clone()
+                    };
+                    return Err(invalidf(format!(
+                        "{} ({}) cannot take {}: contained {} ({}) is in {got}, expected {}",
+                        n.key,
+                        n.r#type,
+                        t.name,
+                        c.key,
+                        c.r#type,
+                        rule.states.join(" or ")
+                    )));
+                }
+                children.push(c);
+            }
+        }
+        if !t.guard.is_empty() {
+            let gd = goap_guard::compile(&t.guard)
+                .map_err(|e| invalidf(format!("guard of {}: {e}", t.name)))?;
+            let views: Vec<Value> = children.iter().map(node_view).collect();
+            let change = json!({"id": self.change.id.to_string(), "title": self.change.title,
+                "intent": self.change.intent, "methodology": self.change.methodology, "goal": self.change.goal,
+                "state": self.change.state, "status": self.change.status.to_string()});
+            let obj = |v: Value| match v {
+                Value::Object(m) => m,
+                _ => Map::new(),
+            };
+            let ok = gd
+                .check(
+                    &obj(node_view(n)),
+                    &views,
+                    &obj(change),
+                    Some(&obj(impact_view(self.impact.as_ref()))),
+                    Some(&obj(draft_view(self.draft.as_ref()))),
+                )
+                .map_err(|e| invalidf(format!("guard of {} on {}: {e}", t.name, n.key)))?;
+            if !ok {
+                return Err(invalidf(format!(
+                    "{} ({}) cannot take {}: guard not satisfied ({})",
+                    n.key, n.r#type, t.name, t.guard
+                )));
+            }
+        }
+        self.run_guards(ctx, n, t, &children).await?;
+        Ok(children)
+    }
+}

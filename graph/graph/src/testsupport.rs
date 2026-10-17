@@ -167,7 +167,7 @@ pub(crate) async fn for_each_repo(f: impl AsyncFn(&TestRepo)) {
     for r in &repos {
         eprintln!("--- {}", r.name);
         f(r).await;
-        check_impact_logs(r.repo.as_ref()).await;
+        check_impact_logs(r.repo.clone()).await;
         check_landings(r.repo.clone()).await;
         check_states(r.repo.as_ref()).await;
     }
@@ -193,10 +193,11 @@ fn norm(list: &[ChangeImpact]) -> String {
 }
 
 /// checkImpactLogs replays the impact log of every change and compares it with the change_impact projection (ADR
-/// 0029): nothing may write a projection without an event. (Go also compares the drafts the graph reads with a
-/// from-scratch fold, ADR 0079: the draft cache is a later slice, which adds that comparison here.)
-pub(crate) async fn check_impact_logs(repo: &dyn Repo) {
+/// 0029): nothing may write a projection without an event. It also compares the drafts a graph with an empty draft
+/// cache reads with a from-scratch fold of the events (ADR 0079).
+pub(crate) async fn check_impact_logs(repo: Arc<dyn Repo>) {
     let ctx = ctx();
+    let cold = Graph::new(repo.clone());
     let mut tx = repo.begin(&ctx).await.expect("begin");
     let cs = tx.changes(&ctx).await.expect("changes");
     for c in &cs {
@@ -212,6 +213,23 @@ pub(crate) async fn check_impact_logs(repo: &dyn Repo) {
             got,
             want,
             "change {}: the replay of its {} events differs from the projection",
+            c.id,
+            events.len()
+        );
+        let stored_drafts = cold.drafts(&ctx, tx.as_mut(), &c.id).await.expect("drafts");
+        let mut replayed = goap_domain::fold_drafts(&events);
+        replayed.sort_by(|a, b| a.impact.cmp(&b.impact).then_with(|| a.flow.cmp(&b.flow)));
+        let dj = |l: &[goap_domain::Draft]| {
+            if l.is_empty() {
+                "[]".to_string()
+            } else {
+                serde_json::to_string_pretty(l).expect("json")
+            }
+        };
+        assert_eq!(
+            dj(&replayed),
+            dj(&stored_drafts),
+            "change {}: the folded drafts of its {} events differ from the from-scratch fold",
             c.id,
             events.len()
         );
@@ -256,7 +274,7 @@ pub(crate) async fn check_verdict_causes(ctx: &Ctx, tx: &mut dyn Tx, id: &Change
         let entry = rec.entries.iter().find(|x| x.impact == ev.impact.as_str());
         let ok = rec.status == REVIEW_STATUS_SUBMITTED
             && rec.key == r.review_id
-            && entry.is_some_and(|x| x.outcome.as_str() == r.status.as_str());
+            && entry.is_some_and(|x| x.outcome.as_str() == goap_domain::review_outcome(&r.status));
         if !ok {
             return Err(Error::msg(format!(
                 "verdict {} on {} (review {}) is not recorded by its cause {rec:?}",
@@ -755,36 +773,56 @@ pub(crate) struct Fixture {
 }
 
 pub(crate) async fn new_fixture(r: &TestRepo) -> Fixture {
+    use crate::tests::helpers::{ImportNode, import_node};
+    use goap_graphapi::LinkWrite;
     let g = r.graph();
     must(g.bootstrap(&ctx()).await);
-    let base = must(
-        land(
+    let need = must(
+        import_node(
             &g,
-            "",
-            &[
-                Landing {
-                    properties: props(&[("title", "Pay online".into())]),
-                    ..landing("NEED-1", "Need")
-                },
-                Landing {
-                    properties: props(&[("title", "Use PSP v1".into())]),
-                    links: vec![("satisfies".into(), "NEED-1".into())],
-                    ..landing("REQ-1", "Requirement")
-                },
-                Landing {
-                    links: vec![("verifies".into(), "REQ-1".into())],
-                    ..landing("TST-1", "TestCase")
-                },
-            ],
+            ImportNode {
+                key: "NEED-1".into(),
+                r#type: "Need".into(),
+                properties: props(&[("title", "Pay online".into())]),
+                ..Default::default()
+            },
         )
         .await,
     );
-    let by_key = async |k: &str| must(g.node_by_key(&ctx(), "", k).await);
-    let (need, req, test) = (
-        by_key("NEED-1").await,
-        by_key("REQ-1").await,
-        by_key("TST-1").await,
+    let req = must(
+        import_node(
+            &g,
+            ImportNode {
+                key: "REQ-1".into(),
+                r#type: "Requirement".into(),
+                properties: props(&[("title", "Use PSP v1".into())]),
+                links: vec![LinkWrite {
+                    r#type: "satisfies".into(),
+                    to: need.r#ref(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        )
+        .await,
     );
+    let test = must(
+        import_node(
+            &g,
+            ImportNode {
+                key: "TST-1".into(),
+                r#type: "TestCase".into(),
+                links: vec![LinkWrite {
+                    r#type: "verifies".into(),
+                    to: req.r#ref(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            },
+        )
+        .await,
+    );
+    let base = must(g.branch_head(&ctx(), "", MAIN_BRANCH).await);
     Fixture {
         g,
         need,
@@ -944,4 +982,230 @@ impl crate::TypeCatalog for TestTypes {
 /// Makes a graph judge by a catalogue.
 pub(crate) fn use_types(g: &mut Graph, cat: Arc<dyn crate::TypeCatalog>) {
     g.set_types(move || Some(cat.clone()));
+}
+
+// ---- G2: a stand-in for the commit and the merge (slice G3 ports them) ------------------------------------------
+
+/// commitChange is Go's `CommitChange` for the tests of G2 (a stand-in until slice G3 ports commit.go / apply.go):
+/// the change gets its own branch, its accepted modifications are written there as versions (the applier of
+/// changeimpact_apply.rs), checked, the nodes withdrawn since their commit reverted, and recorded as a commit
+/// baseline with a `landed` event per impact; the change stays open.
+pub(crate) async fn commit_change(g: &Graph, id: &ChangeID, name: &str) -> Result<Baseline> {
+    let ctx = ctx();
+    let mut tx = g.change_tx(&ctx, id).await?;
+    let mut c = tx.change(&ctx, id).await?;
+    if crate::changebranch::own_branch(&ctx, &mut tx, &c)
+        .await?
+        .is_none()
+    {
+        c = g.ensure_own_branch(&ctx, &mut tx, c).await?.0;
+    }
+    if c.status == CHANGE_APPLIED
+        || c.status == goap_domain::CHANGE_ABANDONED
+        || c.status == goap_domain::CHANGE_COMMITTED
+    {
+        return Err(Error::wrap(
+            ErrorKind::Conflict,
+            format!("change {id} is {}", c.status),
+        ));
+    }
+    let head = branch_head(&ctx, &mut tx, &c.namespace, &c.branch).await?;
+    let mut a = crate::apply::Applier::new(g);
+    a.ix = g.types_at();
+    a.branch = goap_domain::branch_of(&c.branch).to_string();
+    a.target = head.nodes.clone();
+    a.change = c.clone();
+    a.prepare_change_impacts(&ctx, &mut tx).await?;
+    let (withdrawn, fork) = g.withdrawn_since(&ctx, &mut tx, &c).await?;
+    for nid in &withdrawn {
+        match fork.get(nid) {
+            Some(v) => {
+                a.target.insert(nid.clone(), *v);
+            }
+            None => {
+                a.target.remove(nid);
+            }
+        }
+    }
+    if a.cposts.is_empty() && withdrawn.is_empty() {
+        return Err(Error::wrap(
+            ErrorKind::NothingToCommit,
+            format!(
+                "change {id}: no accepted change impact modifies a node, and nothing it committed is withdrawn"
+            ),
+        ));
+    }
+    a.walk_change_impacts(&ctx, &mut tx).await?;
+    g.run_node_validators(&ctx, &mut tx, &a.target, &a.cposts)
+        .await?;
+    let result = Baseline {
+        id: BaselineID::new(g.new_id()),
+        name: if name.is_empty() {
+            c.title.clone()
+        } else {
+            name.to_string()
+        },
+        namespace: c.namespace.clone(),
+        branch: a.branch.clone(),
+        parent_id: head.id.clone(),
+        change_id: c.id.clone(),
+        kind: if withdrawn.is_empty() {
+            BASELINE_COMMIT
+        } else {
+            goap_domain::BASELINE_REVERT
+        }
+        .into(),
+        nodes: a.target.clone(),
+        created_at: g.now(),
+        ..Default::default()
+    };
+    tx.put_baseline(&ctx, result.clone()).await?;
+    let branch = a.branch.clone();
+    g.advance_branch(&ctx, &mut tx, &c.namespace, &branch, &result)
+        .await?;
+    let cposts = std::mem::take(&mut a.cposts);
+    drop(a);
+    for cp in cposts {
+        g.emit(
+            &ctx,
+            &mut tx,
+            vec![ImpactEvent {
+                change: c.id.clone(),
+                impact: cp.cn.id.clone(),
+                op: IMPACT_LANDED,
+                landed: Some(cp.post.r#ref()),
+                baseline: result.id.clone(),
+                branch: branch.clone(),
+                ..Default::default()
+            }],
+        )
+        .await?;
+    }
+    let mut c = tx.change(&ctx, id).await?;
+    if c.status == goap_domain::CHANGE_DRAFT {
+        c.status = goap_domain::CHANGE_ACTIVE;
+    }
+    c.result_baseline_id = result.id.clone();
+    tx.put_change(&ctx, c).await?;
+    tx.commit(&ctx).await?;
+    Ok(result)
+}
+
+/// apply is Go's `Apply` for the tests of G2: commit what is pending ([`commit_change`]), then fast-forward the
+/// branch it was forked from onto the change's (Go's `merge`: `unsettled`, `hasCommits`, `checkMerge`, then
+/// `fastForward` and `land`). The rebase and the merge of a sub-change are slice G3's: a target that moved since the
+/// fork is a conflict here, and a sub-change is refused.
+pub(crate) async fn apply(g: &Graph, id: &ChangeID, name: &str) -> Result<Baseline> {
+    match commit_change(g, id, name).await {
+        Err(e) if e.kind() == ErrorKind::NothingToCommit => {}
+        r => {
+            r?;
+        }
+    }
+    let c = integrate_change(g, id).await?;
+    g.baseline(&ctx(), &c.result_baseline_id).await
+}
+
+/// integrateChange is Go's `IntegrateChange` of an open root change for the tests of G2 (`merge`: `unsettled`,
+/// `hasCommits`, `checkMerge`, then `fastForward` and `land`); see [`apply`].
+pub(crate) async fn integrate_change(g: &Graph, id: &ChangeID) -> Result<Change> {
+    let ctx = ctx();
+    {
+        let mut tx = g.change_tx(&ctx, id).await?;
+        let c = tx.change(&ctx, id).await?;
+        if c.status != goap_domain::CHANGE_DRAFT && c.status != goap_domain::CHANGE_ACTIVE {
+            return Err(Error::wrap(
+                ErrorKind::Conflict,
+                format!("change {id} is {}", c.status),
+            ));
+        }
+        if !c.parent_id.is_empty() {
+            return Err(Error::msg(format!(
+                "change {id}: the merge of a sub-change is slice G3's"
+            )));
+        }
+        let left = g.unsettled(&ctx, &mut tx, &c).await?;
+        if !left.is_empty() {
+            return Err(Error::wrap(
+                ErrorKind::Conflict,
+                format!("change {id} cannot be merged yet: {}", left.join("; ")),
+            ));
+        }
+        if !crate::rebase::has_commits(&c) {
+            return Err(Error::wrap(
+                ErrorKind::NothingToCommit,
+                format!("change {id} committed nothing on its branch"),
+            ));
+        }
+    }
+    g.check_merge(&ctx, id).await?;
+    let mut tx = g.change_tx(&ctx, id).await?;
+    let mut c = tx.change(&ctx, id).await?;
+    let Some(mut own) = crate::changebranch::own_branch(&ctx, &mut tx, &c).await? else {
+        return Err(Error::wrap(
+            ErrorKind::Invalid,
+            format!("change {id} has no branch of its own"),
+        ));
+    };
+    let into = branch_head(&ctx, &mut tx, &c.namespace, &own.parent).await?;
+    if into.id != own.fork_baseline {
+        return Err(Error::wrap(
+            ErrorKind::Conflict,
+            format!(
+                "change {id}: {} moved since the fork (the rebase is slice G3's)",
+                own.parent
+            ),
+        ));
+    }
+    let from = branch_head(&ctx, &mut tx, &c.namespace, &own.name).await?;
+    let target = goap_domain::branch_of(&own.parent).to_string();
+    let mut moves = Vec::new();
+    for (nid, v) in &from.nodes {
+        if into.nodes.get(nid) != Some(v) {
+            moves.push(NodeRef {
+                id: nid.clone(),
+                version: *v,
+            });
+        }
+    }
+    for nid in into.nodes.keys() {
+        if from.nodes.contains_key(nid) {
+            continue;
+        }
+        match tx.latest_on(&ctx, nid, &own.name).await {
+            Ok(n) if n.deleted => moves.push(n.r#ref()),
+            Ok(_) => {}
+            Err(e) if e.is_not_found() => {}
+            Err(e) => return Err(e),
+        }
+    }
+    for r in &moves {
+        tx.join_branch(&ctx, r, &target, &c.id).await?;
+    }
+    let res = Baseline {
+        id: BaselineID::new(g.new_id()),
+        name: c.title.clone(),
+        namespace: c.namespace.clone(),
+        branch: target.clone(),
+        parent_id: into.id.clone(),
+        change_id: c.id.clone(),
+        kind: BASELINE_FAST_FORWARD.into(),
+        nodes: from.nodes.clone(),
+        created_at: g.now(),
+        ..Default::default()
+    };
+    tx.put_baseline(&ctx, res.clone()).await?;
+    g.advance_branch(&ctx, &mut tx, &c.namespace, &target, &res)
+        .await?;
+    own.status = goap_domain::BRANCH_MERGED.into();
+    tx.put_branch(&ctx, own.clone()).await?;
+    c.status = CHANGE_APPLIED;
+    c.result_baseline_id = res.id.clone();
+    let cid = c.id.clone();
+    g.land_impacts(&ctx, &mut tx, &c, &own, &cid, &res.id)
+        .await?;
+    tx.put_change(&ctx, c.clone()).await?;
+    tx.commit(&ctx).await?;
+    let _ = res;
+    Ok(c)
 }

@@ -4,12 +4,15 @@
 
 use goap_ctx::Ctx;
 use goap_domain::{
-    BRANCH_ABANDONED, CHANGE_ABANDONED, CHANGE_APPLIED, CHANGE_COMMITTED, Change, ChangeID,
-    STRUCTURE_ORGANISATION, STRUCTURE_PROJECT, namespace_of,
+    BRANCH_ABANDONED, CHANGE_ABANDONED, CHANGE_APPLIED, CHANGE_COMMITTED, Change, ChangeID, Draft,
+    Link, Node, NodeRef, STRUCTURE_ORGANISATION, STRUCTURE_PROJECT, namespace_of,
 };
 
+use crate::algorithms::NodeResolver;
 use crate::api::NewChange;
 use crate::changebranch::own_branch;
+use crate::draft::{DraftReader, draft_node};
+use crate::lifecycle::TypeIndex;
 use crate::merge::branch_head;
 use crate::repo::Tx;
 use crate::{Error, ErrorKind, Graph, Result};
@@ -163,4 +166,149 @@ pub(crate) async fn open_sub_changes(
     let mut subs = sub_changes(ctx, tx, id).await?;
     subs.retain(|c| c.status != CHANGE_APPLIED && c.status != CHANGE_ABANDONED);
     Ok(subs)
+}
+
+// ---- the checks of a version (ADR 0054, 0065, 0076, 0079) --------------------------------------------------------
+
+/// requirement is a number of outgoing links of one type a node must have: what the parent of a structure (ADR 0054)
+/// and the required links a node type declares (ADR 0065) come down to. of describes it in error messages.
+pub(crate) struct Requirement {
+    pub(crate) link_type: String,
+    pub(crate) count: i64,
+    pub(crate) of: String,
+}
+
+impl Graph {
+    /// requirementsOf returns the links a node of type typ and key must carry: the parent of a node of a structure,
+    /// except the root of it, and the links its node type requires. Empty for any other node.
+    pub(crate) fn requirements_of(&self, typ: &str, key: &str) -> Vec<Requirement> {
+        let mut out = Vec::new();
+        for st in self.bootstrap_structures() {
+            if typ == st.r#type && key != st.root {
+                out.push(Requirement {
+                    link_type: st.parent.clone(),
+                    count: 1,
+                    of: format!("a parent {} ({})", st.r#type, st.parent),
+                });
+            }
+        }
+        for r in self.requires(typ) {
+            out.push(Requirement {
+                link_type: r.link.clone(),
+                count: r.exactly(),
+                of: format!("exactly {} {}", r.exactly(), r.link),
+            });
+        }
+        out
+    }
+
+    /// checkRequiredLinks checks that a version or a draft carries the links its type requires (the parent of a node
+    /// of a structure, the membership of a User): read back from the node itself, so a client that built its edits
+    /// from a stale read fails instead of leaving the node with zero or two of them. Checked when a draft is accepted
+    /// (ADR 0079) and when the version lands, never while the draft is edited.
+    pub(crate) fn check_required_links(&self, n: &Node, links: &[Link]) -> Result<()> {
+        let reqs = self.requirements_of(&n.r#type, &n.key);
+        if reqs.is_empty() || n.deleted {
+            return Ok(());
+        }
+        for r in reqs {
+            let count = links.iter().filter(|l| l.r#type == r.link_type).count() as i64;
+            if count != r.count {
+                return Err(Error::wrap(
+                    ErrorKind::Invalid,
+                    format!("{} needs {}, got {count}", n.key, r.of),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// checkVersion is what a draft must satisfy to be accepted and the version written from it to land (ADR 0076,
+    /// 0079): its properties, the links its type requires, and for each outgoing link its attributes, their validators
+    /// and the link validators of its type.
+    pub(crate) async fn check_version(
+        &self,
+        ctx: &Ctx,
+        ix: &TypeIndex,
+        n: &Node,
+        links: &[Link],
+        resolve: &mut dyn NodeResolver,
+    ) -> Result<()> {
+        self.validate_props(ctx, ix, n, &n.properties).await?;
+        self.check_required_links(n, links)?;
+        for l in links {
+            ix.check_link_attributes(&l.r#type, &l.properties)
+                .map_err(|e| e.context(&n.key))?;
+            self.run_link_validators(ctx, ix, n, l, Some(&mut *resolve))
+                .await?;
+        }
+        Ok(())
+    }
+
+    /// checkWritten checks a version a landing wrote, with its links.
+    pub(crate) async fn check_written(
+        &self,
+        ctx: &Ctx,
+        tx: &mut dyn Tx,
+        ix: &TypeIndex,
+        n: &Node,
+    ) -> Result<()> {
+        let links = tx.out_links(ctx, &n.r#ref()).await?;
+        let mut r = StoredResolver { tx };
+        self.check_version(ctx, ix, n, &links, &mut r).await
+    }
+
+    /// checkDraft checks a draft as the version written from it will be.
+    pub(crate) async fn check_draft(
+        &self,
+        ctx: &Ctx,
+        ix: &TypeIndex,
+        c: &Change,
+        d: &Draft,
+        resolve: &mut dyn NodeResolver,
+    ) -> Result<()> {
+        self.check_version(ctx, ix, &draft_node(c, d), &d.out_links(), resolve)
+            .await
+    }
+}
+
+/// storedResolver resolves exact versions from the store: the links of a version written by a landing.
+pub(crate) struct StoredResolver<'a> {
+    pub(crate) tx: &'a mut dyn Tx,
+}
+
+#[async_trait::async_trait]
+impl NodeResolver for StoredResolver<'_> {
+    async fn resolve(&mut self, ctx: &Ctx, r: &NodeRef) -> Result<Option<Node>> {
+        match self.tx.node(ctx, r).await {
+            Ok(n) => Ok(Some(n)),
+            Err(e) if e.is_not_found() => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+/// draftResolver resolves the references of a draft through the drafts the reader holds, else the store.
+pub(crate) struct DraftResolver<'a> {
+    pub(crate) tx: &'a mut dyn Tx,
+    pub(crate) reader: &'a DraftReader,
+}
+
+#[async_trait::async_trait]
+impl NodeResolver for DraftResolver<'_> {
+    async fn resolve(&mut self, ctx: &Ctx, r: &NodeRef) -> Result<Option<Node>> {
+        let r = self.reader.normalize(r);
+        if r.is_draft() {
+            return Ok(self
+                .reader
+                .by_node
+                .get(&r.id)
+                .map(|d| self.reader.draft_node(d)));
+        }
+        match self.tx.node(ctx, &r).await {
+            Ok(n) => Ok(Some(n)),
+            Err(e) if e.is_not_found() => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
 }

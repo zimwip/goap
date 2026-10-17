@@ -242,7 +242,7 @@ async fn node_changes() {
         must(tx.commit(&c).await);
         let got = must(g.node_changes(&c, &f.req.id).await);
         let ids: Vec<_> = got.iter().map(|x| x.id.clone()).collect();
-        assert_eq!(ids, vec![f.base.change_id.clone(), ch.id.clone()]);
+        assert_eq!(ids, vec![f.req.change_id.clone(), ch.id.clone()]);
         assert!(got.iter().all(|x| x.items.is_empty() && x.nodes.is_empty()));
         let refs = must(g.change_impacts(&c, &ch.id).await);
         assert_eq!(refs, vec![f.req.r#ref()]);

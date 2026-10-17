@@ -18,13 +18,11 @@ pub fn is_working(c: &Change, flow: &str, n: &Node) -> bool {
 }
 
 /// The branch a flow's versions would be written on (`graphapi.DraftBranch`).
-#[allow(dead_code)]
 pub(crate) fn draft_branch(c: &Change, flow: &str) -> String {
     goap_graphapi::draft_branch(c, flow)
 }
 
 /// The branch of a flow other than the main one (`graphapi.FlowBranch`).
-#[allow(dead_code)]
 pub(crate) fn flow_branch_name(flow: &str) -> String {
     goap_graphapi::flow_branch(flow)
 }

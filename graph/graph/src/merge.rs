@@ -83,3 +83,17 @@ pub(crate) async fn branch_head(
         ..Default::default()
     })
 }
+
+/// onBranch reports whether a node version is part of a branch: written there, or joined (ADR 0032).
+pub(crate) async fn on_branch(
+    ctx: &Ctx,
+    tx: &mut dyn Tx,
+    r: &goap_domain::NodeRef,
+    branch: &str,
+) -> Result<bool> {
+    let vs = tx.versions(ctx, &r.id).await?;
+    Ok(vs
+        .iter()
+        .find(|n| n.version == r.version)
+        .is_some_and(|n| n.on(branch)))
+}

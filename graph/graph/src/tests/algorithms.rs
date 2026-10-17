@@ -30,6 +30,14 @@ fn params(v: Value) -> serde_json::Map<String, Value> {
 /// Req: property "code" must match ^REQ-[0-9]+$ (inherited by Sub); approve stamps the node. Doc: release needs its
 /// requirements approved (guard).
 fn algo_graph() -> (Graph, Transition, Transition) {
+    let (types, approve, release) = algo_types();
+    let mut g = memory_repo().graph();
+    use_types(&mut g, Arc::new(types));
+    (g, approve, release)
+}
+
+/// algoTypes are the types of Go's algoWorld, with the approve and release transitions.
+pub(crate) fn algo_types() -> (TestTypes, Transition, Transition) {
     let regex = Bound {
         instance: "req-code".into(),
         algorithm: "regex".into(),
@@ -87,35 +95,31 @@ fn algo_graph() -> (Graph, Transition, Transition) {
         transitions: vec![release.clone()],
         ..Default::default()
     };
-    let mut g = memory_repo().graph();
-    use_types(
-        &mut g,
-        Arc::new(TestTypes::new(&[
-            (
-                "Req",
-                TestType {
-                    lifecycle: Some(req_lc),
-                    validators: vec![regex],
-                    ..Default::default()
-                },
-            ),
-            (
-                "Sub",
-                TestType {
-                    extends: "Req".into(),
-                    ..Default::default()
-                },
-            ),
-            (
-                "Doc",
-                TestType {
-                    lifecycle: Some(doc_lc),
-                    ..Default::default()
-                },
-            ),
-        ])),
-    );
-    (g, approve, release)
+    let types = TestTypes::new(&[
+        (
+            "Req",
+            TestType {
+                lifecycle: Some(req_lc),
+                validators: vec![regex],
+                ..Default::default()
+            },
+        ),
+        (
+            "Sub",
+            TestType {
+                extends: "Req".into(),
+                ..Default::default()
+            },
+        ),
+        (
+            "Doc",
+            TestType {
+                lifecycle: Some(doc_lc),
+                ..Default::default()
+            },
+        ),
+    ]);
+    (types, approve, release)
 }
 
 fn node(key: &str, typ: &str, state: &str, code: Option<&str>) -> Node {

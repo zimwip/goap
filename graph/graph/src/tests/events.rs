@@ -12,7 +12,7 @@ use crate::testsupport::*;
 use crate::{EventSink, GraphEvent, Result};
 
 #[derive(Default)]
-struct RecSink(Mutex<Vec<(String, GraphEvent)>>);
+pub(crate) struct RecSink(pub(crate) Mutex<Vec<(String, GraphEvent)>>);
 
 #[async_trait]
 impl EventSink for RecSink {
