@@ -257,3 +257,190 @@ async fn impact_validation_withdrawn() {
         );
     }
 }
+
+// ---- validators_levels_test.go ----------------------------------------------------------------------------------
+
+// The draft is refused at its review with the message, and accepted once valid.
+#[tokio::test]
+async fn validators_of_each_level_refuse_at_review() {
+    let ok = json!({"title": "t", "colour": "red"});
+    let cases = [
+        (
+            "attribute",
+            json!({"title": " ", "colour": "red"}),
+            ok.clone(),
+            Value::Null,
+            r#"property "title" is invalid: title is blank"#,
+        ),
+        (
+            "node",
+            json!({"title": "t", "tag": "x"}),
+            ok.clone(),
+            Value::Null,
+            "a tag needs a colour",
+        ),
+        (
+            "link attribute",
+            ok.clone(),
+            ok.clone(),
+            json!({"weight": -1}),
+            r#"link lv@refs: property "weight" is invalid: weight must be positive"#,
+        ),
+        (
+            "link",
+            ok.clone(),
+            json!({"title": "t", "colour": "blue"}),
+            Value::Null,
+            "link lv@refs to B is invalid: colours differ (lv@refs) (validator colours)",
+        ),
+    ];
+    for (name, a, b, link, want) in cases {
+        let lc = new_levels_change(a, b, link).await;
+        let b = lc.b.clone();
+        let r = lc.accept(&b).await;
+        assert!(r.is_ok(), "{name}: B is valid: {r:?}");
+        let a = lc.a.clone();
+        let err = lc.accept(&a).await.unwrap_err();
+        assert!(
+            err.is_invalid() && err.to_string().contains(want),
+            "{name}: want {want:?}, got {err}"
+        );
+    }
+}
+
+// valid drafts are accepted and land; a link validator also judges the version written at landing.
+#[tokio::test]
+async fn validators_of_each_level_accept_valid() {
+    let ok = json!({"title": "t", "colour": "red", "tag": "x"});
+    let lc = new_levels_change(ok.clone(), ok, json!({"weight": 2})).await;
+    for cn in [lc.b.clone(), lc.a.clone()] {
+        must(lc.accept(&cn).await);
+    }
+    must(apply(&lc.g, &lc.c.id, "").await);
+}
+
+// A target changed after the source was accepted is caught when the version lands.
+#[tokio::test]
+async fn link_validator_runs_at_landing() {
+    let ok = json!({"title": "t", "colour": "red"});
+    let lc = new_levels_change(ok.clone(), ok, Value::Null).await;
+    for cn in [lc.b.clone(), lc.a.clone()] {
+        must(lc.accept(&cn).await);
+    }
+    // B turns blue and is accepted again: A, still accepted, no longer matches it
+    must(
+        lc.g.impact_node_update(
+            &ctx(),
+            &lc.c.id,
+            &lc.b.id,
+            NodeUpdate {
+                properties: obj(json!({"colour": "blue"})),
+                ..Default::default()
+            },
+        )
+        .await,
+    );
+    let b = lc.b.clone();
+    must(lc.accept(&b).await);
+    let err = apply(&lc.g, &lc.c.id, "").await.unwrap_err();
+    assert!(
+        err.is_invalid() && err.to_string().contains("colours differ"),
+        "landing: {err}"
+    );
+}
+
+/// A resolver of the tests: every reference resolves to one node, or to none.
+struct FixedResolver(Option<Node>);
+
+#[async_trait::async_trait]
+impl crate::algorithms::NodeResolver for FixedResolver {
+    async fn resolve(&mut self, _: &goap_ctx::Ctx, _: &NodeRef) -> Result<Option<Node>> {
+        Ok(self.0.clone())
+    }
+}
+
+// Every level also judges a written version directly (checkWritten, what Apply runs).
+#[tokio::test]
+async fn check_version_runs_every_level() {
+    let ctx = ctx();
+    let (g, _) = levels_graph().await;
+    let ix = crate::lifecycle::TypeIndex { cat: g.catalog() };
+    let to = Node {
+        id: NodeID::new("n2"),
+        version: 1,
+        key: "B".into(),
+        r#type: "lv@Item".into(),
+        properties: obj(json!({"colour": "blue"})),
+        ..Default::default()
+    };
+    let link = |p: Value| {
+        vec![Link {
+            r#type: "lv@refs".into(),
+            to: to.r#ref(),
+            properties: obj(p),
+            ..Default::default()
+        }]
+    };
+    let item = |p: Value| Node {
+        key: "A".into(),
+        r#type: "lv@Item".into(),
+        properties: obj(p),
+        ..Default::default()
+    };
+    let mut n = Node {
+        id: NodeID::new("n1"),
+        version: 1,
+        ..item(json!({"title": "t", "colour": "blue"}))
+    };
+    let mut resolve = FixedResolver(Some(to.clone()));
+    must(
+        g.check_version(&ctx, &ix, &n, &link(json!({"weight": 1})), &mut resolve)
+            .await,
+    );
+    let cases = [
+        (
+            "attribute",
+            item(json!({"title": ""})),
+            vec![],
+            "title is blank",
+        ),
+        (
+            "node",
+            item(json!({"tag": "x", "title": "t"})),
+            vec![],
+            "a tag needs a colour",
+        ),
+        (
+            "link attribute",
+            n.clone(),
+            link(json!({"weight": 0})),
+            "weight must be positive",
+        ),
+        (
+            "link",
+            Node {
+                id: NodeID::new("n1"),
+                ..item(json!({"title": "t", "colour": "red"}))
+            },
+            link(Value::Null),
+            "colours differ",
+        ),
+    ];
+    for (name, cn, l, want) in cases {
+        let err = g
+            .check_version(&ctx, &ix, &cn, &l, &mut resolve)
+            .await
+            .unwrap_err();
+        assert!(
+            err.is_invalid() && err.to_string().contains(want),
+            "{name}: {err}"
+        );
+    }
+    // a target that cannot be resolved is left to the other checks
+    let mut gone = FixedResolver(None);
+    n.properties.insert("colour".into(), json!("red"));
+    must(
+        g.check_version(&ctx, &ix, &n, &link(Value::Null), &mut gone)
+            .await,
+    );
+}

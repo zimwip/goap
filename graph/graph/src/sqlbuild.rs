@@ -41,11 +41,6 @@ pub enum Arg {
 }
 
 impl Arg {
-    /// An id argument.
-    pub fn id(s: impl Into<String>) -> Arg {
-        Arg::Id(s.into())
-    }
-
     /// A text argument.
     pub fn text(s: impl Into<String>) -> Arg {
         Arg::Text(s.into())

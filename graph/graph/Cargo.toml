@@ -35,6 +35,7 @@ goap-risk = { workspace = true }
 goap-prov = { workspace = true }
 goap-pgtest = { workspace = true }
 goap-sqlschematest = { workspace = true }
+futures = { workspace = true }
 
 [lints]
 workspace = true

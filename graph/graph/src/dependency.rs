@@ -1,11 +1,216 @@
-//! Part of `dependency.go` (G2): how a change sees its dependencies (ADR 0108), the facet of its blackboard and the check of the merge. Setting
-//! them (`SetChangeDependencies`) and `ChangeDependencies` belong to slice G3 (see PORTING.md).
+//! Port of `dependency.go`: dependencies between changes (ADR 0108). A change names the changes whose work must have
+//! reached the branch it merges into before it merges (`Change::depends_on`). The merge refuses a change with a
+//! dependency not satisfied (check_merge), the guards see them (FACET_DEPENDENCIES), and the open sub-changes of a
+//! change merge in their dependency order (`dependency_order`, change_dependencies).
+
+use std::collections::{BTreeMap, HashSet, VecDeque};
 
 use goap_ctx::Ctx;
-use goap_domain::{CHANGE_ABANDONED, CHANGE_APPLIED, Change, ChangeID, Dependency};
+use goap_domain::{
+    CHANGE_ABANDONED, CHANGE_ACTIVE, CHANGE_APPLIED, CHANGE_COMMITTED, CHANGE_DRAFT, Change,
+    ChangeID, Dependency, HeaderValue, dependency_order,
+};
+use goap_operations as operations;
+use serde_json::{Value, json};
 
-use crate::Result;
+use crate::api::ChangeDependencies;
 use crate::repo::Tx;
+use crate::{Error, ErrorKind, Graph, Result};
+
+/// HeaderDependsOn is the field of a change.updated log entry recording a change of the dependencies of a change.
+pub const HEADER_DEPENDS_ON: &str = "dependsOn";
+
+impl Graph {
+    /// SetChangeDependencies replaces the changes a change depends on. The change is open; each dependency exists, is
+    /// another change, neither one of its ancestors nor one of its sub-changes (a change already waits for its
+    /// sub-changes), and the relation never makes a cycle (Invalid). An abandoned dependency is refused (Conflict): it
+    /// never lands. The change is journaled in a change.updated entry (dependsOn {from, to}); no entry when nothing
+    /// changes.
+    ///
+    /// goap:operation change.depend doer
+    pub async fn set_change_dependencies(
+        &self,
+        ctx: &Ctx,
+        id: &ChangeID,
+        deps: &[ChangeID],
+    ) -> Result<Change> {
+        self.allow(ctx, id, operations::CHANGE_DEPEND).await?;
+        let mut want: Vec<ChangeID> = Vec::new();
+        for d in deps {
+            if !d.is_empty() && !want.contains(d) {
+                want.push(d.clone());
+            }
+        }
+        let mut tx = self.change_tx(ctx, id).await?;
+        let mut c = tx.change(ctx, id).await?;
+        if c.status != CHANGE_DRAFT && c.status != CHANGE_ACTIVE {
+            return Err(Error::wrap(
+                ErrorKind::Conflict,
+                format!(
+                    "change {} is {}: its dependencies no longer change",
+                    c.id, c.status
+                ),
+            ));
+        }
+        if c.depends_on == want {
+            tx.commit(ctx).await?;
+            return Ok(c);
+        }
+        let ancestors = ancestor_ids(ctx, &mut tx, &c).await?;
+        for d in &want {
+            check_dependency(ctx, &mut tx, &c, &ancestors, d).await?;
+        }
+        let mut fields = BTreeMap::new();
+        fields.insert(
+            HEADER_DEPENDS_ON.to_string(),
+            HeaderValue {
+                from: id_strings(&c.depends_on),
+                to: id_strings(&want),
+            },
+        );
+        self.header_entry(ctx, &mut tx, &c.id, fields).await?;
+        c.depends_on = want;
+        tx.put_change(ctx, c.clone()).await?;
+        tx.commit(ctx).await?;
+        Ok(c)
+    }
+
+    /// ChangeDependencies reads the dependencies of a change, the open changes depending on it and the merge order of
+    /// its open sub-changes.
+    pub async fn change_dependencies(
+        &self,
+        ctx: &Ctx,
+        id: &ChangeID,
+    ) -> Result<ChangeDependencies> {
+        let mut tx = self.begin(ctx).await?;
+        let c = tx.change(ctx, id).await?;
+        let mut out = ChangeDependencies {
+            depends_on: dependencies_of(ctx, &mut tx, &c).await?,
+            ..Default::default()
+        };
+        let all = tx.changes(ctx).await?;
+        let mut subs = Vec::new();
+        for x in all {
+            let open = x.status == CHANGE_DRAFT
+                || x.status == CHANGE_ACTIVE
+                || x.status == CHANGE_COMMITTED;
+            if !open {
+                continue;
+            }
+            if x.depends_on.contains(id) {
+                let mut dep = dependency_of(ctx, &mut tx, &x, id).await?;
+                dep.id = x.id.clone();
+                dep.title = x.title.clone();
+                dep.methodology = x.methodology.clone();
+                dep.status = x.status.clone();
+                dep.state = x.state.clone();
+                dep.parent_id = x.parent_id.clone();
+                out.dependents.push(dep);
+            }
+            if &x.parent_id == id {
+                subs.push(x);
+            }
+        }
+        for s in dependency_order(&subs) {
+            let deps = dependencies_of(ctx, &mut tx, &s).await?;
+            let mut o = Dependency {
+                id: s.id.clone(),
+                title: s.title.clone(),
+                methodology: s.methodology.clone(),
+                status: s.status.clone(),
+                state: s.state.clone(),
+                parent_id: s.parent_id.clone(),
+                satisfied: true,
+                ..Default::default()
+            };
+            if let Some(d) = deps.iter().find(|d| !d.satisfied) {
+                o.satisfied = false;
+                o.reason = format!("waits for {} ({})", d.id, d.title);
+            }
+            out.order.push(o);
+        }
+        tx.commit(ctx).await?;
+        Ok(out)
+    }
+}
+
+/// checkDependency checks that change c may depend on change d.
+pub(crate) async fn check_dependency(
+    ctx: &Ctx,
+    tx: &mut dyn Tx,
+    c: &Change,
+    ancestors: &[ChangeID],
+    d: &ChangeID,
+) -> Result<()> {
+    if d == &c.id {
+        return Err(Error::wrap(
+            ErrorKind::Invalid,
+            "a change does not depend on itself",
+        ));
+    }
+    if ancestors.contains(d) {
+        return Err(Error::wrap(
+            ErrorKind::Invalid,
+            format!(
+                "change {d} is an ancestor of {}: it merges after it anyway",
+                c.id
+            ),
+        ));
+    }
+    let dc = tx.change(ctx, d).await?;
+    if dc.status == CHANGE_ABANDONED {
+        return Err(Error::wrap(
+            ErrorKind::Conflict,
+            format!("change {d} is abandoned: it never lands"),
+        ));
+    }
+    let up = ancestor_ids(ctx, tx, &dc).await?;
+    if up.contains(&c.id) {
+        return Err(Error::wrap(
+            ErrorKind::Invalid,
+            format!(
+                "change {d} is a sub-change of {}: a change already waits for its sub-changes",
+                c.id
+            ),
+        ));
+    }
+    // no cycle: c is not reached from d by the dependencies already stored
+    let mut seen = HashSet::new();
+    let mut todo = VecDeque::from([d.clone()]);
+    while let Some(x) = todo.pop_front() {
+        if x == c.id {
+            return Err(Error::wrap(
+                ErrorKind::Invalid,
+                format!(
+                    "change {d} depends, directly or not, on {}: a dependency never makes a cycle",
+                    c.id
+                ),
+            ));
+        }
+        if !seen.insert(x.clone()) {
+            continue;
+        }
+        let xc = tx.change(ctx, &x).await?;
+        todo.extend(xc.depends_on);
+    }
+    Ok(())
+}
+
+/// ancestorIDs are the ancestors of a change, its parent first.
+pub(crate) async fn ancestor_ids(ctx: &Ctx, tx: &mut dyn Tx, c: &Change) -> Result<Vec<ChangeID>> {
+    let mut out: Vec<ChangeID> = Vec::new();
+    let mut a = c.parent_id.clone();
+    while !a.is_empty() && !out.contains(&a) {
+        out.push(a.clone());
+        a = tx.change(ctx, &a).await?.parent_id;
+    }
+    Ok(out)
+}
+
+/// idStrings is a list of change ids as a field of a header edit.
+fn id_strings(ids: &[ChangeID]) -> Value {
+    json!(ids.iter().map(|id| id.to_string()).collect::<Vec<_>>())
+}
 
 /// dependencyOf is change d as a dependency of change c: whether its work has reached the branch c merges into. The
 /// work of an applied change is on the branch of its parent, that of an applied parent on its own parent's, and so on:

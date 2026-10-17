@@ -1,6 +1,5 @@
-//! The fixtures of the G2 tests (Go: `checkout_helpers_test.go`): they write through the operations every change
-//! uses (ADR 0076), and land through the stand-ins [`apply`] / [`commit_change`] of testsupport until slice G3 ports
-//! the commit and the merge.
+//! The fixtures of the tests (Go: `checkout_helpers_test.go`): they write through the operations every change uses
+//! (ADR 0076), and land through [`apply`] / [`commit_change`] of testsupport (the real commit and merge).
 
 use goap_domain::{
     ChangeID, ChangeImpact, ChangeImpactID, Draft, INTENT_CREATED, Link, LinkID, MAIN_BRANCH,

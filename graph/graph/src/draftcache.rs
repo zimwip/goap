@@ -101,14 +101,8 @@ impl DraftCache {
         self.lru.lock().m.remove(id);
     }
 
-    pub(crate) fn len(&self) -> usize {
-        self.lru.lock().m.len()
-    }
-
-    pub(crate) fn contains(&self, id: &ChangeID) -> bool {
-        self.lru.lock().m.contains_key(id)
-    }
-
+    /// The number of folds the cache made (read by the tests).
+    #[cfg(test)]
     pub(crate) fn folded(&self) -> i64 {
         self.folded.load(Ordering::SeqCst)
     }

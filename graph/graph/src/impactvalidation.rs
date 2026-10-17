@@ -47,10 +47,6 @@ impl ValidationCache {
         }
         m.insert(k, (seq, out));
     }
-
-    pub(crate) fn len(&self) -> usize {
-        self.m.lock().len()
-    }
 }
 
 /// validationMessage is the readable text of a refusal: the error without the sentinel the graph wraps it with.

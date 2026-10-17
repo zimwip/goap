@@ -1,5 +1,5 @@
 //! The parts of `graph_test.go` that are G1's: the validation of the items added to a change, and the change headers
-//! (creation, patch, listing, the changes acting on a node). The apply tests are a later slice's.
+//! (creation, patch, listing, the changes acting on a node), and the apply.
 
 use goap_domain::{
     CHANGE_ABANDONED, CHANGE_ACTIVE, CHANGE_APPLIED, ChangeImpact, ChangeImpactID, ChangeItem,
@@ -8,6 +8,7 @@ use goap_domain::{
 };
 use goap_graphapi::{ChangePatch, ChangesFilter};
 
+use crate::tests::helpers::*;
 use crate::testsupport::*;
 use crate::{ErrorKind, Graph, NewChange};
 
@@ -250,6 +251,235 @@ async fn node_changes() {
         let v = must(g.view(&c, &f.req.r#ref()).await);
         assert_eq!(v.node.key, "REQ-1");
         let _ = LINK_CONTAINS;
+    })
+    .await;
+}
+
+// ---- apply ----------------------------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn apply_update_creates_suspect_links() {
+    for_each_repo(async |r: &TestRepo| {
+        let ctx = ctx();
+        let f = new_fixture(r).await;
+        let g = &f.g;
+        let c = must(g.create_change(&ctx, new_change(&f.base, "PSP v2")).await);
+        let req_ref = f.req.r#ref();
+        let cns = must(
+            propose_or_create(
+                g,
+                &c.id,
+                vec![
+                    ChangeImpact {
+                        intent: INTENT_MODIFIED,
+                        pre: Some(req_ref.clone()),
+                        rationale: "PSP v2".into(),
+                        ..Default::default()
+                    },
+                    ChangeImpact {
+                        intent: goap_domain::INTENT_CREATED,
+                        key: "TST-2".into(),
+                        r#type: "TestCase".into(),
+                        rationale: "cover REQ-1".into(),
+                        ..Default::default()
+                    },
+                ],
+            )
+            .await,
+        );
+        must(
+            edit(
+                g,
+                &c.id,
+                &cns[0].id,
+                Edit {
+                    properties: props(&[("title", serde_json::json!("Use PSP v2"))]),
+                    ..Default::default()
+                },
+            )
+            .await,
+        );
+        must(
+            edit(
+                g,
+                &c.id,
+                &cns[1].id,
+                Edit {
+                    add_links: vec![goap_graphapi::LinkWrite {
+                        r#type: "verifies".into(),
+                        to: req_ref.clone(),
+                        ..Default::default()
+                    }],
+                    ..Default::default()
+                },
+            )
+            .await,
+        );
+        for n in &cns {
+            must(accept(g, &c.id, &n.id, "u", "ok").await);
+        }
+
+        let bb = must(g.blackboard(&ctx, &c.id).await);
+        let v = &bb.nodes[&req_ref];
+        assert!(
+            v.key == "REQ-1" && v.r#in.len() == 1 && v.out.len() == 1,
+            "unexpected hydration: {v:?}"
+        );
+
+        let b2 = must(apply(g, &c.id, "").await);
+        assert_eq!(
+            b2.nodes.get(&f.req.id),
+            Some(&2),
+            "REQ-1 should be at v2 in the target baseline"
+        );
+        assert!(
+            b2.nodes.get(&f.need.id) == Some(&1) && b2.nodes.get(&f.test.id) == Some(&1),
+            "untouched nodes must keep their version: {:?}",
+            b2.nodes
+        );
+        let req2 = must(
+            g.node(
+                &ctx,
+                &goap_domain::NodeRef {
+                    id: f.req.id.clone(),
+                    version: 0,
+                },
+            )
+            .await,
+        );
+        assert_eq!(req2.properties["title"], "Use PSP v2", "props not updated");
+
+        let (nodes, links) = must(g.baseline_graph(&ctx, &b2.id).await);
+        assert_eq!(nodes.len(), 4, "expected 4 nodes");
+        // carried: REQ-1@v2 satisfies NEED-1@v1 ; added: TST-2@v1 verifies REQ-1@v2
+        assert_eq!(links.len(), 2, "expected 2 links in B2, got {links:?}");
+        let suspects = must(g.suspect_links(&ctx, &b2.id).await);
+        assert!(
+            suspects.len() == 1 && suspects[0].from == f.test.r#ref(),
+            "TST-1 verifies REQ-1@v1 must be suspect, got {suspects:?}"
+        );
+        // The reference baseline is untouched.
+        let (_, links1) = must(g.baseline_graph(&ctx, &f.base.id).await);
+        assert_eq!(links1.len(), 2, "reference baseline changed: {links1:?}");
+        let sus1 = must(g.suspect_links(&ctx, &f.base.id).await);
+        assert!(sus1.is_empty(), "reference baseline has suspects: {sus1:?}");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn apply_remove_link_bumps_source() {
+    for_each_repo(async |r: &TestRepo| {
+        let ctx = ctx();
+        let f = new_fixture(r).await;
+        let g = &f.g;
+        let v = must(g.view(&ctx, &f.test.r#ref()).await);
+        let c = must(
+            g.create_change(&ctx, new_change(&f.base, "drop test"))
+                .await,
+        );
+        let ns = must(
+            g.propose_impact(
+                &ctx,
+                &c.id,
+                vec![ChangeImpact {
+                    intent: INTENT_MODIFIED,
+                    pre: Some(f.test.r#ref()),
+                    rationale: "the test no longer verifies".into(),
+                    ..Default::default()
+                }],
+            )
+            .await,
+        );
+        must(
+            edit(
+                g,
+                &c.id,
+                &ns[0].id,
+                Edit {
+                    remove_links: vec![v.out[0].id.clone()],
+                    ..Default::default()
+                },
+            )
+            .await,
+        );
+        must(accept(g, &c.id, &ns[0].id, "u", "ok").await);
+        let b2 = must(apply(g, &c.id, "B2").await);
+        assert_eq!(b2.nodes.get(&f.test.id), Some(&2), "TST-1 should be bumped");
+        let (_, links) = must(g.baseline_graph(&ctx, &b2.id).await);
+        assert!(
+            links.len() == 1 && links[0].r#type == "satisfies",
+            "unexpected links {links:?}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn apply_rejected_and_conflicts() {
+    for_each_repo(async |r: &TestRepo| {
+        let ctx = ctx();
+        let f = new_fixture(r).await;
+        let g = &f.g;
+        let req_ref = f.req.r#ref();
+        // each change writes the same property with its own value, and accepts (or rejects) it
+        let change = async |title: &str, value: i64, ok: bool| {
+            let c = must(g.create_change(&ctx, new_change(&f.base, title)).await);
+            let ns = must(
+                g.propose_impact(
+                    &ctx,
+                    &c.id,
+                    vec![ChangeImpact {
+                        intent: INTENT_MODIFIED,
+                        pre: Some(req_ref.clone()),
+                        rationale: title.into(),
+                        ..Default::default()
+                    }],
+                )
+                .await,
+            );
+            must(
+                edit(
+                    g,
+                    &c.id,
+                    &ns[0].id,
+                    Edit {
+                        properties: props(&[("x", serde_json::json!(value))]),
+                        ..Default::default()
+                    },
+                )
+                .await,
+            );
+            let status = if ok {
+                goap_domain::REVIEW_ACCEPTED
+            } else {
+                goap_domain::REVIEW_REJECTED
+            };
+            must(
+                g.impact_node_review(&ctx, &c.id, &ns[0].id, status, "u", "decided")
+                    .await,
+            );
+            c
+        };
+        let c1 = change("c1", 1, false).await;
+        let c2 = change("c2", 1, true).await;
+        // the only change impact of c1 is rejected: reworked or withdrawn before anything merges (ADR 0102)
+        assert_kind(
+            apply(g, &c1.id, "").await,
+            ErrorKind::Conflict,
+            "rejected change impact applied",
+        );
+        must(apply(g, &c2.id, "").await);
+        // a third change from B1 writes another value of the same property: the apply rebases it and stops on the
+        // conflict
+        let c3 = change("c3", 2, true).await;
+        assert_kind(
+            apply(g, &c3.id, "").await,
+            ErrorKind::Conflict,
+            "expected a conflict",
+        );
+        let c3b = must(g.change(&ctx, &c3.id).await);
+        assert_eq!(c3b.status, CHANGE_ACTIVE, "expected active");
     })
     .await;
 }

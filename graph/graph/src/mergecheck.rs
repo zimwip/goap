@@ -3,7 +3,7 @@
 //! (`ChangeLifecycles::merge`: the goal of the Activity the change is scoped to), else the landable states of the
 //! domain decide (ADR 0078); then the outer guardians of its chain, innermost first (ADR 0106). Before them, the
 //! changes it depends on must have reached the branch it merges into (ADR 0108). Asked outside any transaction: the
-//! guardian may read the graph. The merge that asks it (`merge`, `IntegrateChange`) is slice G3's.
+//! guardian may read the graph. The merge asks it (`merge`, `IntegrateChange`, rebase.rs).
 
 use std::collections::BTreeMap;
 

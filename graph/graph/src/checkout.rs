@@ -395,7 +395,7 @@ impl Graph {
     /// the draft of the node (ADR 0076, 0077, 0079). There is no proposal of a new node, and no version until the
     /// change lands.
     ///
-    /// pending goap:operation impact.create doer
+    /// goap:operation impact.create doer
     pub async fn impact_node_create(
         &self,
         ctx: &Ctx,
@@ -534,7 +534,7 @@ impl Graph {
     /// flow whose parent flow holds a draft copies that one. A checkout modifies nothing: the review stands until the
     /// draft is edited (editedAgain, ADR 0102).
     ///
-    /// pending goap:operation impact.checkout doer
+    /// goap:operation impact.checkout doer
     pub async fn impact_node_checkout(
         &self,
         ctx: &Ctx,
@@ -645,7 +645,7 @@ impl Graph {
     /// ImpactNodeUpdate edits the draft of a change impact: its properties (merged and validated) and its owner. No
     /// version is written; the edit is an updated event of the impact log.
     ///
-    /// pending goap:operation impact.update doer
+    /// goap:operation impact.update doer
     pub async fn impact_node_update(
         &self,
         ctx: &Ctx,
@@ -699,7 +699,7 @@ impl Graph {
 
     /// ImpactLinkCreate adds an outgoing link to the draft of a change impact.
     ///
-    /// pending goap:operation impact.link.create doer
+    /// goap:operation impact.link.create doer
     pub async fn impact_link_create(
         &self,
         ctx: &Ctx,
@@ -857,7 +857,7 @@ impl Graph {
 
     /// ImpactLinkUpdate replaces the properties of an outgoing link of a draft.
     ///
-    /// pending goap:operation impact.link.update doer
+    /// goap:operation impact.link.update doer
     pub async fn impact_link_update(
         &self,
         ctx: &Ctx,
@@ -896,7 +896,7 @@ impl Graph {
     /// ImpactLinkDelete removes an outgoing link of a draft: removing a child is a modification of its parent (ADR
     /// 0024 §4).
     ///
-    /// pending goap:operation impact.link.delete doer
+    /// goap:operation impact.link.delete doer
     pub async fn impact_link_delete(
         &self,
         ctx: &Ctx,
@@ -1003,7 +1003,7 @@ impl Graph {
     /// before (the draft of a parent flow), or to none. A creation cancelled leaves no node: the change impact is
     /// removed.
     ///
-    /// pending goap:operation impact.cancel doer
+    /// goap:operation impact.cancel doer
     pub async fn impact_node_cancel(
         &self,
         ctx: &Ctx,
@@ -1070,7 +1070,7 @@ impl Graph {
     /// change, the impact of the node and its draft: a transition may require a review) and its actions run on the
     /// draft.
     ///
-    /// pending goap:operation impact.transition doer
+    /// goap:operation impact.transition doer
     pub async fn impact_node_transition(
         &self,
         ctx: &Ctx,
@@ -1261,7 +1261,7 @@ impl Graph {
     /// version the branch was forked from). A rejected impact is withdrawn this way, or reworked (editedAgain). Only
     /// the flow that declared an impact withdraws it.
     ///
-    /// pending goap:operation impact.withdraw doer
+    /// goap:operation impact.withdraw doer
     pub async fn withdraw_impact(
         &self,
         ctx: &Ctx,

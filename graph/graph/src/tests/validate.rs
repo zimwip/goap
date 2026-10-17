@@ -1,5 +1,5 @@
-//! Port of `validate_test.go`: the consistency of the blackboard as a process sees it. (The flow view of a relaunched
-//! run is a later slice's: flows.)
+//! Port of `validate_test.go`: the consistency of the blackboard as a process sees it, and the flow view of a relaunched
+//! run.
 
 use std::collections::BTreeMap;
 
@@ -145,6 +145,88 @@ async fn validate_board_impacts() {
         assert!(
             w.len() == 1 && w[0].item.as_str() == wid.as_str(),
             "reference = {by:?}"
+        );
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn validate_board_outdated_and_flow_view() {
+    for_each_repo(async |r: &TestRepo| {
+        let ctx = ctx();
+        let f = new_fixture(r).await;
+        let g = &f.g;
+        let a = must(g.create_change(&ctx, new_change(&f.base, "a")).await);
+        let b = must(g.create_change(&ctx, new_change(&f.base, "b")).await);
+        let pre = f.req.r#ref();
+        let r#as = must(
+            g.propose_impact(
+                &ctx,
+                &a.id,
+                vec![ChangeImpact {
+                    intent: INTENT_MODIFIED,
+                    pre: Some(pre.clone()),
+                    rationale: "from a".into(),
+                    ..Default::default()
+                }],
+            )
+            .await,
+        );
+        must(
+            crate::tests::helpers::edit(
+                g,
+                &a.id,
+                &r#as[0].id,
+                crate::tests::helpers::Edit {
+                    properties: props(&[("title", serde_json::json!("from a"))]),
+                    ..Default::default()
+                },
+            )
+            .await,
+        );
+        must(crate::tests::helpers::accept(g, &a.id, &r#as[0].id, "u", "ok").await);
+        let bs = must(
+            g.propose_impact(
+                &ctx,
+                &b.id,
+                vec![ChangeImpact {
+                    intent: INTENT_MODIFIED,
+                    pre: Some(pre.clone()),
+                    rationale: "from b".into(),
+                    execution: "e1".into(),
+                    ..Default::default()
+                }],
+            )
+            .await,
+        );
+        must(apply(g, &a.id, "").await);
+        // REQ-1 moved on main since the impact of b was written: it is outdated
+        let id = ItemID::new(bs[0].id.to_string());
+        let by = by_code(&issues(g, &b.id).await);
+        let o = by.get("outdated").cloned().unwrap_or_default();
+        assert!(
+            o.len() == 1 && o[0].item == id && o[0].culprit == id && o[0].severity == ISSUE_WARNING,
+            "outdated = {by:?}"
+        );
+        // relaunching the run that declared it marks it stale: the flow view no longer contains it, so it is clean
+        let fl = must(
+            g.open_flow(
+                &ctx,
+                &b.id,
+                goap_graphapi::OpenFlowRequest {
+                    stale_runs: vec!["e1".into()],
+                    ..Default::default()
+                },
+            )
+            .await,
+        );
+        let is = must(g.validate_board(&ctx, &b.id, &fl.id).await);
+        assert!(is.is_empty(), "flow view issues = {is:?}");
+        let is = issues(g, &b.id).await;
+        assert_eq!(
+            by_code(&is).get("outdated").map(Vec::len),
+            Some(1),
+            "main view must still show the problem: {is:?}"
         );
     })
     .await;

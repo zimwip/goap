@@ -1,6 +1,5 @@
 //! Port of `modification_test.go` (ADR 0102): only a modification is accepted and committed; a committed change is
-//! iterated on. `TestWithdrawACommittedImpact` asks `CommitState` (rebase_committed.go, slice G3): it is left for G3
-//! (see PORTING.md).
+//! iterated on.
 
 use goap_domain::*;
 use goap_graphapi::{NodeCheckout, NodeCreate, NodeUpdate};
@@ -205,6 +204,88 @@ async fn iterate_on_the_branch_of_a_change() {
             checkout(&req.id).await,
             ErrorKind::Conflict,
             "a merged change is closed",
+        );
+    })
+    .await;
+}
+
+// ADR 0102: an impact committed then withdrawn is reverted by the next commit; the merge waits for it.
+#[tokio::test]
+async fn withdraw_a_committed_impact() {
+    for_each_repo(async |r: &TestRepo| {
+        let ctx = ctx();
+        let f = new_fixture(r).await;
+        let g = &f.g;
+        let c = must(g.create_change(&ctx, own_change(&f.base, "revert")).await);
+        let req = must(
+            g.impact_node_checkout(
+                &ctx,
+                &c.id,
+                NodeCheckout {
+                    node: f.req.id.clone(),
+                    rationale: "v2".into(),
+                    ..Default::default()
+                },
+            )
+            .await,
+        );
+        touch(g, &c.id, &req.id).await;
+        must(
+            g.impact_node_review(&ctx, &c.id, &req.id, REVIEW_ACCEPTED, "bob", "ok")
+                .await,
+        );
+        let made = must(g.impact_node_create(&ctx, &c.id, design("D-2")).await);
+        must(
+            g.impact_node_review(&ctx, &c.id, &made.id, REVIEW_ACCEPTED, "bob", "ok")
+                .await,
+        );
+        let st = must(g.commit_state(&ctx, &c.id).await);
+        assert!(
+            st.can_commit && !st.can_merge && st.to_commit.len() == 2 && st.unsettled.len() == 2,
+            "two modifications to commit, nothing to merge: {st:?}"
+        );
+        let first = must(commit_change(g, &c.id, "").await);
+        assert_ne!(
+            first.nodes.get(&f.req.id),
+            Some(&f.req.version),
+            "REQ-1 committed: {:?}",
+            first.nodes
+        );
+
+        must(g.withdraw_impact(&ctx, &c.id, &made.id, "", "").await);
+        let err = integrate_change(g, &c.id).await.unwrap_err();
+        assert!(
+            err.is_conflict() && err.to_string().contains("withdrawn"),
+            "the withdrawal waits for a commit: {err}"
+        );
+        let st = must(g.commit_state(&ctx, &c.id).await);
+        assert!(
+            st.can_commit
+                && !st.can_merge
+                && st.reverts == 1
+                && st.commits
+                && st.to_commit.is_empty(),
+            "a revert to commit, nothing else: {st:?}"
+        );
+        let second = must(commit_change(g, &c.id, "").await);
+        let st = must(g.commit_state(&ctx, &c.id).await);
+        assert!(
+            !st.can_commit && st.can_merge && st.unsettled.is_empty(),
+            "committed, ready to merge: {st:?}"
+        );
+        assert!(
+            !second.nodes.contains_key(&node_of(&made))
+                && second.nodes.get(&f.req.id) == first.nodes.get(&f.req.id)
+                && second.kind == BASELINE_REVERT,
+            "D-2 reverted, REQ-1 kept: {second:?}"
+        );
+        let ch = must(integrate_change(g, &c.id).await);
+        let head = must(g.baseline(&ctx, &ch.result_baseline_id).await);
+        assert!(
+            !head.nodes.contains_key(&node_of(&made))
+                && head.nodes.get(&f.req.id) == first.nodes.get(&f.req.id),
+            "main holds REQ-1's commit and no D-2: {:?}",
+            head.nodes
         );
     })
     .await;

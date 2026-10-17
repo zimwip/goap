@@ -1,6 +1,6 @@
-//! Part of `subchange.go` (G1): the rules of a new sub-change and the listing and abandonment of sub-changes (ADR
-//! 0103). The checks of a version (`checkVersion`, `checkDraft`, `checkRequiredLinks`) and SplitByOwner belong to
-//! later slices (see PORTING.md).
+//! Port of `subchange.go`: the rules of a new sub-change, the listing and abandonment of sub-changes, the split of a
+//! change by owner (ADR 0103), and the checks of a version (ADR 0054, 0065, 0076, 0079). `checkRequiredParent` is in
+//! commit.rs, with its only caller.
 
 use goap_ctx::Ctx;
 use goap_domain::{
@@ -129,6 +129,169 @@ impl Graph {
         let out = sub_changes(ctx, &mut tx, id).await?;
         tx.commit(ctx).await?;
         Ok(out)
+    }
+
+    /// SplitByOwner splits a change along organisational boundaries: one sub-change per unit owning nodes the change
+    /// has a candidate impact on (the owner of the pre version of a modified change impact, ADR 0024, 0054). The
+    /// candidate moves to the sub-change (a copy derived from the parent's, withdrawn from the parent: ADR 0103). Units
+    /// that already have an open sub-change are left as they are. Impacts on nodes the unit holding the change owns, or
+    /// a unit outside it, stay with the parent.
+    pub async fn split_by_owner(&self, ctx: &Ctx, id: &ChangeID) -> Result<Vec<Change>> {
+        let mut tx = self.begin(ctx).await?;
+        let parent = tx.change(ctx, id).await?;
+        let existing = open_sub_changes(ctx, &mut tx, id).await?;
+        let have: std::collections::HashSet<String> =
+            existing.iter().map(|sc| sc.owner_org.clone()).collect();
+        struct Group {
+            org: String,
+            name: String,
+            nodes: Vec<goap_domain::ChangeImpact>,
+        }
+        let mut groups: Vec<Group> = Vec::new();
+        // the change impacts of the main flow: stored and derived from items
+        let seen = crate::flownodes::FlowNodes::new(parent.clone(), "")
+            .nodes(ctx, &mut tx)
+            .await?;
+        for cn in &parent.nodes {
+            if !seen.iter().any(|x| x.id == cn.id) && cn.items.is_empty() {
+                continue; // a candidate of a flow, or replaced by one
+            }
+            let Some(pre) = &cn.pre else { continue };
+            if cn.intent != goap_domain::INTENT_MODIFIED || cn.post.is_some() || cn.superseded {
+                continue; // only a candidate moves: a node the change works on already stays with it
+            }
+            let pre = tx.node(ctx, pre).await?;
+            let unit = tx
+                .node(
+                    ctx,
+                    &NodeRef {
+                        id: pre.owner.clone(),
+                        version: 0,
+                    },
+                )
+                .await?;
+            if unit.key == parent.owner_org {
+                continue; // the unit holding the change owns it
+            }
+            if !self
+                .within(
+                    ctx,
+                    &mut tx,
+                    STRUCTURE_ORGANISATION,
+                    &unit.key,
+                    &parent.owner_org,
+                )
+                .await?
+            {
+                continue; // owned outside the unit holding the change: nothing to delegate to
+            }
+            match groups.iter_mut().find(|g| g.org == unit.key) {
+                Some(g) => g.nodes.push(cn.clone()),
+                None => {
+                    let name = unit
+                        .properties
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("");
+                    groups.push(Group {
+                        org: unit.key.clone(),
+                        name: crate::flow::first_non_empty(&[name, &unit.key]),
+                        nodes: vec![cn.clone()],
+                    });
+                }
+            }
+        }
+        let mut created = Vec::new();
+        for gr in groups {
+            if have.contains(&gr.org) {
+                continue;
+            }
+            let mut input = NewChange {
+                title: format!("{} / {}", parent.title, gr.name),
+                intent: parent.intent.clone(),
+                methodology: parent.methodology.clone(),
+                parent_id: id.clone(),
+                owner_org: gr.org.clone(),
+                ..Default::default()
+            };
+            let mut sub = Change {
+                id: ChangeID::new(self.new_id()),
+                title: input.title.clone(),
+                intent: input.intent.clone(),
+                methodology: input.methodology.clone(),
+                status: goap_domain::CHANGE_DRAFT,
+                parent_id: id.clone(),
+                owner_org: gr.org.clone(),
+                created_at: self.now(),
+                ..Default::default()
+            };
+            self.prepare_sub_change(ctx, &mut tx, &mut sub, &mut input)
+                .await?;
+            self.scope_change(ctx, &mut tx, &mut sub).await?;
+            let fork = tx.baseline(ctx, &sub.baseline_id).await?;
+            let own = goap_domain::Branch {
+                name: crate::changebranch::change_branch_name(&sub.id),
+                namespace: sub.namespace.clone(),
+                parent: sub.branch.clone(),
+                fork_baseline: fork.id.clone(),
+                head: fork.id,
+                origin: goap_domain::change_branch_origin(&sub.id),
+                status: goap_domain::BRANCH_OPEN.to_string(),
+                created_at: self.now(),
+                ..Default::default()
+            };
+            tx.put_branch(ctx, own.clone()).await?;
+            sub.branch = own.name;
+            tx.put_change(ctx, sub.clone()).await?;
+            for cn in &gr.nodes {
+                // the candidate moves to the sub-change (ADR 0103): withdrawn from the parent, it comes back to it with
+                // the version the sub-change commits, when the sub-change merges
+                self.emit(
+                    ctx,
+                    &mut tx,
+                    vec![goap_domain::ImpactEvent {
+                        change: id.clone(),
+                        impact: cn.id.clone(),
+                        op: goap_domain::IMPACT_WITHDRAWN,
+                        by: "graph.split_by_owner".into(),
+                        ..Default::default()
+                    }],
+                )
+                .await?;
+                // DerivedFrom holds the id of the parent's change impact it is copied from
+                let cp = goap_domain::ChangeImpact {
+                    id: goap_domain::ChangeImpactID::new(self.new_id()),
+                    key: cn.key.clone(),
+                    r#type: cn.r#type.clone(),
+                    intent: goap_domain::INTENT_MODIFIED,
+                    rationale: cn.rationale.clone(),
+                    pre: cn.pre.clone(),
+                    review: goap_domain::REVIEW_PROPOSED,
+                    produced_by: "graph.split_by_owner".into(),
+                    derived_from: vec![goap_domain::ItemID::new(cn.id.to_string())],
+                    created_at: self.now(),
+                    ..Default::default()
+                };
+                self.emit(
+                    ctx,
+                    &mut tx,
+                    vec![goap_domain::ImpactEvent {
+                        change: sub.id.clone(),
+                        impact: cp.id.clone(),
+                        op: goap_domain::IMPACT_PROPOSED,
+                        by: cp.produced_by.clone(),
+                        state: Some(cp),
+                        ..Default::default()
+                    }],
+                )
+                .await?;
+            }
+            sub.status = goap_domain::CHANGE_ACTIVE;
+            tx.put_change(ctx, sub.clone()).await?;
+            created.push(sub);
+        }
+        tx.commit(ctx).await?;
+        Ok(created)
     }
 
     /// abandonSubChanges abandons the open sub-changes of a change (and their branches), recursively.

@@ -53,7 +53,7 @@ impl Graph {
     /// Refused (invalid) for a source with no parent, nodes of another namespace or of a type incompatible with the new
     /// node, or created by the change; (conflict) for a source checked out.
     ///
-    /// pending goap:operation impact.merge doer
+    /// goap:operation impact.merge doer
     pub async fn impact_node_merge(
         &self,
         ctx: &Ctx,
@@ -85,7 +85,7 @@ impl Graph {
     /// ImpactNodeSplit splits a node into new ones, in one transaction. The links of other types to the source are
     /// left and returned as suspect.
     ///
-    /// pending goap:operation impact.split doer
+    /// goap:operation impact.split doer
     pub async fn impact_node_split(
         &self,
         ctx: &Ctx,

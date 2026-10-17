@@ -1,7 +1,8 @@
 # Porting `graph/graph` to Rust (`goap-graph`)
 
-The Go package stays in place until every slice is ported. This note records what the Rust crate holds, the
-internal API later slices build on, and the Go files still to port with the place each one plugs in.
+**Status: complete.** Every Go file of the package (slices G1, G2, G3) has its Rust module and every Go test
+function its Rust counterpart, except `BenchmarkDraftRead` (see the end). The Go package stays in place until the
+orchestrator retires it. This note records what the crate holds and the internal API.
 
 ## Slice G1: the foundation (done)
 
@@ -43,8 +44,8 @@ the slice that ports the rest of that file completes the module instead of creat
 | subchange.rs | `prepare_sub_change`, `Graph::sub_changes`, `abandon_sub_changes`, `open_sub_changes` | `checkRequiredLinks`, the rest |
 | transition.rs | `guardian_chain`, `chain_under` | `TransitionChange` |
 
-`lib.rs` has a crate-level `#![allow(dead_code)]`: some foundation pieces have no caller until a later slice. Remove
-it once the crate is complete.
+`lib.rs` no longer has `#![allow(dead_code)]` (removed in G3). Items only the tests call are `#[cfg(test)]`
+(`Graph::integrate_tx`, `DraftCache::folded`).
 
 ## Internal API
 
@@ -95,13 +96,9 @@ Tests are unit tests (`src/tests/*.rs`), so they reach `pub(crate)` items. Reuse
 - Fixtures: `seed_node` (a version written directly in a change of its own), `pin_baseline`, `test_change`,
   `new_fixture` (NEED-1, REQ-1, TST-1 and their links, like Go's `newFixture`, now landed through `import_node` /
   `import_link`), and `land(g, ns, &[Landing])` (one applied change written directly, for G1's world tests).
-- G2 stand-ins for the commit and the merge (testsupport.rs, section "G2"): `commit_change(g, id, name)` (Go's
-  `CommitChange`: own branch, `Applier::prepare_change_impacts`, `withdrawn_since`, `walk_change_impacts`,
-  `run_node_validators`, a commit / revert baseline, `advance_branch`, a `landed` event per impact),
-  `integrate_change(g, id)` (Go's `IntegrateChange` of a root change: `unsettled`, `has_commits`, `check_merge`, then a
-  fast-forward and `land_impacts`; a target that moved since the fork is a Conflict, a sub-change is refused) and
-  `apply(g, id, name)` (both). G3 replaces their bodies by calls to the real `commit_change` / `integrate_change` /
-  `apply` of `Graph` (keep the helper names, every G2 test calls them).
+- `commit_change(g, id, name)`, `integrate_change(g, id)` and `apply(g, id, name)` (testsupport.rs) call the real
+  `Graph::commit_change` / `integrate_change` (no resolutions) / `apply`.
+- `assert_kind(r, ErrorKind::Invalid, ..)` accepts `NothingToCommit` too (Go's `errors.Is(err, ErrInvalid)`).
 - tests/helpers.rs holds the fixtures of Go's checkout_helpers_test.go (`ImportNode` / `import_node`, `import_link`,
   `import_props`, `Edit` / `edit`, `accept`, `accept_on`, `accept_all`, `accept_impact`, `propose_or_create`,
   `draft_of`, `seen_impact`, `checked_out`, `version_count`, `touch`, `assert_err`, `state_of`); the worlds of the
@@ -112,13 +109,14 @@ Tests are unit tests (`src/tests/*.rs`), so they reach `pub(crate)` items. Reuse
   verdict causes.
 - Tests changing `CHECKPOINT_EVERY` hold `baselinedelta::CHECKPOINT_LOCK` (`set_checkpoint_every`, test only).
 
-## Operation annotations: warning for the later slices
+## Operation annotations
 
-G1 adds no `goap:operation` annotation. goap-opgen reads only the Rust files as soon as one Rust file of the
-crate carries a `goap:operation` directive. Until every annotated Go method has a Rust port, write the doc line of
-a ported operation as `/// pending goap:operation <code> <doer|reviewer>` and still call
-`self.allow(ctx, id, goap_operations::CONST).await?` first; switch every placeholder to `/// goap:operation ...` in
-the slice that completes the catalogue, then run `go generate ./contracts/operations/` (or its Rust twin).
+Every operation method carries `/// goap:operation <code> <doer|reviewer>` (the 21 of Go, same codes and kinds) and
+calls `self.allow(ctx, id, operations::CONST).await?` first. goap-opgen now reads the Rust sources (they hold a
+directive): a dry run of `goap-cmd-goap-opgen -src graph/graph -out <tmp>` reports no problem, and the catalogue
+differs from the committed `contracts/operations/src/operations_gen.rs` only in the `method` names (`Graph.attach_change`
+for `Graph.AttachChange`) and in error words of a few docs. Regenerate it (outside this crate):
+`GOAP_UPDATE_OPERATIONS=1 cargo test -p goap-opgen catalogue_is_current` (until then that test fails).
 
 ## Slice G2: the work on a change before it lands (done)
 
@@ -145,7 +143,7 @@ Ported ahead of G3 because G2's views and stand-ins need them (complete, from th
 - rebase.rs: `has_commits`, `Graph::withdrawn_since`, `Graph::unsettled` from rebase_committed.go (the rest of that
   file is G3's).
 
-Operation annotations: every operation method of the G2 files carries `/// pending goap:operation <code> <kind>`
+Operation annotations: every operation method of the G2 files carried `/// pending goap:operation <code> <kind>` (switched to `/// goap:operation` in G3)
 (checkout.rs 9, changeimpact.rs 2, restructure.rs 2, as in Go) and calls `self.allow(...)` first.
 
 Tests: every *_test.go of the G2 files is ported under `src/tests/` with the same test names in snake case, over
@@ -156,34 +154,45 @@ PostgreSQL, and with `GOAP_MATERIALIZE_EVERY` 1, 3 and 100000.
 
 Differences from Go:
 
-- The tests land through the stand-ins `commit_change` / `integrate_change` / `apply` of testsupport.rs. The race of
-  the lifecycle test (`lifecycle.rs`, two changes landing the same node) conflicts because the target moved since
-  the fork, where Go conflicts in the rebase: the outcome checked is the same.
 - The Go validators and actions of the tests are written in JavaScript (the Rust DSL runs no Go scripts).
 - `BenchmarkDraftRead` (draftcache_test.go) is not ported (no benchmark harness in the crate).
 - `goap_domain` does not export the type `StateMove` (`Change::state_moves` returns it): a need of goap-domain
   (`pub use transition::*`), not blocking.
 
-Deferred to G3 (they need the rebase, `CommitState` or the merge of a sub-change):
+The two tests deferred from G2 (`TestChangeImpactsMerge`, `TestWithdrawACommittedImpact`) are ported in G3.
 
-- `TestChangeImpactsMerge` (changeimpact_test.go): the rebase, `SharedNodes`, the settle of a conflict.
-- `TestWithdrawACommittedImpact` (modification_test.go): `CommitState` (rebase_committed.go).
+## Slice G3: the commit, the rebase and the merge (done)
 
-## Slice G3: what is left, and where each plugs in
+| Go | Rust | Notes |
+|---|---|---|
+| commit.go | commit.rs | `commit` (`Commit` / `CommitEdits` of goap-graphapi), `check_required_parent`, `check_required_links` |
+| apply.go | apply.rs | `commit_change`, `apply`, fast-forward, landing |
+| changebranch.go | changebranch.rs | `integrate_change(ctx, id, &BTreeMap<NodeID, Resolution>)`, `shared_nodes` (`SharedNode`), `node_by_key_on` |
+| merge.go | merge.rs | `create_branch`, `branches`, `branch`, `set_branch_status` / `_description`, `plan_merge`, `merge_branch` (`MergeRequest`, `MergeResult`, `NewBranch`), `merge_props`, `merge_links`, `common_ancestor` |
+| rebase.go, rebase_committed.go | rebase.rs | `rebase_change`, `rebase_state`, `impact_node_resolve`, `commit_state` (`CommitState`), `rebase_committed_tx`, `record_in_parent` |
+| subchange.go | subchange.rs | `sub_changes`, `split_by_owner` |
+| attach.go | attach.rs | `attach_change`, `detach_change` (`HEADER_PARENT_ID`, `HEADER_GUARDIANS`) |
+| dependency.go | dependency.rs | `set_change_dependencies`, `change_dependencies` (`HEADER_DEPENDS_ON`) |
+| move.go | move_change.rs | `move_change` (`HEADER_PROJECT_ID`); `move` is a keyword |
+| upgrade.go | upgrade.rs | `upgrade_change` (`HEADER_METHODOLOGY_VERSION`) |
+| purge.go, tag.go | purge.rs, tag.rs | `purge_change`; `tag_change`, `tags`, `delete_tag`, `state_after` |
+| snapshot.go | snapshot.rs | `export_snapshot`, `import_snapshot`, `parse_snapshot` and the `Snapshot*` types |
+| (graphapi.Port) | port.rs | `impl goap_graphapi::Port for Graph`: so goap-journal's `Log` (blanket over `Port`) works over a `Graph` |
 
-| Go file | Plugs in |
-|---|---|
-| commit.go (`Commit`, `CommitEdits`), graph.go's callers of them | new commit.rs; `checkRequiredParent` (subchange.go) and `checkRequiredLinks` are not ported yet and belong with it |
-| apply.go | apply.rs (has `advance_branch`, `next_version`, `Cpost`, the applier of changeimpact_apply.rs); `CommitChange` / `IntegrateChange` / `Apply`, fast-forward, `land_impacts`; then point the stand-ins of testsupport.rs at them |
-| merge.go, rebase.go, rebase_committed.go (rest) | merge.rs (has `branch_head`, `versions`), rebase.rs (has `has_commits`, `withdrawn_since`, `unsettled`, `check_settled`, `impact_node_resolve`); `MergeBranch`, `rebaseCommittedTx`, `RebaseChange`, `CommitState` |
-| changebranch.go (integrate) | changebranch.rs |
-| subchange.go (rest), attach.go, dependency.go (rest), move.go | subchange.rs, dependency.rs; new attach.rs, move.rs; gates through `project_move_gate`, `lifecycles` |
-| purge.go, tag.go, upgrade.go, snapshot.go | new modules over `change_tx` / `begin` |
+Tests (G3): attach, branches, changebranch, commit (+ commitcycle, parenting), concurrency, dependency, domainrules,
+facet (+ logfacet), journal_log, landed, move_change, prov, purge, rebase_root, snapshot, strictattrs (+ attrcheck),
+subchange, subchange_nested, tag, typecat, upgrade, validate, validators_levels (in impactvalidation.rs). A test whose
+Rust name is not the snake case of Go's carries a `// Go: TestName` marker. 184 tests; they pass on memory, SQLite
+and PostgreSQL with `GOAP_MATERIALIZE_EVERY` 1, 3 and 100000.
 
-The Go tests left are those of these files (attach, branches, changebranch, commit, commitcycle, concurrency,
-dependency, landed, move, purge, rebase_root, snapshot, subchange, subchange_nested, tag, upgrade) plus the two
-deferred above and the test files no slice listed yet (attrcheck, domainrules, facet, journal_log, logfacet,
-parenting, prov, strictattrs, typecat, validators_levels: most need `Commit` / `CommitEdits`). When G3 is done:
-switch every `/// pending goap:operation` to `/// goap:operation`, regenerate the operation catalogue, and remove
-`#![allow(dead_code)]` from lib.rs (its remaining unused items are G3 callers: the applier, `check_merge`,
-`unsettled`, `withdrawn_since`, `has_commits`, `check_dependencies`, `land_impacts`, `run_node_validators`, ...).
+Differences from Go:
+
+- Deep async futures overflow the 2 MiB test-thread stack in debug builds: the heavy awaits are `Box::pin`ned
+  (apply.rs, changebranch.rs, rebase.rs, `for_each_repo`). A downstream crate driving several commits / merges in one
+  future may need the same.
+- An empty `Resolution.props` is treated as Go's nil (no override). `records_execution` (purge) is deterministic.
+  A snapshot's `exported_at` is in UTC; a malformed snapshot reports serde's error text.
+- concurrency.rs runs its writers as futures polled together (`join_all`) on a multi-threaded runtime instead of
+  goroutines.
+
+Not ported: `BenchmarkDraftRead` (draftcache_test.go): no benchmark harness in the crate.

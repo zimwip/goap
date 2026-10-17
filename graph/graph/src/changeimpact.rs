@@ -52,7 +52,7 @@ impl Graph {
     /// ImpactNodeCheckout writes one (ADR 0076). A new node is created by ImpactNodeCreate, which adds its impact and
     /// its draft in one event (ADR 0077); it may be planned before (intent created, a key and a type, no draft).
     ///
-    /// pending goap:operation impact.propose doer
+    /// goap:operation impact.propose doer
     pub async fn propose_impact(
         &self,
         ctx: &Ctx,
@@ -309,7 +309,7 @@ impl Graph {
     /// until the flow is adopted, and execution is the action run that made it. As every verdict (ADR 0105), it is the
     /// submission of a review: one of a single entry, whose record the graph writes before the verdict.
     ///
-    /// pending goap:operation impact.review reviewer
+    /// goap:operation impact.review reviewer
     #[allow(clippy::too_many_arguments)]
     pub async fn impact_node_review_on(
         &self,

@@ -471,8 +471,7 @@ async fn lifecycle_transition_rules() {
     .await;
 }
 
-// (In Go the second change is rebased onto the first and stops on the conflict; the merge fixture of G2 stops
-// because its target moved since the fork, the rebase being slice G3's: the outcome the test checks is the same.)
+// The second change is rebased onto the first at its merge and stops on the conflict (ADR 0101, 0102).
 #[tokio::test]
 async fn lifecycle_parallel_changes_conflict() {
     for_each_repo(async |r: &TestRepo| {

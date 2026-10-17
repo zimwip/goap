@@ -1,6 +1,4 @@
 //! Port of `changeimpact_test.go`: the change impacts, their reviews and their landing (ADR 0024, 0029, 0075, 0102).
-//! `TestChangeImpactsMerge` (the rebase of a change onto a moved target, `SharedNodes`, `settle`) needs the merge and
-//! the rebase of slice G3: it is left for G3 (see PORTING.md).
 
 use std::sync::Arc;
 
@@ -712,6 +710,72 @@ async fn item_policy() {
         );
         let ch = must(g.change(&ctx, &c.id).await);
         assert_eq!(ch.items.len(), 1, "a refused item is not stored");
+    })
+    .await;
+}
+
+#[tokio::test]
+async fn change_impacts_merge() {
+    for_each_repo(async |r: &TestRepo| {
+        let ctx = ctx();
+        let f = new_fixture(r).await;
+        let g = &f.g;
+        let a = crate::tests::changebranch::set_prop(g, &f, &f.base.id, "a", title("A")).await;
+        let b = crate::tests::changebranch::set_prop(g, &f, &f.base.id, "b", title("B")).await;
+        let c = crate::tests::changebranch::set_prop(
+            g,
+            &f,
+            &f.base.id,
+            "c",
+            props(&[("owner", json!("carol"))]),
+        )
+        .await;
+
+        let sh = must(g.shared_nodes(&ctx, &a.id).await);
+        assert!(
+            sh.len() == 1 && sh[0].changes.len() == 2,
+            "the three changes share the node: {sh:?}"
+        );
+        must(apply(g, &a.id, "").await);
+        // c changes another property: merged automatically on top of a
+        must(apply(g, &c.id, "").await);
+        let head = crate::tests::changebranch::head_node(g, &f.req.id).await;
+        assert!(
+            head.properties["title"] == "A"
+                && head.properties["owner"] == "carol"
+                && head.change_id == c.id,
+            "disjoint changes must merge: {head:?}"
+        );
+        // b changes the same property as a: the apply commits it, rebases its branch and stops on the conflict
+        // (ADR 0102)
+        assert_kind(
+            apply(g, &b.id, "").await,
+            ErrorKind::Conflict,
+            "conflicting change must stop",
+        );
+        let ch = must(g.change(&ctx, &b.id).await);
+        assert_eq!(
+            ch.status, CHANGE_ACTIVE,
+            "conflicting change must stay active"
+        );
+        let before = head.r#ref();
+        crate::tests::changebranch::settle(g, &b.id).await;
+        must(apply(g, &b.id, "").await);
+        let head = crate::tests::changebranch::head_node(g, &f.req.id).await;
+        let list = must(g.list_change_impacts(&ctx, &b.id).await);
+        assert!(
+            head.properties["title"] == "B"
+                && head.properties["owner"] == "carol"
+                && head.change_id == b.id
+                && list[0].landed.as_ref() == Some(&head.r#ref()),
+            "the rebased change must land as the version of b: {head:?} {list:?}"
+        );
+        // b committed on its branch, then its rebase merged its version with main's: both are parents (ADR 0102)
+        assert!(
+            head.parents.len() == 2 && head.parents[1] == before.version,
+            "a rebased version is parented to b's commit and to the version on main: {:?}",
+            head.parents
+        );
     })
     .await;
 }
