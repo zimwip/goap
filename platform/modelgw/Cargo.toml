@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 goap-gen = { workspace = true }
+goap-graphsvc = { workspace = true }
 goap-authz = { workspace = true }
 goap-connect = { workspace = true }
 goap-ctx = { workspace = true }
@@ -37,6 +38,7 @@ tokio = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
+goap-def = { workspace = true }
 goap-engine = { workspace = true }
 goap-graph = { workspace = true }
 goap-graphtest = { workspace = true }
@@ -48,6 +50,7 @@ goap-graphsnap = { workspace = true }
 goap-pgtest = { workspace = true }
 goap-sqlschematest = { workspace = true }
 goap-telemetry = { workspace = true }
+goap-typecat = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 syn = { workspace = true }

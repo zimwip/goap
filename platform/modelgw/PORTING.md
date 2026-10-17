@@ -5,12 +5,10 @@ OpenAI-compatible, Gemini, fake) with native tools and the text tool protocol, r
 ledger `llm_call` and its exchanges (both SQL dialects), behaviours with their measured cost and calibration, the
 Anthropic proxy, the helper (`Suggest`), the Connect handler and client of `model.v1`.
 
-## Tests not ported
+## Tests
 
-This Go test needs `graphsvc`, not ported yet:
-
-- The re-seed assertion of `TestDefaultConfigIsSeededOnce` (`service_test.go`): "an administered graph must not be
-  re-seeded" checks `graphsvc.SeedModels`. The rest of that test is ported.
+`TestDefaultConfigIsSeededOnce` (`service_test.go`) runs on the real graph (`goap-graph`, typed by the domains of the
+repository), seeded with `goap_graphsvc::seed_models` as in Go.
 
 `TestEngineRowsFindTheirExchangeInTheChangeLog` (`exchange_test.go`) is ported in `src/tests/exchange.rs` over the
 real graph (`goap-graph`, `goap-graphtest`) and the engine (dev-dependencies, as in Go).
@@ -26,8 +24,7 @@ the test secrets resolve, so no test sets a process variable.
 
 Once graph/graphsvc is ported, run these tests again on the real graph:
 
-- `service.rs`: `test_service_policy`, `test_provider_key_is_a_reference`, `test_default_config_is_seeded_once`,
-  `test_embed`
+- `service.rs`: `test_service_policy`, `test_provider_key_is_a_reference`, `test_embed`
 - `suggest.rs`: `test_suggest_authorization`
 - `ledger*.rs`, `exchange.rs`, `behavior.rs` and `behaviorcost.rs`: every test, through `ledger_service` and
   `new_cost_harness`
@@ -35,8 +32,7 @@ Once graph/graphsvc is ported, run these tests again on the real graph:
 
 ## Differences from Go
 
-- `config::ModelsConfig` (providers, models, aliases) stands in for `graphsvc.ModelsConfig`, which `BootConfig`
-  returns in Go. It should move to graphsvc once graphsvc is ported.
+- `ModelsConfig` is `goap_graphsvc::ModelsConfig`, re-exported (`BootConfig` returns it, as in Go).
 - The Anthropic provider sends its own HTTP requests (Messages API, `?beta=true`, the server-side fallback beta) and
   handles retries the way the SDK does. Go uses the Anthropic SDK.
 - `Proposal.value` is the raw JSON text, a `String`. `Discovered`, `ProviderView` and `CatalogEntry` hold the record

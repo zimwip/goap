@@ -251,11 +251,23 @@ async fn test_gemini_complete() {
 
 #[tokio::test]
 async fn test_default_config_is_seeded_once() {
-    let ctx = Ctx::background();
-    let (svc, g) = new_service(memory());
-    let svc = svc.shared();
+    // on the real graph, seeded by graphsvc::seed_models and administered through a change, as in Go
+    let ctx = goap_graphsvc::system(&Ctx::background());
+    let ds = goap_def::load_domains("../../domains").expect("load the domains");
+    let cat = Arc::new(goap_typecat::new(&ds).expect("catalogue"));
+    let mut g = goap_graph::Graph::new(Arc::new(goap_graph::Memory::new()));
+    g.set_types(move || Some(cat.clone() as Arc<dyn goap_graph::TypeCatalog>));
+    let g = Arc::new(g);
+    g.bootstrap(&ctx).await.unwrap();
+    let dir = llmcfg::Directory::new(g.clone()).with_ttl(std::time::Duration::from_nanos(1));
+    let svc = crate::Service::new(Arc::new(dir), memory(), None).shared();
     let (provs, models, aliases) = default_config(false).objects().unwrap();
-    assert!(g.seed(&provs, &models, &aliases), "seed");
+    assert!(
+        goap_graphsvc::seed_models(&ctx, &g, &provs, &models, &aliases)
+            .await
+            .unwrap(),
+        "seed"
+    );
     assert!(
         svc.router.resolve("default").is_err(),
         "the router is built on first use"
@@ -268,9 +280,33 @@ async fn test_default_config_is_seeded_once() {
         cat.len() == 2 && cat[0].model.enabled && cat[1].model.enabled,
         "alias targets must be in the catalog: {cat:?}"
     );
-    g.retire(&llmcfg::alias_key("default"));
-    // (the Go test also checks that graphsvc.SeedModels does not seed an administered graph again: graphsvc is not
-    // ported, see PORTING.md)
+    let n = g
+        .node_by_key(
+            &ctx,
+            llmcfg::NAMESPACE_PLATFORM,
+            &llmcfg::alias_key("default"),
+        )
+        .await
+        .unwrap();
+    goap_graphsvc::seed_change(
+        &ctx,
+        &g,
+        llmcfg::NAMESPACE_PLATFORM,
+        "retire",
+        vec![goap_graph::NodeEdit {
+            pre: Some(n.r#ref()),
+            state: "retired".into(),
+            ..Default::default()
+        }],
+    )
+    .await
+    .unwrap();
+    assert!(
+        !goap_graphsvc::seed_models(&ctx, &g, &provs, &models, &aliases)
+            .await
+            .unwrap(),
+        "an administered graph must not be re-seeded"
+    );
     svc.reload(&ctx).await.unwrap();
     assert!(
         svc.router.resolve("default").is_err(),

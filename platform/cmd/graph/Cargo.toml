@@ -31,6 +31,13 @@ goap-telemetry = { workspace = true }
 goap-typecat = { workspace = true }
 goap-devseed = { workspace = true }
 goap-modelgw = { workspace = true }
+goap-ctx = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-graphsnap = { workspace = true }
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 
 [lints]
 workspace = true

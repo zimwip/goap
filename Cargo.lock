@@ -1750,10 +1750,12 @@ dependencies = [
 name = "goap-cmd-graph"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-access",
  "goap-assess",
  "goap-authz",
  "goap-criticality",
+ "goap-ctx",
  "goap-decision",
  "goap-def",
  "goap-devseed",
@@ -1761,6 +1763,8 @@ dependencies = [
  "goap-domainsvc",
  "goap-gen",
  "goap-graph",
+ "goap-graphapi",
+ "goap-graphsnap",
  "goap-graphsvc",
  "goap-identity",
  "goap-llmcfg",
@@ -1770,6 +1774,9 @@ dependencies = [
  "goap-telemetry",
  "goap-typecat",
  "goap-verify",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -2131,6 +2138,7 @@ dependencies = [
  "goap-access",
  "goap-adapter",
  "goap-algo",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-graph",
@@ -2138,6 +2146,8 @@ dependencies = [
  "goap-mcp",
  "goap-mcpbuiltin",
  "goap-typecat",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2242,15 +2252,19 @@ dependencies = [
 name = "goap-e2e-access"
 version = "0.1.0"
 dependencies = [
+ "chrono",
  "goap-access",
  "goap-authz",
  "goap-criticality",
+ "goap-ctx",
  "goap-def",
  "goap-domain",
  "goap-graph",
  "goap-graphsvc",
  "goap-mcp",
  "goap-typecat",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2296,9 +2310,11 @@ version = "0.1.0"
 dependencies = [
  "goap-access",
  "goap-authz",
+ "goap-connect",
  "goap-connector-localfs",
  "goap-connector-workspace",
  "goap-connectorkit",
+ "goap-ctx",
  "goap-devseed",
  "goap-gen",
  "goap-graph",
@@ -2307,17 +2323,24 @@ dependencies = [
  "goap-mcp",
  "goap-mcpbuiltin",
  "goap-mcpsvc",
+ "reqwest",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
 name = "goap-e2e-engine"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
+ "futures",
  "goap-assess",
  "goap-authz",
  "goap-builtins",
  "goap-condition",
  "goap-connector-workspace",
+ "goap-ctx",
  "goap-decision",
  "goap-def",
  "goap-devseed",
@@ -2326,7 +2349,9 @@ dependencies = [
  "goap-engine",
  "goap-enginesvc",
  "goap-form",
+ "goap-goap",
  "goap-graph",
+ "goap-graphapi",
  "goap-graphsvc",
  "goap-graphtest",
  "goap-intent",
@@ -2340,6 +2365,10 @@ dependencies = [
  "goap-startingpoint",
  "goap-typecat",
  "goap-verify",
+ "parking_lot",
+ "serde",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2367,10 +2396,14 @@ dependencies = [
 name = "goap-e2e-mcpsvc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-access",
  "goap-adapter",
  "goap-algo",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-devseed",
  "goap-gen",
  "goap-graph",
@@ -2380,6 +2413,10 @@ dependencies = [
  "goap-mcpsvc",
  "goap-modeltoken",
  "goap-pbconv",
+ "http",
+ "parking_lot",
+ "serde_json",
+ "tokio",
 ]
 
 [[package]]
@@ -2983,12 +3020,14 @@ dependencies = [
  "goap-authz",
  "goap-connect",
  "goap-ctx",
+ "goap-def",
  "goap-domain",
  "goap-engine",
  "goap-gen",
  "goap-graph",
  "goap-graphapi",
  "goap-graphsnap",
+ "goap-graphsvc",
  "goap-graphtest",
  "goap-identity",
  "goap-intent",
@@ -3001,6 +3040,7 @@ dependencies = [
  "goap-platform",
  "goap-sqlschematest",
  "goap-telemetry",
+ "goap-typecat",
  "http",
  "include_dir",
  "opentelemetry",

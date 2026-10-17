@@ -1,20 +1,14 @@
 //! The configuration the graph is seeded with at the platform bootstrap.
 
 use goap_ctx::Ctx;
-use goap_llmcfg as llmcfg;
 use goap_platform::Secrets;
 
 use crate::error::Error;
 use crate::router::{Config, default_config, load_config};
 
-/// The model section of the platform bootstrap (Go's `graphsvc.ModelsConfig`, defined here until graphsvc is
-/// ported): the providers, models and aliases the graph is seeded with when it holds no provider.
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct ModelsConfig {
-    pub providers: Vec<llmcfg::Provider>,
-    pub models: Vec<llmcfg::Model>,
-    pub aliases: Vec<llmcfg::Alias>,
-}
+/// The model section of the platform bootstrap: the providers, models and aliases the graph is seeded with when it
+/// holds no provider.
+pub use goap_graphsvc::ModelsConfig;
 
 /// The configuration the graph is seeded with when it holds no provider: the file (GOAP_MODELS_CONFIG) or, without
 /// one, the default (Anthropic when a key is available, the fake provider otherwise).

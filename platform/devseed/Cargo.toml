@@ -8,6 +8,7 @@ publish = false
 
 [dependencies]
 goap-algo = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-mcp = { workspace = true }
 goap-graph = { workspace = true }
@@ -15,10 +16,12 @@ goap-graphsvc = { workspace = true }
 goap-access = { workspace = true }
 goap-adapter = { workspace = true }
 goap-mcpbuiltin = { workspace = true }
+serde_json = { workspace = true }
 
 [dev-dependencies]
 goap-def = { workspace = true }
 goap-typecat = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true
