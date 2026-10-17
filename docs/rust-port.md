@@ -60,7 +60,7 @@ move to `CLAUDE.md`).
 | x/crypto/bcrypt | `bcrypt` |
 | robfig/cron | `cron` |
 | google/uuid | `uuid` |
-| goja (JavaScript sandbox) | `boa_engine` (pure Rust, decided) |
+| goja (JavaScript sandbox) | `boa_engine` (pure Rust, decided), behind a `ScriptEngine` trait of `lib/dsl` so that another engine (rquickjs, a WebAssembly build) can replace it without touching the scripts; a script is compiled once and cached by the hash of its source, not parsed again per run |
 | yaegi (Go scripts) | none: the Go scripts of `domains/` and `methodologies/` are rewritten in JavaScript and the `go` language leaves the DSL (decided) |
 | OpenTelemetry | `opentelemetry` + `tracing` |
 
