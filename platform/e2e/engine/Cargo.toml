@@ -5,6 +5,9 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
+# one test binary for the suite (tests/main.rs declares one module per Go file): a binary per file would link the
+# whole platform forty times
+autotests = false
 
 [dependencies]
 
@@ -26,6 +29,7 @@ goap-enginesvc = { workspace = true }
 goap-intent = { workspace = true }
 goap-methodology = { workspace = true }
 goap-graph = { workspace = true }
+goap-graphapi = { workspace = true }
 goap-graphtest = { workspace = true }
 goap-graphsvc = { workspace = true }
 goap-def = { workspace = true }
@@ -34,8 +38,22 @@ goap-mcpbuiltin = { workspace = true }
 goap-startingpoint = { workspace = true }
 goap-typecat = { workspace = true }
 goap-connector-workspace = { workspace = true }
+goap-connectorkit = { workspace = true }
 goap-devseed = { workspace = true }
 goap-registrysvc = { workspace = true }
+goap-ctx = { workspace = true }
+goap-goap = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[[test]]
+name = "e2e"
+path = "tests/main.rs"
 
 [lints]
 workspace = true
