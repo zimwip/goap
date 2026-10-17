@@ -192,7 +192,7 @@ async fn main() {
     let pool = optional_postgres(&ctx, Some(&goap_graph::MIGRATIONS)).await;
     if let Some(pool) = &pool {
         // the domain registry keeps its versions next to the graph they define
-        if let Err(e) = migrate(&ctx, pool, &domainsvc::MIGRATIONS, "migrations").await {
+        if let Err(e) = migrate(&ctx, pool, &domainsvc::MIGRATIONS, ".").await {
             fatal("migrate domains", e);
         }
         repo = Arc::new(Postgres::new(pool.clone()));

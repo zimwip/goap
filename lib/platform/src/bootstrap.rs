@@ -5,8 +5,9 @@ use sqlx::PgPool;
 
 use crate::{Events, env, fatal, migrate, open_postgres};
 
-/// Opens and migrates `GOAP_DB_DSN` when set (the `migrations` directory of `migrations`). None when no DSN is
-/// configured (the service then uses in-memory storage). A failure is fatal.
+/// Opens and migrates `GOAP_DB_DSN` when set. None when no DSN is
+/// configured (the service then uses in-memory storage); `migrations` holds the `*.sql` files at its root, as every
+/// crate's embedded `MIGRATIONS` does. A failure is fatal.
 pub async fn optional_postgres(ctx: &Ctx, migrations: Option<&Dir<'_>>) -> Option<PgPool> {
     let dsn = env("GOAP_DB_DSN", "");
     if dsn.is_empty() {
@@ -18,7 +19,7 @@ pub async fn optional_postgres(ctx: &Ctx, migrations: Option<&Dir<'_>>) -> Optio
         Err(e) => fatal("postgres", e),
     };
     if let Some(m) = migrations
-        && let Err(e) = migrate(ctx, &pool, m, "migrations").await
+        && let Err(e) = migrate(ctx, &pool, m, ".").await
     {
         fatal("migrate", e);
     }

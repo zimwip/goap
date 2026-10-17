@@ -55,6 +55,27 @@ goap-eventsvc = { workspace = true }
 goap-modelgw = { workspace = true }
 goap-prefssvc = { workspace = true }
 goap-registrysvc = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-graphsnap = { workspace = true }
+goap-journal = { workspace = true }
+goap-mcp = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+getrandom = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+tower = { workspace = true }
+reqwest = { workspace = true }
 
 [lints]
 workspace = true
