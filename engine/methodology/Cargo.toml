@@ -16,6 +16,14 @@ goap-operations = { workspace = true }
 goap-condition = { workspace = true }
 goap-def = { workspace = true }
 goap-guard = { workspace = true }
+goap-decision = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml_ng = { workspace = true }
+serde_ignored = { workspace = true }
+regex = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
 
 [dev-dependencies]
 goap-goap = { workspace = true }

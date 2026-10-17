@@ -1,0 +1,144 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Analyse the fees of the payment providers",
+   "effects": {
+    "fees_known": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "analyse_fees",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 2,
+   "description": "Rule the decision point: undecidable while the fees are unknown (asking for them), then decided on the cheapest option. Stands in for an LLM decider.\n",
+   "effects": {
+    "no_decision_pending": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "decide",
+   "narrowed": false,
+   "pre": {
+    "decision_ready": true,
+    "no_open_questions": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 3,
+   "description": "Answer the open questions of the decision points, one sub-agent per question: the points they blocked are ready to be ruled again\n",
+   "effects": {
+    "decision_ready": true,
+    "no_open_questions": true,
+    "open_questions": false
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "investigate",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Open a decision point on the open options of the change",
+   "effects": {
+    "decision_opened": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "open_decision",
+   "narrowed": false,
+   "pre": {
+    "options_open": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "open_decision",
+    "decide",
+    "investigate"
+   ],
+   "description": "Opens and rules the decision over the options of a change",
+   "goals": [
+    "decide_option"
+   ],
+   "name": "decider",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  },
+  {
+   "actions": [
+    "analyse_fees"
+   ],
+   "description": "Answers questions about payment providers",
+   "goals": [
+    "know_fees"
+   ],
+   "name": "analyst",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "decision_escalated",
+  "decision_opened",
+  "decision_pending",
+  "decision_ready",
+  "fees_known",
+  "no_decision_pending",
+  "no_open_questions",
+  "open_questions",
+  "option_selected",
+  "options_evaluated",
+  "options_open",
+  "ratification_pending"
+ ],
+ "graphs": {},
+ "issues": null,
+ "levels": {},
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": null,
+ "view": {
+  "methodology": "option-decision",
+  "version": "0.1.0",
+  "goal": "decide_option",
+  "processes": []
+ }
+}

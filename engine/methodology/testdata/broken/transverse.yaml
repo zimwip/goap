@@ -1,0 +1,9 @@
+name: tr
+version: 1.0.0
+appliesTo: [sdlc, tr]
+conditions:
+  - {name: a, expr: 'artifacts.exists(x, x.target == "a")'}
+actions:
+  - {name: do_a, kind: human, effects: {a: true}, on: [{event: change.created}]}
+goals:
+  - {name: g, pre: {a: true}}

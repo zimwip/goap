@@ -1,0 +1,303 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Automatically accept the test cases (small campaigns)",
+   "effects": {
+    "reviewed": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "auto_review",
+   "narrowed": false,
+   "pre": {
+    "tests_designed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Retain the repository's requirements as the scope of the campaign",
+   "effects": {
+    "has_scope": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "collect_scope",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Have the specialized agents design then review the campaign",
+   "effects": {
+    "reviewed": true,
+    "summarized": true,
+    "tests_designed": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "delegate",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Create one test case per requirement in scope",
+   "effects": {
+    "tests_designed": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "design_tests",
+   "narrowed": false,
+   "pre": {
+    "has_scope": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Human review of the test cases",
+   "effects": {
+    "reviewed": true
+   },
+   "implements": "",
+   "instructions": "Accept or reject each proposed test case (a comment is required).",
+   "kind": "human",
+   "lifted": null,
+   "name": "human_review",
+   "narrowed": false,
+   "pre": {
+    "tests_designed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Signal progress to the parent process, then wait to finish",
+   "effects": {
+    "pinger_pinged": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "ping",
+   "narrowed": false,
+   "pre": {
+    "pinger_ready": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Write the campaign summary with the LLM",
+   "effects": {
+    "summarized": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "summarize",
+   "narrowed": false,
+   "pre": {
+    "tests_designed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Start the pinger and wake early on its progress signal",
+   "effects": {
+    "ping_done": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "script",
+   "lifted": null,
+   "name": "wait_for_ping",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Wait for a human to let the pinger proceed",
+   "effects": {
+    "pinger_ready": true
+   },
+   "implements": "",
+   "instructions": "Submit an artifact of type \"go\".",
+   "kind": "human",
+   "lifted": null,
+   "name": "wait_ready",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 0,
+   "description": "Wait for a human to let the pinger finish",
+   "effects": {
+    "pinger_wrapped": true
+   },
+   "implements": "",
+   "instructions": "Submit an artifact of type \"wrapped\".",
+   "kind": "human",
+   "lifted": null,
+   "name": "wait_wrap",
+   "narrowed": false,
+   "pre": {
+    "pinger_pinged": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": [
+    "collect_scope",
+    "design_tests",
+    "summarize"
+   ],
+   "description": "Test designer",
+   "goals": [
+    "designed"
+   ],
+   "name": "test-designer",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  },
+  {
+   "actions": [
+    "auto_review",
+    "human_review"
+   ],
+   "description": "Test campaign reviewer",
+   "goals": [
+    "review"
+   ],
+   "name": "reviewer",
+   "planner": "utility",
+   "process": "",
+   "role": ""
+  },
+  {
+   "actions": [
+    "delegate"
+   ],
+   "description": "Test campaign coordinator",
+   "goals": [
+    "delivered"
+   ],
+   "name": "coordinator",
+   "planner": "hybrid",
+   "process": "",
+   "role": ""
+  },
+  {
+   "actions": [
+    "wait_ready",
+    "ping",
+    "wait_wrap"
+   ],
+   "description": "Sends a progress signal to its parent before finishing",
+   "goals": [
+    "notified"
+   ],
+   "name": "pinger",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  },
+  {
+   "actions": [
+    "wait_for_ping"
+   ],
+   "description": "Starts a pinger and wakes early on its progress signal",
+   "goals": [
+    "pinged_back"
+   ],
+   "name": "watcher",
+   "planner": "hybrid",
+   "process": "",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "has_scope",
+  "ping_done",
+  "pinger_pinged",
+  "pinger_ready",
+  "pinger_wrapped",
+  "reviewed",
+  "summarized",
+  "tests_designed"
+ ],
+ "graphs": {},
+ "issues": null,
+ "levels": {},
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": null,
+ "view": {
+  "methodology": "test-design",
+  "version": "1.3.0",
+  "goal": "delivered",
+  "processes": []
+ }
+}
