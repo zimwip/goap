@@ -11,6 +11,10 @@ name = "preferences"
 path = "src/main.rs"
 
 [dependencies]
+tokio = { workspace = true }
+tracing = { workspace = true }
+sqlx = { workspace = true }
+goap-ctx = { workspace = true }
 goap-gen = { workspace = true }
 goap-platform = { workspace = true }
 goap-telemetry = { workspace = true }

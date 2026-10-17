@@ -1488,6 +1488,7 @@ dependencies = [
  "goap-connector-claudeagent",
  "goap-connectorkit",
  "goap-platform",
+ "tokio",
 ]
 
 [[package]]
@@ -1496,6 +1497,7 @@ version = "0.1.0"
 dependencies = [
  "goap-connector-localfs",
  "goap-connectorkit",
+ "tokio",
 ]
 
 [[package]]
@@ -1504,6 +1506,7 @@ version = "0.1.0"
 dependencies = [
  "goap-connector-workspace",
  "goap-connectorkit",
+ "tokio",
 ]
 
 [[package]]
@@ -1527,9 +1530,13 @@ name = "goap-cmd-credentials"
 version = "0.1.0"
 dependencies = [
  "goap-credsvc",
+ "goap-ctx",
  "goap-gen",
  "goap-platform",
  "goap-telemetry",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1580,13 +1587,19 @@ name = "goap-cmd-gateway"
 version = "0.1.0"
 dependencies = [
  "goap-access",
- "goap-authz",
+ "goap-connect",
  "goap-credsvc",
+ "goap-ctx",
  "goap-gateway",
  "goap-gen",
  "goap-graphclient",
+ "goap-identity",
  "goap-platform",
  "goap-telemetry",
+ "reqwest",
+ "serde_json",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1738,10 +1751,14 @@ dependencies = [
 name = "goap-cmd-preferences"
 version = "0.1.0"
 dependencies = [
+ "goap-ctx",
  "goap-gen",
  "goap-platform",
  "goap-prefssvc",
  "goap-telemetry",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1801,14 +1818,19 @@ dependencies = [
 name = "goap-connector-builtin"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
+ "chrono",
  "goap-access",
  "goap-adapter",
  "goap-authz",
  "goap-brief",
+ "goap-connect",
  "goap-connectorkit",
+ "goap-ctx",
  "goap-decision",
  "goap-def",
  "goap-domain",
+ "goap-domainclient",
  "goap-gen",
  "goap-graphapi",
  "goap-identity",
@@ -1819,6 +1841,12 @@ dependencies = [
  "goap-review",
  "goap-risk",
  "goap-startingpoint",
+ "pbjson-types",
+ "regex",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
 ]
 
 [[package]]

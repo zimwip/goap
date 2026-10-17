@@ -11,6 +11,7 @@ name = "connector-claude-coding-agent"
 path = "src/main.rs"
 
 [dependencies]
+tokio = { workspace = true }
 goap-platform = { workspace = true }
 goap-connectorkit = { workspace = true }
 goap-connector-claudeagent = { workspace = true }

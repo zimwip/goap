@@ -280,6 +280,8 @@ nix = { version = "0.31", default-features = false, features = ["signal", "proce
 [profile.dev]
 # a crate per package makes many test binaries: keep their debug info small
 debug = "line-tables-only"
+# incremental caches grow to tens of gigabytes over the workspace
+incremental = false
 
 [profile.dev.package."*"]
 opt-level = 1

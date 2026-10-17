@@ -11,6 +11,7 @@ name = "connector-workspace"
 path = "src/main.rs"
 
 [dependencies]
+tokio = { workspace = true }
 goap-connectorkit = { workspace = true }
 goap-connector-workspace = { workspace = true }
 
