@@ -10,6 +10,8 @@ publish = false
 goap-gen = { workspace = true }
 goap-authz = { workspace = true }
 goap-builtins = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
 goap-domain = { workspace = true }
 goap-graphapi = { workspace = true }
 goap-mcp = { workspace = true }
@@ -18,21 +20,32 @@ goap-engine = { workspace = true }
 goap-methodology = { workspace = true }
 goap-selfimprove = { workspace = true }
 goap-def = { workspace = true }
+goap-domainclient = { workspace = true }
 goap-domainpb = { workspace = true }
+goap-graphclient = { workspace = true }
 goap-graphsnap = { workspace = true }
 goap-identity = { workspace = true }
 goap-llmcfg = { workspace = true }
 goap-pbconv = { workspace = true }
 goap-typecat = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+pbjson-types = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
+goap-domainsvc = { workspace = true }
 goap-assess = { workspace = true }
-goap-decision = { workspace = true }
 goap-risk = { workspace = true }
 goap-verify = { workspace = true }
-goap-domainsvc = { workspace = true }
-goap-graph = { workspace = true }
 goap-mcpbuiltin = { workspace = true }
+serde_yaml_ng = { workspace = true }
 
 [lints]
 workspace = true

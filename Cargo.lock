@@ -3058,7 +3058,6 @@ dependencies = [
  "goap-condition",
  "goap-connect",
  "goap-ctx",
- "goap-decision",
  "goap-def",
  "goap-domain",
  "goap-domainclient",
