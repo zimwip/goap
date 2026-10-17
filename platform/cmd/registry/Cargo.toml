@@ -11,6 +11,12 @@ name = "registry"
 path = "src/main.rs"
 
 [dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-engine = { workspace = true }
 goap-gen = { workspace = true }
 goap-authz = { workspace = true }
 goap-access = { workspace = true }

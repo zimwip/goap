@@ -1744,15 +1744,21 @@ dependencies = [
 name = "goap-cmd-mcp"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-access",
+ "goap-adapter",
+ "goap-connect",
  "goap-connector-builtin",
- "goap-connectorkit",
+ "goap-ctx",
  "goap-domainclient",
  "goap-gen",
  "goap-graphclient",
  "goap-mcpsvc",
  "goap-platform",
  "goap-telemetry",
+ "sqlx",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1786,9 +1792,13 @@ dependencies = [
 name = "goap-cmd-registry"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "goap-access",
  "goap-authz",
+ "goap-connect",
+ "goap-ctx",
  "goap-domainclient",
+ "goap-engine",
  "goap-gen",
  "goap-graphclient",
  "goap-identity",
@@ -1796,6 +1806,8 @@ dependencies = [
  "goap-platform",
  "goap-registrysvc",
  "goap-telemetry",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

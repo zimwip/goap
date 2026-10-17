@@ -51,7 +51,16 @@ pub async fn open_postgres(ctx: &Ctx, dsn: &str) -> Result<PgPool> {
     let opts = pg_connect_options(dsn)?;
     let mut attempt = 1;
     loop {
-        match PgPoolOptions::new().connect_with(opts.clone()).await {
+        // one connection first, which fails at once when nothing listens (a pool would retry it until its acquire
+        // timeout), then the pool: Go's ping after the pool
+        let attempt_pool = async {
+            sqlx::Connection::close(
+                <sqlx::PgConnection as sqlx::Connection>::connect_with(&opts).await?,
+            )
+            .await?;
+            PgPoolOptions::new().connect_with(opts.clone()).await
+        };
+        match attempt_pool.await {
             Ok(pool) => return Ok(pool),
             Err(e) if attempt >= 20 => return Err(PlatformError::ConnectPostgres(e)),
             Err(_) => {}
