@@ -1,4 +1,4 @@
-//! Port of `graph/indexersvc` (see docs/rust-port.md): the node index service (ADR 0026, 0095). It follows the node,
+//! The node index service (ADR 0026, 0095). It follows the node,
 //! baseline and change-document events of the graph ([`SUBJECTS`], [`Service::handle`]; the binary consumes them
 //! through `goap_platform::Events::consume_durable`, the all-in-one mode through a [`Sink`]), embeds the documents
 //! through the model gateway ([`Embedder`]) and answers searches ([`Handler`], Connect `index.v1.IndexService`),

@@ -1,4 +1,3 @@
-//! Port of `lib/telemetry` (see docs/rust-port.md).
 //!
 //! OpenTelemetry: OTLP exporters (traces and metrics, configured by the standard `OTEL_*` environment variables),
 //! W3C trace context propagation, the hooks of the Connect layer and of the HTTP server (spans, timing logs), and the

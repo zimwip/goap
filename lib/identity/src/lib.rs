@@ -1,4 +1,4 @@
-//! Port of `lib/identity` (see docs/rust-port.md): reads the caller identity propagated by the gateway.
+//! Reads the caller identity propagated by the gateway.
 //!
 //! - [`from_headers`] / [`set_headers`]: the identity headers of a request and the principal they name.
 //! - [`Forward`]: the client interceptor of a platform client acting for its caller (Go's `Forward()` client option).

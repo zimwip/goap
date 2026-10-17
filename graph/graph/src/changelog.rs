@@ -1,4 +1,4 @@
-//! Port of `changelog.go`. The log of a change (ADR 0030) holds its facts, its journal records and the events of its
+//! The log of a change (ADR 0030) holds its facts, its journal records and the events of its
 //! change impacts: the repositories store entries ([`Tx::append_log`], [`Tx::log`]); these helpers write and read the
 //! typed values through them. (Go's `logWhere` is in `sqlbuild.rs`, with the statements.)
 

@@ -1,4 +1,4 @@
-//! Port of `scopes.go`: where a methodology declares its MCPs (ADR 0028).
+//! Where a methodology declares its MCPs (ADR 0028).
 
 use goap_ctx::Ctx;
 use goap_def::{Issue, Issues};

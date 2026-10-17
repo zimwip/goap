@@ -1,4 +1,4 @@
-//! Port of `handler.go`: the Connect `index.v1.IndexService`.
+//! The Connect `index.v1.IndexService`.
 
 use std::sync::Arc;
 

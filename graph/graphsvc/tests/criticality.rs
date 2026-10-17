@@ -1,5 +1,3 @@
-//! Port of `criticality_test.go`.
-
 mod common;
 
 use std::sync::Arc;

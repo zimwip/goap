@@ -1,4 +1,4 @@
-//! Port of `branches_test.go`: branches of a namespace and their merge (ADR 0032, 0056).
+//! Branches of a namespace and their merge (ADR 0032, 0056).
 
 use std::collections::BTreeMap;
 

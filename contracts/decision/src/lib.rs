@@ -1,4 +1,4 @@
-//! Port of `contracts/decision` (see docs/rust-port.md): the policy of the decision points of a change (ADR 0067):
+//! The policy of the decision points of a change (ADR 0067):
 //! who decides, how sure an agent must be to settle a point alone, how many rulings may fail before a person takes
 //! over, and by when. The graph core keeps the mechanism (open, rule, answer, ratify, the status machine); it stores
 //! the opaque policy values the opener gives and asks a domain::DecisionPolicy. The composition roots plug [`Policy`]

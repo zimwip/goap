@@ -1,10 +1,8 @@
-//! Port of `graph.go`: the [`Graph`] (the domain and change axes over a [`Repo`]), the [`TypeCatalog`] it judges the
-//! nodes by, its seams, and the operations of `graph.go` itself: reading the domain axis, creating, reading, patching
+//! The [`Graph`] (the domain and change axes over a [`Repo`]), the [`TypeCatalog`] it judges the
+//! nodes by, its seams, and its own operations: reading the domain axis, creating, reading, patching
 //! changes and adding their items.
 //!
-//! Every nil-by-default seam of Go's `Graph` is an `Option<Arc<dyn …>>` field here; a Go function type is a trait of
-//! one method. The blackboard reads of `graph.go` (`Blackboard`, `BlackboardIn`, `ChangeChecked`) need the drafts and
-//! the validation of later slices: they are not ported yet (see PORTING.md).
+//! Every nil-by-default seam is an `Option<Arc<dyn …>>` field; a hook is a trait of one method.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

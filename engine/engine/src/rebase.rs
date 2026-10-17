@@ -1,4 +1,4 @@
-//! Port of `rebase.go`: the conflicts a rebase left to settle (ADR 0101).
+//! The conflicts a rebase left to settle (ADR 0101).
 
 use std::sync::Arc;
 

@@ -1,4 +1,4 @@
-//! Port of `modules_test.go` and `architecture_test.go`: the modules of the repository, the dependencies of their
+//! The modules of the repository, the dependencies of their
 //! crates, and the architecture overview that draws them.
 
 use std::collections::BTreeSet;
@@ -39,7 +39,7 @@ fn components() {
 
 /// Each module depends on the modules it may depend on, and only those (Go: each go.mod requires them; here the
 /// crates of a module together), and every crate names a crate of the workspace through `[workspace.dependencies]`
-/// (`{ workspace = true }`, never a `path` of its own: docs/rust-port.md, "Layout").
+/// (`{ workspace = true }`, never a `path` of its own: CLAUDE.md, "Rust conventions").
 #[test]
 fn module_requirements() {
     let ws = Workspace::load().unwrap();
@@ -104,17 +104,17 @@ fn architecture_overview() {
             ));
         }
     };
-    let top: BTreeSet<String> = std::fs::read_dir(&root)
-        .unwrap()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().join("Cargo.toml").exists() || e.path().join("go.mod").exists())
-        .map(|e| e.file_name().to_string_lossy().into_owned())
+    let ws = Workspace::load().unwrap();
+    // a module is a top directory holding crates of the workspace
+    let top: BTreeSet<String> = ws
+        .crates
+        .values()
+        .filter_map(|c| c.pkg.split('/').next().map(str::to_string))
         .collect();
     for m in MODULES {
         assert!(top.contains(*m), "module {m} has no directory at the root");
         missing("data-module", m);
     }
-    let ws = Workspace::load().unwrap();
     let mut bins = 0;
     for c in ws
         .crates

@@ -1,4 +1,4 @@
-//! Port of `changeimpact_sql.go`: the flat storage form of a change impact shared by the SQL backends.
+//! The flat storage form of a change impact shared by the SQL backends.
 
 use goap_domain::{
     ChangeImpact, ChangeImpactID, ItemID, NodeID, NodeIntent, NodeRef, NodeReview, Review,

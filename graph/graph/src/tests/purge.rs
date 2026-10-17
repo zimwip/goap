@@ -1,4 +1,4 @@
-//! Port of `purge_test.go`: a change that landed nothing goes with its log (ADR 0037, 0129).
+//! A change that landed nothing goes with its log (ADR 0037, 0129).
 
 use goap_domain::*;
 use serde_json::json;

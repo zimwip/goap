@@ -1,4 +1,4 @@
-//! Port of `graph/index` (see docs/rust-port.md): the node and change index (ADR 0026, 0095) and its stores: memory,
+//! The node and change index (ADR 0026, 0095) and its stores: memory,
 //! SQLite (FTS5, exact cosine scan) and PostgreSQL (tsvector, pgvector).
 mod error;
 mod index;

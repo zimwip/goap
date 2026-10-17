@@ -1,4 +1,4 @@
-//! Port of `changestate.go`: the current state of a change in its methodology (ADR 0112 §4). The steps are judged
+//! The current state of a change in its methodology (ADR 0112 §4). The steps are judged
 //! against the change as it is (its conditions and its history), then what the live runs are doing is laid over
 //! them. A step whose entry does not hold says which conditions it still needs, with what each means.
 

@@ -1,4 +1,4 @@
-//! Port of `checkout.go`: how a change edits nodes (ADR 0076, 0079). Every write names the change; a node has no
+//! How a change edits nodes (ADR 0076, 0079). Every write names the change; a node has no
 //! version during the change: ImpactNodeCreate or ImpactNodeCheckout gives it a draft on the flow (once per change and
 //! flow), and the draft stays until the change lands, which writes the version from it:
 //!

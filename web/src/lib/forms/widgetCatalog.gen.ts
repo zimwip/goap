@@ -1,4 +1,4 @@
-// Code generated from the widget registry of pkg/form (GOAP_UPDATE_WEB=1 go test ./pkg/form/). DO NOT EDIT.
+// Code generated from the widget registry of contracts/form (GOAP_UPDATE_WEB=1 cargo test -p goap-form --test catalog). DO NOT EDIT.
 import type { WidgetSpec } from './types';
 
 export const WIDGET_CATALOG: WidgetSpec[] = [

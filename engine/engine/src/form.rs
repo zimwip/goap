@@ -1,4 +1,4 @@
-//! Port of `form.go`: the submission of the form of a human action (ADR 0115).
+//! The submission of the form of a human action (ADR 0115).
 
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;

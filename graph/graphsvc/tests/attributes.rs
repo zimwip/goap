@@ -1,5 +1,3 @@
-//! Port of `attributes_test.go`.
-
 use std::cell::RefCell;
 
 use chrono::TimeDelta;

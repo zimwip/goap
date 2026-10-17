@@ -1,4 +1,3 @@
-//! Port of `mcp/mcpsvc` (see docs/rust-port.md).
 //!
 //! Package mcpsvc is the MCP hub: the live registry of connectors and the resolution and invocation of tools for the
 //! organisational unit holding a change. MCPs and adapters are nodes of the graph, read here (ADR 0019).

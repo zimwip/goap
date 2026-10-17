@@ -1,4 +1,4 @@
-//! Port of `baselinediff_test.go`: two baselines are compared node by node: added, removed, changed.
+//! Two baselines are compared node by node: added, removed, changed.
 
 use std::collections::BTreeMap;
 

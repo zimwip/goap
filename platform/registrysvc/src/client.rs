@@ -1,4 +1,4 @@
-//! Port of `client.go`: the registry as the engine sees it (engine.MethodologyPort) over its Connect service.
+//! The registry as the engine sees it (engine.MethodologyPort) over its Connect service.
 
 use std::collections::HashMap;
 use std::sync::Arc;

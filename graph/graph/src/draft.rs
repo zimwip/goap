@@ -1,4 +1,4 @@
-//! Port of `draft.go`: reading the drafts of a change (ADR 0079). A draft is the working state of a node in a change,
+//! Reading the drafts of a change (ADR 0079). A draft is the working state of a node in a change,
 //! per change impact and flow, the fold of the impact log ([`Graph::drafts`]). What a flow sees of a node of the
 //! change is the draft of the innermost flow of its chain that holds one (the flow, its ancestors, the main flow); a
 //! draft is its flow's to edit, a child flow checks the node out to write its own. Outside the change a node is still

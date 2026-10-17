@@ -1,4 +1,4 @@
-//! Port of `option_test.go`: options (ADR 0009 §3, ADR 0032 §6): two hypotheses explored at once on the same node, the
+//! Options (ADR 0009 §3, ADR 0032 §6): two hypotheses explored at once on the same node, the
 //! change working on the active one, compared, then one selected.
 
 use goap_domain::*;

@@ -1,4 +1,4 @@
-//! Port of `tag.go`: tags (ADR 0056) name the state a change leaves. A baseline is the state after a change, computed
+//! Tags (ADR 0056) name the state a change leaves. A baseline is the state after a change, computed
 //! from the history and possibly kept as a snapshot; naming one labels the change that produced it, it never makes a
 //! baseline. Tags are not unique: a name may label several changes, a change may carry several names.
 

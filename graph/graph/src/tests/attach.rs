@@ -1,4 +1,4 @@
-//! Port of `attach_test.go`: a root change attached to a change whose methodology integrates its own, detached again
+//! A root change attached to a change whose methodology integrates its own, detached again
 //! (ADR 0106). Also holds [`Stub`], the configurable ChangeLifecycles of the tests of the guardian chain, of the move
 //! and of the versions.
 

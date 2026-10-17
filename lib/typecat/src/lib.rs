@@ -5,7 +5,6 @@
 //! built from the published domains it serves, and replace it when a domain is published. A catalogue is immutable
 //! (`Arc<Catalog>`); [`Live`] holds the one in force of a service.
 //!
-//! Port of `lib/typecat` (see docs/rust-port.md).
 
 mod typecat;
 

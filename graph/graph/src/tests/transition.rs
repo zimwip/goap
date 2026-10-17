@@ -1,4 +1,4 @@
-//! Port of `transition_test.go`: the lifecycle of a change (ADR 0058): its transitions, their gates (a decided
+//! The lifecycle of a change (ADR 0058): its transitions, their gates (a decided
 //! decision point, the world, vetos and objectives with derogations, ADR 0075 §3), the freeze of the impacts of a
 //! state left, and the default goal of a change (ADR 0096).
 

@@ -1,5 +1,3 @@
-//! Port of `operation_test.go`.
-
 mod common;
 
 use std::collections::BTreeMap;

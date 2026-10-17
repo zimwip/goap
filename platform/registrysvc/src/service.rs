@@ -1,4 +1,4 @@
-//! Port of `service.go`: the rules of the methodology registry.
+//! The rules of the methodology registry.
 
 use std::collections::{BTreeMap, HashSet};
 use std::future::Future;

@@ -1,4 +1,4 @@
-//! Port of `baselinediff.go`: what going from one baseline to another changes, node by node.
+//! What going from one baseline to another changes, node by node.
 
 use goap_ctx::Ctx;
 use goap_domain::{BaselineID, Node, NodeID, NodeRef, Version, namespace_of};

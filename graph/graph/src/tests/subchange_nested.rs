@@ -1,4 +1,4 @@
-//! Port of `subchange_nested_test.go`: the recursive model of sub-changes (ADR 0103). A sub-change owns a branch
+//! The recursive model of sub-changes (ADR 0103). A sub-change owns a branch
 //! forked from the branch of its parent, recursively, and the levels only meet through a commit, a rebase and a
 //! merge: a sub-change of a sub-change, the guardian of the change being merged, and a parent holding an uncommitted
 //! draft.

@@ -1,4 +1,4 @@
-//! Port of `assessmentstates.go`: how the assessment of each subject of a change reads now (ADR 0116).
+//! How the assessment of each subject of a change reads now (ADR 0116).
 
 use goap_condition::AssessmentState;
 use goap_ctx::Ctx;

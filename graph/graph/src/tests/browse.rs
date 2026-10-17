@@ -1,4 +1,4 @@
-//! Port of `browse_test.go`: the pages of the nodes of a baseline, the neighbourhood of a node (its suspect links)
+//! The pages of the nodes of a baseline, the neighbourhood of a node (its suspect links)
 //! and the namespaces of the graph.
 
 use goap_domain::*;

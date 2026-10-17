@@ -1,4 +1,4 @@
-//! Port of `browse.go`. Browsing a baseline without shipping it whole: the IDE lists the node types of a baseline,
+//! Browsing a baseline without shipping it whole: the IDE lists the node types of a baseline,
 //! pages through the nodes of one type with a text filter, and shows the neighbourhood of a selected node.
 
 use std::collections::{BTreeMap, HashSet};

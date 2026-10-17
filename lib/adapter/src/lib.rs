@@ -1,4 +1,3 @@
-//! Port of `lib/adapter` (see docs/rust-port.md).
 //!
 //! The model of the adapter, the one place where organisation, MCP and connector meet (ADR 0019, 0061).
 //!

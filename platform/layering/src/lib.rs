@@ -1,4 +1,4 @@
-//! Port of `platform/layering` (see docs/rust-port.md): the dependency rules between the concepts of the platform
+//! The dependency rules between the concepts of the platform
 //! (CLAUDE.md, design rule 1; ADR 0061, ADR 0125), checked over the Rust workspace by the tests of this crate
 //! (`tests/*.rs`).
 //!

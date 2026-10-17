@@ -1,4 +1,4 @@
-//! Port of `platform/devseed` (see docs/rust-port.md): the data of the development and demo compositions, the ALM demo
+//! The data of the development and demo compositions, the ALM demo
 //! repository and the local file system document repository. It is separate from the platform bootstrap
 //! (`goap_graphsvc::boot`), which every composition runs. The demo is loaded on demand (the "Load demo data" setting,
 //! RPC LoadDemoData) or at start when asked (GOAP_GRAPH_SEED=demo for the graph service, GOAP_DEV_DEMO=1 for

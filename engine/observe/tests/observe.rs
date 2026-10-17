@@ -1,5 +1,3 @@
-//! Port of `observe_test.go`.
-
 use std::collections::{BTreeMap, HashMap};
 
 use goap_domain::{ChangeImpact, ChangeImpactID, INTENT_MODIFIED};

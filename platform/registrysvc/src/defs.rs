@@ -1,4 +1,4 @@
-//! Port of `defs.go`. A version of a methodology is a node (its header: the scalar fields, the status, the
+//! A version of a methodology is a node (its header: the scalar fields, the status, the
 //! timestamps) and one node per element (condition, action, goal, agent, process, method, role, step), keyed
 //! `<header key>/<kind>/<name>` and typed by the built-in meta-domain methodology (`methodology@Agent`, ...; ADR
 //! 0023); the references between elements are links (ADR 0120, refs.rs). The version is the graph content; the

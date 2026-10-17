@@ -1,4 +1,4 @@
-//! Port of `restructure_test.go`: merge and split as modifications of the parents (ADR 0077, 0102).
+//! Merge and split as modifications of the parents (ADR 0077, 0102).
 
 use std::collections::HashMap;
 use std::sync::Arc;

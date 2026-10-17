@@ -1,4 +1,4 @@
-//! Port of `changeimpact_apply.go`: how the change impacts land (ADR 0024, 0079, 0102). The commit (`CommitChange`)
+//! How the change impacts land (ADR 0024, 0079, 0102). The commit (`CommitChange`)
 //! and the merge that call it are in apply.rs.
 
 use std::collections::HashMap;

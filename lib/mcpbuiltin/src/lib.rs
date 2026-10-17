@@ -1,4 +1,3 @@
-//! Port of `lib/mcpbuiltin` (see docs/rust-port.md).
 //!
 //! The schemas of the built-in MCPs (ADR 0028, 0061): the platform itself as tools. It builds MCP definitions
 //! (`goap-mcp`) and the adapter side that gives them to every unit (`goap-adapter`); neither of them depends on it.

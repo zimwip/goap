@@ -1,4 +1,4 @@
-//! Port of `flownodes_test.go`: the change impacts as each flow sees them (ADR 0025, 0029 §5): a relaunched step's
+//! The change impacts as each flow sees them (ADR 0025, 0029 §5): a relaunched step's
 //! flow starts without the stale impacts, writes its own drafts, is adopted (its impacts become the change's) or
 //! discarded; parallel flows do not see each other, a nested flow sees its parent's writes.
 

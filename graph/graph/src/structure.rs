@@ -1,4 +1,4 @@
-//! Port of `structure.go`. It places every change and every node version in the two structures of the graph (ADR
+//! It places every change and every node version in the two structures of the graph (ADR
 //! 0054): the organisation (who is responsible) and the project (where the work happens). They are the node types the
 //! type catalogue tags (`structure:` on a node type of a domain), with their parent link and root; an untyped graph
 //! uses the catalogue of the built-in domains.

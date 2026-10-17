@@ -1,4 +1,4 @@
-//! Port of `repo.go`: the persistence primitives the storage backends implement.
+//! The persistence primitives the storage backends implement.
 //!
 //! Go's `Repo.InTx(ctx, fn)` runs a closure in a transaction; in Rust a transaction is a value: [`Repo::begin`] opens
 //! one, [`Tx::commit`] commits it, and dropping it without committing rolls it back (what Go does when `fn` returns

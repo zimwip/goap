@@ -1,4 +1,4 @@
-//! Port of `draftcache.go`. The drafts of a change are derived from its log, not stored (ADR 0079 §2): the fold of the
+//! The drafts of a change are derived from its log, not stored (ADR 0079 §2): the fold of the
 //! impact events (`fold_drafts`, one event at a time: `apply_impact_event` then `apply_draft_event`), which `created`
 //! and `checkedOut` open with a whole snapshot and the other events patch. A read folds from a cached copy: the cache
 //! holds, per change, the fold up to a log position (seq); a read asks the log for the impact events after that

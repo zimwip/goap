@@ -1,4 +1,4 @@
-//! Port of `steps.go`: the steps of the processes and methods as nodes of their own (ADR 0120).
+//! The steps of the processes and methods as nodes of their own (ADR 0120).
 
 use std::collections::{BTreeMap, HashSet};
 

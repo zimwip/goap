@@ -1,4 +1,4 @@
-//! Port of `concurrency_test.go`: concurrent writers of one change and concurrent merges into one branch (ADR 0127).
+//! Concurrent writers of one change and concurrent merges into one branch (ADR 0127).
 //! Go runs goroutines; the writers here are futures polled together (`join_all`), which interleave at every await of
 //! a transaction, on a multi-threaded runtime. Meaningful under PostgreSQL (`GOAP_TEST_PG_DSN`).
 

@@ -1,4 +1,4 @@
-//! Port of `companion.go`: the choreography of a change (ADR 0036 §3, ADR 0106, ADR 0110).
+//! The choreography of a change (ADR 0036 §3, ADR 0106, ADR 0110).
 
 use std::sync::Arc;
 

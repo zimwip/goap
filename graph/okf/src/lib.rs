@@ -1,4 +1,3 @@
-//! Port of `graph/okf` (see docs/rust-port.md).
 //!
 //! Renders the state of a graph at a baseline as an OKF tree (ADR 0111): one Markdown file per node, its identity,
 //! properties and links in a YAML front matter, its long texts and its links to other nodes in a Markdown body, and

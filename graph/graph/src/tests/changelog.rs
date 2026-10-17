@@ -1,4 +1,4 @@
-//! Port of `changelog_test.go`: facts, journal records and impact events are entries of one log, in one order,
+//! Facts, journal records and impact events are entries of one log, in one order,
 //! filtered on their columns (ADR 0030); an edit of a change header is an entry of its log.
 
 use goap_domain::{

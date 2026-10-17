@@ -1,4 +1,4 @@
-//! Port of `boot.go`: the platform bootstrap every composition runs (ADR 0071).
+//! The platform bootstrap every composition runs (ADR 0071).
 
 use std::future::Future;
 use std::pin::Pin;

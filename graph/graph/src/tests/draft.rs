@@ -1,4 +1,4 @@
-//! Port of `draft_test.go`: a node has no version during a change; landing writes one version per draft; a child flow
+//! A node has no version during a change; landing writes one version per draft; a child flow
 //! forks the parent's draft (ADR 0079).
 
 use goap_domain::*;

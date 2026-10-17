@@ -1,4 +1,4 @@
-//! Port of `engine/enginesvc` (see docs/rust-port.md): the process engine over Connect ([`Handler`], the
+//! The process engine over Connect ([`Handler`], the
 //! `goap.engine.v1.EngineService`), the process store on SQL ([`SQLStore`], SQLite and PostgreSQL, also the lock
 //! service of the engine replicas) and the signals between replicas over NATS ([`NATSSignals`]).
 //!

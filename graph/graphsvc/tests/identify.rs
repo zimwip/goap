@@ -1,5 +1,3 @@
-//! Port of `identify_test.go`.
-
 mod common;
 
 use std::sync::Arc;

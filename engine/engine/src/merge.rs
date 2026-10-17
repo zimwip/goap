@@ -1,4 +1,4 @@
-//! Port of `merge.go`: the merge a committed change waits for (ADR 0056).
+//! The merge a committed change waits for (ADR 0056).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

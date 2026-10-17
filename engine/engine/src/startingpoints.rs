@@ -1,4 +1,4 @@
-//! Port of `startingpoints.go` (ADR 0097): the steps of the methodology of a change that are possible NOW towards
+//! The steps of the methodology of a change that are possible NOW towards
 //! its goal, the end point of the process. A step is possible when ALL its entry conditions hold, its exit criteria
 //! do not, and nothing already carries it out; a step whose entry does not hold is never proposed. The proposals
 //! are steps and method steps, never the actions behind them.

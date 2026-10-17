@@ -1,5 +1,3 @@
-//! Port of `itemauth_test.go`.
-
 mod common;
 
 use std::collections::BTreeMap;

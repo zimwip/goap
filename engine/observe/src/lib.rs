@@ -1,4 +1,3 @@
-//! Port of `engine/observe` (see docs/rust-port.md).
 //!
 //! Package observe analyzes the execution journal of agent processes (and their OpenTelemetry spans) to find what
 //! makes a methodology costly, and turns the findings into improvement proposals on the methodology model (ADR 0011):

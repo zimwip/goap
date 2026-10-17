@@ -1,4 +1,4 @@
-//! Port of `internals.go`: the unexported workings of an engine for the integration tests of the platform
+//! The unexported workings of an engine for the integration tests of the platform
 //! (platform/e2e/engine), which run the engine on a real graph the engine's own tests do not import (ADR 0125 §5).
 //! Production code never calls it (platform/layering).
 

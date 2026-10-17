@@ -1,9 +1,9 @@
-//! Port of `operation.go`: asking the OperationAuthorizer (ADR 0103) before an operation of the catalogue
+//! Asking the OperationAuthorizer (ADR 0103) before an operation of the catalogue
 //! (`goap_operations`). The authorizer itself is the [`crate::OperationAuthorizer`] trait of graph.rs.
 //!
 //! Every method of the graph a person performs on a change carries, in its doc, `/// goap:operation <code>
 //! <doer|reviewer>` and calls `self.allow(ctx, id, operations::CONST).await?` (with `use goap_operations as
-//! operations;`) before its transaction; see PORTING.md for the switch of goap-opgen to the Rust sources.
+//! operations;`) before its transaction; goap-opgen reads these annotations to write the catalogue.
 
 use goap_ctx::Ctx;
 use goap_domain::ChangeID;

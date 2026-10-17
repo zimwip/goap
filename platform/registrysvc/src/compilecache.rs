@@ -1,4 +1,4 @@
-//! Port of `compilecache.go`: the compiled methodologies of the registry (ADR 0072) and the one activation of a
+//! The compiled methodologies of the registry (ADR 0072) and the one activation of a
 //! stored version (ADR 0126 step 6).
 
 use std::collections::HashMap;

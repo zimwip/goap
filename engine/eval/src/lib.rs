@@ -1,4 +1,3 @@
-//! Port of `engine/eval` (see docs/rust-port.md).
 //!
 //! Package eval is the offline evaluation of LLM work (ADR 0099): cases (a prompt, mocked tools, what is expected)
 //! run against a model through the same tool loop as an engine LLM action, scored on their answer, their tool

@@ -1,4 +1,4 @@
-//! Port of `store.go`: the store of the domain versions and its in-memory implementation.
+//! The store of the domain versions and its in-memory implementation.
 
 use std::collections::HashMap;
 

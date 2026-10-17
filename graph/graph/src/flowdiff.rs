@@ -1,4 +1,4 @@
-//! Port of `flowdiff.go`: the comparison of two flows of a change, impact by impact (ADR 0083).
+//! The comparison of two flows of a change, impact by impact (ADR 0083).
 
 use std::collections::HashMap;
 

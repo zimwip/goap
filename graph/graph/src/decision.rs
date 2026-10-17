@@ -1,4 +1,4 @@
-//! Port of `decision.go`. Decision points of a change (ADR 0009 §4): opened on the question to settle, ruled (decided,
+//! Decision points of a change (ADR 0009 §4): opened on the question to settle, ruled (decided,
 //! or undecidable with the questions that block it), the questions answered, a ruling that did not settle the point
 //! ratified by a person. A decided point that names an option selects it (ADR 0032 §6). Every operation is a
 //! decision point fact of the main flow; the state is its replay (Change::decision_points_at). When a ruling settles a

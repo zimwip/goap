@@ -1,4 +1,4 @@
-//! Port of `graph/graphsvc` (see docs/rust-port.md): the graph exposed over Connect (`graph.v1.GraphService`), the
+//! The graph exposed over Connect (`graph.v1.GraphService`), the
 //! platform bootstrap and its seeds (ADR 0071), the users seen by the platform (ADR 0039, 0040, 0042), the
 //! authorizers and gates the compositions plug on the graph, the staged settings (ADR 0122) and the history facet
 //! (ADR 0109).

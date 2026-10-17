@@ -1,4 +1,4 @@
-//! Port of `contracts/verify` (see docs/rust-port.md): the use case of independent verification (ADR 0075): a result
+//! The use case of independent verification (ADR 0075): a result
 //! produced is not a result accepted. An action declares how its effect is verified (methodology Action.verify: the
 //! kind of oracle, and that the verifier is not the producer); the engine records the states of what an action run
 //! produced as facts of the change (fact.verification, ADR 0030), folded here; [`Policy`] is the rule the graph asks

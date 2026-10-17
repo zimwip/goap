@@ -1,4 +1,4 @@
-//! Port of `graphstore.go`: the methodology versions kept as nodes of the graph (ADR 0023, 0120).
+//! The methodology versions kept as nodes of the graph (ADR 0023, 0120).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;

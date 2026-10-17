@@ -1,4 +1,4 @@
-//! Port of `graph/domainsvc` (see docs/rust-port.md): the domain registry (ADR 0125 §3). It stores the domains, the
+//! The domain registry (ADR 0125 §3). It stores the domains, the
 //! definition of the graph (node types, link types, lifecycles, algorithms, one per namespace, ADR 0013), in its own
 //! database, and serves them over Connect (`registry.v1.DomainService`). It goes with the graph, which loads its type
 //! catalogue from it, and names no methodology: publishing a domain emits an event, and the methodology registry checks

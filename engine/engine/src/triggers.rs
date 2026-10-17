@@ -1,4 +1,4 @@
-//! Port of `triggers.go`: the trigger manager, running agents on events and schedules.
+//! The trigger manager, running agents on events and schedules.
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Weak};

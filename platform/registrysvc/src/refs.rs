@@ -1,4 +1,4 @@
-//! Port of `refs.go`. The references between the elements of a version are links (ADR 0120,
+//! The references between the elements of a version are links (ADR 0120,
 //! `methodology::encode_refs`): this is what the store adds to them: the steps' sub-activities and the capabilities
 //! of the steps.
 

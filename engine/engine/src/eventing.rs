@@ -1,4 +1,4 @@
-//! Port of `eventing.go`: an in-process graph reporting the change lifecycle events.
+//! An in-process graph reporting the change lifecycle events.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

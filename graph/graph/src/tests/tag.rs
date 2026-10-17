@@ -1,4 +1,4 @@
-//! Port of `tag_test.go`: names on the states changes leave, and baselines computed from the log (ADR 0056).
+//! Names on the states changes leave, and baselines computed from the log (ADR 0056).
 
 use goap_domain::*;
 use goap_graphapi::{Commit, NodeEdit};

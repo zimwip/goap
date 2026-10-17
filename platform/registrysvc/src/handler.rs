@@ -1,4 +1,4 @@
-//! Port of `handler.go`: the Connect `registry.v1.RegistryService`.
+//! The Connect `registry.v1.RegistryService`.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

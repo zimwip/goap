@@ -1,4 +1,4 @@
-//! Port of `state.go`. The state of a namespace after a change follows from what the change did (ADR 0056), so
+//! The state of a namespace after a change follows from what the change did (ADR 0056), so
 //! storing the entries of a baseline (materialising it, a snapshot) is an acceleration: a baseline with a gap has only
 //! its header stored. Its state is the state of the baseline before it with the change's work put in, according to its
 //! kind: the `landed` events of the change for a commit or a 3-way merge, the versions the change joined to the branch

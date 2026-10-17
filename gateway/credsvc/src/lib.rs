@@ -1,4 +1,4 @@
-//! Port of `gateway/credsvc` (see docs/rust-port.md): the local sign-in password of subjects that connect without an
+//! The local sign-in password of subjects that connect without an
 //! external identity provider (ADR 0040): one credential per subject, outside the graph, so a failed login never
 //! touches the audited graph/change log and no secret material ever becomes graph data; and their sign-in sessions
 //! (ADR 0045).

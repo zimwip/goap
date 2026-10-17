@@ -1,4 +1,4 @@
-//! Port of `settings.go`: the staged settings (ADR 0037 §3, ADR 0122).
+//! The staged settings (ADR 0037 §3, ADR 0122).
 //!
 //! What the settings dialog edits is graph data staged in the personal changes of the caller, one per namespace: an
 //! edit checks the node out and writes its draft, a removal is the transition that retires it, Save accepts and

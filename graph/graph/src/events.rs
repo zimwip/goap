@@ -1,4 +1,4 @@
-//! Port of `events.go`: the events the graph publishes for what each transaction wrote (ADR 0026, 0053, 0095), once
+//! The events the graph publishes for what each transaction wrote (ADR 0026, 0053, 0095), once
 //! it committed, and the republication of the whole graph to rebuild an index.
 //!
 //! Go's `observedRepo` / `observedTx` are the observer part of [`GraphTx`] (guard.rs): it records what a transaction

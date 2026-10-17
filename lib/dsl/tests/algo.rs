@@ -1,4 +1,4 @@
-//! Port of `lib/dsl/algo_test.go`. The Go halves of the Go suite (`TestValidatorGo`, the Go scripts of
+//! The Go halves of the Go suite (`TestValidatorGo`, the Go scripts of
 //! `TestTransitionActionBoth` and `TestLinkValidatorBoth`) are JavaScript here, and Go algorithms are refused.
 
 use goap_algo::{

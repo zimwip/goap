@@ -1,4 +1,4 @@
-//! Port of `okf.go`: the OKF tree of a snapshot, written as a zip.
+//! The OKF tree of a snapshot, written as a zip.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::io::Write;

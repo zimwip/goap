@@ -1,4 +1,4 @@
-//! Port of `rebase_root_test.go`: a root change is rebased onto the head of the branch it was forked from before it
+//! A root change is rebased onto the head of the branch it was forked from before it
 //! lands, and lands as a fast-forward (ADR 0101, 0102).
 
 use std::collections::BTreeMap;

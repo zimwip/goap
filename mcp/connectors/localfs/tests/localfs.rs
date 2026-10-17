@@ -1,4 +1,3 @@
-//! Port of `localfs_test.go`.
 #![cfg(unix)]
 
 use std::path::{Path, PathBuf};

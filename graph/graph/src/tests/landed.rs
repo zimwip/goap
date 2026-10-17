@@ -1,4 +1,4 @@
-//! Port of `landed_test.go`: a change lands on every branch it leaves its state on (ADR 0056, 0102, 0103).
+//! A change lands on every branch it leaves its state on (ADR 0056, 0102, 0103).
 
 use goap_domain::*;
 use goap_graphapi::{Commit, NodeEdit};

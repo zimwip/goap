@@ -1,4 +1,4 @@
-//! Port of `activitygoals.go`: the Activity a change is scoped to, and the guardian of its merge (ADR 0066, 0102).
+//! The Activity a change is scoped to, and the guardian of its merge (ADR 0066, 0102).
 
 use std::collections::BTreeMap;
 

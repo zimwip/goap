@@ -1,4 +1,4 @@
-//! Port of `history.go`: the facets the graph folds from the log of a change (ADR 0109 §4).
+//! The facets the graph folds from the log of a change (ADR 0109 §4).
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-//! Port of `platform/convsvc` (see docs/rust-port.md): the conversations of the users with the assistant, kept
+//! The conversations of the users with the assistant, kept
 //! outside the graph (ADR 0085): per subject, conversations holding ordered messages, read and written by their owner
 //! alone (the executor of the assistant, a platform service, appends and updates the assistant's messages).
 //!

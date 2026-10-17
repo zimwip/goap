@@ -1,4 +1,4 @@
-//! Port of `typecat_test.go`: a graph judged by a type catalogue built from a domain (ADR 0012). Go's `testTypes` is
+//! A graph judged by a type catalogue built from a domain (ADR 0012). Go's `testTypes` is
 //! [`crate::testsupport::TestTypes`]; `TestAdminOnlyFollowsTheDomain` is in `tests/structure.rs`.
 
 use std::sync::Arc;

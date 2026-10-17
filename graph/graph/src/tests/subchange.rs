@@ -1,4 +1,4 @@
-//! Port of `subchange_test.go`: sub-changes on their own branch, split by owner, merged into their parent (ADR 0016,
+//! Sub-changes on their own branch, split by owner, merged into their parent (ADR 0016,
 //! 0039, 0054, 0103).
 
 use std::collections::BTreeMap;

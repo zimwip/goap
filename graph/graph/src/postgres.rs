@@ -1,4 +1,4 @@
-//! Port of `postgres.go`: a PostgreSQL [`Repo`] (schema migrated from [`MIGRATIONS`]). The statements are the ones
+//! A PostgreSQL [`Repo`] (schema migrated from [`MIGRATIONS`]). The statements are the ones
 //! of [`SqlTx`]; this file holds the connection: its value encodings (uuid ids, jsonb, integer arrays, timestamptz)
 //! and its error mapping.
 

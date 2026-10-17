@@ -1,4 +1,4 @@
-//! Port of `lib/dsl/adapter_test.go`. `TestGoAdapter` is JavaScript here (the Go language left the DSL).
+//! `TestGoAdapter` is JavaScript here (the Go language left the DSL).
 
 use std::sync::Arc;
 

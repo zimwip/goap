@@ -1,4 +1,4 @@
-//! Port of `platform/e2e/engine` (package enginee2e): the engine run on a real graph. One test binary, one module per
+//! The engine run on a real graph. One test binary, one module per
 //! Go test file (see Cargo.toml).
 
 mod common;

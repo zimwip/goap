@@ -1,4 +1,4 @@
-//! Port of `dependency.go`: dependencies between changes (ADR 0108). A change names the changes whose work must have
+//! Dependencies between changes (ADR 0108). A change names the changes whose work must have
 //! reached the branch it merges into before it merges (`Change::depends_on`). The merge refuses a change with a
 //! dependency not satisfied (check_merge), the guards see them (FACET_DEPENDENCIES), and the open sub-changes of a
 //! change merge in their dependency order (`dependency_order`, change_dependencies).

@@ -1,4 +1,4 @@
-//! Port of `lifecycle_test.go`: the lifecycles of the nodes inside a change (ADR 0076, 0078): transitions, their
+//! The lifecycles of the nodes inside a change (ADR 0076, 0078): transitions, their
 //! rules, guards and authorizer, the landable states at the merge, the Activity goal replacing them.
 
 use std::sync::Arc;

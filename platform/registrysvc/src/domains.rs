@@ -1,4 +1,4 @@
-//! Port of `domains.go`: the port of the methodology registry on the domain registry (ADR 0125 §3).
+//! The port of the methodology registry on the domain registry (ADR 0125 §3).
 
 use async_trait::async_trait;
 use goap_ctx::Ctx;

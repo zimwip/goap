@@ -1,4 +1,4 @@
-//! Port of `events_test.go`: the graph publishes a NodeEvent per version written and a BaselineEvent per baseline,
+//! The graph publishes a NodeEvent per version written and a BaselineEvent per baseline,
 //! once the transaction committed (ADR 0026), with the search properties of the type (inherited ones included).
 
 use std::sync::Arc;

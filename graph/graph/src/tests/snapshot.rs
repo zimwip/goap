@@ -1,4 +1,4 @@
-//! Port of `snapshot_test.go`: the state of a namespace without its history, exported and imported as one change
+//! The state of a namespace without its history, exported and imported as one change
 //! (ADR 0104).
 
 use std::collections::BTreeMap;

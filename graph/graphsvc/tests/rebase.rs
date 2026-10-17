@@ -1,5 +1,3 @@
-//! Port of `rebase_test.go`.
-
 mod common;
 
 use std::sync::Arc;

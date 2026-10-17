@@ -1,4 +1,4 @@
-//! Port of `option.go` (and of the blackboard reads of `graph.go`): the options of a change (ADR 0009 §3, ADR 0032
+//! The options of a change (ADR 0009 §3, ADR 0032
 //! §6), the facets of a blackboard (ADR 0066, 0109) and the blackboard itself.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};

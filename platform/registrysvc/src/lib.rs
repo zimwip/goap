@@ -1,4 +1,4 @@
-//! Port of `platform/registrysvc` (see docs/rust-port.md): the methodology registry (ADR 0023, 0125 §3).
+//! The methodology registry (ADR 0023, 0125 §3).
 //!
 //! A [`Service`] over a [`Store`] ([`GraphStore`]: the versions as nodes of the graph; [`MemoryStore`]) reading the
 //! domain registry through [`Domains`]; it validates, publishes and compiles the methodologies ([`activate`], the

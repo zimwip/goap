@@ -1,4 +1,4 @@
-//! Port of `baselinedelta_test.go`: a baseline is stored as a delta from its parent, whole every checkpoint_every
+//! A baseline is stored as a delta from its parent, whole every checkpoint_every
 //! baselines (ADR 0032); reading it back gives what was written. Old whole copies are compacted to deltas.
 
 use goap_domain::Baseline;

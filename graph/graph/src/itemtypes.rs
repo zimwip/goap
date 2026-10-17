@@ -1,4 +1,4 @@
-//! Port of `itemtypes.go`: the types of change item the domains declare (ADR 0128) and the check of an item before
+//! The types of change item the domains declare (ADR 0128) and the check of an item before
 //! the graph stores it.
 
 use std::sync::Arc;

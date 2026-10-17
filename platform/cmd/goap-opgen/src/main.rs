@@ -1,4 +1,3 @@
-//! Port of `platform/cmd/goap-opgen` (see docs/rust-port.md).
 //!
 //! Generates the catalogue of operations (`contracts/operations/src/operations_gen.rs`, ADR 0103) from the
 //! `goap:operation <code> <kind>` annotations of graph/graph; it fails on a duplicate code or a malformed annotation.

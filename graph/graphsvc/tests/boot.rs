@@ -1,5 +1,3 @@
-//! Port of `boot_test.go`.
-
 mod common;
 
 use common::typed_graph;

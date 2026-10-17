@@ -1,4 +1,4 @@
-//! Port of `planned_test.go`: a creation is planned before it is written (ADR 0121).
+//! A creation is planned before it is written (ADR 0121).
 
 use goap_domain::*;
 use goap_graphapi::{LinkWrite, NodeCheckout, NodeCreate};

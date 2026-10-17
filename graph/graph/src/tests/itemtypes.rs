@@ -1,4 +1,4 @@
-//! Port of `itemtypes_test.go`: the graph stores only the items of a type a domain in force declares, and checks the
+//! The graph stores only the items of a type a domain in force declares, and checks the
 //! keys of their data the type declares as attributes; the other keys stay free (ADR 0128).
 
 use std::sync::Arc;

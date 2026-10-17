@@ -1,4 +1,4 @@
-//! Port of `api.go`: the requests and answers of the graph's operations are its contract, `goap_graphapi`; these names
+//! The requests and answers of the graph's operations are its contract, `goap_graphapi`; these names
 //! keep the graph's own code and its tests reading as before.
 
 use goap_domain::{Change, Node};

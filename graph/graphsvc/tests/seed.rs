@@ -1,5 +1,3 @@
-//! Port of `seed_test.go`.
-
 mod common;
 
 use common::{client, serve, typed_graph};

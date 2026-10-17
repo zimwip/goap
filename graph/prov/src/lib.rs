@@ -1,4 +1,4 @@
-//! Port of `graph/prov` (see docs/rust-port.md): the PROV-O JSON-LD export of the log of a change (ADR 0057).
+//! The PROV-O JSON-LD export of the log of a change (ADR 0057).
 mod gojson;
 mod prov;
 

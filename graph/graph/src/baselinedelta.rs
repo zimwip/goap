@@ -1,4 +1,4 @@
-//! Port of `baselinedelta.go`. Baselines are stored as deltas (ADR 0032): a baseline keeps the entries that differ
+//! Baselines are stored as deltas (ADR 0032): a baseline keeps the entries that differ
 //! from its parent, and every `checkpoint_every` baselines along a parent chain one is stored whole (a checkpoint),
 //! which bounds what reading a baseline replays. The SQL stores use this; the memory store keeps whole maps. (Go's
 //! `baselineEntriesSQL` is in `sqlbuild.rs`; `baselineEntry` / `baselineHeader` are [`BaselineEntry`] /

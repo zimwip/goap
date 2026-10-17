@@ -1,4 +1,4 @@
-//! Port of `gateway/gateway` (see docs/rust-port.md): the single entry point: authentication, CORS and routing of
+//! The single entry point: authentication, CORS and routing of
 //! Connect calls to the services (echo → axum).
 //!
 //! - [`Config`], [`mount`] (the whole gateway on an axum `Router`), [`mount_auth_endpoints`] (the sign-in endpoints

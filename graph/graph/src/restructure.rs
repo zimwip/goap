@@ -1,4 +1,4 @@
-//! Port of `restructure.go`. Merge and split of nodes, seen from the parent side (ADR 0077, "Merge and split"). A node
+//! Merge and split of nodes, seen from the parent side (ADR 0077, "Merge and split"). A node
 //! never disappears and a merge or a split retires nothing: merging A and B into C is a modification of the parent P
 //! of A and B, whose draft loses the links to A and B and gains one to C; splitting A into C and D loses the link to A
 //! and gains the links to C and D. A and B stay in history, untouched; their change impacts carry Via, the impact of

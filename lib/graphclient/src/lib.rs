@@ -1,4 +1,4 @@
-//! Port of `lib/graphclient` (see docs/rust-port.md): the client of the graph service, implementing
+//! The client of the graph service, implementing
 //! `goap_graphapi::Port` (and so `goap_access::Graph`, `goap_graphsnap::Graph`) over the generated client.
 
 mod client;

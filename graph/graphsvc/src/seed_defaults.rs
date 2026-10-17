@@ -1,4 +1,4 @@
-//! Port of `seed_defaults.go`: the seeds of the platform, each one change on main (ADR 0056, 0071).
+//! The seeds of the platform, each one change on main (ADR 0056, 0071).
 
 use std::collections::BTreeMap;
 

@@ -1,4 +1,4 @@
-//! Port of `impactvalidation_test.go`: the views of a change carry the validation of each draft (a read model). The
+//! The views of a change carry the validation of each draft (a read model). The
 //! levels world comes from `validators_levels_test.go` (Go runs these tests on the memory store only, as here); its
 //! link validator, a Go script there, is JavaScript here (the DSL has no Go language any more).
 

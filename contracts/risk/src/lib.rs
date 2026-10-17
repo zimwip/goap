@@ -1,4 +1,4 @@
-//! Port of `contracts/risk` (see docs/rust-port.md): the risk register of a change (ADR 0036 §1, ADR 0065): risks,
+//! The risk register of a change (ADR 0036 §1, ADR 0065): risks,
 //! actions and derogations are items of the change whose types this crate registers ([`register`]), and the free
 //! functions [`risks`], [`actions`] and [`derogations`] fold them. It is a use case: the graph and the domain model
 //! know nothing of it.

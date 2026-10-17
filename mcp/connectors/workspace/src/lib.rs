@@ -1,4 +1,3 @@
-//! Port of `mcp/connectors/workspace` (see docs/rust-port.md).
 //!
 //! Package workspace is the connector of the workspace MCP on the local machine (ADR 0118): one directory per change
 //! under a root the unit configures, where the agents of the change read, write, edit and search files, run commands

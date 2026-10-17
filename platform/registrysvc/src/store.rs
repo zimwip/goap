@@ -1,4 +1,4 @@
-//! Port of `store.go`: the stored methodology versions and the [`Store`] that persists them.
+//! The stored methodology versions and the [`Store`] that persists them.
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-//! Port of `layering_test.go`: the dependency rules between the concepts of the platform (CLAUDE.md, design rule 1;
+//! The dependency rules between the concepts of the platform (CLAUDE.md, design rule 1;
 //! ADR 0061): an MCP knows no connector and no adapter, the algorithm library knows no MCP, a domain knows no adapter,
 //! the graph and the domain model know no use case (the risk register) nor the policy of the engine and of the agents
 //! (the relaunch of a step, the guidance, the confidence an agent ruling needs: ADR 0067), and the adapter is the one

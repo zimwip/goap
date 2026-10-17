@@ -1,4 +1,4 @@
-//! Port of `engine/methodology` (see docs/rust-port.md): the declarative definition of a methodology, its compile
+//! The declarative definition of a methodology, its compile
 //! pipeline and the compiled form the engine runs.
 
 mod assessment;

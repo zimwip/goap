@@ -4,7 +4,6 @@
 //! organisation; an [`Authorizer`] built on it evaluates them with Casbin (`goap-authz`); the compiled-in floor keeps
 //! administrators in whatever the stored policies say. The [`Session`] is what the web learns of its caller (ADR 0070).
 //!
-//! Port of `lib/access` (see docs/rust-port.md).
 
 #[allow(clippy::module_inception)]
 mod access;

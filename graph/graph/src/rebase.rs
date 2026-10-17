@@ -1,4 +1,4 @@
-//! Port of `rebase.go` and `rebase_committed.go`. Rebasing a change (ADR 0101, 0102, 0103): what it committed on its
+//! Rebasing a change (ADR 0101, 0102, 0103): what it committed on its
 //! branch is brought onto the head of the branch it was forked from (main, a release branch, the branch of its parent
 //! change), the nodes changed on both sides merged three-way (`merge_drafts`, `rebase_committed_tx`); the fields changed
 //! on both sides are conflicts the change settles by editing its draft, and its merge is then a fast-forward. A change

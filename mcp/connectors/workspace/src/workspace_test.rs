@@ -1,5 +1,3 @@
-//! Port of `workspace_test.go`.
-
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};

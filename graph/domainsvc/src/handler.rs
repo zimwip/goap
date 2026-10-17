@@ -1,4 +1,4 @@
-//! Port of `handler.go`: the Connect `registry.v1.DomainService`.
+//! The Connect `registry.v1.DomainService`.
 
 use std::sync::Arc;
 

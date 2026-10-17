@@ -1,4 +1,4 @@
-//! Port of `contracts/journal` (see docs/rust-port.md): the execution journal of a change (ADR 0011, 0030, 0059): the
+//! The execution journal of a change (ADR 0011, 0030, 0059): the
 //! records of what the agent processes do on it (every tick of the observe / plan / act loop, every action run with
 //! its model and tool calls, every human decision) and the prompts of the LLM calls. It is a use case of the log of a
 //! change: the graph holds a generic typed log (`domain::LogEntry`, `Graph::append_log` / `change_log`) and knows

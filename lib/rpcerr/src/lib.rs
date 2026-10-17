@@ -1,4 +1,4 @@
-//! Port of `lib/rpcerr` (see docs/rust-port.md): maps domain errors to Connect codes and back.
+//! Maps domain errors to Connect codes and back.
 
 mod rpcerr;
 

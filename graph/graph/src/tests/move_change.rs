@@ -1,4 +1,4 @@
-//! Port of `move_test.go`: a change moves to another project with its open sub-changes (ADR 0091, 0106).
+//! A change moves to another project with its open sub-changes (ADR 0091, 0106).
 
 use std::sync::Arc;
 

@@ -1,4 +1,3 @@
-//! Port of `engine/sandbox` (see docs/rust-port.md).
 //!
 //! Package sandbox runs script actions outside of the engine: a [`Provisioner`] starts one sandbox per process run (a
 //! process on bare metal, a container with Docker, a pod on Kubernetes) running goap-runner; the engine sends it jobs

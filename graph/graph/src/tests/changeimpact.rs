@@ -1,4 +1,4 @@
-//! Port of `changeimpact_test.go`: the change impacts, their reviews and their landing (ADR 0024, 0029, 0075, 0102).
+//! The change impacts, their reviews and their landing (ADR 0024, 0029, 0075, 0102).
 
 use std::sync::Arc;
 

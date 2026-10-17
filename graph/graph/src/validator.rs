@@ -1,4 +1,4 @@
-//! Port of `validator.go`: the graph-wide checks (NodeValidator, ADR 0048) of the state a change leaves.
+//! The graph-wide checks (NodeValidator, ADR 0048) of the state a change leaves.
 
 use std::collections::BTreeMap;
 

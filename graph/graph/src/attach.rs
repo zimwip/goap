@@ -1,4 +1,4 @@
-//! Port of `attach.go`: attaching and detaching a change (ADR 0106). A methodology may integrate the changes of others
+//! Attaching and detaching a change (ADR 0106). A methodology may integrate the changes of others
 //! (`integrates`), a change of it becoming the parent of the changes it integrates. A change created elsewhere is
 //! attached to it later: it becomes a sub-change (ADR 0103), forked from the parent's branch (what it committed rebased
 //! onto the head of that branch) and merged into it, its guardian chain the parent's plus its own methodology.

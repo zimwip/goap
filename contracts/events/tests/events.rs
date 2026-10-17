@@ -1,4 +1,3 @@
-//! Port of `events_test.go`.
 use std::path::Path;
 
 use regex::Regex;

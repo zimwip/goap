@@ -1,4 +1,4 @@
-//! Port of `merge.go`: the 3-way merge primitives, the branches, and the merge of a branch into another one.
+//! The 3-way merge primitives, the branches, and the merge of a branch into another one.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 

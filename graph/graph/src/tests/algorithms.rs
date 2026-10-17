@@ -1,4 +1,4 @@
-//! Port of `algorithms_test.go`, on the algorithm runners of `algorithms.rs` (the paths that call them, accepting a
+//! The algorithm runners of `algorithms.rs` (the paths that call them, accepting a
 //! draft and taking a transition, are later slices'). The stamp action, written in Go there, is JavaScript here.
 
 use std::sync::Arc;

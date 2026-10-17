@@ -1,5 +1,3 @@
-//! Port of `journal_test.go`.
-
 mod common;
 
 use std::sync::Arc;

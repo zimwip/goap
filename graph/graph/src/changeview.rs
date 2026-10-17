@@ -1,4 +1,4 @@
-//! Port of `changeview.go`: the view levels of a change (ADR 0032), the same change impacts filtered one step of their
+//! The view levels of a change (ADR 0032), the same change impacts filtered one step of their
 //! life earlier or later. A branch that is not validated yet (an option, a flow) is seen at written or accepted; only
 //! landed is a baseline.
 

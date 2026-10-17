@@ -1,4 +1,4 @@
-//! Port of `review_test.go`: the review object (ADR 0080, 0105): batches, their atomicity, the use case of
+//! The review object (ADR 0080, 0105): batches, their atomicity, the use case of
 //! `goap-review` over the graph, the flows, and the origins settled first.
 
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-//! Port of `flownodes.go`: what a flow (ADR 0017, 0025) sees of the change impacts, and what adopting or discarding
+//! What a flow (ADR 0017, 0025) sees of the change impacts, and what adopting or discarding
 //! a flow does to them.
 
 use std::collections::{HashMap, HashSet};

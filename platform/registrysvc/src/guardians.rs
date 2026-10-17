@@ -1,4 +1,4 @@
-//! Port of `guardians.go`. The guardian chain of a change (ADR 0106): the methodologies that frame it, outermost
+//! The guardian chain of a change (ADR 0106): the methodologies that frame it, outermost
 //! first, its own last, each declaring in its definition what it requires of the changes it integrates (integrates,
 //! guardian). The graph saves the chain on the change and asks the registry to evaluate it.
 

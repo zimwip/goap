@@ -1,4 +1,4 @@
-//! Port of `transition.go`: the lifecycle of a change (ADR 0058) and its guardian chain (ADR 0106); the
+//! The lifecycle of a change (ADR 0058) and its guardian chain (ADR 0106); the
 //! [`crate::ChangeLifecycles`] seam is in graph.rs.
 
 use std::collections::{HashMap, HashSet};

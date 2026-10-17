@@ -1,4 +1,4 @@
-//! Port of `flowdiff_test.go`: DiffFlows (ADR 0083): the impacts two flows see differ as added, removed or modified,
+//! DiffFlows (ADR 0083): the impacts two flows see differ as added, removed or modified,
 //! the identical ones are counted.
 
 use std::collections::HashMap;

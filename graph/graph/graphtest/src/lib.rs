@@ -1,4 +1,3 @@
-//! Port of `graph/graph/graphtest` (see docs/rust-port.md).
 //!
 //! Lands the fixtures of tests through the operations every change uses (ADR 0076, 0079): a node is created in a
 //! change of its own, moved to its state on its draft, accepted (as the tester: a fixture is a bulk system path, not

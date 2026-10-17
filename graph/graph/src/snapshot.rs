@@ -1,4 +1,4 @@
-//! Port of `snapshot.go`: the export and import of the graph of a namespace as a snapshot (ADR 0104): the state a
+//! The export and import of the graph of a namespace as a snapshot (ADR 0104): the state a
 //! baseline holds, without its history (no version, no branch, no change), and its import as one change made of node
 //! creations and modifications, left for review like any other change.
 

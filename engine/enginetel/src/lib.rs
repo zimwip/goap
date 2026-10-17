@@ -1,4 +1,3 @@
-//! Port of `engine/enginetel` (see docs/rust-port.md).
 //!
 //! Package enginetel is the telemetry of the engine: the spans of its processes, actions and tools
 //! ([`goap_engine::Tracer`]), the caller baggage of its model calls and the traces the self-observation reads. Package

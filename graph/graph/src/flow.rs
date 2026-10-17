@@ -1,4 +1,4 @@
-//! Port of `flow.go`: the flow branches of a change (ADR 0017, 0025). A flow is opened when a step restarts from a
+//! The flow branches of a change (ADR 0017, 0025). A flow is opened when a step restarts from a
 //! point of the change; the items it invalidated are stale until it is adopted or discarded.
 
 use std::collections::HashSet;

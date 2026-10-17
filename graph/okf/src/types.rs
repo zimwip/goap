@@ -1,4 +1,4 @@
-//! Port of `types.go`: the options derived from the type catalogue.
+//! The options derived from the type catalogue.
 
 use std::sync::Arc;
 

@@ -1,4 +1,4 @@
-//! Port of `preview.go`: the plan an agent would make from a world state, for the methodology editor.
+//! The plan an agent would make from a world state, for the methodology editor.
 
 use std::collections::BTreeMap;
 

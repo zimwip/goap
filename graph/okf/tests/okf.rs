@@ -1,5 +1,3 @@
-//! Port of `okf_test.go`.
-
 use std::collections::BTreeMap;
 use std::io::Read;
 use std::sync::Arc;

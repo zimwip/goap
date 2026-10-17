@@ -1,4 +1,4 @@
-//! Port of `platform/prefssvc` (see docs/rust-port.md): the personal preferences of the users, kept outside the graph
+//! The personal preferences of the users, kept outside the graph
 //! (ADR 0038): one JSON document per user, read and written by that user alone, saved as they change it.
 //!
 //! - [`Service`]: the rules (an identified subject, a JSON object of at most [`MAX_DOCUMENT_BYTES`]).

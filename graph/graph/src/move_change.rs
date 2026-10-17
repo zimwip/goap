@@ -1,4 +1,4 @@
-//! Port of `move.go`: a change moves to another project (ADR 0091). (`move` is a Rust keyword: the module is
+//! A change moves to another project (ADR 0091). (`move` is a Rust keyword: the module is
 //! `move_change`.)
 
 use std::collections::HashMap;

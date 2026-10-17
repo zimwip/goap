@@ -1,5 +1,3 @@
-//! Port of `snapshot_test.go`.
-
 mod common;
 
 use std::io::Cursor;

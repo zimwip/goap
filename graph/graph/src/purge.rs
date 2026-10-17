@@ -1,4 +1,4 @@
-//! Port of `purge.go`: a change that landed nothing is removed with its whole log (ADR 0037).
+//! A change that landed nothing is removed with its whole log (ADR 0037).
 
 use goap_ctx::Ctx;
 use goap_domain::{

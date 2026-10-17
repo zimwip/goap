@@ -1,4 +1,4 @@
-//! Port of `convert.go`: the methodology and its views to and from the protocol (registry.v1).
+//! The methodology and its views to and from the protocol (registry.v1).
 
 use std::collections::{BTreeMap, HashMap};
 

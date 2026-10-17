@@ -1,4 +1,4 @@
-//! Port of `algorithm.go`: trying an algorithm on a sample input.
+//! Trying an algorithm on a sample input.
 
 use goap_algo::{Algorithm, Bound};
 use goap_ctx::Ctx;

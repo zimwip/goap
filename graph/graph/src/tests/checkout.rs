@@ -1,4 +1,4 @@
-//! Port of `checkout_test.go`: a node is edited through its draft (ADR 0076, 0079).
+//! A node is edited through its draft (ADR 0076, 0079).
 
 use goap_domain::*;
 use goap_graphapi::{LinkWrite, NodeCheckout, NodeCreate, NodeUpdate, OpenOptionRequest};

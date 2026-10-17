@@ -1,4 +1,4 @@
-//! Port of `subchange.go`: the rules of a new sub-change, the listing and abandonment of sub-changes, the split of a
+//! The rules of a new sub-change, the listing and abandonment of sub-changes, the split of a
 //! change by owner (ADR 0103), and the checks of a version (ADR 0054, 0065, 0076, 0079). `checkRequiredParent` is in
 //! commit.rs, with its only caller.
 

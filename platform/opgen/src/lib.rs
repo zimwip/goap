@@ -1,4 +1,3 @@
-//! Port of `platform/opgen` (see docs/rust-port.md).
 //!
 //! Generates the catalogue of operations (`contracts/operations`, ADR 0103) from the `goap:operation <code> <kind>`
 //! annotations of the methods of the graph. It refuses a malformed annotation, an unknown kind, a code declared twice

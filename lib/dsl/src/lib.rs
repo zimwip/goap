@@ -1,4 +1,4 @@
-//! Port of `lib/dsl` (see docs/rust-port.md and docs/dsl.md).
+//! The scripting DSL (docs/dsl.md).
 //!
 //! The DSL is the API injected in scripts: script actions (`kind: script`, [`run`]), the algorithms of a domain
 //! (validators, transition guards and actions, [`run_algorithm`]) and the adapters of an MCP ([`run_adapter`]). A

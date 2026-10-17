@@ -1,4 +1,4 @@
-//! Port of `lifecycle.go`: the authorizers the compositions plug on the graph (transitions of nodes and changes,
+//! The authorizers the compositions plug on the graph (transitions of nodes and changes,
 //! items asking a permission, operations of the catalogue).
 
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-//! Port of `dependency_test.go`: dependencies between changes (ADR 0108).
+//! Dependencies between changes (ADR 0108).
 
 use goap_domain::*;
 use goap_graphapi::ChangePatch;

@@ -1,4 +1,4 @@
-//! Port of `flow_test.go`: the flows of the items of a change (ADR 0025): a relaunch makes the items it replaces
+//! The flows of the items of a change (ADR 0025): a relaunch makes the items it replaces
 //! stale, its candidates are seen on the flow only, and the flow is adopted, discarded or loses to a competing one.
 
 use std::collections::HashSet;

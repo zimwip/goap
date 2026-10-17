@@ -1,4 +1,4 @@
-//! Port of `modification.go`. What a change modifies (ADR 0102): a change impact is a modification when its draft
+//! What a change modifies (ADR 0102): a change impact is a modification when its draft
 //! differs from the version it was checked out from (or creates a node). A candidate (an impact with no draft) or a
 //! draft left as it was checked out is not: it cannot be accepted and is not committed, whoever works on the change.
 

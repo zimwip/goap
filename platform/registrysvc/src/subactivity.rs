@@ -1,4 +1,4 @@
-//! Port of `subactivity.go`: the cascade of the Activity of a sub-change.
+//! The cascade of the Activity of a sub-change.
 
 use std::collections::{HashMap, HashSet};
 

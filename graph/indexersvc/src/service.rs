@@ -1,4 +1,4 @@
-//! Port of `service.go`: the node index service (ADR 0026): it follows the node and baseline events of the graph,
+//! The node index service (ADR 0026): it follows the node and baseline events of the graph,
 //! embeds the documents through the model gateway and answers searches.
 
 use std::any::Any;

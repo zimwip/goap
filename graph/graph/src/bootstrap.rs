@@ -1,5 +1,3 @@
-//! Port of `bootstrap.go`.
-
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 

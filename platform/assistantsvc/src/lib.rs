@@ -1,4 +1,4 @@
-//! Port of `platform/assistantsvc` (see docs/rust-port.md): the conversational assistant (ADR 0087).
+//! The conversational assistant (ADR 0087).
 //!
 //! It answers the messages a person writes in a conversation (ADR 0085) with the model of the `assistant` alias, and
 //! may do a few things for them through its server tools, no more (ADR 0090 added the agents), and asks the interface

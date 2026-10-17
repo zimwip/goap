@@ -1,4 +1,4 @@
-//! Port of `sqlbuild_test.go`. The golden texts are the statements postgres.go and sqlite.go ran before the builders
+//! The golden texts are the statements postgres.go and sqlite.go ran before the builders
 //! of sqlbuild.go (ADR 0074). Whitespace is collapsed on both sides; PostgreSQL placeholders are compared as they
 //! were; SQLite placeholders are compared after normalisation (`?` and `?n` are one).
 

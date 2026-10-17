@@ -1,4 +1,3 @@
-//! Port of `contracts/operations` (see docs/rust-port.md).
 //!
 //! The catalogue of the operations a person performs on a change (ADR 0103): checking a node out, editing its draft,
 //! withdrawing an impact, reviewing it, committing and merging the change. The list comes from the code and is fixed:

@@ -1,4 +1,4 @@
-//! Port of `sqlstore.go`: the domain versions in the database of the domain registry, SQLite (local mode) and
+//! The domain versions in the database of the domain registry, SQLite (local mode) and
 //! PostgreSQL.
 
 use async_trait::async_trait;

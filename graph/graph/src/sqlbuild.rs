@@ -1,4 +1,4 @@
-//! Port of `sqlbuild.go`: the SQL text and the arguments of the queries both SQL repositories run (ADR 0074).
+//! The SQL text and the arguments of the queries both SQL repositories run (ADR 0074).
 //!
 //! The repositories keep their own executors and their value encodings (uuid / text, jsonb / text, arrays,
 //! timestamps); what they share is the statement, written once here with the few words that differ between the

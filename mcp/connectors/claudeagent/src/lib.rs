@@ -1,4 +1,3 @@
-//! Port of `mcp/connectors/claudeagent` (see docs/rust-port.md).
 //!
 //! Package claudeagent is the connector of the claude-coding-agent MCP (ADR 0123): a Claude Code session, run by the
 //! Claude Agent SDK in the workspace of the change, that a methodology hands a coding task to and resumes.

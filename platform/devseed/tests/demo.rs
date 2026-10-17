@@ -1,5 +1,3 @@
-//! Port of `demo_test.go`.
-
 use std::sync::Arc;
 
 use goap_access as access;

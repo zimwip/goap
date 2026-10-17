@@ -1,4 +1,4 @@
-//! Port of `mergecheck.go`: the merge of a change is held by its guardian (ADR 0102), the same as its transitions
+//! The merge of a change is held by its guardian (ADR 0102), the same as its transitions
 //! (ADR 0058): the lifecycle of the change must be in a final state, then the methodology has its say
 //! (`ChangeLifecycles::merge`: the goal of the Activity the change is scoped to), else the landable states of the
 //! domain decide (ADR 0078); then the outer guardians of its chain, innermost first (ADR 0106). Before them, the

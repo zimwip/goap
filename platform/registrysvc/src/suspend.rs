@@ -1,4 +1,4 @@
-//! Port of `suspend.go`. Suspension (ADR 0125 §3): the domain registry publishes a domain without asking the
+//! Suspension (ADR 0125 §3): the domain registry publishes a domain without asking the
 //! methodologies: it emits an event, and the methodology registry checks its methodologies again. A published version
 //! that no longer compiles against the domains in force (the latest published version of each, what the graph judges
 //! its writes by) is suspended, never the domain nor the graph: no change starts on it (MethodologyVersion), no run

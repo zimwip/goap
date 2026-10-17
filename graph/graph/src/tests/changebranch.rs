@@ -1,4 +1,4 @@
-//! Port of `changebranch_test.go`: a change works on its own branch and merges into the one it was forked from
+//! A change works on its own branch and merges into the one it was forked from
 //! (ADR 0056, 0101, 0102).
 
 use goap_domain::*;

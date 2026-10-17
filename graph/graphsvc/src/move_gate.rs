@@ -1,4 +1,4 @@
-//! Port of `move.go`: the gate of a move of changes to another project (ADR 0091).
+//! The gate of a move of changes to another project (ADR 0091).
 
 use std::sync::Arc;
 

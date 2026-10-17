@@ -1,4 +1,4 @@
-//! Port of `prov_test.go`: the log of an applied change exported as PROV-O (ADR 0057).
+//! The log of an applied change exported as PROV-O (ADR 0057).
 
 use std::collections::{BTreeMap, BTreeSet};
 

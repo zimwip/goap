@@ -1,4 +1,4 @@
-//! Port of `sqlite.go`: a [`Repo`] on a SQLite database (schema migrated from [`SQLITE_MIGRATIONS`], local
+//! A [`Repo`] on a SQLite database (schema migrated from [`SQLITE_MIGRATIONS`], local
 //! development mode, ADR 0010). The statements are the ones of [`SqlTx`]; this file holds the connection: its
 //! value encodings (text ids, JSON as text, fixed-width timestamps) and its error mapping.
 

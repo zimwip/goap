@@ -1,4 +1,4 @@
-//! Port of `handler.go`: the graph exposed over Connect (`graph.v1.GraphService`).
+//! The graph exposed over Connect (`graph.v1.GraphService`).
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;

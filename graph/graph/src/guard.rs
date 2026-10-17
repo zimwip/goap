@@ -1,5 +1,3 @@
-//! Port of `guard.go` (and of the transaction wrapper of `events.go`, `observedTx`).
-//!
 //! The guard (ADR 0054) is the rule of the graph, in Rust, whatever the storage: a database with constraints repeats
 //! it, a storage without any still gets it. Every repository transaction of a Graph goes through it ([`Graph::begin`]
 //! returns a [`GraphTx`]):

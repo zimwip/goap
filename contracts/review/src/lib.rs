@@ -1,4 +1,3 @@
-//! Port of `contracts/review` (see docs/rust-port.md).
 //!
 //! The review object of a change (ADR 0080): a reviewer builds a review up, with a global comment and one entry per
 //! change impact (its own comment and outcome), then submits it; the submission applies every entry as an ordinary

@@ -1,4 +1,4 @@
-//! Port of `engine/condition` (see docs/rust-port.md): compiles and evaluates the CEL conditions of a methodology.
+//! Compiles and evaluates the CEL conditions of a methodology.
 //!
 //! A condition is a named CEL expression evaluated against the blackboard: the change items (axis change) hydrated
 //! with the domain nodes they reference (axis domain). The result of evaluating every condition is the world state the

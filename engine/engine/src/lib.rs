@@ -1,4 +1,4 @@
-//! Port of `engine/engine` (see docs/rust-port.md): the execution engine. A process runs an agent of a methodology
+//! The execution engine. A process runs an agent of a methodology
 //! on a change: intent loop, then observe / plan / act cycles over the blackboard of the change until the goal
 //! holds. The graph is reached only through `goap_graphapi::Port` (`GraphPort`); who and where through `Scope`.
 

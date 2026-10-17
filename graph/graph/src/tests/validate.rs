@@ -1,4 +1,4 @@
-//! Port of `validate_test.go`: the consistency of the blackboard as a process sees it, and the flow view of a relaunched
+//! The consistency of the blackboard as a process sees it, and the flow view of a relaunched
 //! run.
 
 use std::collections::BTreeMap;

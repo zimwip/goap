@@ -1,4 +1,4 @@
-//! Port of `aliasstubs.go`: the model aliases a published methodology needs, proposed as stubs (ADR 0018, 0021).
+//! The model aliases a published methodology needs, proposed as stubs (ADR 0018, 0021).
 
 use std::collections::HashSet;
 

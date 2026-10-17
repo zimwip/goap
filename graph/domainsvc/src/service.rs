@@ -1,4 +1,4 @@
-//! Port of `service.go`: the rules of the domain registry (ADR 0125 §3).
+//! The rules of the domain registry (ADR 0125 §3).
 
 use std::future::Future;
 use std::path::Path;

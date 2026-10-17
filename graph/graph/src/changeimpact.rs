@@ -1,4 +1,4 @@
-//! Port of `changeimpact.go`: the change impacts of a change, their declaration (ProposeImpact) and their reviews
+//! The change impacts of a change, their declaration (ProposeImpact) and their reviews
 //! (ADR 0024, 0080, 0105); `Graph::change_tx` is in guard.rs.
 
 use std::collections::{HashMap, HashSet};

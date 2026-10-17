@@ -1,4 +1,4 @@
-//! Port of `commit.go`: the producer-facing way of making a change of node edits (ADR 0024): the producer says which
+//! The producer-facing way of making a change of node edits (ADR 0024): the producer says which
 //! nodes it creates or modifies and why; the change, its change impacts, the drafts, the reviews and the apply follow.
 //! Services that project their own definitions into the graph (registry, seeds) use it.
 

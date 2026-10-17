@@ -1,4 +1,4 @@
-//! Port of `asks.go` (ADR 0117): what a change waits for from people. Every task a run of the change waits on a
+//! What a change waits for from people. Every task a run of the change waits on a
 //! person for, and the decision points only a person may settle, gathered in one list with whom each one is
 //! addressed to and whether the caller may answer it. A read model: nothing is stored.
 

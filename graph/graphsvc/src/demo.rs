@@ -1,4 +1,4 @@
-//! Port of `demo.go`: loading the demo data on demand.
+//! Loading the demo data on demand.
 
 use std::sync::Arc;
 

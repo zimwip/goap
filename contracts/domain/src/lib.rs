@@ -1,4 +1,4 @@
-//! Port of `contracts/domain` (see docs/rust-port.md): the two-axis knowledge graph used by GOAP.
+//! The two-axis knowledge graph used by GOAP.
 //!
 //! The domain axis holds versioned content nodes linked version-to-version and grouped into baselines. The change
 //! axis holds Changes: the description of a modification starting from a reference baseline (impacts) and proposing

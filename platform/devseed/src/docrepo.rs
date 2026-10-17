@@ -1,4 +1,4 @@
-//! Port of `docrepo.go`: the document repository of the development compositions and the workspaces of the changes.
+//! The document repository of the development compositions and the workspaces of the changes.
 
 use std::path::{Component, Path, PathBuf};
 

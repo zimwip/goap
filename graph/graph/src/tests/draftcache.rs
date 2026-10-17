@@ -1,4 +1,4 @@
-//! Port of `draftcache_test.go`: the drafts the graph reads (the cache extended event by event) are a from-scratch
+//! The drafts the graph reads (the cache extended event by event) are a from-scratch
 //! fold of the log (ADR 0079 §2). (Go's `BenchmarkDraftRead` has no counterpart: the crate has no bench harness.)
 
 use goap_domain::*;

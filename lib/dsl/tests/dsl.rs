@@ -1,4 +1,4 @@
-//! Port of `lib/dsl/dsl_test.go`. The Go scripts of the Go suite (`TestGo`, `TestGoChangeImpacts`) are JavaScript
+//! The Go scripts of the Go suite (`TestGo`, `TestGoChangeImpacts`) are JavaScript
 //! here: the Go language left the DSL, which `go_scripts_are_refused` checks.
 
 use std::{sync::Arc, time::Duration};

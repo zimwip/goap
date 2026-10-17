@@ -1,4 +1,3 @@
-//! Port of `mcp/connectors/builtin` (see docs/rust-port.md).
 //!
 //! Package builtin holds the connectors of the platform itself (ADR 0028): the drivers of the built-in MCPs
 //! goap-graph, goap-change, goap-scheduler and goap-admin. Like a harness that ships its own tools next to the ones

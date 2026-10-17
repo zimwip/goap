@@ -1,4 +1,4 @@
-//! Port of `modification_test.go` (ADR 0102): only a modification is accepted and committed; a committed change is
+//! Only a modification is accepted and committed; a committed change is
 //! iterated on.
 
 use goap_domain::*;

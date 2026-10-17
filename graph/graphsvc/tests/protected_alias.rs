@@ -1,5 +1,3 @@
-//! Port of `protected_alias_test.go`.
-
 mod common;
 
 use std::sync::Arc;

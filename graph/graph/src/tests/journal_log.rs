@@ -1,4 +1,4 @@
-//! Port of `journal_log_test.go`: the execution journal over the log of a change (ADR 0011, 0030, 0059). Go runs it on
+//! The execution journal over the log of a change (ADR 0011, 0030, 0059). Go runs it on
 //! the memory and SQLite repositories; it runs on every repository here.
 
 use chrono::{TimeDelta, TimeZone, Utc};

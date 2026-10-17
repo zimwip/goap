@@ -1,4 +1,4 @@
-//! Port of `contracts/graphapi` (see docs/rust-port.md): the contract of the graph for its callers, the requests and
+//! The contract of the graph for its callers, the requests and
 //! answers of the operations on a change (`engine.GraphPort`, the built-in MCPs, the services) and the errors they
 //! return ([`Error`]). It depends on `goap-domain` only, so a caller can name the graph's operations without importing
 //! the graph and its storage (`platform/layering`).

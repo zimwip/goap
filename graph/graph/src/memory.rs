@@ -1,4 +1,4 @@
-//! Port of `memory.go`: an in-memory [`Repo`]. Transactions are serialized (one at a time holds the state) and rolled
+//! An in-memory [`Repo`]. Transactions are serialized (one at a time holds the state) and rolled
 //! back by restoring a snapshot.
 
 use std::any::Any;

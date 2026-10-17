@@ -1,11 +1,6 @@
-//! Port of `compositions_test.go`.
-
 use goap_layering::{root, sources};
 
 /// Both compositions boot through graphsvc::boot: neither spells the platform seeds by hand.
-///
-/// A composition whose `main` is still the skeleton of the port (it calls nothing of graphsvc yet) is skipped
-/// with a note: the rule binds it as soon as it names graphsvc.
 #[test]
 fn compositions_use_boot() {
     let mut bad = Vec::new();
@@ -14,10 +9,6 @@ fn compositions_use_boot() {
         let files = sources(&root().join(dir)).unwrap();
         assert!(!files.is_empty(), "{dir}: no source");
         let src: String = files.iter().map(|s| s.code.as_str()).collect();
-        if !src.contains("graphsvc") {
-            eprintln!("{dir}: not ported yet (names no graphsvc), skipped");
-            continue;
-        }
         if !src.contains("graphsvc::boot(") {
             bad.push(format!("{dir} does not call graphsvc::boot"));
         }

@@ -1,4 +1,3 @@
-//! Port of `mcp/connectorkit` (see docs/rust-port.md).
 //!
 //! Package connectorkit is the toolkit to write a connector: a separately deployed service wrapping the API of a real
 //! service and exposed to the platform through the MCP hub (ADR 0019).

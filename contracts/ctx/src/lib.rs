@@ -1,4 +1,4 @@
-//! The request context, Go's `context.Context` made an explicit value (docs/rust-port.md).
+//! The request context, Go's `context.Context` made an explicit value (CLAUDE.md, "Rust conventions").
 //!
 //! A [`Ctx`] is immutable and cheap to clone: [`Ctx::with`] returns a child carrying one more value (the principal of
 //! `authz`, the call metadata of `llm`, ...), [`Ctx::with_cancel`] / [`Ctx::with_timeout`] a child that can be

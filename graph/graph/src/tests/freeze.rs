@@ -1,4 +1,4 @@
-//! Port of `freeze_test.go`: a node has no version while the change works (ADR 0079): the review, the edits and the
+//! A node has no version while the change works (ADR 0079): the review, the edits and the
 //! transitions are on its draft, and landing writes the one version.
 
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-//! Port of `upgrade_test.go`: a change follows a version of its methodology; an upgrade moves it to another (ADR
+//! A change follows a version of its methodology; an upgrade moves it to another (ADR
 //! 0113).
 
 use std::collections::BTreeMap;

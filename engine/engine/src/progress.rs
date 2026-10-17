@@ -1,4 +1,4 @@
-//! Port of `progress.go`: where a process run stands in the steps of its process (ADR 0035 §3), a read model.
+//! Where a process run stands in the steps of its process (ADR 0035 §3), a read model.
 
 use std::collections::BTreeMap;
 

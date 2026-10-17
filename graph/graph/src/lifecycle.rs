@@ -1,6 +1,4 @@
-//! Part of `lifecycle.go` (G1): the type index a change is judged by and the views a guard reads. The checks made
-//! when a transition is taken (`checkTransition`, `childOf`, which need the applier of `apply.go`) belong to a later
-//! slice (see PORTING.md).
+//! The type index a change is judged by, the views a guard reads and the checks made when a transition is taken.
 //!
 //! The lifecycle rules (ADR 0014): a node is modified in any state while it is in a change, and a change lands only
 //! when each node it holds rests in a landable state (ADR 0078); every transition is checked when it is taken, on the

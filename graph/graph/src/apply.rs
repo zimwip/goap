@@ -1,4 +1,4 @@
-//! Port of `apply.go`: a change lands in two acts (ADR 0056, 0102), the same for every change and every caller:
+//! A change lands in two acts (ADR 0056, 0102), the same for every change and every caller:
 //!
 //!   - CommitChange writes the modifications the change accepted on its own branch, as versions (ADR 0079), and
 //!     reverts there the nodes it no longer changes (an impact withdrawn after its commit). It checks the drafts as

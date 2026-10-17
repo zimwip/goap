@@ -1,4 +1,4 @@
-//! Port of `demo.go`: the ALM demo repository, its organisation and its project.
+//! The ALM demo repository, its organisation and its project.
 
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -1,4 +1,4 @@
-//! Port of `resolve_test.go`: every operation on a node of a change resolves it the same way (ADR 0077,
+//! Every operation on a node of a change resolves it the same way (ADR 0077,
 //! "Resolution").
 
 use goap_domain::*;

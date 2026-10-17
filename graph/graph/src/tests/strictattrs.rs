@@ -1,4 +1,4 @@
-//! Port of `attrcheck_test.go` and `strictattrs_test.go`: the checks of attribute values, and attributes are strict
+//! The checks of attribute values, and attributes are strict
 //! (ADR 0055).
 
 use std::sync::Arc;

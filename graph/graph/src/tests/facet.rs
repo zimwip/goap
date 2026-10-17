@@ -1,4 +1,4 @@
-//! Port of `facet_test.go` and `logfacet_test.go`: the facets of a blackboard (ADR 0066, 0109).
+//! The facets of a blackboard (ADR 0066, 0109).
 
 use std::sync::Arc;
 

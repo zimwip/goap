@@ -1,4 +1,4 @@
-//! Port of `commit_test.go`, `commitcycle_test.go` and `parenting_test.go`: a commit of node edits, applied as one
+//! A commit of node edits, applied as one
 //! change (ADR 0024, 0040, 0054).
 
 use goap_domain::*;

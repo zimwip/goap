@@ -1,4 +1,3 @@
-//! Port of `docker_test.go`.
 #![cfg(unix)]
 
 use std::collections::HashMap;

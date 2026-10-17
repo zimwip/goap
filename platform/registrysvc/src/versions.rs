@@ -1,4 +1,4 @@
-//! Port of `versions.go`. Versions (ADR 0113): a change follows a version of its methodology
+//! Versions (ADR 0113): a change follows a version of its methodology
 //! (Change.methodology_version), a methodology version is written against versions of the domains
 //! (Methodology.domains). The readers of a methodology take a reference, "<name>@<version>" (domain::methodology_ref),
 //! a bare name being the latest published version.

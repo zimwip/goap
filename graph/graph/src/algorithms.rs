@@ -1,8 +1,8 @@
-//! Port of `algorithms.go` (the parts of G1): the algorithms plugged in the domain (ADR 0018), the attribute and
+//! The algorithms plugged in the domain (ADR 0018), the attribute and
 //! node validators of a node type and the validators of a link type, and the guards and actions of lifecycle
 //! transitions. Like the lifecycle they come from the type catalogue in force, resolved (instance parameters and
-//! script). Go runs the guards and actions on its `applier` (a later slice); here they are free functions taking a
-//! [`TransitionEnv`] (the change and the impact of the moved node), which the applier will build.
+//! script). The guards and actions are free functions taking a [`TransitionEnv`] (the change and the impact of the
+//! moved node).
 
 use goap_algo::USAGE_NODE_VALIDATOR;
 use goap_ctx::Ctx;

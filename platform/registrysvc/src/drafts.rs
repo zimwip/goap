@@ -1,4 +1,4 @@
-//! Port of `drafts.go`: the registry as the self-observation agent sees it (selfimprove.MethodologyDrafts).
+//! The registry as the self-observation agent sees it (selfimprove.MethodologyDrafts).
 
 use std::sync::Arc;
 

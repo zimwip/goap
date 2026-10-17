@@ -1,4 +1,4 @@
-//! Port of `impactvalidation.go`. The validation of a change impact (`ImpactValidation`) is derived, never stored and
+//! The validation of a change impact (`ImpactValidation`) is derived, never stored and
 //! no event: what the review gate of an acceptance (check_accepted) would say of the draft as it stands. The views of a
 //! change carry it (ChangeChecked, BlackboardIn) so a person sees the failure on the impact and not only after
 //! accepting it. An acceptance still runs the check itself: this is a preview, not a gate.

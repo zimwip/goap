@@ -1,4 +1,4 @@
-//! Port of `platform/modelgw` (see docs/rust-port.md): the model gateway. One API over several LLM providers
+//! The model gateway. One API over several LLM providers
 //! (Anthropic, OpenAI-compatible, Gemini, a fake one), addressed by alias or "provider/model", with the catalog policy
 //! (availability, roles, quotas), the global behaviours (ADR 0093) and their measured cost, native tool calling and
 //! its text protocol (ADR 0098), the ledger of every call (ADR 0089, 0114), the contextual helper (ADR 0086), the

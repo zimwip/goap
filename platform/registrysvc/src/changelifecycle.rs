@@ -1,4 +1,4 @@
-//! Port of `changelifecycle.go`: what the graph asks the registry about the lifecycle of a change (ADR 0058), its
+//! What the graph asks the registry about the lifecycle of a change (ADR 0058), its
 //! default goal (ADR 0096), the guards and gates of its transitions and the roles of the operations (ADR 0103).
 
 use goap_ctx::Ctx;

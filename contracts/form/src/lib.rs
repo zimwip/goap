@@ -1,4 +1,3 @@
-//! Port of `contracts/form` (see docs/rust-port.md).
 //!
 //! The form of a human action (ADR 0115): the fields a person fills in, the widgets that render them and the
 //! constraints limiting their choices, checked when the methodology compiles ([`check_form`]) and when a person

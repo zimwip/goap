@@ -1,4 +1,4 @@
-//! Port of `personal.go`: personal changes (ADR 0037), the users seen by the platform (ADR 0039, 0040, 0042) and the
+//! Personal changes (ADR 0037), the users seen by the platform (ADR 0039, 0040, 0042) and the
 //! interceptors identifying the callers.
 //!
 //! A change held by the personal unit of a person (USR:<subject>) belongs to that person only: nobody else reads it,

@@ -1,4 +1,4 @@
-//! Port of `validate.go`: the consistency of the blackboard as a process on a flow sees it.
+//! The consistency of the blackboard as a process on a flow sees it.
 
 use std::collections::HashMap;
 

@@ -1,4 +1,4 @@
-//! Port of `changebranch.go`: the branch a change owns, and how a change is integrated into the branch it was forked
+//! The branch a change owns, and how a change is integrated into the branch it was forked
 //! from (a fast-forward, else the three-way merge of merge.rs).
 
 use std::collections::{BTreeMap, HashSet};

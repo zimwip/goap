@@ -1,4 +1,4 @@
-//! Port of `domainrules_test.go`: withdrawing impacts, the links a type requires, link attributes, retiring and
+//! Withdrawing impacts, the links a type requires, link attributes, retiring and
 //! restoring by commit (ADR 0054, 0076, 0078, 0102).
 
 use std::sync::Arc;

@@ -1,4 +1,3 @@
-//! Port of `contracts/algo` (see docs/rust-port.md).
 //!
 //! The algorithms of a domain (ADR 0018): scripts written in JavaScript or Go that plug into the model at fixed
 //! extension points. An algorithm has a Type (one of the fixed usages, which decides the DSL context its script runs

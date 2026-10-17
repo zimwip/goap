@@ -1,4 +1,4 @@
-//! Port of `changeview_test.go`: a change is seen at three levels of its change impacts (ADR 0032): written,
+//! A change is seen at three levels of its change impacts (ADR 0032): written,
 //! accepted, landed; a flow sees its own drafts.
 
 use goap_domain::*;

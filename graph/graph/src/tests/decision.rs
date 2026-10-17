@@ -1,4 +1,4 @@
-//! Port of `decision_test.go`: the decision loop (ADR 0009 §4), its safeguards (rounds, deadline: escalation), the
+//! The decision loop (ADR 0009 §4), its safeguards (rounds, deadline: escalation), the
 //! mechanism without a policy (ADR 0067), and a selection settling the points that chose among the options.
 
 use std::sync::Arc;

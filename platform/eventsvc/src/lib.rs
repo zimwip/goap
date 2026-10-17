@@ -1,4 +1,4 @@
-//! Port of `platform/eventsvc` (see docs/rust-port.md): the one event stream of the web (ADR 0053). [`Hub`] takes
+//! The one event stream of the web (ADR 0053). [`Hub`] takes
 //! the platform's publications (in process through [`Hub::publish`] or as an engine `Publisher`, from the bus through
 //! [`Hub::ingest`]), numbers them in an epoch, keeps a short history to resume streams and holds the presence of the
 //! tabs; [`Handler`] serves `goap.events.v1.EventService` (Watch, Heartbeat, Leave).

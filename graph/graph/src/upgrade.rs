@@ -1,4 +1,4 @@
-//! Port of `upgrade.go`: versions of a methodology (ADR 0113). A change follows the version of its methodology it was
+//! Versions of a methodology (ADR 0113). A change follows the version of its methodology it was
 //! created with (`Change::methodology_version`); a new version of the methodology serves the changes created after
 //! it. A change moves to another version only when someone upgrades it.
 
