@@ -13,6 +13,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/graphclient"
 	"github.com/zimwip/goap/lib/llmcfg"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 	"github.com/zimwip/goap/platform/modelgw"
@@ -57,6 +58,10 @@ func main() {
 	svc.CallPrompts = platform.EnvBool("GOAP_LLM_CALL_PROMPTS", true)                                                                            // the exchange of the calls no change log keeps (ADR 0089)
 	go svc.KeepCalls(ctx, platform.EnvInt("GOAP_LLM_CALL_RETENTION_DAYS", modelgw.DefaultCallRetentionDays))                                     // the ledger of calls (ADR 0089)
 	svc.Authz = iam                                                                                                                              // the roles a model requires are held on the caller's project (ADR 0043)
+	// its events (a call recorded in the ledger, a quota exceeded) go through its outbox to the bus (ADR 0136)
+	events := platform.OptionalEvents(ctx, log)
+	defer events.Close()
+	outbox.Start(ctx, svc.Emit(outbox.NATS(events)), log)
 	srv.Mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: svc, Authz: iam}, telemetry.HandlerOptions()...))
 	// the Anthropic endpoint where the Claude coding agent's sessions call the model, each call a row of the ledger
 	// (ADR 0123 §6); its tokens are minted by the MCP hub with the same secret

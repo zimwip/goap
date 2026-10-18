@@ -15,6 +15,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/graphclient"
 	"github.com/zimwip/goap/lib/identity"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 	"github.com/zimwip/goap/platform/assistantsvc"
@@ -35,6 +36,11 @@ func main() {
 		srv.Readiness(pool.Ping)
 	}
 	convs := &convsvc.Service{Store: store}
+	// its events (a conversation created, renamed or deleted, a message appended or updated, an action decided) go
+	// through its outbox to the bus (ADR 0136)
+	events := platform.OptionalEvents(ctx, log)
+	defer events.Close()
+	outbox.Start(ctx, convs.Emit(outbox.NATS(events)), log)
 	srv.Mount(conversationsv1connect.NewConversationServiceHandler(&convsvc.Handler{Service: convs}, telemetry.HandlerOptions()...))
 
 	// the assistant calls the platform for the caller: every client carries the principal of its context

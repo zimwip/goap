@@ -52,7 +52,7 @@ export interface PlatformEvent {
   /** the id the issuing client gave its command (`X-Goap-Command`): a client knows the echo of its own writes */
   commandId: string;
   time: string;
-  /** version label of a methodology or domain */
+  /** version label of a methodology or domain; the message a conversation event names */
   label: string;
   process?: Process;
   log?: LogLine;

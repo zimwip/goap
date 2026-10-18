@@ -8,8 +8,10 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Memory is an in-memory Repo. Transactions are serialized and rolled back by
@@ -17,6 +19,8 @@ import (
 type Memory struct {
 	mu sync.Mutex
 	st memState
+	// outbox holds the events of the committed transactions (ADR 0136)
+	outbox outbox.Memory
 }
 
 type memState struct {
@@ -79,14 +83,40 @@ func (m *Memory) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	snapshot := m.st.clone()
-	if err := fn(&memTx{st: &m.st}); err != nil {
+	tx := &memTx{st: &m.st}
+	if err := fn(tx); err != nil {
 		m.st = snapshot
 		return err
 	}
+	m.outbox.Append(tx.outbox...)
 	return nil
 }
 
-type memTx struct{ st *memState }
+// Pending implements outbox.Store.
+func (m *Memory) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return m.outbox.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (m *Memory) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return m.outbox.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (m *Memory) PurgePublished(ctx context.Context, before time.Time) error {
+	return m.outbox.PurgePublished(ctx, before)
+}
+
+type memTx struct {
+	st *memState
+	// outbox are the events of the transaction, stored when it commits
+	outbox []outbox.Message
+}
+
+func (t *memTx) AppendOutbox(_ context.Context, msgs []outbox.Message) error {
+	t.outbox = append(t.outbox, msgs...)
+	return nil
+}
 
 type joinKey struct {
 	ref    domain.NodeRef

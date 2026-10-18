@@ -74,6 +74,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	if err := g.land(ctx, tx, c, own, res.Change.ID, res.Baseline.ID); err != nil {
 		return c, err
 	}
+	g.raiseApplied(ctx, tx, c, res.Baseline)
 	return c, tx.PutChange(ctx, c)
 }
 
@@ -267,6 +268,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	if err := g.land(ctx, tx, c, own, c.ID, res.ID); err != nil {
 		return false, err
 	}
+	g.raiseApplied(ctx, tx, c, res)
 	return true, tx.PutChange(ctx, c)
 }
 

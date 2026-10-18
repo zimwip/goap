@@ -11,7 +11,6 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
-	"github.com/zimwip/goap/contracts/events"
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/lib/access"
@@ -152,7 +151,6 @@ func (h *Handler) settingsChange(ctx context.Context, byNs map[string]domain.Cha
 	if err != nil {
 		return domain.Change{}, err
 	}
-	h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
 	byNs[ns] = c
 	return c, nil
 }
@@ -351,15 +349,8 @@ func (h *Handler) saveSettings(ctx context.Context, id domain.ChangeID, me strin
 	if _, err := h.Graph.ImpactNodeReviewBatch(ctx, id, b); err != nil {
 		return err
 	}
-	bl, err := h.Graph.Apply(ctx, id, "")
-	if err != nil {
-		return err
-	}
-	if c, err := h.Graph.Change(ctx, id); err == nil && c.Status != domain.ChangeCommitted {
-		c.Items = nil
-		h.publish(ctx, events.ChangeSubject(string(id), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &bl})
-	}
-	return nil
+	_, err = h.Graph.Apply(ctx, id, "")
+	return err
 }
 
 // DiscardSettings removes the personal changes holding the staged edits.

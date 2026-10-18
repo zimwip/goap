@@ -18,6 +18,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
@@ -37,6 +38,46 @@ type Service struct {
 	// graph in the same process reloads its catalogue). Nil: nothing is called.
 	Changed func(ctx context.Context, r def.Record)
 	now     func() time.Time
+	// relay delivers the events of the outbox (Emit, ADR 0136).
+	relay *outbox.Relay
+}
+
+// OutboxOrigin names the domain registry in the ids of its events (ADR 0136).
+const OutboxOrigin = "domains"
+
+// Emit makes the registry write its events in the outbox of its store, in the transaction of the write they are about
+// (ADR 0136), and returns the relay delivering them to sink after each write (synchronously: the writes are rare); the
+// caller runs it (Relay.Run) for what a delivery missed. The store must keep an outbox (it panics otherwise); a nil sink
+// keeps Events. Changed is still called in process once a version is published or archived.
+func (s *Service) Emit(sink outbox.Sink) *outbox.Relay {
+	if sink == nil {
+		return nil
+	}
+	st, ok := s.Store.(outbox.Store)
+	if !ok {
+		panic(fmt.Sprintf("domainsvc: the store %T keeps no outbox", s.Store))
+	}
+	s.relay = &outbox.Relay{Origin: OutboxOrigin, Store: st, Sink: sink}
+	return s.relay
+}
+
+// DomainEvent is the payload of goap.registry.domain.<event>.
+type DomainEvent struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Status  string `json:"status"`
+}
+
+// events are the outbox messages of a write (none without Emit).
+func (s *Service) events(ctx context.Context, event, name, version string, st def.Status) []outbox.Message {
+	if s.relay == nil {
+		return nil
+	}
+	m, err := outbox.New(ctx, "goap.registry.domain."+event, DomainEvent{Name: name, Version: version, Status: string(st)}, s.clock())
+	if err != nil {
+		return nil
+	}
+	return []outbox.Message{m}
 }
 
 // ErrInvalid wraps validation issues.
@@ -76,8 +117,11 @@ func (s *Service) authorizeDomain(ctx context.Context, action string, d *def.Dom
 		Resource: authz.Resource{Type: "domain", ID: d.Name + "@" + d.Version, Name: d.Name, Org: authz.From(ctx).Org}})
 }
 
+// publishDomainEvent delivers the event of a write that stored it (Emit), else publishes it, then tells Changed.
 func (s *Service) publishDomainEvent(ctx context.Context, event string, r def.Record) {
-	if s.Events != nil {
+	if s.relay != nil {
+		_ = s.relay.Drain(ctx) // what it cannot deliver now, Relay.Run delivers later
+	} else if s.Events != nil {
 		_ = s.Events.Publish(ctx, "goap.registry.domain."+event, map[string]string{"name": r.Domain.Name, "version": r.Domain.Version, "status": string(r.Status)})
 	}
 	if event != "saved" && s.Changed != nil {
@@ -161,7 +205,7 @@ func (s *Service) SaveDomain(ctx context.Context, d def.Domain) (def.Record, def
 	}
 	now := s.clock()
 	r := def.Record{Domain: d, Status: def.StatusDraft, CreatedAt: now, UpdatedAt: now, UpdatedBy: authz.From(ctx).Subject}
-	if err := ds.SaveDomain(ctx, r); err != nil {
+	if err := ds.SaveDomain(ctx, r, s.events(ctx, "saved", d.Name, d.Version, def.StatusDraft)...); err != nil {
 		return def.Record{}, nil, err
 	}
 	saved, err := ds.GetDomain(ctx, d.Name, d.Version)
@@ -210,7 +254,7 @@ func (s *Service) PublishDomain(ctx context.Context, name, version string) (def.
 	if err := s.checkPublishable(ctx, &r.Domain); err != nil {
 		return def.Record{}, err
 	}
-	if err := ds.SetDomainStatus(ctx, name, version, def.StatusPublished, s.clock()); err != nil {
+	if err := ds.SetDomainStatus(ctx, name, version, def.StatusPublished, s.clock(), s.events(ctx, "published", name, version, def.StatusPublished)...); err != nil {
 		return def.Record{}, err
 	}
 	r, err = ds.GetDomain(ctx, name, version)
@@ -270,10 +314,12 @@ func (s *Service) DeleteDomain(ctx context.Context, name, version string) error 
 	if r.Status == def.StatusArchived {
 		return nil
 	}
+	// the event names the status the version had (as it always did)
+	ev := s.events(ctx, "deleted", name, version, r.Status)
 	if r.Status == def.StatusDraft {
-		err = ds.DeleteDomain(ctx, name, version)
+		err = ds.DeleteDomain(ctx, name, version, ev...)
 	} else {
-		err = ds.SetDomainStatus(ctx, name, version, def.StatusArchived, s.clock())
+		err = ds.SetDomainStatus(ctx, name, version, def.StatusArchived, s.clock(), ev...)
 	}
 	if err == nil {
 		s.publishDomainEvent(ctx, "deleted", r)
@@ -322,7 +368,7 @@ func (s *Service) importPublishedDomain(ctx context.Context, d def.Domain) (def.
 	}
 	now := s.clock()
 	r := def.Record{Domain: d, Status: def.StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}
-	if err := ds.SaveDomain(ctx, r); err != nil {
+	if err := ds.SaveDomain(ctx, r, s.events(ctx, "published", d.Name, d.Version, def.StatusPublished)...); err != nil {
 		return def.Record{}, nil, err
 	}
 	saved, err := ds.GetDomain(ctx, d.Name, d.Version)

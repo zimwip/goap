@@ -38,6 +38,7 @@ type (
 	NodeEdit            = graphapi.NodeEdit
 	LinkEdit            = graphapi.LinkEdit
 	Commit              = graphapi.Commit
+	CarriedEvent        = graphapi.CarriedEvent
 	CommitResult        = graphapi.CommitResult
 	TransitionRequest   = graphapi.TransitionRequest
 	NodeValidator       = graphapi.NodeValidator

@@ -667,6 +667,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 	if err := tx.PutChange(ctx, c); err != nil {
 		return res, err
 	}
+	g.raiseApplied(ctx, tx, c, res.Baseline)
 	res.Change = c
 	fb.Status = domain.BranchMerged
 	return res, tx.PutBranch(ctx, fb)

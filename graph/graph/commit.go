@@ -28,6 +28,9 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
 	}
+	if err := checkCarried(in.Events); err != nil {
+		return res, err
+	}
 	for _, e := range in.Edits {
 		if err := g.checkRequiredParent(e); err != nil {
 			return res, err
@@ -221,7 +224,8 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 	if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, accept); err != nil {
 		return res, fmt.Errorf("commit %q: %w", in.Title, err)
 	}
-	if res.Baseline, err = g.Apply(ctx, c.ID, in.BaselineName); err != nil {
+	// the writer's events ride on the landing (ADR 0136): raised with change.applied, in its transaction
+	if res.Baseline, err = g.Apply(withCarried(ctx, in.Events), c.ID, in.BaselineName); err != nil {
 		return res, err
 	}
 	if done, err := g.Change(ctx, c.ID); err != nil {

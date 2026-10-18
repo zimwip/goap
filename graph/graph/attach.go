@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
 	"github.com/zimwip/goap/contracts/operations"
 )
 
@@ -63,8 +64,11 @@ func (g *Graph) AttachChange(ctx context.Context, id, parent domain.ChangeID) (d
 			return err
 		}
 		cur.ParentID, cur.Guardians = pc.ID, chain
-		c, err = g.reparent(ctx, tx, cur, pc.Branch)
-		return err
+		if c, err = g.reparent(ctx, tx, cur, pc.Branch); err != nil {
+			return err
+		}
+		g.raise(ctx, tx, events.ChangeAttached, c, nil)
+		return nil
 	})
 	return c, err
 }
@@ -109,9 +113,14 @@ func (g *Graph) DetachChange(ctx context.Context, id domain.ChangeID) (domain.Ch
 			HeaderParentID: {From: string(cur.ParentID), To: ""}, HeaderGuardians: {From: cur.Guardians, To: chain}}); err != nil {
 			return err
 		}
+		left := cur.ParentID
 		cur.ParentID, cur.Guardians = "", chain
-		c, err = g.reparent(ctx, tx, cur, target)
-		return err
+		if c, err = g.reparent(ctx, tx, cur, target); err != nil {
+			return err
+		}
+		// the event names the change it left (ADR 0106)
+		g.raise(ctx, tx, events.ChangeDetached, c, func(ev *domain.ChangeEvent) { ev.Change.ParentID = left })
+		return nil
 	})
 	return c, err
 }
