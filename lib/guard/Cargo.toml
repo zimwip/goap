@@ -1,0 +1,16 @@
+[package]
+name = "goap-guard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Compiles and evaluates the CEL guards of lifecycle transitions (ADR 0014)"
+
+[dependencies]
+cel = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

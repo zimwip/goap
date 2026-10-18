@@ -1,0 +1,76 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 0,
+   "description": "",
+   "effects": {
+    "a": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "human",
+   "lifted": null,
+   "name": "do_a",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": null,
+   "description": "",
+   "goals": null,
+   "name": "default",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "a"
+ ],
+ "graphs": {},
+ "issues": [
+  {
+   "path": "actions[0].on",
+   "message": "a transverse methodology subscribes at its own level (on of the methodology)"
+  },
+  {
+   "path": "appliesTo",
+   "message": "a transverse methodology runs its processes alongside the changes: declare at least one process"
+  },
+  {
+   "path": "appliesTo[1]",
+   "message": "a methodology does not apply to itself"
+  }
+ ],
+ "levels": {},
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": [
+  {
+   "path": "actions[0].on",
+   "message": "a transverse methodology subscribes at its own level (on of the methodology)"
+  },
+  {
+   "path": "appliesTo",
+   "message": "a transverse methodology runs its processes alongside the changes: declare at least one process"
+  },
+  {
+   "path": "appliesTo[1]",
+   "message": "a methodology does not apply to itself"
+  }
+ ],
+ "view": {
+  "methodology": "tr",
+  "version": "1.0.0",
+  "goal": "g",
+  "processes": []
+ }
+}

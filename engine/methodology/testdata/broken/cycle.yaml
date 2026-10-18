@@ -1,0 +1,8 @@
+name: cyc
+version: 1.0.0
+namespace: alm
+processes:
+  - name: x
+    steps: [{name: s, process: y}]
+  - name: y
+    steps: [{name: s, process: x}]

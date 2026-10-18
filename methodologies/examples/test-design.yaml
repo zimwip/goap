@@ -56,32 +56,21 @@ actions:
 
   - name: design_tests
     kind: script
-    language: go
+    language: javascript
     description: Create one test case per requirement in scope
     pre: {has_scope: true}
     effects: {tests_designed: true}
     code: |
-      package action
-
-      import (
-      	"fmt"
-
-      	"github.com/zimwip/goap/pkg/dsl"
-      )
-
-      func Run(ctx *dsl.Ctx) error {
-      	for _, n := range ctx.ChangeImpacts() {
-      		if n.Pre == nil || n.Type != "alm@Requirement" || n.Intent != "modified" {
-      			continue
-      		}
-      		title := fmt.Sprintf("Verify %s: %v", n.Key, n.Pre.Props["title"])
-      		t := ctx.ImpactNodeCreate("alm@TestCase", "TC-"+n.Key, "verifies "+n.Key)
-      		ctx.WriteNode(t, map[string]any{
-      			"props": map[string]any{"title": title},
-      			"links": []any{map[string]any{"type": "alm@verifies", "to": n.Key}},
-      		})
-      	}
-      	return nil
+      function run(ctx) {
+        for (const n of ctx.changeImpacts()) {
+          if (!n.pre || n.type !== "alm@Requirement" || n.intent !== "modified") continue;
+          const title = (n.pre.props || {}).title;
+          const t = ctx.impactNodeCreate("alm@TestCase", "TC-" + n.key, "verifies " + n.key);
+          ctx.writeNode(t, {
+            props: { title: "Verify " + n.key + ": " + (title === undefined || title === null ? "<nil>" : title) },
+            links: [{ type: "alm@verifies", to: n.key }],
+          });
+        }
       }
 
   - name: summarize

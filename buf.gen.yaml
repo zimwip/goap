@@ -1,16 +1,7 @@
 version: v2
-managed:
-  enabled: true
-  override:
-    - file_option: go_package_prefix
-      value: github.com/zimwip/goap/contracts/gen
+# The Rust code of the protos (contracts/gen, crate goap-gen) is generated at build time by its build.rs (prost +
+# pbjson, compiled by protox): buf writes only the TypeScript of the web.
 plugins:
-  - local: protoc-gen-go
-    out: contracts/gen
-    opt: paths=source_relative
-  - local: protoc-gen-connect-go
-    out: contracts/gen
-    opt: paths=source_relative
   # the TypeScript of the web (ADR 0125): message types and their JSON forms (json_types), read by
   # web/src/lib/api/types; needs `npm ci` in web/
   - local: ["node", "web/node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es"]

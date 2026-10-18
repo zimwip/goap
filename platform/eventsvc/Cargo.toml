@@ -1,0 +1,32 @@
+[package]
+name = "goap-eventsvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+goap-domain = { workspace = true }
+goap-engine = { workspace = true }
+goap-enginesvc = { workspace = true }
+goap-access = { workspace = true }
+goap-identity = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-platform = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+uuid = { workspace = true }
+
+[lints]
+workspace = true

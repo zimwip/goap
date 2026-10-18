@@ -1,0 +1,3 @@
+ITEM it-art-0 artifact/analysis [accepted] by agent run exec-123 — the summary
+led to it-art-0 artifact [accepted] by ? — {a,b}
+led to node REQ-2 (modified accepted)

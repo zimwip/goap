@@ -1,0 +1,31 @@
+[package]
+name = "goap-cmd-mcp"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "mcp"
+path = "src/main.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+goap-adapter = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-gen = { workspace = true }
+goap-access = { workspace = true }
+goap-domainclient = { workspace = true }
+goap-graphclient = { workspace = true }
+goap-platform = { workspace = true }
+goap-telemetry = { workspace = true }
+goap-connector-builtin = { workspace = true }
+goap-mcpsvc = { workspace = true }
+
+[lints]
+workspace = true

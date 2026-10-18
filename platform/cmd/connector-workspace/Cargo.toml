@@ -1,0 +1,19 @@
+[package]
+name = "goap-cmd-connector-workspace"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "connector-workspace"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+goap-connectorkit = { workspace = true }
+goap-connector-workspace = { workspace = true }
+
+[lints]
+workspace = true

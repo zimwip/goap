@@ -1,0 +1,27 @@
+[package]
+name = "goap-e2e-access"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+chrono = { workspace = true }
+goap-authz = { workspace = true }
+goap-criticality = { workspace = true }
+goap-ctx = { workspace = true }
+goap-domain = { workspace = true }
+goap-mcp = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphsvc = { workspace = true }
+goap-access = { workspace = true }
+goap-def = { workspace = true }
+goap-typecat = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+
+[lints]
+workspace = true

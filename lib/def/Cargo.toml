@@ -1,0 +1,25 @@
+[package]
+name = "goap-def"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-algo = { workspace = true }
+goap-domain = { workspace = true }
+goap-form = { workspace = true }
+goap-domains-builtin = { workspace = true }
+goap-dsl = { workspace = true }
+goap-guard = { workspace = true }
+chrono = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_ignored = { workspace = true }
+serde_yaml_ng = { workspace = true }
+thiserror = { workspace = true }
+
+[lints]
+workspace = true

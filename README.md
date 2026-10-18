@@ -16,7 +16,7 @@ elements it references.
 
 ```bash
 # 1. Local, without docker: a single process, SQLite (.goap/goap.db), IDE included
-make devlocal                 # IDE + API on http://localhost:8080 (Go + Node required)
+make devlocal                 # IDE on http://localhost:5173, API on :8080 (Rust + Node required: make toolchain installs Rust)
 make devlocal-reset           # start from an empty database (demo and methodologies re-imported)
 
 #    in-memory variant, hot reload of the IDE
@@ -67,13 +67,16 @@ curl -s localhost:8080/goap.engine.v1.EngineService/StartProcess -H 'Content-Typ
 ## Development
 
 ```bash
-make tools      # buf + protoc plugins
-make generate   # proto/ -> contracts/gen/
-make test       # unit tests
-make test-pg    # graph PostgreSQL repository tests
-make lint
+make toolchain  # rustup + the toolchain pinned by rust-toolchain.toml, when missing
+make tools      # watchexec (devlocal), buf when not on the PATH
+make build      # cargo build --workspace, the services copied into bin/
+make generate   # proto/ -> web/src/gen (the Rust types of contracts/gen are generated at build time),
+                # the catalogue of operations, the form widget catalogue of the web
+make test       # cargo test --workspace
+make test-pg    # every test, the PostgreSQL ones included (throw-away pgvector container)
+make lint       # rustfmt, clippy -D warnings, Cargo.lock in line, docs/dsl.md copy
 ```
 
 Script action DSL: [docs/dsl.md](docs/dsl.md).
 
-Stack: Go 1.26 · Echo · connect-rpc · NATS JetStream · PostgreSQL · Vault · Svelte 5.
+Stack: Rust (stable, edition 2024) · tokio · axum · Connect (prost + pbjson) · sqlx · NATS JetStream · PostgreSQL · Vault · Svelte 5.

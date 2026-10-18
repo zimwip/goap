@@ -1,0 +1,21 @@
+CHANGE C1234567 "A \"quoted\" title é\u200b" status=active ns=alm goal=ship
+INTENT write a note
+SUBJECT description fp=624110a4
+STEP p/s method=m R=w
+IMPACTS 2 (key type intent state review fp)
+- REQ-1 Requirement created drafted proposed fp=e83aa6d0 — because it is needed and this is a long rationale that shou…
+- REQ-2 other@T modified landed accepted fp=e9156f73
+RISKS 2 (key score=PxI status owner title)
+- R2 20=4x5 open bob "High risk" actions=A1
+- R1 2=1x2 closed - "Low risk"
+ACTIONS 1 open, 1 closed (key owner due for title)
+- A1 - - R2 "Do it"
+ASSESSMENT description score=2/5 unclear (stale: the subject changed since) fp=624110a4
+- finding major "vague"
+- suggested "Write better"
+THREAD description 2 messages (oldest first)
+- rater score=2: "say which"
+- person: "ok I will"
+ARTIFACTS 2 (latest: id type summary fp)
+- it-art-0 analysis the summary fp=fb6f1b40
+- it-art-0 - {a,b} fp=7f990c72

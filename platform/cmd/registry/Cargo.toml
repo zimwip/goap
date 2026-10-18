@@ -1,0 +1,32 @@
+[package]
+name = "goap-cmd-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "registry"
+path = "src/main.rs"
+
+[dependencies]
+async-trait = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-engine = { workspace = true }
+goap-gen = { workspace = true }
+goap-authz = { workspace = true }
+goap-access = { workspace = true }
+goap-domainclient = { workspace = true }
+goap-graphclient = { workspace = true }
+goap-identity = { workspace = true }
+goap-platform = { workspace = true }
+goap-telemetry = { workspace = true }
+goap-mcpsvc = { workspace = true }
+goap-registrysvc = { workspace = true }
+
+[lints]
+workspace = true

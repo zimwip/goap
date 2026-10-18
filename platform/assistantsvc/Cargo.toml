@@ -1,0 +1,44 @@
+[package]
+name = "goap-assistantsvc"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+goap-authz = { workspace = true }
+goap-domain = { workspace = true }
+goap-llm = { workspace = true }
+goap-condition = { workspace = true }
+goap-engine = { workspace = true }
+goap-methodology = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-access = { workspace = true }
+goap-identity = { workspace = true }
+goap-llmcfg = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-startingpoint = { workspace = true }
+goap-convsvc = { workspace = true }
+goap-modelgw = { workspace = true }
+goap-telemetry = { workspace = true }
+async-trait = { workspace = true }
+chrono = { workspace = true }
+opentelemetry = { workspace = true }
+parking_lot = { workspace = true }
+regex = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
+
+[lints]
+workspace = true

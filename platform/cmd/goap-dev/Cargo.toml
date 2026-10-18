@@ -1,0 +1,81 @@
+[package]
+name = "goap-cmd-goap-dev"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[[bin]]
+name = "goap-dev"
+path = "src/main.rs"
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-assess = { workspace = true }
+goap-authz = { workspace = true }
+goap-criticality = { workspace = true }
+goap-decision = { workspace = true }
+goap-domain = { workspace = true }
+goap-events = { workspace = true }
+goap-llm = { workspace = true }
+goap-risk = { workspace = true }
+goap-verify = { workspace = true }
+goap-engine = { workspace = true }
+goap-enginesvc = { workspace = true }
+goap-enginetel = { workspace = true }
+goap-intent = { workspace = true }
+goap-methodology = { workspace = true }
+goap-sandbox = { workspace = true }
+goap-selfimprove = { workspace = true }
+goap-credsvc = { workspace = true }
+goap-gateway = { workspace = true }
+goap-domainsvc = { workspace = true }
+goap-graph = { workspace = true }
+goap-graphsvc = { workspace = true }
+goap-index = { workspace = true }
+goap-indexersvc = { workspace = true }
+goap-access = { workspace = true }
+goap-def = { workspace = true }
+goap-identity = { workspace = true }
+goap-llmcfg = { workspace = true }
+goap-platform = { workspace = true }
+goap-telemetry = { workspace = true }
+goap-typecat = { workspace = true }
+goap-connectorkit = { workspace = true }
+goap-connector-builtin = { workspace = true }
+goap-connector-claudeagent = { workspace = true }
+goap-connector-localfs = { workspace = true }
+goap-connector-workspace = { workspace = true }
+goap-mcpsvc = { workspace = true }
+goap-assistantsvc = { workspace = true }
+goap-convsvc = { workspace = true }
+goap-devseed = { workspace = true }
+goap-eventsvc = { workspace = true }
+goap-modelgw = { workspace = true }
+goap-prefssvc = { workspace = true }
+goap-registrysvc = { workspace = true }
+goap-ctx = { workspace = true }
+goap-connect = { workspace = true }
+goap-graphapi = { workspace = true }
+goap-graphsnap = { workspace = true }
+goap-journal = { workspace = true }
+goap-mcp = { workspace = true }
+async-trait = { workspace = true }
+axum = { workspace = true }
+chrono = { workspace = true }
+futures = { workspace = true }
+getrandom = { workspace = true }
+parking_lot = { workspace = true }
+serde_json = { workspace = true }
+sqlx = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+http-body-util = { workspace = true }
+tower = { workspace = true }
+reqwest = { workspace = true }
+
+[lints]
+workspace = true

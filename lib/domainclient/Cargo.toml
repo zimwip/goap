@@ -1,0 +1,21 @@
+[package]
+name = "goap-domainclient"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+goap-gen = { workspace = true }
+goap-def = { workspace = true }
+goap-domainpb = { workspace = true }
+goap-pbconv = { workspace = true }
+goap-connect = { workspace = true }
+goap-ctx = { workspace = true }
+goap-typecat = { workspace = true }
+chrono = { workspace = true }
+parking_lot = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+

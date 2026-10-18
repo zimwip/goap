@@ -1,0 +1,18 @@
+[package]
+name = "goap-ctx"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The request context of the port: Go's context.Context (values, cancellation, deadline) as an explicit value"
+
+[dependencies]
+tokio-util = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt"] }
+
+[lints]
+workspace = true

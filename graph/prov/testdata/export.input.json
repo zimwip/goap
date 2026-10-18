@@ -1,0 +1,522 @@
+{
+  "change": {
+    "id": "c/1 x",
+    "title": "Rework \u003clogin\u003e \u0026 co",
+    "intent": "why",
+    "methodology": "sdlc",
+    "namespace": "alm",
+    "parentId": "c0",
+    "ownerOrg": "ORG-A",
+    "projectId": "PROJ-1",
+    "goal": "release",
+    "status": "active",
+    "baselineId": "b1",
+    "branch": "chg-c1",
+    "resultBaselineId": "b2",
+    "data": {
+      "criticality": "C2",
+      "n": 1.5
+    },
+    "items": null,
+    "createdAt": "2026-03-04T05:06:07.12Z"
+  },
+  "entries": [
+    {
+      "seq": 1,
+      "id": "r1",
+      "change": "c/1 x",
+      "type": "journal.action",
+      "process": "p1",
+      "execution": "r1",
+      "subject": "rate",
+      "by": "analyst",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "action": "rate",
+        "actionKind": "llm",
+        "activityRef": "proc/step",
+        "agent": "analyst",
+        "boardAfter": 0,
+        "boardBefore": 0,
+        "changeId": "c/1 x",
+        "endedAt": "2026-03-04T05:06:08.12Z",
+        "error": "oops",
+        "id": "r1",
+        "kind": "action",
+        "methodology": "sdlc",
+        "methodologyVersion": "0.9.0",
+        "modelCalls": [
+          {
+            "durationMs": 0,
+            "inputTokens": 0,
+            "model": "m",
+            "outputTokens": 0,
+            "provider": "anthropic"
+          },
+          {
+            "durationMs": 0,
+            "inputTokens": 0,
+            "outputTokens": 0
+          }
+        ],
+        "parentProcessId": "p0",
+        "planner": "goap",
+        "processId": "p1",
+        "reads": [
+          {
+            "id": "n1",
+            "version": 1
+          }
+        ],
+        "seq": 0,
+        "startedAt": "2026-03-04T05:06:07.12Z",
+        "status": "done",
+        "step": 0,
+        "toolCalls": [
+          {
+            "durationMs": 0,
+            "name": "goap-graph/read"
+          }
+        ],
+        "traceId": "tr"
+      }
+    },
+    {
+      "seq": 2,
+      "id": "r1/0",
+      "change": "c/1 x",
+      "type": "model.call",
+      "process": "p1",
+      "execution": "r1",
+      "subject": "0",
+      "by": "analyst",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "call": 0,
+        "response": "ok",
+        "step": 0,
+        "system": "sys"
+      }
+    },
+    {
+      "seq": 3,
+      "id": "r2",
+      "change": "c/1 x",
+      "type": "journal.action",
+      "process": "p1",
+      "execution": "r2",
+      "subject": "confirm",
+      "by": "alice",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "action": "confirm",
+        "actor": "alice",
+        "boardAfter": 0,
+        "boardBefore": 0,
+        "changeId": "c/1 x",
+        "endedAt": "0001-01-01T00:00:00Z",
+        "id": "r2",
+        "kind": "action",
+        "methodology": "sdlc",
+        "processId": "p1",
+        "seq": 0,
+        "startedAt": "2026-03-04T05:06:07.12Z",
+        "step": 0
+      }
+    },
+    {
+      "seq": 4,
+      "id": "h1",
+      "change": "c/1 x",
+      "type": "change.updated",
+      "subject": "title",
+      "by": "bob",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "fields": {
+          "title": {
+            "from": "a",
+            "to": "b"
+          }
+        }
+      }
+    },
+    {
+      "seq": 5,
+      "id": "it1",
+      "change": "c/1 x",
+      "type": "fact.artifact",
+      "execution": "r1",
+      "subject": "report",
+      "by": "bob",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "x": "\u003cy\u003e"
+        },
+        "derivedFrom": [
+          "it0"
+        ],
+        "execution": "r1",
+        "id": "it1",
+        "producedBy": "bob",
+        "status": "proposed",
+        "supersedes": [
+          "it00"
+        ],
+        "target": "report",
+        "type": "artifact"
+      }
+    },
+    {
+      "seq": 6,
+      "id": "it2",
+      "change": "c/1 x",
+      "type": "fact.transition",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "decision": "dp1"
+        },
+        "id": "it2",
+        "status": "proposed",
+        "type": "transition"
+      }
+    },
+    {
+      "seq": 7,
+      "id": "it3",
+      "change": "c/1 x",
+      "type": "fact.verification",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "by": "carol",
+          "impact": "i1",
+          "impacts": [
+            "i1",
+            "i2"
+          ],
+          "oracle": "tests",
+          "state": "verified"
+        },
+        "id": "it3",
+        "status": "proposed",
+        "type": "verification"
+      }
+    },
+    {
+      "seq": 8,
+      "id": "it4",
+      "change": "c/1 x",
+      "type": "fact.derogation",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "expires": "2030-01-01T00:00:00Z",
+          "key": "DRG-1",
+          "rule": "r",
+          "signatory": "alice",
+          "status": "open",
+          "target": "REQ-1"
+        },
+        "id": "it4",
+        "status": "proposed",
+        "type": "derogation"
+      }
+    },
+    {
+      "seq": 9,
+      "id": "it5",
+      "change": "c/1 x",
+      "type": "fact.review",
+      "by": "alice",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "data": {
+          "by": "alice",
+          "comment": "fine",
+          "entries": [
+            {
+              "impact": "i1",
+              "outcome": "accept"
+            }
+          ],
+          "key": "REV-1",
+          "status": "submitted",
+          "submittedAt": "2026-03-04T05:06:07.12Z"
+        },
+        "id": "it5",
+        "producedBy": "alice",
+        "status": "proposed",
+        "type": "review"
+      }
+    },
+    {
+      "seq": 10,
+      "id": "it6",
+      "change": "c/1 x",
+      "type": "fact.artifact",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "createdAt": "2026-03-04T05:06:07.12Z",
+        "decision": {
+          "accept": true,
+          "comment": "ok",
+          "item": "it1"
+        },
+        "id": "it6",
+        "status": "proposed",
+        "type": "artifact"
+      }
+    },
+    {
+      "seq": 11,
+      "id": "v1",
+      "change": "c/1 x",
+      "type": "impact.proposed",
+      "execution": "r1",
+      "subject": "i1",
+      "by": "bob",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "bob",
+        "changeId": "c/1 x",
+        "execution": "r1",
+        "id": "v1",
+        "impactId": "i1",
+        "op": "proposed",
+        "seq": 0,
+        "state": {
+          "createdAt": "0001-01-01T00:00:00Z",
+          "derivedFrom": [
+            "it1"
+          ],
+          "id": "i1",
+          "intent": "modified",
+          "items": [
+            "it2"
+          ],
+          "key": "REQ-1",
+          "pre": {
+            "id": "n1",
+            "version": 1
+          },
+          "rationale": "because",
+          "review": "",
+          "type": "alm@Requirement"
+        }
+      }
+    },
+    {
+      "seq": 12,
+      "id": "v2",
+      "change": "c/1 x",
+      "type": "impact.rebased",
+      "subject": "i1",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "changeId": "c/1 x",
+        "id": "v2",
+        "impactId": "i1",
+        "op": "rebased",
+        "pre": {
+          "id": "n1",
+          "version": 2
+        },
+        "seq": 0
+      }
+    },
+    {
+      "seq": 13,
+      "id": "v3",
+      "change": "c/1 x",
+      "type": "impact.checkedOut",
+      "subject": "i1",
+      "by": "bob",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "bob",
+        "changeId": "c/1 x",
+        "draft": {
+          "changeId": "",
+          "impactId": "",
+          "key": "REQ-1",
+          "node": "n1",
+          "type": "alm@Requirement"
+        },
+        "id": "v3",
+        "impactId": "i1",
+        "op": "checkedOut",
+        "post": {
+          "id": "n1",
+          "version": 0
+        },
+        "seq": 0
+      }
+    },
+    {
+      "seq": 14,
+      "id": "v3b",
+      "change": "c/1 x",
+      "type": "impact.transitioned",
+      "subject": "i1",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "changeId": "c/1 x",
+        "id": "v3b",
+        "impactId": "i1",
+        "op": "transitioned",
+        "post": {
+          "id": "n1",
+          "version": 0
+        },
+        "seq": 0
+      }
+    },
+    {
+      "seq": 15,
+      "id": "v4",
+      "change": "c/1 x",
+      "type": "impact.reviewed",
+      "subject": "i1",
+      "by": "alice",
+      "at": "2026-03-04T05:06:07.12Z",
+      "causation": "it5",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "alice",
+        "causation": "it5",
+        "changeId": "c/1 x",
+        "id": "v4",
+        "impactId": "i1",
+        "op": "reviewed",
+        "review": {
+          "at": "2026-03-04T05:06:07.12Z",
+          "by": "alice",
+          "comment": "fine",
+          "reviewId": "REV-1",
+          "status": "accepted"
+        },
+        "seq": 0
+      }
+    },
+    {
+      "seq": 16,
+      "id": "v5",
+      "change": "c/1 x",
+      "type": "impact.landed",
+      "subject": "i1",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "baseline": "b2",
+        "changeId": "c/1 x",
+        "id": "v5",
+        "impactId": "i1",
+        "landed": {
+          "id": "n1",
+          "version": 3
+        },
+        "op": "landed",
+        "seq": 0
+      }
+    },
+    {
+      "seq": 17,
+      "id": "v6",
+      "change": "c/1 x",
+      "type": "impact.created",
+      "subject": "i9",
+      "by": "bob",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "bob",
+        "changeId": "c/1 x",
+        "draft": {
+          "changeId": "",
+          "impactId": "",
+          "key": "REQ-9",
+          "node": "n9",
+          "type": "alm@Requirement"
+        },
+        "id": "v6",
+        "impactId": "i9",
+        "op": "created",
+        "patch": {
+          "origins": [
+            {
+              "id": "n5",
+              "key": "REQ-5",
+              "version": 2
+            }
+          ]
+        },
+        "post": {
+          "id": "n9",
+          "version": 0
+        },
+        "seq": 0,
+        "state": {
+          "createdAt": "0001-01-01T00:00:00Z",
+          "id": "i9",
+          "intent": "created",
+          "key": "REQ-9",
+          "rationale": "",
+          "review": "",
+          "type": "alm@Requirement"
+        }
+      }
+    },
+    {
+      "seq": 18,
+      "id": "v7",
+      "change": "c/1 x",
+      "type": "impact.adopted",
+      "flow": "f1",
+      "by": "bob",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "bob",
+        "changeId": "c/1 x",
+        "flow": "f1",
+        "id": "v7",
+        "op": "adopted",
+        "seq": 0,
+        "stale": [
+          "e0",
+          "e1"
+        ]
+      }
+    },
+    {
+      "seq": 19,
+      "id": "v8",
+      "change": "c/1 x",
+      "type": "impact.discarded",
+      "subject": "i9",
+      "by": "bob",
+      "at": "2026-03-04T05:06:07.12Z",
+      "payload": {
+        "at": "2026-03-04T05:06:07.12Z",
+        "by": "bob",
+        "changeId": "c/1 x",
+        "id": "v8",
+        "impactId": "i9",
+        "op": "discarded",
+        "seq": 0
+      }
+    }
+  ]
+}

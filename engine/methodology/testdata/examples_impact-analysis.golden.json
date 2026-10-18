@@ -1,0 +1,203 @@
+{
+ "actions": [
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Apply the validated change to the repository (creates the resulting baseline)",
+   "effects": {
+    "applied": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "apply_change",
+   "narrowed": false,
+   "pre": {
+    "reviewed": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 2,
+   "description": "Identify the elements directly impacted by the change intent",
+   "effects": {
+    "has_impacts": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "identify_impacts",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Propagate impacts to linked elements (tests, components, derived requirements)",
+   "effects": {
+    "propagated": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "builtin",
+   "lifted": null,
+   "name": "propagate_impacts",
+   "narrowed": false,
+   "pre": {
+    "has_impacts": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 3,
+   "description": "Propose a new version of each impacted requirement",
+   "effects": {
+    "expect:propose_requirement_updates": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "propose_requirement_updates",
+   "narrowed": false,
+   "pre": {
+    "propagated": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 3,
+   "description": "Create a new test case for each impacted requirement",
+   "effects": {
+    "expect:propose_tests": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "propose_tests",
+   "narrowed": false,
+   "pre": {
+    "expect:propose_requirement_updates": true,
+    "propagated": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 2,
+   "description": "Review of the change impacts (accept / reject)",
+   "effects": {
+    "reviewed": true
+   },
+   "implements": "",
+   "instructions": "Accept or reject each change impact (impacts, updated requirements, new tests); a comment is required.",
+   "kind": "human",
+   "lifted": null,
+   "name": "review_proposals",
+   "narrowed": false,
+   "pre": {
+    "expect:propose_requirement_updates": true,
+    "expect:propose_tests": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 8,
+   "description": "Manual selection of impacted elements (fallback if automatic analysis is not possible)",
+   "effects": {
+    "has_impacts": true
+   },
+   "implements": "",
+   "instructions": "Indicate the elements of the repository directly impacted by the change, and why.",
+   "kind": "human",
+   "lifted": null,
+   "name": "select_impacts",
+   "narrowed": false,
+   "pre": null,
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  },
+  {
+   "call": null,
+   "cost": 1,
+   "description": "Write the impact report",
+   "effects": {
+    "reported": true
+   },
+   "implements": "",
+   "instructions": "",
+   "kind": "llm",
+   "lifted": null,
+   "name": "write_report",
+   "narrowed": false,
+   "pre": {
+    "propagated": true
+   },
+   "scopedEffects": null,
+   "scopedPre": null,
+   "step": "",
+   "where": ""
+  }
+ ],
+ "agents": [
+  {
+   "actions": null,
+   "description": "Impact analysis of a change on a requirements repository: identification of impacted elements, propagation along traceability links, update proposals and human review.\n",
+   "goals": null,
+   "name": "default",
+   "planner": "goap",
+   "process": "",
+   "role": ""
+  }
+ ],
+ "auto": null,
+ "conditions": [
+  "applied",
+  "expect:propose_requirement_updates",
+  "expect:propose_tests",
+  "has_impacts",
+  "propagated",
+  "reported",
+  "reviewed"
+ ],
+ "graphs": {},
+ "issues": null,
+ "levels": {},
+ "reactions": null,
+ "stepDependencies": {},
+ "strictIssues": null,
+ "view": {
+  "methodology": "impact-analysis",
+  "version": "1.2.0",
+  "goal": "deliver_change",
+  "processes": []
+ }
+}
