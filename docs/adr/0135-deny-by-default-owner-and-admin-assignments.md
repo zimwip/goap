@@ -1,4 +1,4 @@
-# ADR 0135 — Deny by default; owner and admin flags on Assignments
+# ADR 0135 — Deny by default; project owners and administrators
 
 **Status**: proposed · **Date**: 2026-10 ·
 Revises ADR 0020 (access control) and ADR 0043 (project-scoped roles); keeps ADR 0046 / 0047 (platform roles,
@@ -55,35 +55,50 @@ by a rule, or the platform administrator floor. Consequences:
 Platform administration is unchanged: the platform role `admin` (ADR 0047), granted by an Assignment naming no
 project, checked by the floor. The **project** Assignment (`assigns_project` set) gains two boolean attributes,
 `owner` and `admin` (default false); a platform Assignment carrying either is refused. Roles stay what the
-methodologies declare; the rights on the project are flags of the grant.
+methodologies declare; the rights on the project are flags of the grant. **The owner possesses the project, the
+administrator administers it for them**: the owner holds every right of the administrator, and the rights that
+come from possession.
 
-| Flag on a project Assignment | Grants |
+| Flag on a project Assignment | Grants, on the project and its sub-projects (never on the platform) |
 |---|---|
-| `admin` | **administrator of the project** and its sub-projects (not of the platform): every action on a resource of that project chain, the management of its Assignments included (flags too) |
-| `owner` | **owner of the project** and its sub-projects: manages their Assignments (roles the project needs, `owner`), never `admin` |
+| `admin` | **administrator of the project**: every action on a resource of the project chain; manages the Assignments' roles (not their flags); creates and edits sub-projects |
+| `owner` | everything `admin` grants, and **possession**: sets and removes the `admin` and `owner` flags; stops the project (retires it through its lifecycle, `config` → `retired`), restores it, moves it in the project tree |
 
-- **Sub-projects.** A project administrator or owner creates sub-projects of a project in their chain and edits
-  them: the `adminOnly` gate of `ProjectUnit` asks `project:write` with the project its `project_part_of` names
-  (before and after the edit), allowed by `isProjectAdmin` and `isProjectOwner`. A sub-project inherits the
-  Assignments above it, so its creator keeps their flags there; moving a project out of the writer's chain, or
-  editing the project their own flag is held on, stays a platform administrator's.
-- **Never beyond the scope.** A project administrator or owner touches neither the platform resources
-  (methodologies, domains, policies, organisation units, adapters, models) nor a platform Assignment nor an
-  Assignment of a project outside their chain.
+- **Inherited, never taken.** The flags hold on the project the Assignment names and every project below it
+  (`ProjectChain`). Creating a sub-project makes nobody its owner: its owners are those of the projects above it,
+  until an owner sets the flag on an Assignment of the sub-project. An administrator who creates a sub-project
+  administers it through the flag they already hold above.
+- **Always an owner.** A project chain keeps at least one owner (an `owner` Assignment on it or above it, to a
+  unit or a user); `ProjectOwnerValidator`, next to `AdminFloorValidator`, refuses a commit that leaves a live
+  project with none, the root project aside (a platform administrator owns it). A platform administrator
+  remains above every project: it sets an owner on an orphaned one.
+- **Never beyond the scope.** An owner or an administrator touches neither the platform resources (methodologies,
+  domains, policies, organisation units, adapters, models), nor a platform Assignment, nor an Assignment or a
+  project outside their chain, nor the project their own flag is held on in a way that removes it from their
+  chain (moving it elsewhere is a platform administrator's).
 - **Resolution.** `Authorize` sets `Principal.ProjectAdmin` / `ProjectOwner` when an Assignment of the subject's
-  chain carrying the flag covers the resource's project chain (resource-dependent, like the project roles).
-  Casbin functions `isProjectAdmin(r.sub)`, `isProjectOwner(r.sub)`.
+  chain carrying the flag covers the resource's project chain (resource-dependent, like the project roles); the
+  owner flag implies the admin flag. Casbin functions `isProjectAdmin(r.sub)`, `isProjectOwner(r.sub)`.
 - **Floor.** Unchanged: `hasRole(r.sub, "admin")`, the platform role. The project flags are default policies: a
   stored policy may narrow them, never a platform administrator.
-- **Managing Assignments.** The `adminOnly` gate of `Assignment` asks `assignment:write` with the Assignment's
-  project (before and after the edit). Default rules: the platform `admin`; `isProjectAdmin`; `isProjectOwner` when the
-  Assignment carries no `admin`. A graph validator (`AssignmentScopeValidator`, next to `AdminFloorValidator`)
-  checks the final state at commit: the writer's flags cover the project, `owner` never on a platform Assignment,
-  `admin` only by an administrator of the project or of the platform.
+- **Assignments.** The `adminOnly` gate of `Assignment` asks `assignment:write` with the Assignment's project;
+  `assignment:flag` when the edit sets or removes `owner` / `admin`. Default rules: `assignment:write` for
+  `isProjectAdmin`, `assignment:flag` for `isProjectOwner` (the platform administrator through the floor).
+- **Projects.** The `adminOnly` gate of `ProjectUnit` asks `project:create` / `project:write` with the project
+  its `project_part_of` names (`isProjectAdmin`); `project:retire` (a move to `retired` or back) and
+  `project:move` (a new `project_part_of`, asked on the old and the new parent) for `isProjectOwner`. The project
+  itself is checked on its parent's chain, so a flag held on a project does not let its holder edit that same
+  project's place.
+- **Checked at commit.** `ProjectScopeValidator` (graph validator, like `AdminFloorValidator`) checks the final
+  state of a change touching Assignments or projects as the person committing it: every Assignment and project
+  written is in the writer's chain, every flag set or removed by an owner of it, no flag on a platform Assignment.
+  The handler gate is the early refusal, the validator the guarantee (a personal change, the settings, `goap-change`
+  and the assistant all go through it).
 - The platform roles (`admin`, `reader`), `AdminFloorValidator` and the first user's grant (ADR 0040) are
   unchanged.
-- **Session.** `access.Session.can` gains `manageMembers` (per project) and `administerProject`; the
-  Assignments pane shows the two flags as checkboxes, offered by what the session allows.
+- **Session.** `access.Session.can` gains, per project of the session, `administerProject` and `ownProject`;
+  the Assignments pane offers the flags and the role editing by what the session allows, the Projects tab the
+  creation, retirement and move of projects.
 
 ## Consequences
 
@@ -98,8 +113,9 @@ methodologies declare; the rights on the project are flags of the grant.
 
 1. `authz`: nil refuses, `AllowAll`, `isProjectAdmin` / `isProjectOwner`, the new defaults.
 2. `lib/access`: the flags on `Assignment` (domain `organisation` and its attributes), `Authorize`,
-   `AssignmentScopeValidator`, session hints.
-3. `graphsvc`: authorized reads, the `assignment:write` and `project:write` gates.
+   session hints.
+3. `graphsvc`: authorized reads, the `assignment:*` and `project:*` gates; `ProjectOwnerValidator`,
+   `ProjectScopeValidator`.
 4. `mayRun` / `OperationRoles` with `"*"`; the shipped methodologies declare their roles.
 5. Gateway: token roles, dev-token.
 6. Web: the Assignments pane, the session hints.
