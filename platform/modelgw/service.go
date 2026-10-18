@@ -15,6 +15,7 @@ import (
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/lib/llmcfg"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Errors of the policy applied to completions and of the administration.
@@ -52,6 +53,8 @@ type Service struct {
 	CostTTL, CostBackoff time.Duration
 
 	cost   costBook
+	relay  *outbox.Relay  // the outbox's (Emit), nil: no event
+	drains sync.WaitGroup // the deliveries in flight
 	mu     sync.RWMutex
 	snap   *llmcfg.Snapshot
 	active map[string]string // provider -> "" (loaded) | reason it is not
@@ -224,7 +227,7 @@ func (s *Service) complete(ctx context.Context, req llm.Request, calibration boo
 	rec.request(req.System, req.Messages)
 	t, m, period, err := s.admit(ctx, req.Model, calibration)
 	if err != nil {
-		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
+		rec.refuse(ctx, t.Provider, t.Model, err)
 		return llm.Response{}, err
 	}
 	// the global behaviours join the instructions here, after the admission and before the provider (ADR 0093); req is
@@ -256,7 +259,7 @@ func (s *Service) Embed(ctx context.Context, req llm.EmbedRequest) (llm.EmbedRes
 	rec.requestEmbed(req.Texts)
 	t, m, period, err := s.admit(ctx, req.Model, false)
 	if err != nil {
-		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
+		rec.refuse(ctx, t.Provider, t.Model, err)
 		return llm.EmbedResponse{}, err
 	}
 	resp, err := s.Router.Embed(ctx, req)
@@ -303,7 +306,7 @@ func (s *Service) admitModel(ctx context.Context, t Target, who authz.Principal,
 			return m, period, err
 		}
 		if used >= m.QuotaTokens {
-			return m, period, fmt.Errorf("%w: %s/%s used %d of %d tokens (%s)", ErrQuotaExceeded, t.Provider, t.Model, used, m.QuotaTokens, m.QuotaPeriod)
+			return m, period, &quotaError{provider: t.Provider, model: t.Model, used: used, limit: m.QuotaTokens, period: m.QuotaPeriod}
 		}
 	}
 	return m, period, nil

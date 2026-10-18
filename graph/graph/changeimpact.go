@@ -81,7 +81,7 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		if err != nil {
 			return err
 		}
-		// the reference baseline is read for the nodes the impacts name, never whole (ADR 0136)
+		// the reference baseline is read for the nodes the impacts name, never whole (ADR 0137)
 		b, err := headerOf(ctx, tx, c.BaselineID)
 		if err != nil {
 			return err

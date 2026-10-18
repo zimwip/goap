@@ -32,7 +32,7 @@ func commitOn(t *testing.T, g *Graph, branch string, from domain.BaselineID, edi
 	if err != nil {
 		t.Fatal(err)
 	}
-	// a commit returns the header of its baseline (ADR 0136): its state is read apart
+	// a commit returns the header of its baseline (ADR 0137): its state is read apart
 	return must[domain.Baseline](t)(g.Baseline(context.Background(), res.Baseline.ID))
 }
 

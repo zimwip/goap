@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // The errors of the graph are the ones of its contract (pkg/graphapi).
@@ -51,11 +52,11 @@ type Tx interface {
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// BaselineHeader reads a baseline without its state (Nodes nil).
 	BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
-	// BaselineVersions reads the versions some nodes have in a baseline, the nodes it does not hold left out (ADR 0136).
+	// BaselineVersions reads the versions some nodes have in a baseline, the nodes it does not hold left out (ADR 0137).
 	// A store reads a materialised baseline (Gap 0); through the guard of the graph any baseline: the nearest
 	// materialised one before it with what the changes in between did to those nodes.
 	BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
-	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0136).
+	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
 	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
 	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
@@ -91,6 +92,9 @@ type Tx interface {
 	// AppendLog appends an entry to the log of its change (ADR 0030: facts, journal records and impact events in
 	// one order) and returns it with its Seq. The log is insert-only: nothing updates or deletes an entry.
 	AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error)
+	// AppendOutbox writes the events of the transaction in the outbox of the graph (ADR 0136), published once it
+	// commits.
+	AppendOutbox(ctx context.Context, msgs []outbox.Message) error
 	// Log returns the entries matching f, in the order of the log.
 	Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error)
 	// LogCounts counts the entries matching f by type (the limit and the position aside).

@@ -6,13 +6,17 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/stdlib"
 
+	"github.com/zimwip/goap/contracts/authz"
+
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/domains/builtin"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/pgtest"
 	"github.com/zimwip/goap/lib/platform"
 )
@@ -157,4 +161,45 @@ func canon(t *testing.T, v any) string {
 	}
 	b, _ = json.Marshal(x) // map keys sorted
 	return string(b)
+}
+
+// The registry writes its events with the versions they are about (ADR 0136): in order, none for a refused write.
+func TestDomainEventsGoThroughTheOutbox(t *testing.T) {
+	for name, open := range domainStores(t) {
+		if name == "postgres" && os.Getenv("GOAP_TEST_PG_DSN") == "" {
+			continue
+		}
+		t.Run(name, func(t *testing.T) {
+			ctx := authz.With(context.Background(), authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
+			s := &Service{Store: open(t)}
+			var got []string
+			relay := s.Emit(outbox.SinkFunc(func(_ context.Context, m outbox.Message) error {
+				var ev DomainEvent
+				if err := json.Unmarshal(m.Data, &ev); err != nil {
+					return err
+				}
+				got = append(got, m.Subject+" "+ev.Name+"@"+ev.Version+" "+ev.Status)
+				return nil
+			}))
+			if _, _, err := s.ImportDomain(ctx, []byte("name: ev\nversion: \"1\"\nnodeTypes: [{name: A}]\n"), false); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.PublishDomain(ctx, "ev", "1"); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.PublishDomain(ctx, "ev", "1"); err == nil {
+				t.Fatal("a published version is published once")
+			}
+			if err := s.DeleteDomain(ctx, "ev", "1"); err != nil {
+				t.Fatal(err)
+			}
+			if err := relay.Drain(ctx); err != nil {
+				t.Fatal(err)
+			}
+			want := []string{"goap.registry.domain.saved ev@1 draft", "goap.registry.domain.published ev@1 published", "goap.registry.domain.deleted ev@1 published"}
+			if !slices.Equal(got, want) {
+				t.Fatalf("events %v, want %v", got, want)
+			}
+		})
+	}
 }

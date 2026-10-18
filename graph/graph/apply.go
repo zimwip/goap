@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
 	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/contracts/operations"
 )
@@ -38,7 +39,7 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 }
 
 // apply is Apply; without whole the baseline is returned without its state (Commit: reading it costs the size of the
-// namespace, ADR 0136).
+// namespace, ADR 0137).
 func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName string, whole bool) (domain.Baseline, error) {
 	var result domain.Baseline
 	if _, err := g.commitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
@@ -77,7 +78,7 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 	return g.Baseline(ctx, result.ID)
 }
 
-// commitChange is CommitChange, its baseline returned without its state (ADR 0136).
+// commitChange is CommitChange, its baseline returned without its state (ADR 0137).
 func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return result, err
@@ -95,8 +96,14 @@ func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineNa
 				return err
 			}
 		}
-		result, err = g.commitOnBranch(ctx, tx, id, baselineName)
-		return err
+		if result, err = g.commitOnBranch(ctx, tx, id, baselineName); err != nil {
+			return err
+		}
+		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		g.raiseBaseline(ctx, tx, events.ChangeCommitted, c, result)
+		return nil
 	})
 	return result, err
 }
@@ -144,7 +151,7 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 		}
 		parentBaseline = head.ID
 	}
-	// the state it builds on is read node by node, never whole (ADR 0136)
+	// the state it builds on is read node by node, never whole (ADR 0137)
 	return &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: newStateView(ctx, tx, parentBaseline)}, parentBaseline, nil
 }
 

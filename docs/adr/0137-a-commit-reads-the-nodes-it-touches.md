@@ -1,4 +1,4 @@
-# ADR 0136 — A commit reads the nodes it touches, never the whole state
+# ADR 0137 — A commit reads the nodes it touches, never the whole state
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0032 (baselines as deltas with checkpoints), 0056
 (a baseline is the state a change leaves; headers computed from the changes), 0102 (commit on the change's branch, merge)

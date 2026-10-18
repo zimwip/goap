@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/lib/adapter"
 	"github.com/zimwip/goap/lib/dsl"
 	"github.com/zimwip/goap/lib/modeltoken"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/pbconv"
 )
 
@@ -40,6 +41,8 @@ type Service struct {
 	// Claude coding agent) the gateway's Anthropic endpoint and a token of the call, so its model calls are rows of the
 	// ledger (ADR 0123 §6); nil: such a connector calls the model with the adapter's key, outside the ledger.
 	Models *ModelEndpoint
+
+	relay *outbox.Relay
 }
 
 // ModelEndpoint is the model gateway as the hub hands it to a connector (ADR 0123 §6).
@@ -94,7 +97,17 @@ func (s *Service) RegisterConnector(ctx context.Context, info *connectorv1.Conne
 			return 0, fmt.Errorf("connector %s: an operation has no name: %w", info.Id, mcp.ErrInvalid)
 		}
 	}
-	return s.lease(), s.Store.SaveConnector(ctx, ConnectorReg{Info: info, Endpoint: endpoint, LastSeen: s.now()})
+	reg := ConnectorReg{Info: info, Endpoint: endpoint, LastSeen: s.now()}
+	if s.relay == nil {
+		return s.lease(), s.Store.SaveConnector(ctx, reg, nil)
+	}
+	if err := s.Store.SaveConnector(ctx, reg, func(prev ConnectorReg, found bool) ([]outbox.Message, error) {
+		return s.registrationEvents(ctx, prev, found, reg)
+	}); err != nil {
+		return 0, err
+	}
+	s.deliver(ctx)
+	return s.lease(), nil
 }
 
 // ConnectorView is a registration and whether it is live.
@@ -116,7 +129,9 @@ func (s *Service) Connectors(ctx context.Context) ([]ConnectorView, error) {
 	return out, nil
 }
 
-func (s *Service) live(r ConnectorReg) bool { return s.now().Sub(r.LastSeen) <= s.lease() }
+func (s *Service) live(r ConnectorReg) bool { return s.liveAt(r, s.now()) }
+
+func (s *Service) liveAt(r ConnectorReg, now time.Time) bool { return now.Sub(r.LastSeen) <= s.lease() }
 
 // adapterDef returns the definition an adapter instance refers to and checks that it implements the MCP
 // the instance says it does.

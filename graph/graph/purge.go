@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
 )
 
 // PurgeChange removes a change that landed nothing, with its whole log (ADR 0037). It is the exception to the
@@ -47,7 +48,11 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			branch = own.Name
 		}
 		g.draftStates.drop(id)
-		return tx.DeleteChange(ctx, id, c.Namespace, branch)
+		if err := tx.DeleteChange(ctx, id, c.Namespace, branch); err != nil {
+			return err
+		}
+		g.raise(ctx, tx, events.ChangePurged, c, nil)
+		return nil
 	})
 	return c, err
 }

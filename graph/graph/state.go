@@ -47,7 +47,7 @@ type stateCache struct {
 const stateCacheSize = 32
 
 // movesCacheSize bounds the moves kept: they are small (what one change did), and every read of a node in a baseline
-// kept as a header walks them (ADR 0136).
+// kept as a header walks them (ADR 0137).
 const movesCacheSize = 1024
 
 func (c *stateCache) get(id domain.BaselineID) (map[domain.NodeID]domain.Version, bool) {
@@ -119,7 +119,7 @@ func applyMoves(state, mv map[domain.NodeID]domain.Version) {
 	}
 }
 
-// moves returns what a baseline whose state is derived did to the state of its parent (ADR 0056, 0136): the version
+// moves returns what a baseline whose state is derived did to the state of its parent (ADR 0056, 0137): the version
 // each node it moved is at, 0 for a node it removed. A baseline never changes: they are cached.
 func (t *guardTx) moves(ctx context.Context, b domain.Baseline) (map[domain.NodeID]domain.Version, error) {
 	if mv, ok := t.g.moves.get(b.ID); ok {
@@ -244,7 +244,7 @@ func (t *guardTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Ba
 	return b, err
 }
 
-// BaselineVersions reads the versions some nodes have in a baseline (ADR 0136): in a materialised baseline, its
+// BaselineVersions reads the versions some nodes have in a baseline (ADR 0137): in a materialised baseline, its
 // entries for those nodes; in one kept as a header only, the entries of the nearest materialised baseline before it
 // (or a state cached, or the empty one) with what the changes in between did to them. Nothing is read of the other
 // nodes: what it costs follows the nodes asked and the baselines walked, not the size of the state.
@@ -310,7 +310,7 @@ func (t *guardTx) BaselineVersions(ctx context.Context, id domain.BaselineID, id
 }
 
 // putBaselineOver writes a baseline whose state is the state of over with delta put in (a version, 0: the node
-// left), without reading that state when the baseline is kept as a header only (ADR 0136): its state follows from
+// left), without reading that state when the baseline is kept as a header only (ADR 0137): its state follows from
 // what its change did, delta is that. A baseline to materialise (every MaterializeEvery along a chain, a state that is
 // not derived, over not its parent) is written whole, the state of over read then.
 func (t *guardTx) putBaselineOver(ctx context.Context, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {

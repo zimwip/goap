@@ -427,11 +427,19 @@ func (c *Client) ListChanges(ctx context.Context, f graphapi.ChangesFilter) ([]d
 func (c *Client) Commit(ctx context.Context, in graphapi.Commit) (graphapi.CommitResult, error) {
 	r, err := c.rpc.CommitEdits(ctx, connect.NewRequest(&graphv1.CommitEditsRequest{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent,
 		Methodology: in.Methodology, Data: pbconv.Struct(in.Data), BaselineId: string(in.Baseline), BaselineName: in.BaselineName, Edits: pbconv.EditsToPB(in.Edits),
-		OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID}))
+		OwnerOrg: in.OwnerOrg, ProjectId: in.ProjectID, Events: carriedToPB(in.Events)}))
 	if err != nil {
 		return graphapi.CommitResult{}, rpcerr.FromConnect(err)
 	}
 	return graphapi.CommitResult{Change: domain.ChangeID(r.Msg.ChangeId), Baseline: pbconv.BaselineFromPB(r.Msg.Baseline)}, nil
+}
+
+func carriedToPB(evs []graphapi.CarriedEvent) []*graphv1.CarriedEvent {
+	var out []*graphv1.CarriedEvent
+	for _, e := range evs {
+		out = append(out, &graphv1.CarriedEvent{Subject: e.Subject, Payload: e.Payload})
+	}
+	return out
 }
 
 func (c *Client) Blackboard(ctx context.Context, id domain.ChangeID) (domain.Blackboard, error) {

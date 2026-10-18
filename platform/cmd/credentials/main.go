@@ -10,6 +10,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/gen/goap/credentials/v1/credentialsv1connect"
 	"github.com/zimwip/goap/gateway/credsvc"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 )
@@ -30,7 +31,13 @@ func main() {
 	if err != nil || token == "" {
 		platform.Fatal(log, "credentials service token (GOAP_CREDENTIALS_TOKEN)", errors.Join(err, errors.New("not set")))
 	}
-	srv.Mount(credentialsv1connect.NewCredentialsServiceHandler(&credsvc.Handler{Service: &credsvc.Service{Store: store}, Token: token}, telemetry.HandlerOptions()...))
+	// its events (an account registered, a password changed, a session started or ended) go through its outbox to the
+	// bus (ADR 0136)
+	events := platform.OptionalEvents(ctx, log)
+	defer events.Close()
+	svc := &credsvc.Service{Store: store}
+	outbox.Start(ctx, svc.Emit(outbox.NATS(events)), log)
+	srv.Mount(credentialsv1connect.NewCredentialsServiceHandler(&credsvc.Handler{Service: svc, Token: token}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
 	}

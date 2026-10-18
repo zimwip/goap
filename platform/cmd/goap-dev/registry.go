@@ -5,8 +5,6 @@ import (
 	"os"
 
 	"github.com/zimwip/goap/contracts/authz"
-	"github.com/zimwip/goap/contracts/events"
-	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/graphsvc"
@@ -58,14 +56,12 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	// the one event stream of the web (ADR 0053): every publication of the platform also feeds it
 	bus := eventsvc.NewHub()
 	go bus.Run(e.ctx)
-	// publications reload the triggers; a domain published or archived reloads the type catalogue and checks the
-	// methodologies again, the ones it breaks being suspended (ADR 0125 §3)
-	reg.Events = engine.Publishers{bus, registryEvents{
-		methodology: func(ctx context.Context, name, version string) {
-			e.triggers.handle(ctx, engine.TriggerEvent{Type: events.MethodologyPublished, Methodology: name, Version: version})
-		},
-	}}
-	domains.Events = bus
+	// the registries' events go through an outbox (ADR 0136): the methodologies' ride on the graph commits that store
+	// them (delivered by the graph's relay, buildPlatform), the domains' through the domain registry's own; suspensions,
+	// recomputed rather than stored, are published directly. A domain published or archived reloads the type catalogue
+	// and checks the methodologies again, the ones it breaks being suspended (ADR 0125 §3)
+	reg.Events = bus
+	e.emit(domains.Emit(busSink(bus)))
 	domains.Changed = func(ctx context.Context, r def.Record) {
 		if err := types.Reload(ctx); err != nil {
 			e.log.Error("type catalogue", "domain", r.Domain.Name, "err", err)

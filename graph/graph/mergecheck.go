@@ -111,7 +111,7 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 		for _, cn := range impacts {
 			ids = append(ids, nodeOf(cn))
 		}
-		if head, err = versionsAt(ctx, tx, h.ID, ids); err != nil { // the nodes of the impacts only (ADR 0136)
+		if head, err = versionsAt(ctx, tx, h.ID, ids); err != nil { // the nodes of the impacts only (ADR 0137)
 			return bb, nil, err
 		}
 	}

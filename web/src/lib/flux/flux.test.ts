@@ -63,6 +63,8 @@ describe('keysOf', () => {
     expect(keysOf(ev({ kind: 'methodology', id: 'sdlc' }))).toEqual([keyOf.methodology('sdlc'), keyOf.methodologies]);
     expect(keysOf(ev({ kind: 'domain', id: 'alm' }))).toEqual([keyOf.domain('alm'), keyOf.domains]);
     expect(keysOf(ev({ kind: 'process', id: 'p' }))).toEqual([]);
+    expect(keysOf(ev({ kind: 'conversation', type: 'conversation.message_updated', id: 'CV1' }))).toEqual([keyOf.conversation('CV1')]);
+    expect(keysOf(ev({ kind: 'conversation', type: 'conversation.renamed', id: 'CV1' }))).toEqual([keyOf.conversation('CV1'), keyOf.conversations]);
   });
 });
 

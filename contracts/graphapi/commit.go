@@ -1,6 +1,7 @@
 package graphapi
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -53,6 +54,17 @@ type Commit struct {
 	// OwnerOrg is the unit holding the commit and ProjectID the project it acts in (ADR 0054); empty: the root unit.
 	// The project is required (ADR 0091).
 	OwnerOrg, ProjectID string
+	// Events are the writer's own events, stored in the graph's outbox in the transaction that lands the commit and
+	// delivered with the graph's (ADR 0136): what a service keeping its facts in the graph emits (the methodology
+	// registry). No commit landed (nothing to commit, a refusal): no event. A subject of the graph's own families is
+	// refused.
+	Events []CarriedEvent
+}
+
+// CarriedEvent is an event a writer owns that rides on a graph write (ADR 0136).
+type CarriedEvent struct {
+	Subject string
+	Payload json.RawMessage
 }
 
 // CommitResult is the outcome of a Commit.

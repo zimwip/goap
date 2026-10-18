@@ -163,7 +163,7 @@ func (d dialect) sqlBaselineEntries(id domain.BaselineID) (string, []any) {
 	return baselineEntriesSQL(d.ph(1)) + ` SELECT ` + d.id("node_id") + `, version FROM eff WHERE rn = 1 AND NOT removed`, []any{string(id)}
 }
 
-// sqlBaselineVersions reads the entries in effect in a baseline for some nodes (ADR 0136): the chain of the baseline is
+// sqlBaselineVersions reads the entries in effect in a baseline for some nodes (ADR 0137): the chain of the baseline is
 // walked as for the whole state, only the entries of those nodes are read (the primary key of baseline_entry).
 func (d dialect) sqlBaselineVersions(id domain.BaselineID, ids []domain.NodeID) (string, []any) {
 	in := `e.node_id IN (SELECT value FROM json_each(` + d.ph(2) + `))`
@@ -182,7 +182,7 @@ func (d dialect) sqlBaselineVersions(id domain.BaselineID, ids []domain.NodeID) 
 	return baselineEntriesWhereSQL(d.ph(1), in) + ` SELECT ` + d.id("node_id") + `, version FROM eff WHERE rn = 1 AND NOT removed`, []any{string(id), arg}
 }
 
-// sqlBranchNodeIDs reads the nodes a branch holds a version of: written on it or joined to it (ADR 0136).
+// sqlBranchNodeIDs reads the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
 func (d dialect) sqlBranchNodeIDs(branch string) (string, []any) {
 	return `SELECT ` + d.id("node_id") + ` FROM node_version WHERE branch = ` + d.ph(1) +
 		` UNION SELECT ` + d.id("node_id") + ` FROM node_branch WHERE branch = ` + d.ph(1), []any{domain.BranchOf(branch)}

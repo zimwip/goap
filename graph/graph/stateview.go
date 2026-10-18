@@ -8,7 +8,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 )
 
-// stateView is the state a baseline leaves as an operation builds on it (ADR 0136): the versions it reads are read
+// stateView is the state a baseline leaves as an operation builds on it (ADR 0137): the versions it reads are read
 // node by node from the baseline (Tx.BaselineVersions, the nearest materialised baseline with what the changes since
 // did), what it changes is kept apart (the delta the next baseline is written with), and the whole state is read only
 // for a question about every node (all).
@@ -98,7 +98,7 @@ func versionsAt(ctx context.Context, tx Tx, at domain.BaselineID, ids []domain.N
 	return tx.BaselineVersions(ctx, at, ids)
 }
 
-// branchHeadHeader returns the head baseline of a branch without its state (ADR 0136); the empty state (no change
+// branchHeadHeader returns the head baseline of a branch without its state (ADR 0137); the empty state (no change
 // landed yet) has the empty id.
 func branchHeadHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
 	ns, n := domain.NamespaceOf(namespace), domain.BranchOf(name)

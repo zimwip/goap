@@ -2,17 +2,41 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 type recSink struct {
 	mu   sync.Mutex
 	subj []string
 	vals []any
+}
+
+// Deliver implements outbox.Sink: the payload decoded by its subject.
+func (r *recSink) Deliver(ctx context.Context, m outbox.Message) error {
+	var v any
+	switch {
+	case strings.HasPrefix(m.Subject, "goap.node."):
+		var ev domain.NodeEvent
+		_ = json.Unmarshal(m.Data, &ev)
+		v = ev
+	case strings.HasPrefix(m.Subject, "goap.baseline."):
+		var ev domain.BaselineEvent
+		_ = json.Unmarshal(m.Data, &ev)
+		v = ev
+	case strings.HasPrefix(m.Subject, "goap.change.") || strings.HasPrefix(m.Subject, "goap.changed."):
+		var ev domain.ChangeEvent
+		_ = json.Unmarshal(m.Data, &ev)
+		v = ev
+	default:
+		v = m.Data
+	}
+	return r.Publish(ctx, m.Subject, v)
 }
 
 func (r *recSink) Publish(_ context.Context, subject string, v any) error {

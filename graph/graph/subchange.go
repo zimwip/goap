@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
 )
 
 // requirement is a number of outgoing links of one type a node must have: what the parent of a structure (ADR 0054)
@@ -370,6 +371,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err := tx.PutChange(ctx, sub); err != nil {
 				return err
 			}
+			g.raise(ctx, tx, events.ChangeCreated, sub, nil)
 			created = append(created, sub)
 		}
 		return nil

@@ -75,6 +75,7 @@ func (g *Graph) integrate(ctx context.Context, tx Tx, c domain.Change, own domai
 	if err := g.land(ctx, tx, c, own, res.Change.ID, res.Baseline.ID); err != nil {
 		return c, err
 	}
+	g.raiseApplied(ctx, tx, c, res.Baseline)
 	return c, tx.PutChange(ctx, c)
 }
 
@@ -229,7 +230,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	// what the branch changed since its fork joins the target: the versions of its head baseline (a rejected or
 	// replaced version stays behind), and the tombstones of the nodes it retired; only a node the branch holds a version
-	// of can differ, the states are read for those (ADR 0136)
+	// of can differ, the states are read for those (ADR 0137)
 	target := domain.BranchOf(own.Parent)
 	ids, err := tx.BranchNodeIDs(ctx, own.Name)
 	if err != nil {
@@ -288,6 +289,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	if err := g.land(ctx, tx, c, own, c.ID, res.ID); err != nil {
 		return false, err
 	}
+	g.raiseApplied(ctx, tx, c, res)
 	return true, tx.PutChange(ctx, c)
 }
 

@@ -50,7 +50,7 @@ func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]d
 	for _, cn := range mainImpactsOf(c) {
 		held[nodeOf(cn)] = true
 	}
-	// only a node the branch holds a version of can differ from the fork (ADR 0136)
+	// only a node the branch holds a version of can differ from the fork (ADR 0137)
 	changed, err := tx.BranchNodeIDs(ctx, own.Name)
 	if err != nil {
 		return nil, nil, err
@@ -355,7 +355,7 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 		impactOf[nodeOf(cn)] = cn
 	}
 	// the nodes read are the ones the branch holds a version of (only those can differ from the fork) and the ones the
-	// impacts start from, never the whole states (ADR 0136)
+	// impacts start from, never the whole states (ADR 0137)
 	ids, err := tx.BranchNodeIDs(ctx, own.Name)
 	if err != nil {
 		return res, err
@@ -564,7 +564,7 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 	return
 }
 
-// states3 reads the versions of some nodes in three baselines (ADR 0136).
+// states3 reads the versions of some nodes in three baselines (ADR 0137).
 func states3(ctx context.Context, tx Tx, ids []domain.NodeID, a, b, c domain.BaselineID) ([3]map[domain.NodeID]domain.Version, error) {
 	var out [3]map[domain.NodeID]domain.Version
 	for i, at := range []domain.BaselineID{a, b, c} {
