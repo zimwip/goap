@@ -16,12 +16,8 @@ elements it references.
 
 ```bash
 # 1. Local, without docker: a single process, SQLite (.goap/goap.db), IDE included
-make devlocal                 # IDE + API on http://localhost:8080 (Go + Node required)
-make devlocal-reset           # start from an empty database (demo and methodologies re-imported)
-
-#    in-memory variant, hot reload of the IDE
-make dev                      # Connect API on http://localhost:8080
-make web                      # UI on http://localhost:5173 (separate terminal)
+make dev                      # IDE on http://localhost:5173, API on :8080, both reload on code change (Go + Node required)
+make dev-reset                # start from an empty database (demo and methodologies re-imported)
 
 # 2. Full stack: postgres, nats, vault, services, web
 ANTHROPIC_API_KEY=... make up # without a key: "fake" LLM provider

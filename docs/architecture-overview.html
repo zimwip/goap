@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap">
 <style>
-/* Layout: one reading column; a module map, a runtime diagram, a numbered run, a devlocal note. Module hues are reused everywhere a module appears. */
+/* Layout: one reading column; a module map, a runtime diagram, a numbered run, a local dev note. Module hues are reused everywhere a module appears. */
 :root {
   --bg: #f6f7f9; --surface: #ffffff; --fg: #1b2230; --muted: #5b6475; --line: #d5dae3; --wire: #7a8496;
   --contracts: #5a6478; --lib: #0f766e; --graph: #1d4ed8; --engine: #b45309; --mcp: #be185d; --gateway: #15803d; --platform: #6d28d9;
@@ -273,7 +273,7 @@ footer { font-size: 13px; color: var(--muted); }
         <tr data-binary="connector-workspace"><td><code>connector-workspace</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>workspace of a change (git, commands); standalone, not in compose</td></tr>
         <tr data-binary="connector-claude-coding-agent"><td><code>connector-claude-coding-agent</code></td><td><span class="chip m-mcp">mcp</span></td><td class="num">—</td><td>Claude Code sessions; their model calls go to modelgw <code>/anthropic</code> with a token the hub mints; standalone, not in compose</td></tr>
         <tr data-binary="goap-runner"><td><code>goap-runner</code></td><td><span class="chip m-engine">engine</span></td><td class="num">—</td><td>sandbox image the engine runs scripts in (make runner-image)</td></tr>
-        <tr data-binary="goap-dev"><td><code>goap-dev</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>every service in one process on SQLite: make dev, make devlocal</td></tr>
+        <tr data-binary="goap-dev"><td><code>goap-dev</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>every service in one process on SQLite: make dev</td></tr>
         <tr data-binary="goap-eval"><td><code>goap-eval</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>offline evaluation CLI (make eval)</td></tr>
         <tr data-binary="goap-opgen"><td><code>goap-opgen</code></td><td><span class="chip m-platform">platform</span></td><td class="num">—</td><td>generator of the operations catalogue (make generate)</td></tr>
       </tbody>
@@ -294,10 +294,10 @@ footer { font-size: 13px; color: var(--muted); }
 
   <section class="two">
     <div class="note">
-      <h3>devlocal: one process</h3>
+      <h3>make dev: one process</h3>
       <p><code>goap-dev</code> composes every service in process on SQLite (<code>.goap/goap.db</code>): no NATS, no Docker. Air rebuilds it on each Go change and Vite serves the IDE.</p>
-      <pre>make devlocal          # :5173 IDE, :8080 API
-.\make.ps1 devlocal   # Windows</pre>
+      <pre>make dev               # :5173 IDE, :8080 API
+.\make.ps1 dev         # Windows</pre>
     </div>
     <div class="note">
       <h3>Working in the go.work</h3>
