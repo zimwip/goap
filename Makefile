@@ -96,8 +96,14 @@ claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)
 
-up: runner-image ## start the docker compose stack
+up: runner-image ## start the docker compose stack, then print how to reach its database (DBeaver)
 	$(COMPOSE) up --build -d
+	@echo
+	@echo "PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):"
+	@echo "  host localhost, port 5432, database goap, user goap, password goap"
+	@echo "  JDBC URL: jdbc:postgresql://localhost:5432/goap"
+	@echo "  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials),"
+	@echo "  each also reachable as its own role, password = name (e.g. graph / graph)"
 
 down: ## stop the docker compose stack
 	$(COMPOSE) down
