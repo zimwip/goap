@@ -123,6 +123,21 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg BaselineEntries", pg, q, a, entries("$1")+` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1"})
 	q, a = lite.sqlBaselineEntries("b1")
 	check("sqlite BaselineEntries", lite, q, a, entries("?")+` SELECT node_id, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1"})
+	ids := []domain.NodeID{"n1", "n2"}
+	q, a = pg.sqlBaselineVersions("b1", ids)
+	check("pg BaselineVersions", pg, q, a, strings.Replace(entries("$1"), "e.baseline_id = c.id", "e.baseline_id = c.id WHERE e.node_id = ANY($2::uuid[])", 1)+
+		` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1", []string{"n1", "n2"}})
+	q, a = lite.sqlBaselineVersions("b1", ids)
+	check("sqlite BaselineVersions", lite, q, a, strings.Replace(entries("?"), "e.baseline_id = c.id", "e.baseline_id = c.id WHERE e.node_id IN (SELECT value FROM json_each(?))", 1)+
+		` SELECT node_id, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1", `["n1","n2"]`})
+	q, a = pg.sqlBaselineHeader("b1")
+	check("pg BaselineHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from::text, '') FROM baseline WHERE id = $1`, []any{"b1"})
+	q, a = lite.sqlBaselineHeader("b1")
+	check("sqlite BaselineHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from, '') FROM baseline WHERE id = ?`, []any{"b1"})
+	q, a = pg.sqlBranchNodeIDs("change-1")
+	check("pg BranchNodeIDs", pg, q, a, `SELECT node_id::text FROM node_version WHERE branch = $1 UNION SELECT node_id::text FROM node_branch WHERE branch = $1`, []any{"change-1"})
+	q, a = lite.sqlBranchNodeIDs("change-1")
+	check("sqlite BranchNodeIDs", lite, q, a, `SELECT node_id FROM node_version WHERE branch = ? UNION SELECT node_id FROM node_branch WHERE branch = ?`, []any{"change-1"})
 
 	// Links
 	q, a = pg.sqlLinks(true, ref)
@@ -163,6 +178,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite Baselines", lite, q, a, `SELECT id FROM baseline WHERE namespace = ? ORDER BY created_at, rowid`, []any{"default"})
 	check("pg Changes", pg, pg.sqlChangeIDs(), nil, `SELECT id::text FROM change ORDER BY created_at`, nil)
 	check("sqlite Changes", lite, lite.sqlChangeIDs(), nil, `SELECT id FROM change ORDER BY created_at, rowid`, nil)
+	q, a = pg.sqlSubChangeIDs("c1")
+	check("pg SubChanges", pg, q, a, `SELECT id::text FROM change WHERE parent_id = $1 ORDER BY created_at`, []any{"c1"})
+	q, a = lite.sqlSubChangeIDs("c1")
+	check("sqlite SubChanges", lite, q, a, `SELECT id FROM change WHERE parent_id = ? ORDER BY created_at, rowid`, []any{"c1"})
 	check("pg OpenChangeIDs", pg, pg.sqlOpenChangeIDs(), nil, `SELECT id::text FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at`, nil)
 	check("sqlite OpenChangeIDs", lite, lite.sqlOpenChangeIDs(), nil, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`, nil)
 

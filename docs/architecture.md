@@ -53,7 +53,7 @@ of a versioned knowledge graph, whose other axis, the **domain axis**, describes
 | **Node** | Typed content element. Its type is a qualified reference `<namespace>@<NodeType>` (`alm@Requirement`, [ADR 0012](adr/0012-node-types.md)). Stable identity `NodeID` + readable `Key` (`REQ-12`). A version of a successor node records its lineage (`Origins`, [ADR 0077](adr/0077-impact-node-operations.md), "Merge and split"): the nodes it derives from, set on its first version; `Graph.DerivedNodes` answers the other way. |
 | **Version** | Each landed modification creates a new immutable version `NodeID@vN`. A version can be a *tombstone* (deletion). It is written **when its change lands** (commit), from the node's draft ([ADR 0079](adr/0079-drafts-and-versions-at-landing.md)): while a change works on a node it has no version, only a **draft** (per change impact and flow, derived from the change log, never stored). A written version is never edited. It is owned by an organisational unit, and its node was created in a project ([ADR 0054](adr/0054-structures-bootstrap-and-the-graph-guard.md)). |
 | **Link** | Typed relationship **from version to version**: `REQ-12@v3 ─satisfies→ NEED-4@v2`. A link does not automatically "follow" new versions: if `NEED-4` moves to v3, the link becomes **suspect** — this is the model's native impact signal. |
-| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace (the empty state before the first change) and produces a resulting baseline of that same namespace: a baseline is the state a change leaves, and a name given to it is a tag on that change ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)). It is stored as the entries that differ from its parent, whole every 50 baselines along a chain (a checkpoint, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)), and only every 16th baseline of a chain stores its entries at all: the state after a change is computed from what the change did, its `landed` events or the versions it joined to the branch ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)). |
+| **Baseline** | Coherent set `{NodeID → Version}`, scoped to one namespace (every node in it belongs to that namespace): a "commit" of the graph. A baseline's links are those whose two endpoints are both in the baseline. Every modification starts from a reference baseline of its own namespace (the empty state before the first change) and produces a resulting baseline of that same namespace: a baseline is the state a change leaves, and a name given to it is a tag on that change ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)). It is stored as the entries that differ from its parent, whole every 50 baselines along a chain (a checkpoint, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)), and only every 16th baseline of a chain stores its entries at all: the state after a change is computed from what the change did, its `landed` events or the versions it joined to the branch ([ADR 0056](adr/0056-baselines-are-states-of-changes-names-are-tags.md)). A commit and a merge never read a state whole: they read the versions of the nodes they touch (`Tx.BaselineVersions`: the nearest materialised baseline for those nodes, then what the changes since did to them), find what a change's branch changed from the versions on that branch, and write a header from what the change did; only a baseline to materialise is written whole ([ADR 0137](adr/0137-a-commit-reads-the-nodes-it-touches.md)). |
 
 **Namespaces** ([ADR 0015](adr/0015-namespaces.md)): every node lives in a namespace, and a namespace is the content of
 one domain ([ADR 0013](adr/0013-domains.md)): `alm` (delivery), `organisation`, `platform` (MCPs, adapter definitions,
@@ -1217,6 +1217,29 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
   (warn from `telemetry.SlowRPC`, 1 s); the assistant logs `assistant phase` lines (`send`, `send.available`,
   `send.history`, `turn`, `turn.model` per round with `system_bytes` / `history_bytes`, `turn.tools`, `turn.tool`):
   the model call is the whole of a turn but a few milliseconds.
+
+- **Go runtime** of every service (`go.opentelemetry.io/contrib/instrumentation/runtime`: `go.memory.*`,
+  `go.goroutine.count`, GC); metrics are exported every 15 s, or every `OTEL_METRIC_EXPORT_INTERVAL` ms when set;
+- **profiles**: `GOAP_PPROF_ADDR` serves `net/http/pprof` on a listener of its own (`lib/platform`, any service), never on the
+  service's port.
+
+**Performance stack** (`make perf`, `.\make.ps1 perf`, `deploy/compose/perf.yml`, project `goap-perf`): the graph service alone
+on PostgreSQL (with the domain registry it serves), `goap-bench` (`platform/cmd/goap-bench`, `platform/bench`), the
+collector (`deploy/otel/collector-perf.yaml`: metrics only, the services sample no trace), Prometheus every 5 s
+(`deploy/prometheus/prometheus-perf.yml`, with `postgres-exporter`) and Grafana (http://localhost:3300, dashboard
+`deploy/grafana/dashboards/goap-perf.json`, provisioned in both stacks). `goap-bench` writes only through the API, as a client
+would (identity headers of `system:bench`, admin; or `-token` through the gateway), on the two axes: the **domain** (it publishes
+a generated domain `bench`, `bench@T000...` extending `bench@Item`, link `bench@relates`, through `ImportDomain`, a new version
+at each run and every `-domain-every` versions written) and the **change** (`-workers` writers on their own nodes, each change
+of `-edits` nodes, `-create` of them created with `-links` links, the others modified, `-hot` nodes taking `-hot-ratio` of the
+modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`, `ImpactNodeCreate` /
+`ImpactNodeCheckout` + `ImpactNodeUpdate`, `ImpactNodeReview` by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every
+`-probe` it measures the reads (`GetBranch`, `GetNode`, `ListNodeVersions` of a hot node, `ListNodeChanges`,
+`GetNodeNeighbourhood`, `ListBaselineNodes` by type and by text, `DiffBaselines`, `ListChanges`). It records `bench.op.duration`
+(by `op`, `outcome` ok / conflict / error), `bench.response.size` and the gauges `bench.versions`, `nodes`, `links`,
+`changes`, `domain.versions`, `domain.types`, `errors` (Prometheus `goap_bench_*`), and a CSV per run (`.goap/perf/<run>.csv`:
+one row per operation and window, the totals at its end). Runs add to the same graph (`make perf-run`, keys prefixed by the
+run) until `make perf-reset`.
 
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.

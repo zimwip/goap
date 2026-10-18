@@ -921,19 +921,15 @@ func (g *Graph) transitionOf(ctx context.Context, tx Tx, id domain.ChangeID, in 
 
 // viewTarget is the state of the namespace as an operation on a flow sees it: the head of the change branch (else the
 // reference baseline). The nodes the change holds a draft of are read through their drafts (draftReader).
-func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (map[domain.NodeID]domain.Version, error) {
-	b, err := branchHead(ctx, tx, w.c.Namespace, domain.BranchOf(w.c.Branch))
+func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (*stateView, error) {
+	b, err := branchHeadHeader(ctx, tx, w.c.Namespace, domain.BranchOf(w.c.Branch))
 	if errors.Is(err, ErrNotFound) || (err == nil && b.ID == "") {
-		b, err = tx.Baseline(ctx, w.c.BaselineID)
+		b, err = headerOf(ctx, tx, w.c.BaselineID)
 	}
 	if err != nil {
 		return nil, err
 	}
-	target := maps.Clone(b.Nodes)
-	if target == nil {
-		target = map[domain.NodeID]domain.Version{}
-	}
-	return target, nil
+	return newStateView(ctx, tx, b.ID), nil
 }
 
 // WithdrawImpact takes a change impact out of the change, at any time while the change is open (ADR 0076 §5b, ADR 0102):

@@ -46,6 +46,10 @@ type stateCache struct {
 
 const stateCacheSize = 32
 
+// movesCacheSize bounds the moves kept: they are small (what one change did), and every read of a node in a baseline
+// kept as a header walks them (ADR 0137).
+const movesCacheSize = 1024
+
 func (c *stateCache) get(id domain.BaselineID) (map[domain.NodeID]domain.Version, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -56,7 +60,28 @@ func (c *stateCache) get(id domain.BaselineID) (map[domain.NodeID]domain.Version
 	return maps.Clone(s), true
 }
 
+// lookup reads some nodes of a cached state, without copying it.
+func (c *stateCache) lookup(id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s, ok := c.m[id]
+	if !ok {
+		return nil, false
+	}
+	out := map[domain.NodeID]domain.Version{}
+	for _, n := range ids {
+		if v, ok := s[n]; ok {
+			out[n] = v
+		}
+	}
+	return out, true
+}
+
 func (c *stateCache) put(id domain.BaselineID, s map[domain.NodeID]domain.Version) {
+	c.putSized(id, s, stateCacheSize)
+}
+
+func (c *stateCache) putSized(id domain.BaselineID, s map[domain.NodeID]domain.Version, size int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.m == nil {
@@ -64,7 +89,7 @@ func (c *stateCache) put(id domain.BaselineID, s map[domain.NodeID]domain.Versio
 	}
 	if _, ok := c.m[id]; !ok {
 		c.order = append(c.order, id)
-		if len(c.order) > stateCacheSize {
+		if len(c.order) > size {
 			delete(c.m, c.order[0])
 			c.order = c.order[1:]
 		}
@@ -74,14 +99,51 @@ func (c *stateCache) put(id domain.BaselineID, s map[domain.NodeID]domain.Versio
 
 // step returns the state of a baseline kept as a header only, from the state of its parent.
 func (t *guardTx) step(ctx context.Context, b domain.Baseline, from map[domain.NodeID]domain.Version) (map[domain.NodeID]domain.Version, error) {
+	mv, err := t.moves(ctx, b)
+	if err != nil {
+		return nil, err
+	}
 	out := maps.Clone(from)
+	applyMoves(out, mv)
+	return out, nil
+}
+
+// applyMoves puts in a state what a baseline did to it (moves: a version, 0 for a node it removed).
+func applyMoves(state, mv map[domain.NodeID]domain.Version) {
+	for id, v := range mv {
+		if v == 0 {
+			delete(state, id)
+		} else {
+			state[id] = v
+		}
+	}
+}
+
+// moves returns what a baseline whose state is derived did to the state of its parent (ADR 0056, 0137): the version
+// each node it moved is at, 0 for a node it removed. A baseline never changes: they are cached.
+func (t *guardTx) moves(ctx context.Context, b domain.Baseline) (map[domain.NodeID]domain.Version, error) {
+	if mv, ok := t.g.moves.get(b.ID); ok {
+		return mv, nil
+	}
+	mv, err := t.readMoves(ctx, b)
+	if err != nil {
+		return nil, err
+	}
+	if !t.newBaselines[b.ID] { // one this transaction wrote may not have all its landed events yet
+		t.g.moves.putSized(b.ID, mv, movesCacheSize)
+	}
+	return mv, nil
+}
+
+func (t *guardTx) readMoves(ctx context.Context, b domain.Baseline) (map[domain.NodeID]domain.Version, error) {
+	out := map[domain.NodeID]domain.Version{}
 	put := func(ref domain.NodeRef) error {
 		n, err := t.Tx.Node(ctx, ref)
 		if err != nil {
 			return err
 		}
 		if n.Deleted {
-			delete(out, n.ID)
+			out[n.ID] = 0
 		} else {
 			out[n.ID] = n.Version
 		}
@@ -182,6 +244,123 @@ func (t *guardTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Ba
 	return b, err
 }
 
+// BaselineVersions reads the versions some nodes have in a baseline (ADR 0137): in a materialised baseline, its
+// entries for those nodes; in one kept as a header only, the entries of the nearest materialised baseline before it
+// (or a state cached, or the empty one) with what the changes in between did to them. Nothing is read of the other
+// nodes: what it costs follows the nodes asked and the baselines walked, not the size of the state.
+func (t *guardTx) BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	if id == "" || len(ids) == 0 {
+		return map[domain.NodeID]domain.Version{}, nil
+	}
+	if s, ok := t.g.states.lookup(id, ids); ok {
+		return s, nil
+	}
+	b, err := t.Tx.BaselineHeader(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if b.Gap == 0 {
+		return t.Tx.BaselineVersions(ctx, id, ids)
+	}
+	chain := []domain.Baseline{b}
+	var out map[domain.NodeID]domain.Version
+	for cur := b; out == nil; {
+		if cur.ParentID == "" {
+			out = map[domain.NodeID]domain.Version{}
+			break
+		}
+		if s, ok := t.g.states.lookup(cur.ParentID, ids); ok {
+			out = s
+			break
+		}
+		p, err := t.Tx.BaselineHeader(ctx, cur.ParentID)
+		if err != nil {
+			return nil, err
+		}
+		if p.Gap == 0 {
+			if out, err = t.Tx.BaselineVersions(ctx, p.ID, ids); err != nil {
+				return nil, err
+			}
+			break
+		}
+		chain = append(chain, p)
+		cur = p
+	}
+	want := map[domain.NodeID]bool{}
+	for _, n := range ids {
+		want[n] = true
+	}
+	for i := len(chain) - 1; i >= 0; i-- {
+		mv, err := t.moves(ctx, chain[i])
+		if err != nil {
+			return nil, err
+		}
+		for n, v := range mv {
+			if !want[n] {
+				continue
+			}
+			if v == 0 {
+				delete(out, n)
+			} else {
+				out[n] = v
+			}
+		}
+	}
+	return out, nil
+}
+
+// putBaselineOver writes a baseline whose state is the state of over with delta put in (a version, 0: the node
+// left), without reading that state when the baseline is kept as a header only (ADR 0137): its state follows from
+// what its change did, delta is that. A baseline to materialise (every MaterializeEvery along a chain, a state that is
+// not derived, over not its parent) is written whole, the state of over read then.
+func (t *guardTx) putBaselineOver(ctx context.Context, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {
+	if b.ParentID != "" && over == b.ParentID && domain.DerivedKind(b.Kind) {
+		if err := t.needChange(b.ChangeID, "baseline "+b.Name); err != nil {
+			return err
+		}
+		parent, err := t.Tx.BaselineHeader(ctx, b.ParentID)
+		if err != nil {
+			return err
+		}
+		if gap := parent.Gap + 1; gap < t.g.materializeEvery() {
+			b.Gap, b.Nodes = gap, nil
+			t.markNew(b.ID)
+			return t.Tx.PutBaseline(ctx, b)
+		}
+	}
+	from, err := t.Baseline(ctx, over)
+	if err != nil {
+		return err
+	}
+	b.Nodes = from.Nodes
+	applyMoves(b.Nodes, delta)
+	return t.PutBaseline(ctx, b)
+}
+
+func (t *guardTx) markNew(id domain.BaselineID) {
+	if t.newBaselines == nil {
+		t.newBaselines = map[domain.BaselineID]bool{}
+	}
+	t.newBaselines[id] = true
+}
+
+// putBaselineOver writes a baseline whose state is the state of over with delta put in (0: the node left), through
+// the guard of the transaction when there is one (guardTx.putBaselineOver), else whole.
+func putBaselineOver(ctx context.Context, tx Tx, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {
+	if p, ok := tx.(interface {
+		putBaselineOver(context.Context, domain.Baseline, domain.BaselineID, map[domain.NodeID]domain.Version) error
+	}); ok {
+		return p.putBaselineOver(ctx, b, over, delta)
+	}
+	from, err := tx.Baseline(ctx, over)
+	if err != nil {
+		return err
+	}
+	b.Nodes = from.Nodes
+	applyMoves(b.Nodes, delta)
+	return tx.PutBaseline(ctx, b)
+}
+
 // Baselines lists the baselines of a namespace, their nodes included.
 func (t *guardTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	bs, err := t.Tx.Baselines(ctx, namespace)
@@ -230,8 +409,9 @@ func (t *guardTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 		return err
 	}
 	b.Gap = 0
+	t.markNew(b.ID)
 	if b.ParentID != "" && domain.DerivedKind(b.Kind) {
-		parent, err := t.Tx.Baseline(ctx, b.ParentID)
+		parent, err := t.Tx.BaselineHeader(ctx, b.ParentID)
 		if err != nil {
 			return err
 		}

@@ -1,11 +1,11 @@
-SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace connector-claude-coding-agent goap-dev goap-runner goap-eval
+SERVICES := graph registry engine modelgw preferences conversations credentials indexer events gateway mcp connector-localfs connector-workspace connector-claude-coding-agent goap-dev goap-runner goap-eval goap-bench
 COMPOSE  := docker compose -f deploy/compose/docker-compose.yml
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test test-wasm tidy web-test test-pg lint eval generate tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
+.PHONY: perf perf-up perf-run perf-down perf-reset help all build test test-wasm tidy web-test test-pg lint eval generate tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -112,6 +112,26 @@ down: ## stop the docker compose stack
 reset: ## stop the docker compose stack and drop everything it keeps: containers, volumes (database, NATS, web modules), images built for it
 	$(COMPOSE) down --volumes --remove-orphans
 	-docker image rm goap/goap:dev goap/runner:dev
+
+# Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
+PERF      := docker compose -f deploy/compose/perf.yml
+PERF_ARGS ?= -versions 100000
+
+perf: perf-up perf-run ## performance test in docker: the graph service on PostgreSQL loaded by goap-bench (PERF_ARGS, goap-bench -h), measured in Grafana http://localhost:3300
+	@echo "Grafana: http://localhost:3300/d/goap-perf · Prometheus: http://localhost:9390 · reports: .goap/perf/*.csv"
+
+perf-up: ## start the performance stack (builds goap/goap:dev): graph, PostgreSQL, collector, Prometheus, Grafana
+	docker build --target services -t goap/goap:dev .
+	$(PERF) up -d
+
+perf-run: ## one more run of goap-bench against the performance stack (PERF_ARGS, e.g. PERF_ARGS="-versions 1000000 -workers 8")
+	$(PERF) run --rm bench $(PERF_ARGS)
+
+perf-down: ## stop the performance stack, keeping its data (the graph grows run after run)
+	$(PERF) --profile bench down
+
+perf-reset: ## stop the performance stack and drop its data (database, Prometheus)
+	$(PERF) --profile bench down --volumes --remove-orphans
 
 logs: ## follow the logs of the docker compose stack
 	$(COMPOSE) logs -f engine graph registry modelgw gateway

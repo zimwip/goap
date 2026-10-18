@@ -135,9 +135,9 @@ func (a *applier) childOf(l domain.Link) (*domain.Node, error) {
 			return &n, nil
 		}
 	}
-	v, ok := a.target[l.To.ID]
-	if !ok {
-		return nil, nil
+	v, ok, err := a.target.get(l.To.ID)
+	if err != nil || !ok {
+		return nil, err
 	}
 	c, err := a.tx.Node(a.ctx, domain.NodeRef{ID: l.To.ID, Version: v})
 	if err != nil {

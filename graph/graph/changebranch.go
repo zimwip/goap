@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/operations"
@@ -219,27 +220,47 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 // branch was forked: the versions of the branch join the target (ADR 0032),
 // no merge version is made, and each change impact lands as the version it wrote.
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
-	into, err := branchHead(ctx, tx, c.Namespace, own.Parent)
+	into, err := branchHeadHeader(ctx, tx, c.Namespace, own.Parent)
 	if err != nil || into.ID != own.ForkBaseline {
 		return false, err
 	}
-	from, err := branchHead(ctx, tx, c.Namespace, own.Name)
+	from, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
 	if err != nil {
 		return false, err
 	}
 	// what the branch changed since its fork joins the target: the versions of its head baseline (a rejected or
-	// replaced version stays behind), and the tombstones of the nodes it retired
+	// replaced version stays behind), and the tombstones of the nodes it retired; only a node the branch holds a version
+	// of can differ, the states are read for those (ADR 0137)
 	target := domain.BranchOf(own.Parent)
+	ids, err := tx.BranchNodeIDs(ctx, own.Name)
+	if err != nil {
+		return false, err
+	}
+	slices.Sort(ids)
+	fromNodes, err := versionsAt(ctx, tx, from.ID, ids)
+	if err != nil {
+		return false, err
+	}
+	intoNodes, err := versionsAt(ctx, tx, into.ID, ids)
+	if err != nil {
+		return false, err
+	}
 	var moves []domain.NodeRef
-	for id, v := range from.Nodes {
-		if into.Nodes[id] != v {
+	delta := map[domain.NodeID]domain.Version{}
+	for _, id := range ids {
+		if v, ok := fromNodes[id]; ok && intoNodes[id] != v {
 			moves = append(moves, domain.NodeRef{ID: id, Version: v})
+			delta[id] = v
 		}
 	}
-	for id := range into.Nodes {
-		if _, ok := from.Nodes[id]; ok {
+	for _, id := range ids {
+		if _, ok := intoNodes[id]; !ok {
 			continue
 		}
+		if _, ok := fromNodes[id]; ok {
+			continue
+		}
+		delta[id] = 0
 		if n, err := tx.LatestOn(ctx, id, own.Name); err == nil && n.Deleted {
 			moves = append(moves, n.Ref())
 		} else if err != nil && !errors.Is(err, ErrNotFound) {
@@ -253,8 +274,8 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	// a fast-forward, not a merge (own.Parent did not move since the fork): name it after the change, not "merge …"
 	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
-		Kind: domain.BaselineFastForward, Nodes: from.Nodes, CreatedAt: g.now()}
-	if err := tx.PutBaseline(ctx, res); err != nil {
+		Kind: domain.BaselineFastForward, CreatedAt: g.now()}
+	if err := putBaselineOver(ctx, tx, res, into.ID, delta); err != nil {
 		return false, err
 	}
 	if err := g.advanceBranch(ctx, tx, c.Namespace, domain.BranchOf(own.Parent), res); err != nil {
@@ -286,7 +307,7 @@ func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (do
 	if parent.Status != domain.BranchOpen {
 		return c, parent, fmt.Errorf("branch %s is %s: %w", parent.Name, parent.Status, ErrConflict)
 	}
-	fork, err := tx.Baseline(ctx, c.BaselineID)
+	fork, err := headerOf(ctx, tx, c.BaselineID)
 	if err != nil {
 		return c, parent, err
 	}

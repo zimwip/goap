@@ -81,8 +81,25 @@ func (g *Graph) declareTx(ctx context.Context, tx Tx, id domain.ChangeID, nodes 
 		if err != nil {
 			return err
 		}
-		b, err := tx.Baseline(ctx, c.BaselineID)
+		// the reference baseline is read for the nodes the impacts name, never whole (ADR 0137)
+		b, err := headerOf(ctx, tx, c.BaselineID)
 		if err != nil {
+			return err
+		}
+		var ids []domain.NodeID
+		for _, cn := range nodes {
+			if cn.Pre != nil {
+				ids = append(ids, cn.Pre.ID)
+			}
+			if propose && cn.Intent == domain.IntentCreated {
+				if nid, err := tx.NodeIDByKey(ctx, domain.NamespaceOf(c.Namespace), cn.Key); err == nil {
+					ids = append(ids, nid)
+				} else if !errors.Is(err, ErrNotFound) {
+					return err
+				}
+			}
+		}
+		if b.Nodes, err = versionsAt(ctx, tx, b.ID, ids); err != nil {
 			return err
 		}
 		ix, err := g.typesAt(ctx, tx, c.BaselineID)

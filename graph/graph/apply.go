@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
@@ -36,8 +35,14 @@ var ErrNothingToCommit = graphapi.ErrNothingToCommit
 // Apply commits what the change has pending, then merges it (IntegrateChange). It returns the baseline the change left
 // on the branch it was forked from, or its last commit when the merge waits for a resolution.
 func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	return g.apply(ctx, id, baselineName, true)
+}
+
+// apply is Apply; without whole the baseline is returned without its state (Commit: reading it costs the size of the
+// namespace, ADR 0137).
+func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName string, whole bool) (domain.Baseline, error) {
 	var result domain.Baseline
-	if _, err := g.CommitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
+	if _, err := g.commitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
 		return result, err
 	}
 	c, err := g.IntegrateChange(ctx, id, nil)
@@ -45,7 +50,11 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 		return result, err
 	}
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		if result, err = tx.Baseline(ctx, c.ResultBaselineID); err != nil {
+		read := tx.BaselineHeader
+		if whole {
+			read = tx.Baseline
+		}
+		if result, err = read(ctx, c.ResultBaselineID); err != nil {
 			return err
 		}
 		// a name other than the title the change already carries is a tag on the state it leaves (ADR 0056)
@@ -61,7 +70,16 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 // longer changes; it returns the commit baseline. The change stays open (ADR 0102).
 //
 //goap:operation change.commit doer
-func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
+func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	result, err := g.commitChange(ctx, id, baselineName)
+	if err != nil {
+		return result, err
+	}
+	return g.Baseline(ctx, result.ID)
+}
+
+// commitChange is CommitChange, its baseline returned without its state (ADR 0137).
+func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
 	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
 		return result, err
 	}
@@ -113,7 +131,7 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	if c.Status == domain.ChangeApplied || c.Status == domain.ChangeAbandoned || c.Status == domain.ChangeCommitted {
 		return nil, "", fmt.Errorf("change %s is %s: %w", id, c.Status, ErrConflict)
 	}
-	base, err := tx.Baseline(ctx, c.BaselineID)
+	base, err := headerOf(ctx, tx, c.BaselineID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -121,19 +139,20 @@ func (g *Graph) newApplier(ctx context.Context, tx Tx, id domain.ChangeID) (*app
 	if err != nil {
 		return nil, "", err
 	}
-	target, parentBaseline := maps.Clone(base.Nodes), base.ID
+	parentBaseline := base.ID
 	// A change on its own branch starts from the head of that branch (moved by its own commits and by the merges of its
 	// sub-changes, ADR 0102, 0103).
 	if _, isOwn, err := ownBranch(ctx, tx, c); err != nil {
 		return nil, "", err
 	} else if isOwn {
-		head, err := branchHead(ctx, tx, c.Namespace, c.Branch)
+		head, err := branchHeadHeader(ctx, tx, c.Namespace, c.Branch)
 		if err != nil {
 			return nil, "", err
 		}
-		target, parentBaseline = maps.Clone(head.Nodes), head.ID
+		parentBaseline = head.ID
 	}
-	return &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: target}, parentBaseline, nil
+	// the state it builds on is read node by node, never whole (ADR 0137)
+	return &applier{g: g, tx: tx, ctx: ctx, change: c, ix: ix, branch: domain.BranchOf(c.Branch), target: newStateView(ctx, tx, parentBaseline)}, parentBaseline, nil
 }
 
 // commitOnBranch writes the accepted modifications of a change on its own branch and reverts the nodes it no longer
@@ -163,11 +182,11 @@ func (g *Graph) commitOnBranch(ctx context.Context, tx Tx, id domain.ChangeID, b
 	if baselineName == "" {
 		baselineName = c.Title
 	}
-	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit, Nodes: a.target, CreatedAt: g.now()}
+	result := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: baselineName, Namespace: c.Namespace, Branch: a.branch, ParentID: parentBaseline, ChangeID: c.ID, Kind: domain.BaselineCommit, CreatedAt: g.now()}
 	if reverted > 0 {
 		result.Kind = domain.BaselineRevert // a revert is no landed event: the state is stored whole
 	}
-	if err := tx.PutBaseline(ctx, result); err != nil {
+	if err := putBaselineOver(ctx, tx, result, parentBaseline, a.target.delta()); err != nil {
 		return domain.Baseline{}, err
 	}
 	if err := g.advanceBranch(ctx, tx, c.Namespace, a.branch, result); err != nil {
@@ -195,9 +214,9 @@ func (a *applier) revertWithdrawn() (int, error) {
 	ids, fork, err := a.g.withdrawnSince(a.ctx, a.tx, a.change)
 	for _, id := range ids {
 		if v, ok := fork[id]; ok {
-			a.target[id] = v
+			a.target.set(id, v)
 		} else {
-			delete(a.target, id)
+			a.target.remove(id)
 		}
 	}
 	return len(ids), err
@@ -242,7 +261,7 @@ type applier struct {
 	change domain.Change
 	ix     *typeIndex
 	branch string
-	target map[domain.NodeID]domain.Version
+	target *stateView
 	// cposts are the versions produced by the accepted change impacts (ADR 0024).
 	cposts []cpost
 	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076),
