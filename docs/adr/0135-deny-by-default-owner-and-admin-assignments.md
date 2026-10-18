@@ -62,6 +62,11 @@ methodologies declare; the rights on the project are flags of the grant.
 | `admin` | **administrator of the project** and its sub-projects (not of the platform): every action on a resource of that project chain, the management of its Assignments included (flags too) |
 | `owner` | **owner of the project** and its sub-projects: manages their Assignments (roles the project needs, `owner`), never `admin` |
 
+- **Sub-projects.** A project administrator or owner creates sub-projects of a project in their chain and edits
+  them: the `adminOnly` gate of `ProjectUnit` asks `project:write` with the project its `project_part_of` names
+  (before and after the edit), allowed by `isProjectAdmin` and `isProjectOwner`. A sub-project inherits the
+  Assignments above it, so its creator keeps their flags there; moving a project out of the writer's chain, or
+  editing the project their own flag is held on, stays a platform administrator's.
 - **Never beyond the scope.** A project administrator or owner touches neither the platform resources
   (methodologies, domains, policies, organisation units, adapters, models) nor a platform Assignment nor an
   Assignment of a project outside their chain.
@@ -94,12 +99,8 @@ methodologies declare; the rights on the project are flags of the grant.
 1. `authz`: nil refuses, `AllowAll`, `isProjectAdmin` / `isProjectOwner`, the new defaults.
 2. `lib/access`: the flags on `Assignment` (domain `organisation` and its attributes), `Authorize`,
    `AssignmentScopeValidator`, session hints.
-3. `graphsvc`: authorized reads, the `assignment:write` gate.
+3. `graphsvc`: authorized reads, the `assignment:write` and `project:write` gates.
 4. `mayRun` / `OperationRoles` with `"*"`; the shipped methodologies declare their roles.
 5. Gateway: token roles, dev-token.
 6. Web: the Assignments pane, the session hints.
 7. `docs/architecture.md`, `CLAUDE.md`.
-
-## Not decided
-
-Whether a project owner or administrator may create sub-projects of their project (today an administrator's).
