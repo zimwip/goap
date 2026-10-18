@@ -1,4 +1,4 @@
-# ADR 0140 — A baseline is computed from the versions that landed in it
+# ADR 0140 — A baseline is computed from the versions that landed in it; a commit is one transaction
 
 **Status**: accepted, implemented · **Date**: 2026-10 · Builds on ADR 0032 (versions and branches), 0056 (a baseline is
 the state a change leaves), 0137 (a commit reads the nodes it touches) · Supersedes the delta chains of ADR 0032 §5
@@ -35,14 +35,21 @@ records the branch it was written on (`node_version.branch`). The versions a bra
 5. `MaterializeEvery` (`GOAP_MATERIALIZE_EVERY`) now defaults to 0, so a commit never stores entries. A positive value
    stores every n-th baseline as an overlay, which the test suites use to exercise both paths (1, 3, 100000). The
    compaction of ADR 0032 (`CompactBaselines`, `baselinedelta.go`) is removed.
+6. **A commit is one transaction.** `Graph.Commit` is built of the graph's own operations (create the change, the
+   drafts, the reviews, commit, merge), each of which opened its own transaction: about 60 for a ten-edit commit, so a
+   failure left a change to purge, and each paid a sync to disk. `Graph.inOne` puts the transaction in the context and
+   the outer layer of the repository (`ambientRepo`) makes every operation called with that context join it. The checks
+   of the guard, the events and the checkpoints run once, at its end. A failure rolls everything back, so nothing is
+   purged any more. The roots of a fresh graph are bootstrapped before the commit and never rolled back with it.
 
 ## Consequences
 
 - A commit writes its node versions, their joins and one baseline header, and no entry. On the measure above, entries
   went from 250 to 0 per commit and WAL from 176 KB to 117 KB.
-- What a commit writes now is mostly the change's own record: its log (about 60 entries, 58 KB per ten-edit commit) and
-  the impact projection (about 40 row writes). The commit path writes itself in some 60 transactions. Both are the next
-  targets. The log stays as it is: a change is the activity of a person or an agent, never a high-frequency stream.
+- A commit is one transaction: a ten-edit update commit went from about 60 transactions and 435 ms to 1 and 306 ms on
+  PostgreSQL, a ten-node creation from 276 ms to 194 ms. What it writes is now mostly the change's own record, its log
+  (about 60 entries, 58 KB) and the impact projection. The log stays as it is: a change is the activity of a person or
+  an agent, never a high-frequency stream.
 - Reading the state of a header costs one indexed query over the landings since its base, at most `CheckpointEvery`
   baselines.
 - Schema: migration 0007 (both dialects) adds `baseline.seq`, `baseline.base_id`, `node_version.landed` and

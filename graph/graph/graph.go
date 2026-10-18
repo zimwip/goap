@@ -165,7 +165,7 @@ type Graph struct {
 // whatever the storage.
 func New(repo Repo) *Graph {
 	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
-	g.repo = &guardRepo{Repo: repo, g: g}
+	g.repo = &ambientRepo{Repo: &guardRepo{Repo: repo, g: g}, g: g}
 	return g
 }
 

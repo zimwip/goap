@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"testing"
@@ -376,5 +377,61 @@ func checkStates(t *testing.T, repo Repo) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// countingRepo counts the transactions a repository opens.
+type countingRepo struct {
+	Repo
+	n int
+}
+
+func (r *countingRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
+	r.n++
+	return r.Repo.InTx(ctx, fn)
+}
+
+func TestCommitIsOneTransaction(t *testing.T) { forEachRepo(t, testCommitIsOneTransaction) }
+
+// testCommitIsOneTransaction: a commit, whatever its edits, is one transaction of the repository (ADR 0140), and one
+// that fails leaves nothing.
+func testCommitIsOneTransaction(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	counted := &countingRepo{Repo: repo}
+	f := newFixture(t, repo)
+	g := New(counted)
+	head := f.base
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "boot", Baseline: head.ID, By: "test", Edits: []NodeEdit{{Key: "DES-0", Type: "Design"}}}); err != nil {
+		t.Fatal(err)
+	}
+	head = must[domain.Baseline](t)(g.BranchHead(ctx, head.Namespace, domain.MainBranch))
+	counted.n = 0
+	_, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "c", Baseline: head.ID, By: "test", Edits: []NodeEdit{
+		{Key: "DES-1", Type: "Design", Links: []LinkEdit{{Type: "satisfies", To: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}}}},
+		{Key: "DES-2", Type: "Design"},
+		{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": 1}},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counted.n != 1 {
+		t.Fatalf("a commit opened %d transactions", counted.n)
+	}
+	changes := len(must[[]domain.Change](t)(g.Changes(ctx)))
+	counted.n = 0
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "stale", Baseline: head.ID, By: "test", Edits: []NodeEdit{
+		{Key: "DES-3", Type: "Design"},
+		{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": 2}},
+	}}); err == nil {
+		t.Fatal("a commit from a stale version lands")
+	}
+	if counted.n != 1 {
+		t.Fatalf("a failed commit opened %d transactions", counted.n)
+	}
+	if n := len(must[[]domain.Change](t)(g.Changes(ctx))); n != changes {
+		t.Fatalf("a failed commit left %d changes behind", n-changes)
+	}
+	if _, err := g.NodeByKey(ctx, head.Namespace, "DES-3"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("a failed commit left its node: %v", err)
 	}
 }

@@ -28,8 +28,8 @@ func (g *Graph) Bootstrap(ctx context.Context) error {
 		// another process bootstrapped meanwhile (the keys are unique): check it did
 		err = g.repo.InTx(ctx, func(tx Tx) error { return g.bootstrap(ctx, tx) })
 	}
-	if err == nil {
-		g.booted.Store(true)
+	if _, joined := ctx.Value(ambientKey{g}).(Tx); err == nil && !joined {
+		g.booted.Store(true) // a joined transaction may still roll back
 	}
 	return err
 }

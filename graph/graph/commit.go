@@ -19,10 +19,10 @@ import (
 // Commit runs the edits as one change, through the operations every change uses (ADR 0076): it opens the change on a
 // branch of its own; a created node is a ImpactNodeCreate, a modified one a ImpactNodeCheckout with its ImpactNodeUpdate and link edits;
 // the state edits are transitions (ImpactNodeTransition, on the draft), each impact that modifies its node is accepted by
-// the producer and one that modifies nothing withdrawn (ADR 0102), and the change is applied. A commit that lands nothing
-// (ErrNothingToCommit) or fails leaves no change behind (purged); when the branch cannot be merged without conflict
-// (another change moved a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and
-// rebuilds its edits.
+// the producer and one that modifies nothing withdrawn (ADR 0102), and the change is applied. All of it is one
+// transaction (ADR 0140): a commit that lands nothing (ErrNothingToCommit) or fails leaves nothing behind; when the
+// branch cannot be merged without conflict (another change moved a node meanwhile) ErrConflict is returned: the producer
+// reads again and rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
 // The baseline returned is a header, without its state: reading it costs the size of the namespace (ADR 0137).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
@@ -37,32 +37,32 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 			return res, err
 		}
 	}
+	if err := g.Bootstrap(ctx); err != nil { // the roots are there before the commit, whatever becomes of it
+		return res, err
+	}
+	err = g.inOne(ctx, func(ctx context.Context) error {
+		res, err = g.commitIn(ctx, in)
+		return err
+	})
+	if err != nil {
+		res.Change = ""
+	}
+	return res, err
+}
+
+// commitIn is Commit, run in the transaction of the commit.
+func (g *Graph) commitIn(ctx context.Context, in Commit) (res CommitResult, err error) {
 	c, err := g.CreateChange(ctx, NewChange{Namespace: in.Namespace, Title: in.Title, Intent: in.Intent, Methodology: in.Methodology,
 		BaselineID: in.Baseline, Branch: in.Branch, Data: in.Data, OwnBranch: true, OwnerOrg: in.OwnerOrg, ProjectID: in.ProjectID})
 	if err != nil {
 		return res, err
 	}
 	res.Change = c.ID
-	impacts := []domain.ChangeImpactID{}
-	defer func() {
-		if err == nil {
-			return
-		}
-		// a commit is all or nothing: a change that landed nothing leaves no trace (purged with its drafts and its log,
-		// no key is held, ADR 0079), else it is abandoned
-		if _, perr := g.PurgeChange(ctx, c.ID); perr == nil {
-			return
-		}
-		abandoned := domain.ChangeAbandoned
-		if _, aerr := g.UpdateChange(ctx, c.ID, ChangePatch{Status: &abandoned}); aerr != nil {
-			err = errors.Join(err, aerr)
-		}
-	}()
 	order, err := g.commitOrder(ctx, in.Edits)
 	if err != nil {
 		return res, err
 	}
-	impacts = make([]domain.ChangeImpactID, len(in.Edits))
+	impacts := make([]domain.ChangeImpactID, len(in.Edits))
 	posts := make([]*domain.NodeRef, len(in.Edits)) // the drafts
 	written := map[string]int{}                     // key of a created node → its edit
 	type late struct {

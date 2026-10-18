@@ -36,7 +36,8 @@ func (g *Graph) Observe(sink outbox.Sink) *outbox.Relay {
 		panic(fmt.Sprintf("graph: repository %T keeps no outbox", g.base))
 	}
 	g.relay = &outbox.Relay{Origin: OutboxOrigin, Store: store, Sink: sink}
-	g.repo = &observedRepo{Repo: g.repo, g: g}
+	a := g.repo.(*ambientRepo)
+	a.Repo = &observedRepo{Repo: a.Repo, g: g}
 	return g.relay
 }
 
