@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
 
-$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'goap-dev', 'goap-runner', 'goap-eval'
+$Services = 'graph', 'registry', 'engine', 'modelgw', 'preferences', 'conversations', 'credentials', 'indexer', 'events', 'gateway', 'mcp', 'connector-localfs', 'connector-workspace', 'connector-claude-coding-agent', 'goap-dev', 'goap-runner', 'goap-eval', 'goap-bench'
 # the modules of the go.work (ADR 0125): `./...` at the root matches none, every Go command names them
 $Modules = 'contracts', 'lib', 'graph', 'engine', 'mcp', 'gateway', 'platform'
 $Pkgs = $Modules | ForEach-Object { "./$_/..." }
@@ -171,6 +171,19 @@ function Reset {
     Run docker @Compose down --volumes --remove-orphans
     & docker image rm goap/goap:dev goap/runner:dev # absent images are not an error
 }
+# Performance stack (deploy/compose/perf.yml): the graph service on PostgreSQL, goap-bench, Prometheus and Grafana
+$Perf = @('compose', '-f', 'deploy/compose/perf.yml')
+function PerfArgs { if ($env:PERF_ARGS) { -split $env:PERF_ARGS } else { @('-versions', '100000') } }
+function PerfUp { Run docker build --target services -t goap/goap:dev .; Run docker @Perf up -d }
+function PerfRun { $a = PerfArgs; Run docker @Perf run --rm bench @a }
+function Perf {
+    PerfUp
+    PerfRun
+    Write-Host 'Grafana: http://localhost:3300/d/goap-perf - Prometheus: http://localhost:9390 - reports: .goap\perf\*.csv'
+}
+function PerfDown { Run docker @Perf --profile bench down }
+function PerfReset { Run docker @Perf --profile bench down --volumes --remove-orphans }
+
 function Logs { DockerSock; Run docker @Compose logs -f engine graph registry modelgw gateway }
 
 function Help {
@@ -203,6 +216,10 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   up | down | logs  docker compose stack (up prints its URLs and how to reach its database, DBeaver)
   reset             stop the stack and drop its containers, volumes (database, NATS, web modules) and images
   urls              the URLs of the compose stack: IDE, gateway, each service, tools, database
+  perf              performance test in docker: the graph service on PostgreSQL loaded by goap-bench
+                    ($env:PERF_ARGS, goap-bench -h), measured in Grafana http://localhost:3300
+  perf-up | perf-run | perf-down | perf-reset
+                    start the performance stack, one more run of goap-bench, stop it (keeping its data), drop its data
 '@ | Write-Host
 }
 
@@ -231,6 +248,11 @@ switch ($Target) {
     'down'             { Down }
     'reset'            { Reset }
     'logs'             { Logs }
+    'perf'             { Perf }
+    'perf-up'          { PerfUp }
+    'perf-run'         { PerfRun }
+    'perf-down'        { PerfDown }
+    'perf-reset'       { PerfReset }
     { $_ -in 'help', '-h', '--help' } { Help }
     default            { Help; throw "unknown target: $Target" }
 }

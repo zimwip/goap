@@ -1,0 +1,9 @@
+# The dashboards of deploy/grafana/dashboards (GOAP performance: make perf), in both stacks.
+apiVersion: 1
+providers:
+  - name: goap
+    folder: GOAP
+    type: file
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards

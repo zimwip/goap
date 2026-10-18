@@ -74,6 +74,7 @@ require (
 require (
 	github.com/fastschema/qjs v0.0.6
 	github.com/zimwip/goap/contracts v0.0.0
+	go.opentelemetry.io/contrib/instrumentation/runtime v0.71.0
 )
 
 replace github.com/zimwip/goap/contracts => ../contracts

@@ -1,0 +1,103 @@
+# Performance stack: make perf (.\make.ps1 perf), or by hand:
+#   docker build --target services -t goap/goap:dev .
+#   docker compose -f deploy/compose/perf.yml up -d
+#   docker compose -f deploy/compose/perf.yml run --rm bench -versions 100000 -workers 8
+# The graph service alone on PostgreSQL (with the domain registry it serves), measured by goap-bench, the load generator,
+# which writes nodes and versions through its API on the domain and change axes. Every measure goes to Prometheus (the
+# graph's RPCs, its database calls and Go runtime, goap-bench's calls, PostgreSQL's tables) and is drawn by the Grafana
+# dashboard "GOAP performance"; goap-bench also writes a CSV per run in .goap/perf (GOAP_PERF_RESULTS).
+# Grafana: http://localhost:3300/d/goap-perf · Prometheus: http://localhost:9390 · graph: http://localhost:8380
+# pprof of the graph service: go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30
+# Its own project (goap-perf) and ports: it runs next to the dev stack (make up). make perf-reset drops its data.
+name: goap-perf
+
+x-telemetry: &telemetry
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+  OTEL_METRIC_EXPORT_INTERVAL: "5000"
+  OTEL_TRACES_SAMPLER: always_off
+  GOAP_LOG_FORMAT: text
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    command: ["postgres", "-c", "shared_buffers=${GOAP_PERF_PG_SHARED_BUFFERS:-1GB}", "-c", "max_connections=200", "-c", "track_io_timing=on"]
+    environment:
+      POSTGRES_USER: goap
+      POSTGRES_PASSWORD: goap
+      POSTGRES_DB: goap
+    volumes:
+      - perf-pgdata:/var/lib/postgresql/data
+      - ../postgres/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro,z
+    ports: ["${GOAP_PERF_PG_PORT:-5433}:5432"]
+    shm_size: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goap -d goap"]
+      interval: 2s
+      retries: 30
+
+  graph:
+    image: goap/goap:dev
+    pull_policy: never
+    restart: unless-stopped
+    entrypoint: ["/goap/graph"]
+    environment:
+      <<: *telemetry
+      GOAP_HTTP_ADDR: ":8080"
+      GOAP_DB_DSN: postgres://graph:graph@postgres:5432/goap?sslmode=disable
+      GOAP_DOMAINS_DIR: /domains
+      GOAP_PPROF_ADDR: ":6060"
+      # baselines storing their whole state (ADR 0056): 1 every baseline, the default otherwise
+      GOAP_MATERIALIZE_EVERY: ${GOAP_MATERIALIZE_EVERY:-}
+    depends_on:
+      postgres: {condition: service_healthy}
+    ports: ["8380:8080", "6060:6060"]
+
+  # the load generator: docker compose -f deploy/compose/perf.yml run --rm bench <flags> (goap-bench -h)
+  bench:
+    image: goap/goap:dev
+    pull_policy: never
+    profiles: [bench]
+    # the results are written in a directory of the host
+    user: "0"
+    entrypoint: ["/goap/goap-bench", "-wait", "3m", "-csv", "/results/"]
+    command: ["-versions", "100000"]
+    environment:
+      <<: *telemetry
+      GOAP_GRAPH_URL: http://graph:8080
+    volumes: ["${GOAP_PERF_RESULTS:-../../.goap/perf}:/results:z"]
+    depends_on: [graph, otel-collector]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.135.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes: ["../otel/collector-perf.yaml:/etc/otelcol/config.yaml:ro,z"]
+
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:v0.18.1
+    environment:
+      DATA_SOURCE_NAME: postgresql://goap:goap@postgres:5432/goap?sslmode=disable
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.path=/prometheus", "--storage.tsdb.retention.time=30d"]
+    volumes:
+      - ../prometheus/prometheus-perf.yml:/etc/prometheus/prometheus.yml:ro,z
+      - perf-prometheus:/prometheus
+    ports: ["9390:9090"]
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /var/lib/grafana/dashboards/goap-perf.json
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro,z
+    ports: ["3300:3000"]
+
+volumes:
+  perf-pgdata:
+  perf-prometheus:

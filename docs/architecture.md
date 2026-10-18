@@ -1201,6 +1201,29 @@ standard `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_*` variables:
   `send.history`, `turn`, `turn.model` per round with `system_bytes` / `history_bytes`, `turn.tools`, `turn.tool`):
   the model call is the whole of a turn but a few milliseconds.
 
+- **Go runtime** of every service (`go.opentelemetry.io/contrib/instrumentation/runtime`: `go.memory.*`,
+  `go.goroutine.count`, GC); metrics are exported every 15 s, or every `OTEL_METRIC_EXPORT_INTERVAL` ms when set;
+- **profiles**: `GOAP_PPROF_ADDR` serves `net/http/pprof` on a listener of its own (`lib/platform`, any service), never on the
+  service's port.
+
+**Performance stack** (`make perf`, `.\make.ps1 perf`, `deploy/compose/perf.yml`, project `goap-perf`): the graph service alone
+on PostgreSQL (with the domain registry it serves), `goap-bench` (`platform/cmd/goap-bench`, `platform/bench`), the
+collector (`deploy/otel/collector-perf.yaml`: metrics only, the services sample no trace), Prometheus every 5 s
+(`deploy/prometheus/prometheus-perf.yml`, with `postgres-exporter`) and Grafana (http://localhost:3300, dashboard
+`deploy/grafana/dashboards/goap-perf.json`, provisioned in both stacks). `goap-bench` writes only through the API, as a client
+would (identity headers of `system:bench`, admin; or `-token` through the gateway), on the two axes: the **domain** (it publishes
+a generated domain `bench`, `bench@T000...` extending `bench@Item`, link `bench@relates`, through `ImportDomain`, a new version
+at each run and every `-domain-every` versions written) and the **change** (`-workers` writers on their own nodes, each change
+of `-edits` nodes, `-create` of them created with `-links` links, the others modified, `-hot` nodes taking `-hot-ratio` of the
+modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`, `ImpactNodeCreate` /
+`ImpactNodeCheckout` + `ImpactNodeUpdate`, `ImpactNodeReview` by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every
+`-probe` it measures the reads (`GetBranch`, `GetNode`, `ListNodeVersions` of a hot node, `ListNodeChanges`,
+`GetNodeNeighbourhood`, `ListBaselineNodes` by type and by text, `DiffBaselines`, `ListChanges`). It records `bench.op.duration`
+(by `op`, `outcome` ok / conflict / error), `bench.response.size` and the gauges `bench.versions`, `nodes`, `links`,
+`changes`, `domain.versions`, `domain.types`, `errors` (Prometheus `goap_bench_*`), and a CSV per run (`.goap/perf/<run>.csv`:
+one row per operation and window, the totals at its end). Runs add to the same graph (`make perf-run`, keys prefixed by the
+run) until `make perf-reset`.
+
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.
 

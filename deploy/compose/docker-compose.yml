@@ -209,7 +209,9 @@ services:
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
       GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    volumes: ["../grafana/provisioning:/etc/grafana/provisioning:ro,z"]
+    volumes:
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro,z
     ports: ["3000:3000"]
 
   # MCP hub: registry of connectors, MCP definitions, adapters, organization bindings
