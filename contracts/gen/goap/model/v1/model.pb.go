@@ -1308,7 +1308,9 @@ type Provider struct {
 	HasKey    bool                   `protobuf:"varint,6,opt,name=has_key,json=hasKey,proto3" json:"has_key,omitempty"`
 	ApiKeyRef string                 `protobuf:"bytes,7,opt,name=api_key_ref,json=apiKeyRef,proto3" json:"api_key_ref,omitempty"`
 	// whether the provider is loaded in the running router
-	Active        bool `protobuf:"varint,8,opt,name=active,proto3" json:"active,omitempty"`
+	Active bool `protobuf:"varint,8,opt,name=active,proto3" json:"active,omitempty"`
+	// why an enabled provider is not loaded (no API key, a key that does not resolve, ...); empty when active
+	Reason        string `protobuf:"bytes,9,opt,name=reason,proto3" json:"reason,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1397,6 +1399,13 @@ func (x *Provider) GetActive() bool {
 		return x.Active
 	}
 	return false
+}
+
+func (x *Provider) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
 }
 
 type ListProvidersRequest struct {
@@ -3958,7 +3967,7 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x18ListProviderKindsRequest\"\x8d\x01\n" +
 	"\x19ListProviderKindsResponse\x121\n" +
 	"\x05kinds\x18\x01 \x03(\v2\x1b.goap.model.v1.ProviderKindR\x05kinds\x12=\n" +
-	"\tprotocols\x18\x02 \x03(\v2\x1f.goap.model.v1.ProviderProtocolR\tprotocols\"\xd4\x01\n" +
+	"\tprotocols\x18\x02 \x03(\v2\x1f.goap.model.v1.ProviderProtocolR\tprotocols\"\xec\x01\n" +
 	"\bProvider\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1a\n" +
@@ -3967,7 +3976,8 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x12\x17\n" +
 	"\ahas_key\x18\x06 \x01(\bR\x06hasKey\x12\x1e\n" +
 	"\vapi_key_ref\x18\a \x01(\tR\tapiKeyRef\x12\x16\n" +
-	"\x06active\x18\b \x01(\bR\x06active\"\x16\n" +
+	"\x06active\x18\b \x01(\bR\x06active\x12\x16\n" +
+	"\x06reason\x18\t \x01(\tR\x06reason\"\x16\n" +
 	"\x14ListProvidersRequest\"N\n" +
 	"\x15ListProvidersResponse\x125\n" +
 	"\tproviders\x18\x01 \x03(\v2\x17.goap.model.v1.ProviderR\tproviders\"d\n" +
