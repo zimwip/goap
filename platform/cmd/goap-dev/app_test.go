@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
@@ -172,4 +173,47 @@ func TestSignOnFromEnvironment(t *testing.T) {
 		}
 	}
 	t.Fatalf("providers = %v", list.Msg.Providers)
+}
+
+// A provider signed on from the environment serves the models picked for it, and an alias retargeted to one is available
+// at once: the gateway answers what is available from the head of the graph, not from a snapshot up to a second old,
+// so the assistant is offered right after the change lands.
+func TestSignedOnProviderServesTheAssistantAlias(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the whole platform; skipped with -short")
+	}
+	t.Setenv("MISTRAL_API_KEY", "smoke-key")
+	_, ts := smokeApp(t)
+	ctx := context.Background()
+	models := modelv1connect.NewModelServiceClient(ts.Client(), ts.URL)
+	g := graphv1connect.NewGraphServiceClient(ts.Client(), ts.URL)
+	save := func(typ, key string, props map[string]any) {
+		t.Helper()
+		st, _ := structpb.NewStruct(props)
+		if _, err := g.StageSettings(ctx, connect.NewRequest(&graphv1.StageSettingsRequest{Edits: []*graphv1.SettingEdit{{Namespace: "platform", Type: typ, Key: key, Props: st}}})); err != nil {
+			t.Fatalf("stage %s: %v", key, err)
+		}
+		if _, err := g.SaveSettings(ctx, connect.NewRequest(&graphv1.SaveSettingsRequest{})); err != nil {
+			t.Fatalf("save %s: %v", key, err)
+		}
+	}
+	// warm the gateway's snapshot, so a stale read would show the alias before the change
+	if _, err := models.ListModels(ctx, connect.NewRequest(&modelv1.ListModelsRequest{})); err != nil {
+		t.Fatal(err)
+	}
+	save("platform@LlmModel", "LLM:mistral/mistral-small-latest", map[string]any{"provider": "mistral", "model": "mistral-small-latest", "enabled": true})
+	save("platform@LlmAlias", "LLA:assistant", map[string]any{"alias": "assistant", "target": "mistral/mistral-small-latest", "protected": true})
+	list, err := models.ListModels(ctx, connect.NewRequest(&modelv1.ListModelsRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range list.Msg.Aliases {
+		if a.Alias == "assistant" {
+			if a.Provider != "mistral" || a.Model != "mistral-small-latest" {
+				t.Fatalf("assistant = %+v", a)
+			}
+			return
+		}
+	}
+	t.Fatalf("the assistant alias is not available: %v", list.Msg.Aliases)
 }
