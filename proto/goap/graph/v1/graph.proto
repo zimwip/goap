@@ -154,8 +154,11 @@ service GraphService {
   rpc DerivedNodes(DerivedNodesRequest) returns (DerivedNodesResponse);
   rpc PlanMerge(PlanMergeRequest) returns (PlanMergeResponse);
   rpc MergeBranch(MergeBranchRequest) returns (MergeBranchResponse);
-  // What going from a baseline to another changes, node by node (same namespace).
+  // What going from a baseline to another changes, node by node (same namespace), and the changes that explain it.
   rpc DiffBaselines(DiffBaselinesRequest) returns (DiffBaselinesResponse);
+  // The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
+  // and the lineage they are read from.
+  rpc GetChangeStack(GetChangeStackRequest) returns (GetChangeStackResponse);
   // Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
   // into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
   // fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
@@ -283,7 +286,7 @@ message Baseline {
   string namespace = 8;
   // the head of the branch merged in, when this baseline is the result of a merge (a second parent)
   string merged_from = 9;
-  // commit | merge | fast-forward | snapshot (ADR 0056)
+  // commit | merge | fast-forward | rebase | revert | snapshot (ADR 0056)
   string kind = 10;
   // the baseline the change was forked from before its rebase onto the head of its target (ADR 0101)
   string rebased_from = 11;
@@ -1121,6 +1124,69 @@ message DiffBaselinesRequest {
 }
 message DiffBaselinesResponse {
   repeated BaselineDiff nodes = 1;
+  // the changes the stack of `to` holds and the one of `from` does not (ADR 0133)
+  repeated StackChange changes_added = 2;
+  // the changes the stack of `from` holds and the one of `to` does not
+  repeated StackChange changes_removed = 3;
+}
+
+// A node version (node_id, version 0: its latest on main) or a baseline (baseline_id), one of the two.
+message GetChangeStackRequest {
+  string node_id = 1;
+  int32 version = 2;
+  string baseline_id = 3;
+  // the most recent steps of the lineage kept (0: 500)
+  int32 limit = 4;
+}
+message GetChangeStackResponse {
+  ChangeStack stack = 1;
+}
+// The stack of changes producing a node version or a baseline (ADR 0133).
+message ChangeStack {
+  // oldest first
+  repeated StackChange changes = 1;
+  // the lineage of a node version, oldest first
+  repeated VersionStep versions = 2;
+  // the lineage of a baseline, oldest first
+  repeated BaselineStep baselines = 3;
+  // the lineage was cut at the limit, its oldest part left out
+  bool truncated = 4;
+}
+message StackChange {
+  string id = 1;
+  // the change it is a sub-change of
+  string parent = 2;
+  // empty when the caller may not read the change
+  string title = 3;
+  string status = 4;
+}
+message VersionStep {
+  int32 version = 1;
+  string branch = 2;
+  // create | revise | derive | merge | rebase
+  string reason = 3;
+  repeated int32 parents = 4;
+  // the change that wrote it
+  string change = 5;
+  repeated VersionJoin joined = 6;
+  google.protobuf.Timestamp created_at = 7;
+}
+// A version joining a branch by the merge of a change.
+message VersionJoin {
+  string branch = 1;
+  string change = 2;
+}
+message BaselineStep {
+  string id = 1;
+  string name = 2;
+  string branch = 3;
+  // commit | fast-forward | merge | rebase | revert | snapshot
+  string kind = 4;
+  string change = 5;
+  string parent = 6;
+  string merged_from = 7;
+  string rebased_from = 8;
+  google.protobuf.Timestamp created_at = 9;
 }
 message BaselineDiff {
   string node = 1;

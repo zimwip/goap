@@ -7,6 +7,7 @@
   import { changes, refreshChanges } from '../stores/catalog.svelte';
   import { loadRaw, save } from '../shell/storage';
   import NodeBranchGraph from './NodeBranchGraph.svelte';
+  import ChangeStackView from './ChangeStackView.svelte';
 
   let { id, reloadKey = 0 }: { id: string; /** bump to reload */ reloadKey?: number } = $props();
 
@@ -21,6 +22,8 @@
   $effect(() => save(VIEW_KEY, view));
   /** version shown under the branch graph */
   let picked = $state<number | undefined>();
+  /** the version whose change-stack is open (ADR 0133) */
+  let stackOf = $state<number | undefined>();
 
   async function load(signal?: AbortSignal) {
     loading = true;
@@ -127,6 +130,10 @@
             <span>· {formatDate(e.v.createdAt)}</span>
           </p>
           {#if e.v.comment}<p>{e.v.comment}</p>{/if}
+          <details ontoggle={(ev) => (stackOf = (ev.currentTarget as HTMLDetailsElement).open ? e.v.version : undefined)}>
+            <summary>Change-stack: the changes v{e.v.version} results from</summary>
+            {#if stackOf === e.v.version}<ChangeStackView nodeId={id} version={e.v.version} />{/if}
+          </details>
           {@render detail(e)}
         </section>
       {/if}

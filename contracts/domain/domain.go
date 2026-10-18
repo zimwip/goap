@@ -71,8 +71,11 @@ const (
 	ReasonCreate = "create" // first version of a node
 	ReasonRevise = "revise" // successor on the same branch
 	ReasonDerive = "derive" // first version on a parallel branch
-	ReasonMerge  = "merge"  // merge of versions of two branches
-	ReasonAdopt  = "adopt"  // a version that makes a change branch equal to an adopted flow (ADR 0025)
+	ReasonMerge  = "merge"  // merge of versions of two branches, written on the branch merged into
+	// ReasonRebase: a merge seen from the other side (ADR 0133): the version a rebase writes on the branch of a change,
+	// merging into it the version of the branch it was forked from (its parent branch). Parents: the version the
+	// change had committed, then the parent branch's.
+	ReasonRebase = "rebase"
 )
 
 // BranchOf returns the branch name, defaulting to main.

@@ -24,6 +24,7 @@
   import Icon from '../../shell/Icon.svelte';
   import NodeGraph from '../../components/NodeGraph.svelte';
   import BaselineCompare from '../../components/BaselineCompare.svelte';
+  import ChangeStackView from '../../components/ChangeStackView.svelte';
   import BaselineBranchGraph from '../../components/BaselineBranchGraph.svelte';
   import { isOpenHead } from '../../baselineHistory';
   import { stamp, keyOf } from '../../flux/signals.svelte';
@@ -42,6 +43,8 @@
 
   const namespace = $derived(baselineTool.namespace);
 
+  /** the node version whose change-stack is open (ADR 0133) */
+  let stackOf = $state('');
   let historyWidth = $state(typeof loadRaw(HW_KEY) === 'number' ? (loadRaw(HW_KEY) as number) : 320);
   function resizeHistory(v: number) {
     historyWidth = v;
@@ -704,6 +707,10 @@
         {:else}
           <NodeGraph {index} center={center.id ?? ''} maxDepth={1} {suspect} onrecenter={(nid) => selectNode(byNodeId(nid))} onopen={(nid) => { const n = byNodeId(nid); if (n) void openNode(n, { pin: true }); }} onLinkSelect={(id) => { const l = links.find((x) => x.id === id); if (l) selectLink(l); }} />
           {#if nbLoading}<p class="hint">Loading…</p>{/if}
+          <details class="props" ontoggle={(e) => (stackOf = (e.currentTarget as HTMLDetailsElement).open ? `${center?.id}@${center?.version}` : '')}>
+            <summary>Change-stack of v{center.version}</summary>
+            {#if stackOf === `${center.id}@${center.version}`}<ChangeStackView nodeId={center.id} version={center.version} />{/if}
+          </details>
           {#if propRows(center).length}
             <details class="props" open>
               <summary>Properties</summary>

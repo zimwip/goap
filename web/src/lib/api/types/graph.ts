@@ -1,6 +1,7 @@
 // Graph types (proto3 JSON).
 
 import type { Int64, Struct } from './common';
+import type { ChangeStackJson, StackChangeJson, VersionStepJson, BaselineStepJson } from '../../../gen/goap/graph/v1/graph_pb';
 
 // --- graph ------------------------------------------------------------------
 
@@ -631,3 +632,14 @@ export interface StagedSetting {
 export interface PendingSettings {
   changes?: { namespace: string; changeId: string; nodes?: StagedSetting[] }[];
 }
+
+// --- change-stack (ADR 0133) -------------------------------------------------
+
+/** The changes a node version or a baseline is the application of, oldest first, with the lineage they are read from. */
+export type ChangeStack = ChangeStackJson;
+/** A change of a stack (its title is empty when the caller may not read it). */
+export type StackChange = StackChangeJson;
+/** A version of the lineage of a node version. */
+export type VersionStep = VersionStepJson;
+/** A baseline of the lineage of a baseline. */
+export type BaselineStep = BaselineStepJson;

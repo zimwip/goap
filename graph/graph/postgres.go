@@ -424,6 +424,44 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 	return b, rows.Err()
 }
 
+func (t *pgTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
+	q, args := dialectPG.sqlNamespaceBaselineHeaders(namespace)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Baseline
+	for rows.Next() {
+		b := domain.Baseline{Namespace: domain.NamespaceOf(namespace)}
+		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom)); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error) {
+	q, args := dialectPG.sqlVersionJoins(id)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.VersionJoin
+	for rows.Next() {
+		var v int
+		var j domain.VersionJoin
+		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change)); err != nil {
+			return nil, err
+		}
+		j.Version = domain.Version(v)
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
 func (t *pgTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectPG.sqlBaselineIDs(namespace)
 	rows, err := t.tx.Query(ctx, q, args...)

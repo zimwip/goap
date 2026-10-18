@@ -327,6 +327,46 @@ func (t *sqliteTx) ids(ctx context.Context, q string, args ...any) ([]string, er
 	return out, rows.Err()
 }
 
+func (t *sqliteTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
+	q, args := dialectSQLite.sqlNamespaceBaselineHeaders(namespace)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Baseline
+	for rows.Next() {
+		b := domain.Baseline{Namespace: domain.NamespaceOf(namespace)}
+		var created string
+		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom)); err != nil {
+			return nil, err
+		}
+		b.CreatedAt = tsParse(created)
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error) {
+	q, args := dialectSQLite.sqlVersionJoins(id)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.VersionJoin
+	for rows.Next() {
+		var v int
+		var j domain.VersionJoin
+		if err := rows.Scan(&v, &j.Branch, (*string)(&j.Change)); err != nil {
+			return nil, err
+		}
+		j.Version = domain.Version(v)
+		out = append(out, j)
+	}
+	return out, rows.Err()
+}
+
 func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectSQLite.sqlBaselineIDs(namespace)
 	ids, err := t.ids(ctx, q, args...)

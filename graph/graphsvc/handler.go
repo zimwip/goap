@@ -1177,7 +1177,33 @@ func (h *Handler) DiffBaselines(ctx context.Context, r *connect.Request[graphv1.
 		}
 		out.Nodes = append(out.Nodes, pb)
 	}
+	if err != nil {
+		return res(out, err)
+	}
+	ctx = h.Identity.Context(ctx, r.Header())
+	added, removed, err := h.Graph.DiffStacks(ctx, domain.BaselineID(r.Msg.From), domain.BaselineID(r.Msg.To))
+	out.ChangesAdded, out.ChangesRemoved = pbconv.StackChangesToPB(readableStack(ctx, added)), pbconv.StackChangesToPB(readableStack(ctx, removed))
 	return res(out, err)
+}
+
+// GetChangeStack serves the change-stack of a node version or a baseline (ADR 0133).
+func (h *Handler) GetChangeStack(ctx context.Context, r *connect.Request[graphv1.GetChangeStackRequest]) (*connect.Response[graphv1.GetChangeStackResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	s, err := h.Graph.ChangeStack(ctx, graph.ChangeStackQuery{Node: domain.NodeRef{ID: domain.NodeID(r.Msg.NodeId), Version: domain.Version(r.Msg.Version)},
+		Baseline: domain.BaselineID(r.Msg.BaselineId), Limit: int(r.Msg.Limit)})
+	s.Changes = readableStack(ctx, s.Changes)
+	return res(&graphv1.GetChangeStackResponse{Stack: pbconv.ChangeStackToPB(s)}, err)
+}
+
+// readableStack leaves the title of the personal changes of others out of a stack: their id stays, what they did is
+// in the graph for everyone, what they were called is their subject's (ADR 0037).
+func readableStack(ctx context.Context, cs []domain.StackChange) []domain.StackChange {
+	for i, c := range cs {
+		if !visibleTo(ctx, domain.Change{OwnerOrg: c.OwnerOrg}) {
+			cs[i].Title = ""
+		}
+	}
+	return cs
 }
 
 func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.MergeChangeRequest]) (*connect.Response[graphv1.MergeChangeResponse], error) {
