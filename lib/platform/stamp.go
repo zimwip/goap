@@ -26,3 +26,20 @@ func StampOf(ctx context.Context) Stamp {
 	s, _ := ctx.Value(stampKey{}).(Stamp)
 	return s
 }
+
+// HeaderEventID carries the id of an event on the bus (<origin>:<seq>, ADR 0136), so a consumer that may see it twice
+// can tell.
+const HeaderEventID = "X-Goap-Event-Id"
+
+type eventIDKey struct{}
+
+// WithEventID returns ctx carrying the id of the event being handled.
+func WithEventID(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, eventIDKey{}, id)
+}
+
+// EventIDOf returns the id of the event ctx handles ("" when none).
+func EventIDOf(ctx context.Context) string {
+	id, _ := ctx.Value(eventIDKey{}).(string)
+	return id
+}

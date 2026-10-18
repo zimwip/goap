@@ -8,6 +8,7 @@ import (
 	triggerevents "github.com/zimwip/goap/contracts/events"
 	"os"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/zimwip/goap/lib/domainclient"
 	"github.com/zimwip/goap/lib/graphclient"
 	"github.com/zimwip/goap/lib/identity"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 	"github.com/zimwip/goap/lib/typecat"
@@ -134,6 +136,23 @@ func main() {
 		PersonReviewsModelOutput: platform.EnvBool("GOAP_PERSON_REVIEWS_MODEL_OUTPUT", true), // the oversight floor (EU AI Act Art. 14)
 		Types:                    func() def.TypeSet { return types.Get() },
 	}
+	// the events of the processes go through the outbox of the store (ADR 0136): to the bus, where every replica's
+	// broker reads them and one replica's triggers (their durable consumer, below); without a bus, in process
+	var local atomic.Pointer[engine.TriggerManager]
+	sink := outbox.NATS(events)
+	if events == nil {
+		sink = outbox.Sinks{
+			engine.ProcessEvents(func(_ context.Context, ev engine.ProcessEvent) { broker.Deliver(ev) }),
+			engine.ProcessEvents(func(ctx context.Context, ev engine.ProcessEvent) {
+				if t := local.Load(); t != nil {
+					t.OnProcess(ctx, ev)
+				}
+			}),
+		}
+	}
+	relay := e.Emit(sink)
+	relay.Poll, relay.Retention = platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second), platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
+	go relay.Run(ctx)
 	if locks != nil {
 		if events != nil {
 			// wake-ups and interruptions reach the other replicas at once (ADR 0124)
@@ -196,6 +215,13 @@ func main() {
 			}
 			go func() {
 				handle := func(ctx context.Context, subject string, data []byte) error {
+					if strings.HasPrefix(subject, "goap.process.") {
+						var ev engine.ProcessEvent
+						if json.Unmarshal(data, &ev) == nil && ev.Event != "log" {
+							triggers.OnProcess(ctx, ev)
+						}
+						return nil
+					}
 					if subject == "goap.registry.methodology.published" {
 						var m struct{ Name, Version string }
 						_ = json.Unmarshal(data, &m)
@@ -208,14 +234,14 @@ func main() {
 					}
 					return nil
 				}
-				if err := events.ConsumeDurable(ctx, log, "trigger-manager", []string{"goap.change.>", "goap.registry.methodology.published"}, handle); err != nil {
+				if err := events.ConsumeDurable(ctx, log, "trigger-manager", []string{"goap.change.>", "goap.process.>", "goap.registry.methodology.published"}, handle); err != nil {
 					log.Error("trigger events consumer", "err", err)
 				}
 			}()
 		}
 		triggers.Start(ctx)
-		go triggers.WatchProcesses(ctx, broker)
 	}
+	local.Store(triggers)
 	srv := platform.NewServer(log, platform.Env("GOAP_HTTP_ADDR", ":8080"))
 	srv.Readiness(events.Ready)
 	srv.Mount(enginev1connect.NewEngineServiceHandler(&enginesvc.Handler{Engine: e, Log: log, Authz: authorizer, Broker: broker, Triggers: triggers}, telemetry.HandlerOptions()...))

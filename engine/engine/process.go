@@ -18,6 +18,7 @@ import (
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/engine/goap"
 	"github.com/zimwip/goap/engine/intent"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Status is the lifecycle state of a process.
@@ -367,6 +368,14 @@ type Store interface {
 	ListProcessLog(ctx context.Context, processID string) ([]ProcessLogEntry, error)
 }
 
+// EventStore is a Store that keeps the outbox of the engine (ADR 0136): PutEmitting writes p (when not nil) and
+// appends the messages to the outbox in one transaction, nothing written when the write of p is refused.
+type EventStore interface {
+	Store
+	outbox.Store
+	PutEmitting(ctx context.Context, p *Process, msgs ...outbox.Message) error
+}
+
 // ProcessLogEntry is one append-only entry of a process's own log.
 type ProcessLogEntry struct {
 	Seq       int64          `json:"seq"`
@@ -384,6 +393,35 @@ type MemoryStore struct {
 	mu  sync.RWMutex
 	m   map[string]*Process
 	log map[string][]ProcessLogEntry
+	out outbox.Memory
+}
+
+var _ EventStore = (*MemoryStore)(nil)
+
+// PutEmitting implements EventStore.
+func (s *MemoryStore) PutEmitting(_ context.Context, p *Process, msgs ...outbox.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if p != nil {
+		s.m[p.ID] = clone(p)
+	}
+	s.out.Append(msgs...)
+	return nil
+}
+
+// Pending implements outbox.Store.
+func (s *MemoryStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.out.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s *MemoryStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.out.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s *MemoryStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.out.PurgePublished(ctx, before)
 }
 
 // NewMemoryStore returns an empty store.

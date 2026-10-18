@@ -978,7 +978,8 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 
 | Subject | Emitter | Content |
 |---|---|---|
-| `goap.process.<id>.started` / `.attached` / `.step` / `.step_completed` / `.intent` / `.waiting` / `.clarifying` / `.stuck` / `.completed` / `.failed` / `.cancelled` / `.superseded` / `.log` | engine | `ProcessEvent` |
+| `goap.process.<id>.started` / `.attached` / `.step` / `.step_completed` / `.intent` / `.waiting` / `.clarifying` / `.stuck` / `.completed` / `.failed` / `.cancelled` / `.superseded` | engine, through the outbox of its process store (ADR 0136), with the process | `ProcessEvent` |
+| `goap.process.<id>.log` | engine, published directly (a live display, ADR 0136 §4) | `ProcessEvent` with a `LogLine` |
 | `goap.change.<id>.created` / `.edited` / `.attached` / `.detached` / `.item_added` / `.signal` / `.committed` / `.transitioned` / `.applied` / `.purged` | graph, through its outbox ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)), from the operation that writes the fact | `ChangeEvent` |
 | `goap.changed.<id>` | graph, through its outbox | `ChangeEvent` of type `change.updated`: the header, the impacts or the log of a change were written (the web) |
 | `goap.changeindex.<id>` | graph, through its outbox | `ChangeDocEvent`: the document of a change for the index |
@@ -990,8 +991,12 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 Each service emits its own events ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)): an event is
 written in the outbox table of its database (`event_outbox`) in the transaction that writes its fact, and a relay
 (`lib/outbox`) delivers it afterwards, in order and at least once, with its id `<service>:<seq>` (`Nats-Msg-Id`,
-`X-Goap-Event-Id`). No caller emits an event on behalf of a service. The graph does so today; the engine, the
-registries and the other services follow (ADR 0136, Steps).
+`X-Goap-Event-Id`). No caller emits an event on behalf of a service. The graph and the engine do so today (the engine
+writes a process and its event in one transaction, table `process_outbox`; its replicas deliver one at a time under
+the shared lock `outbox`); the registries and the other services follow (ADR 0136, Steps). The consumers that act on
+an event are durable and idempotent: the trigger manager reads `goap.change.>` and `goap.process.>` through one
+durable consumer shared by the engine replicas (in process in the local mode: the relays' sinks, never the lossy
+broker), handles an event id once (`platform.EventIDOf`, `outbox.EventID`) and rate-limits a trigger per change.
 
 ### 3.2 Engine clustering ([ADR 0124](adr/0124-engine-replicas-share-processes.md))
 

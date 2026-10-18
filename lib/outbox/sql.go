@@ -10,7 +10,8 @@ import (
 	"time"
 )
 
-// The outbox table of a service (both dialects, in its own migrations):
+// The outbox table of a service (both dialects, in its own migrations; services sharing a database, as in the local
+// mode, name theirs apart: SQL.Table):
 //
 //	CREATE TABLE event_outbox (
 //	    seq          bigserial   PRIMARY KEY,   -- INTEGER PRIMARY KEY AUTOINCREMENT
@@ -30,13 +31,21 @@ type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-// SQL is the outbox of a database/sql database; Postgres selects the dialect (SQLite otherwise).
+// SQL is the outbox of a database/sql database; Postgres selects the dialect (SQLite otherwise), Table names the
+// outbox table (event_outbox by default).
 type SQL struct {
 	DB       *sql.DB
 	Postgres bool
+	Table    string
 }
 
-func (s SQL) q(query string) string { return Rebind(query, s.Postgres) }
+func (s SQL) q(query string) string {
+	t := s.Table
+	if t == "" {
+		t = "event_outbox"
+	}
+	return Rebind(strings.ReplaceAll(query, "event_outbox", t), s.Postgres)
+}
 
 // Rebind turns the ? placeholders of a query into $n for PostgreSQL.
 func Rebind(query string, postgres bool) string {

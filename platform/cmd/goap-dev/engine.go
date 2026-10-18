@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"maps"
+	"time"
 
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/engine/engine"
@@ -12,6 +14,7 @@ import (
 	"github.com/zimwip/goap/engine/sandbox"
 	"github.com/zimwip/goap/engine/selfimprove"
 	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 	"github.com/zimwip/goap/mcp/connectors/builtin"
@@ -62,9 +65,23 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		Types:                    func() def.TypeSet { return rp.types.Get() },
 	}
 	// a store shared by replicas (sqlite) serializes the work on a process through its locks, and the runs left by
-	// the previous start are resumed (ADR 0124)
-	if locks, ok := st.processes.(engine.Locker); ok {
+	// the previous start are resumed (ADR 0124, below once the outbox is set)
+	locks, shared := st.processes.(engine.Locker)
+	if shared {
 		eg.Locks = locks
+	}
+	// the events of the processes go through the engine's outbox (ADR 0136), delivered in process: to the live
+	// broker, the event stream of the web and the triggers (late bound)
+	relay := eg.Emit(outbox.Sinks{
+		engine.ProcessEvents(func(_ context.Context, ev engine.ProcessEvent) { broker.Deliver(ev) }),
+		outbox.SinkFunc(func(ctx context.Context, m outbox.Message) error {
+			rp.bus.Ingest(m.Subject, m.Data, platform.StampOf(ctx))
+			return nil
+		}),
+		engine.ProcessEvents(e.triggers.onProcess)})
+	relay.Poll, relay.Retention = platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second), platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
+	go relay.Run(e.ctx)
+	if shared {
 		go eg.Recover(e.ctx, 0)
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
@@ -72,7 +89,6 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	triggers := &engine.TriggerManager{Engine: eg, Log: e.log}
 	e.triggers.set(triggers)
 	triggers.Start(e.ctx)
-	go triggers.WatchProcesses(e.ctx, broker)
 	handler := &enginesvc.Handler{Engine: eg, Log: e.log, DefaultPrincipal: e.dev, Authz: gp.authorizer, Broker: broker, Triggers: triggers}
 	// the built-in connectors call the platform in-process, for the caller of the tool
 	maps.Copy(pp.connectors, builtin.Connectors(builtin.Ports{Graph: g, Engine: handler,

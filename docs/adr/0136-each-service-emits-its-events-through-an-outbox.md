@@ -63,11 +63,17 @@ relay publishes them afterwards. The outbox is generic (`lib/outbox`):
 - `outbox.Relay` reads the unpublished rows in `id` order, publishes each to the bus with `Nats-Msg-Id`
   `<service>:<id>` (JetStream deduplicates a row published twice within its window), marks it published, and is woken
   right after a commit (in process) or by its poll interval (`GOAP_OUTBOX_POLL`, 1 s); one relay at a time per
-  database (PostgreSQL: advisory lock; SQLite: one process). Published rows are deleted after
+  outbox (`Relay.Lease`, a lease shared by the replicas). Published rows are deleted after
   `GOAP_OUTBOX_RETENTION` (24 h). A row that cannot be published stays and is retried with a backoff: the order of a
   service's events is kept.
 - The headers keep what the publishers put on a message today (trace context, actor, command), captured from the
   context at `Append`.
+
+The engine's outbox is `process_outbox` (its tables live in the database it may share with others in the local
+mode; `outbox.SQL.Table`), written by `EventStore.PutEmitting` with the process; the replicas sharing it deliver one at
+a time (`outbox.Relay.Lease`, the engine's shared lock `outbox` of ADR 0124); concurrent writes of different
+processes may reach the bus in the order their transactions committed rather than their rank, the order of one
+process's events is kept.
 
 `goap-dev` runs the same relays over its in-process bus (`eventsvc.Hub` and the trigger manager): the local mode has
 the same events, from the same places, as the distributed one. A memory store (graph tests, `graph.NewMemory`) keeps
@@ -87,15 +93,18 @@ its outbox in memory with the same semantics.
 
 ### 4. What is not a stored fact
 
+The log lines of a run (`goap.process.<id>.log`) are a live display nothing keeps: the engine publishes them directly
+(`Engine.Events`), outside the outbox.
+
 An event computed from the state rather than written with it (`methodology.suspended` / `resumed`, recomputed from the
 domains in force at each start and on each domain event) has no outbox row: it is emitted when computed, and its
 consumers read the state again on a resync.
 
 ## Steps
 
-1. `lib/outbox`; the graph writes all its events (§1) in its outbox, the handler and `EventingGraph` stop emitting;
+1. (done) `lib/outbox`; the graph writes all its events (§1) in its outbox, the handler and `EventingGraph` stop emitting;
    the dead subjects go.
-2. The engine: its process events in the outbox of the process store (`enginesvc.SQLStore`, same transaction as the
+2. (done) The engine: its process events in the outbox of the process store (`enginesvc.SQLStore`, same transaction as the
    `Put`), durable consumers for the triggers and the companions, the rate limit per change.
 3. The domain registry (graph database) and the methodology registry (its events ride on the graph write that stores
    the version).

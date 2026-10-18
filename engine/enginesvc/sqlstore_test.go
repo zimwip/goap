@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/zimwip/goap/engine/engine"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/pgtest"
 	"github.com/zimwip/goap/lib/platform"
 )
@@ -131,6 +132,43 @@ func TestSQLStoreLocks(t *testing.T) {
 			}
 			if held, _, _ := b.Acquire(ctx, "p", ttl); !held {
 				t.Fatal("b after release all")
+			}
+		})
+	}
+}
+
+// A process and its events are written in one transaction (ADR 0136): a fenced write leaves no event behind.
+func TestSQLStoreOutbox(t *testing.T) {
+	for name, open := range stores(t) {
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			a, b := open("a"), open("b")
+			now := time.Now().UTC()
+			m, err := outbox.New(ctx, "goap.process.p.running", map[string]string{"event": "running"}, now)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := a.PutEmitting(ctx, &engine.Process{ID: "p", Status: engine.StatusRunning, CreatedAt: now}, m); err != nil {
+				t.Fatal(err)
+			}
+			if held, _, err := a.Acquire(ctx, "p", time.Minute); err != nil || !held {
+				t.Fatalf("a acquires: %v %v", held, err)
+			}
+			if err := b.PutEmitting(ctx, &engine.Process{ID: "p", Status: engine.StatusFailed, CreatedAt: now}, m); !errors.Is(err, engine.ErrFenced) {
+				t.Fatalf("fenced write: %v", err)
+			}
+			pending, err := a.Pending(ctx, 10)
+			if err != nil || len(pending) != 1 || pending[0].Subject != "goap.process.p.running" || string(pending[0].Data) != `{"event":"running"}` {
+				t.Fatalf("pending: %+v %v", pending, err)
+			}
+			if err := a.MarkPublished(ctx, []int64{pending[0].Seq}, now); err != nil {
+				t.Fatal(err)
+			}
+			if p, _ := a.Pending(ctx, 10); len(p) != 0 {
+				t.Fatalf("published still pending: %+v", p)
+			}
+			if err := a.PurgePublished(ctx, now.Add(time.Second)); err != nil {
+				t.Fatal(err)
 			}
 		})
 	}

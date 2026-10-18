@@ -154,6 +154,13 @@ Design rules that follow, to keep the whole consistent:
   (`CommitChange`, so `Apply` too), `transitioned`, `applied` (wherever a change lands), `purged`. There is no
   `engine.EventingGraph`, no `graphsvc.Handler.publish`; `goap-dev` delivers the relay in process (index, `eventsvc.Hub`,
   `engine.ChangeEvents` to the triggers), `platform/cmd/graph` to NATS. A new write of a change raises its event in its
-  transaction. Done: the graph (step 1); to come: the engine, the registries, credentials, preferences, conversations,
-  hub, model gateway (ADR 0136 §Steps).
+  transaction. The engine writes its process events with the process (`EventStore.PutEmitting`, `MemoryStore` and
+  `enginesvc.SQLStore`, table `process_outbox`; `Engine.emit` from `save` and `stepCompleted`; `Engine.Emit(sink)`
+  returns the relay, delivering in the background after each write, one replica at a time under the shared lock
+  `outbox`, `Relay.Lease`; without `Emit` the old direct publication, as in the tests); the log lines stay direct.
+  Consumers are idempotent: `ProcessEvents` / `ChangeEvents` sinks in process, one durable consumer for
+  `goap.change.>` and `goap.process.>` in `platform/cmd/engine`; `TriggerManager.OnProcess` (`WatchProcesses` over the
+  lossy broker is for tests), `Handle` skips an event id seen lately (`outbox.EventID(ctx)`, set by `outbox.Context`
+  and `ConsumeDurable`), the rate limit is per trigger and change. Done: the graph and the engine (steps 1, 2); to come:
+  the registries, credentials, preferences, conversations, hub, model gateway (ADR 0136 §Steps).
 - One event stream and presence (ADR 0053): `platform/eventsvc` (`Hub` is a `Publisher`/`EventSink` fed in process by `goap-dev`, from NATS by `platform/cmd/events`; `Watch` resumes by `(epoch, seq)` or says `resync`; `Heartbeat`/`Leave` are the presence, in memory with a TTL). The graph publishes `change.updated` (`goap.changed.<id>`) for every change header / impact / log write, so a new write path needs no extra event. Web: never refetch after a write; `web/src/lib/flux/` (`events.svelte.ts` the one stream, `reducers.svelte.ts` events → `signals.svelte.ts` stamps; a view that loads depends on `stamp(keyOf.…)` in its `$effect`); every `rpc` carries `X-Goap-Command`.

@@ -72,3 +72,26 @@ func TestDrainStopsAtTheFirstFailure(t *testing.T) {
 		t.Fatalf("delivered %v", got)
 	}
 }
+
+type lease struct{ held, lets int }
+
+func (l *lease) Hold(context.Context) (bool, error) { return l.held > 0, nil }
+func (l *lease) Let(context.Context)                { l.lets++ }
+
+// A relay that does not hold the lease of the outbox leaves the delivery to the replica that does.
+func TestDrainNeedsTheLease(t *testing.T) {
+	ctx := context.Background()
+	store := &Memory{}
+	m, _ := New(ctx, "a", nil, time.Now())
+	store.Append(m)
+	var got int
+	l := &lease{}
+	r := &Relay{Store: store, Lease: l, Sink: SinkFunc(func(context.Context, Message) error { got++; return nil })}
+	if err := r.Drain(ctx); !errors.Is(err, ErrBusy) || got != 0 {
+		t.Fatalf("without the lease: %v, %d delivered", err, got)
+	}
+	l.held = 1
+	if err := r.Drain(ctx); err != nil || got != 1 || l.lets != 2 {
+		t.Fatalf("with the lease: %v, %d delivered, %d lets", err, got, l.lets)
+	}
+}

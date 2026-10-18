@@ -4,12 +4,14 @@
 package outbox
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -19,7 +21,7 @@ import (
 )
 
 // HeaderEventID carries the id of an event (Message.EventID) on the bus, so a consumer that may see it twice can tell.
-const HeaderEventID = "X-Goap-Event-Id"
+const HeaderEventID = platform.HeaderEventID
 
 // Message is an event of the outbox: its subject, its JSON payload and the headers its context gave it (trace,
 // actor, command). Seq is its rank in the outbox, 0 before it is stored; Origin is the service whose outbox holds it.
@@ -50,14 +52,21 @@ func New(ctx context.Context, subject string, v any, at time.Time) (Message, err
 	return Message{Subject: subject, Data: data, Headers: h, CreatedAt: at}, nil
 }
 
-// Context is ctx carrying what the headers of m say: its trace context and its stamp.
+// Context is ctx carrying what m says: its trace context, its stamp and its event id (platform.EventIDOf).
 func Context(ctx context.Context, m Message) context.Context {
 	ctx = otel.GetTextMapPropagator().Extract(ctx, propagation.MapCarrier(m.Headers))
+	if m.Seq != 0 {
+		ctx = platform.WithEventID(ctx, m.EventID())
+	}
 	if c := m.Headers[platform.HeaderCommand]; c != "" {
 		ctx = platform.WithStamp(ctx, platform.Stamp{Actor: m.Headers[platform.HeaderActor], Command: c})
 	}
 	return ctx
 }
+
+// EventID is the id of the event ctx handles (Context, or a durable consumer of the bus), "" when none: a consumer that
+// may see an event twice tells it by this id.
+func EventID(ctx context.Context) string { return platform.EventIDOf(ctx) }
 
 // Store is the outbox of a service as its relay reads it.
 type Store interface {
@@ -138,13 +147,26 @@ type Relay struct {
 	Log             *slog.Logger
 	// Now is the clock (time.Now by default).
 	Now func() time.Time
+	// Lease, when set, makes one relay of the replicas sharing the outbox deliver at a time: a drain that does not
+	// hold it leaves the delivery to the holder (ErrBusy). Without it the replicas' relays may deliver one message
+	// twice, which the bus deduplicates by its id.
+	Lease Lease
 
-	mu   sync.Mutex
-	once sync.Once
-	kick chan struct{}
+	mu    sync.Mutex
+	again atomic.Bool
+	once  sync.Once
+	kick  chan struct{}
 }
 
 const batch = 100
+
+// Lease is a lock shared by the replicas of a service, held for a while and renewed by its holder.
+type Lease interface {
+	// Hold takes the lease, or renews it when this replica holds it; false while another replica holds it.
+	Hold(ctx context.Context) (bool, error)
+	// Let lets it go.
+	Let(ctx context.Context)
+}
 
 // ErrBusy is returned by Drain when another drain of the relay is at work (it delivers what this one would have).
 var ErrBusy = errors.New("outbox relay busy")
@@ -182,15 +204,32 @@ func (r *Relay) Drain(ctx context.Context) error {
 		return nil
 	}
 	if !r.mu.TryLock() {
+		// the drain at work looks again before it stops, so what this one would deliver is not left behind
+		r.again.Store(true)
 		r.Kick()
 		return ErrBusy
 	}
 	defer r.mu.Unlock()
 	ctx = context.WithoutCancel(ctx) // a delivery outlives the request that wrote the event
+	if r.Lease != nil {
+		defer r.Lease.Let(ctx)
+	}
 	for {
+		if r.Lease != nil {
+			if held, err := r.Lease.Hold(ctx); err != nil || !held {
+				return cmp.Or(err, ErrBusy)
+			}
+		}
+		r.again.Store(false)
 		msgs, err := r.Store.Pending(ctx, batch)
-		if err != nil || len(msgs) == 0 {
+		if err != nil {
 			return err
+		}
+		if len(msgs) == 0 {
+			if r.again.Load() {
+				continue
+			}
+			return nil
 		}
 		var done []int64
 		var failed error

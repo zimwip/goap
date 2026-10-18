@@ -114,3 +114,10 @@ func (t *triggerRef) handle(ctx context.Context, ev engine.TriggerEvent) {
 func (t *triggerRef) onChange(ctx context.Context, ev domain.ChangeEvent) {
 	t.handle(ctx, engine.TriggerEventOf(ev))
 }
+
+// onProcess forwards a process event of the engine to the triggers.
+func (t *triggerRef) onProcess(ctx context.Context, ev engine.ProcessEvent) {
+	if m := t.m.Load(); m != nil {
+		m.OnProcess(ctx, ev)
+	}
+}
