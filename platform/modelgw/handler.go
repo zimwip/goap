@@ -121,7 +121,7 @@ func (h *Handler) ListProviderKinds(ctx context.Context, r *connect.Request[mode
 }
 
 func providerToPB(v ProviderView) *modelv1.Provider {
-	return &modelv1.Provider{Name: v.Name, Kind: v.Kind, Protocol: v.Protocol, BaseUrl: v.BaseURL, Enabled: v.Enabled, HasKey: v.HasKey, ApiKeyRef: v.APIKeyRef, Active: v.Active}
+	return &modelv1.Provider{Name: v.Name, Kind: v.Kind, Protocol: v.Protocol, BaseUrl: v.BaseURL, Enabled: v.Enabled, HasKey: v.HasKey, ApiKeyRef: v.APIKeyRef, Active: v.Active, Reason: v.Reason}
 }
 
 func providerFromPB(p *modelv1.Provider) ProviderRecord {
