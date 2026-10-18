@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/jackc/pgx/v5/stdlib"
@@ -43,6 +45,9 @@ func main() {
 		log.Info("model alias", "alias", n, "provider", targets[n].Provider, "model", targets[n].Model)
 	}
 	log.Info("providers", "providers", providers)
+	// the providers whose well-known API key variable is set (ANTHROPIC_API_KEY, ...) are signed on with no model (the
+	// administrator picks the models in the settings), once the graph has seeded the model configuration
+	go signOn(ctx, log, graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...), svc)
 
 	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, graphURL)})
 	if err != nil {
@@ -62,5 +67,31 @@ func main() {
 	}
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
+	}
+}
+
+// signOn signs on to the providers of the environment, retrying while the graph is unreachable or not booted yet.
+func signOn(ctx context.Context, log *slog.Logger, g modelgw.SignOnGraph, svc *modelgw.Service) {
+	detected := modelgw.DetectProviders(os.LookupEnv)
+	if len(detected) == 0 {
+		return
+	}
+	for wait := time.Second; ; wait = min(2*wait, time.Minute) {
+		names, err := modelgw.SignOn(ctx, g, detected)
+		if err == nil {
+			if len(names) > 0 {
+				log.Info("providers signed on from the environment", "providers", names)
+				if err := svc.Reload(ctx); err != nil {
+					log.Warn("model configuration not read", "err", err)
+				}
+			}
+			return
+		}
+		log.Debug("sign on to the providers of the environment: retrying", "err", err)
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
 	}
 }
