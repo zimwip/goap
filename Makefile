@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test tidy web-test test-pg lint eval generate tools up down logs dev dev-backend dev-web dev-reset web runner-image claude-agent-runner
+.PHONY: help all build test tidy web-test test-pg lint eval generate tools up down logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -87,14 +87,17 @@ web: dev-web ## same as dev-web
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
 
+images: runner-image ## the image of every Go service of the compose stack (goap/goap:dev), built once
+	docker build --target services -t goap/goap:dev .
+
 claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
 	go run ./platform/cmd/connector-claude-coding-agent install
 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)
 
-up: runner-image ## start the docker compose stack, then print how to reach its database (DBeaver)
-	$(COMPOSE) up --build -d
+up: images ## start the docker compose stack, then print how to reach its database (DBeaver)
+	$(COMPOSE) up -d
 	@echo
 	@echo "PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):"
 	@echo "  host localhost, port 5432, database goap, user goap, password goap"

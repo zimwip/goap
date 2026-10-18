@@ -1091,7 +1091,7 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   (`.goap/goap.db`, pure Go driver), rebuilt by air on a code change, and the IDE from vite on
   http://localhost:5173. `GOAP_STORE=memory` (the default of a bare `go run ./platform/cmd/goap-dev`) keeps the
   ephemeral mode.
-- A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`.
+- A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
 - Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
   the work-queue stream depth), NATS via the official chart, Vault Agent Injector.
 
