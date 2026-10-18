@@ -16,6 +16,8 @@ import (
 
 	graphv1 "github.com/zimwip/goap/contracts/gen/goap/graph/v1"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
+	modelv1 "github.com/zimwip/goap/contracts/gen/goap/model/v1"
+	"github.com/zimwip/goap/contracts/gen/goap/model/v1/modelv1connect"
 )
 
 // smokeApp builds the whole platform in one process on a temporary SQLite database, with no sign-in, and serves
@@ -147,4 +149,27 @@ func TestRunStopsWithItsContext(t *testing.T) {
 	case <-time.After(20 * time.Second):
 		t.Fatal("run did not stop with its context")
 	}
+}
+
+// A well-known API key variable set at start signs the gateway on to its provider, with no model.
+func TestSignOnFromEnvironment(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the whole platform; skipped with -short")
+	}
+	t.Setenv("MISTRAL_API_KEY", "smoke-key")
+	_, ts := smokeApp(t)
+	models := modelv1connect.NewModelServiceClient(ts.Client(), ts.URL)
+	list, err := models.ListProviders(context.Background(), connect.NewRequest(&modelv1.ListProvidersRequest{}))
+	if err != nil {
+		t.Fatalf("ListProviders: %v", err)
+	}
+	for _, p := range list.Msg.Providers {
+		if p.Name == "mistral" {
+			if p.Kind != "mistral" || !p.Enabled || !p.HasKey || p.ApiKeyRef != "env:MISTRAL_API_KEY" {
+				t.Fatalf("mistral = %+v", p)
+			}
+			return
+		}
+	}
+	t.Fatalf("providers = %v", list.Msg.Providers)
 }

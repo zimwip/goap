@@ -92,11 +92,14 @@ services:
       <<: *env
       GOAP_DB_DSN: postgres://modelgw:modelgw@postgres:5432/goap?sslmode=disable
       GOAP_GRAPH_URL: http://graph:8080
-      # the provider keys of your shell, for providers whose key is env:<VAR> (the key reference of a provider, in the settings)
+      # the provider keys of your shell: the gateway signs on to each provider whose key is set (models picked in the
+      # settings), and a provider whose key is env:<VAR> (the key reference of a provider, in the settings) finds it
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       MISTRAL_API_KEY: ${MISTRAL_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_KEY: ${OPENAI_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_API_KEY: ${GOOGLE_API_KEY:-}
       # the Anthropic endpoint of a connector calling a model by itself (ADR 0123 §6), tokens minted by the hub
       GOAP_MODEL_PROXY_SECRET: ${GOAP_MODEL_PROXY_SECRET:-dev-model-proxy-secret}
     ports: ["8084:8080"]

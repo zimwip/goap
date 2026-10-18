@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/events"
@@ -120,6 +121,13 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 			return nil
 		}}); err != nil {
 		return nil, wrap("boot", err)
+	}
+	// the providers whose well-known API key variable is set (ANTHROPIC_API_KEY, ...), signed on with no model: the
+	// administrator picks the models in the settings
+	if names, err := modelgw.SignOn(e.ctx, g, modelgw.DetectProviders(os.LookupEnv)); err != nil {
+		e.log.Warn("sign on to the providers of the environment", "err", err)
+	} else if len(names) > 0 {
+		e.log.Info("providers signed on from the environment", "providers", names)
 	}
 	loaded, err := reg.Seed(system, e.cfg.MethodologiesDir)
 	if err != nil {
