@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test tidy web-test test-pg lint eval generate tools up urls down logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
+.PHONY: help all build test tidy web-test test-pg lint eval generate tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -105,6 +105,10 @@ urls: ## the URLs of the compose stack: IDE, gateway, each service, tools, datab
 
 down: ## stop the docker compose stack
 	$(COMPOSE) down
+
+reset: ## stop the docker compose stack and drop everything it keeps: containers, volumes (database, NATS, web modules), images built for it
+	$(COMPOSE) down --volumes --remove-orphans
+	-docker image rm goap/goap:dev goap/runner:dev
 
 logs: ## follow the logs of the docker compose stack
 	$(COMPOSE) logs -f engine graph registry modelgw gateway

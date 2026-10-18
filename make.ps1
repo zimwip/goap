@@ -159,6 +159,11 @@ function Up {
 function Urls { Get-Content deploy/compose/urls.txt | Write-Host }
 
 function Down { DockerSock; Run docker @Compose down }
+function Reset {
+    DockerSock
+    Run docker @Compose down --volumes --remove-orphans
+    & docker image rm goap/goap:dev goap/runner:dev # absent images are not an error
+}
 function Logs { DockerSock; Run docker @Compose logs -f engine graph registry modelgw gateway }
 
 function Help {
@@ -188,6 +193,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
   up | down | logs  docker compose stack (up prints its URLs and how to reach its database, DBeaver)
+  reset             stop the stack and drop its containers, volumes (database, NATS, web modules) and images
   urls              the URLs of the compose stack: IDE, gateway, each service, tools, database
 '@ | Write-Host
 }
@@ -214,6 +220,7 @@ switch ($Target) {
     'up'               { Up }
     'urls'             { Urls }
     'down'             { Down }
+    'reset'            { Reset }
     'logs'             { Logs }
     { $_ -in 'help', '-h', '--help' } { Help }
     default            { Help; throw "unknown target: $Target" }
