@@ -12,13 +12,17 @@ import (
 // version only joins its branch once Apply advances it, after validators run.
 type txQuery struct {
 	tx     Tx
-	target map[domain.NodeID]domain.Version
+	target *stateView
 }
 
 func (q txQuery) NodesOfType(ctx context.Context, namespace, typ string) ([]domain.Node, error) {
 	ns := domain.NamespaceOf(namespace)
 	var out []domain.Node
-	for id, v := range q.target {
+	target, err := q.target.all() // a question about every node of the state
+	if err != nil {
+		return nil, err
+	}
+	for id, v := range target {
 		n, err := q.tx.Node(ctx, domain.NodeRef{ID: id, Version: v})
 		if err != nil {
 			return nil, err
@@ -36,14 +40,18 @@ func (q txQuery) OutLinksOf(ctx context.Context, ref domain.NodeRef) ([]domain.L
 
 func (q txQuery) Node(ctx context.Context, ref domain.NodeRef) (domain.Node, error) {
 	if ref.Version == 0 {
-		ref.Version = q.target[ref.ID]
+		v, _, err := q.target.get(ref.ID)
+		if err != nil {
+			return domain.Node{}, err
+		}
+		ref.Version = v
 	}
 	return q.tx.Node(ctx, ref)
 }
 
 // runNodeValidators runs the registered NodeValidator plugins whose declared types intersect the types this
 // change actually wrote (ADR 0048), grouping cposts per validator so each sees only its own impacted nodes.
-func (g *Graph) runNodeValidators(ctx context.Context, tx Tx, target map[domain.NodeID]domain.Version, cposts []cpost) error {
+func (g *Graph) runNodeValidators(ctx context.Context, tx Tx, target *stateView, cposts []cpost) error {
 	if len(g.Validators) == 0 {
 		return nil
 	}

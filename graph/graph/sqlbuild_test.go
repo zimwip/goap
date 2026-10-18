@@ -123,6 +123,21 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg BaselineEntries", pg, q, a, entries("$1")+` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1"})
 	q, a = lite.sqlBaselineEntries("b1")
 	check("sqlite BaselineEntries", lite, q, a, entries("?")+` SELECT node_id, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1"})
+	ids := []domain.NodeID{"n1", "n2"}
+	q, a = pg.sqlBaselineVersions("b1", ids)
+	check("pg BaselineVersions", pg, q, a, strings.Replace(entries("$1"), "e.baseline_id = c.id", "e.baseline_id = c.id WHERE e.node_id = ANY($2::uuid[])", 1)+
+		` SELECT node_id::text, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1", []string{"n1", "n2"}})
+	q, a = lite.sqlBaselineVersions("b1", ids)
+	check("sqlite BaselineVersions", lite, q, a, strings.Replace(entries("?"), "e.baseline_id = c.id", "e.baseline_id = c.id WHERE e.node_id IN (SELECT value FROM json_each(?))", 1)+
+		` SELECT node_id, version FROM eff WHERE rn = 1 AND NOT removed`, []any{"b1", `["n1","n2"]`})
+	q, a = pg.sqlBaselineHeader("b1")
+	check("pg BaselineHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from::text, '') FROM baseline WHERE id = $1`, []any{"b1"})
+	q, a = lite.sqlBaselineHeader("b1")
+	check("sqlite BaselineHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from, '') FROM baseline WHERE id = ?`, []any{"b1"})
+	q, a = pg.sqlBranchNodeIDs("change-1")
+	check("pg BranchNodeIDs", pg, q, a, `SELECT node_id::text FROM node_version WHERE branch = $1 UNION SELECT node_id::text FROM node_branch WHERE branch = $1`, []any{"change-1"})
+	q, a = lite.sqlBranchNodeIDs("change-1")
+	check("sqlite BranchNodeIDs", lite, q, a, `SELECT node_id FROM node_version WHERE branch = ? UNION SELECT node_id FROM node_branch WHERE branch = ?`, []any{"change-1"})
 
 	// Links
 	q, a = pg.sqlLinks(true, ref)

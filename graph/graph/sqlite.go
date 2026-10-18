@@ -327,6 +327,51 @@ func (t *sqliteTx) ids(ctx context.Context, q string, args ...any) ([]string, er
 	return out, rows.Err()
 }
 
+func (t *sqliteTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
+	var b domain.Baseline
+	var created string
+	q, args := dialectSQLite.sqlBaselineHeader(id)
+	err := t.tx.QueryRowContext(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created,
+		&b.Branch, &b.Namespace, &b.Gap, &b.Kind, (*string)(&b.RebasedFrom))
+	if err != nil {
+		return b, sqliteErr(err, "baseline "+string(id))
+	}
+	b.CreatedAt = tsParse(created)
+	return b, nil
+}
+
+func (t *sqliteTx) BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	out := map[domain.NodeID]domain.Version{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	q, args := dialectSQLite.sqlBaselineVersions(id, ids)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var nid string
+		var v int
+		if err := rows.Scan(&nid, &v); err != nil {
+			return nil, err
+		}
+		out[domain.NodeID(nid)] = domain.Version(v)
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
+	q, args := dialectSQLite.sqlBranchNodeIDs(branch)
+	ids, err := t.ids(ctx, q, args...)
+	out := make([]domain.NodeID, len(ids))
+	for i, id := range ids {
+		out[i] = domain.NodeID(id)
+	}
+	return out, err
+}
+
 func (t *sqliteTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectSQLite.sqlNamespaceBaselineHeaders(namespace)
 	rows, err := t.tx.QueryContext(ctx, q, args...)

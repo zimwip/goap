@@ -50,6 +50,8 @@ type guardTx struct {
 	owners     map[domain.NodeID]string
 	projects   map[domain.NodeID]string
 	changes    map[domain.ChangeID]domain.Change
+	// newBaselines are the baselines the transaction wrote (their moves are not cached before it ends)
+	newBaselines map[domain.BaselineID]bool
 	// headers caches the changes read to stamp versions
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote

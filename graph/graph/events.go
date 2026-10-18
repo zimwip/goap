@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -36,6 +37,8 @@ type observedTx struct {
 	// nodes are the versions written by the transaction
 	nodes     []domain.NodeRef
 	baselines []domain.Baseline
+	// deltas are what the baselines written over their parent changed (putBaselineOver)
+	deltas map[domain.BaselineID]map[domain.NodeID]domain.Version
 	// changes written in the transaction, in order: the header when it was written, else just the id
 	changes []domain.ChangeID
 	headers map[domain.ChangeID]domain.Change
@@ -124,6 +127,28 @@ func (t *observedTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
 	return nil
 }
 
+// putBaselineOver writes a baseline over another (putBaselineOver); its event is the delta when over is its parent.
+func (t *observedTx) putBaselineOver(ctx context.Context, b domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) error {
+	if err := putBaselineOver(ctx, t.Tx, b, over, delta); err != nil {
+		return err
+	}
+	if over != b.ParentID {
+		full, err := t.Tx.Baseline(ctx, b.ID)
+		if err != nil {
+			return err
+		}
+		t.baselines = append(t.baselines, full)
+		return nil
+	}
+	if t.deltas == nil {
+		t.deltas = map[domain.BaselineID]map[domain.NodeID]domain.Version{}
+	}
+	t.deltas[b.ID] = delta
+	b.Nodes = nil
+	t.baselines = append(t.baselines, b)
+	return nil
+}
+
 type published struct {
 	subject string
 	v       any
@@ -197,6 +222,17 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 	}
 	for _, b := range ot.baselines {
 		ev := domain.BaselineEvent{ID: b.ID, Branch: domain.BranchOf(b.Branch), Parent: b.ParentID, Set: map[domain.NodeID]domain.Version{}, Time: b.CreatedAt}
+		if delta, ok := ot.deltas[b.ID]; ok {
+			for _, id := range slices.Sorted(maps.Keys(delta)) {
+				if v := delta[id]; v == 0 {
+					ev.Removed = append(ev.Removed, id)
+				} else {
+					ev.Set[id] = v
+				}
+			}
+			out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
+			continue
+		}
 		var parent map[domain.NodeID]domain.Version
 		if b.ParentID != "" {
 			p, err := tx.Baseline(ctx, b.ParentID)

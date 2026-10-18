@@ -3,7 +3,6 @@ package graph
 import (
 	"context"
 	"fmt"
-	"maps"
 	"slices"
 	"strings"
 
@@ -47,25 +46,44 @@ func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]d
 	if err != nil || !ok {
 		return nil, nil, err
 	}
-	fork, err := tx.Baseline(ctx, own.ForkBaseline)
-	if err != nil {
-		return nil, nil, err
-	}
-	head, err := branchHead(ctx, tx, c.Namespace, own.Name)
-	if err != nil {
-		return nil, nil, err
-	}
 	held := map[domain.NodeID]bool{}
 	for _, cn := range mainImpactsOf(c) {
 		held[nodeOf(cn)] = true
 	}
+	// only a node the branch holds a version of can differ from the fork (ADR 0136)
+	changed, err := tx.BranchNodeIDs(ctx, own.Name)
+	if err != nil {
+		return nil, nil, err
+	}
+	var ids []domain.NodeID
+	for _, id := range changed {
+		if !held[id] {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return nil, nil, nil
+	}
+	fork, err := versionsAt(ctx, tx, own.ForkBaseline, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	head, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
+	if err != nil {
+		return nil, nil, err
+	}
+	at, err := versionsAt(ctx, tx, head.ID, ids)
+	if err != nil {
+		return nil, nil, err
+	}
+	slices.Sort(ids)
 	var out []domain.NodeID
-	for _, id := range slices.Sorted(maps.Keys(head.Nodes)) {
-		if !held[id] && fork.Nodes[id] != head.Nodes[id] {
+	for _, id := range ids {
+		if hv, ok := at[id]; ok && fork[id] != hv {
 			out = append(out, id)
 		}
 	}
-	return out, fork.Nodes, nil
+	return out, fork, nil
 }
 
 // unsettled lists what holds the merge of a change (ADR 0102), one rule for every impact of its main flow: a rejected
@@ -315,12 +333,12 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (RebaseResult, error) {
 	target := domain.BranchOf(own.Parent)
 	res := RebaseResult{Branch: target, From: own.ForkBaseline}
-	head, err := branchHead(ctx, tx, c.Namespace, target)
+	headB, err := branchHeadHeader(ctx, tx, c.Namespace, target)
 	if err != nil {
 		return res, err
 	}
-	res.Onto = head.ID
-	if head.ID == own.ForkBaseline {
+	res.Onto = headB.ID
+	if headB.ID == own.ForkBaseline {
 		return res, nil
 	}
 	if keys, err := g.uncommitted(ctx, tx, c); err != nil {
@@ -328,11 +346,7 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 	} else if len(keys) > 0 {
 		return res, fmt.Errorf("change %s holds uncommitted modifications (%s): commit or cancel them before it is rebased: %w", c.ID, strings.Join(keys, ", "), ErrConflict)
 	}
-	fork, err := tx.Baseline(ctx, own.ForkBaseline)
-	if err != nil {
-		return res, err
-	}
-	mine, err := branchHead(ctx, tx, c.Namespace, own.Name)
+	mineB, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
 	if err != nil {
 		return res, err
 	}
@@ -340,18 +354,36 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 	for _, cn := range mainImpactsOf(c) {
 		impactOf[nodeOf(cn)] = cn
 	}
-	nodes := maps.Clone(head.Nodes)
-	if nodes == nil {
-		nodes = map[domain.NodeID]domain.Version{}
+	// the nodes read are the ones the branch holds a version of (only those can differ from the fork) and the ones the
+	// impacts start from, never the whole states (ADR 0136)
+	ids, err := tx.BranchNodeIDs(ctx, own.Name)
+	if err != nil {
+		return res, err
 	}
-	for _, id := range slices.Sorted(maps.Keys(mine.Nodes)) {
-		hv := mine.Nodes[id]
-		fv, inFork := fork.Nodes[id]
+	for _, cn := range mainImpactsOf(c) {
+		if cn.Pre != nil {
+			ids = append(ids, cn.Pre.ID)
+		}
+	}
+	slices.Sort(ids)
+	ids = slices.Compact(ids)
+	fork, err := states3(ctx, tx, ids, own.ForkBaseline, mineB.ID, headB.ID)
+	if err != nil {
+		return res, err
+	}
+	forkNodes, mineNodes, headNodes := fork[0], fork[1], fork[2]
+	delta := map[domain.NodeID]domain.Version{} // over the head of the target
+	for _, id := range ids {
+		hv, inMine := mineNodes[id]
+		if !inMine {
+			continue
+		}
+		fv, inFork := forkNodes[id]
 		if inFork && fv == hv {
 			continue // the change did not change it: the target's version stands
 		}
-		nodes[id] = hv
-		tv, inHead := head.Nodes[id]
+		delta[id] = hv
+		tv, inHead := headNodes[id]
 		if inHead == inFork && tv == fv {
 			continue // changed by the change only
 		}
@@ -388,7 +420,7 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 		}
 		merged.Change, merged.Impact, merged.Flow = c.ID, cn.ID, ""
 		merged.Base, merged.MergedWith = &oursRef, &theirsRef
-		rebased := map[string]any{"branch": target, "baseline": string(head.ID)}
+		rebased := map[string]any{"branch": target, "baseline": string(headB.ID)}
 		var pre *domain.NodeRef
 		if cn.Pre != nil && inHead {
 			pre = &theirsRef // the change now starts from the target's version
@@ -404,20 +436,20 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 		if cn.Landed != nil || cn.Pre == nil {
 			continue
 		}
-		if v, ok := head.Nodes[cn.Pre.ID]; ok && v != cn.Pre.Version {
+		if v, ok := headNodes[cn.Pre.ID]; ok && v != cn.Pre.Version {
 			ref := domain.NodeRef{ID: cn.Pre.ID, Version: v}
 			if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactRebased, Pre: &ref}); err != nil {
 				return res, err
 			}
 		}
 	}
-	rb := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: own.Name, ParentID: mine.ID, ChangeID: c.ID,
-		Kind: domain.BaselineRebase, Nodes: nodes, MergedFrom: head.ID, RebasedFrom: fork.ID, CreatedAt: g.now()}
-	if err := tx.PutBaseline(ctx, rb); err != nil {
+	rb := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: own.Name, ParentID: mineB.ID, ChangeID: c.ID,
+		Kind: domain.BaselineRebase, MergedFrom: headB.ID, RebasedFrom: own.ForkBaseline, CreatedAt: g.now()}
+	if err := putBaselineOver(ctx, tx, rb, headB.ID, delta); err != nil {
 		return res, err
 	}
 	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(head.ID)}}})
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(headB.ID)}}})
 	if err != nil {
 		return res, err
 	}
@@ -427,14 +459,14 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 	if own.RebasedFrom == "" {
 		own.RebasedFrom = own.ForkBaseline
 	}
-	own.ForkBaseline, own.Head = head.ID, rb.ID
+	own.ForkBaseline, own.Head = headB.ID, rb.ID
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return res, err
 	}
 	if c, err = tx.Change(ctx, c.ID); err != nil {
 		return res, err
 	}
-	c.BaselineID = head.ID
+	c.BaselineID = headB.ID
 	if err := tx.PutChange(ctx, c); err != nil {
 		return res, err
 	}
@@ -451,26 +483,31 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 // moved since the fork, and the impacts whose node changed on both sides.
 func (g *Graph) committedBehind(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, st *RebaseState) error {
 	target := domain.BranchOf(own.Parent)
-	head, err := branchHead(ctx, tx, c.Namespace, target)
+	head, err := branchHeadHeader(ctx, tx, c.Namespace, target)
 	if err != nil || head.ID == own.ForkBaseline {
 		return err
 	}
 	st.Branch, st.Onto = target, head.ID
-	fork, err := tx.Baseline(ctx, own.ForkBaseline)
+	mine, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
 	if err != nil {
 		return err
 	}
-	mine, err := branchHead(ctx, tx, c.Namespace, own.Name)
+	var ids []domain.NodeID
+	for _, cn := range mainImpactsOf(c) {
+		ids = append(ids, nodeOf(cn))
+	}
+	s, err := states3(ctx, tx, ids, own.ForkBaseline, mine.ID, head.ID)
 	if err != nil {
 		return err
 	}
+	forkNodes, mineNodes, headNodes := s[0], s[1], s[2]
 	for _, cn := range mainImpactsOf(c) {
 		id := nodeOf(cn)
-		hv, ok := mine.Nodes[id]
-		if !ok || fork.Nodes[id] == hv {
+		hv, ok := mineNodes[id]
+		if !ok || forkNodes[id] == hv {
 			continue
 		}
-		if tv, ok := head.Nodes[id]; ok && tv != fork.Nodes[id] {
+		if tv, ok := headNodes[id]; ok && tv != forkNodes[id] {
 			st.Behind = append(st.Behind, cn.ID)
 		}
 	}
@@ -525,4 +562,17 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 		return nil
 	})
 	return
+}
+
+// states3 reads the versions of some nodes in three baselines (ADR 0136).
+func states3(ctx context.Context, tx Tx, ids []domain.NodeID, a, b, c domain.BaselineID) ([3]map[domain.NodeID]domain.Version, error) {
+	var out [3]map[domain.NodeID]domain.Version
+	for i, at := range []domain.BaselineID{a, b, c} {
+		v, err := versionsAt(ctx, tx, at, ids)
+		if err != nil {
+			return out, err
+		}
+		out[i] = v
+	}
+	return out, nil
 }

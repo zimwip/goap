@@ -181,7 +181,7 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	c.Branch = own.Name
 	in.OwnBranch = true
 	if c.BaselineID == "" {
-		head, err := branchHead(ctx, tx, c.Namespace, own.Name)
+		head, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
 		if err != nil {
 			return err
 		}
@@ -340,7 +340,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err := g.scopeChange(ctx, tx, &sub); err != nil {
 				return err
 			}
-			fork, err := tx.Baseline(ctx, sub.BaselineID)
+			fork, err := headerOf(ctx, tx, sub.BaselineID)
 			if err != nil {
 				return err
 			}

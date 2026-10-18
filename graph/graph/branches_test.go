@@ -32,7 +32,8 @@ func commitOn(t *testing.T, g *Graph, branch string, from domain.BaselineID, edi
 	if err != nil {
 		t.Fatal(err)
 	}
-	return res.Baseline
+	// a commit returns the header of its baseline (ADR 0136): its state is read apart
+	return must[domain.Baseline](t)(g.Baseline(context.Background(), res.Baseline.ID))
 }
 
 func TestBranchMerge(t *testing.T) { forEachRepo(t, testBranchMerge) }
@@ -314,7 +315,7 @@ func testFirstChangeStartsFromTheEmptyState(t *testing.T, repo Repo) {
 	if c.BaselineID != "" || c.ResultBaselineID != res.Baseline.ID {
 		t.Fatalf("the first change starts from the empty state: %+v", c)
 	}
-	if b := res.Baseline; b.ParentID != "" || b.ChangeID != c.ID || len(b.Nodes) != 1 {
+	if b := must[domain.Baseline](t)(g.Baseline(ctx, res.Baseline.ID)); b.ParentID != "" || b.ChangeID != c.ID || len(b.Nodes) != 1 {
 		t.Fatalf("the first baseline has no parent and its change: %+v", b)
 	}
 	if after := must[domain.Baseline](t)(g.BranchHead(ctx, "nothing-here-yet", domain.MainBranch)); after.ID != res.Baseline.ID {
