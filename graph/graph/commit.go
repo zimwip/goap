@@ -24,6 +24,7 @@ import (
 // (another change moved a node meanwhile) the change is abandoned and ErrConflict returned: the producer reads again and
 // rebuilds its edits.
 // A created node of a structure or a User must name its required parent (checkRequiredParent, ADR 0040).
+// The baseline returned is a header, without its state: reading it costs the size of the namespace (ADR 0137).
 func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err error) {
 	if len(in.Edits) == 0 {
 		return res, fmt.Errorf("a commit needs at least one edit: %w", ErrInvalid)
@@ -225,7 +226,7 @@ func (g *Graph) Commit(ctx context.Context, in Commit) (res CommitResult, err er
 		return res, fmt.Errorf("commit %q: %w", in.Title, err)
 	}
 	// the writer's events ride on the landing (ADR 0136): raised with change.applied, in its transaction
-	if res.Baseline, err = g.Apply(withCarried(ctx, in.Events), c.ID, in.BaselineName); err != nil {
+	if res.Baseline, err = g.apply(withCarried(ctx, in.Events), c.ID, in.BaselineName, false); err != nil {
 		return res, err
 	}
 	if done, err := g.Change(ctx, c.ID); err != nil {

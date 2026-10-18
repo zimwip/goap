@@ -476,6 +476,49 @@ func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Basel
 	return b, rows.Err()
 }
 
+func (t *pgTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
+	var b domain.Baseline
+	q, args := dialectPG.sqlBaselineHeader(id)
+	err := t.tx.QueryRow(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt,
+		&b.Branch, &b.Namespace, &b.Gap, &b.Kind, (*string)(&b.RebasedFrom))
+	return b, mapErr(err, "baseline "+string(id))
+}
+
+func (t *pgTx) BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	out := map[domain.NodeID]domain.Version{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	q, args := dialectPG.sqlBaselineVersions(id, ids)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var nid string
+		var v int
+		if err := rows.Scan(&nid, &v); err != nil {
+			return nil, err
+		}
+		out[domain.NodeID(nid)] = domain.Version(v)
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
+	q, args := dialectPG.sqlBranchNodeIDs(branch)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeID, error) {
+		var id string
+		err := r.Scan(&id)
+		return domain.NodeID(id), err
+	})
+}
+
 func (t *pgTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectPG.sqlNamespaceBaselineHeaders(namespace)
 	rows, err := t.tx.Query(ctx, q, args...)
@@ -565,6 +608,27 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, e
 
 func (t *pgTx) Changes(ctx context.Context) ([]domain.Change, error) {
 	rows, err := t.tx.Query(ctx, dialectPG.sqlChangeIDs())
+	if err != nil {
+		return nil, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Change, 0, len(ids))
+	for _, id := range ids {
+		c, err := t.Change(ctx, domain.ChangeID(id))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
+func (t *pgTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error) {
+	q, args := dialectPG.sqlSubChangeIDs(parent)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

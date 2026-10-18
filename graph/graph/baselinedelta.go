@@ -62,15 +62,21 @@ func storedEntries(parent *domain.Baseline, parentDepth int, nodes map[domain.No
 // baselineEntriesSQL selects the entries in effect in a baseline (the first parameter), in both SQL dialects: the
 // chain of the baseline up to its checkpoint (d = distance from the baseline), and for each node the entry of the
 // nearest baseline of the chain that has one. The caller filters `rn = 1 AND NOT removed`.
-func baselineEntriesSQL(param string) string {
+func baselineEntriesSQL(param string) string { return baselineEntriesWhereSQL(param, "") }
+
+// baselineEntriesWhereSQL is baselineEntriesSQL over the entries matching a condition on e (empty: all).
+func baselineEntriesWhereSQL(param, where string) string {
+	if where != "" {
+		where = "\n\t\tWHERE " + where
+	}
 	return fmt.Sprintf(`WITH RECURSIVE chain(id, parent_id, depth, d) AS (
 		SELECT id, parent_id, depth, 0 FROM baseline WHERE id = %s
 		UNION ALL
 		SELECT b.id, b.parent_id, b.depth, c.d + 1 FROM baseline b JOIN chain c ON b.id = c.parent_id WHERE c.depth > 0
 	), eff AS (
 		SELECT e.node_id, e.version, e.removed, row_number() OVER (PARTITION BY e.node_id ORDER BY c.d) AS rn
-		FROM chain c JOIN baseline_entry e ON e.baseline_id = c.id
-	)`, param)
+		FROM chain c JOIN baseline_entry e ON e.baseline_id = c.id%s
+	)`, param, where)
 }
 
 // baselineHeader is what compaction needs of a stored baseline.

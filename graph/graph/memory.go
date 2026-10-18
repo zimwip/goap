@@ -365,6 +365,18 @@ func (t *memTx) Changes(ctx context.Context) ([]domain.Change, error) {
 	return out, nil
 }
 
+func (t *memTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error) {
+	var out []domain.Change
+	for id, c := range t.st.changes {
+		if c.ParentID == parent {
+			c, _ := t.Change(ctx, id)
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
 func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 	vs := t.st.versions[n.ID]
 	if int(n.Version) != len(vs)+1 {
@@ -428,6 +440,56 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 	}
 	t.st.baselines[b.ID] = b
 	return nil
+}
+
+func (t *memTx) BaselineHeader(_ context.Context, id domain.BaselineID) (domain.Baseline, error) {
+	b, ok := t.st.baselines[id]
+	if !ok {
+		return domain.Baseline{}, fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+	}
+	b.Nodes = nil
+	return b, nil
+}
+
+func (t *memTx) BaselineVersions(_ context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	b, ok := t.st.baselines[id]
+	if !ok {
+		return nil, fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+	}
+	out := map[domain.NodeID]domain.Version{}
+	for _, n := range ids {
+		if v, ok := b.Nodes[n]; ok {
+			out[n] = v
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) BranchNodeIDs(_ context.Context, branch string) ([]domain.NodeID, error) {
+	branch = domain.BranchOf(branch)
+	seen := map[domain.NodeID]bool{}
+	var out []domain.NodeID
+	add := func(id domain.NodeID) {
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
+		}
+	}
+	for id, vs := range t.st.versions {
+		for _, v := range vs {
+			if domain.BranchOf(v.Branch) == branch {
+				add(id)
+				break
+			}
+		}
+	}
+	for k := range t.st.joins {
+		if k.branch == branch {
+			add(k.ref.ID)
+		}
+	}
+	slices.Sort(out)
+	return out, nil
 }
 
 func (t *memTx) BaselineHeaders(_ context.Context, namespace string) ([]domain.Baseline, error) {

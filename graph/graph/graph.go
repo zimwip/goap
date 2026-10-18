@@ -143,8 +143,9 @@ type Graph struct {
 
 	// booted is set once the roots of the structures are known to exist (Bootstrap).
 	booted atomic.Bool
-	// states caches the states computed for baselines kept as a header only.
+	// states caches the states computed for baselines kept as a header only, moves what each of them did (ADR 0137).
 	states stateCache
+	moves  stateCache
 
 	// DraftCacheSize is how many changes keep their folded drafts in memory (ADR 0079 §2). 0: DefaultDraftCacheSize.
 	DraftCacheSize int
@@ -393,13 +394,13 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 		// a change naming no starting state starts from the head of its branch: the state the last change left, or
 		// the empty state while the namespace has none (ADR 0056)
 		if c.BaselineID == "" {
-			head, err := branchHead(ctx, tx, c.Namespace, c.Branch)
+			head, err := branchHeadHeader(ctx, tx, c.Namespace, c.Branch)
 			if err != nil {
 				return err
 			}
 			c.BaselineID = head.ID
 		}
-		fork, err := tx.Baseline(ctx, c.BaselineID)
+		fork, err := headerOf(ctx, tx, c.BaselineID)
 		if err != nil {
 			return err
 		}

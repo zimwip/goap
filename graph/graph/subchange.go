@@ -182,7 +182,7 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	c.Branch = own.Name
 	in.OwnBranch = true
 	if c.BaselineID == "" {
-		head, err := branchHead(ctx, tx, c.Namespace, own.Name)
+		head, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
 		if err != nil {
 			return err
 		}
@@ -228,17 +228,7 @@ func (g *Graph) SubChanges(ctx context.Context, id domain.ChangeID) (out []domai
 }
 
 func subChanges(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.Change, error) {
-	all, err := tx.Changes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var out []domain.Change
-	for _, c := range all {
-		if c.ParentID == id {
-			out = append(out, c)
-		}
-	}
-	return out, nil
+	return tx.SubChanges(ctx, id)
 }
 
 // openSubChanges are the sub-changes that still have to be applied or abandoned.
@@ -351,7 +341,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err := g.scopeChange(ctx, tx, &sub); err != nil {
 				return err
 			}
-			fork, err := tx.Baseline(ctx, sub.BaselineID)
+			fork, err := headerOf(ctx, tx, sub.BaselineID)
 			if err != nil {
 				return err
 			}

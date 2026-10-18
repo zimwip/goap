@@ -50,12 +50,23 @@ type Tx interface {
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
+	// BaselineHeader reads a baseline without its state (Nodes nil).
+	BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
+	// BaselineVersions reads the versions some nodes have in a baseline, the nodes it does not hold left out (ADR 0137).
+	// A store reads a materialised baseline (Gap 0); through the guard of the graph any baseline: the nearest
+	// materialised one before it with what the changes in between did to those nodes.
+	BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
+	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
+	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
 	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
 	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// VersionJoins lists the branches the versions of a node joined, with the changes whose merge made them join.
 	VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
+	// SubChanges returns the changes whose parent is a change, oldest first: what a merge, a purge or a move asks of a
+	// change, read by its parent rather than by a scan of every change.
+	SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error)
 
 	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
 	// node in a change is a draft, the version is written when the change lands.

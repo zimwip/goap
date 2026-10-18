@@ -92,7 +92,7 @@ func (a *applier) prepareChangeImpacts() error {
 			cp.pre = &pre
 		}
 		a.cposts = append(a.cposts, cp)
-		a.target[nodes[i].ID] = nodes[i].Version
+		a.target.set(nodes[i].ID, nodes[i].Version)
 	}
 	return nil
 }
