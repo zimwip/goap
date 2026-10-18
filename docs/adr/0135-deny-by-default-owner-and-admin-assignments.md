@@ -129,7 +129,7 @@ come from possession.
   (`BaselineGraph`, the diffs) are not filtered by project.
 - `engine.AuthzScope` with a nil `Authz` still grants everything (a library default of the engine's tests); the
   compositions plug the access authorizer.
-- A sub-project's `project_part_of` link names a version of its parent: once the parent is edited, the snapshot of
-  the head no longer sees the link (`BaselineGraph` keeps the links whose target version the baseline holds), so
-  the sub-project inherits neither the roles, nor the flags, nor the stop of its parent until the link is
-  renewed. This predates the ADR (the roles inherited along the project tree had it already).
+
+A link names the version its target had: once a project is edited, its sub-projects' `project_part_of` and its
+Assignments' `assigns_project` are suspect links. The access and hub snapshots and the web's head graph read them
+too (`graphsnap.BaselineWithSuspects`), so an edited parent keeps its sub-projects and its Assignments.

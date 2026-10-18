@@ -3,6 +3,7 @@ package accesse2e
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/authz"
@@ -95,8 +96,14 @@ func TestProjectOwnersAndAdministrators(t *testing.T) {
 	if err := commit("bob", update("PROJ-A", map[string]any{access.PropStopped: true})); err != nil {
 		t.Fatalf("the owner stops the project: %v", err)
 	}
-	if stopped, err := dir.ProjectStopped(ctx, "PROJ-A"); err != nil || !stopped {
-		t.Fatalf("the project is stopped: %v %v", stopped, err)
+	// the parent has a new version: its sub-project and the Assignments naming it still reach it (suspect links)
+	for _, p := range []string{"PROJ-A", "PROJ-A1"} {
+		if stopped, err := dir.ProjectStopped(ctx, p); err != nil || !stopped {
+			t.Fatalf("%s is stopped: %v %v", p, stopped, err)
+		}
+	}
+	if snap, err := dir.Snapshot(ctx); err != nil || !slices.Contains(snap.ProjectChain("PROJ-A1"), "PROJ-A") {
+		t.Fatalf("the sub-project keeps its parent once the parent is edited: %v", err)
 	}
 	if err := commit("bob", update("PROJ-A", map[string]any{access.PropStopped: nil})); err != nil {
 		t.Fatalf("the owner restarts the project: %v", err)

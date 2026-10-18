@@ -27,7 +27,9 @@ export async function headGraph(namespace: string): Promise<HeadGraph> {
   return {
     baselineId: id,
     nodes: all.filter((n) => !gone.has(n.id)),
-    links: (g.links ?? []).filter((l) => !gone.has(l.from?.id) && !gone.has(l.to?.id)),
+    // the suspect links too: a link names the version its target had, and editing the target leaves it in place (a
+    // sub-project keeps its parent, an Assignment its project, once they are edited)
+    links: [...(g.links ?? []), ...(g.suspectLinks ?? [])].filter((l) => !gone.has(l.from?.id) && !gone.has(l.to?.id)),
     retired,
   };
 }

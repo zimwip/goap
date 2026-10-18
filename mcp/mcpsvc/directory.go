@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/adapter"
+	"github.com/zimwip/goap/lib/graphsnap"
 )
 
 // Graph is the part of the graph the hub reads.
@@ -265,14 +266,14 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	var nodes []domain.Node
 	var links []domain.Link
 	if orgHead.ID != "" {
-		n, l, err := d.Graph.BaselineGraph(ctx, orgHead.ID)
+		n, l, err := graphsnap.BaselineWithSuspects(ctx, d.Graph, orgHead.ID) // a unit edited keeps its sub-units
 		if err != nil {
 			return nil, err
 		}
 		nodes, links = append(nodes, n...), append(links, l...)
 	}
 	if platHead.ID != "" {
-		n, l, err := d.Graph.BaselineGraph(ctx, platHead.ID)
+		n, l, err := graphsnap.BaselineWithSuspects(ctx, d.Graph, platHead.ID)
 		if err != nil {
 			return nil, err
 		}

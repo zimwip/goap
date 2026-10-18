@@ -534,7 +534,8 @@ func (d *Directory) snapshots(ctx context.Context) (*graphsnap.Cache[*Snapshot],
 		if err != nil {
 			return nil, err
 		}
-		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation().Namespace, TTL: d.TTL,
+		// the suspect links too: a sub-project keeps its parent, an Assignment its unit and project, once they are edited
+		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation().Namespace, TTL: d.TTL, Suspects: true,
 			Build: func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 				return BuildSnapshot(st, id, nodes, links)
 			}}
