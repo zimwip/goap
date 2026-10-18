@@ -665,7 +665,7 @@ declared on the agent (`agents[].triggers`):
 | Field | Role |
 |---|---|
 | `type` | `event` or `schedule` |
-| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `change.signal`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `methodology.published`; CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload) |
+| `event` + `filter` | `change.created`, `change.edited`, `change.attached`, `change.detached`, `change.item_added`, `change.signal`, `change.committed`, `change.transitioned`, `change.applied`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `step.completed`, `methodology.published` (`contracts/events.All`); CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload) |
 | `schedule` | cron expression (5 fields, UTC) |
 | `goal`, `intent` | targeted goal (otherwise identification is limited to the agent) and intent text |
 | `target` | `new_change` (new change on the latest baseline) or `event_change` (the event's change) |
@@ -978,12 +978,20 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 
 | Subject | Emitter | Content |
 |---|---|---|
-| `goap.process.<id>.started` / `.step` / `.waiting` / `.completed` / `.failed` | engine | `ProcessEvent` |
-| `goap.change.<id>.item_added` / `.applied` | graph | `ChangeEvent` |
+| `goap.process.<id>.started` / `.attached` / `.step` / `.step_completed` / `.intent` / `.waiting` / `.clarifying` / `.stuck` / `.completed` / `.failed` / `.cancelled` / `.superseded` / `.log` | engine | `ProcessEvent` |
+| `goap.change.<id>.created` / `.edited` / `.attached` / `.detached` / `.item_added` / `.signal` / `.committed` / `.transitioned` / `.applied` / `.purged` | graph, through its outbox ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)), from the operation that writes the fact | `ChangeEvent` |
+| `goap.changed.<id>` | graph, through its outbox | `ChangeEvent` of type `change.updated`: the header, the impacts or the log of a change were written (the web) |
+| `goap.changeindex.<id>` | graph, through its outbox | `ChangeDocEvent`: the document of a change for the index |
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
-| `goap.registry.methodology.published` / `.suspended` / `.resumed` | registry | name + version (+ reason) |
+| `goap.registry.methodology.saved` / `.published` / `.deleted` / `.suspended` / `.resumed` | registry | name + version (+ reason) |
 | `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph) | name + version + status |
+
+Each service emits its own events ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)): an event is
+written in the outbox table of its database (`event_outbox`) in the transaction that writes its fact, and a relay
+(`lib/outbox`) delivers it afterwards, in order and at least once, with its id `<service>:<seq>` (`Nats-Msg-Id`,
+`X-Goap-Event-Id`). No caller emits an event on behalf of a service. The graph does so today; the engine, the
+registries and the other services follow (ADR 0136, Steps).
 
 ### 3.2 Engine clustering ([ADR 0124](adr/0124-engine-replicas-share-processes.md))
 

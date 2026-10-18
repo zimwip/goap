@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/graph/index"
 	"github.com/zimwip/goap/lib/access"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Subjects the indexer consumes.
@@ -219,14 +220,30 @@ func NewSink(ctx context.Context, svc *Service) *Sink {
 	return k
 }
 
-// Publish implements graph.EventSink.
+// Deliver implements outbox.Sink: the graph's events, from its outbox relay (ADR 0136).
+func (k *Sink) Deliver(ctx context.Context, m outbox.Message) error {
+	return k.handle(ctx, m.Subject, m.Data)
+}
+
+// Publish implements graph.EventSink: what Republish sends.
 func (k *Sink) Publish(ctx context.Context, subject string, v any) error {
-	if !strings.HasPrefix(subject, "goap.node.") && !strings.HasPrefix(subject, "goap.baseline.") && !strings.HasPrefix(subject, "goap.changeindex.") {
+	if !indexed(subject) {
 		return nil
 	}
 	data, err := json.Marshal(v)
 	if err != nil {
 		return err
+	}
+	return k.handle(ctx, subject, data)
+}
+
+func indexed(subject string) bool {
+	return strings.HasPrefix(subject, "goap.node.") || strings.HasPrefix(subject, "goap.baseline.") || strings.HasPrefix(subject, "goap.changeindex.")
+}
+
+func (k *Sink) handle(ctx context.Context, subject string, data []byte) error {
+	if !indexed(subject) {
+		return nil
 	}
 	ctx = context.WithoutCancel(ctx)
 	k.ch <- func() {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // The errors of the graph are the ones of its contract (pkg/graphapi).
@@ -80,6 +81,9 @@ type Tx interface {
 	// AppendLog appends an entry to the log of its change (ADR 0030: facts, journal records and impact events in
 	// one order) and returns it with its Seq. The log is insert-only: nothing updates or deletes an entry.
 	AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error)
+	// AppendOutbox writes the events of the transaction in the outbox of the graph (ADR 0136), published once it
+	// commits.
+	AppendOutbox(ctx context.Context, msgs []outbox.Message) error
 	// Log returns the entries matching f, in the order of the log.
 	Log(ctx context.Context, f domain.LogFilter) ([]domain.LogEntry, error)
 	// LogCounts counts the entries matching f by type (the limit and the position aside).

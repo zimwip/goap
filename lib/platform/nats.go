@@ -61,6 +61,21 @@ func (e *Events) Publish(ctx context.Context, subject string, v any) error {
 	return err
 }
 
+// PublishMessage publishes data as is with its headers, deduplicated by the stream on id (Nats-Msg-Id): what an
+// outbox relay publishes (ADR 0136), the headers captured when the event was written.
+func (e *Events) PublishMessage(ctx context.Context, id, subject string, data []byte, headers map[string]string) error {
+	if e == nil {
+		return nil
+	}
+	msg := nats.NewMsg(subject)
+	msg.Data = data
+	for k, v := range headers {
+		msg.Header.Set(k, v)
+	}
+	_, err := e.js.PublishMsg(ctx, msg, jetstream.WithMsgID(id))
+	return err
+}
+
 // PublishCore publishes without persistence (core NATS, at most once): for ephemeral facts such as presence,
 // on subjects outside the GOAP stream (goap.>).
 func (e *Events) PublishCore(subject string, v any) error {

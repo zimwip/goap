@@ -64,7 +64,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		srv.Mount(path, h)
 	}
 
-	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: engine.Publishers{changePublisher(e.triggers.onChange), pp.indexSink, rp.bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident,
+	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: pp.indexSink, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident,
 		Demo: devseed.DemoLoader(gp.directory)}
 	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: rp.reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
@@ -83,7 +83,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	mount(conversationsv1connect.NewConversationServiceHandler(&convsvc.Handler{Service: convs, Identity: ident}, telemetry.HandlerOptions()...))
 	// the assistant (ADR 0087) in process: the real graph (a change it creates starts its triggers like any other), the
 	// gateway, the registry, the access directory and the conversation service, all acting for the caller
-	assistant := &assistantsvc.Service{Convs: convs, Model: pp.gw, Graph: engine.EventingGraph{GraphPort: gp.g, OnEvent: e.triggers.onChange},
+	assistant := &assistantsvc.Service{Convs: convs, Model: pp.gw, Graph: gp.g,
 		Methodologies: rp.reg, Projects: assistantsvc.Directory{Directory: gp.directory}, Engine: assistantsvc.EngineClient{API: ep.handler, Views: &registrysvc.Handler{Service: rp.reg}}, Log: e.log}
 	mount(assistantv1connect.NewAssistantServiceHandler(&assistantsvc.Handler{Service: assistant, Identity: ident}, telemetry.HandlerOptions()...))
 	mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: pp.indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))

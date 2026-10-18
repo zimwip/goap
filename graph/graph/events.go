@@ -7,28 +7,42 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
-// EventSink receives the events of the node index (ADR 0026). It is satisfied by engine.Publisher.
+// EventSink receives typed events: what Republish hands the index (ADR 0026). It is satisfied by engine.Publisher.
 type EventSink interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
-// Observe makes the graph publish a NodeEvent for every node version written (at landing, ADR 0079: a node in a change
-// is a draft, no version) and a BaselineEvent
-// for every baseline created, once the transaction that wrote them has committed. It sees every
-// write path. Publishing is best effort: the index rebuilds from the graph (Reindex) when an
-// event is lost.
-func (g *Graph) Observe(sink EventSink) {
-	if sink != nil {
-		g.repo = &observedRepo{Repo: g.repo, g: g, sink: sink}
+// OutboxOrigin names the graph in the ids of its events (ADR 0136).
+const OutboxOrigin = "graph"
+
+// Observe makes the graph emit its events (ADR 0136): the changes (change.created, change.applied...), the technical
+// change.updated and change documents of the index, a NodeEvent for every node version written (at landing, ADR 0079:
+// a node in a change is a draft, no version) and a BaselineEvent for every baseline created. They are written in the
+// outbox of the graph in the transaction that writes their fact, whatever the write path, and delivered to sink once
+// it commits; the relay returned delivers again what could not be (Run it). It is called once, before serving.
+func (g *Graph) Observe(sink outbox.Sink) *outbox.Relay {
+	if sink == nil {
+		return nil
 	}
+	store, ok := g.base.(outbox.Store)
+	if !ok {
+		panic(fmt.Sprintf("graph: repository %T keeps no outbox", g.base))
+	}
+	g.relay = &outbox.Relay{Origin: OutboxOrigin, Store: store, Sink: sink}
+	g.repo = &observedRepo{Repo: g.repo, g: g}
+	return g.relay
 }
+
+// Relay is the relay of the outbox of the graph, nil until Observe.
+func (g *Graph) Relay() *outbox.Relay { return g.relay }
 
 type observedRepo struct {
 	Repo
-	g    *Graph
-	sink EventSink
+	g *Graph
 }
 
 type observedTx struct {
@@ -43,8 +57,53 @@ type observedTx struct {
 	// written, in order; purged are the ones deleted.
 	indexed []domain.ChangeID
 	purged  []domain.ChangeID
+	// raised are the events of the changes the operations of the transaction emitted (raise), in order
+	raised []published
 }
 
+// raise emits an event of a change from the transaction that writes its fact (ADR 0136): stored in the outbox with
+// the writes, published once they commit. Without an observer (no Observe) it does nothing. The header is the one of
+// the event (c, items and impacts left out); set completes the event.
+func (g *Graph) raise(ctx context.Context, tx Tx, typ string, c domain.Change, set func(*domain.ChangeEvent)) {
+	ot, ok := tx.(*observedTx)
+	if !ok {
+		return
+	}
+	c.Items, c.Nodes = nil, nil
+	ev := domain.ChangeEvent{Type: typ, Change: c}
+	if g.EndUser != nil {
+		ev.EndUser = g.EndUser(ctx) // what the event sets off is attributed to its end user (ADR 0114)
+	}
+	if set != nil {
+		set(&ev)
+	}
+	ot.raised = append(ot.raised, published{events.ChangeSubject(string(c.ID), typ), ev})
+}
+
+// raiseItems emits change.item_added for items written on c, and change.signal when one of them is a signal.
+func (g *Graph) raiseItems(ctx context.Context, tx Tx, c domain.Change, items []domain.ChangeItem) {
+	if len(items) == 0 {
+		return
+	}
+	with := func(ev *domain.ChangeEvent) { ev.Items = items }
+	g.raise(ctx, tx, events.ChangeItemAdded, c, with)
+	if slices.ContainsFunc(items, func(it domain.ChangeItem) bool { return it.Type == domain.TypeSignal }) {
+		g.raise(ctx, tx, events.ChangeSignal, c, with)
+	}
+}
+
+// raiseApplied emits change.applied: the change landed in what it was forked from, leaving b (its header: the state
+// is not carried).
+func (g *Graph) raiseApplied(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline) {
+	b.Nodes = nil
+	g.raise(ctx, tx, events.ChangeApplied, c, func(ev *domain.ChangeEvent) { ev.Baseline = &b })
+}
+
+// raiseBaseline is raise with the header of the baseline the event names.
+func (g *Graph) raiseBaseline(ctx context.Context, tx Tx, typ string, c domain.Change, b domain.Baseline) {
+	b.Nodes = nil
+	g.raise(ctx, tx, typ, c, func(ev *domain.ChangeEvent) { ev.Baseline = &b })
+}
 func (t *observedTx) index(id domain.ChangeID) {
 	if id != "" && !slices.Contains(t.indexed, id) {
 		t.indexed = append(t.indexed, id)
@@ -130,21 +189,31 @@ type published struct {
 }
 
 func (r *observedRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
-	var out []published
+	wrote := false
 	err := r.Repo.InTx(ctx, func(tx Tx) error {
-		out = nil
+		wrote = false
 		ot := &observedTx{Tx: tx}
 		if err := fn(ot); err != nil {
 			return err
 		}
-		var err error
-		out, err = r.g.eventsOf(ctx, tx, ot)
-		return err
-	})
-	if err == nil {
-		for _, p := range out {
-			_ = r.sink.Publish(ctx, p.subject, p.v)
+		out, err := r.g.eventsOf(ctx, tx, ot)
+		if err != nil || len(out) == 0 {
+			return err
 		}
+		msgs := make([]outbox.Message, 0, len(out))
+		for _, p := range out {
+			m, err := outbox.New(ctx, p.subject, p.v, r.g.now())
+			if err != nil {
+				return err
+			}
+			msgs = append(msgs, m)
+		}
+		wrote = true
+		return tx.AppendOutbox(ctx, msgs)
+	})
+	if err == nil && wrote {
+		// delivered at once; what fails is delivered again by the relay's Run
+		_ = r.g.relay.Drain(ctx)
 	}
 	return err
 }
@@ -162,6 +231,7 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 		return nil, err
 	}
 	out = append(out, docs...)
+	out = append(out, ot.raised...)
 	if len(ot.nodes) > 0 {
 		// typesAt ignores its baseline argument (the type catalogue is process-global, not
 		// namespace-scoped graph data): no baseline lookup is needed to build it.

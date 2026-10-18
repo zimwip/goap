@@ -114,14 +114,3 @@ func (t *triggerRef) handle(ctx context.Context, ev engine.TriggerEvent) {
 func (t *triggerRef) onChange(ctx context.Context, ev domain.ChangeEvent) {
 	t.handle(ctx, engine.TriggerEventOf(ev))
 }
-
-// changePublisher forwards the change events of the graph handler (calls from
-// the IDE) to the triggers.
-type changePublisher func(ctx context.Context, ev domain.ChangeEvent)
-
-func (f changePublisher) Publish(ctx context.Context, _ string, v any) error {
-	if ev, ok := v.(domain.ChangeEvent); ok {
-		f(ctx, ev)
-	}
-	return nil
-}

@@ -14,6 +14,8 @@ import (
 
 	"github.com/zimwip/goap/contracts/algo"
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/typecat"
 )
 
@@ -59,7 +61,10 @@ type TypeCatalog interface {
 
 // Graph exposes the domain and change axes.
 type Graph struct {
-	repo  Repo
+	repo Repo
+	// base is the repository as given to New, which keeps the outbox (ADR 0136); relay delivers it, set by Observe
+	base  Repo
+	relay *outbox.Relay
 	now   func() time.Time
 	newID func() string
 	// Authorizer, when set, is asked before every lifecycle transition.
@@ -70,6 +75,9 @@ type Graph struct {
 	// Caller names the principal behind an operation, recorded on the events of the change impacts (ADR 0029).
 	// Set by the services from the authenticated principal; unset, the events carry no caller.
 	Caller func(ctx context.Context) string
+	// EndUser names the person an operation is done for, carried by the events of the changes (ADR 0114). Set by the
+	// services from the authenticated principal; unset, the events name none.
+	EndUser func(ctx context.Context) string
 	// Validators are the NodeValidator plugins checked once per Apply (ADR 0048), keyed by the node types they
 	// declare interest in via Types(). Unset: no plugin validators run (tests, tools).
 	Validators []NodeValidator
@@ -149,7 +157,7 @@ type Graph struct {
 // New returns a Graph backed by repo. Every transaction goes through the guard of the graph (guardRepo, ADR 0054),
 // whatever the storage.
 func New(repo Repo) *Graph {
-	g := &Graph{now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
+	g := &Graph{base: repo, now: func() time.Time { return time.Now().UTC() }, newID: func() string { return uuid.NewString() }}
 	g.repo = &guardRepo{Repo: repo, g: g}
 	return g
 }
@@ -421,7 +429,11 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 			}
 			c.Branch = own.Name
 		}
-		return tx.PutChange(ctx, c)
+		if err := tx.PutChange(ctx, c); err != nil {
+			return err
+		}
+		g.raise(ctx, tx, events.ChangeCreated, c, nil)
+		return nil
 	})
 	return c, err
 }
@@ -486,6 +498,8 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 		if err != nil {
 			return err
 		}
+		before := c
+		before.Data = maps.Clone(c.Data)
 		edit := domain.HeaderEdit{Fields: map[string]domain.HeaderValue{}}
 		if p.Title != nil && *p.Title != c.Title {
 			edit.Fields["title"] = domain.HeaderValue{From: c.Title, To: *p.Title}
@@ -546,7 +560,13 @@ func (g *Graph) UpdateChange(ctx context.Context, id domain.ChangeID, p ChangePa
 				return err
 			}
 		}
-		return tx.PutChange(ctx, c)
+		if err := tx.PutChange(ctx, c); err != nil {
+			return err
+		}
+		if fields := domain.EditedFields(before, c); fields != nil {
+			g.raise(ctx, tx, events.ChangeEdited, c, func(ev *domain.ChangeEvent) { ev.Fields = fields })
+		}
+		return nil
 	})
 	return
 }
@@ -624,8 +644,11 @@ func (g *Graph) AddItems(ctx context.Context, id domain.ChangeID, items []domain
 		}
 		if c.Status == domain.ChangeDraft {
 			c.Status = domain.ChangeActive
-			return tx.PutChange(ctx, c)
+			if err := tx.PutChange(ctx, c); err != nil {
+				return err
+			}
 		}
+		g.raiseItems(ctx, tx, c, out)
 		return nil
 	})
 	return out, err

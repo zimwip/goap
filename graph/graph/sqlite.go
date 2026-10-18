@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // SQLiteMigrations holds the SQLite schema of the graph (local development mode).
@@ -39,6 +40,26 @@ func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
 }
 
 type sqliteTx struct{ tx *sql.Tx }
+
+// AppendOutbox implements Tx.
+func (t *sqliteTx) AppendOutbox(ctx context.Context, msgs []outbox.Message) error {
+	return outbox.SQL{}.Append(ctx, t.tx, msgs...)
+}
+
+// Pending implements outbox.Store.
+func (s *SQLite) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return outbox.SQL{DB: s.db}.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s *SQLite) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return outbox.SQL{DB: s.db}.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s *SQLite) PurgePublished(ctx context.Context, before time.Time) error {
+	return outbox.SQL{DB: s.db}.PurgePublished(ctx, before)
+}
 
 // sqliteTime is a fixed-width UTC layout: text order is time order.
 const sqliteTime = "2006-01-02T15:04:05.000000000Z"

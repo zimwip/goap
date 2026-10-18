@@ -28,6 +28,7 @@ import (
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/llmcfg"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 	"github.com/zimwip/goap/lib/typecat"
@@ -85,9 +86,14 @@ func main() {
 	g := graph.New(repo)
 	// the principal behind each event of the impact logs (ADR 0029)
 	g.Caller = graphsvc.Caller
+	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
-	g.Observe(events)                    // node and baseline events feed the node index (ADR 0026)
+	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136)
+	if relay := g.Observe(outbox.NATS(events)); relay != nil {
+		relay.Log, relay.Poll, relay.Retention = log, platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second), platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
+		go relay.Run(ctx)
+	}
 	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
 	go func() {
 		if n, err := g.CompactBaselines(ctx); err != nil {

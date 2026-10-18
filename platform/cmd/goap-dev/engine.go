@@ -40,7 +40,7 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	broker := engine.NewBroker()
 	builtins := engine.DefaultBuiltins()
 	eg := &engine.Engine{
-		Graph:         engine.EventingGraph{GraphPort: g, OnEvent: e.triggers.onChange},
+		Graph:         g, // the graph emits the events of the changes the engine writes (ADR 0136)
 		Methodologies: rp.reg,
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: models},
@@ -75,7 +75,7 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	go triggers.WatchProcesses(e.ctx, broker)
 	handler := &enginesvc.Handler{Engine: eg, Log: e.log, DefaultPrincipal: e.dev, Authz: gp.authorizer, Broker: broker, Triggers: triggers}
 	// the built-in connectors call the platform in-process, for the caller of the tool
-	maps.Copy(pp.connectors, builtin.Connectors(builtin.Ports{Graph: engine.EventingGraph{GraphPort: g, OnEvent: e.triggers.onChange}, Engine: handler,
+	maps.Copy(pp.connectors, builtin.Connectors(builtin.Ports{Graph: g, Engine: handler,
 		Hub: pp.hub, Domains: rp.domains, Methodologies: &registrysvc.Handler{Service: rp.reg}, Authz: gp.authorizer, Floor: gp.authorizer.Floor()}))
 	pp.hub.KeepRegistered(e.ctx, pp.connectors)
 	return &enginePart{e: eg, handler: handler, runtime: runtime}, nil
