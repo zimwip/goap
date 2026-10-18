@@ -141,6 +141,11 @@ func (d dialect) sqlVersionBranches(id domain.NodeID) (string, []any) {
 	return `SELECT version, branch FROM node_branch WHERE node_id = ` + d.ph(1) + ` ORDER BY branch`, []any{string(id)}
 }
 
+// sqlVersionJoins reads the branches the versions of a node joined and the changes whose merge made them join (ADR 0133).
+func (d dialect) sqlVersionJoins(id domain.NodeID) (string, []any) {
+	return `SELECT version, branch, ` + d.id("change_id") + ` FROM node_branch WHERE node_id = ` + d.ph(1) + ` ORDER BY version, branch`, []any{string(id)}
+}
+
 // sqlNodeIDByKey reads the id of a node by its key.
 func (d dialect) sqlNodeIDByKey(namespace, key string) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` AND key = ` + d.ph(2), []any{domain.NamespaceOf(namespace), key}
@@ -198,6 +203,12 @@ func (d dialect) sqlBranchJoins(namespace, branch string, change domain.ChangeID
 // sqlBaselineHeaders reads the header of every materialised baseline.
 func (d dialect) sqlBaselineHeaders() string {
 	return `SELECT ` + d.id("id") + `, ` + d.idOr("coalesce", "parent_id") + `, depth FROM baseline WHERE gap = 0` + d.orderBy("created_at", ", id")
+}
+
+// sqlNamespaceBaselineHeaders reads the header of every baseline of a namespace, oldest first (ADR 0133).
+func (d dialect) sqlNamespaceBaselineHeaders(namespace string) (string, []any) {
+	return `SELECT ` + d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
+		`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + ` FROM baseline WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ", id"), []any{domain.NamespaceOf(namespace)}
 }
 
 // sqlBaselineIDs reads the ids of the baselines of a namespace, oldest first.

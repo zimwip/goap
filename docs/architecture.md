@@ -143,13 +143,17 @@ nodes stay on the old version and become **suspect**. Baselines thus remain immu
 
 Versions are numbered **per node, across all branches** (`REQ-1@v7`), and each version carries
 the `branch` it was written on (`main` by default, never changed), its `parents`, and its `reason`: `create`, `revise` (successor on the same
-branch), `derive` (first version on a parallel branch), `merge` (two parents) or `adopt` (ADR 0025).
+branch), `derive` (first version on a branch other than its base's: the common case, a change's commit of a version of main),
+`merge` (a three-way branch merge, written on the target: two parents) or `rebase` (a merge seen from the change's branch:
+the rebase of the change onto its parent branch, written on the change's branch; parents: the version the change committed,
+then the parent branch's, [ADR 0133](adr/0133-rebase-is-a-merge-and-the-change-stack.md)). Versions are written when a
+change commits (`CommitChange`, ADR 0079 / 0102), on its own branch; the merge only rebases and fast-forwards.
 A version is **part of several branches** when a merge lands it as is: it *joins* the target (`node_branch`,
 `Node.Joined`, [ADR 0032](adr/0032-branches-as-pointers-baselines-as-deltas.md)) instead of being copied.
 
 ```
-REQ-1  v1(main) ── v3(main, revise) ───────────── v4(main, merge ← v3 + v2)
-          └────── v2(opt-a, derive) ─────────────────┘
+REQ-1  v1(main) ── v2(change-A, derive) ═══ joins main (fast-forward of A)
+          └────── v3(change-B, derive) ── v4(change-B, rebase ← v3 + v2) ═══ joins main (fast-forward of B)
 ```
 
 - A **branch** (`CreateBranch`) belongs to one namespace (`Branch.namespace`) and starts from a baseline of that
@@ -169,21 +173,30 @@ REQ-1  v1(main) ── v3(main, revise) ───────────── 
   A change branch that the target did not move since its fork lands by a **fast-forward**: its versions join the
   target, nothing is copied. A change is rebased onto its target before it lands (ADR 0101), so the fast-forward is the
   normal path and the merge a race or a branch merged by hand. The baseline carries its `kind` (`commit`, `fast-forward`,
-  `merge`) and, for the commit of a rebased change, `rebasedFrom` (the baseline it was forked from before, copied from
+  `merge`, `rebase`, `revert`, `snapshot`) and, for the commit of a rebased change, `rebasedFrom` (the baseline it was forked from before, copied from
   `Branch.rebasedFrom`). The history tab (`BaselineBranchGraph`, `baselineHistory.ts`) shows the kind as a badge on each row,
   a "rebased" badge ("rebased onto T1, was B") with a dashed "rebased from" edge next to the solid fork edge, edges labelled
   fork / rebase / merge / fast-forward, and on a merge the change and the branch merged. Every open branch forked from the
   branch shown has a lane (ADR 0102): its commits, or, before the first one, an open head drawn as a transparent dot.
+- **Change-stack** ([ADR 0133](adr/0133-rebase-is-a-merge-and-the-change-stack.md)): every node version and every baseline
+  exposes the changes it is the application of, oldest first, with the lineage they are read from (`Graph.ChangeStack`,
+  RPC `GetChangeStack`): for a version, its ancestors through `parents` with the change that wrote each and the changes
+  whose merge made it join a branch (`node_branch`); for a baseline, the baselines it follows from (parent, merged head)
+  and, for one that took a change in, the baselines of that change's own branch (its commits, rebases, merged
+  sub-changes). A sub-change names its parent. Nothing is stored: the stack is composed from what every version and
+  baseline records. `DiffBaselines` also answers the changes that explain the difference (`changes_added` /
+  `changes_removed`). Web: `ChangeStackView.svelte` in the node history, the Baseline workspace and the comparison.
 - **Views of a change** (`ChangeView`): the head of the change branch with the change impacts of a flow counted at a
-  level — `written` (proposed or accepted, not rejected: what the change or an option would look like),
+  level — `written` (the drafts proposed or accepted, not rejected: what the change or an option would look like),
   `accepted` (what would land), `landed` (its result baseline: on its own branch when applied, then on the branch it is merged into; the last one counts). Only `landed` is stored.
 - **Options** ([ADR 0009](adr/0009-branches-options-decisions.md) §3, ADR 0032 §6): an option is a flow opened as a
-  hypothesis (`OpenOption`); several are explored at once, each writing its own versions of the same nodes. The
+  hypothesis (`OpenOption`); several are explored at once, each holding its own drafts of the same nodes in the change's
+  log (an option is a flow of the change, not a branch of the domain, and writes no version, ADR 0079). The
   **active option** is the one the change works on: every call that names no flow goes to it
   (`Change.ResolveFlow`; `main` names the main flow), and a process on the main flow reads its graph
   (`ChangeGraph`). Two scopes (the main flow or an option, open or decided) are compared impact by impact at `written` or
   `accepted` (`DiffFlows`, [ADR 0083](adr/0083-option-diff.md); the older `CompareOptions` still serves the `goap-change` tool); an option is evaluated,
-  then one is selected (its flow is adopted: its versions join the change branch, no copy) and the others are
+  then one is selected (its flow is adopted: its drafts become the main flow's) and the others are
   rejected. In the IDE the change editor opens on a **scope bar**: the main flow and one chip per option (status,
   the active one marked, the impacts it declared). The scope is chosen first, and the scoped panes (`<scope> ▸
   Impacts`, `<scope> ▸ Artifacts`) show the change as that flow sees it (`GetBlackboard` on the flow), each impact

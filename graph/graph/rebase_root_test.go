@@ -157,7 +157,7 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	}
 	// test2's commit, then the merge of it with test1's version: both its parents (ADR 0102)
 	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID}))
-	if n.ChangeID != t2.ID || len(n.Parents) != 2 || n.Parents[1] != v1.Version || n.Properties["a"] != float64(1) && n.Properties["a"] != 1 || n.Properties["b"] != float64(2) && n.Properties["b"] != 2 {
+	if n.ChangeID != t2.ID || len(n.Parents) != 2 || n.Parents[1] != v1.Version || n.Reason != domain.ReasonRebase || n.Properties["a"] != float64(1) && n.Properties["a"] != 1 || n.Properties["b"] != float64(2) && n.Properties["b"] != 2 {
 		t.Fatalf("test2's version = %+v, test1's = %+v", n, v1)
 	}
 	ev := rebasedEvents(t, g, t2.ID)
@@ -288,7 +288,7 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 		t.Fatalf("the merge of a rebased branch is a fast-forward: %+v", res)
 	}
 	n := must[domain.Node](t)(g.Node(ctx, domain.NodeRef{ID: f.req.ID, Version: res.Nodes[f.req.ID]}))
-	if n.Properties["a"] == nil || n.Properties["b"] == nil || len(n.Parents) != 2 {
+	if n.Properties["a"] == nil || n.Properties["b"] == nil || len(n.Parents) != 2 || n.Reason != domain.ReasonRebase {
 		t.Fatalf("REQ-1 holds both changes, merged from both versions: %+v", n)
 	}
 	if rb := baselineOfChange(t, g, t2.ID, domain.BaselineRebase); rb.RebasedFrom != f.base.ID || rb.ParentID != c2.ID || rb.MergedFrom != b1.ID {
