@@ -6,9 +6,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
+
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // ErrInvalid is returned for a request the service does not accept (empty subject/password, too short).
@@ -27,8 +30,14 @@ func validate(subject, password string) error {
 	return nil
 }
 
-// Service registers and verifies local credentials.
-type Service struct{ Store Store }
+// Service registers and verifies local credentials. Once Emit is called it emits the events of what it writes (ADR
+// 0136, events.go).
+type Service struct {
+	Store Store
+
+	relay   *outbox.Relay
+	pending sync.WaitGroup
+}
 
 // Register creates the credential of a new subject. ErrExists if one is already there.
 func (s *Service) Register(ctx context.Context, subject, password string) error {
@@ -39,7 +48,15 @@ func (s *Service) Register(ctx context.Context, subject, password string) error 
 	if err != nil {
 		return err
 	}
-	return s.Store.Create(ctx, subject, string(hash))
+	msgs, err := s.event(ctx, EventRegistered, Event{Subject: subject, At: time.Now()})
+	if err != nil {
+		return err
+	}
+	if err := s.Store.Create(ctx, subject, string(hash), msgs...); err != nil {
+		return err
+	}
+	s.deliver(ctx)
+	return nil
 }
 
 // Verify reports whether password matches the stored hash of subject. A subject with no credential (or a
@@ -68,9 +85,14 @@ func (s *Service) SetPassword(ctx context.Context, subject, password string) err
 	if err != nil {
 		return err
 	}
-	if err := s.Store.Set(ctx, subject, string(hash)); err != nil {
+	msgs, err := s.event(ctx, EventPasswordChanged, Event{Subject: subject, At: time.Now()})
+	if err != nil {
 		return err
 	}
+	if err := s.Store.Set(ctx, subject, string(hash), msgs...); err != nil {
+		return err
+	}
+	s.deliver(ctx)
 	// a new password ends every session signed in with the old one (ADR 0045)
 	return s.EndSessions(ctx, subject)
 }
@@ -96,9 +118,14 @@ func (s *Service) StartSession(ctx context.Context, subject string, maxAge time.
 	now := time.Now()
 	sess := Session{ID: hex.EncodeToString(b), Subject: subject, Created: now, Expires: now.Add(maxAge)}
 	// sessions expired for a day are forgotten as new ones open
-	if err := s.Store.CreateSession(ctx, sess, now.Add(-24*time.Hour)); err != nil {
+	msgs, err := s.event(ctx, EventSessionStarted, Event{Subject: subject, Session: sess.ID, At: now})
+	if err != nil {
 		return "", err
 	}
+	if err := s.Store.CreateSession(ctx, sess, now.Add(-24*time.Hour), msgs...); err != nil {
+		return "", err
+	}
+	s.deliver(ctx)
 	return sess.ID, nil
 }
 
@@ -123,7 +150,11 @@ func (s *Service) EndSession(ctx context.Context, id string) error {
 	if id == "" {
 		return nil
 	}
-	return s.Store.RevokeSession(ctx, id, time.Now())
+	if err := s.Store.RevokeSession(ctx, id, time.Now(), s.ended(ctx)); err != nil {
+		return err
+	}
+	s.deliver(ctx)
+	return nil
 }
 
 // EndSessions ends every session of a subject (signing out everywhere, a new password).
@@ -131,5 +162,9 @@ func (s *Service) EndSessions(ctx context.Context, subject string) error {
 	if subject == "" {
 		return nil
 	}
-	return s.Store.RevokeSessions(ctx, subject, time.Now())
+	if err := s.Store.RevokeSessions(ctx, subject, time.Now(), s.ended(ctx)); err != nil {
+		return err
+	}
+	s.deliver(ctx)
+	return nil
 }

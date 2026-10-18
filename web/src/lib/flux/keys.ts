@@ -2,6 +2,9 @@
 import type { PlatformEvent } from './events.svelte';
 import { keyOf } from './signals.svelte';
 
+/** the conversation events that change the caller's list of conversations */
+const LIST_EVENTS = new Set(['conversation.created', 'conversation.renamed', 'conversation.deleted']);
+
 /** What an event touches: the keys of the signals it moves. */
 export function keysOf(e: PlatformEvent): string[] {
   switch (e.kind) {
@@ -15,6 +18,9 @@ export function keysOf(e: PlatformEvent): string[] {
       return [keyOf.methodology(e.id), keyOf.methodologies];
     case 'domain':
       return [keyOf.domain(e.id), keyOf.domains];
+    case 'conversation':
+      // the stream delivers them to their owner only (ADR 0136); the list moves when one comes, goes or is renamed
+      return [keyOf.conversation(e.id), ...(LIST_EVENTS.has(e.type) ? [keyOf.conversations] : [])];
     default:
       return [];
   }

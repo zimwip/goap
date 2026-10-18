@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"maps"
-	"time"
 
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/engine/engine"
@@ -79,8 +78,7 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 			return nil
 		}),
 		engine.ProcessEvents(e.triggers.onProcess)})
-	relay.Poll, relay.Retention = platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second), platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
-	go relay.Run(e.ctx)
+	e.emit(relay)
 	if shared {
 		go eg.Recover(e.ctx, 0)
 	}

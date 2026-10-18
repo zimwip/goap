@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/zimwip/goap/contracts/events"
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/graph/indexersvc"
 	"github.com/zimwip/goap/lib/llmcfg"
@@ -18,6 +20,7 @@ import (
 	"github.com/zimwip/goap/mcp/connectors/workspace"
 	"github.com/zimwip/goap/mcp/mcpsvc"
 	"github.com/zimwip/goap/platform/modelgw"
+	"github.com/zimwip/goap/platform/registrysvc"
 )
 
 // platformPart is what the engine and the handlers reach out with: the model gateway, the node index and the MCP hub.
@@ -64,9 +67,18 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 			rp.bus.Ingest(m.Subject, m.Data, platform.StampOf(ctx))
 			return nil
 		}),
-		engine.ChangeEvents(e.triggers.onChange)})
-	relay.Log, relay.Poll, relay.Retention = e.log, platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second), platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
-	go relay.Run(e.ctx)
+		engine.ChangeEvents(e.triggers.onChange),
+		// a methodology published reloads the triggers: its event rides on the graph commit storing it (ADR 0136)
+		outbox.SinkFunc(func(ctx context.Context, m outbox.Message) error {
+			if m.Subject == "goap.registry.methodology.published" {
+				var ev registrysvc.MethodologyEvent
+				if json.Unmarshal(m.Data, &ev) == nil {
+					e.triggers.handle(ctx, engine.TriggerEvent{Type: events.MethodologyPublished, Methodology: ev.Name, Version: ev.Version})
+				}
+			}
+			return nil
+		})})
+	e.emit(relay)
 	go func() {
 		if n, err := indexer.Republish(e.ctx); err != nil {
 			e.log.Error("index: initial publication", "err", err)
@@ -96,6 +108,11 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 		Secrets:   mcpsvc.ResolveSecret(e.secrets),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
 	}
+	// the hub's events (a connector registered, lost, back) and the gateway's (a call recorded, a quota exceeded) go
+	// through their outboxes to the event stream (ADR 0136)
+	e.emit(hub.Emit(busSink(rp.bus)))
+	go hub.Watch(e.ctx, 0)
+	e.emit(gw.Emit(busSink(rp.bus)))
 	// the sessions of the Claude coding agent call the model through the gateway, each call a row of the ledger (ADR
 	// 0123 §6): the hub gives each call a token the gateway checks, signed with a secret generated like the others
 	proxySecret := e.cfg.ModelProxySecret

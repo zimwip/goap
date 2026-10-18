@@ -1,6 +1,6 @@
 # ADR 0136 — Each service emits its own events, through an outbox
 
-**Status**: accepted, in progress · **Date**: 2026-10 · Builds on ADR 0026 (node index), 0036 §3 (transverse
+**Status**: accepted, done · **Date**: 2026-10 · Builds on ADR 0026 (node index), 0036 §3 (transverse
 methodologies), 0053 (one event stream), 0106 (methodologies integrating methodologies), 0110 (reactive activities),
 0124 (engine replicas)
 
@@ -75,6 +75,25 @@ a time (`outbox.Relay.Lease`, the engine's shared lock `outbox` of ADR 0124); co
 processes may reach the bus in the order their transactions committed rather than their rank, the order of one
 process's events is kept.
 
+In the local mode every service shares one SQLite database, so each outbox has a table of its own (`outbox.SQL.Table`):
+`event_outbox` (graph), `process_outbox` (engine), `domain_outbox` (domain registry), `credentials_outbox`,
+`preferences_outbox`, `conversation_outbox`, `mcp_outbox` (hub), `model_outbox` (model gateway). A composition starts
+each relay with `outbox.Start` (the poll and the retention from the environment); a service given no sink (no bus)
+writes no event.
+
+The methodology registry keeps its facts in the graph (`registrysvc.GraphStore`, ADR 0023), not in a database of its
+own: its events **ride on the graph commit** that stores the version (`graphapi.Commit.Events`, proto
+`CommitEditsRequest.events`, a `CarriedEvent{subject, payload}`), written in the graph's outbox in the landing
+transaction, after its `change.applied`, and delivered by the graph's relay. The graph takes carried events from a
+platform service only (`system:` principal; the registry commits as `system:registry` for the person it acts for), on
+a `goap.` subject outside the graph's own families (`goap.change.`, `goap.changed.`, `goap.changeindex.`,
+`goap.node.`, `goap.baseline.`), with a JSON payload; a write the graph holds already (`ErrNothingToCommit`) emits
+nothing. The memory store of the registry's tests has no graph: the service publishes there itself.
+
+The hub's `lost` is a fact it records: a connector whose lease ran out is marked lost (`connector.lost_ms`, both
+dialects) with its event in one transaction by `Service.Sweep` (`Service.Watch`, a fifth of the lease), one replica
+winning; a registration after it is `back`.
+
 `goap-dev` runs the same relays over its in-process bus (`eventsvc.Hub` and the trigger manager): the local mode has
 the same events, from the same places, as the distributed one. A memory store (graph tests, `graph.NewMemory`) keeps
 its outbox in memory with the same semantics.
@@ -106,10 +125,11 @@ consumers read the state again on a resync.
    the dead subjects go.
 2. (done) The engine: its process events in the outbox of the process store (`enginesvc.SQLStore`, same transaction as the
    `Put`), durable consumers for the triggers and the companions, the rate limit per change.
-3. The domain registry (graph database) and the methodology registry (its events ride on the graph write that stores
-   the version).
-4. Credentials, preferences, conversations (the web stops polling), hub, model gateway.
-5. `docs/architecture.md` §2.11 and §3.1, `docs/architecture-overview.html`.
+3. (done) The domain registry (graph database, `domain_outbox`) and the methodology registry (its events ride on the
+   graph write that stores the version).
+4. (done) Credentials, preferences, conversations (the event stream delivers a conversation's events to its owner, the
+   web reloads on them and keeps a slow poll only as a fallback), hub, model gateway.
+5. (done) `docs/architecture.md` §2.11 and §3.1, `docs/architecture-overview.html`.
 
 ## Consequences
 

@@ -673,7 +673,8 @@ declared on the agent (`agents[].triggers`):
 
 Safeguards: a trigger never reacts to its own productions (the change it opens is marked
 `data.trigger`, the process carries `trigger`), and it does not run more than once every 2 s.
-Events come from NATS (graph, engine, registry services) or the local bus in all-in-one mode.
+Events come from NATS (graph, engine, registry services, each through its outbox, ADR 0136) or the relays' in-process
+sinks in all-in-one mode; a methodology published reloads the triggers from the event the graph's relay delivers.
 `ListTriggers` / `FireTrigger` expose the state and manual firing (permission `trigger:fire`).
 With several engine replicas, event triggers are delivered through a durable JetStream consumer
 (competing consumers, one replica handles each event) and schedule (cron) firing is gated by a
@@ -985,15 +986,24 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 | `goap.changeindex.<id>` | graph, through its outbox | `ChangeDocEvent`: the document of a change for the index |
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
-| `goap.registry.methodology.saved` / `.published` / `.deleted` / `.suspended` / `.resumed` | registry | name + version (+ reason) |
-| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph) | name + version + status |
+| `goap.registry.methodology.saved` / `.published` / `.deleted` | methodology registry, carried by the graph commit that stores the version (graph outbox) | name + version + status |
+| `goap.registry.methodology.suspended` / `.resumed` | methodology registry, published directly (recomputed, ADR 0136 §4) | name + version + reason |
+| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph), through its outbox (`domain_outbox`) | name + version + status |
+| `goap.credentials.<subject>.registered` / `.password_changed` / `.session_started` / `.session_ended` | credentials, through its outbox | subject + session + time (never a password or a token) |
+| `goap.preferences.<subject>.updated` / `.reset` | preferences, through its outbox | subject + the keys changed (never the values) |
+| `goap.conversation.<id>.created` / `.renamed` / `.deleted` / `.message_appended` / `.message_updated` / `.action_updated` / `.summarized` | conversations, through its outbox | conversation, owner, message, role, action index, status (never a text); the event stream delivers it to the owner only |
+| `goap.mcp.connector.<id>.registered` / `.lost` / `.back` | hub, through its outbox | connector id, endpoint, liveness |
+| `goap.model.call.<seq>.recorded`, `goap.model.quota.<subject>.exceeded` | model gateway, through its outbox, with the ledger row | the row (subject, end user, source, alias, model, tokens, outcome; never the exchange) |
 
 Each service emits its own events ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)): an event is
-written in the outbox table of its database (`event_outbox`) in the transaction that writes its fact, and a relay
-(`lib/outbox`) delivers it afterwards, in order and at least once, with its id `<service>:<seq>` (`Nats-Msg-Id`,
-`X-Goap-Event-Id`). No caller emits an event on behalf of a service. The graph and the engine do so today (the engine
-writes a process and its event in one transaction, table `process_outbox`; its replicas deliver one at a time under
-the shared lock `outbox`); the registries and the other services follow (ADR 0136, Steps). The consumers that act on
+written in the outbox table of its database in the transaction that writes its fact, and a relay (`lib/outbox`, started
+by `outbox.Start`) delivers it afterwards, in order and at least once, with its id `<service>:<seq>` (`Nats-Msg-Id`,
+`X-Goap-Event-Id`). No caller emits an event on behalf of a service. Each service has its own table, the local mode
+sharing one database: `event_outbox` (graph), `process_outbox` (engine: a process and its event in one transaction; its
+replicas deliver one at a time under the shared lock `outbox`), `domain_outbox`, `credentials_outbox`,
+`preferences_outbox`, `conversation_outbox`, `mcp_outbox`, `model_outbox`. The methodology registry, whose facts are
+graph data, has its events carried by the graph commit that stores them (`graphapi.Commit.Events`, from a `system:`
+principal only), written in the graph's outbox after its `change.applied`. The consumers that act on
 an event are durable and idempotent: the trigger manager reads `goap.change.>` and `goap.process.>` through one
 durable consumer shared by the engine replicas (in process in the local mode: the relays' sinks, never the lossy
 broker), handles an event id once (`platform.EventIDOf`, `outbox.EventID`) and rate-limits a trigger per change.

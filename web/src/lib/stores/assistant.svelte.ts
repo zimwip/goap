@@ -1,6 +1,7 @@
 // The conversational assistant (ADR 0087): conversations of the caller from the conversation service (ADR 0085), the
-// messages of the current one, and the polling of an answer being written. Memory only: the current conversation is not
-// kept in the browser (ADR 0052), a new page opens the most recent one.
+// messages of the current one, read again when the event stream says they moved (ADR 0136), and a fallback polling of an
+// answer being written. Memory only: the current conversation is not kept in the browser (ADR 0052), a new page opens the
+// most recent one.
 import { assistantApi, conversationsApi, errorMessage, type Conversation, type ConversationMessage } from '../api';
 import { activeTab } from '../shell/tabs.svelte';
 import { assistantContext, clipBytes } from '../assistant/context';
@@ -8,6 +9,8 @@ import { runActions } from '../assistant/actions';
 import { describeTools } from '../assist/registry.svelte';
 import { forgetSelection } from '../assist/capture';
 import { untrack } from 'svelte';
+import { stream } from '../flux/events.svelte';
+import { keyOf, stamp } from '../flux/signals.svelte';
 import { project } from './project.svelte';
 import { working } from './workingChange.svelte';
 
@@ -20,8 +23,20 @@ export const POLL_FAST_MS = 500;
 export const POLL_FAST_COUNT = 12;
 const POLL_MAX_MS = 15000;
 
-/** The wait before the next poll: fast at first, POLL_MS after, doubled by every consecutive failure (capped). */
-export function pollDelay(polled: number, failed: number): number {
+/**
+ * While the event stream is open the conversation follows its events (`conversation.*`, delivered to the owner only)
+ * and the poll of a pending answer is only a fallback, this slow: for an event lost on the way, or a deployment whose
+ * conversations service publishes on no bus (no NATS), where the events never come.
+ */
+export const POLL_FALLBACK_MS = 20000;
+const POLL_FALLBACK_MAX_MS = 60000;
+
+/**
+ * The wait before the next poll. Stream not open: fast at first, POLL_MS after; stream open: POLL_FALLBACK_MS. Doubled by
+ * every consecutive failure (capped).
+ */
+export function pollDelay(polled: number, failed: number, live = false): number {
+  if (live) return Math.min(POLL_FALLBACK_MS * 2 ** failed, POLL_FALLBACK_MAX_MS);
   const base = polled < POLL_FAST_COUNT ? POLL_FAST_MS : POLL_MS;
   return Math.min(base * 2 ** failed, POLL_MAX_MS);
 }
@@ -49,6 +64,10 @@ export const assistant = $state({
 });
 
 let viewers = 0;
+/** the effects following the events of the conversations, while a view is attached */
+let following: (() => void) | undefined;
+/** an event came while the page was hidden: read again when it shows */
+let staleWhileHidden = false;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let fails = 0;
 /** polls made since the answer being waited for was sent (or the conversation opened) */
@@ -75,7 +94,7 @@ function stopPolling(): void {
 
 function schedulePoll(): void {
   if (timer || viewers <= 0 || !assistant.currentId || !isPending()) return;
-  const delay = pollDelay(polled, fails);
+  const delay = pollDelay(polled, fails, stream.status === 'open');
   timer = setTimeout(() => {
     timer = undefined;
     void poll();
@@ -142,12 +161,70 @@ export async function reportOutcome(m: Pick<ConversationMessage, 'conversationId
   if (r.message) applyMessage(r.message);
 }
 
-/** A view of the conversation (the tab, the floating panel) is shown: polling runs while there is at least one. */
+const hidden = (): boolean => typeof document !== 'undefined' && document.hidden;
+
+/** An event says the conversation or the list moved: read it again, now or once the page shows. */
+function onMoved(read: () => void): void {
+  if (hidden()) staleWhileHidden = true;
+  else read();
+}
+
+function onVisible(): void {
+  if (hidden() || !staleWhileHidden) return;
+  staleWhileHidden = false;
+  if (assistant.loaded) void loadConversations();
+  if (assistant.currentId) void openConversation(assistant.currentId, true);
+}
+
+/** the stamps of the current conversation and of the list last acted on */
+let seenKey = '';
+let seenAt = 0;
+let seenList = -1;
+
+/**
+ * Reads the stamps of the current conversation and of the list, and reads again what moved since the last call; the
+ * current conversation is not read again when another one became current (opening it reads it already). Run by the
+ * effect of `follow`, which so depends on those stamps (exported for tests: the effects do not run outside a browser).
+ */
+export function syncWithEvents(): void {
+  const id = assistant.currentId;
+  const k = id ? keyOf.conversation(id) : '';
+  const at = k ? stamp(k) : 0;
+  const moved = k === seenKey && at > seenAt;
+  seenKey = k;
+  seenAt = at;
+  const list = stamp(keyOf.conversations);
+  const listMoved = seenList >= 0 && list > seenList;
+  seenList = list;
+  untrack(() => {
+    if (moved) onMoved(() => void openConversation(id, true));
+    if (listMoved) onMoved(() => void (assistant.loaded && loadConversations()));
+  });
+}
+
+/** Follows the events of the conversations (their stamps) while a view is attached. */
+function follow(): () => void {
+  syncWithEvents();
+  const stop = $effect.root(() => {
+    $effect(syncWithEvents);
+  });
+  if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+  return () => {
+    stop();
+    if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+  };
+}
+
+/**
+ * A view of the conversation (the tab, the floating panel) is shown: the events are followed and the fallback polling
+ * runs while there is at least one.
+ */
 export function attachView(): () => void {
   // attached from an $effect: nothing it reads here (the loading flags, the current id) may become a dependency of
   // that effect, or loading re-runs the effect, which attaches again and loads again: a request storm
   untrack(() => {
     viewers++;
+    following ??= follow();
     void ensureLoaded();
     schedulePoll();
   });
@@ -158,9 +235,19 @@ export function attachView(): () => void {
     viewers--;
     if (viewers <= 0) {
       viewers = 0;
+      stopFollowing();
       stopPolling();
     }
   };
+}
+
+function stopFollowing(): void {
+  following?.();
+  following = undefined;
+  staleWhileHidden = false;
+  seenKey = '';
+  seenAt = 0;
+  seenList = -1;
 }
 
 async function ensureLoaded(): Promise<void> {
@@ -340,6 +427,7 @@ export function togglePanel(): void {
 
 /** For tests: forgets everything. */
 export function resetAssistant(): void {
+  stopFollowing();
   stopPolling();
   epoch++;
   viewers = 0;

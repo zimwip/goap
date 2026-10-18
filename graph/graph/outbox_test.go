@@ -11,6 +11,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/lib/outbox"
 )
 
@@ -155,6 +156,51 @@ func TestOutboxKeepsWhatTheBusRefused(t *testing.T) {
 		}
 		if got := sink.types(c.ID); len(got) != 2 {
 			t.Fatalf("delivered twice: %v", got)
+		}
+	})
+}
+
+// carriedSink records the subjects of every message, in order.
+type carriedSink struct {
+	mu   sync.Mutex
+	subs []string
+	data []string
+}
+
+func (s *carriedSink) Deliver(_ context.Context, m outbox.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.subs, s.data = append(s.subs, m.Subject), append(s.data, string(m.Data))
+	return nil
+}
+
+// A writer's own events ride on the landing of its commit (ADR 0136): after change.applied, in its transaction; none
+// when nothing lands (a refused commit); a subject of the graph refused.
+func TestCommitCarriesTheWritersEvents(t *testing.T) {
+	forEachRepo(t, func(t *testing.T, repo Repo) {
+		ctx := context.Background()
+		g := New(repo)
+		sink := &carriedSink{}
+		g.Observe(sink)
+		ev := graphapi.CarriedEvent{Subject: "goap.registry.thing.saved", Payload: json.RawMessage(`{"name":"N-1"}`)}
+		edit := []NodeEdit{{Key: "N-1", Type: "Thing"}}
+		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "First", Edits: edit, Events: []graphapi.CarriedEvent{ev}}); err != nil {
+			t.Fatal(err)
+		}
+		i := slices.Index(sink.subs, ev.Subject)
+		if i < 1 || !strings.HasSuffix(sink.subs[i-1], ".applied") || sink.data[i] != `{"name":"N-1"}` {
+			t.Fatalf("carried event not after change.applied: %d %q", i, sink.data[max(i, 0)])
+		}
+		n := len(sink.subs)
+		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "Again", Edits: edit, Events: []graphapi.CarriedEvent{ev}}); err == nil {
+			t.Fatal("creating N-1 again is refused")
+		}
+		if slices.Contains(sink.subs[n:], ev.Subject) {
+			t.Fatal("an event carried by a commit that landed nothing")
+		}
+		bad := graphapi.CarriedEvent{Subject: "goap.change.x.applied", Payload: json.RawMessage(`{}`)}
+		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Namespace: "carry", Title: "Bad", Edits: []NodeEdit{{Key: "N-2", Type: "Thing"}}, Events: []graphapi.CarriedEvent{bad}}); !errors.Is(err, ErrInvalid) {
+			t.Fatalf("a subject of the graph: %v", err)
 		}
 	})
 }

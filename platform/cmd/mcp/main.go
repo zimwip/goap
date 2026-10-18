@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/domainclient"
 	"github.com/zimwip/goap/lib/graphclient"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 	"github.com/zimwip/goap/mcp/connectorkit"
@@ -72,6 +73,12 @@ func main() {
 		Authz:         iam,
 		Floor:         iam.Floor(),
 	}))
+	// its events (a connector registered, lost, back) go through its outbox to the bus (ADR 0136); Watch tells the
+	// connectors whose lease ran out
+	events := platform.OptionalEvents(ctx, log)
+	defer events.Close()
+	outbox.Start(ctx, svc.Emit(outbox.NATS(events)), log)
+	go svc.Watch(ctx, 0)
 	svc.KeepRegistered(ctx, connectors)
 	srv.Mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: svc, Authz: iam, ConnectorToken: token}, telemetry.HandlerOptions()...))
 	if err := srv.Run(); err != nil {

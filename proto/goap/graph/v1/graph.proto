@@ -1358,6 +1358,15 @@ message CommitEditsRequest {
   // caller's active project, else the default project), ADR 0054
   string owner_org = 9;
   string project_id = 10;
+  // the writer's own events, stored in the graph's outbox with the landing of the commit and delivered with the graph's
+  // (ADR 0136): what a registry keeping its versions in the graph emits; system callers only, never a subject of the graph
+  repeated CarriedEvent events = 11;
+}
+
+// CarriedEvent is an event a writer owns that rides on a graph write (ADR 0136): its subject and its JSON payload.
+message CarriedEvent {
+  string subject = 1;
+  bytes payload = 2;
 }
 
 message CommitEditsResponse {

@@ -161,6 +161,17 @@ Design rules that follow, to keep the whole consistent:
   Consumers are idempotent: `ProcessEvents` / `ChangeEvents` sinks in process, one durable consumer for
   `goap.change.>` and `goap.process.>` in `platform/cmd/engine`; `TriggerManager.OnProcess` (`WatchProcesses` over the
   lossy broker is for tests), `Handle` skips an event id seen lately (`outbox.EventID(ctx)`, set by `outbox.Context`
-  and `ConsumeDurable`), the rate limit is per trigger and change. Done: the graph and the engine (steps 1, 2); to come:
-  the registries, credentials, preferences, conversations, hub, model gateway (ADR 0136 §Steps).
+  and `ConsumeDurable`), the rate limit is per trigger and change. Every other service does the same, each with a
+  table of its own (the local mode shares one database; `outbox.SQL.Table`): `domain_outbox` (`domainsvc`, synchronous
+  drain), `credentials_outbox` (`goap.credentials.<subject>.registered` / `password_changed` / `session_started` /
+  `session_ended`), `preferences_outbox` (`goap.preferences.<subject>.updated` with the keys, `reset`),
+  `conversation_outbox` (`goap.conversation.<id>.*`, delivered by the event stream to the owner only), `mcp_outbox`
+  (`goap.mcp.connector.<id>.registered` / `lost` / `back`; `lost` is recorded, `connector.lost_ms`, by `Sweep` /
+  `Watch`), `model_outbox` (`goap.model.call.<seq>.recorded`, `goap.model.quota.<subject>.exceeded`); each has
+  `Emit(sink)` and the store writes take the messages; a composition runs each relay with `outbox.Start` (nil relay:
+  no bus, no event). The methodology registry's facts are graph data: its events (`saved` / `published` / `deleted`)
+  ride on the graph commit that stores them (`graphapi.Commit.Events`, `CarriedEvent`, proto
+  `CommitEditsRequest.events`; a `system:` principal only, `GraphStore.commit` goes as `system:registry` for the
+  person; `checkCarried` refuses the graph's own families), written after `change.applied`; `suspended` / `resumed` are
+  published directly (recomputed). A new event of a service is written by its store in the transaction of its fact.
 - One event stream and presence (ADR 0053): `platform/eventsvc` (`Hub` is a `Publisher`/`EventSink` fed in process by `goap-dev`, from NATS by `platform/cmd/events`; `Watch` resumes by `(epoch, seq)` or says `resync`; `Heartbeat`/`Leave` are the presence, in memory with a TTL). The graph publishes `change.updated` (`goap.changed.<id>`) for every change header / impact / log write, so a new write path needs no extra event. Web: never refetch after a write; `web/src/lib/flux/` (`events.svelte.ts` the one stream, `reducers.svelte.ts` events → `signals.svelte.ts` stamps; a view that loads depends on `stamp(keyOf.…)` in its `$effect`); every `rpc` carries `X-Goap-Command`.

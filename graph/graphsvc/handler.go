@@ -646,9 +646,17 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 		return nil, err
 	}
 	projectID := h.projectOf(ctx, r.Msg.ProjectId)
+	// a platform service's own events ride on its commit (ADR 0136); a person carries none
+	var carried []graph.CarriedEvent
+	if len(r.Msg.Events) > 0 && !authz.From(ctx).System() {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("only a platform service carries events on a commit"))
+	}
+	for _, e := range r.Msg.Events {
+		carried = append(carried, graph.CarriedEvent{Subject: e.Subject, Payload: e.Payload})
+	}
 	out, err := h.Graph.Commit(ctx, graph.Commit{Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		Data: pbconv.Map(r.Msg.Data), Baseline: domain.BaselineID(r.Msg.BaselineId), By: by, BaselineName: r.Msg.BaselineName, Edits: edits,
-		OwnerOrg: owner, ProjectID: projectID})
+		OwnerOrg: owner, ProjectID: projectID, Events: carried})
 	return res(&graphv1.CommitEditsResponse{ChangeId: string(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline)}, err)
 }
 

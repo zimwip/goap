@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"sort"
 	"sync"
 	"time"
@@ -37,15 +38,20 @@ type Record struct {
 type Store interface {
 	// Save creates or replaces a draft. It fails with ErrImmutable when the
 	// version exists and is not a draft.
-	Save(ctx context.Context, r Record) error
+	Save(ctx context.Context, r Record, events ...graphapi.CarriedEvent) error
 	// Get returns a version; an empty version returns the latest published one.
 	Get(ctx context.Context, name, version string) (Record, error)
 	// List returns every version, sorted by name then creation date.
 	List(ctx context.Context) ([]Record, error)
-	SetStatus(ctx context.Context, name, version string, s Status, at time.Time) error
+	SetStatus(ctx context.Context, name, version string, s Status, at time.Time, events ...graphapi.CarriedEvent) error
 	// Delete removes a draft.
-	Delete(ctx context.Context, name, version string) error
+	Delete(ctx context.Context, name, version string, events ...graphapi.CarriedEvent) error
 }
+
+// The writes take the registry's events about them (ADR 0136): a store that keeps its facts in the graph (GraphStore)
+// writes them in the transaction of its commit, delivered by the graph's outbox; a store that does not (MemoryStore,
+// the tests) ignores them and the service publishes them itself.
+type carriesEvents interface{ carriesEvents() }
 
 var (
 	// ErrNotFound is returned for unknown methodologies.
@@ -65,7 +71,7 @@ func NewMemoryStore() *MemoryStore { return &MemoryStore{m: map[string]Record{}}
 
 func key(name, version string) string { return name + "@" + version }
 
-func (s *MemoryStore) Save(_ context.Context, r Record) error {
+func (s *MemoryStore) Save(_ context.Context, r Record, _ ...graphapi.CarriedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key(r.Methodology.Name, r.Methodology.Version)
@@ -122,7 +128,7 @@ func sortRecords(rs []Record) {
 	})
 }
 
-func (s *MemoryStore) SetStatus(_ context.Context, name, version string, st Status, at time.Time) error {
+func (s *MemoryStore) SetStatus(_ context.Context, name, version string, st Status, at time.Time, _ ...graphapi.CarriedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key(name, version)
@@ -139,7 +145,7 @@ func (s *MemoryStore) SetStatus(_ context.Context, name, version string, st Stat
 	return nil
 }
 
-func (s *MemoryStore) Delete(_ context.Context, name, version string) error {
+func (s *MemoryStore) Delete(_ context.Context, name, version string, _ ...graphapi.CarriedEvent) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key(name, version)

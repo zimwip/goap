@@ -10,9 +10,11 @@ import (
 	"errors"
 	"log/slog"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -288,4 +290,30 @@ func (r *Relay) Run(ctx context.Context) {
 			purged = now
 		}
 	}
+}
+
+// Token makes s one token of a subject: the separators and wildcards of NATS (".", "*", ">") and blanks become "_"
+// (a subject or an email holds dots). The payload of an event carries the exact value.
+func Token(s string) string {
+	return strings.Map(func(r rune) rune {
+		switch {
+		case r == '.' || r == '*' || r == '>' || unicode.IsSpace(r) || unicode.IsControl(r):
+			return '_'
+		}
+		return r
+	}, s)
+}
+
+// Start runs a relay of a composition until ctx is done, in the background, configured from the environment
+// (GOAP_OUTBOX_POLL, 1 s; GOAP_OUTBOX_RETENTION, 24 h): the retries of what a delivery missed and the purge. A nil
+// relay (a service emitting nothing) is left alone.
+func Start(ctx context.Context, r *Relay, log *slog.Logger) *Relay {
+	if r == nil {
+		return nil
+	}
+	r.Log = log
+	r.Poll = platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second)
+	r.Retention = platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
+	go r.Run(ctx)
+	return r
 }

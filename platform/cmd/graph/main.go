@@ -90,10 +90,7 @@ func main() {
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136)
-	if relay := g.Observe(outbox.NATS(events)); relay != nil {
-		relay.Log, relay.Poll, relay.Retention = log, platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second), platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
-		go relay.Run(ctx)
-	}
+	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
 	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
 	go func() {
 		if n, err := g.CompactBaselines(ctx); err != nil {
@@ -105,7 +102,9 @@ func main() {
 	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the
 	// reference (ADR 0125 §3), the graph holds a copy reloaded when a version is published or archived; the methodology
 	// registry follows the same publications through the events
-	domains := &domainsvc.Service{Store: domainStore, Events: events}
+	// the domain registry's events (a version saved, published, deleted) go through its outbox to the bus (ADR 0136)
+	domains := &domainsvc.Service{Store: domainStore}
+	outbox.Start(ctx, domains.Emit(outbox.NATS(events)), log)
 	types := typecat.NewLive(domains.Domains)
 	domains.Changed = func(ctx context.Context, r def.Record) {
 		if err := types.Reload(ctx); err != nil {

@@ -150,9 +150,7 @@ func main() {
 			}),
 		}
 	}
-	relay := e.Emit(sink)
-	relay.Poll, relay.Retention = platform.EnvDuration("GOAP_OUTBOX_POLL", time.Second), platform.EnvDuration("GOAP_OUTBOX_RETENTION", 24*time.Hour)
-	go relay.Run(ctx)
+	outbox.Start(ctx, e.Emit(sink), log)
 	if locks != nil {
 		if events != nil {
 			// wake-ups and interruptions reach the other replicas at once (ADR 0124)

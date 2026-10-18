@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Migrations holds the PostgreSQL schema of the domain registry; SQLiteMigrations the local mode one.
@@ -90,7 +91,7 @@ func scanDomain(row rowScanner) (def.Record, error) {
 	return r, nil
 }
 
-func (s SQLStore) SaveDomain(ctx context.Context, r def.Record) error {
+func (s SQLStore) SaveDomain(ctx context.Context, r def.Record, events ...outbox.Message) error {
 	definition, err := json.Marshal(r.Domain)
 	if err != nil {
 		return err
@@ -124,7 +125,30 @@ func (s SQLStore) SaveDomain(ctx context.Context, r def.Record) error {
 			return err
 		}
 	}
+	if err := s.outbox().Append(ctx, tx, events...); err != nil {
+		return err
+	}
 	return tx.Commit()
+}
+
+// outbox is the outbox of the registry (ADR 0136), beside the domain versions.
+func (s SQLStore) outbox() outbox.SQL {
+	return outbox.SQL{DB: s.DB, Postgres: s.Dollar, Table: "domain_outbox"}
+}
+
+// Pending implements outbox.Store.
+func (s SQLStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.outbox().Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s SQLStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.outbox().MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s SQLStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.outbox().PurgePublished(ctx, before)
 }
 
 func (s SQLStore) GetDomain(ctx context.Context, name, version string) (def.Record, error) {
@@ -181,24 +205,32 @@ func (s SQLStore) ListDomains(ctx context.Context) ([]def.Record, error) {
 	return out, nil
 }
 
-func (s SQLStore) SetDomainStatus(ctx context.Context, name, version string, st def.Status, at time.Time) error {
+func (s SQLStore) SetDomainStatus(ctx context.Context, name, version string, st def.Status, at time.Time, events ...outbox.Message) error {
 	query := `UPDATE domain_version SET status = ?, updated_at = ? WHERE name = ? AND version = ?`
 	args := []any{string(st), sqlTime(at), name, version}
 	if st == def.StatusPublished {
 		query = `UPDATE domain_version SET status = ?, updated_at = ?, published_at = ? WHERE name = ? AND version = ?`
 		args = []any{string(st), sqlTime(at), sqlTime(at), name, version}
 	}
-	res, err := s.DB.ExecContext(ctx, s.q(query), args...)
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	res, err := tx.ExecContext(ctx, s.q(query), args...)
 	if err != nil {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return fmt.Errorf("%s: %w", key(name, version), ErrNotFound)
 	}
-	return nil
+	if err := s.outbox().Append(ctx, tx, events...); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
-func (s SQLStore) DeleteDomain(ctx context.Context, name, version string) error {
+func (s SQLStore) DeleteDomain(ctx context.Context, name, version string, events ...outbox.Message) error {
 	r, err := s.GetDomain(ctx, name, version)
 	if err != nil {
 		return err
@@ -206,6 +238,16 @@ func (s SQLStore) DeleteDomain(ctx context.Context, name, version string) error 
 	if r.Status != def.StatusDraft {
 		return fmt.Errorf("domain %s: %w", key(name, version), ErrImmutable)
 	}
-	_, err = s.DB.ExecContext(ctx, s.q(`DELETE FROM domain_version WHERE name = ? AND version = ? AND status = ?`), name, version, string(def.StatusDraft))
-	return err
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback() //nolint:errcheck
+	if _, err := tx.ExecContext(ctx, s.q(`DELETE FROM domain_version WHERE name = ? AND version = ? AND status = ?`), name, version, string(def.StatusDraft)); err != nil {
+		return err
+	}
+	if err := s.outbox().Append(ctx, tx, events...); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

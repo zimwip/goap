@@ -2,12 +2,14 @@ package graph
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/events"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/lib/outbox"
 )
 
@@ -97,6 +99,41 @@ func (g *Graph) raiseItems(ctx context.Context, tx Tx, c domain.Change, items []
 func (g *Graph) raiseApplied(ctx context.Context, tx Tx, c domain.Change, b domain.Baseline) {
 	b.Nodes = nil
 	g.raise(ctx, tx, events.ChangeApplied, c, func(ev *domain.ChangeEvent) { ev.Baseline = &b })
+	if ot, ok := tx.(*observedTx); ok {
+		evs, _ := ctx.Value(carriedKey{}).([]graphapi.CarriedEvent)
+		for _, e := range evs {
+			ot.raised = append(ot.raised, published{e.Subject, e.Payload})
+		}
+	}
+}
+
+type carriedKey struct{}
+
+// withCarried is ctx carrying the writer's events of a Commit to the transaction that lands it.
+func withCarried(ctx context.Context, evs []graphapi.CarriedEvent) context.Context {
+	if len(evs) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, carriedKey{}, evs)
+}
+
+// carriedFamilies are the subjects the graph emits itself: a writer may not carry one (ADR 0136).
+var carriedFamilies = []string{"goap.change.", "goap.changed.", "goap.changeindex.", "goap.node.", "goap.baseline."}
+
+// checkCarried refuses a carried event outside goap.>, with a wildcard or an empty token, or of the graph's families,
+// and one whose payload is not JSON.
+func checkCarried(evs []graphapi.CarriedEvent) error {
+	for _, e := range evs {
+		bad := !strings.HasPrefix(e.Subject, "goap.") || strings.ContainsAny(e.Subject, "*> \t\r\n") ||
+			strings.Contains(e.Subject, "..") || strings.HasSuffix(e.Subject, ".") || !json.Valid(e.Payload)
+		for _, f := range carriedFamilies {
+			bad = bad || strings.HasPrefix(e.Subject, f)
+		}
+		if bad {
+			return fmt.Errorf("event %q: a writer carries its own events, under goap., as JSON: %w", e.Subject, ErrInvalid)
+		}
+	}
+	return nil
 }
 
 // raiseBaseline is raise with the header of the baseline the event names.
