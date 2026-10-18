@@ -94,6 +94,12 @@ func TestSQLBuildersGolden(t *testing.T) {
 			p = "$1"
 		}
 		check("VersionBranches", d, q, a, `SELECT version, branch FROM node_branch WHERE node_id = `+p+` ORDER BY branch`, []any{"n1"})
+		q, a = d.sqlVersionJoins("n1")
+		cid := "change_id"
+		if d.pg {
+			cid = "change_id::text"
+		}
+		check("VersionJoins", d, q, a, `SELECT version, branch, `+cid+` FROM node_branch WHERE node_id = `+p+` ORDER BY version, branch`, []any{"n1"})
 	}
 
 	// NodeIDByKey
@@ -147,6 +153,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	// Baselines, changes
 	check("pg BaselineHeaders", pg, pg.sqlBaselineHeaders(), nil, `SELECT id::text, coalesce(parent_id::text, ''), depth FROM baseline WHERE gap = 0 ORDER BY created_at, id`, nil)
 	check("sqlite BaselineHeaders", lite, lite.sqlBaselineHeaders(), nil, `SELECT id, coalesce(parent_id, ''), depth FROM baseline WHERE gap = 0 ORDER BY created_at, rowid`, nil)
+	q, a = pg.sqlNamespaceBaselineHeaders("")
+	check("pg NamespaceBaselineHeaders", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, '') FROM baseline WHERE namespace = $1 ORDER BY created_at, id`, []any{"default"})
+	q, a = lite.sqlNamespaceBaselineHeaders("")
+	check("sqlite NamespaceBaselineHeaders", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, '') FROM baseline WHERE namespace = ? ORDER BY created_at, rowid`, []any{"default"})
 	q, a = pg.sqlBaselineIDs("")
 	check("pg Baselines", pg, q, a, `SELECT id::text FROM baseline WHERE namespace = $1 ORDER BY created_at`, []any{"default"})
 	q, a = lite.sqlBaselineIDs("")

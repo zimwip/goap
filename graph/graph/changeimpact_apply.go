@@ -123,13 +123,15 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		return n, err
 	}
 	n.Version, n.Parents, n.Reason = domain.Version(len(vs)+1), []domain.Version{d.Base.Version}, domain.ReasonDerive
-	if d.MergedWith != nil && d.MergedWith.Version != d.Base.Version {
-		n.Parents = append(n.Parents, d.MergedWith.Version) // a rebase merged it with the target's version (ADR 0102)
-	}
 	if on, err := onBranch(a.ctx, a.tx, *d.Base, a.branch); err != nil {
 		return n, err
 	} else if on {
 		n.Reason = domain.ReasonRevise
+	}
+	if d.MergedWith != nil && d.MergedWith.Version != d.Base.Version {
+		// a rebase merged the parent branch's version into the change's (ADR 0102): a merge written on the current
+		// branch, seen from it (ADR 0133)
+		n.Parents, n.Reason = append(n.Parents, d.MergedWith.Version), domain.ReasonRebase
 	}
 	if latest, err := a.tx.LatestOn(a.ctx, d.Node, a.branch); err == nil && latest.Version != d.Base.Version {
 		return n, fmt.Errorf("%s changed on the branch of change %s since it was checked out (v%d, checked out from v%d): %w", d.Key, a.change.ID, latest.Version, d.Base.Version, ErrConflict)

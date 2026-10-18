@@ -2,7 +2,10 @@
   // Comparing two baselines of a namespace: what going from one to the other changes, node by node (added, removed,
   // another version with the properties that differ). The default is the baseline against its parent: what its
   // change landed.
-  import { graph, errorMessage, shortId, type Baseline, type BaselineDiff, type JsonValue } from '../api';
+  import { graph, errorMessage, shortId, type Baseline, type BaselineDiff, type JsonValue, type StackChange } from '../api';
+  import { changeLabel } from '../changeStack';
+  import { openTab } from '../shell/tabs.svelte';
+  import ChangeStackView from './ChangeStackView.svelte';
   import { openNode } from '../nodeEditors';
 
   let { baseline }: { baseline: Baseline } = $props();
@@ -10,6 +13,10 @@
   let others = $state<Baseline[]>([]);
   let from = $state('');
   let diff = $state<BaselineDiff[] | undefined>();
+  /** the changes that explain the difference (ADR 0133) */
+  let added = $state<StackChange[]>([]);
+  let removed = $state<StackChange[]>([]);
+  let stackOpen = $state(false);
   let error = $state('');
 
   $effect(() => {
@@ -25,11 +32,13 @@
     const f = from;
     const to = baseline.id ?? '';
     diff = undefined;
+    added = [];
+    removed = [];
     if (!f || !to) return;
     const ctrl = new AbortController();
     graph
       .diffBaselines(f, to, ctrl.signal)
-      .then((r) => ((diff = r.nodes ?? []), (error = '')))
+      .then((r) => ((diff = r.nodes ?? []), (added = r.changesAdded ?? []), (removed = r.changesRemoved ?? []), (error = '')))
       .catch((e) => {
         if (!ctrl.signal.aborted) error = errorMessage(e);
       });
@@ -57,6 +66,17 @@
     {#if diff}<span class="hint">{diff.length} node(s) differ</span>{/if}
   </div>
   {#if error}<div class="alert">{error}</div>{/if}
+  {#if added.length || removed.length}
+    <p class="explained">
+      <span class="hint">Explained by</span>
+      {#each added as c (c.id)}<button type="button" class="link added" onclick={() => openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin: true })}>+ {changeLabel(c)}</button>{/each}
+      {#each removed as c (c.id)}<button type="button" class="link removed" onclick={() => openTab({ kind: 'change', params: { id: c.id ?? '' } }, { pin: true })}>− {changeLabel(c)}</button>{/each}
+    </p>
+  {/if}
+  <details ontoggle={(e) => (stackOpen = (e.currentTarget as HTMLDetailsElement).open)}>
+    <summary>Change-stack of this baseline</summary>
+    {#if stackOpen && baseline.id}<ChangeStackView baselineId={baseline.id} />{/if}
+  </details>
   {#if diff?.length}
     <div class="scroll">
       <table>
@@ -119,6 +139,18 @@
     position: sticky;
     top: 0;
     background: var(--surface);
+  }
+  .explained {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin: 4px 0 0;
+  }
+  .explained .added {
+    color: var(--ok);
+  }
+  .explained .removed {
+    color: var(--danger);
   }
   .kind.added {
     color: var(--ok);

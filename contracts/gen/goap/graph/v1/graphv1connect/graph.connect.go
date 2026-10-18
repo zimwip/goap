@@ -254,6 +254,9 @@ const (
 	// GraphServiceDiffBaselinesProcedure is the fully-qualified name of the GraphService's
 	// DiffBaselines RPC.
 	GraphServiceDiffBaselinesProcedure = "/goap.graph.v1.GraphService/DiffBaselines"
+	// GraphServiceGetChangeStackProcedure is the fully-qualified name of the GraphService's
+	// GetChangeStack RPC.
+	GraphServiceGetChangeStackProcedure = "/goap.graph.v1.GraphService/GetChangeStack"
 	// GraphServiceMergeChangeProcedure is the fully-qualified name of the GraphService's MergeChange
 	// RPC.
 	GraphServiceMergeChangeProcedure = "/goap.graph.v1.GraphService/MergeChange"
@@ -475,8 +478,11 @@ type GraphServiceClient interface {
 	DerivedNodes(context.Context, *connect.Request[v1.DerivedNodesRequest]) (*connect.Response[v1.DerivedNodesResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
-	// What going from a baseline to another changes, node by node (same namespace).
+	// What going from a baseline to another changes, node by node (same namespace), and the changes that explain it.
 	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
+	// The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
+	// and the lineage they are read from.
+	GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error)
 	// Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
 	// into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
 	// fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
@@ -999,6 +1005,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("DiffBaselines")),
 			connect.WithClientOptions(opts...),
 		),
+		getChangeStack: connect.NewClient[v1.GetChangeStackRequest, v1.GetChangeStackResponse](
+			httpClient,
+			baseURL+GraphServiceGetChangeStackProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("GetChangeStack")),
+			connect.WithClientOptions(opts...),
+		),
 		mergeChange: connect.NewClient[v1.MergeChangeRequest, v1.MergeChangeResponse](
 			httpClient,
 			baseURL+GraphServiceMergeChangeProcedure,
@@ -1243,6 +1255,7 @@ type graphServiceClient struct {
 	planMerge              *connect.Client[v1.PlanMergeRequest, v1.PlanMergeResponse]
 	mergeBranch            *connect.Client[v1.MergeBranchRequest, v1.MergeBranchResponse]
 	diffBaselines          *connect.Client[v1.DiffBaselinesRequest, v1.DiffBaselinesResponse]
+	getChangeStack         *connect.Client[v1.GetChangeStackRequest, v1.GetChangeStackResponse]
 	mergeChange            *connect.Client[v1.MergeChangeRequest, v1.MergeChangeResponse]
 	getSharedNodes         *connect.Client[v1.GetSharedNodesRequest, v1.GetSharedNodesResponse]
 	splitChange            *connect.Client[v1.SplitChangeRequest, v1.SplitChangeResponse]
@@ -1657,6 +1670,11 @@ func (c *graphServiceClient) DiffBaselines(ctx context.Context, req *connect.Req
 	return c.diffBaselines.CallUnary(ctx, req)
 }
 
+// GetChangeStack calls goap.graph.v1.GraphService.GetChangeStack.
+func (c *graphServiceClient) GetChangeStack(ctx context.Context, req *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error) {
+	return c.getChangeStack.CallUnary(ctx, req)
+}
+
 // MergeChange calls goap.graph.v1.GraphService.MergeChange.
 func (c *graphServiceClient) MergeChange(ctx context.Context, req *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
 	return c.mergeChange.CallUnary(ctx, req)
@@ -1936,8 +1954,11 @@ type GraphServiceHandler interface {
 	DerivedNodes(context.Context, *connect.Request[v1.DerivedNodesRequest]) (*connect.Response[v1.DerivedNodesResponse], error)
 	PlanMerge(context.Context, *connect.Request[v1.PlanMergeRequest]) (*connect.Response[v1.PlanMergeResponse], error)
 	MergeBranch(context.Context, *connect.Request[v1.MergeBranchRequest]) (*connect.Response[v1.MergeBranchResponse], error)
-	// What going from a baseline to another changes, node by node (same namespace).
+	// What going from a baseline to another changes, node by node (same namespace), and the changes that explain it.
 	DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error)
+	// The change-stack of a node version or a baseline (ADR 0133): the changes it is the application of, oldest first,
+	// and the lineage they are read from.
+	GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error)
 	// Merges a change into what it was forked from (ADR 0102): a root change into the branch it forked from, a sub-change
 	// into its parent. It must be settled; it is rebased onto the target's head, its guardian is asked, then it is
 	// fast-forwarded. A change whose three-way merge waits for its resolutions (committed) is integrated with them.
@@ -2456,6 +2477,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("DiffBaselines")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceGetChangeStackHandler := connect.NewUnaryHandler(
+		GraphServiceGetChangeStackProcedure,
+		svc.GetChangeStack,
+		connect.WithSchema(graphServiceMethods.ByName("GetChangeStack")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceMergeChangeHandler := connect.NewUnaryHandler(
 		GraphServiceMergeChangeProcedure,
 		svc.MergeChange,
@@ -2774,6 +2801,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceMergeBranchHandler.ServeHTTP(w, r)
 		case GraphServiceDiffBaselinesProcedure:
 			graphServiceDiffBaselinesHandler.ServeHTTP(w, r)
+		case GraphServiceGetChangeStackProcedure:
+			graphServiceGetChangeStackHandler.ServeHTTP(w, r)
 		case GraphServiceMergeChangeProcedure:
 			graphServiceMergeChangeHandler.ServeHTTP(w, r)
 		case GraphServiceGetSharedNodesProcedure:
@@ -3143,6 +3172,10 @@ func (UnimplementedGraphServiceHandler) MergeBranch(context.Context, *connect.Re
 
 func (UnimplementedGraphServiceHandler) DiffBaselines(context.Context, *connect.Request[v1.DiffBaselinesRequest]) (*connect.Response[v1.DiffBaselinesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.DiffBaselines is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) GetChangeStack(context.Context, *connect.Request[v1.GetChangeStackRequest]) (*connect.Response[v1.GetChangeStackResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.GetChangeStack is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) MergeChange(context.Context, *connect.Request[v1.MergeChangeRequest]) (*connect.Response[v1.MergeChangeResponse], error) {
