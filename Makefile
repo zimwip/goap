@@ -10,9 +10,16 @@ CARGO_EXCLUDE ?=
 BUF_VERSION ?= 1.50.0
 BUF      ?= $(shell command -v buf 2>/dev/null || echo npx --yes @bufbuild/buf@$(BUF_VERSION))
 
-.PHONY: toolchain watch-tool rs-build rs-test rs-lint all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
+.PHONY: help toolchain watch-tool rs-build rs-test rs-lint all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
 
-all: generate build test
+.DEFAULT_GOAL := help
+
+help: ## list the targets and what they do (the default target)
+	@echo "Usage: make <target>"
+	@echo
+	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/^([a-zA-Z_-]+):.*## (.*)/\1\t\2/' | awk -F'\t' '{ printf "  %-20s %s\n", $$1, $$2 }'
+
+all: generate build test ## generate, build, test
 
 toolchain: ## install what building needs when it is missing: rustup + the pinned Rust toolchain (rust-toolchain.toml), checks node / npm for the web
 	@if ! command -v rustup >/dev/null 2>&1; then \
@@ -28,9 +35,9 @@ watch-tool: toolchain ## install watchexec (devlocal's rebuild on change) when i
 	@command -v watchexec >/dev/null 2>&1 || $(CARGO) install --locked watchexec-cli
 
 # the former names of the Rust targets, kept as aliases
-rs-build: build
-rs-test: test
-rs-lint: lint
+rs-build: build ## former name of build
+rs-test: test ## former name of test
+rs-lint: lint ## former name of lint
 
 tools: watch-tool ## install the development tools: watchexec, and buf when it is not on the PATH (npm)
 	@command -v buf >/dev/null 2>&1 || npm install -g @bufbuild/buf@$(BUF_VERSION)
@@ -47,7 +54,7 @@ build: toolchain ## build the workspace, and the services into bin/
 	@mkdir -p bin
 	@for s in $(SERVICES); do cp target/debug/$$s bin/$$s || exit 1; done
 
-test: toolchain
+test: toolchain ## cargo test of the workspace (CARGO_EXCLUDE: e.g. --exclude <crate>)
 	$(CARGO) test --workspace $(CARGO_EXCLUDE)
 
 tidy: toolchain ## bring Cargo.lock in line with the manifests of the workspace
@@ -68,7 +75,7 @@ test-pg: toolchain ## every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN
 
 # offline evaluation of LLM work (ADR 0099) against a running goap-dev or gateway: GOAP_TOKEN, GOAP_EVAL_URL, EVAL (cases)
 EVAL ?= evals
-eval: toolchain
+eval: toolchain ## offline evaluation cases of evals/ (or EVAL) against a running gateway, as GOAP_TOKEN
 	$(CARGO) run -q -p goap-cmd-goap-eval -- $(EVAL)
 
 lint: toolchain ## rustfmt + clippy (warnings refused) + Cargo.lock in line with the manifests + dsl.md sync check
@@ -102,7 +109,7 @@ devlocal-reset: ## drop the local SQLite database (demo data and methodologies a
 web/dist/index.html: web/package.json web/index.html web/vite.config.ts $(shell find web/src -type f 2>/dev/null)
 	cd web && npm install --no-audit --no-fund && npm run build
 
-web: devlocal-web
+web: devlocal-web ## same as devlocal-web
 
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
@@ -113,11 +120,11 @@ claude-agent-runner: toolchain ## install the Claude Agent SDK of the claude-cod
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)
 
-up: runner-image
+up: runner-image ## start the docker compose stack
 	$(COMPOSE) up --build -d
 
-down:
+down: ## stop the docker compose stack
 	$(COMPOSE) down
 
-logs:
+logs: ## follow the logs of the docker compose stack
 	$(COMPOSE) logs -f engine graph registry modelgw gateway
