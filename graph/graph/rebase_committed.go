@@ -141,6 +141,20 @@ func (g *Graph) unsettled(ctx context.Context, tx Tx, c domain.Change) ([]string
 // rebased onto the head of its target; a sub-change: rebased onto its parent), asked to the merge guards, then integrated
 // (a fast-forward; a target moving in between falls back to the three-way merge with the resolutions given).
 func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, err error) {
+	// one transaction (ADR 0140): the guardians judge what is merged; a rebase that changed the branch is kept, the merge
+	// waits for the change to be looked at again
+	var rebased error
+	err = g.inChange(ctx, id, func(ctx context.Context) error {
+		c, rebased, err = g.mergeIn(ctx, id, resolutions)
+		return err
+	})
+	if err == nil && rebased != nil {
+		err = rebased
+	}
+	return c, err
+}
+
+func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map[domain.NodeID]Resolution) (c domain.Change, rebased error, err error) {
 	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
 			return err
@@ -156,7 +170,7 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		return g.checkParentDrafts(ctx, tx, c)
 	})
 	if err != nil {
-		return c, err
+		return c, nil, err
 	}
 	var res RebaseResult
 	err = g.changeTx(ctx, id, func(tx Tx) error {
@@ -164,13 +178,13 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		return err
 	})
 	if err != nil {
-		return c, err
+		return c, nil, err
 	}
 	if res.Changed() {
-		return c, fmt.Errorf("change %s %s: %w", id, res.Summary(), ErrConflict)
+		return c, fmt.Errorf("change %s %s: %w", id, res.Summary(), ErrConflict), nil
 	}
 	if err := g.checkMerge(ctx, id); err != nil {
-		return c, err
+		return c, nil, err
 	}
 	err = g.changeTx(ctx, id, func(tx Tx) error {
 		if c, err = tx.Change(ctx, id); err != nil {
@@ -203,7 +217,7 @@ func (g *Graph) merge(ctx context.Context, id domain.ChangeID, resolutions map[d
 		}
 		return g.recordInParent(ctx, tx, c)
 	})
-	return c, err
+	return c, nil, err
 }
 
 // checkParentDrafts refuses the merge of a sub-change while its parent holds an uncommitted modification of a node the

@@ -83,7 +83,8 @@ type Graph struct {
 	Validators []NodeValidator
 	// SubChangeValidator, when set, is asked by CreateChange about a sub-change before it is stored, with its parent
 	// as stored and the change as it is about to be (Data, Methodology, ...): an error refuses it (wrap ErrInvalid).
-	// Like the guardian of a merge (ChangeLifecycles.Merge) it runs outside any transaction and may read the graph.
+	// Like the guardian of a merge (ChangeLifecycles.Merge) it runs in the transaction it judges (ADR 0140) and may read
+	// the graph with the context it is given.
 	SubChangeValidator func(ctx context.Context, parent, child domain.Change) error
 
 	// Facets are the providers of the facets of a blackboard (domain.Blackboard.Facets) beyond the built-in ones (options,
@@ -323,12 +324,21 @@ func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []d
 // CreateChange opens a change on a reference baseline. A sub-change
 // (ParentID) belongs to the namespace of its parent (which must have a branch of
 // its own), sees its parent's drafts and lands in its parent's log (ADR 0081).
-func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, error) {
+func (g *Graph) CreateChange(ctx context.Context, in NewChange) (c domain.Change, err error) {
 	if err := g.Bootstrap(ctx); err != nil {
 		return domain.Change{}, fmt.Errorf("bootstrap: %w", err)
 	}
-	// a change whose methodology names a lifecycle starts in its initial state (ADR 0058); the registry is asked
-	// before the transaction, it reads the graph
+	// one transaction (ADR 0140): the validator of a sub-change judges the parent the sub-change is stored under
+	err = g.inOne(ctx, func(ctx context.Context) error {
+		c, err = g.createChange(ctx, in)
+		return err
+	})
+	return c, err
+}
+
+func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, error) {
+	// a change whose methodology names a lifecycle starts in its initial state (ADR 0058); the registry, asked in the
+	// transaction of the creation, may read the graph
 	var lifecycle, initial, goal string
 	goal = in.Goal
 	// the version of the methodology the change follows (ADR 0113): a sub-change stays on its parent's, a new change
@@ -368,7 +378,7 @@ func (g *Graph) CreateChange(ctx context.Context, in NewChange) (domain.Change, 
 	if err != nil {
 		return domain.Change{}, err
 	}
-	// the validator of sub-changes is asked before the transaction too, it reads the graph
+	// the validator of sub-changes, in the transaction of the creation (it may read the graph)
 	if g.SubChangeValidator != nil && in.ParentID != "" {
 		parent, err := g.Change(ctx, in.ParentID)
 		if err != nil {

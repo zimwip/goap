@@ -77,8 +77,17 @@ func (g *Graph) changeLifecycle(ctx context.Context, c domain.Change) (*domain.L
 	return lc, nil
 }
 
-// TransitionChange moves the state of a change along the transition named by the request (ADR 0058).
-func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in TransitionRequest) (domain.Change, error) {
+// TransitionChange moves the state of a change along the transition named by the request (ADR 0058). Its guard and
+// guardians are asked in the transaction of the move (ADR 0140).
+func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in TransitionRequest) (c domain.Change, err error) {
+	err = g.inChange(ctx, id, func(ctx context.Context) error {
+		c, err = g.transitionChange(ctx, id, in)
+		return err
+	})
+	return c, err
+}
+
+func (g *Graph) transitionChange(ctx context.Context, id domain.ChangeID, in TransitionRequest) (domain.Change, error) {
 	bb, err := g.Blackboard(ctx, id)
 	if err != nil {
 		return domain.Change{}, err

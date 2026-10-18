@@ -11,7 +11,7 @@ import (
 // the change must be in a final state, then the methodology has its say (ChangeLifecycles.Merge: the goal of the
 // Activity the change is scoped to), else the landable states of the domain decide (ADR 0078); then the outer
 // guardians of its chain, innermost first (ADR 0106). Before them, the changes it depends on must have reached the
-// branch it merges into (ADR 0108). Asked outside any transaction: the guardian may read the graph.
+// branch it merges into (ADR 0108). Asked in the transaction of the merge (ADR 0140): the guardian may read the graph, with the context it is given.
 
 // checkMerge asks the guardian of a change whether it may merge.
 func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
@@ -37,7 +37,7 @@ func (g *Graph) checkMerge(ctx context.Context, id domain.ChangeID) error {
 	if err != nil {
 		return err
 	}
-	// the facets folded from the log (the history of the change, ADR 0109), outside the transaction
+	// the facets folded from the log (the history of the change, ADR 0109)
 	if bb, err = g.withLogFacets(ctx, bb, logs); err != nil {
 		return err
 	}
