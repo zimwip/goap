@@ -142,15 +142,17 @@ function DevReset { Remove-Item -Recurse -Force .goap -ErrorAction SilentlyConti
 
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
+function Images { RunnerImage; Run docker build --target services -t goap/goap:dev . }
+
 function ClaudeAgentRunner { Run go run ./platform/cmd/connector-claude-coding-agent install }
 
 # Engine socket for the docker-proxy service: Docker Desktop keeps it in its VM, at the default path
 function DockerSock { if (-not $env:GOAP_DOCKER_SOCK) { $env:GOAP_DOCKER_SOCK = '/var/run/docker.sock' } }
 
 function Up {
-    RunnerImage
+    Images
     DockerSock
-    Run docker @Compose up --build -d
+    Run docker @Compose up -d
     @'
 
 PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):
@@ -187,6 +189,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   dev-reset         drop the local SQLite database
   web               same as dev-web
   runner-image      image of the script sandboxes (goap-runner)
+  images            the image of every Go service of the compose stack (goap/goap:dev), built once
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
   up | down | logs  docker compose stack (up prints how to reach its database, DBeaver)
@@ -210,6 +213,7 @@ switch ($Target) {
     'dev-reset'        { DevReset }
     'web'              { DevWeb }
     'runner-image'     { RunnerImage }
+    'images'           { Images }
     'claude-agent-runner' { ClaudeAgentRunner }
     'up'               { Up }
     'down'             { Down }
