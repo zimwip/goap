@@ -14,7 +14,7 @@ type Options struct {
 	// Models is the model gateway configuration seeded when the graph holds no provider yet (SeedModels); empty: no
 	// model is seeded.
 	Models ModelsConfig
-	// RequireHooks makes Boot panic when the guard-relevant hooks of the graph (Authorizer, ChangeAuthorizer, Validators)
+	// RequireHooks makes Boot panic when the guard-relevant hooks of the graph (the authorizers, ProjectMoveGate, Validators)
 	// are not set: a composition that serves callers sets it, so that a seed never runs ahead of the access gating.
 	RequireHooks bool
 	// Dev, when set, runs last: the development or demo data of the composition (internal/devseed). The platform
@@ -51,8 +51,11 @@ type Report struct {
 // warning saying so.
 func Boot(ctx context.Context, g *graph.Graph, o Options) (Report, error) {
 	var r Report
-	if o.RequireHooks && (g.Authorizer == nil || g.ChangeAuthorizer == nil || len(g.Validators) == 0) {
-		panic("graphsvc.Boot: the graph hooks (Authorizer, ChangeAuthorizer, Validators) must be set before the bootstrap")
+	if o.RequireHooks && (g.Authorizer == nil || g.ChangeAuthorizer == nil || g.OperationAuthorizer == nil || g.ItemAuthorizer == nil ||
+		g.SeatAuthorizer == nil || g.ProjectMoveGate == nil || len(g.Validators) == 0) {
+		// an access hook left nil lets everything through (the graph core is a library): a composition serving people
+		// plugs each one (ADR 0135)
+		panic("graphsvc.Boot: the graph hooks (Authorizer, ChangeAuthorizer, OperationAuthorizer, ItemAuthorizer, SeatAuthorizer, ProjectMoveGate, Validators) must be set before the bootstrap")
 	}
 	if g.SubChangeValidator == nil || g.Lifecycles == nil {
 		log := o.Log

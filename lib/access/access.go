@@ -146,6 +146,8 @@ type Snapshot struct {
 	units, projects *domain.Hierarchy
 	// projectMethods are the methodologies each project names (ADR 0039), by project key; a key is present for every project
 	projectMethods map[string][]string
+	// stopped are the projects flagged stopped (ADR 0135), by key
+	stopped map[string]bool
 	// assignments are the Assignment nodes (ADR 0039), resolved from their assigns_org/assigns_project links
 	assignments []assignment
 	// criticality are the policies of the criticality levels, by the unit that owns them and the level
@@ -155,8 +157,11 @@ type Snapshot struct {
 // assignment is a resolved Assignment node: the roles an org unit holds on a project, or, when Project is
 // empty (no assigns_project link), platform-wide (ADR 0046).
 type assignment struct {
+	Key          string
 	Org, Project string
 	Roles        []string
+	// Owner and Admin are the flags of a project Assignment (ADR 0135), ignored on a platform one.
+	Owner, Admin bool
 }
 
 // BuildSnapshot reads the users and policies of a baseline graph of the namespace of the structures st: the units and
@@ -164,7 +169,7 @@ type assignment struct {
 func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 	nodes, links = InForce(nodes, links)
 	s := &Snapshot{Baseline: id, structures: st, users: map[string]User{}, units: st.Hierarchy(domain.StructureOrganisation, nodes, links), projects: st.Hierarchy(domain.StructureProject, nodes, links),
-		projectMethods: map[string][]string{}}
+		projectMethods: map[string][]string{}, stopped: map[string]bool{}}
 	org := domain.StructureOrganisation
 	byID := map[domain.NodeID]domain.Node{}
 	var crit []domain.Node
@@ -175,6 +180,9 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 		// filter it again.
 		if st.In(domain.StructureProject, n.Type) {
 			s.projectMethods[n.Key] = stringList(n.Properties["methodologies"])
+			if v, _ := n.Properties[PropStopped].(bool); v {
+				s.stopped[n.Key] = true
+			}
 		}
 		switch n.Type {
 		case NodeTypeUser:
@@ -199,7 +207,7 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 				s.Problems = append(s.Problems, fmt.Sprintf("%s: %v", n.Key, err))
 				continue
 			}
-			assignBuild[n.ID] = &assignment{Roles: a.Roles}
+			assignBuild[n.ID] = &assignment{Key: n.Key, Roles: a.Roles, Owner: a.Owner, Admin: a.Admin}
 		}
 	}
 	for _, l := range links {
@@ -222,8 +230,12 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 		}
 	}
 	for _, a := range assignBuild {
-		// Project is empty for a platform-wide assignment (no assigns_project link, ADR 0046); still kept.
-		if a.Org != "" && len(a.Roles) > 0 {
+		// Project is empty for a platform-wide assignment (no assigns_project link, ADR 0046); still kept. The flags of
+		// a project Assignment grant without any role (ADR 0135); a platform Assignment carries none.
+		if a.Project == "" {
+			a.Owner, a.Admin = false, false
+		}
+		if a.Org != "" && (len(a.Roles) > 0 || a.Owner || a.Admin) {
 			s.assignments = append(s.assignments, *a)
 		}
 	}
@@ -330,6 +342,64 @@ func (s *Snapshot) ProjectRoles(orgChain, projectChain []string) []string {
 	return out
 }
 
+// ProjectFlags tells whether an Assignment to any unit of orgChain on any project of projectChain makes the subject an
+// administrator or the owner of the project (ADR 0135): the flags hold on the project they name and every project below
+// it, the owner's implying the administrator's.
+func (s *Snapshot) ProjectFlags(orgChain, projectChain []string) (admin, owner bool) {
+	for _, a := range s.assignments {
+		if a.Project == "" || !slices.Contains(orgChain, a.Org) || !slices.Contains(projectChain, a.Project) {
+			continue
+		}
+		owner = owner || a.Owner
+		admin = admin || a.Admin || a.Owner
+	}
+	return admin, owner
+}
+
+// ProjectOwned tells whether a project has an owner (ADR 0135): an owner Assignment on it or on a project above it.
+func (s *Snapshot) ProjectOwned(project string) bool {
+	chain := s.ProjectChain(project)
+	for _, a := range s.assignments {
+		if a.Owner && a.Project != "" && slices.Contains(chain, a.Project) {
+			return true
+		}
+	}
+	return false
+}
+
+// ProjectStopped tells whether a project takes no new change (ADR 0135): it, or a project above it, is stopped.
+func (s *Snapshot) ProjectStopped(project string) bool {
+	for _, p := range s.ProjectChain(project) {
+		if s.stopped[p] {
+			return true
+		}
+	}
+	return false
+}
+
+// ProjectOf is the project a project names as its parent (project_part_of; "" for the root or an unknown key).
+func (s *Snapshot) ProjectOf(project string) string {
+	chain := s.ProjectChain(project)
+	if len(chain) < 2 {
+		return ""
+	}
+	return chain[1]
+}
+
+// AssignmentProject is the project an Assignment of that key names (PlatformScope for a platform one) and whether
+// the snapshot holds it.
+func (s *Snapshot) AssignmentProject(key string) (project string, owner, admin, ok bool) {
+	for _, a := range s.assignments {
+		if a.Key == key {
+			if a.Project == "" {
+				return PlatformScope, false, false, true
+			}
+			return a.Project, a.Owner, a.Admin, true
+		}
+	}
+	return "", false, false, false
+}
+
 // PlatformRoles returns the platform-wide roles (ADR 0046) granted to any unit of orgChain by an Assignment
 // naming no project: unlike ProjectRoles, these hold everywhere, not just on a project chain.
 func (s *Snapshot) PlatformRoles(orgChain []string) []string {
@@ -381,13 +451,26 @@ func (s *Snapshot) Enrich(p authz.Principal) authz.Principal {
 			p.Org = u.Unit
 		}
 	}
-	roles := slices.Clone(p.Roles)
-	for _, r := range s.PlatformRoles(s.SubjectChain(p)) {
-		if !slices.Contains(roles, r) {
+	// a platform role is held everywhere, never on a project (ADR 0135): one a token or a header carries among the
+	// roles goes with the others, apart from the roles held on the project
+	var roles []string
+	global := slices.Clone(p.Global)
+	add := func(r string) {
+		if !slices.Contains(global, r) {
+			global = append(global, r)
+		}
+	}
+	for _, r := range p.Roles {
+		if slices.Contains(PlatformRoles, r) {
+			add(r)
+		} else if !slices.Contains(roles, r) {
 			roles = append(roles, r)
 		}
 	}
-	p.Roles = roles
+	for _, r := range s.PlatformRoles(s.SubjectChain(p)) {
+		add(r)
+	}
+	p.Roles, p.Global = roles, global
 	return p
 }
 
@@ -401,7 +484,11 @@ func (s *Snapshot) MayAccessProject(p authz.Principal, project string) bool {
 		return false
 	}
 	chain := s.SubjectChain(p)
-	return len(s.PlatformRoles(chain)) > 0 || len(s.ProjectRoles(chain, s.ProjectChain(project))) > 0 || slices.Contains(p.Roles, RoleAdmin)
+	projects := s.ProjectChain(project)
+	if admin, _ := s.ProjectFlags(chain, projects); admin {
+		return true
+	}
+	return len(s.PlatformRoles(chain)) > 0 || len(s.ProjectRoles(chain, projects)) > 0 || p.HasRole(RoleAdmin)
 }
 
 // Directory reads the snapshot of the head of the main branch (see graphsnap.Cache); TTL is how often the
@@ -471,6 +558,15 @@ func (d *Directory) MayAccessProject(ctx context.Context, p authz.Principal, pro
 		return false, err
 	}
 	return s.MayAccessProject(p, project), nil
+}
+
+// ProjectStopped tells whether a project takes no new change (Snapshot.ProjectStopped).
+func (d *Directory) ProjectStopped(ctx context.Context, project string) (bool, error) {
+	snap, err := d.Snapshot(ctx)
+	if snap == nil {
+		return false, err
+	}
+	return snap.ProjectStopped(project), nil
 }
 
 // SubProjects returns a project and the projects below it, from the current snapshot (Snapshot.SubProjects).
@@ -548,6 +644,8 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 		return false, nil
 	}
 	c, snap := a.enforcer(ctx)
+	// the flags are the snapshot's to say, for this request's project, never the caller's
+	req.Subject.ProjectAdmin, req.Subject.ProjectOwner = false, false
 	if snap != nil {
 		// Enrich already merges the subject's platform-wide roles (ADR 0046, 0047); only the roles held on
 		// the resource's project remain to add here (ADR 0043).
@@ -568,6 +666,11 @@ func (a *Authorizer) Authorize(ctx context.Context, req authz.Request) (bool, er
 			}
 		}
 		req.Subject.Roles = roles
+		// the flags of the project Assignments (ADR 0135) hold for a resource naming a project only: a platform resource
+		// (a methodology, a policy) is never a project's
+		if req.Resource.ProjectID != "" {
+			req.Subject.ProjectAdmin, req.Subject.ProjectOwner = snap.ProjectFlags(subjectChain, projectChain)
+		}
 	}
 	if ok, err := a.floor.Authorize(ctx, req); err != nil || ok {
 		return ok, err

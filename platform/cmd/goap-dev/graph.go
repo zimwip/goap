@@ -45,6 +45,7 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.SeatAuthorizer = graphsvc.SeatAuthorizer(authorizer)
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
-	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, llmcfg.ProtectedAliasValidator{}}
+	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
+		llmcfg.ProtectedAliasValidator{}}
 	return &graphPart{g: g, directory: directory, authorizer: authorizer}, nil
 }

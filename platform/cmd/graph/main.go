@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"slices"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/zimwip/goap/lib/typecat"
 	"github.com/zimwip/goap/platform/devseed"
 	"github.com/zimwip/goap/platform/modelgw"
+	"github.com/zimwip/goap/platform/registrysvc"
 )
 
 // loadTypes loads the type catalogue until it holds the domains the seeds write to, then runs the seeds.
@@ -136,7 +138,12 @@ func main() {
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
 	// the history of a change (ADR 0109): no registry here, so no step relies on another for its standing
 	g.LogFacets = graphsvc.LogFacets(nil)
-	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, llmcfg.ProtectedAliasValidator{}}
+	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
+		llmcfg.ProtectedAliasValidator{}}
+	// the roles a methodology allows each operation to (ADR 0103, 0135), asked of the methodology registry: without
+	// them, an operation on a change would be the administrators' only
+	registry := registrysvc.NewClient(&http.Client{Timeout: 30 * time.Second}, platform.Env("GOAP_REGISTRY_URL", "http://localhost:8082"), telemetry.ClientOptions()...)
+	g.OperationAuthorizer = graphsvc.OperationAuthorizer(authorizer, registryOperationRoles(registry))
 	// SubChangeValidator and Lifecycles, the guardian of the changes (ADR 0058, 0102), need the registry service itself
 	// (its methodology store): only goap-dev, which holds it in process, wires them; the registry client has no RPC for
 	// them, so this graph merges by the landable states of the domains only
@@ -177,11 +184,31 @@ func main() {
 		}
 	})
 	domains.Authz = authorizer
-	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor(),
+	graphHandler := &graphsvc.Handler{Graph: g, Events: events, Authz: authorizer, Floor: authorizer.Floor(), Projects: directory.MayAccessProject, Stopped: directory.ProjectStopped,
 		Demo: devseed.DemoLoader(directory)} // the "Load demo data" setting; the alm domain must be published
 	srv.Mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	srv.Mount(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
 	if err := srv.Run(); err != nil {
 		platform.Fatal(log, "server", err)
+	}
+}
+
+// registryOperationRoles reads the roles that allow an operation from the methodology of the change, compiled by the
+// registry (registrysvc.Service.OperationRoles in process): a change of no methodology, or of one the registry does
+// not know, is not restricted by roles (the ABAC rules and the gates still apply).
+func registryOperationRoles(c *registrysvc.Client) graphsvc.OperationRoles {
+	return func(ctx context.Context, ref, op string) ([]string, bool, error) {
+		if ref == "" {
+			return nil, false, nil
+		}
+		m, err := c.Methodology(ctx, ref)
+		if err != nil {
+			if connect.CodeOf(err) == connect.CodeNotFound {
+				return nil, false, nil
+			}
+			return nil, false, err
+		}
+		roles, restricted := m.Definition().OperationRoles(op)
+		return roles, restricted, nil
 	}
 }

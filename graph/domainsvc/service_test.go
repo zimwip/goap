@@ -203,7 +203,7 @@ func TestSeedDomains(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "alm.yaml"), []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s := &Service{Store: NewMemoryStore()}
+	s := &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore()}
 	got, err := s.SeedDomains(as("admin"), dir)
 	if err != nil || len(got) != 1 || got[0] != "alm@1" {
 		t.Fatalf("seed: %v %v", got, err)
@@ -379,7 +379,7 @@ func TestDomainNodeTypeEditors(t *testing.T) {
 }
 
 func TestListTypes(t *testing.T) {
-	s := &Service{Store: NewMemoryStore()}
+	s := &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore()}
 	withALM(t, s)
 	res, err := (&Handler{Service: s}).ListTypes(as("contributor"), connect.NewRequest(&registryv1.ListTypesRequest{}))
 	if err != nil {
@@ -440,7 +440,7 @@ func (r *recorder) Publish(_ context.Context, subject string, _ any) error {
 func TestImportPublishedIsOneEvent(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
 	ev := &recorder{}
-	s := &Service{Store: NewMemoryStore(), Events: ev}
+	s := &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore(), Events: ev}
 	r, _, err := s.ImportDomain(ctx, []byte("name: imp\nversion: \"1\"\nnodeTypes: [{name: A}]\n"), true)
 	if err != nil || r.Status != def.StatusPublished || r.PublishedAt.IsZero() {
 		t.Fatalf("imported as published: %+v %v", r, err)

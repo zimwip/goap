@@ -36,6 +36,11 @@ type Capabilities struct {
 	// LowerCriticality: the caller may lower the criticality of a change of their active project (change:lower-criticality,
 	// ADR 0075 §3); raising it asks nothing more than writing the change.
 	LowerCriticality bool `json:"lowerCriticality"`
+	// AdministerProject and OwnProject (ADR 0135): the caller administers, or owns, their active project (a flag of an
+	// Assignment on it or above it): they manage its Assignments' roles and its sub-projects; the owner also the flags of
+	// the Assignments, the retirement and the place of the projects. A platform administrator does both.
+	AdministerProject bool `json:"administerProject"`
+	OwnProject        bool `json:"ownProject"`
 }
 
 // Names are the namespaces, node types, link types, key schemes and properties of the built-in domains the clients
@@ -127,6 +132,10 @@ func (a *Authorizer) Session(ctx context.Context, p authz.Principal) (Session, e
 		project = s.Structures.Project().Root
 	}
 	s.Can.Approve = snap.MayAccessProject(p, project)
+	s.Can.AdministerProject, s.Can.OwnProject = snap.ProjectFlags(snap.SubjectChain(p), snap.ProjectChain(project))
+	if admin {
+		s.Can.AdministerProject, s.Can.OwnProject = true, true
+	}
 	s.Can.LowerCriticality, err = a.Authorize(ctx, authz.Request{Subject: p, Action: "lower-criticality", Resource: authz.Resource{Type: "change", ProjectID: p.Project}})
 	if err != nil {
 		return Session{}, err

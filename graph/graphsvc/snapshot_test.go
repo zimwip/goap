@@ -39,7 +39,7 @@ func TestImportGraphCreatesAChange(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authorizer}
 	ctx := context.Background()
 
 	exp, err := h.ExportGraph(ctx, connect.NewRequest(&graphv1.ExportGraphRequest{Namespace: "alm"}))
@@ -79,7 +79,7 @@ func TestImportGraphCreatesAChange(t *testing.T) {
 // refused, a streaming call passing none of the unary interceptors.
 func TestExportGraphOkfStreamsAZip(t *testing.T) {
 	g := graph.New(graph.NewMemory())
-	_, h := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	_, h := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g})
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 	client := graphv1connect.NewGraphServiceClient(srv.Client(), srv.URL)

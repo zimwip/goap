@@ -26,6 +26,7 @@ import (
 	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graphsvc"
 	"github.com/zimwip/goap/graph/indexersvc"
+	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
@@ -64,7 +65,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		srv.Mount(path, h)
 	}
 
-	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: engine.Publishers{changePublisher(e.triggers.onChange), pp.indexSink, rp.bus}, Authz: authorizer, Floor: authorizer.Floor(), Identity: ident,
+	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: engine.Publishers{changePublisher(e.triggers.onChange), pp.indexSink, rp.bus}, Authz: authorizer, Floor: authorizer.Floor(), Projects: gp.directory.MayAccessProject, Stopped: gp.directory.ProjectStopped, Identity: ident,
 		Demo: devseed.DemoLoader(gp.directory)}
 	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: rp.reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
@@ -126,7 +127,7 @@ func buildAuth(e *env, st stores, gp *graphPart, srv *platform.Server) (echo.Mid
 	if err != nil {
 		return nil, wrap("jwt secret", err)
 	}
-	authCfg := gateway.Config{AuthMode: e.cfg.AuthMode, JWTSecret: []byte(secret), DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
+	authCfg := gateway.Config{AuthMode: e.cfg.AuthMode, JWTSecret: []byte(secret), DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true", PlatformRoles: access.PlatformRoles,
 		TokenTTL: platform.EnvDuration("GOAP_TOKEN_TTL", gateway.DefaultTokenTTL), MaxSession: platform.EnvDuration("GOAP_SESSION_MAX", gateway.DefaultMaxSession),
 		Credentials: &credsvc.Service{Store: st.creds}, Enrich: gp.directory.Enrich, ProjectAccess: gp.directory.MayAccessProject,
 		// the user exists in the graph from their first sign-in, member of the unit new users join (ADR 0042)

@@ -52,7 +52,7 @@ func TestAutoRegistrationAndCall(t *testing.T) {
 		Invoker: &mcpsvc.ConnectInvoker{Token: token, HTTP: http.DefaultClient}, Lease: 3 * time.Second}
 	dev := authz.Principal{Subject: "u", Org: "acme", Roles: []string{"admin"}}
 	mux := http.NewServeMux()
-	mux.Handle(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Identity: identity.Extractor{Default: &dev}, ConnectorToken: token}))
+	mux.Handle(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authz.AllowAll{}, Identity: identity.Extractor{Default: &dev}, ConnectorToken: token}))
 	hubSrv := httptest.NewServer(mux)
 	defer hubSrv.Close()
 
@@ -127,7 +127,7 @@ func TestCallContextReachesTheConnector(t *testing.T) {
 		Invoker: &mcpsvc.ConnectInvoker{Token: token, HTTP: http.DefaultClient}, Lease: 3 * time.Second}
 	dev := authz.Principal{Subject: "u", Org: "acme", Roles: []string{"admin"}}
 	mux := http.NewServeMux()
-	mux.Handle(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Identity: identity.Extractor{Default: &dev}, ConnectorToken: token}))
+	mux.Handle(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: hub, Authz: authz.AllowAll{}, Identity: identity.Extractor{Default: &dev}, ConnectorToken: token}))
 	hubSrv := httptest.NewServer(mux)
 	defer hubSrv.Close()
 	conn := workspace.New()

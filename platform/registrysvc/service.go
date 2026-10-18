@@ -58,6 +58,9 @@ func (s *Service) clock() time.Time {
 }
 
 func (s *Service) authorize(ctx context.Context, action string, m *methodology.Methodology) error {
+	if authz.From(ctx).System() {
+		return nil // the platform acting by itself (the seeds) is not asked, an authorizer or not (ADR 0135)
+	}
 	return authz.Check(ctx, s.Authz, authz.Request{Subject: authz.From(ctx), Action: action,
 		Resource: authz.Resource{Type: "methodology", ID: m.Name + "@" + m.Version, Name: m.Name, Org: authz.From(ctx).Org}})
 }

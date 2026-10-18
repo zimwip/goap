@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -49,8 +50,13 @@ type Config struct {
 	AuthMode string
 	// JWTSecret signs and validates HS256 tokens.
 	JWTSecret []byte
-	// DevTokens enables POST /auth/dev-token (never in production).
+	// DevTokens enables POST /auth/dev-token (never in production). It never mints a platform role (ADR 0135).
 	DevTokens bool
+	// TrustTokenRoles takes the roles a token carries (hs256 only, tokens from an external identity provider,
+	// GOAP_TRUST_TOKEN_ROLES). Otherwise, and always in local mode, the roles come from the graph only (ADR 0135).
+	TrustTokenRoles bool
+	// PlatformRoles are the roles a dev token never carries (access.PlatformRoles; nil: it carries none).
+	PlatformRoles []string
 	// TokenTTL is how long a signed token is valid (DefaultTokenTTL when zero). The web refreshes it before it
 	// expires (POST /auth/refresh), so it is also how long an idle session survives.
 	TokenTTL time.Duration
@@ -271,7 +277,7 @@ func setPrincipal(c *echo.Context, cfg Config, p authz.Principal) {
 	h.Set(HeaderSubject, p.Subject)
 	h.Set(HeaderOrg, p.Org)
 	h.Set(HeaderProject, p.Project)
-	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
+	h.Set(HeaderRoles, strings.Join(p.AllRoles(), ","))
 	h.Del(identity.HeaderOnBehalfOf) // a caller never says whom it acts for: only platform services do (ADR 0114)
 }
 
@@ -410,6 +416,9 @@ func devToken(cfg Config) echo.HandlerFunc {
 		if err := c.Bind(&in); err != nil || in.Subject == "" {
 			return echo.NewHTTPError(http.StatusBadRequest, "subject required")
 		}
+		// a platform role is granted by the graph only (ADR 0135): a dev token never carries one (none at all when the
+		// platform roles are not known)
+		in.Roles = slices.DeleteFunc(in.Roles, func(r string) bool { return cfg.PlatformRoles == nil || slices.Contains(cfg.PlatformRoles, r) })
 		tok, err := sign(cfg, in.Subject, in.Org, in.Project, in.Roles)
 		if err != nil {
 			return err

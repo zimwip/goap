@@ -29,26 +29,34 @@ structural right can be held on one project.
 **Without an explicit grant, everything is refused.** An explicit grant is an Assignment (a role, a flag) matched
 by a rule, or the platform administrator floor. Consequences:
 
-- **A missing authorizer refuses.** `authz.Check(nil, …)` returns `ErrForbidden`; each graph hook refuses when
-  nil. A test or the `none` auth mode passes `authz.AllowAll` explicitly. `graphsvc.Boot(RequireHooks)` covers
-  every access hook; a composition without a registry (`platform/cmd/graph`) wires an `OperationAuthorizer` that
-  allows administrators only.
+- **A missing authorizer refuses.** `authz.Check(nil, …)` returns `ErrForbidden`; so do the graph service's
+  builders of the graph hooks (`graphsvc.OperationAuthorizer`, `ItemAuthorizer`, `SeatAuthorizer`,
+  `ProjectMoveGate`, …) and the handlers of the services when given no authorizer. A test passes `authz.AllowAll`
+  explicitly, which keeps the opening visible. The hooks of the graph core stay nil when not plugged (a library
+  default, the core knows no ABAC); `graphsvc.Boot(RequireHooks)` refuses a composition that leaves one of them
+  unplugged. `platform/cmd/graph` plugs an `OperationAuthorizer` over the registry (`GOAP_REGISTRY_URL`), else one
+  that allows administrators only.
 - **An empty list grants nothing.** `mayRun` with no `Roles` holds for administrators (of the platform, or of the
-  resource's project) only; a methodology that wants an agent, an action, a model or an operation open to every
-  member says so (`roles: ["*"]`, the explicit "any role on the project"). `Methodology.OperationRoles` restricts
-  every operation a role does not list.
-- **Every read is authorized.** The graph handler authorizes reads like the index does: a node, `read` on its type
-  and access to its project; a change, access to its project (personal changes: their subject only). The
-  `r.obj.Org == ""` clause goes: a resource with no org is a platform resource, read by a platform `reader` or an
-  administrator, or by a rule naming its type.
-- **Membership alone does no work.** The `onProject` rules for writes (`object:create`, `node:transition`,
-  `tool:call`, `change:transition`, `change:move`) are removed: these go through the operations of the change
-  (`operation:perform`, ADR 0103) and the roles the methodology declares. `onProject` stays for reading a
-  project's processes and changes; `prompt:inspect` needs a role listing the operation `prompt.inspect`.
+  resource's project) only; `"*"` (`authz.AnyRole`) is the explicit "any role on the project".
+  `Methodology.OperationRoles` always restricts: the roles listing an operation (or its kind) allow it, a role
+  listing none allows every operation, and a methodology declaring no role leaves its operations to the
+  administrators. An agent or an action that declares no role adds no check of its own to the permission of the
+  run (`process:start`, held by the members of the project): the engine asks `mayRun` only for declared roles.
+- **Every read is authorized.** The graph handler authorizes reads like the index does: a node, access to its
+  project; a change, access to its project (personal changes: their subject only); the lists of changes leave out
+  what the caller may not read. The `r.obj.Org == ""` clause goes: a resource with no org is a platform resource,
+  read by a platform `reader` or an administrator, or by a rule naming its type (the triggers, the types of a
+  namespace).
+- **Membership is a project role.** A platform role (`reader`) no longer makes its holder a member of every
+  project: `Snapshot.Enrich` keeps the platform roles apart (`Principal.Global`, `HasRole` reads both), and
+  `onProject` holds for a role held on the project or a flag (§2). The `onProject` rules of the defaults stay for
+  now (see *Not yet*).
 - **Roles come from the graph only.** In `local` mode the gateway ignores the roles of a token; `hs256` takes them
-  only with `GOAP_TRUST_TOKEN_ROLES=1` (an external identity provider). `/auth/dev-token` never mints `admin`.
-- **No role name in the code.** `release:deploy` and `derogation:sign` lose their rules naming `release_manager` /
-  `derogation_signatory`: a methodology declares these roles and the operations they allow.
+  only with `GOAP_TRUST_TOKEN_ROLES=1` (an external identity provider, `Config.TrustTokenRoles`).
+  `/auth/dev-token` never mints a platform role. The identity headers carry the roles held on the project and the
+  platform roles (`Principal.AllRoles`), told apart again by `Enrich`.
+- **A stopped project takes no new change.** `CreateChange` refuses a change in a project that is stopped or below
+  a stopped one (`Snapshot.ProjectStopped`).
 
 ### 2. `owner` and `admin` flags on a project Assignment
 
@@ -62,16 +70,17 @@ come from possession.
 | Flag on a project Assignment | Grants, on the project and its sub-projects (never on the platform) |
 |---|---|
 | `admin` | **administrator of the project**: every action on a resource of the project chain; manages the Assignments' roles (not their flags); creates and edits sub-projects |
-| `owner` | everything `admin` grants, and **possession**: sets and removes the `admin` and `owner` flags; stops the project (retires it through its lifecycle, `config` → `retired`), restores it, moves it in the project tree |
+| `owner` | everything `admin` grants, and **possession**: sets and removes the `admin` and `owner` flags; stops the project and restarts it (the `stopped` attribute of `ProjectUnit`: a structure type has no lifecycle), moves it in the project tree |
 
 - **Inherited, never taken.** The flags hold on the project the Assignment names and every project below it
   (`ProjectChain`). Creating a sub-project makes nobody its owner: its owners are those of the projects above it,
   until an owner sets the flag on an Assignment of the sub-project. An administrator who creates a sub-project
   administers it through the flag they already hold above.
-- **Always an owner.** A project chain keeps at least one owner (an `owner` Assignment on it or above it, to a
-  unit or a user); `ProjectOwnerValidator`, next to `AdminFloorValidator`, refuses a commit that leaves a live
-  project with none, the root project aside (a platform administrator owns it). A platform administrator
-  remains above every project: it sets an owner on an orphaned one.
+- **Always an owner.** A project that has an owner (an `owner` Assignment on it or above it, to a unit or a user)
+  keeps one: `ProjectOwnerValidator`, next to `AdminFloorValidator`, refuses a commit that takes away the last
+  owner of a project still in the graph (a hand-off in one change passes). A project never owned is a platform
+  administrator's alone, and asked for none; a platform administrator remains above every project and sets an
+  owner on it.
 - **Never beyond the scope.** An owner or an administrator touches neither the platform resources (methodologies,
   domains, policies, organisation units, adapters, models), nor a platform Assignment, nor an Assignment or a
   project outside their chain, nor the project their own flag is held on in a way that removes it from their
@@ -81,42 +90,46 @@ come from possession.
   owner flag implies the admin flag. Casbin functions `isProjectAdmin(r.sub)`, `isProjectOwner(r.sub)`.
 - **Floor.** Unchanged: `hasRole(r.sub, "admin")`, the platform role. The project flags are default policies: a
   stored policy may narrow them, never a platform administrator.
-- **Assignments.** The `adminOnly` gate of `Assignment` asks `assignment:write` with the Assignment's project;
-  `assignment:flag` when the edit sets or removes `owner` / `admin`. Default rules: `assignment:write` for
-  `isProjectAdmin`, `assignment:flag` for `isProjectOwner` (the platform administrator through the floor).
-- **Projects.** The `adminOnly` gate of `ProjectUnit` asks `project:create` / `project:write` with the project
-  its `project_part_of` names (`isProjectAdmin`); `project:retire` (a move to `retired` or back) and
-  `project:move` (a new `project_part_of`, asked on the old and the new parent) for `isProjectOwner`. The project
-  itself is checked on its parent's chain, so a flag held on a project does not let its holder edit that same
-  project's place.
-- **Checked at commit.** `ProjectScopeValidator` (graph validator, like `AdminFloorValidator`) checks the final
-  state of a change touching Assignments or projects as the person committing it: every Assignment and project
-  written is in the writer's chain, every flag set or removed by an owner of it, no flag on a platform Assignment.
-  The handler gate is the early refusal, the validator the guarantee (a personal change, the settings, `goap-change`
-  and the assistant all go through it).
+- **Assignments and projects.** The `adminOnly` gate of `Assignment` and `ProjectUnit` still asks the floor; for
+  anyone else it asks `assignment:write` / `project:write` on their active project (`isProjectAdmin`): the early
+  refusal. The policy rules name what possession adds (`assignment:flag`, `project:stop`, `project:move`, denied to
+  anyone but an owner or a platform administrator), for whoever asks them.
+- **Checked at commit.** `ProjectScopeValidator` (graph validator, like `AdminFloorValidator`) judges every write of
+  an Assignment or a project as the person committing it, against the state the change started from: a platform
+  Assignment and a root project are a platform administrator's; an Assignment of a project, its administrators'
+  (on the project before and after the edit), its flags its owners'; a new project, the administrators' of its
+  parent; an edit of a project, its administrators'; stopping or restarting it, its owners'; its move, the owners'
+  of its old and its new parent. A platform Assignment carrying a flag is refused whoever writes it. A `system:`
+  principal acting by itself and a platform administrator are not asked. The handler gate is the early refusal,
+  the validator the guarantee (a personal change, the settings, `goap-change` and the assistant all commit). Both
+  validators read through the query of the commit only (the stores are not reentrant): the state before is the
+  one the change leaves with each node it wrote taken back to its previous version.
 - The platform roles (`admin`, `reader`), `AdminFloorValidator` and the first user's grant (ADR 0040) are
   unchanged.
-- **Session.** `access.Session.can` gains, per project of the session, `administerProject` and `ownProject`;
-  the Assignments pane offers the flags and the role editing by what the session allows, the Projects tab the
-  creation, retirement and move of projects.
+- **Session.** `access.Session.can` gains `administerProject` and `ownProject`, for the active project of the
+  session (a platform administrator holds both); the Assignments pane offers the owner and admin flags to an owner
+  (an Assignment may carry a flag and no role), the Project tab stops and restarts the project. Hints only: the
+  validator decides.
 
 ## Consequences
 
-- Every shipped methodology (`sdlc`, `release-based`, `risk-management`, `methodology-improvement`, the examples)
-  must declare the roles of its agents, actions and operations, `"*"` where every member is meant. A methodology
-  that declares none runs for administrators only.
-- More refusals at first: the tests that rely on an open authorizer pass `authz.AllowAll` explicitly, which keeps
-  the opening visible.
+- A methodology that wants an operation, an agent, an action, a model or a seat open to every member says so
+  (`roles: ["*"]` where a list of roles is asked); one that declares no role leaves its operations to the
+  administrators.
+- More refusals at first: the tests that relied on an open authorizer pass `authz.AllowAll` (or
+  `graphsvc.EveryProject`) explicitly, which keeps the opening visible.
 - The database starts from zero: no migration of stored Assignments or policies.
 
-## Plan
+## Not yet
 
-1. `authz`: nil refuses, `AllowAll`, `isProjectAdmin` / `isProjectOwner`, the new defaults.
-2. `lib/access`: the flags on `Assignment` (domain `organisation` and its attributes), `Authorize`,
-   session hints.
-3. `graphsvc`: authorized reads, the `assignment:*` and `project:*` gates; `ProjectOwnerValidator`,
-   `ProjectScopeValidator`.
-4. `mayRun` / `OperationRoles` with `"*"`; the shipped methodologies declare their roles.
-5. Gateway: token roles, dev-token.
-6. Web: the Assignments pane, the session hints.
-7. `docs/architecture.md`, `CLAUDE.md`.
+- The `onProject` rules for writes (`object:create`, `node:transition`, `tool:call`, `change:transition`,
+  `change:move`, `prompt:inspect`) and the rules naming `release_manager` / `derogation_signatory`: removing them
+  needs the shipped methodologies to declare the operations of their roles first.
+- The model gateway lets every caller use a model listing no role; the baselines and the graph-wide reads
+  (`BaselineGraph`, the diffs) are not filtered by project.
+- `engine.AuthzScope` with a nil `Authz` still grants everything (a library default of the engine's tests); the
+  compositions plug the access authorizer.
+- A sub-project's `project_part_of` link names a version of its parent: once the parent is edited, the snapshot of
+  the head no longer sees the link (`BaselineGraph` keeps the links whose target version the baseline holds), so
+  the sub-project inherits neither the roles, nor the flags, nor the stop of its parent until the link is
+  renewed. This predates the ADR (the roles inherited along the project tree had it already).

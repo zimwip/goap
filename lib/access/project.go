@@ -25,6 +25,9 @@ const (
 	PlatformScope    = "PLATFORM"
 )
 
+// PropStopped flags a stopped project (ADR 0135): it and its sub-projects take no new change.
+const PropStopped = "stopped"
+
 // ProjectUnit is a project or sub-project.
 type ProjectUnit struct {
 	Name          string
@@ -72,7 +75,17 @@ func PlatformAssignmentKey(org string) string { return AssignmentKey(org, Platfo
 type Assignment struct {
 	Roles       []string
 	Description string
+	// Owner and Admin are the flags of a project Assignment (ADR 0135): the owner possesses the project and its
+	// sub-projects, the administrator administers them; a platform Assignment carries neither.
+	Owner bool
+	Admin bool
 }
+
+// Property names of the flags of an Assignment (ADR 0135).
+const (
+	PropOwner = "owner"
+	PropAdmin = "admin"
+)
 
 // Props returns the properties of the Assignment node.
 func (a Assignment) Props() map[string]any {
@@ -83,12 +96,20 @@ func (a Assignment) Props() map[string]any {
 	if len(a.Roles) > 0 {
 		m["roles"] = toAnyList(a.Roles)
 	}
+	if a.Owner {
+		m[PropOwner] = true
+	}
+	if a.Admin {
+		m[PropAdmin] = true
+	}
 	return m
 }
 
 // AssignmentFromProps reads an assignment from the properties of its node.
 func AssignmentFromProps(props map[string]any) (Assignment, error) {
 	a := Assignment{Description: str(props, "description")}
+	a.Owner, _ = props[PropOwner].(bool)
+	a.Admin, _ = props[PropAdmin].(bool)
 	roles, err := strList(props, "roles")
 	if err != nil {
 		return a, fmt.Errorf("assignment: %w", err)

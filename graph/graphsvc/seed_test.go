@@ -2,6 +2,7 @@ package graphsvc_test
 
 import (
 	"context"
+	"github.com/zimwip/goap/contracts/authz"
 	"net/http"
 	"net/http/httptest"
 	"reflect"
@@ -131,7 +132,7 @@ func TestRootProjectSeeded(t *testing.T) {
 // what the graph's catalogue tags, a User being a unit.
 func TestStructuresThroughTheService(t *testing.T) {
 	g := typedGraph(t)
-	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)

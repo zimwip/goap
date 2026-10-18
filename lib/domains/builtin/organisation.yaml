@@ -1,5 +1,5 @@
 name: organisation
-version: 1.14.0
+version: 1.15.0
 description: >
   Organisation structure, managed in its own namespace ("organisation"): a hierarchy of organisational units,
   mirrored by a hierarchy of projects (ADR 0039). Every node version, whatever its namespace, is owned by a unit and
@@ -134,6 +134,9 @@ nodeTypes:
       - {name: kind, label: Kind, description: "Kind of project", type: string, section: Identity, order: 3}
       - {name: status, label: Status, description: "Where the project stands", type: string, section: Identity, order: 4}
       - {name: methodologies, label: Methodologies, description: "Methodologies that apply to the project (they give it their roles)", type: json, widget: textarea, section: Methodology, order: 5}
+      # ADR 0135: a stopped project (or one below a stopped project) takes no new change; stopping and restarting it is
+      # its owner's (a structure type has no lifecycle: its root is bootstrapped)
+      - {name: stopped, label: Stopped, description: "The project and its sub-projects take no new change", type: boolean, section: Identity, order: 6}
   # the meeting point of organisation and project (ADR 0039, same shape as Adapter): an organisational unit
   # (or a user, through subtyping) is assigned to a project with the roles it locally holds there — a subset
   # of the roles declared by the project's applicable methodologies. This is how the engine resolves "what
@@ -149,6 +152,9 @@ nodeTypes:
     attributes:
       - {name: roles, label: Roles, description: "Roles the unit or user holds on the project (platform roles when no project)", type: json, widget: textarea, section: Identity, order: 1}
       - {name: description, label: Description, description: "Why the assignment exists", type: string, widget: textarea, section: Identity, order: 2}
+      # ADR 0135: rights on the project and its sub-projects, never on the platform (refused on a platform Assignment)
+      - {name: owner, label: Owner, description: "Owns the project and its sub-projects: everything an administrator does, the flags of the assignments, the retirement and the place of the projects", type: boolean, section: Rights, order: 3}
+      - {name: admin, label: Administrator, description: "Administers the project and its sub-projects: everything on their resources, the roles of their assignments, their sub-projects", type: boolean, section: Rights, order: 4}
 lifecycles:
   # A node no parent holds (an adapter instance, a policy, an assignment) is never deleted (ADR 0076 §4c): it is
   # retired, and its readers leave it out (pkg/access, the MCP hub); an active one stays editable.

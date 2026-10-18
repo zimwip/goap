@@ -72,6 +72,9 @@ func (s *Service) Types(ctx context.Context, over ...*def.Domain) (*typecat.Cata
 }
 
 func (s *Service) authorizeDomain(ctx context.Context, action string, d *def.Domain) error {
+	if authz.From(ctx).System() {
+		return nil // the platform acting by itself (the seeds) is not asked, an authorizer or not (ADR 0135)
+	}
 	return authz.Check(ctx, s.Authz, authz.Request{Subject: authz.From(ctx), Action: action,
 		Resource: authz.Resource{Type: "domain", ID: d.Name + "@" + d.Version, Name: d.Name, Org: authz.From(ctx).Org}})
 }

@@ -13,7 +13,7 @@ import (
 func TestImportPublishedIsOneChange(t *testing.T) {
 	ctx := authz.With(context.Background(), authz.Principal{Subject: "system:registry", Roles: []string{"admin"}})
 	g := graph.New(graph.NewMemory())
-	reg := &Service{Store: NewGraphStore(g)}
+	reg := &Service{Authz: authz.AllowAll{}, Store: NewGraphStore(g)}
 	if _, err := domainsOf(reg).SeedDomains(ctx, "../../domains"); err != nil {
 		t.Fatal(err)
 	}

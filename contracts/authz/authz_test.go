@@ -29,17 +29,34 @@ func TestDefaultPolicies(t *testing.T) {
 		{"process", Principal{Subject: "dave", Org: "acme", Roles: []string{"developer"}}, "start", Resource{Type: "process", Org: "acme"}, true},
 		{"process off the project", Principal{Subject: "dave", Org: "acme"}, "start", Resource{Type: "process", Org: "acme"}, false},
 		{"read the project of another org", Principal{Subject: "dave", Org: "acme", Roles: []string{"developer"}}, "read", Resource{Type: "process", Org: "globex"}, true},
-		{"read", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "methodology"}, true},
+		{"a resource of no org is not read by default", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "methodology"}, false},
+		{"the nodes of a namespace", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "alm@Requirement", Namespace: "alm"}, true},
+		{"a platform reader is no member", Principal{Subject: "rex", Global: []string{"reader"}}, "start", Resource{Type: "process", Org: "acme"}, false},
+		{"a platform reader reads", Principal{Subject: "rex", Global: []string{"reader"}}, "read", Resource{Type: "process", Org: "globex"}, true},
+		{"a platform administrator", Principal{Subject: "root", Global: []string{"admin"}}, "publish", Resource{Type: "methodology"}, true},
 		{"read same org", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "process", Org: "acme"}, true},
 		{"read other org", Principal{Subject: "eve", Org: "acme"}, "read", Resource{Type: "process", Org: "globex"}, false},
 		{"write methodology", Principal{Subject: "eve", Org: "acme", Roles: []string{"developer"}}, "write", Resource{Type: "methodology"}, false},
 		{"methodology: administrators only", Principal{Subject: "mia", Org: "acme", Roles: []string{"methodologist"}}, "publish", Resource{Type: "methodology", Org: "acme"}, false},
-		{"action open to the project", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action"}, true},
+		{"an action declaring no role is closed", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action"}, false},
+		{"action open to the project", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action", Roles: []string{AnyRole}}, true},
+		{"action open to the project, off it", Principal{Subject: "eve"}, "run", Resource{Type: "action", Roles: []string{AnyRole}}, false},
+		{"a project administrator runs any action", Principal{Subject: "pam", ProjectAdmin: true}, "run", Resource{Type: "action", ProjectID: "PROJ-A"}, true},
+		{"a project administrator applies others' changes", Principal{Subject: "pam", ProjectAdmin: true}, "apply", change, true},
+		{"a project administrator never their own", Principal{Subject: "carol", ProjectAdmin: true}, "apply", change, false},
+		{"a project administrator sets no flag", Principal{Subject: "pam", ProjectAdmin: true}, "flag", Resource{Type: "assignment", ProjectID: "PROJ-A"}, false},
+		{"a project administrator writes assignments", Principal{Subject: "pam", ProjectAdmin: true}, "write", Resource{Type: "assignment", ProjectID: "PROJ-A"}, true},
+		{"a project administrator does not stop the project", Principal{Subject: "pam", ProjectAdmin: true}, "stop", Resource{Type: "project", ProjectID: "PROJ-A"}, false},
+		{"the owner sets the flags", Principal{Subject: "olga", ProjectOwner: true}, "flag", Resource{Type: "assignment", ProjectID: "PROJ-A"}, true},
+		{"the owner stops the project", Principal{Subject: "olga", ProjectOwner: true}, "stop", Resource{Type: "project", ProjectID: "PROJ-A"}, true},
+		{"the owner moves the project", Principal{Subject: "olga", ProjectOwner: true}, "move", Resource{Type: "project", ProjectID: "PROJ-A"}, true},
+		{"the platform administrator stops any project", Principal{Subject: "root", Global: []string{"admin"}}, "stop", Resource{Type: "project", ProjectID: "PROJ-A"}, true},
 		{"action off the project", Principal{Subject: "eve"}, "run", Resource{Type: "action"}, false},
 		{"action of the role", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action", Roles: []string{"tester", "developer"}}, true},
 		{"action of another role", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "action", Roles: []string{"tester"}}, false},
 		{"agent of another role", Principal{Subject: "eve", Roles: []string{"developer"}}, "run", Resource{Type: "agent", Roles: []string{"tester"}}, false},
 		{"anonymous", Principal{Roles: []string{"admin"}}, "read", Resource{Type: "methodology"}, false},
+		{"a token's admin role", Principal{Subject: "root", Roles: []string{"admin"}}, "read", Resource{Type: "methodology"}, true},
 	}
 	for _, tc := range cases {
 		got, err := c.Authorize(ctx, Request{Subject: tc.sub, Action: tc.act, Resource: tc.res})
@@ -64,6 +81,16 @@ func TestDenyOverridesAndAdmin(t *testing.T) {
 	}
 	if n, _ := c.Policies(); len(n) != len(DefaultPolicies)+1 {
 		t.Fatalf("policies: %d", len(n))
+	}
+}
+
+func TestNilAuthorizerDenies(t *testing.T) {
+	req := Request{Subject: Principal{Subject: "root", Roles: []string{"admin"}}, Action: "apply", Resource: Resource{Type: "change"}}
+	if err := Check(context.Background(), nil, req); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("a missing authorizer must refuse: %v", err)
+	}
+	if err := Check(context.Background(), AllowAll{}, req); err != nil {
+		t.Fatalf("AllowAll: %v", err)
 	}
 }
 

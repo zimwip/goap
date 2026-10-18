@@ -1,6 +1,7 @@
 package graphsvc_test
 
 import (
+	"github.com/zimwip/goap/contracts/authz"
 	"net/http"
 	"net/http/httptest"
 
@@ -224,7 +225,7 @@ func TestAliasNeedsTargetShownOnTheImpact(t *testing.T) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)

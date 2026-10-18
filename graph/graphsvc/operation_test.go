@@ -65,7 +65,7 @@ func TestOperationAuthorizer(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if err := OperationAuthorizer(nil, resolve)(context.Background(), domain.Change{Methodology: "restricted"}, operations.ImpactUpdate); err != nil {
-		t.Errorf("no authorizer: %v", err)
+	if err := OperationAuthorizer(nil, resolve)(authz.With(context.Background(), who("guest")), domain.Change{Methodology: "restricted"}, operations.ImpactUpdate); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("no authorizer must refuse (ADR 0135): %v", err)
 	}
 }

@@ -3,7 +3,7 @@
   // project, granting the roles a unit or user locally holds on a project. Reused, parametrized by which
   // side is fixed, from the Organisation, Project and User editors: the same shape everywhere, one
   // implementation. `fixedOrg` OR `fixedProject` is given by the host tab, never both.
-  import { types as nodeTypes, links as linkTypes, ns, platformRoles, assignmentKey, isUserKey } from '../stores/session.svelte';
+  import { types as nodeTypes, links as linkTypes, ns, platformRoles, assignmentKey, isUserKey, can } from '../stores/session.svelte';
   import Icon from '../shell/Icon.svelte';
   import { errorMessage, nodeTitle, type Struct } from '../api';
   import { findNode, applyOnMain, createNodeItem, updateNodeItem, retireNodeItem, refOf, type HeadGraph } from '../graphEdit';
@@ -45,6 +45,9 @@
     org: string;
     project: string;
     roles: string[];
+    /** flags of a project Assignment (ADR 0135): the owner possesses the project, an admin administers it */
+    owner: boolean;
+    admin: boolean;
     description: string;
   }
 
@@ -56,6 +59,8 @@
         org: targetKey(n, linkTypes.assignsOrg),
         project: targetKey(n, linkTypes.assignsProject),
         roles: Array.isArray(n.props?.['roles']) ? (n.props!['roles'] as string[]) : [],
+        owner: n.props?.['owner'] === true,
+        admin: n.props?.['admin'] === true,
         description: typeof n.props?.['description'] === 'string' ? (n.props!['description'] as string) : '',
       }))
       .filter((r) => (fixedOrg ? r.org === fixedOrg : true) && (fixedProject ? r.project === fixedProject : true))
@@ -108,6 +113,10 @@
   function toggleRole(name: string, on: boolean) {
     fRoles = on ? [...fRoles, name] : fRoles.filter((r) => r !== name);
   }
+  let fOwner = $state(false);
+  let fAdmin = $state(false);
+  /** a flag asks for a project Assignment, even on a project with no role of its own */
+  const flagged = $derived(fOwner || fAdmin);
   let fDescription = $state('');
   let error = $state('');
   let saving = $state(false);
@@ -120,9 +129,12 @@
   $effect(() => {
     if (matchingRow) {
       fRoles = [...matchingRow.roles];
+      fOwner = matchingRow.owner;
+      fAdmin = matchingRow.admin;
       fDescription = matchingRow.description;
     } else if (adding && !editing) {
       fRoles = [];
+      fOwner = fAdmin = false;
       fDescription = '';
     }
   });
@@ -150,6 +162,7 @@
     fOrg = fixedOrg ?? '';
     fProject = fixedProject ?? '';
     fRoles = [];
+    fOwner = fAdmin = false;
     fDescription = '';
     error = '';
     adding = true;
@@ -160,6 +173,8 @@
     fOrg = r.org;
     fProject = r.project || PLATFORM;
     fRoles = [...r.roles];
+    fOwner = r.owner;
+    fAdmin = r.admin;
     fDescription = r.description;
     error = '';
     adding = true;
@@ -174,7 +189,12 @@
     }
     // platform-wide either way: explicitly chosen, or this real project falls back to a platform role because
     // it needs none of its own (ADR 0047)
-    const platform = isPlatform;
+    // a flag holds on a project only (ADR 0135): a project with no role of its own keeps a project Assignment then
+    const platform = isPlatformChoice || (platformFallback && !flagged);
+    if (flagged && platformFallback && fRoles.length) {
+      error = 'A platform role holds everywhere: an Assignment flagged owner or admin of this project carries no role.';
+      return;
+    }
     const orgNode = orgNodes.find((n) => n.key === org);
     const projectNode = platform ? undefined : projectNodes.find((n) => n.key === project);
     if (!orgNode || (!platform && !projectNode)) {
@@ -182,8 +202,8 @@
       return;
     }
     const roles = fRoles;
-    if (!roles.length) {
-      error = 'Pick at least one role.';
+    if (!roles.length && (platform || !flagged)) {
+      error = flagged ? 'Pick at least one role.' : 'Pick at least one role, or the owner or admin flag.';
       return;
     }
     saving = true;
@@ -192,9 +212,10 @@
       const key = assignmentKey(org, platform ? undefined : project);
       const description = fDescription.trim();
       const existing = editing?.node ?? findNode(head, ns.organisation, nodeTypes.assignment, key);
-      const props: Struct = { roles: roles.length ? roles : null, description: description || null };
+      const flags = platform ? {} : { owner: fOwner || null, admin: fAdmin || null };
+      const props: Struct = { roles: roles.length ? roles : null, ...flags, description: description || null };
       const links = platform ? [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }] : [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }, { type: linkTypes.assignsProject, to: refOf(projectNode!) }];
-      const edit = existing ? updateNodeItem(existing, props) : createNodeItem(key, nodeTypes.assignment, { roles, ...(description ? { description } : {}) }, links);
+      const edit = existing ? updateNodeItem(existing, props) : createNodeItem(key, nodeTypes.assignment, { ...(roles.length ? { roles } : {}), ...(!platform && fOwner ? { owner: true } : {}), ...(!platform && fAdmin ? { admin: true } : {}), ...(description ? { description } : {}) }, links);
       const target = platform ? 'the platform' : project;
       await applyOnMain(ns.organisation, `Assignment ${org} / ${target}`, `${existing ? 'Update' : 'Create'} the assignment of ${org} on ${target}`, head.baselineId, [edit]);
       notify(`Assignment saved: ${org} on ${target}.`, 'ok');
@@ -226,7 +247,7 @@
     <button type="button" class="small" onclick={startCreate}><Icon name="plus" size={13} /> Assignment</button>
   </div>
   <p class="hint">
-    The roles an organisation unit or a user holds on a project, among those the project's applicable methodologies declare: what a person may do on a project (the steps, agents and actions they may run) depends on the roles they hold there, by their own assignments and those of their units.
+    The roles an organisation unit or a user holds on a project, among those the project's applicable methodologies declare: what a person may do on a project (the steps, agents and actions they may run) depends on the roles they hold there, by their own assignments and those of their units. An owner possesses the project and its sub-projects, an admin administers them: nothing is allowed without such a grant.
   </p>
   {#if error && !adding}<div class="alert">{error}</div>{/if}
   <table class="tbl">
@@ -235,6 +256,7 @@
         {#if !fixedOrg}<th>Organisation</th>{/if}
         {#if !fixedProject}<th>Project</th>{/if}
         <th>Roles</th>
+        <th>Rights</th>
         <th></th>
       </tr>
     </thead>
@@ -257,13 +279,14 @@
             </td>
           {/if}
           <td>{r.roles.join(', ') || '—'}</td>
+          <td>{[r.owner ? 'owner' : '', r.admin && !r.owner ? 'admin' : ''].filter(Boolean).join(', ') || '—'}</td>
           <td class="acts">
             <button type="button" class="small" onclick={() => startEdit(r)}>Edit</button>
             <button type="button" class="small danger" onclick={() => remove(r)}>Remove</button>
           </td>
         </tr>
       {:else}
-        <tr><td colspan={(!fixedOrg && !fixedProject ? 4 : 3)} class="empty">No assignment yet.</td></tr>
+        <tr><td colspan={!fixedOrg && !fixedProject ? 5 : 4} class="empty">No assignment yet.</td></tr>
       {/each}
     </tbody>
   </table>
@@ -317,6 +340,20 @@
           </label>
         {/each}
       </fieldset>
+      {#if project && !isPlatformChoice}
+        <fieldset class="field roles">
+          <legend>Rights on the project</legend>
+          <label class="check" title="Possesses the project: everything an administrator does, and sets these flags, stops, restarts and moves the project">
+            <input type="checkbox" bind:checked={fOwner} disabled={!can.ownProject} />
+            owner
+          </label>
+          <label class="check" title="Administers the project and its sub-projects: the roles of its Assignments, its sub-projects, every action on its resources">
+            <input type="checkbox" checked={fAdmin || fOwner} disabled={!can.ownProject || fOwner} onchange={(e) => (fAdmin = e.currentTarget.checked)} />
+            admin
+          </label>
+          {#if !can.ownProject}<span class="muted">Only an owner of the project sets these flags.</span>{/if}
+        </fieldset>
+      {/if}
       <div class="field">
         <label for="asg-desc">Description</label>
         <input id="asg-desc" bind:value={fDescription} />

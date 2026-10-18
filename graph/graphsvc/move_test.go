@@ -172,7 +172,7 @@ func TestProjectMoveGateAsksChangeMoveOnBothProjects(t *testing.T) {
 func TestMoveChangeRPC(t *testing.T) {
 	ctx := context.Background()
 	e := moveWorld(t)
-	h := &graphsvc.Handler{Graph: e.g}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: e.g}
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.PersonalScope()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)

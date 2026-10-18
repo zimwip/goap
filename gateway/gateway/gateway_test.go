@@ -78,7 +78,7 @@ func TestAuthAndRouting(t *testing.T) {
 
 	e := echo.New()
 	secret := []byte(strings.Repeat("s", 32))
-	if err := Mount(e, Config{AuthMode: "hs256", JWTSecret: secret, DevTokens: true,
+	if err := Mount(e, Config{AuthMode: "hs256", JWTSecret: secret, DevTokens: true, TrustTokenRoles: true, PlatformRoles: []string{"admin", "reader"},
 		Routes: []Route{{Prefix: "/goap.graph.v1.GraphService/", Upstream: upstream.URL}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -105,7 +105,7 @@ func TestAuthAndRouting(t *testing.T) {
 	if code := call("garbage"); code != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", code)
 	}
-	resp, err := http.Post(srv.URL+"/auth/dev-token", "application/json", strings.NewReader(`{"subject":"alice","org":"acme","project":"PROJ-X","roles":["admin"]}`))
+	resp, err := http.Post(srv.URL+"/auth/dev-token", "application/json", strings.NewReader(`{"subject":"alice","org":"acme","project":"PROJ-X","roles":["admin","developer"]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +115,7 @@ func TestAuthAndRouting(t *testing.T) {
 	if code := call(tok.Token); code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", code)
 	}
-	if gotSubject != "alice" || gotRoles != "admin" || gotProject != "PROJ-X" {
+	if gotSubject != "alice" || gotRoles != "developer" || gotProject != "PROJ-X" { // a dev token never carries a platform role (ADR 0135)
 		t.Fatalf("identity not propagated: %q %q %q", gotSubject, gotRoles, gotProject)
 	}
 
@@ -136,7 +136,7 @@ func TestAuthAndRouting(t *testing.T) {
 	if code := call(swTok.Token); code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", code)
 	}
-	if gotSubject != "alice" || gotRoles != "admin" || gotProject != "PROJ-Y" {
+	if gotSubject != "alice" || gotRoles != "developer" || gotProject != "PROJ-Y" {
 		t.Fatalf("switched identity not propagated: %q %q %q", gotSubject, gotRoles, gotProject)
 	}
 	// a bogus/expired token cannot switch project
@@ -611,5 +611,26 @@ func TestEmptyAuthModeIsRefused(t *testing.T) {
 	}
 	if _, err := Authenticator(Config{AuthMode: "none"}); err != nil {
 		t.Fatalf("explicit none: %v", err)
+	}
+}
+
+// TestTokenRolesAreTrustedOnlyWhenAsked: the roles of a token come from an external identity provider only
+// (hs256 with TrustTokenRoles); otherwise the graph alone grants roles (ADR 0135).
+func TestTokenRolesAreTrustedOnlyWhenAsked(t *testing.T) {
+	for _, trust := range []bool{false, true} {
+		cfg := Config{AuthMode: "hs256", JWTSecret: []byte(strings.Repeat("s", 32)), TrustTokenRoles: trust}
+		tok, err := sign(cfg, "alice", "acme", "PROJ-X", []string{"developer"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		p, err := bearerMode{}.Authenticate(echo.New().NewContext(req, httptest.NewRecorder()), cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := len(p.Roles) == 1 && p.Roles[0] == "developer"; got != trust {
+			t.Fatalf("trust %v: roles %v", trust, p.Roles)
+		}
 	}
 }

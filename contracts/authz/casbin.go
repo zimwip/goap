@@ -3,7 +3,6 @@ package authz
 import (
 	"context"
 	"fmt"
-	"slices"
 	"sync"
 
 	"github.com/casbin/casbin/v2"
@@ -20,9 +19,10 @@ import (
 //
 //	hasRole(r.sub, "tech_lead") && r.sub.Subject != r.obj.Owner
 //
-// Functions: hasRole(sub, role), hasAnyRole(sub, role...), hasRoleIn(sub, role, obj), onProject(sub) (holds a
-// role on the resource's project), mayRun(sub, obj) (holds one of obj.Roles, or any role when it lists none),
-// isAnonymous(sub).
+// Functions: hasRole(sub, role) (held on the project or platform-wide), hasAnyRole(sub, role...), hasRoleIn(sub, role,
+// obj), onProject(sub) (holds a role on the resource's project, or administers it), mayRun(sub, obj) (holds one of
+// obj.Roles, any role when it lists "*", or administers the project), isProjectAdmin(sub), isProjectOwner(sub) (ADR
+// 0135), isAnonymous(sub).
 //
 // A request is allowed when at least one allow rule matches and no deny rule does.
 const Model = `
@@ -49,19 +49,34 @@ type Policy struct {
 
 func (p Policy) params() []any { return []any{p.Rule, p.Resource, p.Action, p.Effect} }
 
-// DefaultPolicies seeds an empty policy store (ADR 0043). A user holds no role of their own: an administrator
-// (RoleAdmin, a platform role) may do everything; anyone else acts on a project with the roles their
-// Assignments grant there, which the authorizer merges into the principal for the resource's project. Holding
-// any role on the project (onProject) lets them work on it; what they write goes through the steps, agents and
-// actions their roles may run (step perform/approve, action run). The platform itself (methodologies, domains,
-// triggers, organisation, policies, adapters) is administered by administrators.
+// DefaultPolicies seeds an empty policy store (ADR 0043, 0135). Without an explicit grant everything is refused: an
+// administrator (RoleAdmin, a platform role) may do everything; the owner and the administrators of a project (flags
+// of its Assignments, ADR 0135) everything on its resources, the possession of the project (its flags, its
+// stopping, its place) being the owner's; anyone else acts on a project with the roles their Assignments grant there,
+// which the authorizer merges into the principal for the resource's project. Holding a role on the project
+// (onProject) lets them work on it; what they write goes through the steps, agents and actions their roles may run
+// (step perform/approve, action run). The platform itself (methodologies, domains, triggers, organisation, policies,
+// adapters) is administered by administrators.
 var DefaultPolicies = []Policy{
 	{Rule: `hasRole(r.sub, "admin")`, Resource: "*", Action: "*", Effect: "allow"},
 	// a platform-wide reader (ADR 0046, granted by an Assignment naming no project) reads everything, past
 	// the organization/project scoping below
 	{Rule: `hasRole(r.sub, "reader")`, Resource: "*", Action: "read", Effect: "allow"},
-	// read access within the organization of the resource (multi-tenant isolation), or on a project one works on
-	{Rule: `!isAnonymous(r.sub) && (r.obj.Org == "" || r.obj.Org == r.sub.Org || onProject(r.sub))`, Resource: "*", Action: "read", Effect: "allow"},
+	// read access within the organization of the resource (multi-tenant isolation), or on a project one works on; a
+	// resource naming no organization is not readable by this rule (ADR 0135)
+	{Rule: `!isAnonymous(r.sub) && ((r.obj.Org != "" && r.obj.Org == r.sub.Org) || onProject(r.sub))`, Resource: "*", Action: "read", Effect: "allow"},
+	// the nodes of a namespace, by their type: who reads which node is the access to its project, checked apart
+	// (indexersvc, graphsvc); reading a type is every person's
+	{Rule: `!isAnonymous(r.sub) && r.obj.Namespace != ""`, Resource: "*", Action: "read", Effect: "allow"},
+	// the triggers are part of the methodologies, which every person reads
+	{Rule: `!isAnonymous(r.sub)`, Resource: "trigger", Action: "read", Effect: "allow"},
+	// the owner and the administrators of a project (ADR 0135): everything on a resource of the project chain (the
+	// authorizer sets the flags only for a resource naming a project)
+	{Rule: `isProjectAdmin(r.sub)`, Resource: "*", Action: "*", Effect: "allow"},
+	// what comes from possessing a project is its owner's: the flags of its Assignments, stopping it, its place
+	{Rule: `!isProjectOwner(r.sub) && !hasRole(r.sub, "admin")`, Resource: "assignment", Action: "flag", Effect: "deny"},
+	{Rule: `!isProjectOwner(r.sub) && !hasRole(r.sub, "admin")`, Resource: "project", Action: "stop", Effect: "deny"},
+	{Rule: `!isProjectOwner(r.sub) && !hasRole(r.sub, "admin")`, Resource: "project", Action: "move", Effect: "deny"},
 	// processes, data objects, lifecycle transitions (ADR 0014) and tools (ADR 0019) of a project: its members
 	{Rule: `onProject(r.sub)`, Resource: "process", Action: "*", Effect: "allow"},
 	{Rule: `onProject(r.sub)`, Resource: "object", Action: "create", Effect: "allow"},
@@ -77,20 +92,23 @@ var DefaultPolicies = []Policy{
 	// the prompts and answers of the model calls of a change (its log, stream model) may hold anything the project works
 	// on: its members inspect them (a graph holding stored policies grants it to administrators until a rule is added)
 	{Rule: `onProject(r.sub)`, Resource: "prompt", Action: "inspect", Effect: "allow"},
-	// four-eyes principle: a member of the project applies its changes, never their own
-	{Rule: `onProject(r.sub) && r.sub.Subject != r.obj.Owner`, Resource: "change", Action: "apply", Effect: "allow"},
+	// four-eyes principle: a member of the project applies its changes, never their own (a project administrator
+	// neither; a platform administrator may)
+	{Rule: `onProject(r.sub)`, Resource: "change", Action: "apply", Effect: "allow"},
+	{Rule: `r.sub.Subject == r.obj.Owner && !hasRole(r.sub, "admin")`, Resource: "change", Action: "apply", Effect: "deny"},
 	// production deployments: a release manager of the project, never on its own change
 	{Rule: `hasRole(r.sub, "release_manager") && r.sub.Subject != r.obj.Owner`, Resource: "release", Action: "deploy", Effect: "allow"},
 	// steps of a process (ADR 0035 §2): whoever holds the responsible role on the project carries them out;
 	// whoever holds the accountable role approves them, never on its own change
 	{Rule: `hasRoleIn(r.sub, r.obj.Role, r.obj)`, Resource: "step", Action: "perform", Effect: "allow"},
-	{Rule: `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner`, Resource: "step", Action: "approve", Effect: "allow"},
-	// agents and actions (ADR 0043): one of the roles they declare (r.obj.Roles), any member of the project
-	// when they declare none
+	{Rule: `hasRoleIn(r.sub, r.obj.Accountable, r.obj)`, Resource: "step", Action: "approve", Effect: "allow"},
+	{Rule: `r.sub.Subject == r.obj.Owner && !hasRole(r.sub, "admin")`, Resource: "step", Action: "approve", Effect: "deny"},
+	// agents and actions (ADR 0043, 0135): one of the roles they declare (r.obj.Roles), any member of the project
+	// when they declare "*", nobody when they declare none
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "action", Action: "run", Effect: "allow"},
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "agent", Action: "run", Effect: "allow"},
-	// an operation on a change (ADR 0103) its methodology restricts to some roles (r.obj.Roles): one of them, held on
-	// the project of the change; an operation no role allows is an administrator's
+	// an operation on a change (ADR 0103) the roles of its methodology allow (r.obj.Roles): one of them, held on the
+	// project of the change; an operation no role allows is an administrator's
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "operation", Action: "perform", Effect: "allow"},
 	// signing a derogation (ADR 0075 §2): whoever holds the role of signatory (granted on the project); an administrator
 	// signs through the first rule
@@ -167,7 +185,7 @@ func newCasbin(adapter persist.Adapter) (*Casbin, error) {
 		}
 		p, _ := args[0].(Principal)
 		role, _ := args[1].(string)
-		return slices.Contains(p.Roles, role), nil
+		return p.HasRole(role), nil
 	})
 	e.AddFunction("hasAnyRole", func(args ...any) (any, error) {
 		if len(args) < 2 {
@@ -175,7 +193,7 @@ func newCasbin(adapter persist.Adapter) (*Casbin, error) {
 		}
 		p, _ := args[0].(Principal)
 		for _, a := range args[1:] {
-			if r, _ := a.(string); slices.Contains(p.Roles, r) {
+			if r, _ := a.(string); p.HasRole(r) {
 				return true, nil
 			}
 		}
@@ -204,6 +222,14 @@ func newCasbin(adapter persist.Adapter) (*Casbin, error) {
 		p, _ := args[0].(Principal)
 		res, _ := args[1].(Resource)
 		return p.MayRun(res), nil
+	})
+	e.AddFunction("isProjectAdmin", func(args ...any) (any, error) {
+		p, _ := args[0].(Principal)
+		return p.ProjectAdmin || p.ProjectOwner, nil
+	})
+	e.AddFunction("isProjectOwner", func(args ...any) (any, error) {
+		p, _ := args[0].(Principal)
+		return p.ProjectOwner, nil
 	})
 	e.AddFunction("isAnonymous", func(args ...any) (any, error) {
 		p, _ := args[0].(Principal)

@@ -3,7 +3,6 @@ package access
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
@@ -51,7 +50,7 @@ func (AdminFloorValidator) Validate(ctx context.Context, q graphapi.ValidatorQue
 			continue
 		}
 		u, err := UserFromProps(n.Properties)
-		if err == nil && slices.Contains(snap.Enrich(authz.Principal{Subject: u.Subject}).Roles, RoleAdmin) {
+		if err == nil && snap.Enrich(authz.Principal{Subject: u.Subject}).HasRole(RoleAdmin) {
 			return nil // at least one active administrator remains
 		}
 	}

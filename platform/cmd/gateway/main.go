@@ -70,8 +70,9 @@ func main() {
 	defer telemetry.Setup(context.Background(), log, "gateway")(context.Background())
 	secrets := platform.NewSecrets()
 	cfg := gateway.Config{
-		AuthMode:  platform.Env("GOAP_AUTH_MODE", gateway.DefaultAuthMode),
-		DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true",
+		AuthMode:        platform.Env("GOAP_AUTH_MODE", gateway.DefaultAuthMode),
+		DevTokens:       platform.Env("GOAP_DEV_TOKENS", "") == "true",
+		TrustTokenRoles: platform.Env("GOAP_TRUST_TOKEN_ROLES", "") == "1", PlatformRoles: access.PlatformRoles,
 		// a token lives GOAP_TOKEN_TTL and is refreshed by the web up to GOAP_SESSION_MAX after the sign-in
 		TokenTTL:   platform.EnvDuration("GOAP_TOKEN_TTL", gateway.DefaultTokenTTL),
 		MaxSession: platform.EnvDuration("GOAP_SESSION_MAX", gateway.DefaultMaxSession),

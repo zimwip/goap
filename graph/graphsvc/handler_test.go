@@ -65,7 +65,7 @@ func TestImpactNodeCreateIsRoleGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authorizer}
 
 	for _, tc := range []struct {
 		name, roles, key string
@@ -107,7 +107,7 @@ func TestAccessNodesAreGatedByTheFloor(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the overall authorizer lets methodologists do everything on policies, the floor only administrators
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authorizer, Floor: floor}
 	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
@@ -166,7 +166,7 @@ func TestAdminOnlyTypeOfADomainIsGated(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g, Floor: floor}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g, Floor: floor}
 	for typ, want := range map[string]bool{"vault@Secret": true, "vault@Note": false} {
 		r, err := h.IsAdminOnlyType(ctx, connect.NewRequest(&graphv1.IsAdminOnlyTypeRequest{Type: typ}))
 		if err != nil || r.Msg.AdminOnly != want {
@@ -203,7 +203,7 @@ func TestChangeImpactRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authorizer, Floor: floor}
 	g.Caller = graphsvc.Caller
 	req1, err := graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
 	if err != nil {
@@ -297,7 +297,7 @@ func TestCommitEditsGatesAccessNodes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authorizer}
 	base, err := g.BranchHead(ctx, "", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)
@@ -373,7 +373,7 @@ linkTypes:
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g, Floor: floor}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g, Floor: floor}
 	base, err := g.BranchHead(ctx, "vault", domain.MainBranch)
 	if err != nil {
 		t.Fatal(err)

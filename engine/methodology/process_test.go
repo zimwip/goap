@@ -422,7 +422,12 @@ func TestOperationRoles(t *testing.T) {
 	if roles, _ := m.OperationRoles("impact.withdraw"); strings.Join(roles, ",") != "author,lead" {
 		t.Fatalf("impact.withdraw: %v", roles)
 	}
-	if _, restricted := (&Methodology{Roles: []Role{{Name: "dev"}}}).OperationRoles("impact.withdraw"); restricted {
-		t.Fatal("no role lists an operation: nothing is restricted")
+	// ADR 0135: always restricted; no role listing an operation lets every role do them all, no role leaves them to
+	// the administrators
+	if roles, restricted := (&Methodology{Roles: []Role{{Name: "dev"}}}).OperationRoles("impact.withdraw"); !restricted || strings.Join(roles, ",") != "dev" {
+		t.Fatalf("no role lists an operation: every role allows it: %v %v", roles, restricted)
+	}
+	if roles, restricted := (&Methodology{}).OperationRoles("impact.withdraw"); !restricted || len(roles) != 0 {
+		t.Fatalf("no role: administrators only: %v %v", roles, restricted)
 	}
 }

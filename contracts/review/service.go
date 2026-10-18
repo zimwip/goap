@@ -35,7 +35,7 @@ const adminRole = "admin"
 // platform service. A service that knows more (the floor of the authorizer) sets Admin itself.
 func ActorOf(ctx context.Context) Actor {
 	p := authz.From(ctx)
-	return Actor{Subject: p.Subject, Admin: p.System() || slices.Contains(p.Roles, adminRole)}
+	return Actor{Subject: p.Subject, Admin: p.System() || p.HasRole(adminRole)}
 }
 
 // Edit is a change to an open review. Comment replaces the global comment when set; Remove then Add change the set of

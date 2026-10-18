@@ -15,8 +15,8 @@ import (
 // hold the organisation (cmd/graph, goap-dev): the caller needs change:move on the project of each change and on
 // the target, and access to both (access.Snapshot.MayAccessProject); and the methodology of each change must apply
 // (its own or inherited, Snapshot.ApplicableMethodologies) to both. A change with no methodology is not held to the
-// second rule. A platform service (authz.Principal.System) is not asked the first two. Either argument may be nil:
-// the check it does is then skipped.
+// second rule. A platform service (authz.Principal.System) is not asked the first two. A nil authorizer refuses (ADR 0135); a nil
+// directory skips the checks it does.
 func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveGate {
 	return func(ctx context.Context, family []domain.Change, to string) error {
 		who := authz.From(ctx)
@@ -33,11 +33,9 @@ func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveG
 					if snap != nil && !snap.MayAccessProject(who, project) {
 						return fmt.Errorf("you may not work on project %s: %w", project, authz.ErrForbidden)
 					}
-					if a != nil {
-						if err := authz.Check(ctx, a, authz.Request{Subject: who, Action: "move",
-							Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: project}}); err != nil {
-							return fmt.Errorf("moving change %s on project %s: %w", c.ID, project, err)
-						}
+					if err := authz.Check(ctx, a, authz.Request{Subject: who, Action: "move",
+						Resource: authz.Resource{Type: "change", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: project}}); err != nil {
+						return fmt.Errorf("moving change %s on project %s: %w", c.ID, project, err)
 					}
 				}
 			}

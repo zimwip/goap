@@ -30,7 +30,7 @@ func TestReviewRPCs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer, Floor: floor}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authorizer, Floor: floor}
 	g.Caller = graphsvc.Caller
 	req1, err := graphtest.Import(ctx, g, graphtest.Node{Key: "REQ-1", Type: "Requirement", Properties: map[string]any{"title": "one"}})
 	if err != nil {

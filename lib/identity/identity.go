@@ -41,7 +41,7 @@ func SetHeaders(p authz.Principal, h http.Header) {
 	h.Set(HeaderSubject, p.Subject)
 	h.Set(HeaderOrg, p.Org)
 	h.Set(HeaderProject, p.Project)
-	h.Set(HeaderRoles, strings.Join(p.Roles, ","))
+	h.Set(HeaderRoles, strings.Join(p.AllRoles(), ","))
 	if p.System() && p.OnBehalfOf != "" {
 		h.Set(HeaderOnBehalfOf, p.OnBehalfOf)
 	} else {
