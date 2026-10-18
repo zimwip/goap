@@ -195,11 +195,13 @@
               <div class="bubble bot pending" aria-busy="true"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="sr">The assistant is answering</span></div>
             {:else if m.status === 'error'}
               <div class="bubble bot err" role="alert">
+                {#if m.context}<span class="where" title="Where the assistant worked">{m.context}</span>{/if}
                 <span>{m.error || 'The assistant could not answer.'}</span>
                 <button type="button" class="small" onclick={() => void retry(m.id)} disabled={assistant.sending}>Retry</button>
               </div>
             {:else}
               <div class="bubble bot">
+                {#if m.context}<div class="where" title="Where the assistant worked">{m.context}</div>{/if}
                 {#if m.text}<div class="text">{m.text}</div>{/if}
                 {#if m.status === 'cancelled'}<div class="muted stopped">Stopped.</div>{/if}
                 {#if m.actions?.length}
@@ -361,6 +363,12 @@
   .stopped {
     font-size: 0.85em;
     font-style: italic;
+  }
+  .where {
+    display: block;
+    font-size: 0.75em;
+    color: var(--muted);
+    margin-bottom: 0.2rem;
   }
   .sugg {
     display: grid;

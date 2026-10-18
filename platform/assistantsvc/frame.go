@@ -10,16 +10,20 @@ import (
 )
 
 // The frame of a turn: where the person is (the active project, the change they are looking at and its methodology),
-// computed by the server from the context of the turn and the history of the conversation, never from the words of the
-// model. The tools the model gets and the prompt follow it: on a change, the tools of a change; elsewhere, those of a
-// project. Creating a change (create_change, start_agent with a newChange) waits until the open changes were searched
+// computed by the server from the context of the turn, the history of the conversation and the tools run in the turn,
+// never from the words of the model. The tools the model gets and the prompt follow it: outside any project (none
+// named), the tools that find one or a change; in a project, those of a project; on a change, those of a change. A
+// tool that sets the context moves the frame for the next rounds of the turn (select_project to the project,
+// open_change to the change), so the assistant reaches the rest of the tools from there. Creating a change (create_change, start_agent with a newChange) waits until the open changes were searched
 // in this conversation (search_changes), so the assistant proposes an existing change before a new one.
 
 // Level is how specific the frame is.
 type Level string
 
 const (
-	// LevelProject: no change in the context; the active project (the root project when none is named).
+	// LevelNone: no project is named and no change is in the context: the assistant works outside any project.
+	LevelNone Level = "none"
+	// LevelProject: no change in the context; the active project.
 	LevelProject Level = "project"
 	// LevelChange: the person is looking at a change they can read.
 	LevelChange Level = "change"
@@ -28,7 +32,7 @@ const (
 // Frame is where the turn stands.
 type Frame struct {
 	Level Level
-	// Project is the active project ("" when none is named: the root project).
+	// Project is the active project ("" at level none), at level change the project of the change.
 	Project string
 	// Change and Methodology are the change of the context and its methodology, at level change.
 	Change, Methodology string
@@ -38,6 +42,7 @@ type Frame struct {
 
 // levelTools are the server tools of each level, in the order they are declared to the model.
 var levelTools = map[Level][]string{
+	LevelNone:    {ToolListProjects, ToolSelectProject, ToolSearchChanges, ToolOpenChange},
 	LevelProject: {ToolSelectProject, ToolOpenChange, ToolListMethodologies, ToolMethodologyQuery, ToolSearchChanges, ToolListAgents, ToolStartAgent, ToolCreateChange},
 	LevelChange:  {ToolSelectProject, ToolOpenChange, ToolMethodologyQuery, ToolListAgents, ToolStartAgent, ToolSearchChanges, ToolAttachChange, ToolDetachChange},
 }
@@ -61,7 +66,7 @@ func (f Frame) mayCreate(searched bool) bool { return f.Level == LevelProject &&
 func (f Frame) render(tools []string, searched bool) string {
 	project := f.Project
 	if project == "" {
-		project = "(none named: the root project)"
+		project = "(none: outside any project)"
 	}
 	var b strings.Builder
 	fmt.Fprintf(&b, "Frame of this turn (computed by the platform):\n- level: %s\n- project: %s\n", f.Level, project)
@@ -77,6 +82,8 @@ func (f Frame) render(tools []string, searched bool) string {
 	}
 	fmt.Fprintf(&b, "- server tools of this turn: %s\n", strings.Join(tools, ", "))
 	switch {
+	case f.Level == LevelNone:
+		b.WriteString("- outside any project only these tools are offered: find a project (list_projects) and select it (select_project), or find a change (search_changes) and open it (open_change); the tools of that project or change are then offered in the next step of this turn\n")
 	case f.Level == LevelChange:
 		b.WriteString("- creating a change is not offered on a change: work on this one, or search the open changes (search_changes) and open another\n")
 	case !searched:
@@ -85,21 +92,24 @@ func (f Frame) render(tools []string, searched bool) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-// frame computes the frame of the turn now: the project may have changed (select_project); the change of the context
-// is read once, as the caller.
+// frame computes the frame of the turn now: the project may have changed (select_project), a change may have been
+// opened (open_change, else the change of the context); the change is read once, as the caller.
 func (t *turn) frame(ctx context.Context) Frame {
 	f := Frame{Level: LevelProject, Project: t.project}
-	id := t.in.Context.change()
+	if f.Project == "" {
+		f.Level = LevelNone
+	}
+	id := t.change()
 	if id == "" {
 		return f
 	}
-	if !t.changeRead {
-		t.changeRead = true
+	if t.changeRead != id {
+		t.changeRead, t.changeOK, t.changeNote = id, false, ""
 		ch, err := t.s.readChange(ctx, t.p, id)
 		if err != nil {
 			t.changeNote = err.Error()
 		} else {
-			t.changeMethodology = ch.Methodology
+			t.changeMethodology, t.changeProject = ch.Methodology, ch.ProjectID
 			t.changeOK = true
 		}
 	}
@@ -108,7 +118,37 @@ func (t *turn) frame(ctx context.Context) Frame {
 		return f
 	}
 	f.Level, f.Change, f.Methodology = LevelChange, id, t.changeMethodology
+	if t.changeProject != "" {
+		f.Project = t.changeProject
+	}
 	return f
+}
+
+// change is the change of the turn: the one open_change opened, else the one of the context.
+func (t *turn) change() string {
+	if t.opened != "" {
+		return t.opened
+	}
+	return t.in.Context.change()
+}
+
+// describe is the frame in a few words, recorded on the answer: where the assistant worked.
+func (f Frame) describe() string {
+	var parts []string
+	switch f.Project {
+	case "":
+		parts = append(parts, "outside any project")
+	default:
+		parts = append(parts, "project "+f.Project)
+	}
+	if f.Level == LevelChange {
+		c := "change " + f.Change
+		if f.Methodology != "" {
+			c += " (" + f.Methodology + ")"
+		}
+		parts = append(parts, c)
+	}
+	return clip(strings.Join(parts, " · "), convsvc.MaxContextBytes)
 }
 
 // available checks that a server tool is one of the frame's; the error names the tools of the turn.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -748,17 +749,54 @@ func TestHandler(t *testing.T) {
 	}
 }
 
-// A change is never created without a project (ADR 0091): with no active project the assistant creates it in the root one.
-func TestCreateChangeWithNoActiveProjectActsInTheRoot(t *testing.T) {
-	e := newEnv(t, call(ToolCreateChange, `{"title":"x","intent":"y"}`), `{"message":"Created."}`)
+// A change is never created without a project (ADR 0091): outside any project the assistant has only the tools that
+// find one; once it selected a project, the next step has the tools of that project and creates the change there.
+func TestOutsideAnyProjectSelectingOneOffersTheRest(t *testing.T) {
+	e := newEnv(t, call(ToolCreateChange, `{"title":"x","intent":"y"}`), call(ToolListProjects, `{}`), call(ToolSelectProject, `{"project":"PROJ-A"}`),
+		call(ToolCreateChange, `{"title":"x","intent":"y"}`), `{"message":"Created."}`)
 	e.user.Project = ""
 	e.ctx = authz.With(context.Background(), e.user)
+	e.svc.Projects = subProjectsOf{fakeProjects: e.svc.Projects.(fakeProjects), subs: map[string][]string{"PROJ-ROOT": {"PROJ-A", "PROJ-B", "PROJ-SECRET"}}}
 	e.searched(t)
 	if _, _, err := e.send("go", Context{}); err != nil {
 		t.Fatal(err)
 	}
-	if len(e.graph.created) != 1 || e.graph.created[0].ProjectID != "PROJ-ROOT" {
+	if got := toolNames(e.model.got[0].Tools); !slices.Equal(got, levelTools[LevelNone]) || !strings.Contains(e.model.got[0].System, "level: none") {
+		t.Fatalf("tools outside any project %v", got)
+	}
+	if res := e.toolResult(1); !strings.Contains(res, "not available at level none") {
+		t.Fatalf("create_change outside any project: %s", res)
+	}
+	if res := e.toolResult(2); !strings.Contains(res, `"project":"PROJ-A"`) || !strings.Contains(res, `{"project":"PROJ-A","methodologies":["sdlc","delivery"]},{"project":"PROJ-B"`) || strings.Contains(res, "SECRET") {
+		t.Fatalf("list_projects: %s", res)
+	}
+	if got := toolNames(e.model.got[3].Tools); !slices.Contains(got, ToolCreateChange) || !strings.Contains(e.model.got[3].System, "project: PROJ-A") {
+		t.Fatalf("tools after select_project %v", got)
+	}
+	if len(e.graph.created) != 1 || e.graph.created[0].ProjectID != "PROJ-A" {
 		t.Fatalf("created %+v", e.graph.created)
+	}
+	if a := e.answer(t); a.Context != "project PROJ-A" {
+		t.Fatalf("context of the answer %q", a.Context)
+	}
+}
+
+// Opening a change moves the turn to it: the next step has the tools of a change, and the answer says where it worked.
+func TestOpeningAChangeOffersItsTools(t *testing.T) {
+	e := newEnv(t, call(ToolOpenChange, `{"changeId":"CHG-D"}`), call(ToolListAgents, `{}`), `{"message":"Here."}`)
+	e.user.Project = ""
+	e.ctx = authz.With(context.Background(), e.user)
+	if _, _, err := e.send("work on the delivery change", Context{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := toolNames(e.model.got[1].Tools); !slices.Contains(got, ToolAttachChange) || !strings.Contains(e.model.got[1].System, "level: change") {
+		t.Fatalf("tools after open_change %v", got)
+	}
+	if res := e.toolResult(2); strings.Contains(res, "not available") {
+		t.Fatalf("list_agents on the opened change: %s", res)
+	}
+	if a := e.answer(t); !strings.HasPrefix(a.Context, "project ") || !strings.Contains(a.Context, "change CHG-D (delivery)") {
+		t.Fatalf("context of the answer %q", a.Context)
 	}
 }
 
