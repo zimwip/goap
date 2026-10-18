@@ -6,7 +6,7 @@
   import { errorMessage, models, type CatalogModel, type LlmBehavior, type ModelAlias, type PreviewBehaviorsResponse } from '../../api';
   import { saveBehavior, setBehaviorEnabled, retireBehavior, type Unsaved } from '../../llmEdit';
   import { confirmDialog } from '../../shell/confirmState.svelte';
-  import { SOURCES, DEFAULT_MAX_INSTRUCTION, DEFAULT_MAX_TOTAL, addedLine, costLine, counter, emptyForm, formOf, scopeSummary, toggled, validateForm, type BehaviorForm } from '../../behaviors';
+  import { SOURCES, DEFAULT_MAX_INSTRUCTION, DEFAULT_MAX_TOTAL, addedLine, costLine, counter, emptyForm, formOf, namesOf, scopeSummary, toggled, validateForm, type BehaviorForm } from '../../behaviors';
 
   let {
     behaviors,
@@ -102,6 +102,7 @@
 
   let pAlias = $state('default');
   let pSource = $state('engine');
+  let pAction = $state('');
   let pJson = $state(false);
   let pSystem = $state('You are a helpful assistant.');
   let preview = $state<PreviewBehaviorsResponse | undefined>();
@@ -110,7 +111,7 @@
   async function runPreview() {
     previewError = '';
     try {
-      preview = await models.previewBehaviors({ alias: pAlias, source: pSource, json: pJson, system: pSystem });
+      preview = await models.previewBehaviors({ alias: pAlias, source: pSource, action: pAction.trim(), json: pJson, system: pSystem });
     } catch (e) {
       preview = undefined;
       previewError = errorMessage(e);
@@ -219,6 +220,11 @@
             <label class="check"><input type="checkbox" checked={form.sources.includes(s)} onchange={() => (form!.sources = toggled(form!.sources, s))} /> {s}</label>
           {/each}
         </div>
+        <label>
+          Actions
+          <input value={form.actions.join(', ')} oninput={(e) => (form!.actions = namesOf(e.currentTarget.value))} placeholder="implement_component, …" />
+          <span class="hint">Only the calls of these actions of a methodology (the engine names the action of each call)</span>
+        </label>
         <label class="check"><input type="checkbox" bind:checked={form.appliesToJson} /> Also apply to calls that require a JSON answer (risky for the protocols built on JSON: prefer scoping by caller)</label>
       </fieldset>
       {#if problem}<p class="hint over">{problem}</p>{/if}
@@ -247,6 +253,7 @@
         {#each sources as s (s)}<option value={s}>{s}</option>{/each}
       </select>
     </label>
+    <label>Action <input bind:value={pAction} placeholder="none" class="narrow" /></label>
     <label class="check"><input type="checkbox" bind:checked={pJson} /> requires JSON</label>
     <button type="button" onclick={runPreview}>Preview</button>
   </div>

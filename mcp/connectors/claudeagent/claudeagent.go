@@ -181,6 +181,7 @@ func (c Connector) Info() *connectorv1.ConnectorInfo {
 			"maxBudgetUsd":    num("budget of a run in USD"),
 			"timeoutMinutes":  num("time of a run in minutes (default 60, at most 240)"),
 			"settingSources":  strs("Claude Code settings loaded (default project)"),
+			"plugins":         strs("Claude Code plugin directories on this host, loaded in every session"),
 			"baseURL":         str("Anthropic API endpoint (ANTHROPIC_BASE_URL)"),
 			"env":             strs("variables set for the sessions (NAME=value)"),
 			"passEnv":         strs("variables of the host environment given to the sessions"),
@@ -261,6 +262,7 @@ type request struct {
 	AllowedTools    []string `json:"allowedTools,omitempty"`
 	DisallowedTools []string `json:"disallowedTools,omitempty"`
 	SettingSources  []string `json:"settingSources"`
+	Plugins         []string `json:"plugins,omitempty"`
 }
 
 func (c Connector) run(ctx context.Context, op, change string, args, config map[string]any, secrets map[string]string) (map[string]any, error) {
@@ -271,7 +273,8 @@ func (c Connector) run(ctx context.Context, op, change string, args, config map[
 	req := request{Cwd: dir, Resume: stringArg(args, "sessionId"), Model: firstString(args, config, "model"),
 		MaxTurns: int(firstNumber(args, config, "maxTurns", DefaultMaxTurns)), MaxBudgetUsd: firstNumber(args, config, "maxBudgetUsd", 0),
 		PermissionMode: stringArg(config, "permissionMode"), AllowedTools: strings1(config, "allowedTools"),
-		DisallowedTools: strings1(config, "disallowedTools"), SettingSources: strings1(config, "settingSources")}
+		DisallowedTools: strings1(config, "disallowedTools"), SettingSources: strings1(config, "settingSources"),
+		Plugins: strings1(config, "plugins")}
 	if req.SettingSources == nil {
 		req.SettingSources = []string{"project"}
 	}

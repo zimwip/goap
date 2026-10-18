@@ -18,10 +18,11 @@ export interface BehaviorForm {
   aliases: string[];
   models: string[];
   sources: string[];
+  actions: string[];
   appliesToJson: boolean;
 }
 
-export const emptyForm = (): BehaviorForm => ({ name: '', description: '', instruction: '', enabled: false, position: 'append', order: 100, aliases: [], models: [], sources: [], appliesToJson: false });
+export const emptyForm = (): BehaviorForm => ({ name: '', description: '', instruction: '', enabled: false, position: 'append', order: 100, aliases: [], models: [], sources: [], actions: [], appliesToJson: false });
 
 export const formOf = (b: LlmBehavior): BehaviorForm => ({
   name: b.name,
@@ -33,6 +34,7 @@ export const formOf = (b: LlmBehavior): BehaviorForm => ({
   aliases: [...(b.aliases ?? [])],
   models: [...(b.models ?? [])],
   sources: [...(b.sources ?? [])],
+  actions: [...(b.actions ?? [])],
   appliesToJson: !!b.appliesToJson,
 });
 
@@ -57,14 +59,18 @@ export function counter(text: string, max = DEFAULT_MAX_INSTRUCTION): { used: nu
 }
 
 /** Where a behaviour applies, in a few words. */
-export function scopeSummary(b: Pick<LlmBehavior, 'aliases' | 'models' | 'sources' | 'appliesToJson'>): string {
+export function scopeSummary(b: Pick<LlmBehavior, 'aliases' | 'models' | 'sources' | 'actions' | 'appliesToJson'>): string {
   const parts: string[] = [];
   if (b.aliases?.length) parts.push(`aliases ${b.aliases.join(', ')}`);
   if (b.models?.length) parts.push(`models ${b.models.join(', ')}`);
   if (b.sources?.length) parts.push(`from ${b.sources.join(', ')}`);
+  if (b.actions?.length) parts.push(`actions ${b.actions.join(', ')}`);
   const where = parts.length ? parts.join(' · ') : 'every completion';
   return b.appliesToJson ? `${where} · JSON calls too` : where;
 }
+
+/** The names of a comma- or space-separated list, without blanks or repeats. */
+export const namesOf = (text: string): string[] => [...new Set(text.split(/[\s,]+/).filter(Boolean))];
 
 /** Toggles a value of a list. */
 export const toggled = (list: string[], v: string): string[] => (list.includes(v) ? list.filter((x) => x !== v) : [...list, v]);

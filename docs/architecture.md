@@ -1248,7 +1248,11 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   identical; results of 512 bytes or more, errors never), before the older results are elided past `compactBytes`.
   `sdlc` 0.8.0 builds the components naming a repository from their sources (method `workspace_build`: workspace
   opened, each component implemented by an agent, built by its command, sent back on a failed build, pushed and
-  recorded); two scoped actions of one scope chain in a plan (`chainScoped`).
+  recorded); two scoped actions of one scope chain in a plan (`chainScoped`). Since 0.12.0 a component that builds is
+  reviewed before it is pushed (`review_code`, llm, scoped: Ponytail's review of the latest code change through
+  `workspace/diff`, an assessment `item:<code_change id>` and an accepted `risk` per `shortcut:` comment it adds;
+  condition `code_reviewed` in `publish_build`'s pre): an advice for the person reviewing the change, never a gate on
+  its score.
   The connector `workspace-docker` (`workspace.NewDocker`) keeps the files and git on its host and runs the commands
   of each workspace in a container of its own (the unit's `image`, no network by default, hardened, limits).
 - **Claude coding agent** ([ADR 0123](adr/0123-claude-coding-agent.md)): the MCP `claude-coding-agent` (`run`,
@@ -1260,7 +1264,8 @@ under the parameter name, and that the code can never read. Runs are bounded (30
   out. A question (`AskUserQuestion`) or a tool the permissions do not settle ends the turn (`needs_input` /
   `needs_approval`, through `canUseTool`); `answer` resumes the session (`resume`) with the person's decision. The
   environment is cleaned (the unit's `api_key`, `baseURL`, `env`, `passEnv`), the repository's settings load
-  (`settingSources: [project]`), one session per change at a time. The model calls of a session go through the
+  (`settingSources: [project]`), the unit's Claude Code `plugins` too (directories on the connector's host, e.g. a
+  checkout of Ponytail: the gateway adds no behaviour to these sessions), one session per change at a time. The model calls of a session go through the
   gateway (ADR 0123 §6): the connector declares `ConnectorInfo.calls_models`, so the hub (`mcpsvc.Service.Models`,
   `ModelEndpoint`) gives each of its calls the gateway's Anthropic endpoint and a token of the call
   (`InvokeRequest.model_url` / `model_token`, `mcp.CallContext.ModelURL` / `ModelToken`; `lib/modeltoken`, HMAC with
@@ -1899,14 +1904,17 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
   consumption includes what their actions set off.
   `TestEveryModelCallGoesThroughTheLedger` keeps the paths to a model through `Service`.
 - **Global behaviours** (ADR 0093): `platform@LlmBehavior` nodes (`LLB:<name>`, `adminOnly`, lifecycle `config`; `llmcfg.Behavior`) hold an
-  instruction the gateway adds to the system text of every completion matching their scope (aliases, models, sources, kinds;
+  instruction the gateway adds to the system text of every completion matching their scope (aliases, models, sources, kinds,
+  actions: the actions of a methodology, by name, `llm.CallMeta.Action`, which only the engine's calls declare;
   `prepend` / `append`, `order`, `enabled`, `appliesToJSON`). `Service.Complete` applies them after `admit` and before the provider
   (`llmcfg.Snapshot.Apply`, pure; the caller's request is never changed; embeddings never; 8 KiB cap, extra ones dropped and
   recorded as `!name`); a call with `JSON` true gets only the ones flagged `appliesToJSON`, wrapped so they cannot change the format.
   The ledger row records `behaviors` and an estimated `behavior_tokens` (`llm_call`, migration 0005), the stored exchange holds the
   system text as sent, the engine's `model.call` log entry the text it built plus `behaviors` / `behaviorTokens`
   (`llm.Response.Behaviors`). `ListBehaviors` / `PreviewBehaviors` (admin, like `ListCatalog`); web: settings "LLM behaviours".
-  `graphsvc.SeedBehaviors` seeds `terse`, enabled by default.
+  `graphsvc.SeedBehaviors` seeds `llmcfg.BuiltinBehaviors`: `terse`, enabled by default, and `ponytail`, disabled
+  (`llmcfg.PonytailBehavior`: the minimal-code ruleset of [Ponytail](https://github.com/DietrichGebert/ponytail),
+  MIT, scoped to the engine's calls of `implement_component`; an administrator enables it in the settings).
   **Measured cost** (ADR 0093): `behavior_tokens` is the cost measured on the model when known (two minimal calibration calls per model and
   behaviour through the gateway, ledger source `calibration`, subject `system:modelgw`, no behaviour applied; stored in `llm_behavior_cost` /
   `llm_model_baseline`, migration 0006, keyed by instruction hash + provider + model; lazy, background, deduplicated, backed off on failure;

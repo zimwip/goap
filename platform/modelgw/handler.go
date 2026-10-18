@@ -213,7 +213,7 @@ func (h *Handler) ListCatalog(ctx context.Context, r *connect.Request[modelv1.Li
 
 func behaviorToPB(b llmcfg.Behavior) *modelv1.Behavior {
 	return &modelv1.Behavior{Name: b.Name, Description: b.Description, Instruction: b.Instruction, Enabled: b.Enabled, Position: b.Position,
-		Order: int32(b.Order), Aliases: b.Aliases, Models: b.Models, Sources: b.Sources, Kinds: b.Kinds, AppliesToJson: b.AppliesToJSON}
+		Order: int32(b.Order), Aliases: b.Aliases, Models: b.Models, Sources: b.Sources, Kinds: b.Kinds, Actions: b.Actions, AppliesToJson: b.AppliesToJSON}
 }
 
 // ListBehaviors lists the global behaviours (ADR 0093); platform administrators only, like the catalog.
@@ -268,7 +268,7 @@ func (h *Handler) PreviewBehaviors(ctx context.Context, r *connect.Request[model
 	if err != nil {
 		return nil, err
 	}
-	ap, price, err := h.Service.PreviewBehaviors(ctx, r.Msg.Alias, r.Msg.Source, r.Msg.Json, r.Msg.System)
+	ap, price, err := h.Service.PreviewBehaviors(ctx, r.Msg.Alias, r.Msg.Source, r.Msg.Action, r.Msg.Json, r.Msg.System)
 	if err != nil {
 		return nil, rpcErr(err)
 	}

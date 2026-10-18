@@ -213,6 +213,8 @@ export interface LlmBehavior {
   sources?: string[];
   /** complete only: a behaviour never applies to an embedding */
   kinds?: string[];
+  /** the actions of a methodology whose calls it applies to, by name (only the engine's calls name an action) */
+  actions?: string[];
   /** also apply to calls that require a JSON answer */
   appliesToJson?: boolean;
   /** the cost on each model it can apply to (the listing only) */
@@ -253,6 +255,8 @@ export interface PreviewBehaviorsRequest {
   source: string;
   json: boolean;
   system: string;
+  /** the action of a methodology making the call ('' : none) */
+  action?: string;
 }
 
 export interface PreviewBehaviorsResponse {

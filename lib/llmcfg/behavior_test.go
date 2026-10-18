@@ -22,6 +22,7 @@ func TestBehaviorRoundTripAndValidation(t *testing.T) {
 		"model":       {Name: "x", Instruction: "x", Models: []string{"nomodel"}},
 		"source":      {Name: "x", Instruction: "x", Sources: []string{"nobody"}},
 		"embed kinds": {Name: "x", Instruction: "x", Kinds: []string{"embed"}},
+		"action":      {Name: "x", Instruction: "x", Actions: []string{""}},
 	}
 	for what, v := range bad {
 		if v.Validate() == nil {
@@ -76,5 +77,30 @@ func TestTerseBehaviorIsValidAndOn(t *testing.T) {
 	b := TerseBehavior()
 	if err := b.Validate(); err != nil || !b.Enabled {
 		t.Fatalf("%v %+v", err, b)
+	}
+}
+
+func TestPonytailReachesTheCodingActionOnly(t *testing.T) {
+	b := PonytailBehavior()
+	if err := b.Validate(); err != nil || b.Enabled {
+		t.Fatalf("seeded enabled or invalid: %v %+v", err, b)
+	}
+	if got, err := BehaviorFromProps(b.Props()); err != nil || len(got.Actions) != 1 || got.Actions[0] != PonytailAction {
+		t.Fatalf("%+v %v", got, err)
+	}
+	b.Enabled = true
+	s := &Snapshot{Behaviors: []Behavior{b}}
+	call := CallInfo{Alias: "default", Provider: "p", Model: "m", Source: "engine", Action: PonytailAction, Kind: KindComplete}
+	if got := s.Apply("S", call); len(got.Names) != 1 || !strings.Contains(got.System, "shortcut: <the limit>") {
+		t.Fatalf("coding action: %+v", got)
+	}
+	for what, c := range map[string]CallInfo{
+		"other action": {Source: "engine", Action: "rate_description", Kind: KindComplete},
+		"no action":    {Source: "engine", Kind: KindComplete},
+		"assistant":    {Source: "assistant", Action: PonytailAction, Kind: KindComplete},
+	} {
+		if got := s.Apply("S", c); len(got.Names) != 0 {
+			t.Errorf("%s: applied %v", what, got.Names)
+		}
 	}
 }

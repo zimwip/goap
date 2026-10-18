@@ -62,6 +62,9 @@ type Behavior struct {
 	Sources []string `json:"sources,omitempty"`
 	// Kinds limits it to these kinds of call; only complete exists (a behaviour never applies to an embedding).
 	Kinds []string `json:"kinds,omitempty"`
+	// Actions limits it to the calls of these actions of a methodology (llm.CallMeta.Action, which only the engine
+	// declares): a coding style reaches the coding actions, not the other calls of the engine.
+	Actions []string `json:"actions,omitempty"`
 	// AppliesToJSON lets it apply to the calls that require a JSON answer (default: it does not, so it cannot break a protocol).
 	AppliesToJSON bool `json:"appliesToJSON,omitempty"`
 }
@@ -100,6 +103,11 @@ func (b Behavior) Validate() error {
 			return fmt.Errorf("behavior %s: source %q must be one of %s", b.Name, s, strings.Join(Sources(), ", "))
 		}
 	}
+	for _, a := range b.Actions {
+		if a == "" || len(a) > llm.MaxNameLen {
+			return fmt.Errorf("behavior %s: action %q must be the name of an action (1-%d bytes)", b.Name, a, llm.MaxNameLen)
+		}
+	}
 	for _, k := range b.Kinds {
 		if k != KindComplete {
 			return fmt.Errorf("behavior %s: kind %q: a behavior applies to complete calls only, never to embeddings", b.Name, k)
@@ -132,6 +140,10 @@ func TerseBehavior() Behavior {
 	}
 }
 
+// BuiltinBehaviors are the behaviours every install gets once (graphsvc.SeedBehaviors): terse, enabled, and the
+// ponytail coding style, disabled.
+func BuiltinBehaviors() []Behavior { return []Behavior{TerseBehavior(), PonytailBehavior()} }
+
 // CallInfo is what a behaviour is matched against: the call as the gateway sees it.
 type CallInfo struct {
 	// Alias is the name requested ("default" when none, "" for a literal provider/model).
@@ -140,6 +152,8 @@ type CallInfo struct {
 	Provider, Model string
 	// Source is llm.CallMeta.Source.
 	Source string
+	// Action is llm.CallMeta.Action: the action of a methodology making the call, "" for a call of no action.
+	Action string
 	// Kind is complete or embed.
 	Kind string
 	// JSON: the call requires a JSON answer.
@@ -155,7 +169,8 @@ func (b Behavior) Matches(c CallInfo) bool {
 		return false
 	}
 	in := func(list []string, v string) bool { return len(list) == 0 || slices.Contains(list, v) }
-	return in(b.Aliases, c.Alias) && in(b.Models, c.Provider+"/"+c.Model) && in(b.Sources, c.Source) && in(b.Kinds, c.Kind)
+	return in(b.Aliases, c.Alias) && in(b.Models, c.Provider+"/"+c.Model) && in(b.Sources, c.Source) && in(b.Kinds, c.Kind) &&
+		in(b.Actions, c.Action)
 }
 
 // Applied is the result of Apply.

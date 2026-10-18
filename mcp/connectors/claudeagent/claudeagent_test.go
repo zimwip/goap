@@ -45,7 +45,7 @@ export async function* query({ prompt, options }) {
   yield { type: 'assistant', session_id: sid, message: { content: [{ type: 'tool_use', name: 'Edit' }, { type: 'text' }] } };
   yield result('success', JSON.stringify({ prompt, cwd: options.cwd, resume: options.resume ?? '',
     key: process.env.ANTHROPIC_API_KEY ?? '', base: process.env.ANTHROPIC_BASE_URL ?? '', secretLeak: process.env.GOAP_TEST_SECRET ?? '',
-    allowed: options.allowedTools ?? [], mode: options.permissionMode, settings: options.settingSources,
+    allowed: options.allowedTools ?? [], mode: options.permissionMode, settings: options.settingSources, plugins: (options.plugins ?? []).map((p) => p.type + ':' + p.path),
     maxTurns: options.maxTurns, append: options.systemPrompt.append.length > 0 }));
 }
 `
@@ -120,8 +120,24 @@ func TestRunDone(t *testing.T) {
 	if p["mode"] != "acceptEdits" || p["maxTurns"] != float64(12) || p["append"] != true || strings.Join(toStrings(p["settings"]), ",") != "project" {
 		t.Fatalf("options %v", p)
 	}
+	if len(toStrings(p["plugins"])) != 0 {
+		t.Fatalf("plugins %v", p["plugins"])
+	}
 	if st := f.call(t, OpStatus, nil); st["running"] != false || st["last"].(map[string]any)["status"] != StatusDone {
 		t.Fatalf("status %v", st)
+	}
+}
+
+func TestPluginsReachTheSession(t *testing.T) {
+	f := setup(t)
+	config := f.config()
+	config["plugins"] = []any{"/opt/ponytail"}
+	out, err := f.c.Invoke(f.ctx, OpRun, map[string]any{"task": "implement"}, config, map[string]string{SecretAPIKey: "sk-test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p := played(t, out); strings.Join(toStrings(p["plugins"]), ",") != "local:/opt/ponytail" {
+		t.Fatalf("plugins %v", p["plugins"])
 	}
 }
 

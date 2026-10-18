@@ -1,5 +1,5 @@
 name: platform
-version: 2.7.0
+version: 2.8.0
 description: >
   The platform configuration, in its own namespace ("platform"): the MCPs (the generic usage of a tool by an LLM), the
   adapter definitions (AdapterDef: code mapping an MCP onto a connector; an organisation implements an MCP with an Adapter
@@ -78,6 +78,7 @@ nodeTypes:
       - {name: sources, label: Sources, description: "Only the calls of these callers: engine, assistant, helper, indexer, intent, other (empty: all)", type: json, widget: textarea, section: Scope, order: 9}
       - {name: kinds, label: Kinds, description: "complete only: a behaviour never applies to an embedding", type: json, widget: textarea, section: Scope, order: 10}
       - {name: appliesToJSON, label: "Applies to JSON calls", description: "Also apply it to calls that require a JSON answer, wrapped so it cannot change the format", type: boolean, section: Scope, order: 11}
+      - {name: actions, label: Actions, description: "Only the calls of these actions of a methodology, by name (empty: all; only the engine's calls name an action)", type: json, widget: textarea, section: Scope, order: 12}
   # a pattern of the form designer (ADR 0115 §9): a ready-made set of fields the methodologies of the platform share,
   # offered next to the patterns shipped with the web (FP:<name>)
   - name: FormPattern

@@ -172,6 +172,21 @@ func TestBehaviorsFollowTheGraph(t *testing.T) {
 	}
 }
 
+func TestBehaviorScopedToAnAction(t *testing.T) {
+	svc, g, sent := behaviorService(t, NewMemoryStore())
+	addBehaviors(t, g, llmcfg.Behavior{Name: "code", Instruction: "LEAN", Enabled: true, Actions: []string{"implement_component"}})
+	req := llm.Request{System: "S", Messages: []llm.Message{{Role: "user", Content: "x"}}}
+	_, _ = svc.Complete(llm.WithMeta(context.Background(), llm.CallMeta{Source: llm.SourceEngine, Action: "implement_component"}), req)
+	_, _ = svc.Complete(llm.WithMeta(context.Background(), llm.CallMeta{Source: llm.SourceEngine, Action: "rate_description"}), req)
+	if (*sent)[0].System != "S\n\nLEAN" || (*sent)[1].System != "S" {
+		t.Fatalf("%q %q", (*sent)[0].System, (*sent)[1].System)
+	}
+	ap, _, err := svc.PreviewBehaviors(context.Background(), "default", llm.SourceEngine, "implement_component", false, "S")
+	if err != nil || len(ap.Names) != 1 {
+		t.Fatalf("preview of the action: %v %+v", err, ap)
+	}
+}
+
 func TestBehaviorRPC(t *testing.T) {
 	svc, g, _ := behaviorService(t, NewMemoryStore())
 	addBehaviors(t, g,

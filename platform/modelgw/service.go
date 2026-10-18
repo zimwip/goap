@@ -471,7 +471,7 @@ func (s *Service) behave(ctx context.Context, req llm.Request, t Target) llmcfg.
 	if err != nil || snap == nil {
 		return llmcfg.Applied{System: req.System}
 	}
-	ap := snap.Apply(req.System, callInfo(llm.MetaFrom(ctx).Source, req.Model, t, req.JSON))
+	ap := snap.Apply(req.System, callInfo(llm.MetaFrom(ctx), req.Model, t, req.JSON))
 	if len(ap.Skipped) > 0 {
 		s.Log.Warn("behaviors dropped by the cap", "skipped", ap.Skipped, "capBytes", llmcfg.MaxBehaviorBytes, "model", t.Provider+"/"+t.Model)
 	}
@@ -479,8 +479,8 @@ func (s *Service) behave(ctx context.Context, req llm.Request, t Target) llmcfg.
 }
 
 // callInfo is the call as the behaviours match it: the alias is the name requested ("default" when none, "" for a
-// literal provider/model, as the ledger names it).
-func callInfo(source, requested string, t Target, json bool) llmcfg.CallInfo {
+// literal provider/model, as the ledger names it), the source and the action those the caller declared.
+func callInfo(meta llm.CallMeta, requested string, t Target, json bool) llmcfg.CallInfo {
 	alias := requested
 	if alias == "" {
 		alias = "default"
@@ -488,7 +488,7 @@ func callInfo(source, requested string, t Target, json bool) llmcfg.CallInfo {
 	if strings.Contains(alias, "/") {
 		alias = ""
 	}
-	return llmcfg.CallInfo{Alias: alias, Provider: t.Provider, Model: t.Model, Source: source, Kind: llmcfg.KindComplete, JSON: json}
+	return llmcfg.CallInfo{Alias: alias, Provider: t.Provider, Model: t.Model, Source: meta.Source, Action: meta.Action, Kind: llmcfg.KindComplete, JSON: json}
 }
 
 // behaviorNames lists the behaviours of a call for the ledger and the caller: the applied ones, then the dropped ones
@@ -517,9 +517,9 @@ func (s *Service) Behaviors(ctx context.Context) ([]llmcfg.Behavior, error) {
 	return all, nil
 }
 
-// PreviewBehaviors returns the system text a completion of the given alias, source and mode would be sent with, and which
-// behaviours made it, without calling any model. An alias that resolves to nothing is ErrInvalid.
-func (s *Service) PreviewBehaviors(ctx context.Context, alias, source string, json bool, system string) (llmcfg.Applied, Price, error) {
+// PreviewBehaviors returns the system text a completion of the given alias, source, action and mode would be sent with,
+// and which behaviours made it, without calling any model. An alias that resolves to nothing is ErrInvalid.
+func (s *Service) PreviewBehaviors(ctx context.Context, alias, source, action string, json bool, system string) (llmcfg.Applied, Price, error) {
 	snap, err := s.sync(ctx)
 	if err != nil {
 		return llmcfg.Applied{}, Price{}, err
@@ -528,7 +528,7 @@ func (s *Service) PreviewBehaviors(ctx context.Context, alias, source string, js
 	if err != nil {
 		return llmcfg.Applied{}, Price{}, fmt.Errorf("%w: %w", ErrInvalid, err)
 	}
-	ap := snap.Apply(system, callInfo(llm.CallMeta{Source: source}.Clean().Source, alias, t, json))
+	ap := snap.Apply(system, callInfo(llm.CallMeta{Source: source, Action: action}.Clean(), alias, t, json))
 	// the preview reads the costs, it never asks for a calibration
 	p := Price{}
 	for _, u := range ap.Uses {

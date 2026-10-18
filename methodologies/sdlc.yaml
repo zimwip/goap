@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.11.0
+version: 0.12.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -186,6 +186,15 @@ conditions:
     expr: >
       artifacts.exists(b, b.target == "build_report" && b.data.component == self.key && b.data.ok == true &&
         b.data.revision == artifacts.filter(k, k.target == "code_change" && k.data.component == self.key).size())
+  # the review of the code (Ponytail's review, github.com/DietrichGebert/ponytail): an advice on the latest code change
+  # that builds, given as an assessment of its code_change artifact; the person reviewing the change decides
+  - name: code_reviewed
+    scope: impact
+    description: The latest code change of the component has its review (an assessment of its code_change artifact)
+    expr: >
+      artifacts.exists(k, k.target == "code_change" && k.data.component == self.key) &&
+      assessments.exists(a, a.key == "item:" + artifacts.filter(k, k.target == "code_change" && k.data.component == self.key)[
+        artifacts.filter(k, k.target == "code_change" && k.data.component == self.key).size() - 1].id)
   - name: published
     scope: impact
     description: The component has its build artifact (its branch pushed)
@@ -199,6 +208,8 @@ conditions:
      description: "Every component built from its sources is implemented"}
   - {name: sources_build_checked, all: build_checked, where: self.conditions.from_sources, empty: true,
      description: "Every component built from its sources was built after its latest code change"}
+  - {name: sources_code_reviewed, all: code_reviewed, where: self.conditions.from_sources, empty: true,
+     description: "Every component built from its sources has the review of its latest code change"}
   # --- delivery
   - name: release_planned
     description: The releases of the affected applications are built (artifacts, version, environment chain)
@@ -923,14 +934,58 @@ actions:
         return c.key + (ok ? " builds" : " does not build");
       }
 
+  - name: review_code
+    kind: llm
+    scope: impact
+    where: self.conditions.from_sources
+    description: >
+      Review the latest code change of a component once it builds, like the senior developer paged when it breaks:
+      bugs, security, load, risky code without a test, then what should not be there (the review of Ponytail,
+      github.com/DietrichGebert/ponytail). An advice, never a verdict: the person reviewing the change decides.
+    pre: {build_checked: true, built: true}
+    effects: {code_reviewed: true}
+    cost: 1
+    model: default
+    mcps: [workspace]
+    parallel: 2
+    loop: {maxRounds: 40, timeout: 30m, maxToolResultBytes: 60000}
+    prompt: |
+      {{ $code := "" }}{{ range .Artifacts }}{{ if and (eq .Target "code_change") (eq (index .Data "component") $.Subject.key) }}{{ $code = .ID }}{{ end }}{{ end }}You review the latest code change of ONE component of a change, like the senior developer who will be paged when it
+      breaks. Order of importance: correct, safe, holds under load, tested, fast, lean.
+      Change: "{{ .Change.Title }}"
+      Intent: "{{ .Change.Intent }}"
+      Component: {{ .Subject.key }} ({{ .Subject.type }}); its sources are in the directory {{ .Subject.key }} of the workspace.
+      Read the change with workspace/diff (path {{ .Subject.key }}), then the code it touches: the callers of every changed
+      function, the functions it calls, the tests. A change can break code it does not touch: grep the callers.
+      Look for, in this order:
+      1. Bug: wrong result, crash, missed edge case, a caller broken by the change.
+      2. Risk: security holes (injection, secrets, unchecked input), data loss (errors swallowed, writes out of order).
+      3. Scale: check-then-write races, a query per item, lists that only grow, O(n^2) on big input.
+      4. Missing test: risky new logic (a branch, a parser, money, security, data writes, a bug fix) with no test.
+      5. Speed: big slowdowns only.
+      6. Lean: dead code, unused options, speculative features, a helper the codebase already has, what the standard
+         library already does, a new dependency for a few lines, an abstraction with one implementation.
+      Every finding needs a concrete case (this input leads to this wrong result); no case, no finding. No style taste.
+      A comment `shortcut: <the limit>, <when to upgrade>` is a decision, not a finding, unless the change already
+      crosses its limit; record each new one as a risk the change takes on (an item per shortcut, the RISKS of the brief
+      give the next free number):
+        {"type":"risk","data":{"key":"RSK-n","title":"shortcut in {{ .Subject.key }}: <the limit>","description":"<file:line, when to upgrade>",
+         "probability":1,"impact":2,"owner":"developer","status":"accepted"}}
+      Finish with exactly one assessment of the code change:
+      {"type":"assessment","data":{"key":"item:{{ $code }}","score":<0 to 5: 5 nothing to fix, 3 should-fix findings only, 0-2 must-fix findings>,
+       "findings":[{"text":"<what the code does, what goes wrong, the smallest fix>","severity":"major|minor"}],
+       "reply":"<one or two sentences: what this change does and what to fix first>"}}
+      (major: must fix, a bug, a security hole, data loss or a break at the expected load; minor: should fix.)
+
   - name: publish_build
     kind: script
     language: javascript
     scope: impact
     where: self.conditions.from_sources
     description: Push the branch of the change of a component that builds and record its build artifact
-    # build_checked chains it after the build in a plan (the outcome is not known before); built holds it to a success
-    pre: {build_checked: true, built: true}
+    # build_checked chains it after the build in a plan (the outcome is not known before); built holds it to a success;
+    # the review of the code comes first, whatever it says (an advice for the person reviewing the change)
+    pre: {build_checked: true, built: true, code_reviewed: true}
     effects: {published: true}
     mcps: [workspace]
     code: |
@@ -1337,7 +1392,7 @@ agents:
     planner: goap
     actions: [identify_requirements, select_scope, propagate_requirements, identify_functions, propagate_functions, identify_applications, propagate_applications, identify_components, propagate_components, qualify_impact, validate_impact_analysis, specify_requirements, write_requirements,
               trace_requirements, trace_manually, allocate_functions, design_solution, write_design, check_design, build,
-              prepare_workspace, implement_component, build_component, publish_build]
+              prepare_workspace, implement_component, build_component, review_code, publish_build]
     goals: [build_components]
   - name: release_manager
     description: Release manager — releases, release note, review, step-by-step deployment
@@ -1476,11 +1531,12 @@ methods:
       Each component with a repository is cloned in the workspace of the change on the branch of the change,
       implemented by an agent from the requirements and the design, built and tested by its build command (the
       report, not the agent, says it builds), sent back to the agent when the build fails (three attempts, then a
-      person takes over), then pushed and recorded as a build artifact. The other components get their build recorded
+      person takes over), reviewed once it builds (an assessment of its code change, the shortcuts it takes recorded
+      as risks), then pushed and recorded as a build artifact. The other components get their build recorded
       by technology.
     roles: {responsible: developer, accountable: tech_lead}
     planner: goap
-    actions: [prepare_workspace, implement_component, build_component, publish_build, build]
+    actions: [prepare_workspace, implement_component, build_component, review_code, publish_build, build]
     done: {sources_published: true, build_complete: true}
   - name: recorded_build
     for: build

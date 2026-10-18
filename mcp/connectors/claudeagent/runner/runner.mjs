@@ -60,6 +60,7 @@ async function main() {
   if (req.maxBudgetUsd) options.maxBudgetUsd = req.maxBudgetUsd;
   if (req.allowedTools?.length) options.allowedTools = req.allowedTools;
   if (req.disallowedTools?.length) options.disallowedTools = req.disallowedTools;
+  if (req.plugins?.length) options.plugins = req.plugins.map((path) => ({ type: 'local', path }));
 
   let sessionId = req.resume || '';
   let result = null;

@@ -75,6 +75,7 @@ export const behaviorProps = (b: LlmBehavior): Struct => ({
   models: b.models ?? [],
   sources: b.sources ?? [],
   kinds: b.kinds ?? [],
+  actions: b.actions ?? [],
   appliesToJSON: !!b.appliesToJson,
 });
 
@@ -199,6 +200,7 @@ export const overlayBehaviors = (applied: LlmBehavior[]): Unsaved<LlmBehavior>[]
       models: strs(p.models, old?.models),
       sources: strs(p.sources, old?.sources),
       kinds: strs(p.kinds, old?.kinds),
+      actions: strs(p.actions, old?.actions),
       appliesToJson: typeof p.appliesToJSON === 'boolean' ? p.appliesToJSON : !!old?.appliesToJson,
       // a measured cost is valid for the instruction it was measured on
       costs: typeof p.instruction === 'string' && p.instruction !== old?.instruction ? undefined : old?.costs,

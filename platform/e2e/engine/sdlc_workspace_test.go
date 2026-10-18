@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"sync"
@@ -90,6 +91,7 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 	base := sdlcModel(t)
 	var mu sync.Mutex
 	attempts := 0
+	reviewed := regexp.MustCompile(`"key":"(item:[^"]*)"`)
 	model := llm.ClientFunc(func(ctx context.Context, req llm.Request) (llm.Response, error) {
 		p := req.Messages[0].Content
 		switch {
@@ -98,6 +100,20 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 			{"type":"changeImpact","changeImpact":{"op":"write","node":"#c1","props":{"title":"installments-engine","technology":"java","version":"0.0.0",
 			  "repository":"file://` + filepath.ToSlash(origin) + `","buildCommand":"test -f feature.txt"},"links":[{"type":"implements","to":"FCT-1"}]}},
 			{"type":"artifact","target":"design","data":{"summary":"dedicated installment scheduling engine","decisions":["new Java component"]}}]}`}, nil
+		case strings.Contains(p, "You review the latest code change"):
+			// the review reads the diff, then rates the code change the prompt names and records its shortcut
+			last := req.Messages[len(req.Messages)-1]
+			if len(last.ToolResults) == 0 {
+				return llm.Response{StopReason: llm.StopToolUse, ToolCalls: []llm.ToolCall{
+					{ID: "d", Name: "workspace/diff", Arguments: map[string]any{"path": "CMP-10"}}}}, nil
+			}
+			m := reviewed.FindStringSubmatch(p)
+			if m == nil || m[1] == "item:" {
+				t.Errorf("the review is not told which code change it rates:\n%s", p)
+				return llm.Response{}, fmt.Errorf("no subject")
+			}
+			return llm.Response{Text: `{"items":[{"type":"risk","data":{"key":"RSK-1","title":"shortcut in CMP-10: one plan only","probability":1,"impact":2,"owner":"developer","status":"accepted"}},
+			{"type":"assessment","data":{"key":"` + m[1] + `","score":4,"findings":[{"text":"feature.txt holds no schedule yet","severity":"minor"}],"reply":"adds the engine marker"}}]}`}, nil
 		case strings.Contains(p, "You implement ONE component"):
 			last := req.Messages[len(req.Messages)-1]
 			if len(last.ToolResults) > 0 {
@@ -159,11 +175,11 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 	// steps may come in between: only the order of these matters)
 	var build []string
 	for _, a := range actions {
-		if slices.Contains([]string{"prepare_workspace", "implement_component", "build_component", "publish_build", "build"}, a) {
+		if slices.Contains([]string{"prepare_workspace", "implement_component", "build_component", "review_code", "publish_build", "build"}, a) {
 			build = append(build, a)
 		}
 	}
-	if want := []string{"prepare_workspace", "implement_component", "build_component", "implement_component", "build_component", "publish_build", "build"}; !slices.Equal(build, want) {
+	if want := []string{"prepare_workspace", "implement_component", "build_component", "implement_component", "build_component", "review_code", "publish_build", "build"}; !slices.Equal(build, want) {
 		t.Fatalf("build steps %v (steps %v)", build, actions)
 	}
 	if attempts != 2 {
@@ -172,8 +188,18 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 
 	c, _ := g.Change(ctx, p.ChangeID)
 	reports, builds, artifacts := 0, 0, 0
+	var lastCode domain.ItemID
+	var review, shortcut bool
 	for _, it := range c.Items {
+		switch it.Type {
+		case "assessment":
+			review = it.Data["key"] == "item:"+string(lastCode)
+		case "risk":
+			shortcut = it.Data["key"] == "RSK-1"
+		}
 		switch it.Target {
+		case "code_change":
+			lastCode = it.ID
 		case "build_report":
 			reports++
 			if ok := it.Data["ok"] == true; ok != (reports == 2) {
@@ -195,6 +221,10 @@ func TestSDLCBuildsFromTheSources(t *testing.T) {
 	// CMP-10 from its sources; CMP-1 (java), CMP-4 (c), CMP-2 (go, generic) by their technology
 	if reports != 2 || builds != 4 || artifacts != 4 || art.Key == "" {
 		t.Fatalf("reports %d, builds %d, artifacts %d (%q)", reports, builds, artifacts, art.Key)
+	}
+	// the review rated the code change that builds (the second), and its shortcut is a risk of the change
+	if !review || !shortcut {
+		t.Fatalf("review %v, shortcut %v", review, shortcut)
 	}
 	// the branch of the change reached the remote with the work of the agent, and nothing else did
 	branch := "goap/" + string(p.ChangeID)

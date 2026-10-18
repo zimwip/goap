@@ -51,6 +51,7 @@ func ClaudeAgentAdapterDef() adapter.Def {
 			{Name: "maxBudgetUsd", Type: algo.ParamNumber, Description: "Budget of a run in USD (default none)"},
 			{Name: "timeoutMinutes", Type: algo.ParamNumber, Description: "Time of a run in minutes (default 60, at most 240)"},
 			{Name: "settingSources", Type: algo.ParamStrings, Description: "Claude Code settings loaded: project (the repository's CLAUDE.md and settings, the default), user, local"},
+			{Name: "plugins", Type: algo.ParamStrings, Description: "Claude Code plugins loaded in every session: directories on the connector's host (a checkout of github.com/DietrichGebert/ponytail gives its minimal-code ruleset and its review)"},
 			{Name: "baseURL", Type: algo.ParamString, Description: "Anthropic API endpoint the sessions call (ANTHROPIC_BASE_URL; default Anthropic's); ignored when the hub knows the model gateway, whose endpoint the sessions then call (ADR 0123 §6)"},
 			{Name: "env", Type: algo.ParamStrings, Description: "Variables set for the sessions (NAME=value)"},
 			{Name: "passEnv", Type: algo.ParamStrings, Description: "Variables of the host environment given to the sessions"},

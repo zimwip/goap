@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addedLine, behaviorsLine, costLine, isEstimated, measuredDate, tokensText, byteLength, counter, emptyForm, formOf, scopeSummary, toggled, validateForm } from './behaviors';
+import { addedLine, behaviorsLine, costLine, isEstimated, measuredDate, tokensText, byteLength, counter, emptyForm, formOf, namesOf, scopeSummary, toggled, validateForm } from './behaviors';
 
 describe('behaviours form', () => {
   const ok = { ...emptyForm(), name: 'terse', instruction: 'Be brief.' };
@@ -32,6 +32,8 @@ describe('behaviours summaries', () => {
   it('summarises the scope', () => {
     expect(scopeSummary({})).toBe('every completion');
     expect(scopeSummary({ aliases: ['fast'], sources: ['engine', 'helper'], appliesToJson: true })).toBe('aliases fast · from engine, helper · JSON calls too');
+    expect(scopeSummary({ sources: ['engine'], actions: ['implement_component'] })).toBe('from engine · actions implement_component');
+    expect(namesOf(' implement_component, review_code  implement_component,')).toEqual(['implement_component', 'review_code']);
   });
 
   it('describes what a call got', () => {

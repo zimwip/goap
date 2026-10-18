@@ -219,17 +219,23 @@ func SeedProtectedAliases(ctx context.Context, g *graph.Graph) (bool, error) {
 	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Protected model aliases", edits)
 }
 
-// SeedBehaviors gives every install the built-in example behaviour of the gateway (ADR 0093: llmcfg.TerseBehavior,
-// enabled): created when no node of its key exists, never touched afterwards, so an administrator who edited, disabled
-// or retired it keeps it so. It reports whether it wrote anything.
+// SeedBehaviors gives every install the built-in behaviours of the gateway (ADR 0093: llmcfg.BuiltinBehaviors, terse
+// enabled, ponytail disabled): each created when no node of its key exists, never touched afterwards, so an
+// administrator who edited, disabled or retired one keeps it so. It reports whether it wrote anything.
 func SeedBehaviors(ctx context.Context, g *graph.Graph) (bool, error) {
-	b := llmcfg.TerseBehavior()
-	if _, err := g.NodeByKey(ctx, llmcfg.NamespacePlatform, llmcfg.BehaviorKey(b.Name)); err == nil {
-		return false, nil
-	} else if !errors.Is(err, graph.ErrNotFound) {
-		return false, err
+	var edits []graph.NodeEdit
+	for _, b := range llmcfg.BuiltinBehaviors() {
+		if _, err := g.NodeByKey(ctx, llmcfg.NamespacePlatform, llmcfg.BehaviorKey(b.Name)); err == nil {
+			continue
+		} else if !errors.Is(err, graph.ErrNotFound) {
+			return false, err
+		}
+		edits = append(edits, SeedNode(llmcfg.BehaviorKey(b.Name), llmcfg.NodeTypeBehavior, b.Props()))
 	}
-	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Built-in LLM behaviours", []graph.NodeEdit{SeedNode(llmcfg.BehaviorKey(b.Name), llmcfg.NodeTypeBehavior, b.Props())})
+	if len(edits) == 0 {
+		return false, nil
+	}
+	return true, SeedChange(ctx, g, llmcfg.NamespacePlatform, "Built-in LLM behaviours", edits)
 }
 
 // SeedBuiltins makes sure, at every start, that the built-in MCPs and their adapter definitions exist

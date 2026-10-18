@@ -1944,7 +1944,9 @@ type Behavior struct {
 	Kinds         []string `protobuf:"bytes,10,rep,name=kinds,proto3" json:"kinds,omitempty"`
 	AppliesToJson bool     `protobuf:"varint,11,opt,name=applies_to_json,json=appliesToJson,proto3" json:"applies_to_json,omitempty"`
 	// the cost on each model it can apply to (ListBehaviors only)
-	Costs         []*BehaviorCost `protobuf:"bytes,12,rep,name=costs,proto3" json:"costs,omitempty"`
+	Costs []*BehaviorCost `protobuf:"bytes,12,rep,name=costs,proto3" json:"costs,omitempty"`
+	// selector: the actions of a methodology whose calls it applies to (empty: every call)
+	Actions       []string `protobuf:"bytes,13,rep,name=actions,proto3" json:"actions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2059,6 +2061,13 @@ func (x *Behavior) GetAppliesToJson() bool {
 func (x *Behavior) GetCosts() []*BehaviorCost {
 	if x != nil {
 		return x.Costs
+	}
+	return nil
+}
+
+func (x *Behavior) GetActions() []string {
+	if x != nil {
+		return x.Actions
 	}
 	return nil
 }
@@ -2384,7 +2393,9 @@ type PreviewBehaviorsRequest struct {
 	// the call requires a JSON answer
 	Json bool `protobuf:"varint,3,opt,name=json,proto3" json:"json,omitempty"`
 	// the system text of the call, before the behaviours
-	System        string `protobuf:"bytes,4,opt,name=system,proto3" json:"system,omitempty"`
+	System string `protobuf:"bytes,4,opt,name=system,proto3" json:"system,omitempty"`
+	// the action of a methodology making the call ("" : none)
+	Action        string `protobuf:"bytes,5,opt,name=action,proto3" json:"action,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2443,6 +2454,13 @@ func (x *PreviewBehaviorsRequest) GetJson() bool {
 func (x *PreviewBehaviorsRequest) GetSystem() string {
 	if x != nil {
 		return x.System
+	}
+	return ""
+}
+
+func (x *PreviewBehaviorsRequest) GetAction() string {
+	if x != nil {
+		return x.Action
 	}
 	return ""
 }
@@ -4000,7 +4018,7 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x12ListCatalogRequest\"\x7f\n" +
 	"\x13ListCatalogResponse\x123\n" +
 	"\x06models\x18\x01 \x03(\v2\x1b.goap.model.v1.CatalogModelR\x06models\x123\n" +
-	"\aaliases\x18\x02 \x03(\v2\x19.goap.model.v1.ModelAliasR\aaliases\"\xeb\x02\n" +
+	"\aaliases\x18\x02 \x03(\v2\x19.goap.model.v1.ModelAliasR\aaliases\"\x85\x03\n" +
 	"\bBehavior\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12 \n" +
@@ -4014,7 +4032,8 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\x05kinds\x18\n" +
 	" \x03(\tR\x05kinds\x12&\n" +
 	"\x0fapplies_to_json\x18\v \x01(\bR\rappliesToJson\x121\n" +
-	"\x05costs\x18\f \x03(\v2\x1b.goap.model.v1.BehaviorCostR\x05costs\"\xef\x01\n" +
+	"\x05costs\x18\f \x03(\v2\x1b.goap.model.v1.BehaviorCostR\x05costs\x12\x18\n" +
+	"\aactions\x18\r \x03(\tR\aactions\"\xef\x01\n" +
 	"\fBehaviorCost\x12\x1a\n" +
 	"\bbehavior\x18\x01 \x01(\tR\bbehavior\x12\x14\n" +
 	"\x05model\x18\x02 \x01(\tR\x05model\x12\x18\n" +
@@ -4034,12 +4053,13 @@ const file_goap_model_v1_model_proto_rawDesc = "" +
 	"\tbehaviors\x18\x01 \x03(\v2\x17.goap.model.v1.BehaviorR\tbehaviors\x122\n" +
 	"\x15max_instruction_bytes\x18\x02 \x01(\x05R\x13maxInstructionBytes\x12&\n" +
 	"\x0fmax_total_bytes\x18\x03 \x01(\x05R\rmaxTotalBytes\x12\x18\n" +
-	"\asources\x18\x04 \x03(\tR\asources\"s\n" +
+	"\asources\x18\x04 \x03(\tR\asources\"\x8b\x01\n" +
 	"\x17PreviewBehaviorsRequest\x12\x14\n" +
 	"\x05alias\x18\x01 \x01(\tR\x05alias\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x12\n" +
 	"\x04json\x18\x03 \x01(\bR\x04json\x12\x16\n" +
-	"\x06system\x18\x04 \x01(\tR\x06system\"\xbf\x01\n" +
+	"\x06system\x18\x04 \x01(\tR\x06system\x12\x16\n" +
+	"\x06action\x18\x05 \x01(\tR\x06action\"\xbf\x01\n" +
 	"\x18PreviewBehaviorsResponse\x12\x16\n" +
 	"\x06system\x18\x01 \x01(\tR\x06system\x12\x18\n" +
 	"\aapplied\x18\x02 \x03(\tR\aapplied\x12\x18\n" +

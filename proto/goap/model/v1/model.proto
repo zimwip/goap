@@ -288,6 +288,8 @@ message Behavior {
   bool applies_to_json = 11;
   // the cost on each model it can apply to (ListBehaviors only)
   repeated BehaviorCost costs = 12;
+  // selector: the actions of a methodology whose calls it applies to (empty: every call)
+  repeated string actions = 13;
 }
 
 // What an instruction costs in input tokens on a model (ADR 0093, "Measured cost").
@@ -340,6 +342,8 @@ message PreviewBehaviorsRequest {
   bool json = 3;
   // the system text of the call, before the behaviours
   string system = 4;
+  // the action of a methodology making the call ("" : none)
+  string action = 5;
 }
 
 message PreviewBehaviorsResponse {
