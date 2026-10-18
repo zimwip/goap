@@ -65,35 +65,18 @@ function run(ctx) {
 	}
 }
 
-func TestGo(t *testing.T) {
+func TestJavaScriptWithoutRun(t *testing.T) {
 	j := job
-	j.Language = "go"
-	j.Code = `package action
-
-import (
-	"fmt"
-	"strings"
-
-	"github.com/zimwip/goap/pkg/dsl"
-)
-
-func Run(ctx *dsl.Ctx) error {
-	for _, n := range ctx.ChangeImpacts() {
-		if n.Type != "Requirement" {
-			continue
-		}
-		t := ctx.ImpactNodeCreate("TestCase", "TST-"+strings.ToLower(n.Key), "verifies")
-		ctx.WriteNode(t, map[string]any{"props": map[string]any{"title": "x"}})
-	}
-	n, err := ctx.Node("REQ-1")
-	if err != nil {
-		return err
-	}
-	fmt.Println("node", n.Type)
-	ctx.AddArtifact("report", map[string]any{"markdown": "# ok"})
-	return nil
+	j.Language = "javascript"
+	j.Code = `
+for (const n of ctx.changeImpacts()) {
+  if (n.type !== "Requirement") continue;
+  const t = ctx.impactNodeCreate("TestCase", "TST-" + n.key.toLowerCase(), "verifies");
+  ctx.writeNode(t, { props: { title: "x" } });
 }
-`
+const n = ctx.node("REQ-1");
+console.log("node", n.type);
+ctx.addArtifact("report", { markdown: "# ok" });`
 	res, err := Run(context.Background(), j, &fakeHost{})
 	if err != nil {
 		t.Fatal(err)
@@ -105,10 +88,11 @@ func Run(ctx *dsl.Ctx) error {
 
 func TestSandboxingAndErrors(t *testing.T) {
 	cases := map[string]Job{
-		"go os import": {Language: "go", Code: "package action\nimport \"os\"\nimport \"github.com/zimwip/goap/pkg/dsl\"\nfunc Run(ctx *dsl.Ctx) error { os.Exit(1); return nil }"},
-		"js throw":     {Language: "javascript", Code: `ctx.impactNode("REQ-1", "x"); throw new Error("boom")`},
-		"js timeout":   {Language: "javascript", Code: `while (true) {}`, Timeout: 200 * time.Millisecond},
-		"js no fs":     {Language: "javascript", Code: `require("fs")`},
+		"go refused": {Language: "go", Code: "package action\nfunc Run() error { return nil }"},
+		"js throw":   {Language: "javascript", Code: `ctx.impactNode("REQ-1", "x"); throw new Error("boom")`},
+		"js timeout": {Language: "javascript", Code: `while (true) {}`, Timeout: 200 * time.Millisecond},
+		"js no fs":   {Language: "javascript", Code: `require("fs")`},
+		"js no std":  {Language: "javascript", Code: `std.open("/etc/passwd", "r")`},
 	}
 	for name, j := range cases {
 		res, err := Run(context.Background(), j, &fakeHost{})
@@ -123,31 +107,22 @@ func TestSandboxingAndErrors(t *testing.T) {
 
 func TestSuspension(t *testing.T) {
 	res, err := Run(context.Background(), Job{Language: "javascript",
-		Code: `ctx.impactNode("REQ-1", "x"); ctx.runAgent("slow", "do it")`}, &fakeHost{})
-	if err != nil || !res.Suspended || len(res.Items) != 0 {
+		Code: `ctx.wakeOn("progress", "done"); ctx.impactNode("REQ-1", "x"); ctx.runAgent("slow", "do it")`}, &fakeHost{})
+	if err != nil || !res.Suspended || len(res.Items) != 0 || len(res.WakeOn) != 2 {
 		t.Fatalf("expected suspension without writes, got %+v %v", res, err)
 	}
 }
 
-func TestGoChangeImpacts(t *testing.T) {
-	res, err := Run(context.Background(), Job{Language: "go", Nodes: []ChangeImpact{{Key: "REQ-1", Planned: true}}, Code: `package action
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.Ctx) error {
-	for _, n := range ctx.ChangeImpacts() {
-		if n.Planned {
-			ctx.WriteNode(n.Key, map[string]any{"props": map[string]any{"title": "x"}})
-		}
-	}
-	r := ctx.ImpactNodeCreate("TestCase", "TST-1", "cover")
-	ctx.WriteNode(r, map[string]any{"links": []any{map[string]any{"type": "verifies", "to": "REQ-1"}}})
-	ctx.ImpactNodeReview(r, true, "ok")
-	ctx.ImpactNodeTransition(r, "approved")
-	ctx.ImpactNodeCancel("REQ-1")
-	return nil
+func TestChangeImpactOperations(t *testing.T) {
+	res, err := Run(context.Background(), Job{Language: "javascript", Nodes: []ChangeImpact{{Key: "REQ-1", Planned: true}}, Code: `
+for (const n of ctx.changeImpacts()) {
+  if (n.planned) ctx.writeNode(n.key, { props: { title: "x" } });
 }
-`}, &fakeHost{})
+const r = ctx.impactNodeCreate("TestCase", "TST-1", "cover");
+ctx.writeNode(r, { links: [{ type: "verifies", to: "REQ-1" }] });
+ctx.impactNodeReview(r, true, "ok");
+ctx.impactNodeTransition(r, "approved");
+ctx.impactNodeCancel("REQ-1");`}, &fakeHost{})
 	if err != nil {
 		t.Fatal(err)
 	}

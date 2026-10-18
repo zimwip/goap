@@ -4,11 +4,9 @@ import { peekDraft } from '../../stores/drafts.svelte';
 import { peekDomainDraft } from '../../stores/domains.svelte';
 import { algorithmUsage } from '../../dsl';
 import { plugsOf, type AlgorithmForm, type InstanceForm } from '../../algorithmForm';
-import type { DslTarget, HelpLanguage, HelpLink, HelpParam, HelpUsage } from '../../dslHelp';
+import type { DslTarget, HelpLink, HelpParam, HelpUsage } from '../../dslHelp';
 import { draftGroup, itemSpec } from './methodologyTabs';
 import { algorithmIndex, algorithmSpec, domainGroup, instanceIndex } from './domainTabs';
-
-const language = (l: string): HelpLanguage | undefined => (l === 'go' ? 'go' : l === 'javascript' ? 'javascript' : undefined);
 
 function paramsOf(a: AlgorithmForm, values?: Record<string, unknown>): HelpParam[] {
   return a.params
@@ -37,10 +35,10 @@ export function actionHelp(t: Tab): DslTarget | undefined {
   if (a.kind !== 'script') {
     return { title, subtitle, note: `This action is of kind ${a.kind || 'unset'}: it runs no script. Set its kind to script to write one.` };
   }
-  return { usage: 'action', language: language(a.language), title, subtitle };
+  return { usage: 'action', title, subtitle };
 }
 
-/** An algorithm tab: its usage, language and declared parameters. */
+/** An algorithm tab: its usage and declared parameters. */
 export function algorithmHelp(t: Tab): DslTarget | undefined {
   const d = peekDomainDraft(domainGroup(t));
   if (!d) return undefined;
@@ -48,7 +46,7 @@ export function algorithmHelp(t: Tab): DslTarget | undefined {
   const a = i >= 0 ? d.form.algorithms[i] : undefined;
   if (!a) return undefined;
   const usage = algorithmUsage(a.type)?.usage as HelpUsage | undefined;
-  return { usage, language: language(a.language), title: a.name || '(unnamed)', subtitle: `Algorithm · ${d.label}`, params: paramsOf(a) };
+  return { usage, title: a.name || '(unnamed)', subtitle: `Algorithm · ${d.label}`, params: paramsOf(a) };
 }
 
 /** An instance tab: the algorithm it sets the values of, and where it is plugged. */
@@ -65,7 +63,6 @@ export function instanceHelp(t: Tab): DslTarget | undefined {
   const plugs = plugsOf(inst.name, d.form.nodeTypes, d.form.linkTypes, d.form.lifecycles);
   return {
     usage: algorithmUsage(a.type)?.usage as HelpUsage | undefined,
-    language: language(a.language),
     title,
     subtitle: `${subtitle} · of ${a.name}`,
     params: paramsOf(a, inst.values),
@@ -73,7 +70,7 @@ export function instanceHelp(t: Tab): DslTarget | undefined {
   };
 }
 
-/** An adapter tab: its code is the adapter usage; the language is the editor's own state, not the tab's. */
+/** An adapter tab: its code is the adapter usage. */
 export function adapterHelp(t: Tab): DslTarget {
   return { usage: 'adapter', title: t.params.name || 'New adapter', subtitle: 'Adapter definition' };
 }
@@ -90,7 +87,7 @@ export function methodologyHelp(t: Tab): DslTarget | undefined {
     subtitle: 'Methodology',
     note: scripts.length ? undefined : 'No script action in this methodology. Add an action of kind script to write one.',
     links: scripts.length
-      ? { heading: 'Script actions', items: scripts.map((a) => scriptLink(a.name, a.language || 'javascript', itemSpec(d, 'actions', a))) }
+      ? { heading: 'Script actions', items: scripts.map((a) => scriptLink(a.name, 'JavaScript', itemSpec(d, 'actions', a))) }
       : undefined,
   };
 }
@@ -107,7 +104,7 @@ export function domainHelp(t: Tab): DslTarget | undefined {
     links: algs.length
       ? {
           heading: 'Algorithms',
-          items: algs.map((a) => scriptLink(a.name, `${algorithmUsage(a.type)?.title ?? a.type} · ${a.language}`, algorithmSpec(d.name, d.version, a.uid, a.name))),
+          items: algs.map((a) => scriptLink(a.name, algorithmUsage(a.type)?.title ?? a.type, algorithmSpec(d.name, d.version, a.uid, a.name))),
         }
       : undefined,
   };

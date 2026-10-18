@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test tidy web-test test-pg lint eval generate tools up down logs dev dev-backend dev-web dev-reset web runner-image claude-agent-runner
+.PHONY: help all build test test-wasm tidy web-test test-pg lint eval generate tools up down logs dev dev-backend dev-web dev-reset web runner-image claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -34,6 +34,9 @@ build: ## build all services into bin/
 
 test: ## go test of every module of the go.work
 	go test $(PKGS)
+
+test-wasm: ## every go test with the scripts run by the wasm JavaScript engine (GOAP_JS_ENGINE=wasm, ADR 0132)
+	GOAP_JS_ENGINE=wasm go test -count=1 $(PKGS)
 
 tidy: ## go mod tidy in every module
 	@for m in $(MODULES); do (cd $$m && go mod tidy) || exit 1; done

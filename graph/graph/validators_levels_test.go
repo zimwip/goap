@@ -24,15 +24,11 @@ algorithms:
   - {name: positive, type: property_validator, language: javascript, code: 'if (ctx.value() !== undefined && ctx.value() !== null && Number(ctx.value()) <= 0) ctx.fail("weight must be positive")'}
   - name: same-colour
     type: link_validator
-    language: go
+    language: javascript
     code: |
-      package v
-      import "github.com/zimwip/goap/pkg/dsl"
-      func Run(ctx *dsl.LinkValidatorCtx) error {
-        if ctx.From().Props["colour"] != ctx.To().Props["colour"] {
-          ctx.Fail("colours differ (" + ctx.Link().Type + ")")
-        }
-        return nil
+      const colour = (n) => (n.props || {}).colour;
+      if (colour(ctx.from()) !== colour(ctx.to())) {
+        ctx.fail("colours differ (" + ctx.link().type + ")");
       }
 algorithmInstances:
   - {name: title-required, algorithm: not-blank}

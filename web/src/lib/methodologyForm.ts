@@ -7,6 +7,7 @@
 
 import { subsToForm, subsFromForm, declaredNames, eventIssues, subscriptionIssues, emitIssues, isStandardEvent as isStandard, type SubscriptionForm, type EventForm } from './subscriptions';
 import type { Action, ActionLoop, Agent, AssessmentView, Attribute, Persistence, Enum, Issue, Lifecycle, LifecycleState, LifecycleTransition, LinkType, DocumentReference, Methodology, MethodologyGuardian, MethodologyIntegration, MethodologyMethod, MethodologyProcess, MethodologyRole, Responsibilities, NodeType, ProcessStep, SearchProperty, Struct, Trigger } from './api';
+import { SCRIPT_LANGUAGE } from './dsl';
 
 export interface CondRow {
   cond: string;
@@ -215,7 +216,7 @@ export interface ActionForm extends Identified {
   params: string;
   hasExpects: boolean;
   expects: ExpectsForm;
-  /** script: javascript | go */
+  /** script: javascript (the only language) */
   language: string;
   code: string;
   /** numeric CEL expression (utility / hybrid planners) */
@@ -484,7 +485,6 @@ export type Section = 'agents' | 'actions' | 'conditions' | 'goals' | 'processes
 export type SectionItem = AgentForm | ActionForm | ConditionForm | GoalForm | ProcessForm | MethodForm;
 
 export const ACTION_KINDS = ['llm', 'script', 'tool', 'human', 'builtin', 'abstract'] as const;
-export const SCRIPT_LANGUAGES = ['javascript', 'go'] as const;
 export const PLANNERS = ['goap', 'utility', 'hybrid', 'llm', 'llm-scoring'] as const;
 /** Planners that call an LLM to plan: Agent.model is required for these. */
 export const LLM_PLANNERS = ['llm', 'llm-scoring'] as const;
@@ -530,7 +530,7 @@ export const emptyAction = (): ActionForm => ({
   params: '',
   hasExpects: false,
   expects: emptyExpects(),
-  language: 'javascript',
+  language: SCRIPT_LANGUAGE,
   code: '',
   utility: '',
   specializes: '',
@@ -707,7 +707,7 @@ function actionToForm(a: Action, uid: string): ActionForm {
       linkType: e?.link?.type ?? '',
       direction: e?.link?.direction || 'out',
     },
-    language: a.language || 'javascript',
+    language: SCRIPT_LANGUAGE,
     code: a.code ?? '',
     utility: a.utility ?? '',
     specializes: a.specializes ?? '',

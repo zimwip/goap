@@ -1,5 +1,5 @@
 // CodeMirror 6 configuration: theme aligned with the application's CSS tokens
-// (light / dark), JavaScript / Go syntax highlighting and `ctx` DSL completion.
+// (light / dark), JavaScript syntax highlighting and `ctx` DSL completion.
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter, drawSelection, placeholder as placeholderExt } from '@codemirror/view';
 import { EditorState, Compartment, type Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
@@ -22,11 +22,10 @@ import {
   type CompletionResult,
 } from '@codemirror/autocomplete';
 import { javascript, javascriptLanguage } from '@codemirror/lang-javascript';
-import { go, goLanguage } from '@codemirror/lang-go';
 import { tags as t } from '@lezer/highlight';
-import { DSL_FIELDS, DSL_FUNCTIONS, algorithmUsage, goName, type DslFunction } from './dsl';
+import { DSL_FIELDS, DSL_FUNCTIONS, algorithmUsage, type DslFunction } from './dsl';
 
-export type CodeLanguage = 'javascript' | 'go' | 'cel' | 'text';
+export type CodeLanguage = 'javascript' | 'cel' | 'text';
 
 // --- theme ----------------------------------------------------------------------
 
@@ -81,9 +80,9 @@ const highlight = HighlightStyle.define([
 
 // --- DSL completion -------------------------------------------------------------
 
-function dslOptions(lang: 'javascript' | 'go', functions: DslFunction[]): Completion[] {
+function dslOptions(functions: DslFunction[]): Completion[] {
   return functions.map((f) => {
-    const name = lang === 'go' ? goName(f.name) : f.name;
+    const name = f.name;
     const args = f.args.map((a, i) => `\${${i + 1}:${a.replace(/[{}]/g, '')}}`).join(', ');
     return snippetCompletion(`${name}(${args})`, {
       label: name,
@@ -104,9 +103,9 @@ const FIELD_OPTIONS: Completion[] = [...new Set(Object.values(DSL_FIELDS).flat()
     .join(' · '),
 }));
 
-function dslSource(lang: 'javascript' | 'go', functions: DslFunction[]) {
-  const fns = dslOptions(lang, functions);
-  const fields = lang === 'go' ? FIELD_OPTIONS.map((o) => ({ ...o, label: goName(o.label) })) : FIELD_OPTIONS;
+function dslSource(functions: DslFunction[]) {
+  const fns = dslOptions(functions);
+  const fields = FIELD_OPTIONS;
   return (ctx: CompletionContext): CompletionResult | null => {
     const m = ctx.matchBefore(/\bctx\.\w*$/);
     if (m) return { from: m.from + 4, options: fns, validFor: /^\w*$/ };
@@ -126,9 +125,7 @@ export function languageExtension(lang: CodeLanguage, dsl: boolean | string): Ex
   const functions = typeof dsl === 'string' ? (algorithmUsage(dsl)?.functions ?? []) : DSL_FUNCTIONS;
   switch (lang) {
     case 'javascript':
-      return [javascript(), dsl ? javascriptLanguage.data.of({ autocomplete: dslSource('javascript', functions) }) : []];
-    case 'go':
-      return [go(), dsl ? goLanguage.data.of({ autocomplete: dslSource('go', functions) }) : []];
+      return [javascript(), dsl ? javascriptLanguage.data.of({ autocomplete: dslSource(functions) }) : []];
     case 'cel':
       // CEL has an expression syntax close to JavaScript: highlighting is good enough.
       return javascript();

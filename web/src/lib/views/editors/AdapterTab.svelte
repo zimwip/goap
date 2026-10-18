@@ -10,13 +10,13 @@
   import { provideActions, useReveal, notify } from '../../shell/workbench.svelte';
   import { closeTab, openTab } from '../../shell/tabs.svelte';
   import { moveItem } from '../../methodologyForm';
-  import { algorithmFromForm, algorithmToForm, emptyAlgorithm, emptyParam, ALGORITHM_LANGUAGES, PARAM_TYPES, SECRET_HINT, type AlgorithmForm } from '../../algorithmForm';
+  import { algorithmFromForm, algorithmToForm, emptyAlgorithm, emptyParam, PARAM_TYPES, SECRET_HINT, type AlgorithmForm } from '../../algorithmForm';
   import { mcp as hub, errorMessage } from '../../api';
   import { headGraph, findNode, applyOnMain, createNodeItem, updateNodeItem, retireNodeItem } from '../../graphEdit';
   import { ADAPTER_DEF_TYPE, adapterDefKey, adapterDefProps } from '../../adapterDef';
   import { tools, refreshTools } from '../../stores/tools.svelte';
   import { ns } from '../../stores/session.svelte';
-  import { ALGORITHM_TEMPLATES, algorithmUsage } from '../../dsl';
+  import { ALGORITHM_TEMPLATES, SCRIPT_LANGUAGE, algorithmUsage } from '../../dsl';
   import { confirmDialog } from '../../shell/confirmState.svelte';
 
   let { tab }: { tab: Tab } = $props();
@@ -62,7 +62,7 @@
   let genNote = $state('');
 
   function untouched(): boolean {
-    return !a.code.trim() || Object.values(ALGORITHM_TEMPLATES).some((t) => Object.values(t).includes(a.code));
+    return !a.code.trim() || Object.values(ALGORITHM_TEMPLATES).includes(a.code);
   }
 
   /** Fills the code (one case per MCP tool, the connector operations available through ctx.call) and the connector's parameters. */
@@ -77,7 +77,7 @@
     generating = true;
     try {
       const t = await hub.adapterTemplate(a.mcp, a.connector);
-      a.language = 'javascript';
+      a.language = SCRIPT_LANGUAGE;
       a.code = t.code ?? a.code;
       const have = new Set(a.params.map((p) => p.name));
       let added = 0;
@@ -115,7 +115,7 @@
       const key = adapterDefKey(def.name);
       const existing = findNode(h, ns.platform, ADAPTER_DEF_TYPE, key);
       if (isNew && existing) throw new Error(`an adapter named ${def.name} already exists`);
-      const props = adapterDefProps({ name: def.name ?? '', description: def.description ?? '', mcp: def.mcp ?? '', connector: def.connector ?? '', language: def.language ?? 'javascript', code: def.code ?? '', params: def.params ?? [] });
+      const props = adapterDefProps({ name: def.name ?? '', description: def.description ?? '', mcp: def.mcp ?? '', connector: def.connector ?? '', language: SCRIPT_LANGUAGE, code: def.code ?? '', params: def.params ?? [] });
       const item = existing ? updateNodeItem(existing, props) : createNodeItem(key, ADAPTER_DEF_TYPE, props);
       await applyOnMain(ns.platform, `Adapter ${def.name}`, `${existing ? 'Update' : 'Create'} adapter ${def.name} (${def.mcp} on ${def.connector})`, h.baselineId, [item]);
       await refreshTools();
@@ -177,12 +177,6 @@
           <div class="field">
             <label for="adp-name">Name</label>
             <input id="adp-name" type="text" class="mono" bind:value={a.name} disabled={!isNew} placeholder="localfs-documents" />
-          </div>
-          <div class="field">
-            <label for="adp-lang">Language</label>
-            <select id="adp-lang" bind:value={a.language}>
-              {#each ALGORITHM_LANGUAGES as l (l)}<option value={l}>{l}</option>{/each}
-            </select>
           </div>
         </div>
         <div class="field">
@@ -265,7 +259,7 @@
       <section class="card">
         <h3>Parameters</h3>
         <p class="hint">
-          Typed values an instance sets and the code reads with <code>ctx.param(name)</code> (Go: <code>ctx.Param(name)</code>). They are handed to the connector as its
+          Typed values an instance sets and the code reads with <code>ctx.param(name)</code>. They are handed to the connector as its
           configuration under the same names (see its config schema); a <code>secret</code> parameter is a reference (<code>{SECRET_HINT}</code>) the hub resolves and
           gives to the connector: the code never reads it.
         </p>
@@ -297,11 +291,7 @@
       <section class="card">
         <h3>Code</h3>
         <p class="hint">
-          {#if a.language === 'go'}
-            Declare <code>func Run(ctx *dsl.{usage?.goCtx}) error</code>; methods are PascalCase (<code>ctx.Tool()</code>).
-          {:else}
-            The code is the body of a function of <code>ctx</code>: it returns the result of the tool call.
-          {/if}
+          The JavaScript code is the body of a function of <code>ctx</code>: it returns the result of the tool call.
           It runs in the hub with a 30 s limit and at most 32 connector calls, and sees the connector only through <code>ctx.call</code>.
         </p>
         {#if usage}
@@ -309,12 +299,12 @@
             <summary>ctx API ({usage.functions.length} functions)</summary>
             <ul class="plain-list">
               {#each usage.functions as f (f.name)}
-                <li><code>ctx.{a.language === 'go' ? f.name.charAt(0).toUpperCase() + f.name.slice(1) : f.name}({f.args.join(', ')})</code>{f.returns ? ` → ${f.returns}` : ''} <span class="hint">{f.doc}</span></li>
+                <li><code>ctx.{f.name}({f.args.join(', ')})</code>{f.returns ? ` → ${f.returns}` : ''} <span class="hint">{f.doc}</span></li>
               {/each}
             </ul>
           </details>
         {/if}
-        <CodeEditor bind:value={a.code} language={a.language === 'go' ? 'go' : 'javascript'} dsl="adapter" label="Adapter code" minHeight="18rem" maxHeight="40rem" />
+        <CodeEditor bind:value={a.code} language="javascript" dsl="adapter" label="Adapter code" minHeight="18rem" maxHeight="40rem" />
       </section>
     </fieldset>
   {/if}

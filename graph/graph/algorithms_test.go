@@ -18,15 +18,8 @@ if (v !== undefined && v !== null && !new RegExp(ctx.param("pattern")).test(Stri
 const noEmptyChildGuardJS = `
 for (const c of ctx.children()) if (c.state !== ctx.param("state")) ctx.fail(c.key + " is " + c.state);`
 
-const stampActionGo = `package action
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.TransitionCtx) error {
-	ctx.SetProp("approvedAt", ctx.Change().Title)
-	ctx.SetProp("state_after", ctx.Transition().To)
-	return nil
-}`
+const stampActionJS = `ctx.setProp("approvedAt", ctx.change().title);
+ctx.setProp("state_after", ctx.transition().to);`
 
 type algoWorld struct {
 	g        *Graph
@@ -42,7 +35,7 @@ func newAlgoWorld(t *testing.T, repo Repo) algoWorld {
 	w := algoWorld{g: New(repo)}
 	regex := algo.Bound{Instance: "req-code", Algorithm: "regex", Type: algo.UsagePropertyValidator, Language: "javascript",
 		Code: regexValidatorJS, Params: map[string]any{"pattern": "^REQ-[0-9]+$"}, Property: "code"}
-	stamp := algo.Bound{Instance: "stamp", Algorithm: "stamp", Type: algo.UsageTransitionAction, Language: "go", Code: stampActionGo}
+	stamp := algo.Bound{Instance: "stamp", Algorithm: "stamp", Type: algo.UsageTransitionAction, Language: "javascript", Code: stampActionJS}
 	guard := algo.Bound{Instance: "children-approved", Algorithm: "children-in-state", Type: algo.UsageTransitionGuard, Language: "javascript",
 		Code: noEmptyChildGuardJS, Params: map[string]any{"state": "approved"}}
 	reqLC := domain.Lifecycle{Initial: "draft",

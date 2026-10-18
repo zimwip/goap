@@ -1,15 +1,20 @@
-# DSL (JavaScript / Go): script actions and domain algorithms
+# DSL (JavaScript): script actions and domain algorithms
 
-The DSL is a generic capability: the same JavaScript (goja) / Go (yaegi) engine runs the code of a
+The DSL is a generic capability: the same JavaScript engine runs the code of a
 **usage**, and the usage decides the `ctx` object the code sees. This page describes the `action` usage
 (first part) and the **algorithm** usages of the domain (last part, [ADR 0018](adr/0018-algorithms.md)).
 
 ## Script actions
 
-`kind: script` actions are written in **JavaScript** (interpreted by goja) or in **Go**
-(interpreted by yaegi) and run in the process's **sandbox** (`goap-runner`).
-The engine injects a `ctx` object: the same API exists in both languages
-(`camelCase` in JavaScript, `PascalCase` in Go).
+`kind: script` actions are written in **JavaScript** and run in the process's **sandbox** (`goap-runner`).
+The engine injects a `ctx` object (methods in `camelCase`).
+
+Two engines run the same JavaScript ([ADR 0132](adr/0132-javascript-in-webassembly.md)), chosen by `GOAP_JS_ENGINE`:
+`goja` (the default, interpreted in the Go process) or `wasm` (QuickJS compiled to WebAssembly, run by wazero in the
+process, with no cgo: memory capped, stopped for real at the deadline). Either compiles a script once, when it is
+saved (the check of an algorithm) or at its first run, and keeps it by the hash of its source. With `wasm` the code
+runs in strict mode (an undeclared variable is an error) and the values cross into Go as JSON: a number is a
+`float64`, a Go struct an object named by its json tags.
 
 Writes are **buffered** and only reach the blackboard (the change) at the end of
 the action, atomically; an action that errors writes nothing. The `#nN` references returned by
@@ -17,17 +22,17 @@ writes designate change impacts declared within the same execution.
 
 ## Reading
 
-| JavaScript | Go | Return |
-|---|---|---|
-| `ctx.intent()` / `ctx.goal()` / `ctx.agent()` / `ctx.action()` | `Intent()`… | `string` |
-| `ctx.param(name)` / `ctx.var(name)` | `Param(name)` / `Var(name)` | JSON value |
-| `ctx.items(type)` (`""` = all) | `Items(type)` | `Item[]` |
-| `ctx.changeImpacts()` | `ChangeImpacts()` | `ChangeImpact[]` |
-| `ctx.options()` | `Options()` | `Option[]` |
-| `ctx.decisionPoints()` | `DecisionPoints()` | `DecisionPoint[]` |
-| `ctx.node(key)` | `Node(key)` | `Node` (reference baseline) |
-| `ctx.nodes(type)` (`""` = all) | `Nodes(type)` | `Node[]` |
-| `ctx.links(key, direction, type)` (`"out"`/`"in"`, `""` = all) | `Links(…)` | `Link[]` |
+| JavaScript | Return |
+|---|---|
+| `ctx.intent()` / `ctx.goal()` / `ctx.agent()` / `ctx.action()` | `string` |
+| `ctx.param(name)` / `ctx.var(name)` | JSON value |
+| `ctx.items(type)` (`""` = all) | `Item[]` |
+| `ctx.changeImpacts()` | `ChangeImpact[]` |
+| `ctx.options()` | `Option[]` |
+| `ctx.decisionPoints()` | `DecisionPoint[]` |
+| `ctx.node(key)` | `Node` (reference baseline) |
+| `ctx.nodes(type)` (`""` = all) | `Node[]` |
+| `ctx.links(key, direction, type)` (`"out"`/`"in"`, `""` = all) | `Link[]` |
 
 The code of a **human action with a form** ([ADR 0115](adr/0115-forms-of-human-actions.md)) runs when a person submits
 it, with the checked values of the form in `ctx.var("form")` (by field name: a `node` field's key, a `link` field's
@@ -97,24 +102,6 @@ for (const n of ctx.changeImpacts()) {
 }
 ```
 
-```go
-// Go: same action
-package action
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.Ctx) error {
-	for _, n := range ctx.ChangeImpacts() {
-		if n.Type != "Requirement" || n.Pre == nil {
-			continue
-		}
-		t := ctx.ImpactNodeCreate("TestCase", "TST-"+n.Key, "verifies "+n.Key)
-		ctx.WriteNode(t, map[string]any{"props": map[string]any{"title": "Verify " + n.Key}})
-	}
-	return nil
-}
-```
-
 ## Algorithms (domain)
 
 A domain declares **algorithms** (a script of a fixed type, with typed parameters) and **instances**
@@ -132,26 +119,25 @@ is the call order. Action code is not an algorithm: it stays in the action decla
 Parameter types: `string`, `number`, `boolean`, `regex`, `enum` (`values`), `strings` (list), `json`.
 The script reads its values with `ctx.param(name)`.
 
-A **JavaScript** algorithm is the body of a function of `ctx` (it may `return`); a **Go** algorithm
-declares `func Run(ctx *dsl.<Usage>Ctx) error`. Algorithms are pure: no LLM, tool, agent or blackboard
-access. They reject with `ctx.fail(message)` (several messages allowed), by throwing / returning an
-error, or (JavaScript) by returning `false` or a message string.
+An algorithm is the body of a function of `ctx` (it may `return`). Algorithms are pure: no LLM, tool,
+agent or blackboard access. They reject with `ctx.fail(message)` (several messages allowed), by throwing,
+or by returning `false` or a message string.
 
-| JavaScript | Go | Available in |
-|---|---|---|
-| `ctx.param(name)` | `Param(name)` | all |
-| `ctx.instance()` / `ctx.algorithm()` | `Instance()` / `Algorithm()` | all |
-| `ctx.fail(message)` | `Fail(message)` | all (in a transition action it aborts the transition) |
-| `ctx.log(msg)` / `ctx.warn(msg)` | `Log(msg)` / `Warn(msg)` | all |
-| `ctx.property()` / `ctx.value()` | `Property()` / `Value()` | validator (`value()` is `null` when absent) |
-| `ctx.node()` | `Node()` | all: `{id, version, key, type, state, props}`, as it will be after the change |
-| `ctx.link()` | `Link()` | link validator: `{type, props}` of the link checked |
-| `ctx.from()` / `ctx.to()` | `From()` / `To()` | link validator: the nodes the link leaves and reaches (`Node`, as they will be); a target that cannot be resolved skips the validator |
-| `ctx.children()` | `Children()` | guard, action: the nodes a document contains (`Node[]`) |
-| `ctx.change()` | `Change()` | guard, action: `{id, title, intent, methodology, goal}` |
-| `ctx.transition()` | `Transition()` | guard, action: `{name, from, to}` |
-| `ctx.impact()` | `Impact()` | guard: the impact of the node in the change, `{intent, review}` ([ADR 0076](adr/0076-checkout-working-versions.md): a transition that requires a review checks it); a CEL guard also sees `change` (`id`, `title`, `intent`, `methodology`, `goal`, `state`, `status`) and `draft` (`key`, `type`, `state` it goes to, `props`, `owner`, `links`, `base` version it was checked out from, `new`), [ADR 0079](adr/0079-drafts-and-versions-at-landing.md) |
-| `ctx.setProp(name, value)` / `ctx.removeProp(name)` | `SetProp(name, value)` / `RemoveProp(name)` | action |
+| JavaScript | Available in |
+|---|---|
+| `ctx.param(name)` | all |
+| `ctx.instance()` / `ctx.algorithm()` | all |
+| `ctx.fail(message)` | all (in a transition action it aborts the transition) |
+| `ctx.log(msg)` / `ctx.warn(msg)` | all |
+| `ctx.property()` / `ctx.value()` | validator (`value()` is `null` when absent) |
+| `ctx.node()` | all: `{id, version, key, type, state, props}`, as it will be after the change |
+| `ctx.link()` | link validator: `{type, props}` of the link checked |
+| `ctx.from()` / `ctx.to()` | link validator: the nodes the link leaves and reaches (`Node`, as they will be); a target that cannot be resolved skips the validator |
+| `ctx.children()` | guard, action: the nodes a document contains (`Node[]`) |
+| `ctx.change()` | guard, action: `{id, title, intent, methodology, goal}` |
+| `ctx.transition()` | guard, action: `{name, from, to}` |
+| `ctx.impact()` | guard: the impact of the node in the change, `{intent, review}` ([ADR 0076](adr/0076-checkout-working-versions.md): a transition that requires a review checks it); a CEL guard also sees `change` (`id`, `title`, `intent`, `methodology`, `goal`, `state`, `status`) and `draft` (`key`, `type`, `state` it goes to, `props`, `owner`, `links`, `base` version it was checked out from, `new`), [ADR 0079](adr/0079-drafts-and-versions-at-landing.md) |
+| `ctx.setProp(name, value)` / `ctx.removeProp(name)` | action |
 
 ```js
 // property_validator "regex-match": params pattern (regex, required), message (string)
@@ -169,14 +155,7 @@ if (ctx.from().props.project !== ctx.to().props.project) {
 }
 ```
 
-```go
+```js
 // transition_action "stamp": records who and when
-package action
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.TransitionCtx) error {
-	ctx.SetProp("approvedInChange", ctx.Change().Title)
-	return nil
-}
+ctx.setProp("approvedInChange", ctx.change().title);
 ```

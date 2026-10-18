@@ -14,7 +14,6 @@ require (
 	github.com/labstack/echo-opentelemetry v0.0.3
 	github.com/labstack/echo/v5 v5.3.1
 	github.com/nats-io/nats.go v1.54.0
-	github.com/traefik/yaegi v0.16.1
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.46.0
@@ -52,6 +51,7 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/tetratelabs/wazero v1.9.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/propagators/b3 v1.46.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.46.0 // indirect
@@ -71,6 +71,9 @@ require (
 	modernc.org/memory v1.12.1 // indirect
 )
 
-require github.com/zimwip/goap/contracts v0.0.0
+require (
+	github.com/fastschema/qjs v0.0.6
+	github.com/zimwip/goap/contracts v0.0.0
+)
 
 replace github.com/zimwip/goap/contracts => ../contracts

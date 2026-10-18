@@ -19,7 +19,6 @@
     splitSections,
     starter,
     usageHelp,
-    type HelpLanguage,
   } from '../../dslHelp';
 
   const sections = splitSections(source).map((s) => ({ ...s, html: renderMarkdown(s.body) }));
@@ -29,17 +28,9 @@
   const usage = $derived(target?.usage);
   const help = $derived(usage ? usageHelp(usage) : undefined);
 
-  // The language of the script, unless the person looks at the other one (forgotten when the tab changes).
-  let chosen = $state<HelpLanguage | undefined>();
-  $effect(() => {
-    void tab?.id;
-    chosen = undefined;
-  });
-  const lang = $derived<HelpLanguage>(chosen ?? target?.language ?? 'javascript');
-
   let query = $state('');
   const groups = $derived(help ? groupFunctions(help.functions, query) : []);
-  const code = $derived(usage ? starter(usage, lang) : '');
+  const code = $derived(usage ? starter(usage) : '');
 
   async function copy(text: string) {
     try {
@@ -96,12 +87,6 @@
       <p class="hint"><strong>Where:</strong> {help.where}</p>
     </section>
 
-    <div class="bar" role="group" aria-label="Language">
-      <button type="button" class="small" class:active={lang === 'javascript'} aria-pressed={lang === 'javascript'} onclick={() => (chosen = 'javascript')}>JavaScript</button>
-      <button type="button" class="small" class:active={lang === 'go'} aria-pressed={lang === 'go'} onclick={() => (chosen = 'go')}>Go</button>
-      {#if lang === 'go'}<span class="hint">entry: <code>func Run(ctx *dsl.{help.goCtx}) error</code></span>{/if}
-    </div>
-
     {#if target?.params}
       <section>
         <h4>Parameters</h4>
@@ -110,7 +95,7 @@
             <tbody>
               {#each target.params as p (p.name)}
                 <tr>
-                  <td><code>{paramAccess(p, lang)}</code></td>
+                  <td><code>{paramAccess(p)}</code></td>
                   <td>
                     {p.type}
                     {#if paramNote(p)}<span class="hint"> · {paramNote(p)}</span>{/if}
@@ -122,7 +107,7 @@
             </tbody>
           </table>
         {:else}
-          <p class="hint">No parameter declared: the script gets none from <code>{lang === 'go' ? 'ctx.Param' : 'ctx.param'}</code>.</p>
+          <p class="hint">No parameter declared: the script gets none from <code>ctx.param</code>.</p>
         {/if}
       </section>
     {/if}
@@ -145,7 +130,7 @@
         <h5>{g.title}</h5>
         <dl class="fns">
           {#each g.fns as f (f.name)}
-            <dt><code>{signature(f, lang)}</code>{#if f.returns}<span class="ret"> → {f.returns}</span>{/if}</dt>
+            <dt><code>{signature(f)}</code>{#if f.returns}<span class="ret"> → {f.returns}</span>{/if}</dt>
             <dd>{f.doc}</dd>
           {/each}
         </dl>
@@ -160,7 +145,7 @@
         <dl class="fns">
           {#each help.shapes as s (s.name)}
             <dt><code>{s.name}</code></dt>
-            <dd>{s.summary}<br /><code>{fieldNames(s, lang).join(', ')}</code></dd>
+            <dd>{s.summary}<br /><code>{fieldNames(s).join(', ')}</code></dd>
           {/each}
         </dl>
       </section>
@@ -215,16 +200,6 @@
     padding: 0.4rem 0.6rem;
     background: var(--surface-2);
     border-radius: 4px;
-  }
-  .bar {
-    display: flex;
-    align-items: center;
-    gap: 0.3rem;
-    margin: 0.6rem 0 0;
-  }
-  .bar .active {
-    font-weight: 600;
-    outline: 1px solid currentColor;
   }
   .links {
     list-style: none;

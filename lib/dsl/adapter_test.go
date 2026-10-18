@@ -98,25 +98,13 @@ func TestAdapterCallLimits(t *testing.T) {
 	}
 }
 
-func TestGoAdapter(t *testing.T) {
-	rec := &recorder{reply: map[string]any{"text": "from go"}}
-	code := `package main
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.AdapterCtx) error {
-	res, err := ctx.Call("read_file", map[string]any{"path": ctx.Args()["path"]})
-	if err != nil {
-		return err
-	}
-	ctx.Return(res)
-	return nil
-}
-`
+func TestAdapterReturn(t *testing.T) {
+	rec := &recorder{reply: map[string]any{"text": "from return"}}
+	code := `ctx.return(ctx.call("read_file", { path: ctx.args().path }))`
 	in := AdapterInput{Tool: "read", Args: map[string]any{"path": "b.txt"}, Operations: []string{"read_file"}, Call: rec.call}
-	out, err := RunAdapter(context.Background(), adapter("go", code, nil), in)
-	if err != nil || out.Result["text"] != "from go" || rec.args[0]["path"] != "b.txt" {
-		t.Fatalf("go adapter = %+v, %v (calls %v)", out, err, rec.args)
+	out, err := RunAdapter(context.Background(), adapter("javascript", code, nil), in)
+	if err != nil || out.Result["text"] != "from return" || rec.args[0]["path"] != "b.txt" {
+		t.Fatalf("adapter = %+v, %v (calls %v)", out, err, rec.args)
 	}
 }
 

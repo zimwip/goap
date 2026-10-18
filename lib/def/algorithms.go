@@ -39,7 +39,7 @@ func (s Schema) checkAlgorithms(prefix string, add func(path, format string, arg
 			}
 			algs[a.Name] = a
 		}
-		if a.Code != "" && (a.Language == algo.JavaScript || a.Language == algo.Go) {
+		if a.Code != "" && a.Language == algo.JavaScript {
 			if err := dsl.CheckAlgorithmCode(a.Language, a.Code); err != nil {
 				add(path+".code", "%v", err)
 			}

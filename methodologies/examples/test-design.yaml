@@ -1,9 +1,9 @@
 name: test-design
-version: 1.3.0
+version: 1.3.1
 description: >
   Design and review of a test campaign from the repository's requirements.
   Example of agents (goap, utility and hybrid planners), script actions
-  (JavaScript and Go) and delegation to sub-agents.
+  (JavaScript) and delegation to sub-agents.
 
 namespace: alm
 goal: delivered
@@ -56,32 +56,19 @@ actions:
 
   - name: design_tests
     kind: script
-    language: go
+    language: javascript
     description: Create one test case per requirement in scope
     pre: {has_scope: true}
     effects: {tests_designed: true}
     code: |
-      package action
-
-      import (
-      	"fmt"
-
-      	"github.com/zimwip/goap/pkg/dsl"
-      )
-
-      func Run(ctx *dsl.Ctx) error {
-      	for _, n := range ctx.ChangeImpacts() {
-      		if n.Pre == nil || n.Type != "alm@Requirement" || n.Intent != "modified" {
-      			continue
-      		}
-      		title := fmt.Sprintf("Verify %s: %v", n.Key, n.Pre.Props["title"])
-      		t := ctx.ImpactNodeCreate("alm@TestCase", "TC-"+n.Key, "verifies "+n.Key)
-      		ctx.WriteNode(t, map[string]any{
-      			"props": map[string]any{"title": title},
-      			"links": []any{map[string]any{"type": "alm@verifies", "to": n.Key}},
-      		})
-      	}
-      	return nil
+      for (const n of ctx.changeImpacts()) {
+        if (!n.pre || n.type !== "alm@Requirement" || n.intent !== "modified") continue;
+        const title = "Verify " + n.key + ": " + n.pre.props.title;
+        const t = ctx.impactNodeCreate("alm@TestCase", "TC-" + n.key, "verifies " + n.key);
+        ctx.writeNode(t, {
+          props: { title: title },
+          links: [{ type: "alm@verifies", to: n.key }],
+        });
       }
 
   - name: summarize

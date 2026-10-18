@@ -822,16 +822,17 @@ change CR-42
 
 ### 2.10 Script actions and DSL
 
-`kind: script` actions are **JavaScript** (goja) or **Go** (yaegi) code entered in the IDE. The engine
-injects a `ctx` object (same API in both languages, reference: [docs/dsl.md](dsl.md)):
+`kind: script` actions are **JavaScript** code entered in the IDE, run by goja or by QuickJS compiled to
+WebAssembly on wazero (`GOAP_JS_ENGINE`, [ADR 0132](adr/0132-javascript-in-webassembly.md)). The engine
+injects a `ctx` object (reference: [docs/dsl.md](dsl.md)):
 
 - **reading** the blackboard (hydrated items) and the reference **domain** (`node`, `nodes`, `links`);
 - **writing** to the change (`addImpact`, `proposeNode`, `proposeUpdate`, `proposeLink`, `addArtifact`,
   `decide`, and the change impact calls `impactNode`, `impactNodeCreate`, `writeNode`, `impactNodeReview`, ADR 0024) — buffered, applied at the end of the action;
 - **platform calls**: `llm` / `complete` (model gateway), `runAgent` (sub-agents), `callTool` (MCP), `log`.
 
-The interpreters expose neither files, network, nor processes (Go: subset of the stdlib;
-JavaScript: no `require`), with a timeout. The code runs in the process's **sandbox** (§3.6).
+The engines expose neither files, network, nor processes (no `require`, no `std` / `os` module), with a
+timeout; the wasm engine also caps the memory of a script and stops it for real at the deadline. The code runs in the process's **sandbox** (§3.6).
 
 ### 2.13 Algorithms: the DSL plugged into the domain ([ADR 0018](adr/0018-algorithms.md))
 

@@ -1,14 +1,13 @@
 // Editing model of the algorithms of a domain (ADR 0018): algorithms (script + declared
 // parameters), their instances (parameter values), and where instances are plugged.
 import type { Algorithm, AlgorithmInstance, AlgorithmParam, AlgorithmParamType } from './api';
-import { ALGORITHM_TEMPLATES, ALGORITHM_USAGES, type AlgorithmUsage } from './dsl';
+import { ALGORITHM_TEMPLATES, ALGORITHM_USAGES, SCRIPT_LANGUAGE, type AlgorithmUsage } from './dsl';
 import { newUid } from './methodologyForm';
 
 export const PARAM_TYPES: AlgorithmParamType[] = ['string', 'number', 'boolean', 'regex', 'enum', 'strings', 'json', 'secret'];
 
 /** hint of a secret value: a reference resolved by the hub at call time, never the secret itself */
 export const SECRET_HINT = 'env:VARIABLE  or  <vault path>#<field>';
-export const ALGORITHM_LANGUAGES = ['javascript', 'go'] as const;
 export { ALGORITHM_USAGES };
 
 export interface ParamForm {
@@ -88,7 +87,7 @@ export function algorithmToForm(a: Algorithm): AlgorithmForm {
     name: a.name ?? '',
     description: a.description ?? '',
     type: a.type ?? 'property_validator',
-    language: a.language ?? 'javascript',
+    language: SCRIPT_LANGUAGE,
     code: a.code ?? '',
     mcp: a.mcp ?? '',
     connector: a.connector ?? '',
@@ -138,7 +137,7 @@ export function instanceFromForm(i: InstanceForm): AlgorithmInstance {
 }
 
 export function emptyAlgorithm(type: AlgorithmUsage = 'property_validator', name = ''): AlgorithmForm {
-  return { uid: newUid(), name, description: '', type, language: 'javascript', code: ALGORITHM_TEMPLATES[type].javascript, params: [], mcp: '', connector: '' };
+  return { uid: newUid(), name, description: '', type, language: SCRIPT_LANGUAGE, code: ALGORITHM_TEMPLATES[type], params: [], mcp: '', connector: '' };
 }
 
 export const emptyParam = (): ParamForm => ({ name: '', type: 'string', description: '', required: false, defaultValue: '', values: '' });

@@ -1,7 +1,7 @@
 <script lang="ts">
   // Editing a methodology action.
-  import { ACTION_KINDS, FOR_EACH, PRODUCE_OPS, SCRIPT_LANGUAGES, type ActionForm } from '../methodologyForm';
-  import { TEMPLATES } from '../dsl';
+  import { ACTION_KINDS, FOR_EACH, PRODUCE_OPS, type ActionForm } from '../methodologyForm';
+  import { ACTION_TEMPLATE } from '../dsl';
   import CondRows from './CondRows.svelte';
   import CodeEditor from './CodeEditor.svelte';
   import HumanFormEditor from './HumanFormEditor.svelte';
@@ -39,15 +39,6 @@
 
   let nameAtFocus = '';
 
-  function setLanguage(lang: string) {
-    // The template for a language is replaced by the other one's.
-    const isTemplate = !action.code.trim() || Object.values(TEMPLATES).includes(action.code);
-    action.language = lang;
-    if (isTemplate && action.code.trim()) action.code = TEMPLATES[lang] ?? '';
-  }
-
-  const LANGUAGE_LABELS: Record<string, string> = { javascript: 'JavaScript (goja)', go: 'Go (yaegi)' };
-
   const p = $derived(`actions[${index}]`);
   /** a specialization is not planned: pre / effects / expects / cost are inherited */
   const isSpec = $derived(!!action.specializes.trim());
@@ -56,7 +47,7 @@
 
   const KIND_LABELS: Record<string, string> = {
     llm: 'llm — language model',
-    script: 'script — JavaScript / Go code',
+    script: 'script — JavaScript code',
     tool: 'tool — external tool',
     human: 'human — human task',
     builtin: 'builtin — built-in function',
@@ -333,24 +324,12 @@
   </fieldset>
 {:else if action.kind === 'script'}
   <div class="script-head">
-    <div class="field lang">
-      <label for="{id}-lang">Language</label>
-      <select
-        id="{id}-lang"
-        value={action.language}
-        onchange={(e) => setLanguage(e.currentTarget.value)}
-        class:bad={bad(`${p}.language`)}
-        data-path="{p}.language"
-      >
-        {#each SCRIPT_LANGUAGES as l (l)}<option value={l}>{LANGUAGE_LABELS[l]}</option>{/each}
-      </select>
-    </div>
     <p class="hint grow">
-      The code runs in the process sandbox with the <code>ctx</code> object (<kbd>Ctrl</kbd>+<kbd>Space</kbd> for
+      The JavaScript code runs in the process sandbox with the <code>ctx</code> object (<kbd>Ctrl</kbd>+<kbd>Space</kbd> for
       completion, see "DSL Help"). Writes are applied atomically at the end of the action.
     </p>
     {#if !readonly && !action.code.trim()}
-      <button type="button" class="small" onclick={() => (action.code = TEMPLATES[action.language] ?? '')}>Insert a template</button>
+      <button type="button" class="small" onclick={() => (action.code = ACTION_TEMPLATE)}>Insert a template</button>
     {/if}
   </div>
   <div class="field">
@@ -358,7 +337,7 @@
     <CodeEditor
       id="{id}-code"
       bind:value={action.code}
-      language={action.language === 'go' ? 'go' : 'javascript'}
+      language="javascript"
       dsl
       {readonly}
       label="Action code"
@@ -540,9 +519,6 @@
     gap: 0.8rem;
     align-items: flex-end;
     flex-wrap: wrap;
-  }
-  .script-head .lang {
-    width: 200px;
   }
   .script-head .hint {
     margin-bottom: 0.7rem;

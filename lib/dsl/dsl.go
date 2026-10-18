@@ -1,8 +1,9 @@
-// Package dsl is the API injected in script actions (JavaScript or Go): it
-// reads the blackboard snapshot and the reference domain, buffers writes to
-// the change, and calls the platform (LLM, sub-agents, tools) through a Host.
-// The same Go type backs both languages: methods are exposed in camelCase to
-// JavaScript (goja) and as is to Go (yaegi). See docs/dsl.md.
+// Package dsl is the API injected in script actions (JavaScript): it reads the
+// blackboard snapshot and the reference domain, buffers writes to the change,
+// and calls the platform (LLM, sub-agents, tools) through a Host. A Go type
+// backs the API: its methods are exposed in camelCase, whatever the engine
+// (goja, or QuickJS compiled to WebAssembly run by wazero: GOAP_JS_ENGINE).
+// See docs/dsl.md.
 package dsl
 
 import (

@@ -3,12 +3,8 @@ package dsl
 import (
 	"context"
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"time"
 
-	"github.com/dop251/goja"
 	"github.com/zimwip/goap/contracts/algo"
 )
 
@@ -18,15 +14,15 @@ import (
 //
 // A JavaScript algorithm is the body of a function of ctx, so it may `return`.
 //
-//	property_validator   ctx: ValidatorCtx    func Run(ctx *dsl.ValidatorCtx) error
-//	node_validator       ctx: NodeValidatorCtx func Run(ctx *dsl.NodeValidatorCtx) error
-//	link_validator       ctx: LinkValidatorCtx func Run(ctx *dsl.LinkValidatorCtx) error
-//	transition_guard     ctx: GuardCtx        func Run(ctx *dsl.GuardCtx) error
-//	transition_action    ctx: TransitionCtx   func Run(ctx *dsl.TransitionCtx) error
+//	property_validator   ctx: ValidatorCtx
+//	node_validator       ctx: NodeValidatorCtx
+//	link_validator       ctx: LinkValidatorCtx
+//	transition_guard     ctx: GuardCtx
+//	transition_action    ctx: TransitionCtx
 //
 // They are pure: no LLM, tool or sub-agent calls, no blackboard. A script
-// rejects with ctx.fail(message), by throwing (JavaScript) / returning an error
-// (Go), or, in JavaScript, by returning false or a string from run(ctx).
+// rejects with ctx.fail(message), by throwing, or by returning false or a
+// string from run(ctx).
 
 // AlgorithmTimeout bounds one execution of an algorithm.
 const AlgorithmTimeout = 5 * time.Second
@@ -269,73 +265,34 @@ func RunAlgorithm(ctx context.Context, b algo.Bound, in AlgorithmInput) (Outcome
 	c := &common{b: b}
 	var obj scriptLogger
 	var jsObj any
-	var bind func(entry any) (func() error, error)
 	var out func() Outcome
 	switch b.Type {
 	case algo.UsagePropertyValidator:
 		x := &ValidatorCtx{c: c, in: in}
 		obj, jsObj = x, x
-		bind = func(entry any) (func() error, error) {
-			run, ok := entry.(func(*ValidatorCtx) error)
-			if !ok {
-				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.ValidatorCtx) error, got %T", entry)
-			}
-			return func() error { return run(x) }, nil
-		}
 		out = func() Outcome { return Outcome{Failures: c.failures, Logs: c.logs} }
 	case algo.UsageNodeValidator:
 		x := &NodeValidatorCtx{c: c, in: in}
 		obj, jsObj = x, x
-		bind = func(entry any) (func() error, error) {
-			run, ok := entry.(func(*NodeValidatorCtx) error)
-			if !ok {
-				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.NodeValidatorCtx) error, got %T", entry)
-			}
-			return func() error { return run(x) }, nil
-		}
 		out = func() Outcome { return Outcome{Failures: c.failures, Logs: c.logs} }
 	case algo.UsageLinkValidator:
 		x := &LinkValidatorCtx{c: c, in: in}
 		obj, jsObj = x, x
-		bind = func(entry any) (func() error, error) {
-			run, ok := entry.(func(*LinkValidatorCtx) error)
-			if !ok {
-				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.LinkValidatorCtx) error, got %T", entry)
-			}
-			return func() error { return run(x) }, nil
-		}
 		out = func() Outcome { return Outcome{Failures: c.failures, Logs: c.logs} }
 	case algo.UsageTransitionGuard:
 		x := &GuardCtx{c: c, in: in}
 		obj, jsObj = x, x
-		bind = func(entry any) (func() error, error) {
-			run, ok := entry.(func(*GuardCtx) error)
-			if !ok {
-				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.GuardCtx) error, got %T", entry)
-			}
-			return func() error { return run(x) }, nil
-		}
 		out = func() Outcome { return Outcome{Failures: c.failures, Logs: c.logs} }
 	case algo.UsageTransitionAction:
 		x := &TransitionCtx{c: c, in: in}
 		obj, jsObj = x, x
-		bind = func(entry any) (func() error, error) {
-			run, ok := entry.(func(*TransitionCtx) error)
-			if !ok {
-				return nil, fmt.Errorf("go script: Run must have signature func(*dsl.TransitionCtx) error, got %T", entry)
-			}
-			return func() error { return run(x) }, nil
-		}
 		out = func() Outcome { return Outcome{Failures: c.failures, Set: x.set, Unset: x.del, Logs: c.logs} }
 	default:
 		return Outcome{}, fmt.Errorf("algorithm %s: type %q cannot be run", b.Instance, b.Type)
 	}
 	// a JavaScript run(ctx) may reject by returning false or a message
-	onReturn := func(v goja.Value) {
-		if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-			return
-		}
-		switch x := v.Export().(type) {
+	onReturn := func(v any) {
+		switch x := v.(type) {
 		case bool:
 			if !x {
 				c.Fail("rejected")
@@ -346,7 +303,7 @@ func RunAlgorithm(ctx context.Context, b algo.Bound, in AlgorithmInput) (Outcome
 			}
 		}
 	}
-	err := runScript(ctx, b.Language, jsBody(b.Language, b.Code), jsObj, obj, onReturn, bind)
+	err := runScript(ctx, b.Language, jsBody(b.Code), jsObj, obj, onReturn)
 	res := out()
 	if err != nil {
 		return res, fmt.Errorf("algorithm %s: %w", b.Instance, err)
@@ -355,34 +312,20 @@ func RunAlgorithm(ctx context.Context, b algo.Bound, in AlgorithmInput) (Outcome
 }
 
 // jsBody makes the code of a JavaScript algorithm the body of run(ctx): it can
-// use `return` (false or a message rejects). Go code is left as is.
-func jsBody(language, code string) string {
-	if language == algo.Go {
-		return code
-	}
+// use `return` (false or a message rejects).
+func jsBody(code string) string {
 	return "function run(ctx) {\n" + code + "\n}"
 }
 
-// CheckAlgorithmCode checks that the code of an algorithm compiles and, in Go,
-// declares func Run. It does not run it.
+// CheckAlgorithmCode checks that the code of an algorithm compiles, and keeps it compiled for its runs (the engine
+// compiles a script once, by the hash of its source). It does not run it.
 func CheckAlgorithmCode(language, code string) error {
-	switch language {
-	case algo.JavaScript, "js":
-		if _, err := goja.Compile("algorithm.js", jsBody(language, code), false); err != nil {
-			return jsError(err)
-		}
-		return nil
-	case algo.Go:
-		f, err := parser.ParseFile(token.NewFileSet(), "algorithm.go", code, 0)
-		if err != nil {
-			return fmt.Errorf("go script: %w", err)
-		}
-		for _, d := range f.Decls {
-			if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && fd.Name.Name == "Run" {
-				return nil
-			}
-		}
-		return fmt.Errorf("go script must declare func Run(ctx *dsl.<Usage>Ctx) error")
+	if !isJS(language) {
+		return fmt.Errorf("unsupported language %q", language)
 	}
-	return fmt.Errorf("unsupported language %q", language)
+	e, err := currentEngine()
+	if err != nil {
+		return err
+	}
+	return e.compile(jsBody(code))
 }

@@ -6,7 +6,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dop251/goja"
 	"github.com/zimwip/goap/contracts/algo"
 )
 
@@ -99,7 +98,7 @@ func (a *AdapterCtx) Call(operation string, args map[string]any) (map[string]any
 	return a.in.Call(a.ctx, operation, args)
 }
 
-// Return sets the result of the tool (Go scripts; a JavaScript script returns it).
+// Return sets the result of the tool (a script may also return it from run(ctx)).
 func (a *AdapterCtx) Return(result map[string]any) { a.result = result }
 
 // Fail rejects the call with a message.
@@ -117,26 +116,16 @@ func RunAdapter(ctx context.Context, b algo.Bound, in AdapterInput) (AdapterOutc
 	defer cancel()
 	c := &common{b: b}
 	x := &AdapterCtx{c: c, in: in, ctx: ctx}
-	bind := func(entry any) (func() error, error) {
-		run, ok := entry.(func(*AdapterCtx) error)
-		if !ok {
-			return nil, fmt.Errorf("go script: Run must have signature func(*dsl.AdapterCtx) error, got %T", entry)
-		}
-		return func() error { return run(x) }, nil
-	}
 	// a JavaScript adapter returns the result of the tool: an object, or any other value wrapped
-	onReturn := func(v goja.Value) {
-		if v == nil || goja.IsUndefined(v) || goja.IsNull(v) {
-			return
-		}
-		switch r := v.Export().(type) {
+	onReturn := func(v any) {
+		switch r := v.(type) {
 		case map[string]any:
 			x.result = r
 		default:
 			x.result = map[string]any{"value": r}
 		}
 	}
-	err := runScript(ctx, b.Language, jsBody(b.Language, b.Code), x, x, onReturn, bind)
+	err := runScript(ctx, b.Language, jsBody(b.Code), x, x, onReturn)
 	out := AdapterOutcome{Result: x.result, Failures: c.failures, Logs: c.logs, Calls: x.calls}
 	if err != nil {
 		return out, fmt.Errorf("adapter %s: %w", b.Instance, err)

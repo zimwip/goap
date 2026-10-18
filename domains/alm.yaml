@@ -1,5 +1,5 @@
 name: alm
-version: 1.6.0
+version: 1.6.1
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -221,22 +221,11 @@ algorithms:
   - name: not-blank
     description: The value must be present and not blank
     type: property_validator
-    language: go
+    language: javascript
     code: |
-      package validator
-
-      import (
-      	"strings"
-
-      	"github.com/zimwip/goap/pkg/dsl"
-      )
-
-      func Run(ctx *dsl.ValidatorCtx) error {
-      	s, _ := ctx.Value().(string)
-      	if strings.TrimSpace(s) == "" {
-      		ctx.Fail(ctx.Property() + " must not be blank")
-      	}
-      	return nil
+      const v = ctx.value();
+      if (typeof v !== "string" || v.trim() === "") {
+        ctx.fail(ctx.property() + " must not be blank");
       }
   - name: max-length
     description: A text value is at most `max` characters long

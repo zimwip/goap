@@ -7,8 +7,7 @@ import {
   ALGORITHM_USAGES,
   DSL_FUNCTIONS,
   DSL_SHAPES,
-  TEMPLATES,
-  goName,
+  ACTION_TEMPLATE,
   type AlgorithmUsage,
   type DslFunction,
   type DslGroup,
@@ -16,7 +15,6 @@ import {
 } from './dsl';
 
 export type HelpUsage = 'action' | AlgorithmUsage;
-export type HelpLanguage = 'javascript' | 'go';
 
 /** A declared parameter of an algorithm, with the value of an instance when the editor holds one. */
 export interface HelpParam {
@@ -43,7 +41,6 @@ export interface HelpLink {
 export interface DslTarget {
   /** no usage: the editor holds no script (the panel says why in `note`) */
   usage?: HelpUsage;
-  language?: HelpLanguage;
   /** name of the object being edited */
   title: string;
   /** its kind: "Script action · sdlc v3" */
@@ -64,7 +61,6 @@ export interface UsageHelp {
   contract: string;
   /** where the code is written / plugged in the IDE */
   where: string;
-  goCtx: string;
   functions: DslFunction[];
   shapes: DslShape[];
   /** the `## ` sections of docs/dsl.md that describe it */
@@ -99,9 +95,8 @@ const ACTION_USAGE: UsageHelp = {
   title: 'Script action',
   description:
     'Code of an action of kind script, run by the engine in the process sandbox on the blackboard of the change. Writes are buffered and reach the change atomically when the action ends: an action that fails writes nothing. The #nN references returned by the writes designate change impacts declared in the same execution.',
-  contract: 'Reads the change, writes to it (impacts, drafts, reviews, decisions) and may call a model, a sub-agent or an MCP tool. Fails by throwing (Go: returning an error).',
+  contract: 'Reads the change, writes to it (impacts, drafts, reviews, decisions) and may call a model, a sub-agent or an MCP tool. Fails by throwing.',
   where: WHERE.action,
-  goCtx: 'Ctx',
   functions: DSL_FUNCTIONS,
   shapes: shapes('Item', 'Node', 'Link', 'ChangeImpact', 'Option', 'DecisionPoint'),
   reference: ['Script actions', 'Reading', 'Writing', 'Calls', 'Examples'],
@@ -118,7 +113,6 @@ export function usageHelp(usage: HelpUsage): UsageHelp {
     description: u.description,
     contract: u.contract,
     where: WHERE[usage],
-    goCtx: u.goCtx,
     functions: u.functions,
     shapes: shapes(...ALGORITHM_SHAPES[usage]),
     reference: ['Algorithms'],
@@ -134,21 +128,20 @@ export function overview(): { usage: HelpUsage; title: string; description: stri
   });
 }
 
-/** Starter script of a usage in a language (what a new script starts from). */
-export function starter(usage: HelpUsage, lang: HelpLanguage): string {
-  if (usage === 'action') return TEMPLATES[lang] ?? '';
-  return ALGORITHM_TEMPLATES[usage]?.[lang] ?? '';
+/** Starter script of a usage (what a new script starts from). */
+export function starter(usage: HelpUsage): string {
+  if (usage === 'action') return ACTION_TEMPLATE;
+  return ALGORITHM_TEMPLATES[usage] ?? '';
 }
 
-/** `ctx.name(a, b)`; the Go form is PascalCase (`ctx.Name(a, b)`). */
-export function signature(fn: DslFunction, lang: HelpLanguage): string {
-  const name = lang === 'go' ? goName(fn.name) : fn.name;
-  return `ctx.${name}(${fn.args.join(', ')})`;
+/** `ctx.name(a, b)`. */
+export function signature(fn: DslFunction): string {
+  return `ctx.${fn.name}(${fn.args.join(', ')})`;
 }
 
-/** The names of a shape's fields in a language (PascalCase in Go). */
-export function fieldNames(shape: DslShape, lang: HelpLanguage): string[] {
-  return lang === 'go' ? shape.fields.map(goName) : shape.fields;
+/** The names of a shape's fields. */
+export function fieldNames(shape: DslShape): string[] {
+  return shape.fields;
 }
 
 export const GROUP_TITLES: Record<DslGroup, string> = {
@@ -179,8 +172,8 @@ export function paramNote(p: HelpParam): string {
 }
 
 /** How a script reads a declared parameter. */
-export function paramAccess(p: HelpParam, lang: HelpLanguage): string {
-  return lang === 'go' ? `ctx.Param("${p.name}")` : `ctx.param("${p.name}")`;
+export function paramAccess(p: HelpParam): string {
+  return `ctx.param("${p.name}")`;
 }
 
 export interface Section {

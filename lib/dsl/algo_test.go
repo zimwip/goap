@@ -37,22 +37,9 @@ func TestValidatorJSReturn(t *testing.T) {
 	}
 }
 
-func TestValidatorGo(t *testing.T) {
-	code := `package validator
-
-import (
-	"regexp"
-	"github.com/zimwip/goap/pkg/dsl"
-)
-
-func Run(ctx *dsl.ValidatorCtx) error {
-	re := regexp.MustCompile(ctx.Param("pattern").(string))
-	if s, _ := ctx.Value().(string); !re.MatchString(s) {
-		ctx.Fail("bad " + ctx.Property())
-	}
-	return nil
-}`
-	b := bound(algo.UsagePropertyValidator, "go", code, map[string]any{"pattern": "^a+$"})
+func TestValidatorRegexp(t *testing.T) {
+	b := bound(algo.UsagePropertyValidator, "javascript", `
+if (!new RegExp(ctx.param("pattern")).test(ctx.value())) ctx.fail("bad " + ctx.property());`, map[string]any{"pattern": "^a+$"})
 	if out, err := RunAlgorithm(context.Background(), b, AlgorithmInput{Property: "p", Value: "aaa"}); err != nil || !out.OK() {
 		t.Fatalf("%v %v", err, out.Failures)
 	}
@@ -72,21 +59,14 @@ func TestGuardJS(t *testing.T) {
 	}
 }
 
-func TestTransitionActionBoth(t *testing.T) {
+func TestTransitionAction(t *testing.T) {
 	js := bound(algo.UsageTransitionAction, "javascript", `ctx.setProp("approvedBy", ctx.param("who")); ctx.removeProp("draftNote")`, map[string]any{"who": "bot"})
 	out, err := RunAlgorithm(context.Background(), js, AlgorithmInput{})
 	if err != nil || out.Set["approvedBy"] != "bot" || len(out.Unset) != 1 {
 		t.Fatalf("%v %+v", err, out)
 	}
-	goCode := `package action
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.TransitionCtx) error {
-	ctx.SetProp("state", ctx.Transition().To)
-	return nil
-}`
-	out, err = RunAlgorithm(context.Background(), bound(algo.UsageTransitionAction, "go", goCode, nil), AlgorithmInput{Transition: TransitionInfo{To: "approved"}})
+	out, err = RunAlgorithm(context.Background(), bound(algo.UsageTransitionAction, "javascript", `ctx.setProp("state", ctx.transition().to)`, nil),
+		AlgorithmInput{Transition: TransitionInfo{To: "approved"}})
 	if err != nil || out.Set["state"] != "approved" {
 		t.Fatalf("%v %+v", err, out)
 	}
@@ -102,15 +82,12 @@ func TestAlgorithmErrors(t *testing.T) {
 	if err := CheckAlgorithmCode("js", "function ("); err == nil {
 		t.Fatal("syntax error expected")
 	}
-	if err := CheckAlgorithmCode("go", "package x\nfunc Other() {}"); err == nil {
-		t.Fatal("missing Run expected")
-	}
-	if err := CheckAlgorithmCode("go", "package x\nfunc Run() error { return nil }"); err != nil {
-		t.Fatal(err)
+	if err := CheckAlgorithmCode("go", "package x\nfunc Run() error { return nil }"); err == nil {
+		t.Fatal("go is no longer a script language")
 	}
 }
 
-func TestLinkValidatorBoth(t *testing.T) {
+func TestLinkValidator(t *testing.T) {
 	in := AlgorithmInput{
 		Link: LinkInfo{Type: "d@refs", Props: map[string]any{"weight": 3}},
 		From: Node{Key: "A", Props: map[string]any{"colour": "red"}},
@@ -123,23 +100,8 @@ func TestLinkValidatorBoth(t *testing.T) {
 	if err != nil || len(out.Failures) != 1 || out.Failures[0] != "d@refs A->B w3 x" {
 		t.Fatalf("js: %v %v", err, out.Failures)
 	}
-	code := `package v
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.LinkValidatorCtx) error {
-	if ctx.From().Props["colour"] != ctx.To().Props["colour"] {
-		ctx.Fail(ctx.Link().Type + " " + ctx.From().Key + "->" + ctx.To().Key)
-	}
-	return nil
-}`
-	g := bound(algo.UsageLinkValidator, "go", code, nil)
-	out, err = RunAlgorithm(context.Background(), g, in)
-	if err != nil || len(out.Failures) != 1 || out.Failures[0] != "d@refs A->B" {
-		t.Fatalf("go: %v %v", err, out.Failures)
-	}
 	in.To.Props["colour"] = "red"
-	for _, b := range []algo.Bound{js, g} {
+	for _, b := range []algo.Bound{js} {
 		if out, err := RunAlgorithm(context.Background(), b, in); err != nil || !out.OK() {
 			t.Fatalf("%s accepted link rejected: %v %v", b.Language, err, out.Failures)
 		}

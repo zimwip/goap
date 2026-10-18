@@ -1,5 +1,5 @@
 <script lang="ts">
-  // "Algorithm" tab: script (JavaScript or Go) of a fixed type with declared parameters,
+  // "Algorithm" tab: JavaScript script of a fixed type with declared parameters,
   // edited in the draft of its domain (ADR 0018).
   import { untrack } from 'svelte';
   import type { Tab } from '../../shell/types';
@@ -10,7 +10,7 @@
   import AlgorithmTryIt from '../../components/AlgorithmTryIt.svelte';
   import { provideActions, useReveal, notify } from '../../shell/workbench.svelte';
   import { closeWhere, openTab } from '../../shell/tabs.svelte';
-  import { emptyInstance, emptyParam, freeName, ALGORITHM_LANGUAGES, PARAM_TYPES } from '../../algorithmForm';
+  import { emptyInstance, emptyParam, freeName, PARAM_TYPES } from '../../algorithmForm';
   import { moveItem } from '../../methodologyForm';
   import { ALGORITHM_TEMPLATES, ALGORITHM_USAGES, algorithmUsage, type AlgorithmUsage } from '../../dsl';
   import { algorithmIndex, algorithmToolbar, domainDraftOf, instanceSpec } from './domainTabs';
@@ -35,14 +35,14 @@
   const bad = (p: string) => d.bad(`algorithms[${index}]${p}`);
   const issues = $derived(d.allIssues.filter((i) => i.norm === `algorithms[${index}]` || i.norm.startsWith(`algorithms[${index}].`) || i.norm.startsWith(`algorithms[${index}][`)));
 
-  /** is the code still the starter template (so that it follows the type / language)? */
+  /** is the code still the starter template (so that it follows the type)? */
   function untouched(): boolean {
     if (!a) return false;
-    return !a.code.trim() || Object.values(ALGORITHM_TEMPLATES).some((t) => Object.values(t).includes(a.code));
+    return !a.code.trim() || Object.values(ALGORITHM_TEMPLATES).includes(a.code);
   }
   function changed() {
     if (!a || !untouched()) return;
-    a.code = ALGORITHM_TEMPLATES[a.type as AlgorithmUsage]?.[a.language as 'javascript' | 'go'] ?? a.code;
+    a.code = ALGORITHM_TEMPLATES[a.type as AlgorithmUsage] ?? a.code;
   }
 
   // renaming an algorithm renames the references of its instances
@@ -127,12 +127,6 @@
               {#each ALGORITHM_USAGES.filter((u) => u.usage !== 'adapter') as u (u.usage)}<option value={u.usage}>{u.title}</option>{/each}
             </select>
           </div>
-          <div class="field">
-            <label for="alg-lang">Language</label>
-            <select id="alg-lang" bind:value={a.language} onchange={changed} class:bad={bad('.language')}>
-              {#each ALGORITHM_LANGUAGES as l (l)}<option value={l}>{l}</option>{/each}
-            </select>
-          </div>
         </div>
         <div class="field">
           <label for="alg-desc">Description</label>
@@ -146,7 +140,7 @@
       <section class="card">
         <h3>Parameters</h3>
         <p class="hint">
-          Typed values an instance sets and the code reads with <code>ctx.param(name)</code> (Go: <code>ctx.Param(name)</code>). A regex is checked when the instance is saved.
+          Typed values an instance sets and the code reads with <code>ctx.param(name)</code>. A regex is checked when the instance is saved.
         </p>
         {#each a.params as p, i}
           <div class="prow" data-path="algorithms[{index}].params[{i}]">
@@ -174,23 +168,19 @@
         <h3>Code</h3>
         {#if usage}
           <p class="hint">
-            {#if a.language === 'go'}
-              Declare <code>func Run(ctx *dsl.{usage.goCtx}) error</code>; methods are PascalCase (<code>ctx.Value()</code>).
-            {:else}
-              The code is the body of a function of <code>ctx</code>: it may <code>return</code> (<code>false</code> or a message rejects).
-            {/if}
+            The JavaScript code is the body of a function of <code>ctx</code>: it may <code>return</code> (<code>false</code> or a message rejects).
             Pure: no blackboard, LLM or tool calls.
           </p>
           <details class="ctxdoc">
             <summary>ctx API ({usage.functions.length} functions)</summary>
             <ul class="plain-list">
               {#each usage.functions as f (f.name)}
-                <li><code>ctx.{a.language === 'go' ? f.name.charAt(0).toUpperCase() + f.name.slice(1) : f.name}({f.args.join(', ')})</code>{f.returns ? ` → ${f.returns}` : ''} <span class="hint">{f.doc}</span></li>
+                <li><code>ctx.{f.name}({f.args.join(', ')})</code>{f.returns ? ` → ${f.returns}` : ''} <span class="hint">{f.doc}</span></li>
               {/each}
             </ul>
           </details>
         {/if}
-        <CodeEditor bind:value={a.code} language={a.language === 'go' ? 'go' : 'javascript'} dsl={a.type} readonly={d.readonly} label="Algorithm code" bad={bad('.code')} path="algorithms[{index}].code" minHeight="14rem" maxHeight="34rem" />
+        <CodeEditor bind:value={a.code} language="javascript" dsl={a.type} readonly={d.readonly} label="Algorithm code" bad={bad('.code')} path="algorithms[{index}].code" minHeight="14rem" maxHeight="34rem" />
       </section>
     </fieldset>
 

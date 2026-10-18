@@ -62,6 +62,13 @@ function Build {
 
 function Test { Run go test @Pkgs }
 
+# every test with the scripts run by the wasm JavaScript engine (ADR 0132)
+function TestWasm {
+    $prev = $env:GOAP_JS_ENGINE
+    $env:GOAP_JS_ENGINE = 'wasm'
+    try { Run go test -count=1 @Pkgs } finally { $env:GOAP_JS_ENGINE = $prev }
+}
+
 function Tidy { foreach ($m in $Modules) { InDir $m { Run go mod tidy } } }
 
 function WebTest { InDir web { Run npm test } }
@@ -174,6 +181,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
                     and the catalogue of operations
   build             build all services into bin\
   test              go test of every module of the go.work
+  test-wasm         every go test with the scripts run by the wasm JavaScript engine (GOAP_JS_ENGINE=wasm)
   tidy              go mod tidy in every module
   web-test          unit tests of the web (needs npm install in web\)
   test-pg           every test, the PostgreSQL ones included (GOAP_TEST_PG_DSN, else a throw-away
@@ -199,6 +207,7 @@ switch ($Target) {
     'generate'         { Generate }
     'build'            { Build }
     'test'             { Test }
+    'test-wasm'        { TestWasm }
     'tidy'             { Tidy }
     'web-test'         { WebTest }
     'test-pg'          { TestPg }

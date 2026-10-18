@@ -4,7 +4,7 @@
 export type DslGroup = 'read' | 'write' | 'call';
 
 export interface DslFunction {
-  /** JavaScript name (camelCase); the Go name is PascalCase */
+  /** name (camelCase) */
   name: string;
   args: string[];
   returns: string;
@@ -112,41 +112,26 @@ export const DSL_SHAPES: Record<string, DslShape> = {
   Transition: { name: 'Transition', summary: 'The lifecycle transition being taken.', fields: ['name', 'from', 'to'] },
 };
 
-export function goName(name: string): string {
-  return name.charAt(0).toUpperCase() + name.slice(1);
-}
+/** Script language of actions, algorithms and adapters: JavaScript is the only one (a stored script naming
+ * another language, an old Go one, is read as JavaScript). */
+export const SCRIPT_LANGUAGE = 'javascript';
 
-export const TEMPLATES: Record<string, string> = {
-  javascript: `// Script actions: the ctx object gives access to the blackboard (see "DSL Help").
+/** Starter script of an action of kind script. */
+export const ACTION_TEMPLATE = `// Script actions: the ctx object gives access to the blackboard (see "DSL Help").
 for (const n of ctx.changeImpacts()) {
   ctx.log("change impact " + n.key);
 }
-`,
-  go: `package action
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.Ctx) error {
-\tfor _, n := range ctx.ChangeImpacts() {
-\t\tctx.Log("change impact " + n.Key)
-\t}
-\treturn nil
-}
-`,
-};
+`;
 
 // --- algorithms (ADR 0018) -----------------------------------------------------------
 // Algorithms plug into the model at fixed extension points. Each type runs in its own
-// `ctx`: a JavaScript algorithm is the BODY of a function of ctx (it may `return`), a Go
-// algorithm declares `func Run(ctx *dsl.<Ctx>) error`. They are pure: no blackboard, LLM or tool calls.
+// `ctx`: an algorithm (JavaScript) is the BODY of a function of ctx (it may `return`). They are pure: no blackboard, LLM or tool calls.
 
 export type AlgorithmUsage = 'property_validator' | 'node_validator' | 'link_validator' | 'transition_guard' | 'transition_action' | 'adapter';
 
 export interface AlgorithmUsageInfo {
   usage: AlgorithmUsage;
   title: string;
-  /** Go context type */
-  goCtx: string;
   description: string;
   /** what the plug does with the result */
   contract: string;
@@ -177,9 +162,8 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
   {
     usage: 'property_validator',
     title: 'Property validator',
-    goCtx: 'ValidatorCtx',
     description: 'Checks the value of a property when a node of the type is created or modified.',
-    contract: 'Rejects with ctx.fail(msg), a throw (Go: a returned error), or by returning false / a message (JavaScript).',
+    contract: 'Rejects with ctx.fail(msg), a throw, or by returning false / a message.',
     functions: [
       paramFn,
       { name: 'property', args: [], returns: 'string', doc: 'Name of the property being validated.', group: 'read' },
@@ -194,18 +178,16 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
   {
     usage: 'node_validator',
     title: 'Node validator',
-    goCtx: 'NodeValidatorCtx',
     description: 'Checks a node as a whole (rules across several attributes) when a node of the type is created or modified, after the attribute validators.',
-    contract: 'Rejects with ctx.fail(msg), a throw (Go: a returned error), or by returning false / a message (JavaScript).',
+    contract: 'Rejects with ctx.fail(msg), a throw, or by returning false / a message.',
     functions: [paramFn, nodeFn, failFn, ...metaFns, ...logFns],
     sample: { node: { key: 'REQ-1', type: 'Requirement', state: 'draft', props: { title: 'Card payment', start: '2026-01-01', end: '2026-02-01' } } },
   },
   {
     usage: 'link_validator',
     title: 'Link validator',
-    goCtx: 'LinkValidatorCtx',
     description: 'Checks a link as a whole, with the node it leaves and the node it reaches, when the draft is accepted and at landing, after the validators of the link attributes.',
-    contract: 'Rejects with ctx.fail(msg), a throw (Go: a returned error), or by returning false / a message (JavaScript).',
+    contract: 'Rejects with ctx.fail(msg), a throw, or by returning false / a message.',
     functions: [
       paramFn,
       { name: 'link', args: [], returns: '{type, props}', doc: 'The link checked: its type and properties.', group: 'read' },
@@ -224,7 +206,6 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
   {
     usage: 'transition_guard',
     title: 'Transition guard',
-    goCtx: 'GuardCtx',
     description: 'Decides whether a lifecycle transition is allowed; checked when the change is applied, after the CEL guard.',
     contract: 'Refuses with ctx.fail(msg), a throw / returned error, or by returning false / a message (JavaScript).',
     functions: [paramFn, nodeFn, ...groupFns, impactFn, failFn, ...metaFns, ...logFns],
@@ -238,7 +219,6 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
   {
     usage: 'transition_action',
     title: 'Transition action',
-    goCtx: 'TransitionCtx',
     description: 'Runs once a transition is accepted and may change properties of the node in the version it produces.',
     contract: 'Changes properties with ctx.setProp / ctx.removeProp; ctx.fail(msg) or a throw aborts the application of the change.',
     functions: [
@@ -260,18 +240,16 @@ export const ALGORITHM_USAGES: AlgorithmUsageInfo[] = [
   {
     usage: 'adapter',
     title: 'Adapter',
-    goCtx: 'AdapterCtx',
     description:
       'Implements the tools an MCP expects with the operations a connector exposes. Declared in the library, instantiated by organisational units with their parameter values; never plugged into a node type or a lifecycle.',
     contract:
-      'Returns the result of the tool (JavaScript: an object, or any value, wrapped; Go: ctx.Return); rejects with ctx.fail(msg) or a throw. A failing ctx.call throws.',
+      'Returns the result of the tool (an object, or any value, wrapped); rejects with ctx.fail(msg) or a throw. A failing ctx.call throws.',
     functions: [
       { name: 'tool', args: [], returns: 'string', doc: 'Name of the MCP tool being called.', group: 'read' },
       { name: 'args', args: [], returns: 'object', doc: 'Arguments of the tool call.', group: 'read' },
       { name: 'param', args: ['name'], returns: 'JSON value', doc: 'Parameter value of the unit instance (secrets are not readable).', group: 'read' },
       { name: 'operations', args: [], returns: 'string[]', doc: 'Operations the connector exposes.', group: 'read' },
       { name: 'call', args: ['operation', 'args'], returns: 'object', doc: 'Run an operation of the connector (the hub adds the parameters as its configuration and the secrets); throws on failure. At most 32 calls per execution.', group: 'call' },
-      { name: 'return', args: ['result'], returns: '', doc: 'Go only: set the result of the tool.', group: 'write' },
       failFn,
       ...logFns,
     ],
@@ -283,130 +261,37 @@ export function algorithmUsage(usage: string): AlgorithmUsageInfo | undefined {
   return ALGORITHM_USAGES.find((u) => u.usage === usage);
 }
 
-export const ALGORITHM_TEMPLATES: Record<AlgorithmUsage, Record<'javascript' | 'go', string>> = {
-  property_validator: {
-    javascript: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
+export const ALGORITHM_TEMPLATES: Record<AlgorithmUsage, string> = {
+  property_validator: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
 const v = ctx.value();
 if (typeof v !== "string" || v.trim() === "") {
   ctx.fail(ctx.property() + " must not be blank");
 }
 `,
-    go: `package validator
-
-import (
-\t"strings"
-
-\t"github.com/zimwip/goap/pkg/dsl"
-)
-
-func Run(ctx *dsl.ValidatorCtx) error {
-\ts, _ := ctx.Value().(string)
-\tif strings.TrimSpace(s) == "" {
-\t\tctx.Fail(ctx.Property() + " must not be blank")
-\t}
-\treturn nil
-}
-`,
-  },
-  node_validator: {
-    javascript: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
+  node_validator: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
 const p = ctx.node().props;
 if (p.start && p.end && p.end < p.start) {
   ctx.fail("end must not be before start");
 }
 `,
-    go: `package validator
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.NodeValidatorCtx) error {
-	p := ctx.Node().Props
-	start, _ := p["start"].(string)
-	end, _ := p["end"].(string)
-	if start != "" && end != "" && end < start {
-		ctx.Fail("end must not be before start")
-	}
-	return nil
-}
-`,
-  },
-  link_validator: {
-    javascript: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
+  link_validator: `// Body of a function of ctx. Reject with ctx.fail(message) or by returning a message.
 if (ctx.from().state === "approved" && ctx.to().state === "draft") {
   ctx.fail(ctx.from().key + " is approved but refines the draft " + ctx.to().key);
 }
 `,
-    go: `package validator
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.LinkValidatorCtx) error {
-	if ctx.From().State == "approved" && ctx.To().State == "draft" {
-		ctx.Fail(ctx.From().Key + " is approved but refines the draft " + ctx.To().Key)
-	}
-	return nil
-}
-`,
-  },
-  transition_guard: {
-    javascript: `// Body of a function of ctx. Refuse with ctx.fail(message).
+  transition_guard: `// Body of a function of ctx. Refuse with ctx.fail(message).
 for (const c of ctx.children()) {
   if (c.state !== "approved") ctx.fail(c.key + " is " + c.state);
 }
 `,
-    go: `package guard
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.GuardCtx) error {
-\tfor _, c := range ctx.Children() {
-\t\tif c.State != "approved" {
-\t\t\tctx.Fail(c.Key + " is " + c.State)
-\t\t}
-\t}
-\treturn nil
-}
-`,
-  },
-  adapter: {
-    javascript: `// Body of a function of ctx: ctx.tool() is the MCP tool called, ctx.args() its arguments,
+  adapter: `// Body of a function of ctx: ctx.tool() is the MCP tool called, ctx.args() its arguments,
 // ctx.call(operation, args) runs an operation of the connector. Return the result of the tool.
 switch (ctx.tool()) {
   // case "read": return ctx.call("read_file", { path: ctx.args().path });
 }
 ctx.fail("unknown tool " + ctx.tool());
 `,
-    go: `package adapter
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.AdapterCtx) error {
-	switch ctx.Tool() {
-	// case "read":
-	//	res, err := ctx.Call("read_file", map[string]any{"path": ctx.Args()["path"]})
-	//	if err != nil {
-	//		return err
-	//	}
-	//	ctx.Return(res)
-	//	return nil
-	}
-	ctx.Fail("unknown tool " + ctx.Tool())
-	return nil
-}
-`,
-  },
-  transition_action: {
-    javascript: `// Body of a function of ctx. Change the node with ctx.setProp / ctx.removeProp.
+  transition_action: `// Body of a function of ctx. Change the node with ctx.setProp / ctx.removeProp.
 ctx.setProp("lastTransition", ctx.transition().name);
 `,
-    go: `package action
-
-import "github.com/zimwip/goap/pkg/dsl"
-
-func Run(ctx *dsl.TransitionCtx) error {
-\tctx.SetProp("lastTransition", ctx.Transition().Name)
-\treturn nil
-}
-`,
-  },
 };

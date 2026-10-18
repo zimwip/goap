@@ -29,10 +29,8 @@ describe('usageHelp', () => {
     }
   });
 
-  it('has a starter script in both languages', () => {
-    for (const { usage } of overview()) {
-      for (const lang of ['javascript', 'go'] as const) expect(starter(usage, lang).trim(), `${usage} ${lang}`).not.toBe('');
-    }
+  it('has a starter script', () => {
+    for (const { usage } of overview()) expect(starter(usage).trim(), usage).not.toBe('');
   });
 });
 
@@ -54,14 +52,12 @@ describe('ctx API against docs/dsl.md', () => {
 
 describe('signature', () => {
   const fn = { name: 'impactNodeCreate', args: ['type', 'key'], returns: '"#nN"', doc: '', group: 'write' as const };
-  it('is camelCase in JavaScript and PascalCase in Go', () => {
-    expect(signature(fn, 'javascript')).toBe('ctx.impactNodeCreate(type, key)');
-    expect(signature(fn, 'go')).toBe('ctx.ImpactNodeCreate(type, key)');
+  it('is the camelCase call of the JavaScript ctx', () => {
+    expect(signature(fn)).toBe('ctx.impactNodeCreate(type, key)');
   });
-  it('names the fields of a shape the same way', () => {
+  it('names the fields of a shape as they are', () => {
     const shape = { name: 'Node', summary: '', fields: ['id', 'props'] };
-    expect(fieldNames(shape, 'javascript')).toEqual(['id', 'props']);
-    expect(fieldNames(shape, 'go')).toEqual(['Id', 'Props']);
+    expect(fieldNames(shape)).toEqual(['id', 'props']);
   });
 });
 
@@ -81,8 +77,7 @@ describe('groupFunctions', () => {
 describe('parameters', () => {
   const p = { name: 'pattern', type: 'regex', description: '', required: true, defaultValue: '', values: '' };
   it('says how a script reads one', () => {
-    expect(paramAccess(p, 'javascript')).toBe('ctx.param("pattern")');
-    expect(paramAccess(p, 'go')).toBe('ctx.Param("pattern")');
+    expect(paramAccess(p)).toBe('ctx.param("pattern")');
   });
   it('notes what is required, restricted and defaulted', () => {
     expect(paramNote(p)).toBe('required');

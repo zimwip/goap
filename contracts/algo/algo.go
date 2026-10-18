@@ -47,11 +47,8 @@ func (u Usage) Pluggable() bool { return u != UsageAction && u.Known() }
 // Known tells whether u is one of the usages.
 func (u Usage) Known() bool { return slices.Contains(Usages(), u) }
 
-// Languages of the scripts.
-const (
-	JavaScript = "javascript"
-	Go         = "go"
-)
+// JavaScript is the language of the scripts (the only one: Go scripts and yaegi are gone).
+const JavaScript = "javascript"
 
 // Param types.
 const (
@@ -148,8 +145,8 @@ func (a Algorithm) Declaration(extraParams ...string) []string {
 	case !ValidName(a.Name):
 		out = append(out, "name must be lowercase letters, digits, '-' or '_' and start with a letter")
 	}
-	if a.Language != JavaScript && a.Language != Go {
-		out = append(out, "language must be javascript or go")
+	if a.Language != JavaScript {
+		out = append(out, "language must be javascript")
 	}
 	if a.Code == "" {
 		out = append(out, "code required")

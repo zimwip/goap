@@ -282,7 +282,8 @@ export interface Verify {
 }
 
 export type ActionKind = 'llm' | 'script' | 'tool' | 'human' | 'builtin' | 'abstract';
-export type ScriptLanguage = 'javascript' | 'go';
+/** JavaScript is the only script language (a stored script may still name an old one). */
+export type ScriptLanguage = 'javascript';
 export type PlannerKind = 'goap' | 'utility' | 'hybrid' | 'llm' | 'llm-scoring';
 
 export interface Action {
@@ -307,7 +308,7 @@ export interface Action {
   builtin?: string;
   instructions?: string;
   params?: Struct;
-  /** script actions: javascript | go */
+  /** script actions: javascript */
   language?: ScriptLanguage | string;
   /** code executed in the sandbox with the `ctx` DSL */
   code?: string;

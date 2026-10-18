@@ -168,10 +168,10 @@ func TestProcessProvisioner(t *testing.T) {
 		t.Fatal(err)
 	}
 	checkResult(t, res, h)
-	// the Go interpreter cannot read the environment (no os package)
-	_, err = sb.Execute(ctx, dsl.Job{Language: "go", Code: "package action\nimport (\"os\"\n\"github.com/zimwip/goap/pkg/dsl\")\nfunc Run(ctx *dsl.Ctx) error { ctx.Log(os.Getenv(\"GOAP_SECRET_FOR_TEST\")); return nil }"}, h)
+	// a script cannot read the environment (no process, no std module)
+	_, err = sb.Execute(ctx, dsl.Job{Language: "javascript", Code: `ctx.log(std.getenv("GOAP_SECRET_FOR_TEST"))`}, h)
 	if err == nil {
-		t.Fatal("os import must be rejected")
+		t.Fatal("reading the environment must fail")
 	}
 	endpoint := sb.(*remote).box.inst.Endpoint
 	pool.Release(ctx, "p1")

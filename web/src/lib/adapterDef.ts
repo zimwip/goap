@@ -1,6 +1,7 @@
 // An adapter definition: node `ADD:<name>` of the platform namespace. It implements the tools of one MCP
 // with the operations of one connector; each organisational unit instantiates it (Adapter node) with its own values.
 import type { AlgorithmParam, GraphNode, Struct } from './api';
+import { SCRIPT_LANGUAGE } from './dsl';
 
 export const ADAPTER_DEF_TYPE = 'platform@AdapterDef';
 export const adapterDefKey = (name: string) => `ADD:${name}`;
@@ -23,7 +24,7 @@ export function adapterDefFromNode(n: GraphNode): AdapterDef {
     description: String(p.description ?? ''),
     mcp: String(p.mcp ?? ''),
     connector: String(p.connector ?? ''),
-    language: String(p.language ?? 'javascript'),
+    language: SCRIPT_LANGUAGE,
     code: String(p.code ?? ''),
     params: params.map((q) => ({
       name: String(q.name ?? ''),
