@@ -340,11 +340,18 @@ func (m *Methodology) checkElementRoles(add func(path, format string, args ...an
 			}
 		}
 	}
+	one := func(path, r string) {
+		if r != "" && !roles[r] {
+			add(path, "unknown role %q (declare it in roles)", r)
+		}
+	}
 	for i, ag := range m.Agents {
 		check(fmt.Sprintf("agents[%d].roles", i), ag.Roles)
+		one(fmt.Sprintf("agents[%d].role", i), ag.Role)
 	}
 	for i, a := range m.Actions {
 		check(fmt.Sprintf("actions[%d].roles", i), a.Roles)
+		one(fmt.Sprintf("actions[%d].role", i), a.Role)
 	}
 }
 

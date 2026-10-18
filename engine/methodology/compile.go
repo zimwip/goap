@@ -30,7 +30,7 @@ type CompileOptions struct {
 // The methodology itself is not modified. With issues, the Compiled is nil unless opt.Lenient; it is nil too when
 // nothing at all can be built. A compiler panic is a bug and is not caught here.
 func (m *Methodology) CompileWith(opt CompileOptions) (*Compiled, def.Issues) {
-	c, issues := m.compileWith(opt.Lenient)
+	c, issues := m.compileWith(opt)
 	if c != nil && !issues.HasErrors() {
 		// Remarks come last and only on a methodology that stands: on a partial one they would be noise.
 		for _, h := range c.Hints() {
@@ -109,7 +109,7 @@ func (s *compileState) add(path, format string, args ...any) {
 	s.issues = append(s.issues, def.Issue{Path: path, Message: fmt.Sprintf(format, args...)})
 }
 
-func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
+func (m *Methodology) compileWith(opt CompileOptions) (*Compiled, def.Issues) {
 	s := &compileState{m: m, known: map[string]bool{}, scopes: map[string]string{}, aggregates: map[string]Condition{}, actions: map[string]Action{}, goals: map[string]bool{}, agents: map[string]Agent{}}
 	s.checkHeader()
 	s.checkEvents()
@@ -124,13 +124,15 @@ func (m *Methodology) compileWith(lenient bool) (*Compiled, def.Issues) {
 	s.checkTransverse()
 	s.checkIntegration()
 	s.mergeRolesMethodsProcesses()
+	s.checkResponsibles(opt.Stored)
+	s.propagateRoles()
 	s.checkStepScopes()
 	s.compileReactions()
 	s.compileAutomaticReviews()
 	s.checkManualSteps()
 	s.checkMainGoal()
 	s.compileAssessments()
-	return s.finish(lenient)
+	return s.finish(opt.Lenient)
 }
 
 func (s *compileState) checkHeader() {

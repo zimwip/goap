@@ -9,6 +9,7 @@
   import StepEditor from './StepEditor.svelte';
   import ReferencesEditor from './ReferencesEditor.svelte';
   import SubscriptionsEditor from './SubscriptionsEditor.svelte';
+  import ResponsibilitiesEditor from './ResponsibilitiesEditor.svelte';
   import { provideActions, useReveal } from '../../shell/workbench.svelte';
   import { emptyStep, walkSteps, fromForm } from '../../methodologyForm';
   import DraftFlow from '../../components/DraftFlow.svelte';
@@ -116,6 +117,13 @@
         </div>
         <ReferencesEditor bind:refs={item.references} path="{p}.references" bad={d.bad} readonly={d.readonly} />
         <SubscriptionsEditor bind:subs={item.on} draft={d} path={p} hint="the process runs again on a change of the methodology for each of them (ADR 0110)" />
+        <ResponsibilitiesEditor
+          bind:roles={item.roles}
+          declared={d.form.roles.map((r) => r.name).filter(Boolean)}
+          path="{p}.roles"
+          bad={d.bad}
+          hint="(the responsible role is required: the agent running the process acts as it, its steps inherit them)"
+        />
       </section>
 
     </fieldset>

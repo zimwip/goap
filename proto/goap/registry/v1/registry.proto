@@ -361,6 +361,8 @@ message Action {
   ActionLoop loop = 30;
   // roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent
   repeated string roles = 31;
+  // the role the action acts as (ADR 0136): its own; the compiler gives the others the role of what refines them
+  string role = 32;
 }
 
 // The budget of the tool loop of an llm action (ADR 0118); 0 / empty: the engine's default.
@@ -404,6 +406,8 @@ message Agent {
   Persistence persistent = 10;
   // roles allowed to run the agent (ADR 0043), declared by the methodology; empty: any member of the project
   repeated string roles = 11;
+  // the role the agent acts as (ADR 0050, 0136)
+  string role = 12;
 }
 
 // The persistence of an agent (ADR 0112): what one instance is for, what closes it, how much of its conversation it
@@ -611,6 +615,8 @@ message Process {
   repeated Reference references = 6;
   // the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
   repeated Subscription on = 7;
+  // the roles of the process, RACI style (ADR 0136): its responsible role is required, its steps inherit them
+  Responsibilities roles = 8;
 }
 
 // A reference document: "doc:<key>" (a document of the graph), "<mcp>:<path>" (a document repository) or a URL.

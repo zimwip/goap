@@ -15,7 +15,8 @@ import (
 func TestPreviewPlanHandler(t *testing.T) {
 	m := methodology.Methodology{Name: "m", Version: "1", Namespace: "alm",
 		Conditions: []methodology.Condition{{Name: "done", Expr: "false"}},
-		Processes: []methodology.Process{{Name: "flow", Steps: []methodology.Step{
+		Roles:      []methodology.Role{{Name: "doer"}},
+		Processes: []methodology.Process{{Name: "flow", Roles: &methodology.Responsibilities{Responsible: "doer"}, Steps: []methodology.Step{
 			{Name: "step1", Action: "work"},
 		}}},
 		Actions: []methodology.Action{{Name: "work", Kind: methodology.KindHuman, Instructions: "do it", Effects: map[string]bool{"done": true}}},
@@ -78,7 +79,8 @@ func TestPreviewPlanHandlerLivePlanner(t *testing.T) {
 func TestGraphAndLevelsOfADraftWithBrokenRules(t *testing.T) {
 	m := methodology.Methodology{Name: "m", Version: "1", Namespace: "alm",
 		Conditions: []methodology.Condition{{Name: "done", Expr: "false"}},
-		Processes: []methodology.Process{{Name: "flow", Steps: []methodology.Step{
+		Roles:      []methodology.Role{{Name: "doer"}},
+		Processes: []methodology.Process{{Name: "flow", Roles: &methodology.Responsibilities{Responsible: "doer"}, Steps: []methodology.Step{
 			{Name: "fine", Action: "work"}, {Name: "broken", Action: "nope"},
 		}}},
 		Actions: []methodology.Action{{Name: "work", Kind: methodology.KindHuman, Instructions: "do it", Effects: map[string]bool{"done": true}}},
@@ -102,7 +104,8 @@ func TestGraphAndLevelsOfADraftWithBrokenRules(t *testing.T) {
 func TestMethodologyViewOfADraft(t *testing.T) {
 	m := methodology.Methodology{Name: "m", Version: "1", Namespace: "alm",
 		Conditions: []methodology.Condition{{Name: "done", Expr: "false", Description: "the work is done"}},
-		Processes: []methodology.Process{{Name: "flow", Steps: []methodology.Step{
+		Roles:      []methodology.Role{{Name: "doer"}},
+		Processes: []methodology.Process{{Name: "flow", Roles: &methodology.Responsibilities{Responsible: "doer"}, Steps: []methodology.Step{
 			{Name: "fine", Action: "work"}, {Name: "broken", Action: "nope"},
 		}}},
 		Actions: []methodology.Action{{Name: "work", Kind: methodology.KindHuman, Instructions: "do it", Effects: map[string]bool{"done": true}}},

@@ -212,7 +212,7 @@
       const key = assignmentKey(org, platform ? undefined : project);
       const description = fDescription.trim();
       const existing = editing?.node ?? findNode(head, ns.organisation, nodeTypes.assignment, key);
-      const flags = platform ? {} : { owner: fOwner || null, admin: fAdmin || null };
+      const flags: Struct = platform ? {} : { owner: fOwner || null, admin: fAdmin || null };
       const props: Struct = { roles: roles.length ? roles : null, ...flags, description: description || null };
       const links = platform ? [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }] : [{ type: linkTypes.assignsOrg, to: refOf(orgNode) }, { type: linkTypes.assignsProject, to: refOf(projectNode!) }];
       const edit = existing ? updateNodeItem(existing, props) : createNodeItem(key, nodeTypes.assignment, { ...(roles.length ? { roles } : {}), ...(!platform && fOwner ? { owner: true } : {}), ...(!platform && fAdmin ? { admin: true } : {}), ...(description ? { description } : {}) }, links);

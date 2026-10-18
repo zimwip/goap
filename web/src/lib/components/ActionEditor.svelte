@@ -151,6 +151,19 @@
       placeholder="developer"
     />
   </div>
+  <div class="field">
+    <label for="{id}-role">Acts as <span class="opt">(optional)</span></label>
+    <input
+      id="{id}-role"
+      type="text"
+      class="mono"
+      bind:value={action.role}
+      class:bad={bad(`${p}.role`)}
+      data-path="{p}.role"
+      title="The role the action acts as, a person performing a human action holds it (ADR 0136). Empty: the responsible role of the step or method refining it, else of the action it specializes."
+      placeholder="inherited"
+    />
+  </div>
 </div>
 
 <div class="field">

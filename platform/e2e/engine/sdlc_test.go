@@ -368,7 +368,9 @@ func TestSDLCDelivery(t *testing.T) {
 	if count["alm@BuildArtifact"] != 4 || count["artifact:build"] != 4 || count["alm@TestCase"] != 2 || count["alm@FunctionalRequirement"] != 1 {
 		t.Fatalf("items: %v", count)
 	}
-	if p, err = e.Submit(ctx, p.ID, decisions); err != nil {
+	// the review is a tech lead's: the role of the step refining it (ADR 0136)
+	lead := authz.With(context.Background(), authz.Principal{Subject: "lead", Org: "acme", Roles: []string{"tech_lead"}})
+	if p, err = e.Submit(lead, p.ID, decisions); err != nil {
 		t.Fatal(err)
 	}
 	// dev, test, staging are deployed; production waits for a release manager

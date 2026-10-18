@@ -127,9 +127,7 @@ func (s *StepContext) withMethod(me methodology.Method) *StepContext {
 	out.Checklist = append(slices.Clone(out.Checklist), me.Checklist...)
 	out.Deliverables = append(slices.Clone(out.Deliverables), me.Deliverables...)
 	out.References = append(slices.Clone(out.References), me.References...)
-	if me.Roles != nil {
-		out.Roles = me.Roles // the method is the more precise reference
-	}
+	out.Roles = me.Roles.Over(out.Roles) // the method is the more precise reference
 	return &out
 }
 
@@ -171,6 +169,14 @@ func stepContext(m *methodology.Compiled, p *Process, a methodology.Action) *Ste
 func contextOfStep(s methodology.StepInfo) *StepContext {
 	return &StepContext{Process: s.Owner, Path: s.Path, Name: s.Name, Description: s.Description, Guidance: s.Guidance,
 		Checklist: s.Checklist, Deliverables: s.Deliverables, References: s.References, Roles: s.Effective}
+}
+
+// responsible is the role responsible for the step ("" when none or no step).
+func (s *StepContext) responsible() string {
+	if s == nil || s.Roles == nil {
+		return ""
+	}
+	return s.Roles.Responsible
 }
 
 // section is the step as the system prompt of an LLM action tells it ("" when there is none).

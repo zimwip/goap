@@ -129,8 +129,9 @@ type Agent struct {
 	// on the project, and its actions that declare no roles of their own need it too. Empty: any member of the
 	// project.
 	Roles []string `yaml:"roles,omitempty" json:"roles,omitempty"`
-	// Role is the role the agent acts as (ADR 0050): the one responsible for the method an agent generated for it
-	// applies. It gives the agent its overall objective; the method says how.
+	// Role is the role the agent acts as (ADR 0050, 0136): its own, else the responsible role of the process or the
+	// method it runs (generated agents), else the one role of its actions. It gives the agent its overall objective;
+	// the method says how.
 	Role string `yaml:"role,omitempty" json:"role,omitempty"`
 	// Persistent makes the agent persistent (ADR 0112): one instance per scope, run again in place for every new
 	// execution there, keeping its conversation.
@@ -256,6 +257,10 @@ type Action struct {
 	// hold one of them on the project of the change, otherwise the process waits for someone who does. Empty:
 	// the roles of the agent running it, any member of the project when it declares none either.
 	Roles []string `yaml:"roles,omitempty" json:"roles,omitempty"`
+	// Role is the role the action acts as (ADR 0136): its own, else the responsible role of the element refining it
+	// (its step, the method whose pool lists it), else the role of the action it specializes. A person performing a
+	// human action holds it.
+	Role string `yaml:"role,omitempty" json:"role,omitempty"`
 	// llm
 	Model  string `yaml:"model,omitempty" json:"model,omitempty"`
 	Prompt string `yaml:"prompt,omitempty" json:"prompt,omitempty"`

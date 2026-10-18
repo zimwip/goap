@@ -207,6 +207,8 @@ export interface ActionForm extends Identified {
   permission: string;
   /** roles allowed to run the action (ADR 0043), comma separated; empty: those of the agent */
   roles: string;
+  /** the role the action acts as (ADR 0136); empty: the role of what refines it */
+  role: string;
   model: string;
   prompt: string;
   tool: string;
@@ -287,6 +289,8 @@ export interface AgentForm extends Identified {
   mcps: string;
   /** roles allowed to run the agent (ADR 0043), comma separated; empty: any member of the project */
   roles: string;
+  /** the role the agent acts as (ADR 0136); empty: the one role of its actions */
+  role: string;
   triggers: TriggerForm[];
   /** one instance per scope (ADR 0112) */
   persistent: PersistenceForm;
@@ -366,6 +370,8 @@ export interface ProcessForm extends Identified {
   /** one example per line */
   examples: string;
   references: ReferenceForm[];
+  /** RACI roles of the process (ADR 0136): the responsible one is required */
+  roles: ResponsibilitiesForm;
   steps: StepForm[];
   /** the events that make it reactive (ADR 0110) */
   on: SubscriptionForm[];
@@ -524,6 +530,7 @@ export const emptyAction = (): ActionForm => ({
   cost: 1,
   permission: '',
   roles: '',
+  role: '',
   model: '',
   prompt: '',
   tool: '',
@@ -564,6 +571,7 @@ export const emptyAgent = (): AgentForm => ({
   goals: [],
   mcps: '',
   roles: '',
+  role: '',
   triggers: [],
   persistent: emptyPersistence(),
 });
@@ -614,7 +622,16 @@ export const emptyMethod = (): MethodForm => ({
   on: [],
   persistent: emptyPersistence(),
 });
-export const emptyProcess = (): ProcessForm => ({ uid: newUid(), name: '', description: '', examples: '', references: [], steps: [emptyStep('first')], on: [] });
+export const emptyProcess = (): ProcessForm => ({
+  uid: newUid(),
+  name: '',
+  description: '',
+  examples: '',
+  references: [],
+  roles: emptyResponsibilities(),
+  steps: [emptyStep('first')],
+  on: [],
+});
 export const emptyTrigger = (): TriggerForm => ({
   name: '',
   description: '',
@@ -695,6 +712,7 @@ function actionToForm(a: Action, uid: string): ActionForm {
     cost: a.cost ?? 0,
     permission: a.permission ?? '',
     roles: (a.roles ?? []).join(', '),
+    role: a.role ?? '',
     model: a.model ?? '',
     prompt: a.prompt ?? '',
     tool: a.tool ?? '',
@@ -744,6 +762,7 @@ function agentToForm(a: Agent, uid: string): AgentForm {
     goals: [...(a.goals ?? [])],
     mcps: (a.mcps ?? []).join(', '),
     roles: (a.roles ?? []).join(', '),
+    role: a.role ?? '',
     triggers: (a.triggers ?? []).map(triggerToForm),
     persistent: persistenceToForm(a.persistent),
   };
@@ -1019,6 +1038,7 @@ export function toForm(m: Methodology): MethodologyForm {
       description: p.description ?? '',
       examples: (p.examples ?? []).join('\n'),
       references: refsToForm(p.references),
+      roles: respToForm(p.roles),
       steps: (p.steps ?? []).map(stepToForm),
       on: subsToForm(p.on),
     })),
@@ -1274,6 +1294,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       }
       put(o, 'permission', a.permission.trim());
       put(o, 'roles', mcpList(a.roles));
+      put(o, 'role', a.role.trim());
       put(o, 'utility', a.utility.trim());
       // Fields specific to the action type: the others are ignored.
       if (a.kind === 'llm') {
@@ -1386,6 +1407,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
       put(o, 'goals', [...a.goals]);
       put(o, 'mcps', mcpList(a.mcps));
       put(o, 'roles', mcpList(a.roles));
+      put(o, 'role', a.role.trim());
       put(o, 'triggers', a.triggers.map(triggerFromForm));
       const pe = persistenceFromForm(a.persistent);
       if (pe) o.persistent = pe;
@@ -1408,6 +1430,7 @@ export function fromForm(f: MethodologyForm): { methodology: Methodology; issues
           .filter(Boolean),
       );
       put(o, 'references', refsFromForm(p.references));
+      put(o, 'roles', respFromForm(p.roles));
       put(o, 'steps', p.steps.map(stepFromForm));
       put(o, 'on', subsFromForm(p.on));
       return o;

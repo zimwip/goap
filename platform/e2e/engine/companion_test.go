@@ -8,6 +8,7 @@ import (
 
 	"github.com/zimwip/goap/engine/engine"
 
+	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	rsk "github.com/zimwip/goap/contracts/risk"
 	"github.com/zimwip/goap/engine/methodology"
@@ -30,12 +31,17 @@ conditions:
 actions:
   - {name: identify, kind: human, description: Identify the risks, effects: {risks_identified: true}}
   - {name: mitigate, kind: human, description: Define the mitigation actions, pre: {risks_identified: true}, effects: {risks_under_control: true}}
+roles: [{name: risk_manager}]
 processes:
   - name: risk_watch
+    roles: {responsible: risk_manager}
     steps:
       - {name: identify, action: identify}
       - {name: mitigate, action: mitigate}
 `
+
+// riskManager performs the steps of risk_watch: the role responsible for the process (ADR 0136).
+var riskManager = authz.With(context.Background(), authz.Principal{Subject: "rm", Org: "acme", Roles: []string{"risk_manager"}})
 
 func companionOf(t *testing.T, e *engine.Engine, change domain.ChangeID) []*engine.Process {
 	t.Helper()
@@ -81,14 +87,14 @@ func TestTransverseProcessRunsAlongsideTheChange(t *testing.T) {
 	}
 	risk := cs[0]
 	// the risks are identified: a high one needs an action
-	if _, err := e.Submit(ctx, risk.ID, []engine.ItemInput{{Type: "artifact", Target: "risk_review"},
+	if _, err := e.Submit(riskManager, risk.ID, []engine.ItemInput{{Type: "artifact", Target: "risk_review"},
 		{Type: "risk", Data: map[string]any{"key": "RSK-1", "title": "the note is wrong", "probability": 4.0, "impact": 4.0}}}); err != nil {
 		t.Fatal(err)
 	}
 	if risk, _ = e.Run(ctx, risk.ID); risk.Pending == nil || risk.Pending.Action != "risk_watch/mitigate" {
 		t.Fatalf("mitigation expected: %+v", risk)
 	}
-	if _, err := e.Submit(ctx, risk.ID, []engine.ItemInput{{Type: "action", Data: map[string]any{"key": "ACT-1", "title": "review the note", "for": "RSK-1"}}}); err != nil {
+	if _, err := e.Submit(riskManager, risk.ID, []engine.ItemInput{{Type: "action", Data: map[string]any{"key": "ACT-1", "title": "review the note", "for": "RSK-1"}}}); err != nil {
 		t.Fatal(err)
 	}
 	if risk, _ = e.Run(ctx, risk.ID); risk.Status != engine.StatusCompleted {
@@ -211,7 +217,7 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 		return false
 	})
 	// the review raises a high risk: its mitigation is asked
-	if _, err := e.Submit(ctx, watch.ID, []engine.ItemInput{{Type: "artifact", Target: "risk_review"},
+	if _, err := e.Submit(riskManager, watch.ID, []engine.ItemInput{{Type: "artifact", Target: "risk_review"},
 		{Type: "risk", Data: map[string]any{"key": "RSK-1", "title": "wrong note", "probability": 4.0, "impact": 4.0}}}); err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +242,7 @@ func TestChoreographyThroughTheEventsOfTheChange(t *testing.T) {
 	}
 
 	// the watch mitigates: the flow is tried again and reaches its approval; the watch reviews the risks of the step
-	if _, err := e.Submit(ctx, watch.ID, []engine.ItemInput{{Type: "action", Data: map[string]any{"key": "ACT-1", "title": "check the note", "for": "RSK-1"}}}); err != nil {
+	if _, err := e.Submit(riskManager, watch.ID, []engine.ItemInput{{Type: "action", Data: map[string]any{"key": "ACT-1", "title": "check the note", "for": "RSK-1"}}}); err != nil {
 		t.Fatal(err)
 	}
 	engine.InternalsOf(e).Schedule(watch.ID)

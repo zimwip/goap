@@ -1,5 +1,5 @@
 name: release-based
-version: 0.1.1
+version: 0.1.2
 description: >
   Release-based delivery of a project (ADR 0106): a release is a change of this methodology, the parent of the sdlc
   changes it integrates. It screens the open changes of its project for candidates, attaches the selected ones as its
@@ -120,6 +120,7 @@ processes:
   - name: release
     description: Plan the release, screen and select its candidates, integrate them, deliver
     examples: ["prepare the next release", "run the release"]
+    roles: {responsible: release_manager}
     steps:
       - name: planning
         description: Scope and target of the release
@@ -144,6 +145,7 @@ processes:
 
   - name: candidates
     description: Follow the integrated changes as they move (an event of one of them wakes it)
+    roles: {responsible: release_manager}
     steps:
       - name: follow
         description: Note what the move of an integrated change means for the release

@@ -562,8 +562,12 @@ owner on a project that had one; the graph handler reads a node or a change only
 
 **Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
-style (`roles: {responsible, accountable, consulted, informed}` on a step, inherited by its sub-steps, or on a method),
-its agents and actions name the roles allowed to run them (`roles: [...]`; an action without roles takes its agent's,
+style (`roles: {responsible, accountable, consulted, informed}` on a process, a method or a step; a process and a method
+must name their responsible role, [ADR 0136](adr/0136-roles-of-processes-methods-agents-actions.md): an error once
+stored, a warning in a draft; a step inherits what it leaves unsaid from its parent step, then its process or method,
+field by field), the agent running a process or a method acts as its responsible role (`Agent.role`, unless declared),
+an action acts as the role of what refines it (`Action.role`: its step, the methods listing it, else the action it
+specializes), and its agents and actions name the roles allowed to run them (`roles: [...]`; an action without roles takes its agent's,
 none at all: no role check beyond the run's own permission, held by the members of the project). It names roles, never people. A user holds no role of their own (administration is a
 platform Assignment, ADR 0047): a project names the methodologies that apply to it (inherited by its sub-projects), which identifies the
 roles it needs, and an `Assignment` grants some of them to a unit or a user on the project. The authorizer resolves

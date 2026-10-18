@@ -23,7 +23,7 @@ func ToPB(r Record) *registryv1.Methodology {
 			Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin, Instructions: a.Instructions,
 			Params: pbconv.Struct(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
 			Specializes: a.Specializes, When: a.When, Priority: int32(a.Priority), Incremental: a.Incremental, Mcps: a.MCPs, On: subsToPB(a.On), Emits: a.Emits, Scope: a.Scope, Where: a.Where, Parallel: int32(a.Parallel),
-			Form: pbconv.FormToPB(a.Form), Loop: loopToPB(a.Loop), Roles: a.Roles}
+			Form: pbconv.FormToPB(a.Form), Loop: loopToPB(a.Loop), Roles: a.Roles, Role: a.Role}
 		if e := a.Expects; e != nil {
 			pe := &registryv1.Expectation{ForEach: e.ForEach, Where: e.Where, Produce: &registryv1.ProduceSpec{Op: e.Produce.Op, NodeType: e.Produce.NodeType}}
 			if e.Link != nil {
@@ -40,7 +40,7 @@ func ToPB(r Record) *registryv1.Methodology {
 		out.Goals = append(out.Goals, &registryv1.Goal{Name: g.Name, Description: g.Description, Examples: g.Examples, Pre: g.Pre, Value: g.Value})
 	}
 	for _, a := range m.Agents {
-		pa := &registryv1.Agent{Name: a.Name, Description: a.Description, Examples: a.Examples, Planner: a.Planner, Actions: a.Actions, Goals: a.Goals, Mcps: a.MCPs, Model: a.Model, Persistent: persistToPB(a.Persistent), Roles: a.Roles}
+		pa := &registryv1.Agent{Name: a.Name, Description: a.Description, Examples: a.Examples, Planner: a.Planner, Actions: a.Actions, Goals: a.Goals, Mcps: a.MCPs, Model: a.Model, Persistent: persistToPB(a.Persistent), Roles: a.Roles, Role: a.Role}
 		for _, t := range a.Triggers {
 			pa.Triggers = append(pa.Triggers, &registryv1.Trigger{Name: t.Name, Description: t.Description, Type: t.Type, Event: t.Event, Filter: t.Filter,
 				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: t.Roles, Enabled: t.Enabled, Supersede: t.Supersede})
@@ -56,7 +56,7 @@ func ToPB(r Record) *registryv1.Methodology {
 			Steps: stepsToPB(me.Steps), Actions: me.Actions, Done: me.Done, Planner: me.Planner, Model: me.Model, Mcps: me.MCPs, On: subsToPB(me.On), Persistent: persistToPB(me.Persistent)})
 	}
 	for _, p := range m.Processes {
-		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Steps: stepsToPB(p.Steps), References: refsToPB(p.References), On: subsToPB(p.On)})
+		out.Processes = append(out.Processes, &registryv1.Process{Name: p.Name, Description: p.Description, Examples: p.Examples, Steps: stepsToPB(p.Steps), References: refsToPB(p.References), On: subsToPB(p.On), Roles: respToPB(p.Roles)})
 	}
 	return out
 }
@@ -232,7 +232,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 			Cost: a.Cost, Permission: a.Permission, Model: a.Model, Prompt: a.Prompt, Tool: a.Tool, Builtin: a.Builtin,
 			Instructions: a.Instructions, Params: pbconv.Map(a.Params), Language: a.Language, Code: a.Code, Utility: a.Utility,
 			Specializes: a.Specializes, When: a.When, Priority: int(a.Priority), Incremental: a.Incremental, MCPs: a.Mcps, On: subsFromPB(a.On), Emits: nilIfNone(a.Emits), Scope: a.Scope, Where: a.Where, Parallel: int(a.Parallel),
-			Form: pbconv.FormFromPB(a.Form), Loop: loopFromPB(a.Loop), Roles: nilIfNone(a.Roles)}
+			Form: pbconv.FormFromPB(a.Form), Loop: loopFromPB(a.Loop), Roles: nilIfNone(a.Roles), Role: a.Role}
 		if e := a.Expects; e != nil && e.ForEach != "" {
 			me := &condition.Expectation{ForEach: e.ForEach, Where: e.Where}
 			if e.Produce != nil {
@@ -253,7 +253,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 	}
 	for _, a := range p.Agents {
 		ma := methodology.Agent{Name: a.Name, Description: a.Description, Examples: nilIfNone(a.Examples), Planner: a.Planner, Model: a.Model,
-			Actions: nilIfNone(a.Actions), Goals: nilIfNone(a.Goals), MCPs: nilIfNone(a.Mcps), Persistent: persistFromPB(a.Persistent), Roles: nilIfNone(a.Roles)}
+			Actions: nilIfNone(a.Actions), Goals: nilIfNone(a.Goals), MCPs: nilIfNone(a.Mcps), Persistent: persistFromPB(a.Persistent), Roles: nilIfNone(a.Roles), Role: a.Role}
 		for _, t := range a.Triggers {
 			ma.Triggers = append(ma.Triggers, methodology.Trigger{Name: t.Name, Description: t.Description, Type: t.Type, Event: t.Event, Filter: t.Filter,
 				Schedule: t.Schedule, Goal: t.Goal, Intent: t.Intent, Target: t.Target, Roles: nilIfNone(t.Roles), Enabled: t.Enabled, Supersede: t.Supersede})
@@ -269,7 +269,7 @@ func FromPB(p *registryv1.Methodology) methodology.Methodology {
 			Steps: stepsFromPB(me.Steps), Actions: nilIfNone(me.Actions), Done: me.Done, Planner: me.Planner, Model: me.Model, MCPs: nilIfNone(me.Mcps), On: subsFromPB(me.On), Persistent: persistFromPB(me.Persistent)})
 	}
 	for _, p := range p.Processes {
-		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Steps: stepsFromPB(p.Steps), References: refsFromPB(p.References), On: subsFromPB(p.On)})
+		m.Processes = append(m.Processes, methodology.Process{Name: p.Name, Description: p.Description, Examples: nilIfNone(p.Examples), Steps: stepsFromPB(p.Steps), References: refsFromPB(p.References), On: subsFromPB(p.On), Roles: respFromPB(p.Roles)})
 	}
 	return m
 }

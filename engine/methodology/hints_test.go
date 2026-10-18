@@ -80,8 +80,9 @@ name: stuck
 namespace: alm
 goal: p
 conditions: [{name: a, expr: "false"}, {name: c, expr: "false"}]
+roles: [{name: doer}]
 actions: [{name: x, kind: human, pre: {c: true}, effects: {a: true}}]
-processes: [{name: p, steps: [{name: one, action: x}]}]
+processes: [{name: p, roles: {responsible: doer}, steps: [{name: one, action: x}]}]
 `
 
 // A hint is a warning of the compile: lenient and strict builds carry it, nothing is refused for it.
