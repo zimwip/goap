@@ -28,11 +28,16 @@ func (g *Graph) draftModifies(ctx context.Context, tx Tx, d *domain.Draft) (bool
 // ImpactModifies reports whether a change impact of the main flow holds a modification of its node (ADR 0102).
 func (g *Graph) ImpactModifies(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID) (ok bool, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		rows, err := g.drafts(ctx, tx, id)
+		st, err := g.draftState(ctx, tx, id)
 		if err != nil {
 			return err
 		}
-		ok, err = g.draftModifies(ctx, tx, ownDraft(rows, impact, ""))
+		var d *domain.Draft
+		if row, found := st.draft(impact, ""); found {
+			row = row.Clone()
+			d = &row
+		}
+		ok, err = g.draftModifies(ctx, tx, d)
 		return err
 	})
 	return

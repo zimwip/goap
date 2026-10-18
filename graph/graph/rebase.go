@@ -133,11 +133,11 @@ func (g *Graph) ImpactNodeResolve(ctx context.Context, id domain.ChangeID, impac
 
 // checkSettled refuses to accept a change impact whose conflicts from a rebase are not settled (ADR 0082 §2, ADR 0101 §2).
 func (g *Graph) checkSettled(ctx context.Context, tx Tx, c domain.Change, impact domain.ChangeImpactID) error {
-	events, err := impactEvents(ctx, tx, c.ID)
+	st, err := g.draftState(ctx, tx, c.ID)
 	if err != nil {
 		return err
 	}
-	if pending := domain.PendingConflicts(events, impact); len(pending) > 0 {
+	if pending := st.conflicts[impact]; len(pending) > 0 {
 		return fmt.Errorf("change impact %s has conflicts with the branch it was forked from to settle first (edit the fields, or keep them with ImpactNodeResolve): %s: %w",
 			impact, strings.Join(pending, ", "), ErrConflict)
 	}

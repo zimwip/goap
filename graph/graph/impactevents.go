@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -36,30 +35,42 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 		if err := e.Validate(); err != nil {
 			return fmt.Errorf("change %s: %v: %w", e.Change, err, ErrInvalid)
 		}
-		e, err := appendImpactEvent(ctx, tx, e)
+		// the projection before the event is the fold of the log (they are the same, ADR 0029), kept by the transaction:
+		// a batch of writes to one change reads none of its impacts again
+		st, err := g.draftState(ctx, tx, e.Change)
 		if err != nil {
 			return err
 		}
-		cur, err := tx.ChangeImpacts(ctx, e.Change)
-		if err != nil {
+		// an event touches its own change impact, an adoption every one of them
+		cur := st.impacts
+		if e.Op != domain.ImpactAdopted {
+			cur = nil
+			if cn, ok := st.impact(e.Impact); ok {
+				cur = []domain.ChangeImpact{cn}
+			}
+		}
+		if e, err = appendImpactEvent(ctx, tx, e); err != nil {
 			return err
 		}
 		next := domain.ApplyImpactEvent(cur, e)
+		kept := make(map[domain.ChangeImpactID]bool, len(next))
+		for _, n := range next {
+			kept[n.ID] = true
+		}
 		// a change impact the event removes (a creation cancelled before it is accepted, an impact removed, ADR 0076)
+		before := make(map[domain.ChangeImpactID]domain.ChangeImpact, len(cur))
 		for _, cn := range cur {
-			if !slices.ContainsFunc(next, func(n domain.ChangeImpact) bool { return n.ID == cn.ID }) {
+			before[cn.ID] = cn
+			if !kept[cn.ID] {
 				if err := tx.DeleteChangeImpact(ctx, e.Change, cn.ID); err != nil {
 					return err
 				}
 			}
 		}
-		cur = slices.DeleteFunc(slices.Clone(cur), func(c domain.ChangeImpact) bool {
-			return !slices.ContainsFunc(next, func(n domain.ChangeImpact) bool { return n.ID == c.ID })
-		})
 		// the superseded ones first: a node has one live change impact per flow (index change_impact_live)
 		var changed []domain.ChangeImpact
-		for i, cn := range next {
-			if i >= len(cur) || !reflect.DeepEqual(cur[i], cn) {
+		for _, cn := range next {
+			if was, ok := before[cn.ID]; !ok || !reflect.DeepEqual(was, cn) {
 				changed = append(changed, cn)
 			}
 		}

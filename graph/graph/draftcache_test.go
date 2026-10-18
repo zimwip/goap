@@ -72,14 +72,14 @@ func testDraftCacheEqualsScratchFold(t *testing.T, repo Repo) {
 	if n := g.draftStates.folded.Load() - before; n != 0 {
 		t.Fatalf("a read with no new event folded %d events", n)
 	}
-	// one more edit: only its events are folded, not the 20 before
+	// one more edit: its transaction published its fold, or the read folds its events only, not the 20 before
 	must[domain.ChangeImpact](t)(g.edit(ctx, c.ID, mod[0].ID, edit{Properties: map[string]any{"title": "last"}}))
 	before = g.draftStates.folded.Load()
 	if got, want := readDrafts(t, g, c.ID), scratchDrafts(t, g, c.ID); got != want {
 		t.Fatalf("the cached drafts differ from the fold\ncache: %s\nfold:  %s", got, want)
 	}
-	if n := g.draftStates.folded.Load() - before; n < 1 || n > 2 {
-		t.Fatalf("a read after one edit folded %d events, want the new one only", n)
+	if n := g.draftStates.folded.Load() - before; n > 2 {
+		t.Fatalf("a read after one edit folded %d events, want the new ones at most", n)
 	}
 	// a cold graph on the same log folds everything and agrees
 	if got, want := readDrafts(t, New(repo), c.ID), scratchDrafts(t, g, c.ID); got != want {

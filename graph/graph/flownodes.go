@@ -103,6 +103,15 @@ func (v *flowNodes) nodes(ctx context.Context) ([]domain.ChangeImpact, error) {
 
 // find returns the change impact a flow sees under an id.
 func (v *flowNodes) find(ctx context.Context, id domain.ChangeImpactID) (domain.ChangeImpact, error) {
+	if v.flow == "" {
+		// the main flow sees its own live change impacts as they are (ImpactsSeenBy with no chain)
+		for _, cn := range v.c.Nodes {
+			if cn.ID == id && !cn.Superseded && cn.Flow == "" {
+				return cn, nil
+			}
+		}
+		return domain.ChangeImpact{}, fmt.Errorf("change impact %s is not on the flow %q of change %s: %w", id, v.flow, v.c.ID, ErrNotFound)
+	}
 	list, err := v.nodes(ctx)
 	if err != nil {
 		return domain.ChangeImpact{}, err

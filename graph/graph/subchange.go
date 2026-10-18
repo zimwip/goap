@@ -102,7 +102,7 @@ func draftResolver(ctx context.Context, tx Tx, r *draftReader) nodeResolver {
 	return func(ref domain.NodeRef) (domain.Node, bool, error) {
 		ref = r.normalize(ref)
 		if ref.IsDraft() {
-			d, ok := r.byNode[ref.ID]
+			d, ok := r.get(ref.ID)
 			if !ok {
 				return domain.Node{}, false, nil
 			}

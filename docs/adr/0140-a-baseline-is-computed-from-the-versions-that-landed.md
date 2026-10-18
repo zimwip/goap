@@ -44,6 +44,13 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    included. A rebase that changed the branch is kept and the merge refused (`ErrConflict`), as before.
    `Graph.Commit`, the shortcut of the seeds and the registries, keeps one transaction per operation, as a person or an
    agent takes them.
+7. **An operation on a change costs what its event touches, not the size of the change.** The fold of the impact log
+   (`draftState`, `graph/graph/draftcache.go`) is indexed (impacts by id, drafts by impact and flow, impacts by node) and
+   carries the pending conflicts. A transaction folds its events in place in its own copy of it, made once, and
+   publishes it to the cache when it commits, so the next transaction folds nothing. Under the lock of the change it
+   asks the log once. The guard reads a change's header alone and takes its impacts from the fold (the projection they
+   equal, ADR 0029). `emit` writes the one projection row its event changes. A reader of drafts (`draftReader`) finds
+   the drafts it is asked for, and gathers them all only to go over every one.
 
 ## Consequences
 
@@ -54,6 +61,12 @@ records the branch it was written on (`node_version.branch`). The versions a bra
   `CommitChange` 27 ms, `IntegrateChange` 63 ms (211 ms and 118 KB of WAL in all). What a change writes is mostly its
   own record, its log and the impact projection; the log stays as it is: a change is the activity of a person or an
   agent, never a high-frequency stream.
+- Before point 7, a `Graph.Commit` of N nodes grew with N³: 400 nodes took 3 min 23 s, and 1,000 did not finish in
+  10 min. Now the cost per node is the same whatever the size of the commit, about 9 ms (1,000 nodes in 9 s, 43 SQL
+  statements per node over its four operations).
+- On PostgreSQL with 50,000 nodes and 100,000 versions (698 MB), a cold read of the whole head takes 100 ms, a
+  `NodeByKey` 0.4 ms, and the per-operation times stay within 1.5 times those at 2,000 nodes. One checkpoint stores the
+  whole state: 0.9 s and 21 MB of WAL at 50,000 nodes, so it grows linearly with the size of the state.
 - Reading the state of a header costs one indexed query over the landings since its base, at most `CheckpointEvery`
   baselines.
 - Schema: migration 0007 (both dialects) adds `baseline.seq`, `baseline.base_id`, `node_version.landed` and

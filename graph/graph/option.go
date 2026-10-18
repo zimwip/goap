@@ -258,8 +258,8 @@ func (g *Graph) CompareOptions(ctx context.Context, id domain.ChangeID, level st
 			}
 		}
 		differs := func(side string, id domain.NodeID) bool {
-			a, aok := readers[side].byNode[id]
-			b, bok := readers[domain.MainFlow].byNode[id]
+			a, aok := readers[side].get(id)
+			b, bok := readers[domain.MainFlow].get(id)
 			return aok && bok && !sameDraft(a, b)
 		}
 		changed := map[domain.NodeID]bool{}

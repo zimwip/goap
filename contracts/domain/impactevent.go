@@ -154,7 +154,12 @@ func FoldImpacts(events []ImpactEvent) []ChangeImpact {
 // ApplyImpactEvent returns the change impacts after an event (the list is not modified).
 func ApplyImpactEvent(impacts []ChangeImpact, e ImpactEvent) []ChangeImpact {
 	out := slices.Clone(impacts)
-	at := slices.IndexFunc(out, func(c ChangeImpact) bool { return c.ID == e.Impact })
+	return ApplyImpactEventAt(out, slices.IndexFunc(out, func(c ChangeImpact) bool { return c.ID == e.Impact }), e)
+}
+
+// ApplyImpactEventAt is ApplyImpactEvent on a list it may modify, given the position of the event's change impact in it
+// (-1: absent): an index kept by the caller spares the search. The change impacts it replaces are new values.
+func ApplyImpactEventAt(out []ChangeImpact, at int, e ImpactEvent) []ChangeImpact {
 	if e.Op == ImpactProposed || e.Op == ImpactCreated {
 		cn := cloneImpact(*e.State)
 		if e.Op == ImpactCreated {

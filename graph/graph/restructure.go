@@ -218,7 +218,7 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 				return out, err
 			}
 			for _, l := range in {
-				if _, drafted := reader.byNode[l.From.ID]; drafted {
+				if _, drafted := reader.get(l.From.ID); drafted {
 					continue // read through its draft below
 				}
 				cur, err := g.currentOf(ctx, tx, w, b, l.From.ID)

@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
+	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -44,6 +47,12 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	if err == nil && len(gt.checkpoints) > 0 {
 		r.g.checkpoints.store(r.g, gt.checkpoints)
 	}
+	if err == nil {
+		// what the transaction folded of the logs it wrote is committed now: the next one folds only what follows
+		for _, st := range gt.drafts {
+			r.g.draftStates.put(st, r.g.draftCacheSize())
+		}
+	}
 	return err
 }
 
@@ -69,6 +78,18 @@ type guardTx struct {
 	// logged are the changes whose log the transaction appended to (the draft cache, ADR 0079, never publishes what a
 	// transaction that may roll back has seen of its own writes)
 	logged map[domain.ChangeID]bool
+	// drafts are the folds of the logs the transaction appended to, as it sees them (never published to the draft cache)
+	drafts map[domain.ChangeID]*draftState
+	// impactSeq is, per change, the seq of the last impact event the transaction appended
+	impactSeq map[domain.ChangeID]int64
+	// fresh is, per change whose lock the transaction holds, the fold it last read the log for: only its own appends can
+	// follow it (ADR 0127)
+	fresh map[domain.ChangeID]*draftState
+	// reads are the changes read whole by the transaction, kept up to date by its own writes (a batch of N writes to
+	// one change reads its N impacts once)
+	reads map[domain.ChangeID]domain.Change
+	// heads are the headers of the changes read by the transaction, their impacts taken from the fold of their log
+	heads map[domain.ChangeID]domain.Change
 	// locked are the changes and branches whose lock the transaction holds (ADR 0127)
 	locked map[string]bool
 }
@@ -111,14 +132,117 @@ func (t *guardTx) PutChangeImpact(ctx context.Context, change domain.ChangeID, c
 	if err := t.LockChange(ctx, change); err != nil {
 		return err
 	}
-	return t.Tx.PutChangeImpact(ctx, change, cn)
+	if err := t.Tx.PutChangeImpact(ctx, change, cn); err != nil {
+		return err
+	}
+	c, ok := t.reads[change]
+	if !ok {
+		return nil
+	}
+	at := slices.IndexFunc(c.Nodes, func(n domain.ChangeImpact) bool { return n.ID == cn.ID })
+	if at < 0 {
+		delete(t.reads, change) // a new one: read again, as the store orders and stamps it
+		return nil
+	}
+	// what the store gives back (its encoding), its creation time kept as an update keeps it
+	r, err := toCNRow(cn)
+	if err != nil {
+		return err
+	}
+	stored, err := r.node()
+	if err != nil {
+		return err
+	}
+	stored.CreatedAt = c.Nodes[at].CreatedAt
+	c.Nodes[at] = stored
+	return nil
 }
 
 func (t *guardTx) DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error {
 	if err := t.LockChange(ctx, change); err != nil {
 		return err
 	}
-	return t.Tx.DeleteChangeImpact(ctx, change, id)
+	if err := t.Tx.DeleteChangeImpact(ctx, change, id); err != nil {
+		return err
+	}
+	if c, ok := t.reads[change]; ok {
+		c.Nodes = slices.DeleteFunc(c.Nodes, func(n domain.ChangeImpact) bool { return n.ID == id })
+		t.reads[change] = c
+	}
+	return nil
+}
+
+// changeHeaderReader is a store that reads a change without its impacts.
+type changeHeaderReader interface {
+	changeHeader(ctx context.Context, id domain.ChangeID) (domain.Change, error)
+}
+
+// Change reads a change: its header once per transaction, its change impacts from the fold of its log (the projection
+// they are the same as, ADR 0029), so that an operation on a change of N impacts decodes none of them. A store that
+// cannot read the header alone is read once per transaction, later reads being copies kept up to date by its writes.
+func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	h, ok := t.Tx.(changeHeaderReader)
+	if !ok {
+		if c, ok := t.reads[id]; ok {
+			return copyChange(c), nil
+		}
+		c, err := t.Tx.Change(ctx, id)
+		if err != nil {
+			return c, err
+		}
+		if t.reads == nil {
+			t.reads = map[domain.ChangeID]domain.Change{}
+		}
+		t.reads[id] = copyChange(c)
+		return c, nil
+	}
+	c, ok := t.heads[id]
+	if !ok {
+		var err error
+		if c, err = h.changeHeader(ctx, id); err != nil {
+			return c, err
+		}
+		if t.heads == nil {
+			t.heads = map[domain.ChangeID]domain.Change{}
+		}
+		t.heads[id] = c
+	}
+	st, err := t.g.draftState(ctx, t, id)
+	if err != nil {
+		return c, err
+	}
+	c.Data = maps.Clone(c.Data)
+	c.Guardians = slices.Clone(c.Guardians)
+	c.DependsOn = slices.Clone(c.DependsOn)
+	c.Items = slices.Clone(c.Items)
+	c.Nodes = slices.Clone(st.impacts) // values the fold replaces, never edits
+	return c, nil
+}
+
+// copyChange is a copy of a change its reader may edit.
+func copyChange(c domain.Change) domain.Change {
+	c.Data = maps.Clone(c.Data)
+	c.Guardians = slices.Clone(c.Guardians)
+	c.DependsOn = slices.Clone(c.DependsOn)
+	c.Items = slices.Clone(c.Items)
+	c.Nodes = slices.Clone(c.Nodes)
+	for i, cn := range c.Nodes {
+		cn.Reviews = slices.Clone(cn.Reviews)
+		cn.DerivedFrom = slices.Clone(cn.DerivedFrom)
+		cn.Items = slices.Clone(cn.Items)
+		for _, r := range []**domain.NodeRef{&cn.Pre, &cn.Post, &cn.Landed} {
+			if *r != nil {
+				v := **r
+				*r = &v
+			}
+		}
+		if cn.Validation != nil {
+			v := *cn.Validation
+			cn.Validation = &v
+		}
+		c.Nodes[i] = cn
+	}
+	return c
 }
 
 func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogEntry, error) {
@@ -129,10 +253,50 @@ func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogE
 		t.logged = map[domain.ChangeID]bool{}
 	}
 	t.logged[e.Change] = true
-	return t.Tx.AppendLog(ctx, e)
+	if !strings.HasPrefix(e.Type, domain.LogImpact+".") {
+		delete(t.reads, e.Change) // a fact is an item of the change
+		delete(t.heads, e.Change)
+	}
+	out, err := t.Tx.AppendLog(ctx, e)
+	if err == nil && strings.HasPrefix(e.Type, domain.LogImpact+".") {
+		if t.impactSeq == nil {
+			t.impactSeq = map[domain.ChangeID]int64{}
+		}
+		t.impactSeq[e.Change] = out.Seq
+	}
+	return out, err
 }
 
 func (t *guardTx) wroteLog(id domain.ChangeID) bool { return t.logged[id] }
+
+func (t *guardTx) ownDrafts(id domain.ChangeID) *draftState { return t.drafts[id] }
+
+// current is the fold of a change that holds every impact event of its log, when the transaction knows one: it holds the
+// lock of the change since it read the log (ADR 0127), so only its own appends can follow, and it has folded them.
+func (t *guardTx) current(id domain.ChangeID) *draftState {
+	if st := t.fresh[id]; st != nil && st.seq >= t.impactSeq[id] {
+		return st
+	}
+	return nil
+}
+
+// readLog records the fold a transaction holding the lock of a change read the log for.
+func (t *guardTx) readLog(st *draftState) {
+	if !t.locked["change:"+string(st.change)] {
+		return
+	}
+	if t.fresh == nil {
+		t.fresh = map[domain.ChangeID]*draftState{}
+	}
+	t.fresh[st.change] = st
+}
+
+func (t *guardTx) keepDrafts(s *draftState) {
+	if t.drafts == nil {
+		t.drafts = map[domain.ChangeID]*draftState{}
+	}
+	t.drafts[s.change] = s
+}
 
 func (t *guardTx) needChange(id domain.ChangeID, what string) error {
 	if id == "" {
@@ -302,6 +466,8 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 	h.Items, h.Nodes = nil, nil
 	t.changes[c.ID] = h
 	delete(t.headers, c.ID)
+	delete(t.reads, c.ID)
+	delete(t.heads, c.ID)
 	return nil
 }
 
@@ -316,6 +482,8 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	}
 	delete(t.changes, id)
 	delete(t.headers, id)
+	delete(t.reads, id)
+	delete(t.heads, id)
 	return nil
 }
 

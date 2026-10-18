@@ -839,7 +839,7 @@ func (g *Graph) ImpactNodeTransition(ctx context.Context, id domain.ChangeID, in
 		if err != nil {
 			return err
 		}
-		reader.byNode[moved.Node] = moved
+		reader.put(moved)
 		out, err := reader.outLinks(ctx, tx, moved.Ref())
 		if err != nil {
 			return err

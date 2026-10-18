@@ -177,6 +177,14 @@ func (t *observedTx) touch(id domain.ChangeID) {
 // wroteLog forwards the guard's record of the log entries the transaction appended.
 func (t *observedTx) wroteLog(id domain.ChangeID) bool { return wroteLog(t.Tx, id) }
 
+func (t *observedTx) ownDrafts(id domain.ChangeID) *draftState { return ownDrafts(t.Tx, id) }
+
+func (t *observedTx) keepDrafts(s *draftState) { keepDrafts(t.Tx, s) }
+
+func (t *observedTx) current(id domain.ChangeID) *draftState { return currentDrafts(t.Tx, id) }
+
+func (t *observedTx) readLog(st *draftState) { readLog(t.Tx, st) }
+
 func (t *observedTx) PutChange(ctx context.Context, c domain.Change) error {
 	if err := t.Tx.PutChange(ctx, c); err != nil {
 		return err

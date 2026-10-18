@@ -496,6 +496,16 @@ func (t *sqliteTx) Baselines(ctx context.Context, namespace string) ([]domain.Ba
 }
 
 func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	c, err := t.changeHeader(ctx, id)
+	if err != nil {
+		return c, err
+	}
+	c.Nodes, err = t.ChangeImpacts(ctx, id)
+	return c, err
+}
+
+// changeHeader reads a change without its change impacts (the guard takes them from the fold of its log).
+func (t *sqliteTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
 	var c domain.Change
 	var start, result sql.NullString
 	var data, created, guardians, dependsOn string
@@ -519,8 +529,7 @@ func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Chang
 	if c.Items, err = itemsOf(facts); err != nil {
 		return c, err
 	}
-	c.Nodes, err = t.ChangeImpacts(ctx, id)
-	return c, err
+	return c, nil
 }
 
 func (t *sqliteTx) Changes(ctx context.Context) ([]domain.Change, error) {

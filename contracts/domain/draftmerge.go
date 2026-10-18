@@ -191,55 +191,60 @@ func sortedKeys(m map[string]bool) []string {
 // `resolved` settles all. A new draft (a checkout, an install that is not a rebase) or the end of the draft clears them.
 func PendingConflicts(events []ImpactEvent, impact ChangeImpactID) []string {
 	var pending []string
-	settle := func(name string) {
-		pending = slices.DeleteFunc(pending, func(c string) bool { return c == name })
-	}
 	for _, e := range events {
-		if e.Impact != impact || e.Flow != "" {
-			continue
+		if e.Impact == impact {
+			pending = ApplyConflictEvent(pending, e)
 		}
-		switch e.Op {
-		case ImpactCreated, ImpactCheckedOut, ImpactCancelled, ImpactWithdrawn, ImpactLanded:
-			pending = nil
-		case ImpactTransitioned:
-			if r, ok := e.Patch["rebased"]; ok && r != nil {
-				pending = stringsOf(e.Patch["conflicts"])
-				continue
-			}
-			if e.Draft != nil {
-				pending = nil // a draft installed wholesale (an adoption)
-				continue
-			}
-			if e.Patch["state"] != nil {
-				settle(ConflictState)
-			}
-			p := patchOf(e.Patch)
-			for k := range p.Props {
-				settle(ConflictProp(k))
-			}
-		case ImpactUpdated:
-			if done, _ := e.Patch["resolved"].(bool); done {
-				pending = nil
-				continue
-			}
-			settle(ConflictNode)
-			p := patchOf(e.Patch)
-			for k := range p.Props {
-				settle(ConflictProp(k))
-			}
-			for _, k := range p.Unset {
-				settle(ConflictProp(k))
-			}
-			if p.OwnerID != "" {
-				settle(ConflictOwner)
-			}
-			for _, name := range []string{"addLink", "removeLink", "updateLink"} {
-				l, _ := e.Patch[name].(map[string]any)
-				typ, _ := l["type"].(string)
-				to, _ := l["toId"].(string)
-				if typ != "" && to != "" {
-					settle(ConflictLink(typ, NodeID(to)))
-				}
+	}
+	return pending
+}
+
+// ApplyConflictEvent is one step of PendingConflicts: the conflicts of a change impact after one of its events.
+func ApplyConflictEvent(pending []string, e ImpactEvent) []string {
+	if e.Flow != "" {
+		return pending
+	}
+	settle := func(name string) {
+		pending = slices.DeleteFunc(slices.Clone(pending), func(c string) bool { return c == name })
+	}
+	switch e.Op {
+	case ImpactCreated, ImpactCheckedOut, ImpactCancelled, ImpactWithdrawn, ImpactLanded:
+		return nil
+	case ImpactTransitioned:
+		if r, ok := e.Patch["rebased"]; ok && r != nil {
+			return stringsOf(e.Patch["conflicts"])
+		}
+		if e.Draft != nil {
+			return nil // a draft installed wholesale (an adoption)
+		}
+		if e.Patch["state"] != nil {
+			settle(ConflictState)
+		}
+		p := patchOf(e.Patch)
+		for k := range p.Props {
+			settle(ConflictProp(k))
+		}
+	case ImpactUpdated:
+		if done, _ := e.Patch["resolved"].(bool); done {
+			return nil
+		}
+		settle(ConflictNode)
+		p := patchOf(e.Patch)
+		for k := range p.Props {
+			settle(ConflictProp(k))
+		}
+		for _, k := range p.Unset {
+			settle(ConflictProp(k))
+		}
+		if p.OwnerID != "" {
+			settle(ConflictOwner)
+		}
+		for _, name := range []string{"addLink", "removeLink", "updateLink"} {
+			l, _ := e.Patch[name].(map[string]any)
+			typ, _ := l["type"].(string)
+			to, _ := l["toId"].(string)
+			if typ != "" && to != "" {
+				settle(ConflictLink(typ, NodeID(to)))
 			}
 		}
 	}

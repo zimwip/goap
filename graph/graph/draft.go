@@ -78,6 +78,20 @@ func (g *Graph) seenDrafts(ctx context.Context, tx Tx, c domain.Change, flow str
 
 // seenDraft is the draft a flow sees for a change impact (nil: none).
 func (g *Graph) seenDraft(ctx context.Context, tx Tx, c domain.Change, flow string, impact domain.ChangeImpactID) (*domain.Draft, error) {
+	if chain := flowChain(c, flow); len(staleOf(chain)) == 0 {
+		// the draft of the innermost flow of the chain holding one, as seenDrafts finds it, without copying the others
+		st, err := g.draftState(ctx, tx, c.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range append(flowIDs(chain), "") {
+			if d, ok := st.draft(impact, f); ok {
+				d = d.Clone()
+				return &d, nil
+			}
+		}
+		return nil, nil
+	}
 	m, err := g.seenDrafts(ctx, tx, c, flow)
 	if err != nil {
 		return nil, err
@@ -89,26 +103,107 @@ func (g *Graph) seenDraft(ctx context.Context, tx Tx, c domain.Change, flow stri
 }
 
 // draftReader reads nodes as a flow of a change sees them: a draft reference (a node the flow holds a draft of) is the
-// draft, any other reference a stored version.
+// draft, any other reference a stored version. It finds the drafts it is asked for as it is asked (a check of one draft
+// reads the few its links name), and gathers them all only for what goes over every draft (sortedDrafts).
 type draftReader struct {
-	c      domain.Change
+	c domain.Change
+	// byNode are the drafts read so far, and the ones a caller set (put)
 	byNode map[domain.NodeID]domain.Draft
+	// lazy finds the draft of a node, all gathers them (nil once byNode holds them all)
+	lazy func(domain.NodeID) (domain.Draft, bool)
+	all  func() map[domain.NodeID]domain.Draft
 }
 
 // newDraftReader reads the drafts a flow sees, for the change impacts it sees (visible: stale or foreign impacts leave
 // their drafts out).
 func (g *Graph) newDraftReader(ctx context.Context, tx Tx, c domain.Change, flow string, visible []domain.ChangeImpact) (*draftReader, error) {
-	seen, err := g.seenDrafts(ctx, tx, c, flow)
+	r := &draftReader{c: c, byNode: map[domain.NodeID]domain.Draft{}}
+	chain := flowChain(c, flow)
+	if len(staleOf(chain)) > 0 {
+		seen, err := g.seenDrafts(ctx, tx, c, flow)
+		if err != nil {
+			return nil, err
+		}
+		for _, cn := range visible {
+			if d, ok := seen[cn.ID]; ok {
+				r.byNode[d.Node] = d
+			}
+		}
+		return r, nil
+	}
+	st, err := g.draftState(ctx, tx, c.ID)
 	if err != nil {
 		return nil, err
 	}
-	r := &draftReader{c: c, byNode: map[domain.NodeID]domain.Draft{}}
-	for _, cn := range visible {
-		if d, ok := seen[cn.ID]; ok {
-			r.byNode[d.Node] = d
+	if ownDrafts(tx, c.ID) == st {
+		st.frozen = true // the reader reads it later: the transaction's next fold is a copy
+	}
+	order := append(flowIDs(chain), "")
+	pick := func(id domain.ChangeImpactID) (domain.Draft, bool) {
+		for _, f := range order {
+			if d, ok := st.draft(id, f); ok {
+				return d, true
+			}
 		}
+		return domain.Draft{}, false
+	}
+	pos := make(map[domain.ChangeImpactID]int, len(visible))
+	for i, cn := range visible {
+		pos[cn.ID] = i
+	}
+	// as the whole reader would hold it: the draft of the last visible impact of the node
+	r.lazy = func(node domain.NodeID) (domain.Draft, bool) {
+		best, out := -1, domain.Draft{}
+		for _, id := range st.nodes[node] {
+			if i, ok := pos[id]; ok && i > best {
+				if d, ok := pick(id); ok && d.Node == node {
+					best, out = i, d
+				}
+			}
+		}
+		if best < 0 {
+			return domain.Draft{}, false
+		}
+		return out.Clone(), true
+	}
+	r.all = func() map[domain.NodeID]domain.Draft {
+		m := map[domain.NodeID]domain.Draft{}
+		for _, cn := range visible {
+			if d, ok := pick(cn.ID); ok {
+				m[d.Node] = d.Clone()
+			}
+		}
+		return m
 	}
 	return r, nil
+}
+
+// get is the draft the reader holds for a node.
+func (r *draftReader) get(id domain.NodeID) (domain.Draft, bool) {
+	if d, ok := r.byNode[id]; ok {
+		return d, true
+	}
+	if r.lazy == nil {
+		return domain.Draft{}, false
+	}
+	d, ok := r.lazy(id)
+	if ok {
+		r.byNode[id] = d
+	}
+	return d, ok
+}
+
+// put makes the reader hold a draft for its node (in place of the one it found, if any).
+func (r *draftReader) put(d domain.Draft) { r.byNode[d.Node] = d }
+
+// whole is every draft the reader holds, by node.
+func (r *draftReader) whole() map[domain.NodeID]domain.Draft {
+	if r.lazy != nil {
+		m := r.all()
+		maps.Copy(m, r.byNode) // what was read is the same, what was put stays
+		r.byNode, r.lazy, r.all = m, nil, nil
+	}
+	return r.byNode
 }
 
 // draftNode is the node of a draft the reader holds.
@@ -116,7 +211,7 @@ func (r *draftReader) draftNode(d domain.Draft) domain.Node { return draftNode(r
 
 // draft is the draft a reference designates: a draft reference, or an exact version the draft was checked out from.
 func (r *draftReader) draft(ref domain.NodeRef) (domain.Draft, bool) {
-	d, ok := r.byNode[ref.ID]
+	d, ok := r.get(ref.ID)
 	if !ok || (!ref.IsDraft() && (d.Base == nil || *d.Base != ref)) {
 		return domain.Draft{}, false
 	}
@@ -125,7 +220,7 @@ func (r *draftReader) draft(ref domain.NodeRef) (domain.Draft, bool) {
 
 // normalize points a reference to the version a node was checked out from at the draft of the node.
 func (r *draftReader) normalize(ref domain.NodeRef) domain.NodeRef {
-	if d, ok := r.byNode[ref.ID]; ok && d.Base != nil && *d.Base == ref {
+	if d, ok := r.get(ref.ID); ok && d.Base != nil && *d.Base == ref {
 		return d.Ref()
 	}
 	return ref
@@ -134,7 +229,7 @@ func (r *draftReader) normalize(ref domain.NodeRef) domain.NodeRef {
 // node reads a node: the draft for a draft reference, else the stored version.
 func (r *draftReader) node(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.Node, error) {
 	if ref.IsDraft() {
-		if d, ok := r.byNode[ref.ID]; ok {
+		if d, ok := r.get(ref.ID); ok {
 			return r.draftNode(d), nil
 		}
 	}
@@ -145,7 +240,7 @@ func (r *draftReader) node(ctx context.Context, tx Tx, ref domain.NodeRef) (doma
 // targets a draft holds as the version a node it also holds was checked out from are shown as that draft.
 func (r *draftReader) outLinks(ctx context.Context, tx Tx, ref domain.NodeRef) ([]domain.Link, error) {
 	if ref.IsDraft() {
-		if d, ok := r.byNode[ref.ID]; ok {
+		if d, ok := r.get(ref.ID); ok {
 			out := d.OutLinks()
 			for i := range out {
 				out[i].To = r.normalize(out[i].To)
@@ -161,7 +256,7 @@ func (r *draftReader) outLinks(ctx context.Context, tx Tx, ref domain.NodeRef) (
 func (r *draftReader) inLinks(ctx context.Context, tx Tx, ref domain.NodeRef) ([]domain.Link, error) {
 	var out []domain.Link
 	from := ref
-	if d, ok := r.byNode[ref.ID]; ok && ref.IsDraft() && d.Base != nil {
+	if d, ok := r.get(ref.ID); ok && ref.IsDraft() && d.Base != nil {
 		from = *d.Base // the links of the version the draft was checked out from still enter the node
 	}
 	if !from.IsDraft() {
@@ -189,8 +284,9 @@ func (r *draftReader) inLinks(ctx context.Context, tx Tx, ref domain.NodeRef) ([
 }
 
 func (r *draftReader) sortedDrafts() []domain.Draft {
-	out := make([]domain.Draft, 0, len(r.byNode))
-	for _, d := range r.byNode {
+	all := r.whole()
+	out := make([]domain.Draft, 0, len(all))
+	for _, d := range all {
 		out = append(out, d)
 	}
 	slices.SortFunc(out, func(a, b domain.Draft) int {

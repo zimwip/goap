@@ -156,6 +156,10 @@ func patchOf(p map[string]any) (out draftPatch) {
 	return out
 }
 
+// ApplyDraftTo is the draft an event of its change impact and flow leaves of a draft (nil: none, or no more); d is not
+// modified.
+func ApplyDraftTo(d *Draft, e ImpactEvent) *Draft { return applyDraft(d, e) }
+
 // DraftRow is the draft an event leaves for (impact, flow): the fold of one row.
 func applyDraft(d *Draft, e ImpactEvent) *Draft {
 	switch e.Op {
@@ -235,10 +239,11 @@ func ApplyDraftEvent(drafts []Draft, e ImpactEvent, impacts []ChangeImpact) []Dr
 		// the adopted flow's drafts were installed on the main flow by the events that follow (see the adoption)
 		out = slices.DeleteFunc(out, func(d Draft) bool { return d.Flow == e.Flow })
 	}
-	return slices.DeleteFunc(out, func(d Draft) bool {
-		i := slices.IndexFunc(impacts, func(c ChangeImpact) bool { return c.ID == d.Impact })
-		return i < 0 || impacts[i].Superseded
-	})
+	live := make(map[ChangeImpactID]bool, len(impacts))
+	for _, c := range impacts {
+		live[c.ID] = !c.Superseded
+	}
+	return slices.DeleteFunc(out, func(d Draft) bool { return !live[d.Impact] })
 }
 
 // FoldDrafts replays a log: the drafts of the change after the last event, in the order of the rows.
