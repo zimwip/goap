@@ -1,0 +1,33 @@
+# OpenTelemetry Collector of the performance stack (make perf, deploy/compose/perf.yml): the metrics of the graph
+# service and of goap-bench, exported to Prometheus (scraped on :8889). The services sample no trace there
+# (OTEL_TRACES_SAMPLER=always_off): what is measured is the platform, not its tracing.
+receivers:
+  otlp:
+    protocols:
+      grpc: {endpoint: 0.0.0.0:4317}
+      http: {endpoint: 0.0.0.0:4318}
+
+processors:
+  batch: {}
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+
+exporters:
+  nop: {}
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    namespace: goap
+    resource_to_telemetry_conversion: {enabled: true}
+    # a series not reported for that long (a finished bench run) leaves the scrape
+    metric_expiration: 10m
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [nop]
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]

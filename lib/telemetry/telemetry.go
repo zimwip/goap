@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
+	"go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -39,7 +40,8 @@ func Setup(ctx context.Context, log *slog.Logger, service string) func(context.C
 		log.Info("telemetry export disabled (OTEL_EXPORTER_OTLP_ENDPOINT not set)")
 		return func(context.Context) error { return nil }
 	}
-	res, err := resource.Merge(resource.Default(), resource.NewWithAttributes(semconv.SchemaURL,
+	// schemaless: the default resource follows the schema of the SDK, which a pinned semconv schema would conflict with
+	res, err := resource.Merge(resource.Default(), resource.NewSchemaless(
 		semconv.ServiceName(service), semconv.ServiceNamespace("goap")))
 	if err != nil {
 		log.Warn("telemetry resource", "err", err)
@@ -54,10 +56,19 @@ func Setup(ctx context.Context, log *slog.Logger, service string) func(context.C
 	otel.SetTracerProvider(tp)
 	shutdown := []func(context.Context) error{tp.Shutdown}
 	if metricExp, err := otlpmetrichttp.New(ctx); err == nil {
+		// every 15 s, unless OTEL_METRIC_EXPORT_INTERVAL (ms) says otherwise (the performance stack exports every 5 s)
+		var opts []sdkmetric.PeriodicReaderOption
+		if os.Getenv("OTEL_METRIC_EXPORT_INTERVAL") == "" {
+			opts = append(opts, sdkmetric.WithInterval(15*time.Second))
+		}
 		mp := sdkmetric.NewMeterProvider(sdkmetric.WithResource(res),
-			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp, sdkmetric.WithInterval(15*time.Second))))
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExp, opts...)))
 		otel.SetMeterProvider(mp)
 		shutdown = append(shutdown, mp.Shutdown)
+		// the Go runtime of the service: memory, goroutines, GC (go.memory.*, go.goroutine.count...)
+		if err := runtime.Start(runtime.WithMeterProvider(mp)); err != nil {
+			log.Warn("telemetry runtime metrics", "err", err)
+		}
 	} else {
 		log.Warn("telemetry metric exporter", "err", err)
 	}

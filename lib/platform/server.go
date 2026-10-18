@@ -43,6 +43,7 @@ func NewServer(log *slog.Logger, addr string) *Server {
 		},
 	}))
 	s := &Server{Echo: e, Addr: addr, log: log}
+	servePprof(log)
 	e.GET("/healthz", func(c *echo.Context) error { return c.String(http.StatusOK, "ok") })
 	e.GET("/readyz", func(c *echo.Context) error {
 		for _, f := range s.ready {
