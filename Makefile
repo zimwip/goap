@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
+.PHONY: help all build test tidy web-test test-pg lint eval generate tools up down logs dev dev-backend dev-web dev-reset web runner-image claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -62,30 +62,27 @@ lint: ## go vet + gofmt + tidy go.mod files + dsl.md sync check
 	@for m in $(MODULES); do (cd $$m && go mod tidy -diff >/dev/null) || { echo "$$m/go.mod is not tidy: make tidy"; exit 1; }; done
 	@cmp -s docs/dsl.md web/src/lib/help/dsl.md || (echo 'web/src/lib/help/dsl.md is out of sync with docs/dsl.md' && exit 1)
 
-dev: ## single process, in-memory, demo data: http://localhost:8080
-	go run ./platform/cmd/goap-dev
-
-devlocal: ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
+dev: ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
 	@command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@latest
 	@trap 'kill 0' EXIT INT TERM; \
-	$(MAKE) devlocal-backend & \
-	$(MAKE) devlocal-web & \
+	$(MAKE) dev-backend & \
+	$(MAKE) dev-web & \
 	wait
 
-devlocal-backend: ## SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080
+dev-backend: ## SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080
 	air -c .air.toml
 
-devlocal-web: ## IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
+dev-web: ## IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
 	cd web && npm install --no-audit --no-fund && npm run dev
 
-devlocal-reset: ## drop the local SQLite database (demo data and methodologies are seeded again)
+dev-reset: ## drop the local SQLite database (demo data and methodologies are seeded again)
 	rm -rf .goap
 
-# static build of the IDE, served by goap-dev itself (used by `make dev`, not devlocal)
+# static build of the IDE, served by goap-dev itself (when web/dist exists; `make dev` serves it from vite instead)
 web/dist/index.html: web/package.json web/index.html web/vite.config.ts $(shell find web/src -type f 2>/dev/null)
 	cd web && npm install --no-audit --no-fund && npm run build
 
-web: devlocal-web ## same as devlocal-web
+web: dev-web ## same as dev-web
 
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .

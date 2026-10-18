@@ -5,7 +5,7 @@
 
 .EXAMPLE
   .\make.cmd test
-  .\make.ps1 devlocal
+  .\make.ps1 dev
   .\make.ps1 help
 #>
 param(
@@ -106,11 +106,9 @@ function Lint {
     }
 }
 
-function Dev { Run go run ./platform/cmd/goap-dev }
-
 # SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080. .air.toml is written for a
 # POSIX shell (an environment prefix, a binary with no extension): its build settings are given on the command line here.
-function DevLocalBackend {
+function DevBackend {
     if (-not (Get-Command air -ErrorAction SilentlyContinue)) { Run go install github.com/air-verse/air@latest }
     $bin = ".air/goap-dev$Exe"
     $old = $env:GOAP_STORE
@@ -120,7 +118,7 @@ function DevLocalBackend {
 }
 
 # IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
-function DevLocalWeb {
+function DevWeb {
     InDir web {
         Run npm install --no-audit --no-fund
         Run npm run dev
@@ -128,11 +126,11 @@ function DevLocalWeb {
 }
 
 # on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
-function DevLocal {
+function Dev {
     $shell = (Get-Process -Id $PID).Path # powershell.exe or pwsh, whichever runs this script
     $backend = Start-Process -FilePath $shell -NoNewWindow -PassThru -ArgumentList @(
-        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'make.ps1'), 'devlocal-backend')
-    try { DevLocalWeb }
+        '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'make.ps1'), 'dev-backend')
+    try { DevWeb }
     finally {
         # the backend and what it started (air, goap-dev)
         if ($env:OS -eq 'Windows_NT') { & taskkill /T /F /PID $backend.Id 2>&1 | Out-Null }
@@ -140,7 +138,7 @@ function DevLocal {
     }
 }
 
-function DevLocalReset { Remove-Item -Recurse -Force .goap -ErrorAction SilentlyContinue }
+function DevReset { Remove-Item -Recurse -Force .goap -ErrorAction SilentlyContinue }
 
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
@@ -182,13 +180,12 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
                     pgvector container on PGTEST_PORT, 55432)
   lint              go vet + gofmt + dsl.md sync check + go.mod files tidy
   eval              offline evaluation cases of evals\ (or $env:EVAL) against a running gateway, as GOAP_TOKEN
-  dev               single process, in-memory, demo data: http://localhost:8080
-  devlocal          no docker: SQLite (.goap\goap.db), backend + IDE both reload on code change:
+  dev               no docker: SQLite (.goap\goap.db), backend + IDE both reload on code change:
                     http://localhost:5173
-  devlocal-backend  SQLite backend only, rebuilt and restarted by air: http://localhost:8080
-  devlocal-web      IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
-  devlocal-reset    drop the local SQLite database
-  web               same as devlocal-web
+  dev-backend       SQLite backend only, rebuilt and restarted by air: http://localhost:8080
+  dev-web           IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
+  dev-reset         drop the local SQLite database
+  web               same as dev-web
   runner-image      image of the script sandboxes (goap-runner)
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
@@ -208,11 +205,10 @@ switch ($Target) {
     'lint'             { Lint }
     'eval'             { Eval }
     'dev'              { Dev }
-    'devlocal'         { DevLocal }
-    'devlocal-backend' { DevLocalBackend }
-    'devlocal-web'     { DevLocalWeb }
-    'devlocal-reset'   { DevLocalReset }
-    'web'              { DevLocalWeb }
+    'dev-backend'      { DevBackend }
+    'dev-web'          { DevWeb }
+    'dev-reset'        { DevReset }
+    'web'              { DevWeb }
     'runner-image'     { RunnerImage }
     'claude-agent-runner' { ClaudeAgentRunner }
     'up'               { Up }
