@@ -1874,7 +1874,12 @@ through changes like any node (the screen writes them with `web/src/lib/llmEdit.
 
 - **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `platform/modelgw/protocols.go`)
   knows how to complete and how to list models; a `Kind` is a preset on a protocol (Anthropic, Mistral AI, Google
-  Gemini, OpenAI, custom OpenAI-compatible). Adding a provider type = `RegisterProtocol` / `RegisterKind`.
+  Gemini, OpenAI, custom OpenAI-compatible). Adding a provider type = `RegisterProtocol` / `RegisterKind`. The `fake`
+  protocol (no key) calls tools deterministically (`platform/modelgw/fake_tools.go`): a request offering tools gets a
+  call of the tool whose name the person's last message holds (a tool that changes something only with arguments, from
+  a JSON object of the text or an entry of earlier tool results the text names; a tool an error asks for is called
+  next), each once per answer (twice after a failure), then a text listing the last results; so the assistant lists and
+  proposes agents with no model.
 - **API keys** are never stored: a provider node holds `apiKeyRef` (`env:<VAR>` or `<vault path>#<field>`, alternatives
   separated by `|`) that the gateway resolves (`platform.Secrets.Resolve`), like the secret parameters of an adapter.
 - **Catalog**: `DiscoverModels` asks the provider for its models; the admin adds them to the catalog, with a global

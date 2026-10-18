@@ -38,7 +38,10 @@ production deployment) and `methodology-improvement` (self-observation).
 
 Without an API key, the `fake` provider returns empty responses: LLM actions fail to produce
 their effects, get disabled, and the planner falls back to human actions — handy for
-observing replanning.
+observing replanning. The assistant still works on it: the fake model calls the tool your
+message names ("which agents can I run?", "start the intake agent") and lists what it returned.
+Agents are offered on a project that names methodologies (load the demo data, or add one to
+the project).
 
 Example call (Connect JSON protocol, via the gateway):
 
