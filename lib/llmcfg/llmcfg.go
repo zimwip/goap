@@ -313,9 +313,19 @@ type Directory struct {
 
 // Snapshot returns the current snapshot; the last one keeps serving when the graph cannot be read.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
+	s, _, err := d.init().Get(ctx)
+	return s, err
+}
+
+// Fresh is Snapshot looking at the head of the graph now, not once per TTL.
+func (d *Directory) Fresh(ctx context.Context) (*Snapshot, error) {
+	s, _, err := d.init().Fresh(ctx)
+	return s, err
+}
+
+func (d *Directory) init() *graphsnap.Cache[*Snapshot] {
 	d.once.Do(func() {
 		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: NamespacePlatform, TTL: d.TTL, Build: BuildSnapshot}
 	})
-	s, _, err := d.cache.Get(ctx)
-	return s, err
+	return &d.cache
 }

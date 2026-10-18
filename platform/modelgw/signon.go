@@ -42,7 +42,8 @@ func DetectProviders(lookup func(string) (string, bool)) []llmcfg.Provider {
 		if !set || !ok {
 			continue
 		}
-		out = append(out, llmcfg.Provider{Name: kind.ID, Kind: kind.ID, Protocol: kind.Protocol, Enabled: true, APIKeyRef: strings.Join(refs, " | ")})
+		out = append(out, llmcfg.Provider{Name: kind.ID, Kind: kind.ID, Protocol: kind.Protocol, BaseURL: kind.DefaultBaseURL, Enabled: true,
+			APIKeyRef: strings.Join(refs, " | ")})
 	}
 	return out
 }

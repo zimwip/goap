@@ -1870,11 +1870,16 @@ status bar. The gateway configuration is **graph data** ([ADR 0021](adr/0021-mod
 `LlmProvider`, `LlmModel`, `LlmAlias` and `LlmBehavior` nodes of the `platform` namespace (`lib/llmcfg`, the built-in `platform` domain), changed
 through changes like any node (the screen writes them with `web/src/lib/llmEdit.ts`). The gateway reads a snapshot of the
 `platform` namespace's head of `main` and rebuilds its router when it moves. `GOAP_MODELS_CONFIG` / env keys only seed a graph that holds no provider
-(`graphsvc.SeedModels`). At every start the gateway (`goap-dev` after `Boot`, `platform/cmd/modelgw` in the background once the graph seeded the protected aliases) signs on to the providers whose well-known key variable is set (`modelgw.KnownKeys`: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` / `OPENAI_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`; `DetectProviders`, `SignOn`): one change creating a provider named after its kind, key `env:<VAR>`, with no model and no alias (the administrator picks the models in the settings); a kind the graph already holds a provider of, in any state, is left alone. The `modelgw` database keeps the quota counters (`llm_usage`, keyed by the key of the model node and period, for the admission) the ledger of calls (`llm_call`) and the exchanges of the calls no change log keeps (`llm_call_exchange`, ADR 0089, below).
+(`graphsvc.SeedModels`). At every start the gateway (`goap-dev` after `Boot`, `platform/cmd/modelgw` in the background once the graph seeded the protected aliases) signs on to the providers whose well-known key variable is set (`modelgw.KnownKeys`: `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` / `OPENAI_KEY`, `MISTRAL_API_KEY`, `GEMINI_API_KEY` / `GOOGLE_API_KEY`; `DetectProviders`, `SignOn`): one change creating a provider named after its kind, on its kind's default address, key `env:<VAR>`, with no model and no alias (the administrator picks the models in the settings); a kind the graph already holds a provider of, in any state, is left alone. The `modelgw` database keeps the quota counters (`llm_usage`, keyed by the key of the model node and period, for the admission) the ledger of calls (`llm_call`) and the exchanges of the calls no change log keeps (`llm_call_exchange`, ADR 0089, below).
 
 - **Providers** are pluggable: a `Protocol` (`anthropic`, `openai`, `gemini`, `fake`; `platform/modelgw/protocols.go`)
   knows how to complete and how to list models; a `Kind` is a preset on a protocol (Anthropic, Mistral AI, Google
   Gemini, OpenAI, custom OpenAI-compatible). Adding a provider type = `RegisterProtocol` / `RegisterKind`.
+- **Availability**: an alias is available to a caller when it targets an enabled catalog model of a loaded provider
+  (enabled, its key resolved, its address given or its kind's default) that the caller may use (`Service.Available`);
+  nothing is probed. `Available` and `Providers` read the head of the graph at each call (`llmcfg.Directory.Fresh`),
+  so the web and the assistant see a retargeted alias at once; the completions keep the snapshot looked at once per
+  second. The assistant is offered, and `Send` accepts a message, only while the `assistant` alias is available.
 - **API keys** are never stored: a provider node holds `apiKeyRef` (`env:<VAR>` or `<vault path>#<field>`, alternatives
   separated by `|`) that the gateway resolves (`platform.Secrets.Resolve`), like the secret parameters of an adapter.
 - **Catalog**: `DiscoverModels` asks the provider for its models; the admin adds them to the catalog, with a global
