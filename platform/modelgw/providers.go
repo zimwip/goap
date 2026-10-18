@@ -379,7 +379,8 @@ func stopReason(got, end, maxTokens string) string {
 
 // Fake answers without calling any model: an empty item list for JSON
 // requests (actions then fail their effects and the planner falls back on
-// human actions), an echo otherwise. For dev without API keys.
+// human actions), a call of the tool the request names when it offers tools
+// (fake_tools.go), an echo otherwise. For dev without API keys.
 type Fake struct{}
 
 // Complete implements Provider.
@@ -393,11 +394,22 @@ func (Fake) Complete(_ context.Context, model string, req llm.Request) (llm.Resp
 		return llm.Response{Text: text, Provider: "fake", Model: model,
 			Usage: llm.Usage{InputTokens: inputTokens, OutputTokens: estimateTokens(text)}}, nil
 	}
-	last := ""
+	last := llm.Message{}
 	if n := len(req.Messages); n > 0 {
-		last = req.Messages[n-1].Content
+		last = req.Messages[n-1]
 	}
-	text := "echo: " + last
+	if len(req.Tools) > 0 {
+		if call, ok := fakeToolCall(req); ok {
+			return llm.Response{ToolCalls: []llm.ToolCall{call}, Provider: "fake", Model: model, StopReason: llm.StopToolUse,
+				Usage: llm.Usage{InputTokens: inputTokens, OutputTokens: 1}}, nil
+		}
+		if len(last.ToolResults) > 0 {
+			text := fakeToolAnswer(last.ToolResults)
+			return llm.Response{Text: text, Provider: "fake", Model: model, StopReason: llm.StopEnd,
+				Usage: llm.Usage{InputTokens: inputTokens, OutputTokens: estimateTokens(text)}}, nil
+		}
+	}
+	text := "echo: " + last.Content
 	return llm.Response{Text: text, Provider: "fake", Model: model,
 		Usage: llm.Usage{InputTokens: inputTokens, OutputTokens: estimateTokens(text)}}, nil
 }

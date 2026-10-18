@@ -210,6 +210,17 @@ func (s *Service) runnable(ctx context.Context, p authz.Principal, project, chan
 			return c, fmt.Errorf("the organisation cannot be read: %w", err)
 		}
 		names = all
+		if len(all) == 0 {
+			shown := c.project
+			if shown == "" {
+				if root, err := s.Projects.RootProject(ctx); err == nil {
+					shown = root
+				}
+			}
+			c.note = fmt.Sprintf("project %q names no methodology, so no agent can run in it: an administrator adds methodologies to the project "+
+				"(People & Organisation, Projects), or the person selects a project that names some", shown)
+			return c, nil
+		}
 	}
 	applicable, err := s.Projects.ApplicableMethodologies(ctx, c.project)
 	if err != nil {
@@ -282,7 +293,7 @@ func (t *turn) listAgents(ctx context.Context) (any, error) {
 		res["note"] = c.note
 	}
 	if len(c.agents) == 0 && c.note == "" && c.points == nil {
-		res["note"] = "no agent of the methodologies of this project is one you may run here"
+		res["note"] = "the methodologies of this project have no agent you may run here: you hold none of the roles their agents need, or none may be started"
 	}
 	return res, nil
 }
@@ -344,6 +355,8 @@ func (t *turn) startAgent(ctx context.Context, a args) (any, error) {
 		return nil, fmt.Errorf("the only change agents are listed for is %q, the one the person is looking at", ctxChange)
 	case ctxChange == "" && changeID != "":
 		return nil, errors.New("no change is open: propose the agent with a newChange {title, intent}")
+	case ctxChange == "" && nc == nil && !t.searched:
+		return nil, errors.New(`no change is open: search the open changes first (search_changes on the intent) and show the person what was found, then propose the agent with a "newChange" {title, intent}`)
 	case ctxChange == "" && nc == nil:
 		return nil, errors.New(`no change is open: "newChange" {title, intent} is required`)
 	}
