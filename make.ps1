@@ -153,6 +153,14 @@ function Up {
     RunnerImage
     DockerSock
     Run docker @Compose up --build -d
+    @'
+
+PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):
+  host localhost, port 5432, database goap, user goap, password goap
+  JDBC URL: jdbc:postgresql://localhost:5432/goap
+  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials),
+  each also reachable as its own role, password = name (e.g. graph / graph)
+'@ | Write-Host
 }
 
 function Down { DockerSock; Run docker @Compose down }
@@ -184,7 +192,7 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   runner-image      image of the script sandboxes (goap-runner)
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
-  up | down | logs  docker compose stack
+  up | down | logs  docker compose stack (up prints how to reach its database, DBeaver)
 '@ | Write-Host
 }
 
