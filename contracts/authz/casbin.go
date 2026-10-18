@@ -22,7 +22,7 @@ import (
 // Functions: hasRole(sub, role) (held on the project or platform-wide), hasAnyRole(sub, role...), hasRoleIn(sub, role,
 // obj), onProject(sub) (holds a role on the resource's project, or administers it), mayRun(sub, obj) (holds one of
 // obj.Roles, any role when it lists "*", or administers the project), isProjectAdmin(sub), isProjectOwner(sub) (ADR
-// 0135), isAnonymous(sub).
+// 0138), isAnonymous(sub).
 //
 // A request is allowed when at least one allow rule matches and no deny rule does.
 const Model = `
@@ -49,9 +49,9 @@ type Policy struct {
 
 func (p Policy) params() []any { return []any{p.Rule, p.Resource, p.Action, p.Effect} }
 
-// DefaultPolicies seeds an empty policy store (ADR 0043, 0135). Without an explicit grant everything is refused: an
+// DefaultPolicies seeds an empty policy store (ADR 0043, 0138). Without an explicit grant everything is refused: an
 // administrator (RoleAdmin, a platform role) may do everything; the owner and the administrators of a project (flags
-// of its Assignments, ADR 0135) everything on its resources, the possession of the project (its flags, its
+// of its Assignments, ADR 0138) everything on its resources, the possession of the project (its flags, its
 // stopping, its place) being the owner's; anyone else acts on a project with the roles their Assignments grant there,
 // which the authorizer merges into the principal for the resource's project. Holding a role on the project
 // (onProject) lets them work on it; what they write goes through the steps, agents and actions their roles may run
@@ -63,14 +63,14 @@ var DefaultPolicies = []Policy{
 	// the organization/project scoping below
 	{Rule: `hasRole(r.sub, "reader")`, Resource: "*", Action: "read", Effect: "allow"},
 	// read access within the organization of the resource (multi-tenant isolation), or on a project one works on; a
-	// resource naming no organization is not readable by this rule (ADR 0135)
+	// resource naming no organization is not readable by this rule (ADR 0138)
 	{Rule: `!isAnonymous(r.sub) && ((r.obj.Org != "" && r.obj.Org == r.sub.Org) || onProject(r.sub))`, Resource: "*", Action: "read", Effect: "allow"},
 	// the nodes of a namespace, by their type: who reads which node is the access to its project, checked apart
 	// (indexersvc, graphsvc); reading a type is every person's
 	{Rule: `!isAnonymous(r.sub) && r.obj.Namespace != ""`, Resource: "*", Action: "read", Effect: "allow"},
 	// the triggers are part of the methodologies, which every person reads
 	{Rule: `!isAnonymous(r.sub)`, Resource: "trigger", Action: "read", Effect: "allow"},
-	// the owner and the administrators of a project (ADR 0135): everything on a resource of the project chain (the
+	// the owner and the administrators of a project (ADR 0138): everything on a resource of the project chain (the
 	// authorizer sets the flags only for a resource naming a project)
 	{Rule: `isProjectAdmin(r.sub)`, Resource: "*", Action: "*", Effect: "allow"},
 	// what comes from possessing a project is its owner's: the flags of its Assignments, stopping it, its place
@@ -103,7 +103,7 @@ var DefaultPolicies = []Policy{
 	{Rule: `hasRoleIn(r.sub, r.obj.Role, r.obj)`, Resource: "step", Action: "perform", Effect: "allow"},
 	{Rule: `hasRoleIn(r.sub, r.obj.Accountable, r.obj)`, Resource: "step", Action: "approve", Effect: "allow"},
 	{Rule: `r.sub.Subject == r.obj.Owner && !hasRole(r.sub, "admin")`, Resource: "step", Action: "approve", Effect: "deny"},
-	// agents and actions (ADR 0043, 0135): one of the roles they declare (r.obj.Roles), any member of the project
+	// agents and actions (ADR 0043, 0138): one of the roles they declare (r.obj.Roles), any member of the project
 	// when they declare "*", nobody when they declare none
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "action", Action: "run", Effect: "allow"},
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "agent", Action: "run", Effect: "allow"},

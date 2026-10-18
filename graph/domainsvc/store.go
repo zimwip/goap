@@ -9,20 +9,22 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Store persists domain versions (same lifecycle as methodologies): the database of the domain registry (SQLStore), or
 // the MemoryStore.
 type Store interface {
-	// SaveDomain creates or replaces a draft (ErrImmutable otherwise).
-	SaveDomain(ctx context.Context, r def.Record) error
+	// SaveDomain creates or replaces a draft (ErrImmutable otherwise). The write methods store the events given with
+	// them in the outbox of the registry, in the same transaction (ADR 0136): a write refused writes none.
+	SaveDomain(ctx context.Context, r def.Record, events ...outbox.Message) error
 	// GetDomain returns a version; an empty version returns the latest published one.
 	GetDomain(ctx context.Context, name, version string) (def.Record, error)
 	// ListDomains returns every version, sorted by name then creation date.
 	ListDomains(ctx context.Context) ([]def.Record, error)
-	SetDomainStatus(ctx context.Context, name, version string, s def.Status, at time.Time) error
+	SetDomainStatus(ctx context.Context, name, version string, s def.Status, at time.Time, events ...outbox.Message) error
 	// DeleteDomain removes a draft.
-	DeleteDomain(ctx context.Context, name, version string) error
+	DeleteDomain(ctx context.Context, name, version string, events ...outbox.Message) error
 }
 
 func sortDomainRecords(rs []def.Record) {
@@ -43,8 +45,26 @@ var (
 
 // MemoryStore is an in-memory Store.
 type MemoryStore struct {
-	mu sync.RWMutex
-	m  map[string]def.Record // key name@version
+	mu  sync.RWMutex
+	m   map[string]def.Record // key name@version
+	out outbox.Memory
+}
+
+var _ outbox.Store = (*MemoryStore)(nil)
+
+// Pending implements outbox.Store.
+func (s *MemoryStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.out.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s *MemoryStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.out.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s *MemoryStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.out.PurgePublished(ctx, before)
 }
 
 // NewMemoryStore returns an empty store.
@@ -52,7 +72,7 @@ func NewMemoryStore() *MemoryStore { return &MemoryStore{m: map[string]def.Recor
 
 func key(name, version string) string { return name + "@" + version }
 
-func (s *MemoryStore) SaveDomain(_ context.Context, r def.Record) error {
+func (s *MemoryStore) SaveDomain(_ context.Context, r def.Record, events ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.m == nil {
@@ -66,6 +86,7 @@ func (s *MemoryStore) SaveDomain(_ context.Context, r def.Record) error {
 		r.CreatedAt = old.CreatedAt
 	}
 	s.m[k] = r
+	s.out.Append(events...)
 	return nil
 }
 
@@ -103,7 +124,7 @@ func (s *MemoryStore) ListDomains(_ context.Context) ([]def.Record, error) {
 	return out, nil
 }
 
-func (s *MemoryStore) SetDomainStatus(_ context.Context, name, version string, st def.Status, at time.Time) error {
+func (s *MemoryStore) SetDomainStatus(_ context.Context, name, version string, st def.Status, at time.Time, events ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key(name, version)
@@ -116,10 +137,11 @@ func (s *MemoryStore) SetDomainStatus(_ context.Context, name, version string, s
 		r.PublishedAt = at
 	}
 	s.m[k] = r
+	s.out.Append(events...)
 	return nil
 }
 
-func (s *MemoryStore) DeleteDomain(_ context.Context, name, version string) error {
+func (s *MemoryStore) DeleteDomain(_ context.Context, name, version string, events ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	k := key(name, version)
@@ -131,5 +153,6 @@ func (s *MemoryStore) DeleteDomain(_ context.Context, name, version string) erro
 		return fmt.Errorf("domain %s: %w", k, ErrImmutable)
 	}
 	delete(s.m, k)
+	s.out.Append(events...)
 	return nil
 }

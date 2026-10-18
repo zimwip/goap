@@ -160,7 +160,7 @@
       bind:value={action.role}
       class:bad={bad(`${p}.role`)}
       data-path="{p}.role"
-      title="The role the action acts as, a person performing a human action holds it (ADR 0136). Empty: the responsible role of the step or method refining it, else of the action it specializes."
+      title="The role the action acts as, a person performing a human action holds it (ADR 0139). Empty: the responsible role of the step or method refining it, else of the action it specializes."
       placeholder="inherited"
     />
   </div>

@@ -104,7 +104,7 @@ type localMode struct{ bearerMode }
 func (localMode) Name() string   { return "local" }
 func (localMode) Sessions() bool { return true }
 
-// Authenticate never takes the roles of a token: they come from the graph (ADR 0135).
+// Authenticate never takes the roles of a token: they come from the graph (ADR 0138).
 func (localMode) Authenticate(c *echo.Context, cfg Config) (authz.Principal, error) {
 	return authenticateToken(c, cfg, false)
 }
@@ -145,7 +145,7 @@ func authenticateToken(c *echo.Context, cfg Config, trustRoles bool) (authz.Prin
 	c.Request().Header.Del("Authorization")
 	p := authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project}
 	if trustRoles {
-		p.Roles = claims.Roles // an external identity provider's (ADR 0135); a session of ours carries the graph's
+		p.Roles = claims.Roles // an external identity provider's (ADR 0138); a session of ours carries the graph's
 	}
 	return p, nil
 }

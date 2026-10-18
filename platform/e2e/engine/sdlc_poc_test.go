@@ -150,7 +150,7 @@ func TestSDLCDerisksByAProofOfConcept(t *testing.T) {
 	if run.Pending == nil || !strings.Contains(run.Pending.Action, "confirmation") {
 		t.Fatalf("the POC waits for its probes to be confirmed: %s %s %+v", run.Status, run.Error, run.Pending)
 	}
-	if _, err = e.Submit(lead, run.ID, nil); err != nil { // the tech lead confirms (ADR 0136)
+	if _, err = e.Submit(lead, run.ID, nil); err != nil { // the tech lead confirms (ADR 0139)
 		t.Fatal(err)
 	}
 	if run, err = e.Run(context.Background(), run.ID); err != nil || run.Pending == nil || !strings.HasSuffix(run.Pending.Action, "closing") {

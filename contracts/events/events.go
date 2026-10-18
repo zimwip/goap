@@ -28,6 +28,10 @@ const (
 	MethodologyPublished = "methodology.published"
 )
 
+// ChangePurged: a change that landed nothing was removed with its log (ADR 0037). The web forgets it; it is not an
+// event a trigger reacts to (not in All).
+const ChangePurged = "change.purged"
+
 // All lists the events a trigger can react to (methodology.TriggerEvents); the web keeps one copy of it
 // (TRIGGER_EVENTS in web/src/lib/api/types/registry.ts), checked against this list by a test.
 var All = []string{

@@ -63,7 +63,7 @@ nodeTypes:
       - {name: description, label: Description, description: "What the element is for", type: string, widget: textarea, section: Identity, order: 2}
       - {name: kind, label: Kind, description: "How the action is carried out", type: enum, enum: action-kind, section: Execution, order: 3}
       - {name: roles, label: Roles, description: "Roles allowed to run the action that the version does not declare (the declared ones are assigns links, as run, ADR 0120)", type: json, widget: textarea, section: Access, order: 4}
-      - {name: role, label: Role, description: "Role the action acts as when the version does not declare it (a declared one is an assigns link, as actsAs); none: the role of what refines it (ADR 0136)", type: string, section: Access, order: 4}
+      - {name: role, label: Role, description: "Role the action acts as when the version does not declare it (a declared one is an assigns link, as actsAs); none: the role of what refines it (ADR 0139)", type: string, section: Access, order: 4}
       - {name: verify, label: Verification, description: "How the effect is verified: the oracle (tool, human, model) and whether the verifier differs from the producer", type: json, widget: textarea, section: Execution, order: 5}
       - {name: pre, label: Preconditions, description: "Conditions required to run the action that the version does not declare (a library's, generated ones), with their expected value: a declared condition is a requires link (ADR 0120)", type: json, widget: textarea, section: Planning, order: 6}
       - {name: effects, label: Effects, description: "Conditions the action establishes that the version does not declare, with their value: a declared condition is a produces link (ADR 0120)", type: json, widget: textarea, section: Planning, order: 7}
@@ -179,7 +179,7 @@ nodeTypes:
     attributes:
       - {name: examples, label: Examples, description: "Examples of the process at work", type: json, widget: textarea, section: Identity, order: 1}
       - {name: references, label: References, description: "Reference documents", type: json, widget: textarea, section: Guidance, order: 2}
-      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, ADR 0120); the responsible role is required, the steps inherit them (ADR 0136)", type: json, widget: textarea, section: Access, order: 3}
+      - {name: roles, label: Responsibilities, description: "RACI assignment of roles the version does not declare (a declared role is an assigns link, ADR 0120); the responsible role is required, the steps inherit them (ADR 0139)", type: json, widget: textarea, section: Access, order: 3}
   # Step and MethodStep (architecture plan point 2): one step of a Process/Method, materialized as its own
   # node (not just compiled in-memory) so it can be an Activity in its own right - its own input/goals/output,
   # its own ActivityRuns. Still authored inline in the owning Process/Method's YAML for ergonomics; the

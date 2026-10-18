@@ -39,11 +39,9 @@ export function moveChoices(opts: {
   return { choices, blocked: choices.length ? '' : `No other project lists the methodology ${methodology}.` };
 }
 
-/** The project a new change starts in: the active project, the claim '' being the root project. */
-export const defaultChangeProject = (active: string, root: string, options: ProjectChoice[]): string => {
-  const key = active || root;
-  return options.some((o) => o.key === key) || !options.length ? key : (options[0]?.key ?? key);
-};
+/** The project a new change starts in: the active project; none ('') when no project is selected or the active one is
+ * not offered, so the person picks it. */
+export const defaultChangeProject = (active: string, options: ProjectChoice[]): string => (active && (options.some((o) => o.key === active) || !options.length) ? active : '');
 
 /** What the form of a new change offers as methodology (ADR 0096): those of the project, one preselected. */
 export interface MethodologyOffer {

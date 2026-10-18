@@ -207,7 +207,7 @@ export interface ActionForm extends Identified {
   permission: string;
   /** roles allowed to run the action (ADR 0043), comma separated; empty: those of the agent */
   roles: string;
-  /** the role the action acts as (ADR 0136); empty: the role of what refines it */
+  /** the role the action acts as (ADR 0139); empty: the role of what refines it */
   role: string;
   model: string;
   prompt: string;
@@ -289,7 +289,7 @@ export interface AgentForm extends Identified {
   mcps: string;
   /** roles allowed to run the agent (ADR 0043), comma separated; empty: any member of the project */
   roles: string;
-  /** the role the agent acts as (ADR 0136); empty: the one role of its actions */
+  /** the role the agent acts as (ADR 0139); empty: the one role of its actions */
   role: string;
   triggers: TriggerForm[];
   /** one instance per scope (ADR 0112) */
@@ -370,7 +370,7 @@ export interface ProcessForm extends Identified {
   /** one example per line */
   examples: string;
   references: ReferenceForm[];
-  /** RACI roles of the process (ADR 0136): the responsible one is required */
+  /** RACI roles of the process (ADR 0139): the responsible one is required */
   roles: ResponsibilitiesForm;
   steps: StepForm[];
   /** the events that make it reactive (ADR 0110) */

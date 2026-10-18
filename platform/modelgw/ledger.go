@@ -237,6 +237,8 @@ type pending struct {
 	start time.Time
 	// x is the exchange to store, nil when the call's is kept elsewhere or the storage is off.
 	x *Exchange
+	// refused: the admission refused the call (OutcomeRefused).
+	refused bool
 }
 
 // begin opens the ledger row of a call: the principal is the context's, the declaration the meta of the context.
@@ -307,6 +309,12 @@ func (p *pending) requestEmbed(texts []string) {
 	p.x.Messages = []llm.Message{{Role: "texts", Content: b.String()}}
 }
 
+// refuse writes the row of a call the admission refused.
+func (p *pending) refuse(ctx context.Context, provider, model string, err error) {
+	p.refused = true
+	p.finish(ctx, provider, model, 0, 0, err)
+}
+
 // finish writes the row: the provider and model that served (or were resolved), the tokens and the error. It never
 // fails the call; a row that cannot be written is logged like the quota counter.
 func (p *pending) finish(ctx context.Context, provider, model string, in, out int, err error) {
@@ -324,7 +332,14 @@ func (p *pending) finish(ctx context.Context, provider, model string, in, out in
 		cx := p.x.capped()
 		x = &cx
 	}
-	if _, e := p.s.Store.AppendCall(context.WithoutCancel(ctx), c, x); e != nil {
+	outcome := OutcomeServed
+	switch {
+	case p.refused:
+		outcome = OutcomeRefused
+	case err != nil:
+		outcome = OutcomeFailed
+	}
+	if _, e := p.s.appendCall(context.WithoutCancel(ctx), c, x, outcome, err); e != nil {
 		p.s.Log.Error("call not recorded", "source", c.Source, "model", provider+"/"+model, "err", e)
 	}
 }

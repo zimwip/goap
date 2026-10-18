@@ -13,7 +13,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 )
 
-// TestProjectOwnersAndAdministrators (ADR 0135): an owner holds every right of an administrator and those of
+// TestProjectOwnersAndAdministrators (ADR 0138): an owner holds every right of an administrator and those of
 // possession (the flags, stopping the project); an administrator creates sub-projects; a member does neither; a
 // project that had an owner keeps one.
 func TestProjectOwnersAndAdministrators(t *testing.T) {

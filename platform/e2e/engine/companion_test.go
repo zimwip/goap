@@ -40,7 +40,7 @@ processes:
       - {name: mitigate, action: mitigate}
 `
 
-// riskManager performs the steps of risk_watch: the role responsible for the process (ADR 0136).
+// riskManager performs the steps of risk_watch: the role responsible for the process (ADR 0139).
 var riskManager = authz.With(context.Background(), authz.Principal{Subject: "rm", Org: "acme", Roles: []string{"risk_manager"}})
 
 func companionOf(t *testing.T, e *engine.Engine, change domain.ChangeID) []*engine.Process {

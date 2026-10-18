@@ -25,7 +25,7 @@ const (
 	PlatformScope    = "PLATFORM"
 )
 
-// PropStopped flags a stopped project (ADR 0135): it and its sub-projects take no new change.
+// PropStopped flags a stopped project (ADR 0138): it and its sub-projects take no new change.
 const PropStopped = "stopped"
 
 // ProjectUnit is a project or sub-project.
@@ -75,13 +75,13 @@ func PlatformAssignmentKey(org string) string { return AssignmentKey(org, Platfo
 type Assignment struct {
 	Roles       []string
 	Description string
-	// Owner and Admin are the flags of a project Assignment (ADR 0135): the owner possesses the project and its
+	// Owner and Admin are the flags of a project Assignment (ADR 0138): the owner possesses the project and its
 	// sub-projects, the administrator administers them; a platform Assignment carries neither.
 	Owner bool
 	Admin bool
 }
 
-// Property names of the flags of an Assignment (ADR 0135).
+// Property names of the flags of an Assignment (ADR 0138).
 const (
 	PropOwner = "owner"
 	PropAdmin = "admin"

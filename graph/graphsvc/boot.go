@@ -54,7 +54,7 @@ func Boot(ctx context.Context, g *graph.Graph, o Options) (Report, error) {
 	if o.RequireHooks && (g.Authorizer == nil || g.ChangeAuthorizer == nil || g.OperationAuthorizer == nil || g.ItemAuthorizer == nil ||
 		g.SeatAuthorizer == nil || g.ProjectMoveGate == nil || len(g.Validators) == 0) {
 		// an access hook left nil lets everything through (the graph core is a library): a composition serving people
-		// plugs each one (ADR 0135)
+		// plugs each one (ADR 0138)
 		panic("graphsvc.Boot: the graph hooks (Authorizer, ChangeAuthorizer, OperationAuthorizer, ItemAuthorizer, SeatAuthorizer, ProjectMoveGate, Validators) must be set before the bootstrap")
 	}
 	if g.SubChangeValidator == nil || g.Lifecycles == nil {

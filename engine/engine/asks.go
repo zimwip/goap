@@ -130,7 +130,7 @@ func (e *Engine) processAsk(ctx context.Context, p *Process, who authz.Principal
 		if r := t.Context.responsible(); r != "" {
 			a.Roles = appendRole(a.Roles, r)
 		} else if found && act.Role != "" {
-			a.Roles = appendRole(a.Roles, act.Role) // the role the action acts as (ADR 0136)
+			a.Roles = appendRole(a.Roles, act.Role) // the role the action acts as (ADR 0139)
 		}
 		allowed = e.maySubmit(ctx, p, m, who)
 	case TaskApproval:

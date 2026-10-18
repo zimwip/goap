@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/zimwip/goap/contracts/events"
 	"slices"
 	"strings"
 
@@ -31,25 +30,27 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-// Publisher publishes the events of the changes (NATS in services, the event hub in process); the engine's
-// Publisher has the same method, so one publisher serves both.
+// Publisher receives the documents RepublishIndex sends again to rebuild an index (ADR 0026); the engine's Publisher
+// has the same method. The events of the graph are not the handler's: the graph emits them through its outbox
+// (ADR 0136), whoever calls it.
 type Publisher interface {
 	Publish(ctx context.Context, subject string, v any) error
 }
 
 // Handler implements graphv1connect.GraphServiceHandler.
 type Handler struct {
-	Graph  *graph.Graph
+	Graph *graph.Graph
+	// Events receives what RepublishIndex sends (nil: the RPC is refused).
 	Events Publisher
 	// Authz gates the creation of a node in a change (resource "object": ImpactNodeCreate, the successors of a
-	// merge or split, a graph import), the tags and the reading of prompts. Nil refuses (ADR 0135). The other
+	// merge or split, a graph import), the tags and the reading of prompts. Nil refuses (ADR 0138). The other
 	// impact operations are not gated by it.
 	Authz authz.Authorizer
 	// Projects tells whether a person works on a project (access.Directory.MayAccessProject): a change, and a node
-	// read outside a change, are read by those who work on its project (ADR 0135), the PersonalScope interceptor and
+	// read outside a change, are read by those who work on its project (ADR 0138), the PersonalScope interceptor and
 	// the lists of changes asking it. Nil: no person reads them (a platform service, acting by itself, still does).
 	Projects func(ctx context.Context, p authz.Principal, project string) (bool, error)
-	// Stopped tells whether a project takes no new change (access.Directory.ProjectStopped, ADR 0135); nil: none is.
+	// Stopped tells whether a project takes no new change (access.Directory.ProjectStopped, ADR 0138); nil: none is.
 	Stopped func(ctx context.Context, project string) (bool, error)
 	// Floor gates changes to User and Policy nodes (resource "policy", action "write"). It must not depend
 	// on the policies themselves, so that no policy can lock the administrators out; nil falls back to Authz.
@@ -63,7 +64,7 @@ type Handler struct {
 
 var _ graphv1connect.GraphServiceHandler = (*Handler)(nil)
 
-// EveryProject is the explicit opening of Handler.Projects (ADR 0135): every person works on every project. For the
+// EveryProject is the explicit opening of Handler.Projects (ADR 0138): every person works on every project. For the
 // tests and the gateway-less dev mode, never a default.
 func EveryProject(context.Context, authz.Principal, string) (bool, error) { return true, nil }
 
@@ -72,16 +73,6 @@ func res[T any](m *T, err error) (*connect.Response[T], error) {
 		return nil, rpcerr.ToConnect(err)
 	}
 	return connect.NewResponse(m), nil
-}
-
-func (h *Handler) publish(ctx context.Context, subject string, v any) {
-	if ev, ok := v.(domain.ChangeEvent); ok && ev.EndUser == "" {
-		ev.EndUser = authz.From(ctx).EndUser() // what the event sets off is attributed to its end user (ADR 0114)
-		v = ev
-	}
-	if h.Events != nil {
-		_ = h.Events.Publish(ctx, subject, v)
-	}
 }
 
 func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNodeRequest]) (*connect.Response[graphv1.GetNodeResponse], error) {
@@ -110,7 +101,7 @@ func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNod
 	return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
 }
 
-// mayReadNode tells whether the caller reads a node outside a change (ADR 0135): those who work on its project; the
+// mayReadNode tells whether the caller reads a node outside a change (ADR 0138): those who work on its project; the
 // nodes of the built-in namespaces (the organisation, the platform, the methodologies) describe the platform and are
 // every person's to read. Read through a change, a node is the change's (PersonalScope).
 func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
@@ -186,6 +177,10 @@ func (h *Handler) GetBaselineGraph(ctx context.Context, r *connect.Request[graph
 // Caller names the principal of a request, recorded on the events of the change impacts (graph.Graph.Caller,
 // ADR 0029).
 func Caller(ctx context.Context) string { return authz.From(ctx).Subject }
+
+// EndUser is the graph's EndUser (ADR 0114): the person the authenticated principal acts for, named by the events of
+// the changes.
+func EndUser(ctx context.Context) string { return authz.From(ctx).EndUser() }
 
 func (h *Handler) ListChangeLog(ctx context.Context, r *connect.Request[graphv1.ListChangeLogRequest]) (*connect.Response[graphv1.ListChangeLogResponse], error) {
 	f := domain.LogFilter{Change: domain.ChangeID(r.Msg.ChangeId), Types: r.Msg.Types, Processes: r.Msg.ProcessIds, Execution: r.Msg.Execution,
@@ -351,7 +346,6 @@ func (h *Handler) ImportGraph(ctx context.Context, r *connect.Request[graphv1.Im
 		if err != nil {
 			return nil, rpcerr.ToConnect(err)
 		}
-		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
 		resp.Change = pbconv.ChangeToPB(c)
 	}
 	return connect.NewResponse(resp), nil
@@ -477,13 +471,10 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 	}
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology, MethodologyVersion: r.Msg.MethodologyVersion,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID})
-	if err == nil {
-		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
-	}
 	return res(&graphv1.CreateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
-// mayRead tells whether the caller may read a change (ADR 0037, 0135): a personal change is its subject's alone; any
+// mayRead tells whether the caller may read a change (ADR 0037, 0138): a personal change is its subject's alone; any
 // other, those who work on its project, platform services acting by themselves.
 func (h *Handler) mayRead(ctx context.Context, c domain.Change) bool {
 	if access.IsPersonal(c) {
@@ -563,17 +554,8 @@ func (h *Handler) UpdateChange(ctx context.Context, r *connect.Request[graphv1.U
 		st := domain.ChangeStatus(*r.Msg.Status)
 		p.Status = &st
 	}
-	before, err := h.Graph.Change(ctx, domain.ChangeID(r.Msg.Id))
-	if err != nil {
-		return nil, rpcerr.ToConnect(err)
-	}
+	// the graph emits change.edited, what a reactive activity of the methodology may want to look at again (ADR 0110)
 	c, err := h.Graph.UpdateChange(ctx, domain.ChangeID(r.Msg.Id), p)
-	if fields := domain.EditedFields(before, c); err == nil && fields != nil {
-		// what a reactive activity of the methodology may want to look at again (ADR 0110)
-		ev := c
-		ev.Items, ev.Nodes = nil, nil
-		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeEdited), domain.ChangeEvent{Type: events.ChangeEdited, Change: ev, Fields: fields})
-	}
 	return res(&graphv1.UpdateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
@@ -590,7 +572,7 @@ func (h *Handler) MoveChange(ctx context.Context, r *connect.Request[graphv1.Mov
 	return connect.NewResponse(&graphv1.MoveChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
-// AttachChange makes a root change a sub-change of a change integrating it (ADR 0106) and publishes change.attached.
+// AttachChange makes a root change a sub-change of a change integrating it (ADR 0106) (the graph emits change.attached).
 func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[graphv1.AttachChangeRequest]) (*connect.Response[graphv1.AttachChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	c, err := h.Graph.AttachChange(ctx, domain.ChangeID(r.Msg.ChangeId), domain.ChangeID(r.Msg.ParentId))
@@ -598,26 +580,17 @@ func (h *Handler) AttachChange(ctx context.Context, r *connect.Request[graphv1.A
 		return nil, rpcerr.ToConnect(err)
 	}
 	c.Items, c.Nodes = nil, nil
-	h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeAttached), domain.ChangeEvent{Type: events.ChangeAttached, Change: c})
 	return connect.NewResponse(&graphv1.AttachChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
-// DetachChange gives a sub-change back as a root change (ADR 0106) and publishes change.detached.
+// DetachChange gives a sub-change back as a root change (ADR 0106) (the graph emits change.detached).
 func (h *Handler) DetachChange(ctx context.Context, r *connect.Request[graphv1.DetachChangeRequest]) (*connect.Response[graphv1.DetachChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	before, err := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId))
-	if err != nil {
-		return nil, rpcerr.ToConnect(err)
-	}
 	c, err := h.Graph.DetachChange(ctx, domain.ChangeID(r.Msg.ChangeId))
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	c.Items, c.Nodes = nil, nil
-	// the event names the change it left, for the integrator listening to its integrated changes
-	ev := c
-	ev.ParentID = before.ParentID
-	h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeDetached), domain.ChangeEvent{Type: events.ChangeDetached, Change: ev})
 	return connect.NewResponse(&graphv1.DetachChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
@@ -643,6 +616,18 @@ func (h *Handler) UpgradeChange(ctx context.Context, r *connect.Request[graphv1.
 	return connect.NewResponse(&graphv1.UpgradeChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
+// SetChangeMethodology gives an open change that follows no methodology one; the graph's MethodologyGate checks that it
+// applies to the project of the change.
+func (h *Handler) SetChangeMethodology(ctx context.Context, r *connect.Request[graphv1.SetChangeMethodologyRequest]) (*connect.Response[graphv1.SetChangeMethodologyResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, err := h.Graph.SetChangeMethodology(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Methodology)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items, c.Nodes = nil, nil
+	return connect.NewResponse(&graphv1.SetChangeMethodologyResponse{Change: pbconv.ChangeToPB(c)}), nil
+}
+
 // GetChangeDependencies reads the dependencies of a change, its dependents and the merge order of its sub-changes
 // (ADR 0108).
 func (h *Handler) GetChangeDependencies(ctx context.Context, r *connect.Request[graphv1.GetChangeDependenciesRequest]) (*connect.Response[graphv1.GetChangeDependenciesResponse], error) {
@@ -659,12 +644,6 @@ func (h *Handler) AddItems(ctx context.Context, r *connect.Request[graphv1.AddIt
 	ctx = h.Identity.Context(ctx, r.Header())
 	proposed := pbconv.ItemsFromPB(r.Msg.Items)
 	items, err := h.Graph.AddItems(ctx, domain.ChangeID(r.Msg.ChangeId), proposed)
-	if err == nil {
-		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
-			c.Items = nil
-			h.publish(ctx, events.ChangeSubject(r.Msg.ChangeId, events.ChangeItemAdded), domain.ChangeEvent{Type: events.ChangeItemAdded, Change: c, Items: items})
-		}
-	}
 	return res(&graphv1.AddItemsResponse{Items: pbconv.ItemsToPB(items)}, err)
 }
 
@@ -682,7 +661,7 @@ func (h *Handler) gateAccess(ctx context.Context, typ string) error {
 		}
 		err := authz.Check(ctx, gate, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: access.ResourcePolicy, Org: who.Org}})
 		if err != nil && (typ == access.NodeTypeAssignment || typ == access.NodeTypeProjectUnit) {
-			// the Assignments and the projects are also their owners' and administrators' (ADR 0135): one who
+			// the Assignments and the projects are also their owners' and administrators' (ADR 0138): one who
 			// administers their active project may try, access.ProjectScopeValidator judges each write at commit
 			err = h.mayAdministerProjects(ctx, who, typ)
 		}
@@ -694,7 +673,7 @@ func (h *Handler) gateAccess(ctx context.Context, typ string) error {
 }
 
 // mayAdministerProjects is the early gate of the Assignments and projects for a person who is no platform
-// administrator (ADR 0135): they administer their active project (the root one when they name none).
+// administrator (ADR 0138): they administer their active project (the root one when they name none).
 func (h *Handler) mayAdministerProjects(ctx context.Context, who authz.Principal, typ string) error {
 	project := who.Project
 	if project == "" {
@@ -748,15 +727,17 @@ func (h *Handler) CommitEdits(ctx context.Context, r *connect.Request[graphv1.Co
 		return nil, err
 	}
 	projectID := h.projectOf(ctx, r.Msg.ProjectId)
+	// a platform service's own events ride on its commit (ADR 0136); a person carries none
+	var carried []graph.CarriedEvent
+	if len(r.Msg.Events) > 0 && !authz.From(ctx).System() {
+		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("only a platform service carries events on a commit"))
+	}
+	for _, e := range r.Msg.Events {
+		carried = append(carried, graph.CarriedEvent{Subject: e.Subject, Payload: e.Payload})
+	}
 	out, err := h.Graph.Commit(ctx, graph.Commit{Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology,
 		Data: pbconv.Map(r.Msg.Data), Baseline: domain.BaselineID(r.Msg.BaselineId), By: by, BaselineName: r.Msg.BaselineName, Edits: edits,
-		OwnerOrg: owner, ProjectID: projectID})
-	if err == nil {
-		if c, cerr := h.Graph.Change(ctx, out.Change); cerr == nil {
-			c.Items, c.Nodes = nil, nil
-			h.publish(ctx, events.ChangeSubject(string(out.Change), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &out.Baseline})
-		}
-	}
+		OwnerOrg: owner, ProjectID: projectID, Events: carried})
 	return res(&graphv1.CommitEditsResponse{ChangeId: string(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline)}, err)
 }
 
@@ -1153,13 +1134,6 @@ func (h *Handler) GetBlackboard(ctx context.Context, r *connect.Request[graphv1.
 func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.ApplyChangeRequest]) (*connect.Response[graphv1.ApplyChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
 	b, err := h.Graph.Apply(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
-	if err == nil {
-		// a merge waiting for a resolution leaves the change committed, not applied
-		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil && c.Status != domain.ChangeCommitted {
-			c.Items = nil
-			h.publish(ctx, events.ChangeSubject(r.Msg.ChangeId, events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &b})
-		}
-	}
 	return res(&graphv1.ApplyChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 
@@ -1168,12 +1142,6 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 func (h *Handler) CommitChange(ctx context.Context, r *connect.Request[graphv1.CommitChangeRequest]) (*connect.Response[graphv1.CommitChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
 	b, err := h.Graph.CommitChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
-	if err == nil {
-		if c, cerr := h.Graph.Change(ctx, domain.ChangeID(r.Msg.ChangeId)); cerr == nil {
-			c.Items, c.Nodes = nil, nil
-			h.publish(ctx, events.ChangeSubject(r.Msg.ChangeId, events.ChangeCommitted), domain.ChangeEvent{Type: events.ChangeCommitted, Change: c, Baseline: &b})
-		}
-	}
 	return res(&graphv1.CommitChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 
@@ -1184,9 +1152,6 @@ func (h *Handler) TransitionChange(ctx context.Context, r *connect.Request[graph
 		return nil, rpcerr.ToConnect(err)
 	}
 	c.Items = nil
-	ev := c
-	ev.Nodes = nil
-	h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeTransitioned), domain.ChangeEvent{Type: events.ChangeTransitioned, Change: ev})
 	return connect.NewResponse(&graphv1.TransitionChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
@@ -1237,11 +1202,6 @@ func (h *Handler) MergeBranch(ctx context.Context, r *connect.Request[graphv1.Me
 		req.Resolutions[domain.NodeID(id)] = graph.Resolution{Props: pbconv.Map(res.GetProps()), Skip: res.GetSkip()}
 	}
 	out, err := h.Graph.MergeBranch(ctx, req)
-	if err == nil {
-		c := out.Change
-		c.Items = nil
-		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c, Baseline: &out.Baseline})
-	}
 	return res(&graphv1.MergeBranchResponse{Change: pbconv.ChangeToPB(out.Change), Baseline: pbconv.BaselineToPB(out.Baseline), Plan: pbconv.MergePlanToPB(out.Plan)}, err)
 }
 
@@ -1294,10 +1254,6 @@ func (h *Handler) MergeChange(ctx context.Context, r *connect.Request[graphv1.Me
 	}
 	ctx = h.Identity.Context(ctx, r.Header()) // the merge asks the change's methodology for the caller (ADR 0102)
 	c, err := h.Graph.IntegrateChange(ctx, domain.ChangeID(r.Msg.ChangeId), resolutions)
-	if err == nil && c.Status == domain.ChangeApplied { // a merge waiting for a resolution leaves the change committed
-		c.Items = nil
-		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeApplied), domain.ChangeEvent{Type: events.ChangeApplied, Change: c})
-	}
 	return res(&graphv1.MergeChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }
 
@@ -1318,7 +1274,6 @@ func (h *Handler) SplitChange(ctx context.Context, r *connect.Request[graphv1.Sp
 	cs, err := h.Graph.SplitByOwner(ctx, domain.ChangeID(r.Msg.ChangeId))
 	out := &graphv1.SplitChangeResponse{}
 	for _, c := range cs {
-		h.publish(ctx, events.ChangeSubject(string(c.ID), events.ChangeCreated), domain.ChangeEvent{Type: events.ChangeCreated, Change: c})
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
 	}
 	return res(out, err)
@@ -1338,9 +1293,6 @@ func (h *Handler) OpenFlow(ctx context.Context, r *connect.Request[graphv1.OpenF
 	m := r.Msg
 	f, err := h.Graph.OpenFlow(ctx, domain.ChangeID(m.ChangeId), graph.OpenFlowRequest{Parent: m.Parent, ForkAfter: domain.ItemID(m.ForkAfter),
 		Seeds: itemIDs(m.Seeds), StaleRuns: m.StaleRuns, Origin: pbconv.Map(m.Origin), Items: pbconv.ItemsFromPB(m.Items)})
-	if err == nil {
-		h.publish(ctx, "goap.change."+m.ChangeId+".flow_opened", f)
-	}
 	return res(&graphv1.OpenFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
 }
 
@@ -1355,18 +1307,12 @@ func itemIDs(ss []string) []domain.ItemID {
 func (h *Handler) AdoptFlow(ctx context.Context, r *connect.Request[graphv1.AdoptFlowRequest]) (*connect.Response[graphv1.AdoptFlowResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	f, err := h.Graph.AdoptFlow(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, authz.From(ctx).Subject)
-	if err == nil {
-		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".flow_adopted", f)
-	}
 	return res(&graphv1.AdoptFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
 }
 
 func (h *Handler) DiscardFlow(ctx context.Context, r *connect.Request[graphv1.DiscardFlowRequest]) (*connect.Response[graphv1.DiscardFlowResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	f, err := h.Graph.DiscardFlow(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Flow, authz.From(ctx).Subject)
-	if err == nil {
-		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".flow_discarded", f)
-	}
 	return res(&graphv1.DiscardFlowResponse{Flow: pbconv.FlowToPB(f)}, err)
 }
 
@@ -1430,18 +1376,12 @@ func (h *Handler) OpenOption(ctx context.Context, r *connect.Request[graphv1.Ope
 	m := r.Msg
 	f, err := h.Graph.OpenOption(ctx, domain.ChangeID(m.ChangeId), graph.OpenOptionRequest{Name: m.Name, Hypothesis: m.Hypothesis, Activate: m.Activate,
 		By: authz.From(ctx).Subject})
-	if err == nil {
-		h.publish(ctx, "goap.change."+m.ChangeId+".option_opened", f)
-	}
 	return res(&graphv1.OpenOptionResponse{Option: pbconv.FlowToPB(f)}, err)
 }
 
 func (h *Handler) ActivateOption(ctx context.Context, r *connect.Request[graphv1.ActivateOptionRequest]) (*connect.Response[graphv1.ActivateOptionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	active, err := h.Graph.ActivateOption(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Option, authz.From(ctx).Subject)
-	if err == nil {
-		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".option_activated", map[string]any{"active": active})
-	}
 	return res(&graphv1.ActivateOptionResponse{Active: active}, err)
 }
 
@@ -1454,18 +1394,12 @@ func (h *Handler) EvaluateOption(ctx context.Context, r *connect.Request[graphv1
 func (h *Handler) SelectOption(ctx context.Context, r *connect.Request[graphv1.SelectOptionRequest]) (*connect.Response[graphv1.SelectOptionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	f, err := h.Graph.SelectOption(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Option, authz.From(ctx).Subject)
-	if err == nil {
-		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".option_selected", f)
-	}
 	return res(&graphv1.SelectOptionResponse{Option: pbconv.FlowToPB(f)}, err)
 }
 
 func (h *Handler) RejectOption(ctx context.Context, r *connect.Request[graphv1.RejectOptionRequest]) (*connect.Response[graphv1.RejectOptionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	f, err := h.Graph.RejectOption(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Option, authz.From(ctx).Subject)
-	if err == nil {
-		h.publish(ctx, "goap.change."+r.Msg.ChangeId+".option_rejected", f)
-	}
 	return res(&graphv1.RejectOptionResponse{Option: pbconv.FlowToPB(f)}, err)
 }
 
@@ -1530,9 +1464,6 @@ func (h *Handler) OpenDecision(ctx context.Context, r *connect.Request[graphv1.O
 		in.Options = []string{}
 	}
 	d, err := h.Graph.OpenDecision(ctx, domain.ChangeID(m.ChangeId), in)
-	if err == nil {
-		h.publish(ctx, "goap.change."+m.ChangeId+".decision_opened", d)
-	}
 	return res(&graphv1.OpenDecisionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
 }
 
@@ -1541,9 +1472,6 @@ func (h *Handler) RuleDecision(ctx context.Context, r *connect.Request[graphv1.R
 	m := r.Msg
 	d, err := h.Graph.RuleDecision(ctx, domain.ChangeID(m.ChangeId), graph.RuleRequest{Point: m.Point, Outcome: m.Outcome, Option: m.Option,
 		Confidence: m.Confidence, Justification: m.Justification, Questions: m.Questions, Human: !m.Agent, By: authz.From(ctx).Subject, Role: m.Role})
-	if err == nil {
-		h.publish(ctx, "goap.change."+m.ChangeId+".decision_ruled", d)
-	}
 	return res(&graphv1.RuleDecisionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
 }
 
@@ -1551,9 +1479,6 @@ func (h *Handler) AnswerQuestion(ctx context.Context, r *connect.Request[graphv1
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	d, err := h.Graph.AnswerQuestion(ctx, domain.ChangeID(m.ChangeId), m.Question, m.Answer, m.Process, authz.From(ctx).Subject)
-	if err == nil {
-		h.publish(ctx, "goap.change."+m.ChangeId+".question_answered", d)
-	}
 	return res(&graphv1.AnswerQuestionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
 }
 
@@ -1561,9 +1486,6 @@ func (h *Handler) RatifyDecision(ctx context.Context, r *connect.Request[graphv1
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	d, err := h.Graph.RatifyDecision(ctx, domain.ChangeID(m.ChangeId), m.Point, m.Accept, authz.From(ctx).Subject, m.Comment)
-	if err == nil {
-		h.publish(ctx, "goap.change."+m.ChangeId+".decision_ratified", d)
-	}
 	return res(&graphv1.RatifyDecisionResponse{Point: pbconv.DecisionPointToPB(d)}, err)
 }
 

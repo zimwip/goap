@@ -1,4 +1,4 @@
-# ADR 0135 — Deny by default; project owners and administrators
+# ADR 0138 — Deny by default; project owners and administrators
 
 **Status**: proposed · **Date**: 2026-10 ·
 Revises ADR 0020 (access control) and ADR 0043 (project-scoped roles); keeps ADR 0046 / 0047 (platform roles,

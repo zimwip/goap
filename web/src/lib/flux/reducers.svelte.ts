@@ -23,7 +23,7 @@ export const CHANGES_REFRESH_MS = 2000;
 /** Starts the reducers; returns the stop function. */
 export function startReducers(): () => void {
   const offs = [
-    onKind(['change', 'node', 'baseline', 'methodology', 'domain'], (e) => {
+    onKind(['change', 'node', 'baseline', 'methodology', 'domain', 'conversation'], (e) => {
       for (const k of keysOf(e)) touchSoon(k);
     }),
     // a version somebody else saved, published or removed, in an open draft

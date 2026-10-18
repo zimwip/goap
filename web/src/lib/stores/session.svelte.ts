@@ -172,7 +172,7 @@ export const platformRoles = (): PlatformRole[] => session.principal?.platformRo
  * catalogue and quotas, the usage of the whole platform, the index). approve: they work on their active project, so
  * an approval of someone else's run may be theirs to give (the engine decides run by run). lowerCriticality: they may
  * lower the criticality of a change of their project (ADR 0075 §3; raising it asks nothing more than writing the change).
- * administerProject / ownProject (ADR 0135): they administer, or own, their active project (a flag of an Assignment on
+ * administerProject / ownProject (ADR 0138): they administer, or own, their active project (a flag of an Assignment on
  * it or above it): its Assignments' roles and its sub-projects; the owner also the owner / admin flags, stopping the
  * project and its place.
  */

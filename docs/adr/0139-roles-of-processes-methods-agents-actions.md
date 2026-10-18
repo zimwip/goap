@@ -1,14 +1,14 @@
-# ADR 0136 — Every process and method has a role; agents and actions take the role of what they run
+# ADR 0139 — Every process and method has a role; agents and actions take the role of what they run
 
 **Status**: proposed · **Date**: 2026-10 ·
 Revises ADR 0035 §2 (RACI roles of steps and methods) and ADR 0050 (the role an agent acts as). Builds on ADR 0043
-(roles allowed to run an agent or an action) and ADR 0135 (deny by default).
+(roles allowed to run an agent or an action) and ADR 0138 (deny by default).
 
 ## Context
 
 A methodology assigns its roles RACI style on steps and methods, but nothing requires it: a process names no role at
 all, a method may name none, a step without roles leaves its human tasks to anyone (`stepAllowed` answers yes), and
-the role an agent acts as is set only for the agent generated for a method. Under deny by default (ADR 0135) a piece
+the role an agent acts as is set only for the agent generated for a method. Under deny by default (ADR 0138) a piece
 of work nobody answers for is a hole: who performs a step, and as whom an agent or an action works, must always be
 said, without the author repeating it on every element.
 
@@ -56,6 +56,10 @@ may start it, ADR 0043) is not touched: the role an agent acts as is not a restr
 The step context already carries the inherited roles. When a human task has no step responsible (an action run
 outside a step), the person submitting it must hold the role the action acts as (`Engine.maySubmit`), and
 `GetChangeAsks` addresses it to that role; an llm action with no step role is told the role it acts as.
+
+None of these roles binds the platform administrator: the first default rule (`hasRole(r.sub, "admin")`, a
+floor no stored policy removes, ADR 0047) allows every request, so an administrator performs a step reserved to a
+role, runs an agent or an action of declared roles and sits on a board alike (`TestPlatformAdministratorPassesTheRolesOfMethodologies`).
 
 ## Consequences
 

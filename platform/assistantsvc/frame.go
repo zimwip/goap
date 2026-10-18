@@ -9,12 +9,13 @@ import (
 	"github.com/zimwip/goap/platform/convsvc"
 )
 
-// The frame of a turn: where the person is (the active project, the change they are looking at and its methodology),
+// The frame of a turn: where the person works (the active project, the working change they selected and its methodology),
 // computed by the server from the context of the turn, the history of the conversation and the tools run in the turn,
 // never from the words of the model. The tools the model gets and the prompt follow it: outside any project (none
 // named), the tools that find one or a change; in a project, those of a project; on a change, those of a change. A
 // tool that sets the context moves the frame for the next rounds of the turn (select_project to the project,
-// open_change to the change), so the assistant reaches the rest of the tools from there. Creating a change (create_change, start_agent with a newChange) waits until the open changes were searched
+// open_change to the change), so the assistant reaches the rest of the tools from there. A change the person only looks
+// at (a change tab that is not the working change) is not the frame: the prompt names it, and open_change works in it. Creating a change (create_change, start_agent with a newChange) waits until the open changes were searched
 // in this conversation (search_changes), so the assistant proposes an existing change before a new one.
 
 // Level is how specific the frame is.
@@ -25,7 +26,7 @@ const (
 	LevelNone Level = "none"
 	// LevelProject: no change in the context; the active project.
 	LevelProject Level = "project"
-	// LevelChange: the person is looking at a change they can read.
+	// LevelChange: the turn works on a change the person can read: the working change, or the one open_change opened.
 	LevelChange Level = "change"
 )
 
@@ -36,8 +37,11 @@ type Frame struct {
 	Project string
 	// Change and Methodology are the change of the context and its methodology, at level change.
 	Change, Methodology string
-	// Note says why a change of the context is not the frame (it cannot be read).
+	// Note says why a change of the context is not the frame (it cannot be read, or belongs to another project than
+	// the one select_project moved to).
 	Note string
+	// Viewed is a change the page shows that is not the change of the frame ("" for none).
+	Viewed string
 }
 
 // levelTools are the server tools of each level, in the order they are declared to the model.
@@ -80,6 +84,9 @@ func (f Frame) render(tools []string, searched bool) string {
 	if f.Note != "" {
 		fmt.Fprintf(&b, "- note: %s\n", f.Note)
 	}
+	if f.Viewed != "" {
+		fmt.Fprintf(&b, "- the person is looking at change %s, which is not the working change: to work on it, open it (open_change)\n", f.Viewed)
+	}
 	fmt.Fprintf(&b, "- server tools of this turn: %s\n", strings.Join(tools, ", "))
 	switch {
 	case f.Level == LevelNone:
@@ -100,6 +107,9 @@ func (t *turn) frame(ctx context.Context) Frame {
 		f.Level = LevelNone
 	}
 	id := t.change()
+	if v := t.in.Context.viewed(); v != "" && v != id {
+		f.Viewed = v
+	}
 	if id == "" {
 		return f
 	}
@@ -117,6 +127,11 @@ func (t *turn) frame(ctx context.Context) Frame {
 		f.Note = t.changeNote
 		return f
 	}
+	// select_project moved the turn to another project: the working change of the project left is not worked on
+	if t.opened == "" && t.project != t.in.Context.App.Project && t.changeProject != "" && t.changeProject != t.project {
+		f.Note = fmt.Sprintf("the working change %s belongs to project %s, not to the project selected in this turn", id, t.changeProject)
+		return f
+	}
 	f.Level, f.Change, f.Methodology = LevelChange, id, t.changeMethodology
 	if t.changeProject != "" {
 		f.Project = t.changeProject
@@ -124,7 +139,17 @@ func (t *turn) frame(ctx context.Context) Frame {
 	return f
 }
 
-// change is the change of the turn: the one open_change opened, else the one of the context.
+// workChange is the change the tools of the turn work on: change(), unless select_project moved the turn to another
+// project than the working change's (frame). A change that cannot be read is still named, so the tool says why.
+func (t *turn) workChange(ctx context.Context) string {
+	id := t.change()
+	if id != "" && t.frame(ctx).Change == "" && t.changeOK {
+		return ""
+	}
+	return id
+}
+
+// change is the change of the turn: the one open_change opened, else the working change of the context.
 func (t *turn) change() string {
 	if t.opened != "" {
 		return t.opened

@@ -521,7 +521,7 @@ p, <rule on attributes>, <resource type | *>, <action | *>, <allow | deny>
 
 | Attribute | Content |
 |---|---|
-| `r.sub` | caller: `Subject`, `Org`, `Roles` (the roles it holds on the resource's project, merged by the authorizer, ADR 0043; a token's only from an external identity provider, ADR 0135), `Global` (the platform roles, `admin` for an administrator, a platform Assignment, ADR 0047), `ProjectAdmin` / `ProjectOwner` (the flags of its Assignments on the resource's project chain, ADR 0135) |
+| `r.sub` | caller: `Subject`, `Org`, `Roles` (the roles it holds on the resource's project, merged by the authorizer, ADR 0043; a token's only from an external identity provider, ADR 0138), `Global` (the platform roles, `admin` for an administrator, a platform Assignment, ADR 0047), `ProjectAdmin` / `ProjectOwner` (the flags of its Assignments on the resource's project chain, ADR 0138) |
 | `r.obj` | resource: `Type`, `ID`, `Org`, `Owner`, `Name`, `ProjectID`, `Roles` (roles allowed to run an agent / action) |
 | `r.act` | action: `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`, `run`… |
 
@@ -529,7 +529,7 @@ Functions available in rules: `hasRole(r.sub, "x")` (on the project or platform-
 `hasRoleIn(r.sub, role, r.obj)`, `onProject(r.sub)` (holds a role on the resource's project, or a flag),
 `mayRun(r.sub, r.obj)` (one of `r.obj.Roles`, any role on the project when it lists `"*"`, nobody when it lists
 none, a project administrator always), `isProjectAdmin(r.sub)`, `isProjectOwner(r.sub)`, `isAnonymous(r.sub)`. A
-matching `deny` overrides any `allow`. **Without an explicit grant everything is refused** ([ADR 0135](adr/0135-deny-by-default-owner-and-admin-assignments.md)):
+matching `deny` overrides any `allow`. **Without an explicit grant everything is refused** ([ADR 0138](adr/0138-deny-by-default-owner-and-admin-assignments.md)):
 a nil authorizer refuses (`authz.Check`; tests pass `authz.AllowAll`), an empty list of roles grants nothing.
 
 Default policies (compiled in `contracts/authz`; seeded as `Policy` nodes at the first start, and applied as they are while
@@ -552,7 +552,7 @@ the graph holds none; a graph still holding the defaults of before ADR 0043 unch
 | `mayRun(r.sub, r.obj)` | `action`, `agent`, `model` | `run`, `run`, `use` |
 
 Methodologies, domains, triggers, the organisation, policies and adapters have no rule of their own: administrators
-administer them. **Project owners and administrators** (ADR 0135): a project Assignment carries the flags `owner`
+administer them. **Project owners and administrators** (ADR 0138): a project Assignment carries the flags `owner`
 and `admin` (never a platform one); they hold on the project and its sub-projects, inherited, never taken. An
 administrator does everything on the resources of the project, manages the roles of its Assignments and creates its
 sub-projects; an owner also sets the flags, stops and restarts the project (`stopped` attribute of `ProjectUnit`: a
@@ -563,7 +563,7 @@ owner on a project that had one; the graph handler reads a node or a change only
 **Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
 style (`roles: {responsible, accountable, consulted, informed}` on a process, a method or a step; a process and a method
-must name their responsible role, [ADR 0136](adr/0136-roles-of-processes-methods-agents-actions.md): an error once
+must name their responsible role, [ADR 0139](adr/0139-roles-of-processes-methods-agents-actions.md): an error once
 stored, a warning in a draft; a step inherits what it leaves unsaid from its parent step, then its process or method,
 field by field), the agent running a process or a method acts as its responsible role (`Agent.role`, unless declared),
 an action acts as the role of what refines it (`Action.role`: its step, the methods listing it, else the action it
@@ -682,7 +682,7 @@ declared on the agent (`agents[].triggers`):
 | Field | Role |
 |---|---|
 | `type` | `event` or `schedule` |
-| `event` + `filter` | `change.created`, `change.applied`, `change.item_added`, `change.signal`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `methodology.published`; CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload) |
+| `event` + `filter` | `change.created`, `change.edited`, `change.attached`, `change.detached`, `change.item_added`, `change.signal`, `change.committed`, `change.transitioned`, `change.applied`, `process.completed`, `process.failed`, `process.stuck`, `process.attached`, `step.completed`, `methodology.published` (`contracts/events.All`); CEL filter on `event` (`event.change.*`, `event.process.*`, `event.items` for `change.signal`'s payload) |
 | `schedule` | cron expression (5 fields, UTC) |
 | `goal`, `intent` | targeted goal (otherwise identification is limited to the agent) and intent text |
 | `target` | `new_change` (new change on the latest baseline) or `event_change` (the event's change) |
@@ -690,7 +690,8 @@ declared on the agent (`agents[].triggers`):
 
 Safeguards: a trigger never reacts to its own productions (the change it opens is marked
 `data.trigger`, the process carries `trigger`), and it does not run more than once every 2 s.
-Events come from NATS (graph, engine, registry services) or the local bus in all-in-one mode.
+Events come from NATS (graph, engine, registry services, each through its outbox, ADR 0136) or the relays' in-process
+sinks in all-in-one mode; a methodology published reloads the triggers from the event the graph's relay delivers.
 `ListTriggers` / `FireTrigger` expose the state and manual firing (permission `trigger:fire`).
 With several engine replicas, event triggers are delivered through a durable JetStream consumer
 (competing consumers, one replica handles each event) and schedule (cron) firing is gated by a
@@ -941,7 +942,7 @@ actions when a transition is applied. Reference: [docs/dsl.md](dsl.md), IDE: the
 | **modelgw** | Multi-provider / multi-model abstraction, aliases (`default`, `fast`, `reasoning`), administered catalog with global token quotas and required roles (see below), traces; `Suggest`, the stateless contextual helper over the `helper` alias (ADR 0086); the **one ledger of LLM calls**: `ListUsage` / `UsageSummary` (ADR 0089) | Connect `model.v1` | `modelgw` (quota counters and the ledger of LLM calls, ADR 0089; the configuration is graph data, ADR 0021) | 🟢 core |
 | **preferences** | Personal preferences of the users (theme, voice input, dashboard defaults), one document per subject, outside the graph ([ADR 0038](adr/0038-user-preferences-service.md)); a caller reaches only their own, saved as they change it | Connect `preferences.v1` | `preferences` (`user_preference`) | 🟢 |
 | **conversations** | Conversations of the users with the assistant (messages, structured UI actions), per subject, outside the graph ([ADR 0085](adr/0085-conversation-service.md)); the owner reads and writes, a system principal appends and updates the assistant's messages | Connect `conversations.v1` | `conversations` (`conversation`, `conversation_message`) | 🟢 |
-| **assistant** (hosted by `conversations`) | The conversational assistant: answers the messages of a conversation on the `assistant` model alias as the caller, with its tools declared to the model as native tools ([ADR 0098](adr/0098-native-tool-calling.md), like the screen tools) following the frame of the turn (`platform/assistantsvc/frame.go`: outside any project, when none is named, only list projects, select project, search and open change; in a project, a project's tools; on a change, a change's; `select_project` and `open_change` move the frame for the next rounds of the turn, and each answer records where it worked, `Message.context`, shown above it in the web) (list projects, list methodologies, select project, search the open changes, create change (offered once the open changes were searched in the conversation, [ADR 0106](adr/0106-methodologies-integrating-methodologies.md)), open change, propose to attach or detach the change it is on, list the agents the caller may run here, propose to start one, and `methodology_query`: read what a methodology declares, filtered by kind / name / text / parent, projected and capped at 6 KiB, [ADR 0094](adr/0094-assistant-methodology-query.md)); the pending message is the run, and an agent starts only when the person confirms the proposal (`ConfirmAction`, [ADR 0087](adr/0087-conversational-assistant.md), [ADR 0090](adr/0090-assistant-runs-agents.md)); it is contextualised to the open screen (layered context focus / screen / app) and may ask the interface to act through the tools the screen offers (`ui.*`: effects run at once, writes only after the person's confirmation and reported with `ReportAction`, [ADR 0092](adr/0092-contextual-assistant-screen-tools.md)); a long conversation keeps its older messages as a rolling summary (`platform/assistantsvc/compact.go`: once `CompactBatch` messages fell out of the history window, the summary is rewritten after the turn from the previous one and those messages: the recorded facts (what the actions of the messages proposed, started or changed and how it ended) written by code, never by the model, kept first with their exact ids and dropped oldest first past 2.5 KiB, then the model's text for what only the words say, durable facts kept verbatim, stored by `conversations` in `conversation_summary` with the seq it covers, `convsvc.Service.Summary` / `SetSummary`, and sent with the rules of each turn) | Connect `assistant.v1` | none (writes through `conversations`) | 🟢 |
+| **assistant** (hosted by `conversations`) | The conversational assistant: answers the messages of a conversation on the `assistant` model alias as the caller, with its tools declared to the model as native tools ([ADR 0098](adr/0098-native-tool-calling.md), like the screen tools) following the frame of the turn (`platform/assistantsvc/frame.go`: outside any project, when none is named, only list projects, select project, search and open change; in a project, a project's tools; on the working change, a change's ([ADR 0135](adr/0135-working-context-project-and-change.md)): a change only shown is named, not worked on; `select_project` and `open_change` move the frame for the next rounds of the turn, and each answer records where it worked, `Message.context`, shown above it in the web) (list projects, list methodologies, select project, search the open changes, create change (offered once the open changes were searched in the conversation, [ADR 0106](adr/0106-methodologies-integrating-methodologies.md)), open change, propose to attach or detach the change it is on, list the agents the caller may run here, propose to start one, and `methodology_query`: read what a methodology declares, filtered by kind / name / text / parent, projected and capped at 6 KiB, [ADR 0094](adr/0094-assistant-methodology-query.md)); the pending message is the run, and an agent starts only when the person confirms the proposal (`ConfirmAction`, [ADR 0087](adr/0087-conversational-assistant.md), [ADR 0090](adr/0090-assistant-runs-agents.md)); it is contextualised to the open screen (layered context focus / screen / app) and may ask the interface to act through the tools the screen offers (`ui.*`: effects run at once, writes only after the person's confirmation and reported with `ReportAction`, [ADR 0092](adr/0092-contextual-assistant-screen-tools.md)); a long conversation keeps its older messages as a rolling summary (`platform/assistantsvc/compact.go`: once `CompactBatch` messages fell out of the history window, the summary is rewritten after the turn from the previous one and those messages: the recorded facts (what the actions of the messages proposed, started or changed and how it ended) written by code, never by the model, kept first with their exact ids and dropped oldest first past 2.5 KiB, then the model's text for what only the words say, durable facts kept verbatim, stored by `conversations` in `conversation_summary` with the seq it covers, `convsvc.Service.Summary` / `SetSummary`, and sent with the rules of each turn) | Connect `assistant.v1` | none (writes through `conversations`) | 🟢 |
 | **indexer** | Document index ([ADR 0026](adr/0026-node-index-and-search.md), [0095](adr/0095-changes-in-the-index-typed-search.md)): follows the node / baseline / change-document events of the graph, embeds through modelgw (alias `embed`), answers lexical / semantic / hybrid and nearest-document searches over nodes and changes with facets, filtered by ABAC and project | Connect `index.v1` | `index` (tsvector + pgvector; FTS5 + exact cosine scan in SQLite) | 🟢 |
 | **mcp** | MCP hub: connector registry (self-registration), resolution of the adapters and their restrictions (graph) along the organisation hierarchy, tool calls, the built-in connectors of the platform (§3.9) | Connect `mcp.v1` | `mcp` | 🟢 |
 | **connector-\*** | One service per real system (`connector-localfs`, ...), registers itself with the hub | Connect `connector.v1` | — | 🟢 localfs |
@@ -995,12 +996,34 @@ hand-written API types are checked against it field by field (`web/src/lib/api/c
 
 | Subject | Emitter | Content |
 |---|---|---|
-| `goap.process.<id>.started` / `.step` / `.waiting` / `.completed` / `.failed` | engine | `ProcessEvent` |
-| `goap.change.<id>.item_added` / `.applied` | graph | `ChangeEvent` |
+| `goap.process.<id>.started` / `.attached` / `.step` / `.step_completed` / `.intent` / `.waiting` / `.clarifying` / `.stuck` / `.completed` / `.failed` / `.cancelled` / `.superseded` | engine, through the outbox of its process store (ADR 0136), with the process | `ProcessEvent` |
+| `goap.process.<id>.log` | engine, published directly (a live display, ADR 0136 §4) | `ProcessEvent` with a `LogLine` |
+| `goap.change.<id>.created` / `.edited` / `.attached` / `.detached` / `.item_added` / `.signal` / `.committed` / `.transitioned` / `.applied` / `.purged` | graph, through its outbox ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)), from the operation that writes the fact | `ChangeEvent` |
+| `goap.changed.<id>` | graph, through its outbox | `ChangeEvent` of type `change.updated`: the header, the impacts or the log of a change were written (the web) |
+| `goap.changeindex.<id>` | graph, through its outbox | `ChangeDocEvent`: the document of a change for the index |
 | `goap.node.<ns>.<type>.<id>.written` | graph | `NodeEvent`: one node version written (any branch), with its searchable text and facets resolved from the `search` declaration of its node type |
 | `goap.baseline.<branch>.advanced` | graph | `BaselineEvent`: diff with the parent baseline (the `main` facet of the index follows the head of each namespace's own main) |
-| `goap.registry.methodology.published` / `.suspended` / `.resumed` | registry | name + version (+ reason) |
-| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph) | name + version + status |
+| `goap.registry.methodology.saved` / `.published` / `.deleted` | methodology registry, carried by the graph commit that stores the version (graph outbox) | name + version + status |
+| `goap.registry.methodology.suspended` / `.resumed` | methodology registry, published directly (recomputed, ADR 0136 §4) | name + version + reason |
+| `goap.registry.domain.saved` / `.published` / `.deleted` | domain registry (graph), through its outbox (`domain_outbox`) | name + version + status |
+| `goap.credentials.<subject>.registered` / `.password_changed` / `.session_started` / `.session_ended` | credentials, through its outbox | subject + session + time (never a password or a token) |
+| `goap.preferences.<subject>.updated` / `.reset` | preferences, through its outbox | subject + the keys changed (never the values) |
+| `goap.conversation.<id>.created` / `.renamed` / `.deleted` / `.message_appended` / `.message_updated` / `.action_updated` / `.summarized` | conversations, through its outbox | conversation, owner, message, role, action index, status (never a text); the event stream delivers it to the owner only |
+| `goap.mcp.connector.<id>.registered` / `.lost` / `.back` | hub, through its outbox | connector id, endpoint, liveness |
+| `goap.model.call.<seq>.recorded`, `goap.model.quota.<subject>.exceeded` | model gateway, through its outbox, with the ledger row | the row (subject, end user, source, alias, model, tokens, outcome; never the exchange) |
+
+Each service emits its own events ([ADR 0136](adr/0136-each-service-emits-its-events-through-an-outbox.md)): an event is
+written in the outbox table of its database in the transaction that writes its fact, and a relay (`lib/outbox`, started
+by `outbox.Start`) delivers it afterwards, in order and at least once, with its id `<service>:<seq>` (`Nats-Msg-Id`,
+`X-Goap-Event-Id`). No caller emits an event on behalf of a service. Each service has its own table, the local mode
+sharing one database: `event_outbox` (graph), `process_outbox` (engine: a process and its event in one transaction; its
+replicas deliver one at a time under the shared lock `outbox`), `domain_outbox`, `credentials_outbox`,
+`preferences_outbox`, `conversation_outbox`, `mcp_outbox`, `model_outbox`. The methodology registry, whose facts are
+graph data, has its events carried by the graph commit that stores them (`graphapi.Commit.Events`, from a `system:`
+principal only), written in the graph's outbox after its `change.applied`. The consumers that act on
+an event are durable and idempotent: the trigger manager reads `goap.change.>` and `goap.process.>` through one
+durable consumer shared by the engine replicas (in process in the local mode: the relays' sinks, never the lossy
+broker), handles an event id once (`platform.EventIDOf`, `outbox.EventID`) and rate-limits a trigger per change.
 
 ### 3.2 Engine clustering ([ADR 0124](adr/0124-engine-replicas-share-processes.md))
 
@@ -1400,12 +1423,15 @@ node serve both. `internal/graphsvc.EnsureUser` creates it on first sight, calle
 path and by the `EnsureCaller` Connect interceptor on every authenticated call (deduplicated per process).
 The active project rides the JWT as a `project` claim (`X-Goap-Project` header, `POST
 /auth/dev-token/project` reissues it with the same subject/org/roles) the same way `org` and `roles`
-already do; `graphsvc.CreateChange` and `enginesvc.StartProcess`/`AttachChange` default their project from
+already do; it is empty until the person or the assistant picks a project, the root project being picked by its key
+([ADR 0135](adr/0135-working-context-project-and-change.md)); `graphsvc.CreateChange` and `enginesvc.StartProcess`/`AttachChange` default their project from
 it when a request names none.
 
 **Web.** One left-nav entry, "People & Organisation", sub-navigated into Organisation / Projects / Users
 (not three separate entries); a project selector next to the brand mark reissues the token
-(`stores/project.svelte.ts`) and persists the choice locally (`goap-dev`, with no token to reissue, keeps a
+(`stores/project.svelte.ts`), followed by the working change selector (`stores/workingChange.svelte.ts`, ADR 0135: the
+change the person works in, chosen there, by *Work in this change* on the change tab or by the assistant, kept per
+project in the preferences, carried to the assistant as `app.change`), and persists the choice locally (`goap-dev`, with no token to reissue, keeps a
 fixed `GOAP_DEV_PROJECT` env var instead, like `GOAP_DEV_ORG`). Assignment has no nav entry of its own: an
 "Assignments" pane on the Organisation, Project and User editors (one `AssignmentsPane.svelte`,
 parametrized by which side is fixed) offers a "+ Assignment" action, and each explorer's context menu
@@ -1611,7 +1637,11 @@ engine) → **archived**. Modifying a published version means creating a new dra
 methodology (`Change.MethodologyVersion`, column `change.methodology_version`): `CreateChange` takes the latest
 published one (`ChangeLifecycles.MethodologyVersion`), a sub-change of the same methodology its parent's, and the change
 keeps it whatever is published later; `Graph.UpgradeChange` (operation `change.upgrade`, RPC `UpgradeChange`,
-`goap-change/upgrade`) moves an open change to another version, keeping its lifecycle and state. Every reader of the
+`goap-change/upgrade`) moves an open change to another version, keeping its lifecycle and state. A change created with
+no methodology takes one with `Graph.SetChangeMethodology` (operation `change.methodology`, RPC `SetChangeMethodology`,
+the change tab's methodology field), as a creation would have given it; `Graph.MethodologyGate`
+(`graphsvc.MethodologyGate`) checks it applies to the change's project
+([ADR 0135](adr/0135-working-context-project-and-change.md)). Every reader of the
 methodology of a change takes the reference `<name>@<version>` (`domain.MethodologyRef`, `Change.MethodologyRef()`; a
 bare name is the latest): the registry's lifecycle, goal, guards, gates, guardians, operation roles, the history fold,
 and the engine, whose process runs the version it started with (`Process.MethodologyVersion`, `Engine.methodologyOf`).

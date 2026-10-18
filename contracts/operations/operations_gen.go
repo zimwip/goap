@@ -4,27 +4,28 @@ package operations
 
 // The operations of the catalogue.
 const (
-	ChangeAttach     = "change.attach"      // Graph.AttachChange, doer
-	ChangeCommit     = "change.commit"      // Graph.CommitChange, doer
-	ChangeDepend     = "change.depend"      // Graph.SetChangeDependencies, doer
-	ChangeDetach     = "change.detach"      // Graph.DetachChange, doer
-	ChangeMerge      = "change.merge"       // Graph.IntegrateChange, doer
-	ChangeRebase     = "change.rebase"      // Graph.RebaseChange, doer
-	ChangeUpgrade    = "change.upgrade"     // Graph.UpgradeChange, doer
-	ImpactCancel     = "impact.cancel"      // Graph.ImpactNodeCancel, doer
-	ImpactCheckout   = "impact.checkout"    // Graph.ImpactNodeCheckout, doer
-	ImpactCreate     = "impact.create"      // Graph.ImpactNodeCreate, doer
-	ImpactLinkCreate = "impact.link.create" // Graph.ImpactLinkCreate, doer
-	ImpactLinkDelete = "impact.link.delete" // Graph.ImpactLinkDelete, doer
-	ImpactLinkUpdate = "impact.link.update" // Graph.ImpactLinkUpdate, doer
-	ImpactMerge      = "impact.merge"       // Graph.ImpactNodeMerge, doer
-	ImpactPropose    = "impact.propose"     // Graph.ProposeImpact, doer
-	ImpactResolve    = "impact.resolve"     // Graph.ImpactNodeResolve, doer
-	ImpactReview     = "impact.review"      // Graph.ImpactNodeReviewOn, reviewer
-	ImpactSplit      = "impact.split"       // Graph.ImpactNodeSplit, doer
-	ImpactTransition = "impact.transition"  // Graph.ImpactNodeTransition, doer
-	ImpactUpdate     = "impact.update"      // Graph.ImpactNodeUpdate, doer
-	ImpactWithdraw   = "impact.withdraw"    // Graph.WithdrawImpact, doer
+	ChangeAttach      = "change.attach"      // Graph.AttachChange, doer
+	ChangeCommit      = "change.commit"      // Graph.CommitChange, doer
+	ChangeDepend      = "change.depend"      // Graph.SetChangeDependencies, doer
+	ChangeDetach      = "change.detach"      // Graph.DetachChange, doer
+	ChangeMerge       = "change.merge"       // Graph.IntegrateChange, doer
+	ChangeMethodology = "change.methodology" // Graph.SetChangeMethodology, doer
+	ChangeRebase      = "change.rebase"      // Graph.RebaseChange, doer
+	ChangeUpgrade     = "change.upgrade"     // Graph.UpgradeChange, doer
+	ImpactCancel      = "impact.cancel"      // Graph.ImpactNodeCancel, doer
+	ImpactCheckout    = "impact.checkout"    // Graph.ImpactNodeCheckout, doer
+	ImpactCreate      = "impact.create"      // Graph.ImpactNodeCreate, doer
+	ImpactLinkCreate  = "impact.link.create" // Graph.ImpactLinkCreate, doer
+	ImpactLinkDelete  = "impact.link.delete" // Graph.ImpactLinkDelete, doer
+	ImpactLinkUpdate  = "impact.link.update" // Graph.ImpactLinkUpdate, doer
+	ImpactMerge       = "impact.merge"       // Graph.ImpactNodeMerge, doer
+	ImpactPropose     = "impact.propose"     // Graph.ProposeImpact, doer
+	ImpactResolve     = "impact.resolve"     // Graph.ImpactNodeResolve, doer
+	ImpactReview      = "impact.review"      // Graph.ImpactNodeReviewOn, reviewer
+	ImpactSplit       = "impact.split"       // Graph.ImpactNodeSplit, doer
+	ImpactTransition  = "impact.transition"  // Graph.ImpactNodeTransition, doer
+	ImpactUpdate      = "impact.update"      // Graph.ImpactNodeUpdate, doer
+	ImpactWithdraw    = "impact.withdraw"    // Graph.WithdrawImpact, doer
 )
 
 var catalog = []Operation{
@@ -33,6 +34,7 @@ var catalog = []Operation{
 	{Code: ChangeDepend, Kind: Doer, Method: "Graph.SetChangeDependencies", Doc: "SetChangeDependencies replaces the changes a change depends on."},
 	{Code: ChangeDetach, Kind: Doer, Method: "Graph.DetachChange", Doc: "DetachChange gives a sub-change back as a root change (ADR 0106: deferred, rejected by the change integrating it), still open and not merged: its branch is forked again from the head of the branch its root ancestor merges into (what it committed rebased there; ErrConflict when that leaves conflicts), its guardian chain recomputed for its methodology and project."},
 	{Code: ChangeMerge, Kind: Doer, Method: "Graph.IntegrateChange", Doc: "IntegrateChange merges a change into what it was forked from (ADR 0102, merge): a root change that committed on its own branch into the branch it was forked from, a sub-change into its parent."},
+	{Code: ChangeMethodology, Kind: Doer, Method: "Graph.SetChangeMethodology", Doc: "SetChangeMethodology gives an open change (draft or active) that follows no methodology the one named, as a creation would have: the latest published version, its main goal when the change has none, its lifecycle starting in its initial state, the guardian chain of its project (or under its parent)."},
 	{Code: ChangeRebase, Kind: Doer, Method: "Graph.RebaseChange", Doc: "RebaseChange brings what a change committed up to date with the head of the branch it was forked from (the branch of its parent change for a sub-change, ADR 0103)."},
 	{Code: ChangeUpgrade, Kind: Doer, Method: "Graph.UpgradeChange", Doc: "UpgradeChange moves an open change to another version of its methodology (ADR 0113): the version named, else the latest published one."},
 	{Code: ImpactCancel, Kind: Doer, Method: "Graph.ImpactNodeCancel", Doc: "ImpactNodeCancel drops the draft of a change impact on the flow: the impact goes back to what the flow saw before (the draft of a parent flow), or to none."},

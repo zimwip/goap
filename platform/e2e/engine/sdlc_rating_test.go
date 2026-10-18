@@ -31,7 +31,8 @@ func ratedOnce(t *testing.T, key string) {
 	broker := engine.NewBroker()
 	e.Events = broker
 	tm := &engine.TriggerManager{Engine: e}
-	e.Graph = engine.EventingGraph{GraphPort: g, OnEvent: func(ctx context.Context, ev domain.ChangeEvent) { tm.Handle(ctx, engine.TriggerEventOf(ev)) }}
+	// the graph emits the events of the changes, whoever writes them (ADR 0136)
+	g.Observe(engine.ChangeEvents(func(ctx context.Context, ev domain.ChangeEvent) { tm.Handle(ctx, engine.TriggerEventOf(ev)) }))
 	wctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go tm.WatchProcesses(wctx, broker)
@@ -103,7 +104,8 @@ func TestSDLCEditDuringRatingRestartsIt(t *testing.T) {
 	broker := engine.NewBroker()
 	e.Events = broker
 	tm := &engine.TriggerManager{Engine: e}
-	e.Graph = engine.EventingGraph{GraphPort: g, OnEvent: func(ctx context.Context, ev domain.ChangeEvent) { tm.Handle(ctx, engine.TriggerEventOf(ev)) }}
+	// the graph emits the events of the changes, whoever writes them (ADR 0136)
+	g.Observe(engine.ChangeEvents(func(ctx context.Context, ev domain.ChangeEvent) { tm.Handle(ctx, engine.TriggerEventOf(ev)) }))
 	wctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	go tm.WatchProcesses(wctx, broker)

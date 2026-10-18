@@ -129,7 +129,7 @@ type Agent struct {
 	// on the project, and its actions that declare no roles of their own need it too. Empty: any member of the
 	// project.
 	Roles []string `yaml:"roles,omitempty" json:"roles,omitempty"`
-	// Role is the role the agent acts as (ADR 0050, 0136): its own, else the responsible role of the process or the
+	// Role is the role the agent acts as (ADR 0050, 0139): its own, else the responsible role of the process or the
 	// method it runs (generated agents), else the one role of its actions. It gives the agent its overall objective;
 	// the method says how.
 	Role string `yaml:"role,omitempty" json:"role,omitempty"`
@@ -257,7 +257,7 @@ type Action struct {
 	// hold one of them on the project of the change, otherwise the process waits for someone who does. Empty:
 	// the roles of the agent running it, any member of the project when it declares none either.
 	Roles []string `yaml:"roles,omitempty" json:"roles,omitempty"`
-	// Role is the role the action acts as (ADR 0136): its own, else the responsible role of the element refining it
+	// Role is the role the action acts as (ADR 0139): its own, else the responsible role of the element refining it
 	// (its step, the method whose pool lists it), else the role of the action it specializes. A person performing a
 	// human action holds it.
 	Role string `yaml:"role,omitempty" json:"role,omitempty"`

@@ -28,7 +28,9 @@
     type MethodologyView,
   } from '../../api';
   import { setContext, tick, untrack } from 'svelte';
-  import { applicable, followChangeProject, loadApplicable } from '../../stores/project.svelte';
+  import { applicable, loadApplicable } from '../../stores/project.svelte';
+  import { rootProject } from '../../stores/session.svelte';
+  import { isWorking, refreshWorking, stopWorking, workIn } from '../../stores/workingChange.svelte';
   import { registerAssist, revealTarget, type ToolImpl } from '../../assist/registry.svelte';
   import { changeSummary, impactEntities, stepEntities, transitionEntities, type ImpactFacts } from '../../assist/changeScreen';
   import { recordAction } from '../../assist/recorder';
@@ -234,7 +236,8 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     try {
       const c = (await graph.getChange(id, signal)).change;
       change = c;
-      void followChangeProject(c);
+      // opening a change is looking at it; working in it is a choice (Work in this change), never a side effect
+      refreshWorking(c);
       if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
       // independent reads go out together; a baseline never changes, so the one already read is kept (every event of the
       // change loads again: re-reading its whole graph each time was the heaviest call of the screen)
@@ -341,7 +344,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   let pointsMethodology = $state('');
   const methodologyChoices = $derived(change && !change.methodology ? (applicable.names ?? []) : []);
   $effect(() => {
-    if (change && !change.methodology) untrack(() => void loadApplicable());
+    if (change && !change.methodology) untrack(() => void loadApplicable(change?.projectId || rootProject()));
   });
   $effect(() => {
     void selected;
@@ -349,7 +352,29 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   });
   function choosePointsMethodology(name: string) {
     pointsMethodology = name;
+    adoptMethodology = name;
     pointsSoon.call();
+  }
+  // a change with no methodology takes one of its project's: the only one offered, else the one the person picks
+  let adoptMethodology = $state('');
+  let adopting = $state(false);
+  $effect(() => {
+    if (!adoptMethodology && methodologyChoices.length === 1) adoptMethodology = methodologyChoices[0];
+  });
+  async function adopt() {
+    const id = change?.id;
+    if (!id || !adoptMethodology) return;
+    adopting = true;
+    try {
+      await graph.setChangeMethodology(id, adoptMethodology);
+      notify(`The change follows ${adoptMethodology} from now on.`, 'ok');
+      adoptMethodology = '';
+      await load(selected);
+    } catch (e) {
+      notify(errorMessage(e), 'error');
+    } finally {
+      adopting = false;
+    }
   }
   let readingPoints: AbortController | undefined;
   let pointsView: { ref: string; view?: MethodologyView } = { ref: '' };
@@ -1148,6 +1173,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
           <StatusBadge status={ch.status} />
           <ChangeCriticality change={ch} {closed} onchange={() => load(selected)} />
           <span class="grow"></span>
+          {#if isWorking(ch.id)}
+            <span class="working" title="The change you work in: the header shows it and the assistant works on it">Working change</span>
+            <button type="button" class="small" title="Leave this change: you work in the project, in no change" onclick={stopWorking}>Stop working in it</button>
+          {:else if !closed}
+            <button type="button" class="small primary" title="Make this change the one you work in (its project becomes the active one)" onclick={() => void workIn(ch)}>Work in this change</button>
+          {/if}
           {#if !closed && !defining}
             <button type="button" class="small" onclick={startDefine}>Edit</button>
             {#if movable(ch)}<button type="button" class="small" onclick={() => (moveOpen = !moveOpen)}>Move to project…</button>{/if}
@@ -1203,7 +1234,23 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
             <dt>Parent change</dt>
             <dd><button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: ch.parentId ?? '' } })}>{shortId(ch.parentId)}</button></dd>
           {/if}
-          {#if ch.methodology}<dt>Methodology</dt><dd>{ch.methodology}</dd>{/if}
+          {#if ch.methodology}<dt>Methodology</dt><dd>{ch.methodology}</dd>
+          {:else if !closed}
+            <dt>Methodology</dt>
+            <dd class="adopt">
+              {#if methodologyChoices.length}
+                <select aria-label="Methodology of the change" bind:value={adoptMethodology}>
+                  <option value="" disabled>Choose a methodology…</option>
+                  {#each methodologyChoices as m (m)}<option value={m}>{m}</option>{/each}
+                </select>
+                <button type="button" class="small primary" disabled={!adoptMethodology || adopting} onclick={() => void adopt()}>Follow it</button>
+              {:else if applicable.names}
+                <span class="hint">None: the project {ch.projectId || rootProject()} names no methodology to choose from.</span>
+              {:else}
+                <span class="hint">None yet: reading the methodologies of the project…</span>
+              {/if}
+            </dd>
+          {/if}
           {#if guardianChain(ch)}<dt>Guardians</dt><dd title="The methodologies whose guardians hold its merge and its moves, outermost first (ADR 0106)">{guardianChain(ch)}</dd>{/if}
           {#if ch.goal}
             <dt>Goal</dt>
@@ -1587,6 +1634,20 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
     flex-wrap: wrap;
     gap: 0.3rem 0.5rem;
     align-items: center;
+  }
+  .adopt {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .working {
+    font-size: 0.8em;
+    font-weight: 600;
+    padding: 0.1rem 0.45rem;
+    border-radius: 999px;
+    border: 1px solid var(--accent, currentColor);
+    color: var(--accent, inherit);
   }
   .intent {
     margin: 0.6rem 0;

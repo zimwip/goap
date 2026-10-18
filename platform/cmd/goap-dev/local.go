@@ -22,9 +22,11 @@ import (
 	"github.com/zimwip/goap/graph/domainsvc"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/graph/index"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/mcp/mcpsvc"
 	"github.com/zimwip/goap/platform/convsvc"
+	"github.com/zimwip/goap/platform/eventsvc"
 	"github.com/zimwip/goap/platform/modelgw"
 	"github.com/zimwip/goap/platform/prefssvc"
 )
@@ -149,26 +151,21 @@ func serveWeb(log *slog.Logger, e *echo.Echo, dir string) {
 
 // registryEvents receives the methodology registry events in-process (no NATS here) and reacts to publications of
 // methodologies (the domain registry calls its Changed hook in process).
-type registryEvents struct {
-	methodology func(ctx context.Context, name, version string)
-}
-
-func (f registryEvents) Publish(ctx context.Context, subject string, v any) error {
-	ev, ok := v.(map[string]string)
-	if !ok {
-		return nil
-	}
-	switch subject {
-	case "goap.registry.methodology.published":
-		f.methodology(context.WithoutCancel(ctx), ev["name"], ev["version"])
-	}
-	return nil
-}
-
 // localURL is the base URL of this process for a listening address (":8080" is http://localhost:8080).
 func localURL(addr string) string {
 	if strings.HasPrefix(addr, ":") {
 		return "http://localhost" + addr
 	}
 	return "http://" + addr
+}
+
+// emit runs the relay of a service's outbox (ADR 0136) for the life of the process.
+func (e *env) emit(r *outbox.Relay) { outbox.Start(e.ctx, r, e.log) }
+
+// busSink delivers the events of an outbox to the event stream of the web, which keeps what is for it.
+func busSink(bus *eventsvc.Hub) outbox.Sink {
+	return outbox.SinkFunc(func(ctx context.Context, m outbox.Message) error {
+		bus.Ingest(m.Subject, m.Data, platform.StampOf(ctx))
+		return nil
+	})
 }

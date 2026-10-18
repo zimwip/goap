@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/lib/access"
 	"maps"
 	"slices"
 	"sort"
@@ -387,7 +389,14 @@ func (s *GraphStore) read(ctx context.Context) (*defs, error) {
 
 // commit applies the items build makes from the current versions as one change on main; when main moved meanwhile, it
 // reads the new head and builds them again (up to three retries).
-func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]graphapi.NodeEdit, error)) error {
+func (s *GraphStore) carriesEvents() {}
+
+// commit lands the edits build gives, with the registry's events about them (ADR 0136). The graph takes events from a
+// platform service only: a commit carrying some goes as the registry, for the person it acts for.
+func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*defs) ([]graphapi.NodeEdit, error), events ...graphapi.CarriedEvent) error {
+	if len(events) > 0 && !authz.From(ctx).System() {
+		ctx = authz.With(ctx, authz.System("registry", access.RoleAdmin).For(authz.From(ctx).EndUser()))
+	}
 	for attempt := 0; ; attempt++ {
 		d, err := s.read(ctx)
 		if err != nil {
@@ -405,7 +414,7 @@ func (s *GraphStore) commit(ctx context.Context, ns, title string, build func(*d
 		if rerr != nil {
 			return rerr
 		}
-		_, err = s.Graph.Commit(ctx, graphapi.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits, ProjectID: root})
+		_, err = s.Graph.Commit(ctx, graphapi.Commit{Namespace: ns, Title: title, Intent: title, Baseline: head.ID, By: "registrysvc", BaselineName: title, Edits: edits, ProjectID: root, Events: events})
 		if errors.Is(err, graphapi.ErrConflict) && attempt < 3 {
 			continue // main moved: read again and rebuild
 		}
@@ -448,7 +457,7 @@ func encodeVersion(m methodology.Methodology, st Status, created, updated, publi
 	return buildElementGraph(headerProps(header, st, created, updated, published, by), els, subActivity), nil
 }
 
-func (s *GraphStore) Save(ctx context.Context, r Record) error {
+func (s *GraphStore) Save(ctx context.Context, r Record, events ...graphapi.CarriedEvent) error {
 	m := r.Methodology
 	k := key(m.Name, m.Version)
 	return s.commit(ctx, NamespaceMethodology, "Methodology "+k, func(d *defs) ([]graphapi.NodeEdit, error) {
@@ -473,7 +482,7 @@ func (s *GraphStore) Save(ctx context.Context, r Record) error {
 			oldNode, oldChildren, oldOut = &n, old.children, old.out
 		}
 		return versionEdits(MethodologyVersionKey(m.Name, m.Version), TypeMethodologyVersion, eg, oldNode, oldChildren, oldOut), nil
-	})
+	}, events...)
 }
 
 func (s *GraphStore) Get(ctx context.Context, name, version string) (Record, error) {
@@ -516,7 +525,7 @@ func (s *GraphStore) List(ctx context.Context) ([]Record, error) {
 	return out, nil
 }
 
-func (s *GraphStore) SetStatus(ctx context.Context, name, version string, st Status, at time.Time) error {
+func (s *GraphStore) SetStatus(ctx context.Context, name, version string, st Status, at time.Time, events ...graphapi.CarriedEvent) error {
 	k := key(name, version)
 	return s.commit(ctx, NamespaceMethodology, fmt.Sprintf("Methodology %s %s", k, st), func(d *defs) ([]graphapi.NodeEdit, error) {
 		old, ok := d.methodologies[k]
@@ -524,10 +533,10 @@ func (s *GraphStore) SetStatus(ctx context.Context, name, version string, st Sta
 			return nil, fmt.Errorf("%s: %w", k, ErrNotFound)
 		}
 		return []graphapi.NodeEdit{update(old.node, statusPatch(st, at))}, nil
-	})
+	}, events...)
 }
 
-func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
+func (s *GraphStore) Delete(ctx context.Context, name, version string, events ...graphapi.CarriedEvent) error {
 	k := key(name, version)
 	return s.commit(ctx, NamespaceMethodology, "Delete methodology "+k, func(d *defs) ([]graphapi.NodeEdit, error) {
 		old, ok := d.methodologies[k]
@@ -538,5 +547,5 @@ func (s *GraphStore) Delete(ctx context.Context, name, version string) error {
 			return nil, fmt.Errorf("%s: %w", k, ErrImmutable)
 		}
 		return []graphapi.NodeEdit{markDeleted(old.node)}, nil
-	})
+	}, events...)
 }

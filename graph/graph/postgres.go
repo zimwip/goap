@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Migrations holds the PostgreSQL schema of the graph service.
@@ -32,6 +33,57 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 }
 
 type pgTx struct{ tx pgx.Tx }
+
+// AppendOutbox implements Tx.
+func (t *pgTx) AppendOutbox(ctx context.Context, msgs []outbox.Message) error {
+	for _, m := range msgs {
+		h, err := json.Marshal(m.Headers)
+		if err != nil {
+			return err
+		}
+		if m.Headers == nil {
+			h = []byte("{}")
+		}
+		if _, err := t.tx.Exec(ctx, `INSERT INTO event_outbox (subject, payload, headers, created_at) VALUES ($1, $2, $3, $4)`,
+			m.Subject, m.Data, h, m.CreatedAt.UTC()); err != nil {
+			return mapErr(err, "outbox")
+		}
+	}
+	return nil
+}
+
+// Pending implements outbox.Store.
+func (p *Postgres) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	rows, err := p.pool.Query(ctx, `SELECT seq, subject, payload, headers, created_at FROM event_outbox
+		WHERE published_at IS NULL ORDER BY seq LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []outbox.Message
+	for rows.Next() {
+		var m outbox.Message
+		var headers []byte
+		if err := rows.Scan(&m.Seq, &m.Subject, &m.Data, &headers, &m.CreatedAt); err != nil {
+			return nil, err
+		}
+		_ = json.Unmarshal(headers, &m.Headers)
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
+// MarkPublished implements outbox.Store.
+func (p *Postgres) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	_, err := p.pool.Exec(ctx, `UPDATE event_outbox SET published_at = $1 WHERE seq = ANY($2)`, at.UTC(), seqs)
+	return err
+}
+
+// PurgePublished implements outbox.Store.
+func (p *Postgres) PurgePublished(ctx context.Context, before time.Time) error {
+	_, err := p.pool.Exec(ctx, `DELETE FROM event_outbox WHERE published_at IS NOT NULL AND published_at < $1`, before.UTC())
+	return err
+}
 
 func mapErr(err error, what string) error {
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -661,7 +713,7 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch,
 		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state, project_id = EXCLUDED.project_id,
 		  parent_id = EXCLUDED.parent_id, guardians = EXCLUDED.guardians, depends_on = EXCLUDED.depends_on,
-		  methodology_version = EXCLUDED.methodology_version`,
+		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
 		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion)
 	return mapErr(err, "change")

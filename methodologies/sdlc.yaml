@@ -1501,7 +1501,7 @@ processes:
   - name: software_delivery
     description: Deliver a change phase by phase — framing, analysis, design, build, release, application
     examples: ["deliver the change step by step", "run the software delivery process"]
-    # ADR 0136: the analyst carries the change through its phases, the product owner answers for it
+    # ADR 0139: the analyst carries the change through its phases, the product owner answers for it
     roles: {responsible: business_analyst, accountable: product_owner}
     references:
       - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md"}

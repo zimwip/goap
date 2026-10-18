@@ -45,7 +45,7 @@ func TestItemAuthorizer(t *testing.T) {
 		}
 	}
 	if err := ItemAuthorizer(nil, nil)(authz.With(context.Background(), authz.Principal{Subject: "bob"}), domain.Change{}, item("x"), perm); !errors.Is(err, authz.ErrForbidden) {
-		t.Errorf("no authorizer must refuse (ADR 0135): %v", err)
+		t.Errorf("no authorizer must refuse (ADR 0138): %v", err)
 	}
 }
 

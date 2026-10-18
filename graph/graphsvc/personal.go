@@ -210,7 +210,7 @@ func (h *Handler) EnsureCaller() connect.Interceptor {
 
 // PersonalScope is the interceptor that keeps a change to those who may read it (Handler.mayRead): a request naming a
 // change (change_id, or id for GetChange and UpdateChange) that is personal to someone else, or of a project the caller
-// does not work on (ADR 0135), is answered as not found.
+// does not work on (ADR 0138), is answered as not found.
 func (h *Handler) PersonalScope() connect.Interceptor {
 	return connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -251,7 +251,6 @@ func (h *Handler) DeleteChange(ctx context.Context, r *connect.Request[graphv1.D
 	c, err := h.Graph.PurgeChange(ctx, domain.ChangeID(r.Msg.ChangeId))
 	if err == nil {
 		c.Items, c.Nodes = nil, nil
-		h.publish(ctx, "goap.change."+string(c.ID)+".purged", domain.ChangeEvent{Type: "change.purged", Change: c})
 	}
 	return res(&graphv1.DeleteChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
 }

@@ -107,7 +107,7 @@
     fMethodologies = on ? [...fMethodologies, name] : fMethodologies.filter((m) => m !== name);
   }
 
-  /** a stopped project takes no new change (ADR 0135); stopping or restarting it is its owner's */
+  /** a stopped project takes no new change (ADR 0138); stopping or restarting it is its owner's */
   const stopped = $derived(project?.props?.['stopped'] === true);
   async function setStopped(on: boolean) {
     if (!project || !head) return;

@@ -244,7 +244,7 @@
                 {#if (p as Unsaved<LlmProvider>).pending}<span class="st bad" title="Saved with the dialog's Save button: the provider is loaded once saved">unsaved</span>
                 {:else if !p.enabled}<span class="st off">disabled</span>
                 {:else if p.active}<span class="st on">active</span>
-                {:else}<span class="st bad" title="Enabled but not loaded: check the API key and the endpoint">not loaded</span>{/if}
+                {:else}<span class="st bad" title={p.reason ? `Enabled but not loaded: ${p.reason}` : 'Enabled but not loaded: check the API key and the endpoint'}>not loaded</span>{#if p.reason}<span class="hint why">{p.reason}</span>{/if}{/if}
               </td>
               <td class="actions">
                 <button type="button" class="small" onclick={() => edit(p)}>Edit</button>
@@ -401,6 +401,10 @@
     align-items: center;
     gap: 0.4rem;
     font-weight: 400;
+  }
+  .why {
+    display: block;
+    font-size: 0.8rem;
   }
   .st {
     border-radius: 999px;

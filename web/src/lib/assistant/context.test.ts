@@ -24,6 +24,8 @@ describe('assistant context layers', () => {
   it('has the app layer alone for a screen with no view registered', () => {
     expect(assistantContext(tab, 'PROJ-A', NOW)).toEqual({ app: { tab: { kind: 'change', params: { id: 'C1' } }, project: 'PROJ-A' }, screen: { kind: 'change' } });
     expect(assistantContext(undefined, '', NOW)).toEqual({});
+    // the working change goes with the project, whatever tab is shown
+    expect(assistantContext(undefined, 'PROJ-A', NOW, 'CHG-7')).toEqual({ app: { project: 'PROJ-A', change: 'CHG-7' } });
   });
 
   it('adds the screen and the focus the views declare', () => {

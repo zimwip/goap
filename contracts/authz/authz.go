@@ -24,7 +24,7 @@ type Principal struct {
 	// Roles so that holding one is never mistaken for working on a project (OnProject). hasRole sees both.
 	Global []string `json:"global,omitempty"`
 	// ProjectAdmin and ProjectOwner are the flags of the project Assignments of the subject's chain covering the
-	// project of the resource being checked (ADR 0135): set by the authorizer that knows the organisation, for that one
+	// project of the resource being checked (ADR 0138): set by the authorizer that knows the organisation, for that one
 	// request. The owner possesses the project (ProjectOwner implies ProjectAdmin), the administrator administers it.
 	ProjectAdmin bool `json:"projectAdmin,omitempty"`
 	ProjectOwner bool `json:"projectOwner,omitempty"`
@@ -95,7 +95,7 @@ type Resource struct {
 
 // HasRole reports whether the principal holds a role, on the project of the request (Roles) or platform-wide (Global).
 // AllRoles are the roles held on the project and the platform roles, once each: what the identity headers carry
-// (ADR 0135), the receiving side telling the platform roles apart again.
+// (ADR 0138), the receiving side telling the platform roles apart again.
 func (p Principal) AllRoles() []string {
 	out := slices.Clone(p.Roles)
 	for _, r := range p.Global {
@@ -111,7 +111,7 @@ func (p Principal) HasRole(role string) bool {
 }
 
 // AnyRole is the role an agent, an action, an operation or a model lists to be open to every member of the project
-// (ADR 0135): an empty list grants nothing.
+// (ADR 0138): an empty list grants nothing.
 const AnyRole = "*"
 
 // RoleScope separates a role from the unit it is held in: "developer@TEAM-PAY".
@@ -141,11 +141,11 @@ func (p Principal) HasRoleIn(role string, res Resource) bool {
 
 // OnProject reports whether the principal works on the project of the resource it is checked against: it holds a role
 // an Assignment grants there (merged by the authorizer that knows the organisation, ADR 0043), one its token carries
-// (an external identity provider, a service identity), or administers the project (ADR 0135). A platform role
+// (an external identity provider, a service identity), or administers the project (ADR 0138). A platform role
 // (Global) is not a role on a project.
 func (p Principal) OnProject() bool { return len(p.Roles) > 0 || p.ProjectAdmin || p.ProjectOwner }
 
-// MayRun reports whether the principal may run an agent or an action allowed to res.Roles (ADR 0135): one of them held
+// MayRun reports whether the principal may run an agent or an action allowed to res.Roles (ADR 0138): one of them held
 // on the project, any role there when the list holds AnyRole, and an administrator of the project whatever the list. An
 // empty list grants nothing else: it is explicit or it is closed.
 func (p Principal) MayRun(res Resource) bool {
@@ -203,14 +203,14 @@ type Authorizer interface {
 	Authorize(ctx context.Context, req Request) (bool, error)
 }
 
-// AllowAll grants every request: the explicit opening of a test or of the gateway-less dev mode (ADR 0135), never a
+// AllowAll grants every request: the explicit opening of a test or of the gateway-less dev mode (ADR 0138), never a
 // default.
 type AllowAll struct{}
 
 // Authorize implements Authorizer.
 func (AllowAll) Authorize(context.Context, Request) (bool, error) { return true, nil }
 
-// Check returns ErrForbidden when the request is denied. A nil authorizer denies everything (ADR 0135: without an
+// Check returns ErrForbidden when the request is denied. A nil authorizer denies everything (ADR 0138: without an
 // explicit grant, everything is refused); AllowAll is the explicit opening.
 func Check(ctx context.Context, a Authorizer, req Request) error {
 	if a == nil {

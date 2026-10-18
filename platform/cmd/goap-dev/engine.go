@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"maps"
 
 	"github.com/zimwip/goap/contracts/llm"
@@ -12,6 +13,7 @@ import (
 	"github.com/zimwip/goap/engine/sandbox"
 	"github.com/zimwip/goap/engine/selfimprove"
 	"github.com/zimwip/goap/lib/def"
+	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
 	"github.com/zimwip/goap/mcp/connectors/builtin"
@@ -40,7 +42,7 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	broker := engine.NewBroker()
 	builtins := engine.DefaultBuiltins()
 	eg := &engine.Engine{
-		Graph:         engine.EventingGraph{GraphPort: g, OnEvent: e.triggers.onChange},
+		Graph:         g, // the graph emits the events of the changes the engine writes (ADR 0136)
 		Methodologies: rp.reg,
 		Executors: map[string]engine.Executor{
 			methodology.KindLLM:     engine.LLMExecutor{Client: models},
@@ -62,9 +64,22 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		Types:                    func() def.TypeSet { return rp.types.Get() },
 	}
 	// a store shared by replicas (sqlite) serializes the work on a process through its locks, and the runs left by
-	// the previous start are resumed (ADR 0124)
-	if locks, ok := st.processes.(engine.Locker); ok {
+	// the previous start are resumed (ADR 0124, below once the outbox is set)
+	locks, shared := st.processes.(engine.Locker)
+	if shared {
 		eg.Locks = locks
+	}
+	// the events of the processes go through the engine's outbox (ADR 0136), delivered in process: to the live
+	// broker, the event stream of the web and the triggers (late bound)
+	relay := eg.Emit(outbox.Sinks{
+		engine.ProcessEvents(func(_ context.Context, ev engine.ProcessEvent) { broker.Deliver(ev) }),
+		outbox.SinkFunc(func(ctx context.Context, m outbox.Message) error {
+			rp.bus.Ingest(m.Subject, m.Data, platform.StampOf(ctx))
+			return nil
+		}),
+		engine.ProcessEvents(e.triggers.onProcess)})
+	e.emit(relay)
+	if shared {
 		go eg.Recover(e.ctx, 0)
 	}
 	// self-observation (methodology-improvement): journal, traces, drafts
@@ -72,10 +87,9 @@ func buildEngine(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	triggers := &engine.TriggerManager{Engine: eg, Log: e.log}
 	e.triggers.set(triggers)
 	triggers.Start(e.ctx)
-	go triggers.WatchProcesses(e.ctx, broker)
 	handler := &enginesvc.Handler{Engine: eg, Log: e.log, DefaultPrincipal: e.dev, Authz: gp.authorizer, Broker: broker, Triggers: triggers}
 	// the built-in connectors call the platform in-process, for the caller of the tool
-	maps.Copy(pp.connectors, builtin.Connectors(builtin.Ports{Graph: engine.EventingGraph{GraphPort: g, OnEvent: e.triggers.onChange}, Engine: handler,
+	maps.Copy(pp.connectors, builtin.Connectors(builtin.Ports{Graph: g, Engine: handler,
 		Hub: pp.hub, Domains: rp.domains, Methodologies: &registrysvc.Handler{Service: rp.reg}, Authz: gp.authorizer, Floor: gp.authorizer.Floor()}))
 	pp.hub.KeepRegistered(e.ctx, pp.connectors)
 	return &enginePart{e: eg, handler: handler, runtime: runtime}, nil

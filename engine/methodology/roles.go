@@ -7,7 +7,7 @@ import (
 	"github.com/zimwip/goap/lib/def"
 )
 
-// Roles of processes, methods, agents and actions (ADR 0136). A process and a method name the role responsible for
+// Roles of processes, methods, agents and actions (ADR 0139). A process and a method name the role responsible for
 // them; their steps inherit what they leave unsaid; the agent running a process or a method acts as its responsible
 // role unless it names its own; an action acts as the role of the element it refines (the step it is planned for, the
 // method whose pool lists it), else as the role of the action it specializes.
@@ -82,7 +82,7 @@ func (m *Methodology) stepRoles() map[string]*Responsibilities {
 // MissingResponsible is the message of a process or a method naming no responsible role.
 const MissingResponsible = "name the role responsible for it (roles.responsible): the agent running it acts as that role, and its steps and actions inherit it"
 
-// checkResponsibles requires a responsible role of every process and method (ADR 0136). A stored methodology must
+// checkResponsibles requires a responsible role of every process and method (ADR 0139). A stored methodology must
 // have them (refused at publication); a draft being written is warned.
 func (s *compileState) checkResponsibles(stored bool) {
 	severity := def.SeverityWarning
@@ -102,7 +102,7 @@ func (s *compileState) checkResponsibles(stored bool) {
 	}
 }
 
-// propagateRoles gives the actions and the declared agents that name no role the role they act as (ADR 0136): a
+// propagateRoles gives the actions and the declared agents that name no role the role they act as (ADR 0139): a
 // planned action the responsible role of its step; a declared action the one responsible role of the steps it is
 // planned for and the methods whose pool lists it (none when they differ: it depends on where it runs); a
 // specialization of an action of this methodology the role of that action; a declared agent the one role of its

@@ -421,7 +421,7 @@ func TestRolesDependOnTheProject(t *testing.T) {
 		{"PROJ-B", []string{"developer"}, false},
 		{"PROJ-C", []string{authz.AnyRole}, false}, // not a member of PROJ-C at all
 		{"PROJ-B", []string{authz.AnyRole}, true},  // any role on PROJ-B
-		{"PROJ-B", nil, false},                     // an empty list grants nothing (ADR 0135)
+		{"PROJ-B", nil, false},                     // an empty list grants nothing (ADR 0138)
 	} {
 		if got := run(eve, tc.project, tc.roles...); got != tc.want {
 			t.Errorf("eve on %s for %v: %v, want %v", tc.project, tc.roles, got, tc.want)

@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/platform"
+	"github.com/zimwip/goap/platform/convsvc"
 )
 
 func node(id string) domain.NodeEvent {
@@ -281,5 +282,35 @@ func TestStampTravelsOnTheBus(t *testing.T) {
 	h.Ingest("goap.node.alm.x.n.written", data, platform.Stamp{Actor: "alice", Command: "cmd-9"})
 	if ev := h.ring[0].ev; ev.Actor != "alice" || ev.CommandId != "cmd-9" {
 		t.Fatalf("stamp = %q/%q", ev.Actor, ev.CommandId)
+	}
+}
+
+func TestConversationEventsAreTheOwners(t *testing.T) {
+	h := NewHub()
+	ctx := context.Background()
+	data, err := json.Marshal(convsvc.Event{Event: convsvc.EventMessageUpdated, ConversationID: "CV1", Subject: "alice",
+		MessageID: "M2", Role: "assistant", Status: "done", At: time.Now()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.Ingest(convsvc.Subject("CV1", convsvc.EventMessageUpdated), data, platform.Stamp{})
+	// an event naming no owner reaches nobody
+	none, _ := json.Marshal(convsvc.Event{Event: convsvc.EventCreated, ConversationID: "CV2", At: time.Now()})
+	h.Ingest(convsvc.Subject("CV2", convsvc.EventCreated), none, platform.Stamp{})
+
+	h.mu.Lock()
+	ring := append([]*record(nil), h.ring...)
+	h.mu.Unlock()
+	if len(ring) != 1 {
+		t.Fatalf("%d events, want 1", len(ring))
+	}
+	ev := ring[0].ev
+	if ev.Kind != "conversation" || ev.Type != "conversation.message_updated" || ev.Id != "CV1" || ev.Label != "M2" {
+		t.Fatalf("event = %s/%s id %q label %q", ev.Kind, ev.Type, ev.Id, ev.Label)
+	}
+	for who, want := range map[string]bool{"alice": true, "bob": false} {
+		if got := h.visibility(ctx, authz.Principal{Subject: who}).sees(ctx, ring[0]); got != want {
+			t.Errorf("%s sees the event: %v, want %v", who, got, want)
+		}
 	}
 }

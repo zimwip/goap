@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
 )
 
 // This file implements the lifecycle of a change (ADR 0058). The domain defines the lifecycle, the methodology of
@@ -164,6 +165,7 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 		if err := tx.PutChange(ctx, cur); err != nil {
 			return err
 		}
+		g.raise(ctx, tx, events.ChangeTransitioned, cur, nil)
 		if reopened {
 			return g.reopenPhase(ctx, tx, cur, t.To)
 		}

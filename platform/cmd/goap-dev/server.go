@@ -53,7 +53,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	// off for development: every request then acts as the fixed GOAP_DEV_SUBJECT/ORG/ROLES principal. Applied
 	// per-route (not e.Use), so the built IDE's static assets and /api/status/health stay reachable with no
 	// token.
-	authMW, err := buildAuth(e, st, gp, srv)
+	authMW, err := buildAuth(e, st, gp, rp, srv)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 		srv.Mount(path, h)
 	}
 
-	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: engine.Publishers{changePublisher(e.triggers.onChange), pp.indexSink, rp.bus}, Authz: authorizer, Floor: authorizer.Floor(), Projects: gp.directory.MayAccessProject, Stopped: gp.directory.ProjectStopped, Identity: ident,
+	graphHandler := &graphsvc.Handler{Graph: gp.g, Events: pp.indexSink, Authz: authorizer, Floor: authorizer.Floor(), Projects: gp.directory.MayAccessProject, Stopped: gp.directory.ProjectStopped, Identity: ident,
 		Demo: devseed.DemoLoader(gp.directory)}
 	mount(graphv1connect.NewGraphServiceHandler(graphHandler, append(telemetry.HandlerOptions(), connect.WithInterceptors(graphHandler.Identify(), identity.CommandInterceptor(), graphHandler.PersonalScope(), graphHandler.EnsureCaller()))...))
 	mount(registryv1connect.NewRegistryServiceHandler(&registrysvc.Handler{Service: rp.reg, Identity: ident}, append(telemetry.HandlerOptions(), connect.WithInterceptors(identity.CommandInterceptor()))...))
@@ -79,12 +79,16 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 	mount(mcpv1connect.NewMcpServiceHandler(&mcpsvc.Handler{Service: pp.hub, Authz: authorizer, Identity: ident, ConnectorToken: pp.connToken}, telemetry.HandlerOptions()...))
 	mount(modelv1connect.NewModelServiceHandler(&modelgw.Handler{Service: pp.gw, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
 	srv.Mount(pp.models.Route()) // its own tokens, minted by the hub (ADR 0123 §6), not the sign-in's
-	mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: &prefssvc.Service{Store: st.prefs}, Identity: ident}, telemetry.HandlerOptions()...))
+	// the preferences' and the conversations' events go through their outboxes to the event stream (ADR 0136)
+	prefs := &prefssvc.Service{Store: st.prefs}
+	e.emit(prefs.Emit(busSink(rp.bus)))
+	mount(preferencesv1connect.NewPreferencesServiceHandler(&prefssvc.Handler{Service: prefs, Identity: ident}, telemetry.HandlerOptions()...))
 	convs := &convsvc.Service{Store: st.convs}
+	e.emit(convs.Emit(busSink(rp.bus)))
 	mount(conversationsv1connect.NewConversationServiceHandler(&convsvc.Handler{Service: convs, Identity: ident}, telemetry.HandlerOptions()...))
 	// the assistant (ADR 0087) in process: the real graph (a change it creates starts its triggers like any other), the
 	// gateway, the registry, the access directory and the conversation service, all acting for the caller
-	assistant := &assistantsvc.Service{Convs: convs, Model: pp.gw, Graph: engine.EventingGraph{GraphPort: gp.g, OnEvent: e.triggers.onChange},
+	assistant := &assistantsvc.Service{Convs: convs, Model: pp.gw, Graph: gp.g,
 		Methodologies: rp.reg, Projects: assistantsvc.Directory{Directory: gp.directory}, Engine: assistantsvc.EngineClient{API: ep.handler, Views: &registrysvc.Handler{Service: rp.reg}}, Log: e.log}
 	mount(assistantv1connect.NewAssistantServiceHandler(&assistantsvc.Handler{Service: assistant, Identity: ident}, telemetry.HandlerOptions()...))
 	mount(indexv1connect.NewIndexServiceHandler(&indexersvc.Handler{Service: pp.indexer, Identity: ident, Authz: authorizer}, telemetry.HandlerOptions()...))
@@ -112,7 +116,7 @@ func buildServer(e *env, st stores, gp *graphPart, rp *registryPart, pp *platfor
 
 // buildAuth mounts the sign-in endpoints and returns the authentication middleware of the mode (nil when the mode
 // is open: every request then acts as the dev principal).
-func buildAuth(e *env, st stores, gp *graphPart, srv *platform.Server) (echo.MiddlewareFunc, error) {
+func buildAuth(e *env, st stores, gp *graphPart, rp *registryPart, srv *platform.Server) (echo.MiddlewareFunc, error) {
 	mode, err := gateway.LookupMode(e.cfg.AuthMode)
 	if err != nil {
 		return nil, wrap("auth mode", err)
@@ -127,9 +131,13 @@ func buildAuth(e *env, st stores, gp *graphPart, srv *platform.Server) (echo.Mid
 	if err != nil {
 		return nil, wrap("jwt secret", err)
 	}
+	// the credentials' events (an account registered, a password changed, a session started or ended) go through
+	// their outbox (ADR 0136)
+	creds := &credsvc.Service{Store: st.creds}
+	e.emit(creds.Emit(busSink(rp.bus)))
 	authCfg := gateway.Config{AuthMode: e.cfg.AuthMode, JWTSecret: []byte(secret), DevTokens: platform.Env("GOAP_DEV_TOKENS", "") == "true", PlatformRoles: access.PlatformRoles,
 		TokenTTL: platform.EnvDuration("GOAP_TOKEN_TTL", gateway.DefaultTokenTTL), MaxSession: platform.EnvDuration("GOAP_SESSION_MAX", gateway.DefaultMaxSession),
-		Credentials: &credsvc.Service{Store: st.creds}, Enrich: gp.directory.Enrich, ProjectAccess: gp.directory.MayAccessProject,
+		Credentials: creds, Enrich: gp.directory.Enrich, ProjectAccess: gp.directory.MayAccessProject,
 		// the user exists in the graph from their first sign-in, member of the unit new users join (ADR 0042)
 		OnSignIn: func(ctx context.Context, subject string) error {
 			if err := graphsvc.EnsureUser(ctx, gp.g, subject); err != nil {

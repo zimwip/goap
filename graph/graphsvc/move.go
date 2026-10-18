@@ -15,7 +15,7 @@ import (
 // hold the organisation (cmd/graph, goap-dev): the caller needs change:move on the project of each change and on
 // the target, and access to both (access.Snapshot.MayAccessProject); and the methodology of each change must apply
 // (its own or inherited, Snapshot.ApplicableMethodologies) to both. A change with no methodology is not held to the
-// second rule. A platform service (authz.Principal.System) is not asked the first two. A nil authorizer refuses (ADR 0135); a nil
+// second rule. A platform service (authz.Principal.System) is not asked the first two. A nil authorizer refuses (ADR 0138); a nil
 // directory skips the checks it does.
 func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveGate {
 	return func(ctx context.Context, family []domain.Change, to string) error {
@@ -48,6 +48,25 @@ func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveG
 						c.Methodology, c.ID, project, graph.ErrInvalid)
 				}
 			}
+		}
+		return nil
+	}
+}
+
+// MethodologyGate is the gate of a change taking a methodology (graph.SetChangeMethodology), plugged by the compositions
+// that hold the organisation (cmd/graph, goap-dev): the methodology must apply to the project of the change, its own or
+// inherited (Snapshot.ApplicableMethodologies), as the form of a new change offers it. A nil directory checks nothing.
+func MethodologyGate(d *access.Directory) graph.MethodologyGate {
+	return func(ctx context.Context, c domain.Change, methodology string) error {
+		if d == nil {
+			return nil
+		}
+		snap, err := d.Snapshot(ctx)
+		if err != nil {
+			return fmt.Errorf("the organisation cannot be read: %w", err)
+		}
+		if !slices.Contains(snap.ApplicableMethodologies(c.ProjectID), methodology) {
+			return fmt.Errorf("methodology %s does not apply to project %s, the project of change %s: %w", methodology, c.ProjectID, c.ID, graph.ErrInvalid)
 		}
 		return nil
 	}

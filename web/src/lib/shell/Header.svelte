@@ -25,6 +25,7 @@
   import { formatTime } from '../api';
   import Popover from './Popover.svelte';
   import ProjectSelector from './ProjectSelector.svelte';
+  import WorkingChangeSelector from './WorkingChangeSelector.svelte';
   import OnlineUsers from './OnlineUsers.svelte';
   import UsageToday from './UsageToday.svelte';
 
@@ -239,6 +240,7 @@
 <header class="header">
   <div class="brand"><span class="logo" aria-hidden="true">◆</span> GOAP</div>
   <ProjectSelector />
+  <WorkingChangeSelector />
 
   <div class="search">
     <span class="sicon"><Icon name="search" size={14} /></span>

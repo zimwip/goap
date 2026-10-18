@@ -140,3 +140,34 @@ func TestStepRolesHeldInAUnitHoldBelowIt(t *testing.T) {
 		}
 	}
 }
+
+// The platform administrator may do everything (ADR 0047, 0139), including what a methodology reserves to its roles:
+// a step of a responsible role, an agent or an action of declared roles, an operation no role allows, a seat, its own
+// change.
+func TestPlatformAdministratorPassesTheRolesOfMethodologies(t *testing.T) {
+	ctx := context.Background()
+	c, err := NewCasbin(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := Principal{Subject: "root", Org: "acme", Global: []string{"admin"}}
+	step := Resource{Type: "step", ID: "p1", Name: "p/review", Org: "acme", ProjectID: "PROJ-A", Owner: "root", Role: "tech_lead", Accountable: "product_owner"}
+	for _, req := range []Request{
+		{Subject: admin, Action: "perform", Resource: step},
+		{Subject: admin, Action: "approve", Resource: step},
+		{Subject: admin, Action: "run", Resource: Resource{Type: "action", Name: "review", ProjectID: "PROJ-A", Roles: []string{"tech_lead"}}},
+		{Subject: admin, Action: "run", Resource: Resource{Type: "agent", Name: "delivery", ProjectID: "PROJ-A", Roles: []string{"developer"}}},
+		{Subject: admin, Action: "perform", Resource: Resource{Type: "operation", Name: "impact.review", ProjectID: "PROJ-A"}},
+		{Subject: admin, Action: "sit", Resource: Resource{Type: "decision", ProjectID: "PROJ-A", Roles: []string{"architect"}}},
+		{Subject: admin, Action: "apply", Resource: Resource{Type: "change", Owner: "root", ProjectID: "PROJ-A"}},
+	} {
+		if ok, err := c.Authorize(ctx, req); err != nil || !ok {
+			t.Errorf("an administrator may %s %s %s: %v", req.Action, req.Resource.Type, req.Resource.Name, err)
+		}
+	}
+	// a member holding none of the roles may not
+	member := Principal{Subject: "ann", Org: "acme", Roles: []string{"developer"}}
+	if ok, _ := c.Authorize(ctx, Request{Subject: member, Action: "perform", Resource: step}); ok {
+		t.Fatal("a developer does not perform a tech lead's step")
+	}
+}

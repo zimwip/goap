@@ -14,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Migrations holds the PostgreSQL schema; SQLiteMigrations the local mode one.
@@ -92,28 +94,37 @@ var (
 )
 
 // Store keeps the conversations. It enforces no ownership: the Service does.
+//
+// The writes take the events of their fact (ADR 0136): msgs are written in the outbox of the store in the transaction
+// of the write, and not at all when the write is refused or fails. A store whose service emits events implements
+// outbox.Store too (both stores of this package do).
 type Store interface {
 	// Create adds a conversation, refusing it (ErrFull) when its subject already holds maxPerSubject of them.
-	Create(ctx context.Context, c Conversation, maxPerSubject int) error
+	Create(ctx context.Context, c Conversation, maxPerSubject int, msgs ...outbox.Message) error
 	Get(ctx context.Context, id string) (Conversation, error)
 	// List returns the conversations of a subject, most recently updated first, after the cursor.
 	List(ctx context.Context, subject string, after Cursor, limit int) ([]Conversation, error)
-	Rename(ctx context.Context, id, title string, now time.Time) (Conversation, error)
+	Rename(ctx context.Context, id, title string, now time.Time, msgs ...outbox.Message) (Conversation, error)
 	// Delete removes a conversation and its messages.
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, id string, msgs ...outbox.Message) error
 	// Messages returns the messages of a conversation in order.
 	Messages(ctx context.Context, conversationID string) ([]Message, error)
 	GetMessage(ctx context.Context, id string) (Message, error)
 	// Append adds a message at the next position, refusing it (ErrFull) beyond maxMessages, and touches the
 	// conversation.
-	Append(ctx context.Context, m Message, maxMessages int) (Message, error)
-	// UpdateMessage reads a message, lets fn change it, stores the result and touches the conversation, atomically.
-	UpdateMessage(ctx context.Context, id string, now time.Time, fn func(Message) (Message, error)) (Message, error)
+	Append(ctx context.Context, m Message, maxMessages int, msgs ...outbox.Message) (Message, error)
+	// UpdateMessage reads a message, lets fn change it, stores the result and touches the conversation, atomically;
+	// events (nil: none) gives the events of the update, written with it, from the owner of the conversation and the
+	// message before and after fn.
+	UpdateMessage(ctx context.Context, id string, now time.Time, fn func(Message) (Message, error), events MessageEvents) (Message, error)
 	// Summary returns the summary of a conversation (ErrNotFound when it has none); SetSummary stores one unless the
-	// stored one already covers as many messages (UpTo only grows).
+	// stored one already covers as many messages (UpTo only grows), and writes msgs only when it stored it.
 	Summary(ctx context.Context, conversationID string) (Summary, error)
-	SetSummary(ctx context.Context, sum Summary) error
+	SetSummary(ctx context.Context, sum Summary, msgs ...outbox.Message) error
 }
+
+// MessageEvents gives the events of an update of a message: owner is the subject owning its conversation.
+type MessageEvents func(owner string, before, after Message) ([]outbox.Message, error)
 
 // micros is the stored form of a time.
 func micros(t time.Time) int64 { return t.UnixMicro() }
@@ -135,9 +146,28 @@ type MemoryStore struct {
 	convs map[string]Conversation
 	msgs  map[string][]Message // conversation id -> messages in order
 	sums  map[string]Summary
+	out   outbox.Memory
 }
 
-var _ Store = (*MemoryStore)(nil)
+var (
+	_ Store        = (*MemoryStore)(nil)
+	_ outbox.Store = (*MemoryStore)(nil)
+)
+
+// Pending implements outbox.Store.
+func (s *MemoryStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.out.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s *MemoryStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.out.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s *MemoryStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.out.PurgePublished(ctx, before)
+}
 
 // NewMemoryStore returns an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
@@ -164,7 +194,7 @@ func (s *MemoryStore) Summary(_ context.Context, id string) (Summary, error) {
 	return sum, nil
 }
 
-func (s *MemoryStore) SetSummary(_ context.Context, sum Summary) error {
+func (s *MemoryStore) SetSummary(_ context.Context, sum Summary, msgs ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.convs[sum.ConversationID]; !ok {
@@ -174,10 +204,11 @@ func (s *MemoryStore) SetSummary(_ context.Context, sum Summary) error {
 		return nil
 	}
 	s.sums[sum.ConversationID] = sum
+	s.out.Append(msgs...)
 	return nil
 }
 
-func (s *MemoryStore) Create(_ context.Context, c Conversation, maxPerSubject int) error {
+func (s *MemoryStore) Create(_ context.Context, c Conversation, maxPerSubject int, msgs ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	n := 0
@@ -190,6 +221,7 @@ func (s *MemoryStore) Create(_ context.Context, c Conversation, maxPerSubject in
 		return ErrFull
 	}
 	s.convs[c.ID] = c
+	s.out.Append(msgs...)
 	return nil
 }
 
@@ -224,7 +256,7 @@ func (s *MemoryStore) List(_ context.Context, subject string, after Cursor, limi
 	return out, nil
 }
 
-func (s *MemoryStore) Rename(_ context.Context, id, title string, now time.Time) (Conversation, error) {
+func (s *MemoryStore) Rename(_ context.Context, id, title string, now time.Time, msgs ...outbox.Message) (Conversation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, ok := s.convs[id]
@@ -233,15 +265,17 @@ func (s *MemoryStore) Rename(_ context.Context, id, title string, now time.Time)
 	}
 	c.Title, c.UpdatedAt = title, now
 	s.convs[id] = c
+	s.out.Append(msgs...)
 	return c, nil
 }
 
-func (s *MemoryStore) Delete(_ context.Context, id string) error {
+func (s *MemoryStore) Delete(_ context.Context, id string, msgs ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.convs, id)
 	delete(s.msgs, id)
 	delete(s.sums, id)
+	s.out.Append(msgs...)
 	return nil
 }
 
@@ -276,7 +310,7 @@ func (s *MemoryStore) GetMessage(_ context.Context, id string) (Message, error) 
 	return cloneMessage(s.msgs[cid][i]), nil
 }
 
-func (s *MemoryStore) Append(_ context.Context, m Message, maxMessages int) (Message, error) {
+func (s *MemoryStore) Append(_ context.Context, m Message, maxMessages int, msgs ...outbox.Message) (Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	c, ok := s.convs[m.ConversationID]
@@ -291,24 +325,33 @@ func (s *MemoryStore) Append(_ context.Context, m Message, maxMessages int) (Mes
 	s.msgs[c.ID] = append(s.msgs[c.ID], m)
 	c.UpdatedAt = m.CreatedAt
 	s.convs[c.ID] = c
+	s.out.Append(msgs...)
 	return cloneMessage(m), nil
 }
 
-func (s *MemoryStore) UpdateMessage(_ context.Context, id string, now time.Time, fn func(Message) (Message, error)) (Message, error) {
+func (s *MemoryStore) UpdateMessage(_ context.Context, id string, now time.Time, fn func(Message) (Message, error), events MessageEvents) (Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cid, i, ok := s.find(id)
 	if !ok {
 		return Message{}, ErrNotFound
 	}
-	out, err := fn(cloneMessage(s.msgs[cid][i]))
+	before := cloneMessage(s.msgs[cid][i])
+	out, err := fn(cloneMessage(before))
 	if err != nil {
 		return Message{}, err
 	}
-	s.msgs[cid][i] = cloneMessage(out)
 	c := s.convs[cid]
+	var msgs []outbox.Message
+	if events != nil {
+		if msgs, err = events(c.Subject, before, cloneMessage(out)); err != nil {
+			return Message{}, err
+		}
+	}
+	s.msgs[cid][i] = cloneMessage(out)
 	c.UpdatedAt = now
 	s.convs[cid] = c
+	s.out.Append(msgs...)
 	return cloneMessage(out), nil
 }
 
@@ -320,7 +363,29 @@ type SQLStore struct {
 	Dollar bool
 }
 
-var _ Store = SQLStore{}
+var (
+	_ Store        = SQLStore{}
+	_ outbox.Store = SQLStore{}
+)
+
+func (s SQLStore) outbox() outbox.SQL {
+	return outbox.SQL{DB: s.DB, Postgres: s.Dollar, Table: "conversation_outbox"}
+}
+
+// Pending implements outbox.Store.
+func (s SQLStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.outbox().Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s SQLStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.outbox().MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s SQLStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.outbox().PurgePublished(ctx, before)
+}
 
 func (s SQLStore) q(query string) string {
 	if !s.Dollar {
@@ -398,15 +463,29 @@ func (s SQLStore) Summary(ctx context.Context, id string) (Summary, error) {
 	return sum, nil
 }
 
-func (s SQLStore) SetSummary(ctx context.Context, sum Summary) error {
+func (s SQLStore) SetSummary(ctx context.Context, sum Summary, msgs ...outbox.Message) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
 	// UpTo only grows: two compactions racing keep the one that covers more
-	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO conversation_summary (conversation_id, summary, up_to, updated_at) VALUES (?, ?, ?, ?)
+	res, err := tx.ExecContext(ctx, s.q(`INSERT INTO conversation_summary (conversation_id, summary, up_to, updated_at) VALUES (?, ?, ?, ?)
 		ON CONFLICT (conversation_id) DO UPDATE SET summary = excluded.summary, up_to = excluded.up_to, updated_at = excluded.updated_at
 		WHERE conversation_summary.up_to < excluded.up_to`), sum.ConversationID, sum.Text, sum.UpTo, micros(sum.UpdatedAt))
-	return err
+	if err != nil {
+		return err
+	}
+	if n, err := res.RowsAffected(); err == nil && n > 0 {
+		// stored: its events go with it, an ignored summary has none
+		if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
-func (s SQLStore) Create(ctx context.Context, c Conversation, maxPerSubject int) error {
+func (s SQLStore) Create(ctx context.Context, c Conversation, maxPerSubject int, msgs ...outbox.Message) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -421,6 +500,9 @@ func (s SQLStore) Create(ctx context.Context, c Conversation, maxPerSubject int)
 	}
 	if _, err := tx.ExecContext(ctx, s.q(`INSERT INTO conversation (`+convCols+`) VALUES (?, ?, ?, ?, ?)`),
 		c.ID, c.Subject, c.Title, micros(c.CreatedAt), micros(c.UpdatedAt)); err != nil {
+		return err
+	}
+	if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -456,18 +538,30 @@ func (s SQLStore) List(ctx context.Context, subject string, after Cursor, limit 
 	return out, rows.Err()
 }
 
-func (s SQLStore) Rename(ctx context.Context, id, title string, now time.Time) (Conversation, error) {
-	res, err := s.DB.ExecContext(ctx, s.q(`UPDATE conversation SET title = ?, updated_at = ? WHERE id = ?`), title, micros(now), id)
+func (s SQLStore) Rename(ctx context.Context, id, title string, now time.Time, msgs ...outbox.Message) (Conversation, error) {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return Conversation{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx, s.q(`UPDATE conversation SET title = ?, updated_at = ? WHERE id = ?`), title, micros(now), id)
 	if err != nil {
 		return Conversation{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
 		return Conversation{}, ErrNotFound
 	}
-	return s.Get(ctx, id)
+	c, err := scanConv(tx.QueryRowContext(ctx, s.q(`SELECT `+convCols+` FROM conversation WHERE id = ?`), id))
+	if err != nil {
+		return Conversation{}, notFound(err)
+	}
+	if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
+		return Conversation{}, err
+	}
+	return c, tx.Commit()
 }
 
-func (s SQLStore) Delete(ctx context.Context, id string) error {
+func (s SQLStore) Delete(ctx context.Context, id string, msgs ...outbox.Message) error {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -481,6 +575,9 @@ func (s SQLStore) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, s.q(`DELETE FROM conversation WHERE id = ?`), id); err != nil {
+		return err
+	}
+	if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -516,7 +613,7 @@ func encodeActions(a []Action) (string, error) {
 	return string(b), err
 }
 
-func (s SQLStore) Append(ctx context.Context, m Message, maxMessages int) (Message, error) {
+func (s SQLStore) Append(ctx context.Context, m Message, maxMessages int, msgs ...outbox.Message) (Message, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Message{}, err
@@ -546,10 +643,13 @@ func (s SQLStore) Append(ctx context.Context, m Message, maxMessages int) (Messa
 	if _, err := tx.ExecContext(ctx, s.q(`UPDATE conversation SET updated_at = ? WHERE id = ?`), micros(m.CreatedAt), id); err != nil {
 		return Message{}, err
 	}
+	if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
+		return Message{}, err
+	}
 	return m, tx.Commit()
 }
 
-func (s SQLStore) UpdateMessage(ctx context.Context, id string, now time.Time, fn func(Message) (Message, error)) (Message, error) {
+func (s SQLStore) UpdateMessage(ctx context.Context, id string, now time.Time, fn func(Message) (Message, error), events MessageEvents) (Message, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Message{}, err
@@ -559,7 +659,7 @@ func (s SQLStore) UpdateMessage(ctx context.Context, id string, now time.Time, f
 	if err != nil {
 		return Message{}, notFound(err)
 	}
-	out, err := fn(cur)
+	out, err := fn(cloneMessage(cur))
 	if err != nil {
 		return Message{}, err
 	}
@@ -573,6 +673,19 @@ func (s SQLStore) UpdateMessage(ctx context.Context, id string, now time.Time, f
 	}
 	if _, err := tx.ExecContext(ctx, s.q(`UPDATE conversation SET updated_at = ? WHERE id = ?`), micros(now), cur.ConversationID); err != nil {
 		return Message{}, err
+	}
+	if events != nil {
+		var owner string
+		if err := tx.QueryRowContext(ctx, s.q(`SELECT subject FROM conversation WHERE id = ?`), cur.ConversationID).Scan(&owner); err != nil {
+			return Message{}, notFound(err)
+		}
+		msgs, err := events(owner, cur, out)
+		if err != nil {
+			return Message{}, err
+		}
+		if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
+			return Message{}, err
+		}
 	}
 	return out, tx.Commit()
 }

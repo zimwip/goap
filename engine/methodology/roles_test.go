@@ -31,7 +31,7 @@ processes:
       - {name: finish, method: build, pre: {c: true}}
 `
 
-// ADR 0136: the steps inherit the roles of their process field by field, the agents act as the responsible role of
+// ADR 0139: the steps inherit the roles of their process field by field, the agents act as the responsible role of
 // what they run, the actions as the role of what refines them, a specialization as the action it specializes.
 func TestRolesPropagate(t *testing.T) {
 	m, err := Parse([]byte(rolesSrc))

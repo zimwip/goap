@@ -25,7 +25,7 @@ type Process struct {
 	Examples    []string `yaml:"examples,omitempty" json:"examples,omitempty"`
 	// References are the reference documents that describe the process.
 	References []Reference `yaml:"references,omitempty" json:"references,omitempty"`
-	// Roles assign the process, RACI style (ADR 0136): its responsible role is required; the agent running the process
+	// Roles assign the process, RACI style (ADR 0139): its responsible role is required; the agent running the process
 	// acts as it, and its steps without roles of their own inherit them.
 	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
 	Steps []Step            `yaml:"steps" json:"steps"`
@@ -613,7 +613,7 @@ func (m *Methodology) checkProcessCycles(add func(path, format string, args ...a
 // actions it compiled to (none for a step of sub-steps).
 type StepInfo struct {
 	Step
-	// Effective are the roles in force for the step (ADR 0136): its own, what they leave unsaid taken from the steps
+	// Effective are the roles in force for the step (ADR 0139): its own, what they leave unsaid taken from the steps
 	// containing it, then from its process or method.
 	Effective *Responsibilities
 	// Owner is the process or the method whose step tree holds the step; Path its path in that tree (ADR 0034).

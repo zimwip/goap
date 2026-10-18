@@ -14,7 +14,7 @@ import (
 // TransitionAuthorizer authorizes the lifecycle transitions of a change for
 // the caller (ADR 0014). A transition declares the permission it needs
 // ("type:action"); by default it is node:transition. A nil authorizer refuses
-// everything (ADR 0135); an anonymous caller is refused by it, internal services act as
+// everything (ADR 0138); an anonymous caller is refused by it, internal services act as
 // a named system principal (SystemPrincipal).
 func TransitionAuthorizer(a authz.Authorizer) graph.TransitionAuthorizer {
 	return func(ctx context.Context, n domain.Node, t domain.Transition) error {
@@ -66,7 +66,7 @@ func SeatAuthorizer(a authz.Authorizer) graph.SeatAuthorizer {
 // ADR 0075: a derogation asks derogation:sign), checked on the project of the change. When the kind names the field that
 // holds who answers for the item, that must be the writer: one signs for oneself. A platform service acting by itself
 // (authz.Principal.System) writes on behalf of the rules it applies (the expiry of a derogation) and is not asked. A nil
-// authorizer refuses (ADR 0135). A derogation also needs the role its criticality level asks of a signatory (ADR 0075 §3,
+// authorizer refuses (ADR 0138). A derogation also needs the role its criticality level asks of a signatory (ADR 0075 §3,
 // criticality.Policy.SignatoryRole, resolved by resolve; nil: the compiled-in table), checked as derogation:sign-role.
 func ItemAuthorizer(a authz.Authorizer, resolve criticality.Resolver) graph.ItemAuthorizer {
 	return func(ctx context.Context, c domain.Change, it domain.ChangeItem, p domain.ItemPermission) error {
@@ -116,14 +116,14 @@ const noRole = "-"
 // OperationAuthorizer authorizes the operations of the catalogue (pkg/operations, ADR 0103) on a change for the caller:
 // when the methodology of the change restricts the operation to some of its roles, operation:perform is checked on the
 // project of the change with those roles (one of them, held there). A platform service acting by itself is not asked;
-// a nil authorizer refuses, a nil resolver leaves every operation to the administrators (ADR 0135).
+// a nil authorizer refuses, a nil resolver leaves every operation to the administrators (ADR 0138).
 func OperationAuthorizer(a authz.Authorizer, roles OperationRoles) graph.OperationAuthorizer {
 	return func(ctx context.Context, c domain.Change, op string) error {
 		who := authz.From(ctx)
 		if who.System() {
 			return nil
 		}
-		// without the roles of the methodologies (no registry), an operation is the administrators' (ADR 0135)
+		// without the roles of the methodologies (no registry), an operation is the administrators' (ADR 0138)
 		var allowed []string
 		if roles != nil {
 			var restricted bool

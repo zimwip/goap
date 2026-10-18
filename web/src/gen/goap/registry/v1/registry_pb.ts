@@ -1989,7 +1989,7 @@ export type Action = Message<"goap.registry.v1.Action"> & {
   roles: string[];
 
   /**
-   * the role the action acts as (ADR 0136): its own; the compiler gives the others the role of what refines them
+   * the role the action acts as (ADR 0139): its own; the compiler gives the others the role of what refines them
    *
    * @generated from field: string role = 32;
    */
@@ -2187,7 +2187,7 @@ export type ActionJson = {
   roles?: string[];
 
   /**
-   * the role the action acts as (ADR 0136): its own; the compiler gives the others the role of what refines them
+   * the role the action acts as (ADR 0139): its own; the compiler gives the others the role of what refines them
    *
    * @generated from field: string role = 32;
    */
@@ -2405,7 +2405,7 @@ export type Agent = Message<"goap.registry.v1.Agent"> & {
   roles: string[];
 
   /**
-   * the role the agent acts as (ADR 0050, 0136)
+   * the role the agent acts as (ADR 0050, 0139)
    *
    * @generated from field: string role = 12;
    */
@@ -2492,7 +2492,7 @@ export type AgentJson = {
   roles?: string[];
 
   /**
-   * the role the agent acts as (ADR 0050, 0136)
+   * the role the agent acts as (ADR 0050, 0139)
    *
    * @generated from field: string role = 12;
    */
@@ -3922,7 +3922,7 @@ export type Process = Message<"goap.registry.v1.Process"> & {
   on: Subscription[];
 
   /**
-   * the roles of the process, RACI style (ADR 0136): its responsible role is required, its steps inherit them
+   * the roles of the process, RACI style (ADR 0139): its responsible role is required, its steps inherit them
    *
    * @generated from field: goap.registry.v1.Responsibilities roles = 8;
    */
@@ -3970,7 +3970,7 @@ export type ProcessJson = {
   on?: SubscriptionJson[];
 
   /**
-   * the roles of the process, RACI style (ADR 0136): its responsible role is required, its steps inherit them
+   * the roles of the process, RACI style (ADR 0139): its responsible role is required, its steps inherit them
    *
    * @generated from field: goap.registry.v1.Responsibilities roles = 8;
    */

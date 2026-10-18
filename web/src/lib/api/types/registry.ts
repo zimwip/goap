@@ -302,7 +302,7 @@ export interface Action {
   permission?: string;
   /** roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent */
   roles?: string[];
-  /** the role the action acts as (ADR 0136); empty: the role of what refines it */
+  /** the role the action acts as (ADR 0139); empty: the role of what refines it */
   role?: string;
   model?: string;
   prompt?: string;
@@ -439,7 +439,7 @@ export interface Agent {
   mcps?: string[];
   /** roles allowed to run the agent (ADR 0043), declared by the methodology; empty: any member of the project */
   roles?: string[];
-  /** the role the agent acts as (ADR 0050, 0136); empty: the one role of its actions */
+  /** the role the agent acts as (ADR 0050, 0139); empty: the one role of its actions */
   role?: string;
   /** LLM alias the llm / llm-scoring planners call each planning cycle (required for them) */
   model?: string;
@@ -570,7 +570,7 @@ export interface MethodologyProcess {
   examples?: string[];
   /** reference documents that describe the process */
   references?: DocumentReference[];
-  /** RACI roles of the process (ADR 0136): the responsible one is required, the steps inherit them */
+  /** RACI roles of the process (ADR 0139): the responsible one is required, the steps inherit them */
   roles?: Responsibilities;
   steps?: ProcessStep[];
   /** the events that make it reactive (ADR 0110) */

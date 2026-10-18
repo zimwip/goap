@@ -12,8 +12,10 @@ import type { ConversationAction, ConversationMessage } from './conversations';
  */
 export interface AssistantContext {
   app?: {
-    /** the active project key */
+    /** the active project key (absent when none is selected) */
     project?: string;
+    /** the working change (stores/workingChange.svelte.ts): the change the turn works on */
+    change?: string;
     /** a change tab is `{ kind: 'change', params: { id } }`: the assistant takes the change it is about from there */
     tab?: { kind: string; params?: Record<string, string> };
   };

@@ -115,7 +115,7 @@ func TestAuthAndRouting(t *testing.T) {
 	if code := call(tok.Token); code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", code)
 	}
-	if gotSubject != "alice" || gotRoles != "developer" || gotProject != "PROJ-X" { // a dev token never carries a platform role (ADR 0135)
+	if gotSubject != "alice" || gotRoles != "developer" || gotProject != "PROJ-X" { // a dev token never carries a platform role (ADR 0138)
 		t.Fatalf("identity not propagated: %q %q %q", gotSubject, gotRoles, gotProject)
 	}
 
@@ -615,7 +615,7 @@ func TestEmptyAuthModeIsRefused(t *testing.T) {
 }
 
 // TestTokenRolesAreTrustedOnlyWhenAsked: the roles of a token come from an external identity provider only
-// (hs256 with TrustTokenRoles); otherwise the graph alone grants roles (ADR 0135).
+// (hs256 with TrustTokenRoles); otherwise the graph alone grants roles (ADR 0138).
 func TestTokenRolesAreTrustedOnlyWhenAsked(t *testing.T) {
 	for _, trust := range []bool{false, true} {
 		cfg := Config{AuthMode: "hs256", JWTSecret: []byte(strings.Repeat("s", 32)), TrustTokenRoles: trust}

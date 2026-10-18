@@ -27,6 +27,7 @@ import (
 	"github.com/zimwip/goap/engine/methodology"
 	"github.com/zimwip/goap/lib/def"
 	"github.com/zimwip/goap/lib/dsl"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Engine runs processes.
@@ -95,6 +96,8 @@ type Engine struct {
 	cancelling sync.Map
 	now        func() time.Time
 	bg         sync.WaitGroup
+	// outbox delivers the events of the outbox (Emit, ADR 0136).
+	outbox *outbox.Relay
 }
 
 // background runs f in a tracked goroutine (see Drain).
@@ -1204,7 +1207,7 @@ func (e *Engine) maySubmit(ctx context.Context, p *Process, m *methodology.Compi
 	}
 	if a, ok := m.Action(p.Pending.Action); ok {
 		if a.Role != "" && p.Pending.Context.responsible() == "" {
-			// the role the action acts as performs it when no step says who (ADR 0136)
+			// the role the action acts as performs it when no step says who (ADR 0139)
 			if ok, err := e.mayRun(ctx, p, who, "action", a.Name, []string{a.Role}); err != nil {
 				return err
 			} else if !ok {
@@ -1555,7 +1558,8 @@ func (e *Engine) save(ctx context.Context, p *Process, event string) error {
 		r.EndedAt = p.UpdatedAt
 		e.journal(ctx, p, r)
 	}
-	if err := e.Store.Put(ctx, p); err != nil {
+	ev := ProcessEvent{Event: event, Process: p, Time: p.UpdatedAt}
+	if err := e.emit(ctx, p, fmt.Sprintf("goap.process.%s.%s", p.ID, event), ev); err != nil {
 		return err
 	}
 	if p.Status.Terminal() || p.Status == StatusStuck {
@@ -1567,11 +1571,6 @@ func (e *Engine) save(ctx context.Context, p *Process, event string) error {
 		if p.ParentID != "" {
 			parent, child := p.ParentID, p.ID
 			e.background(func() { e.resumeParent(parent, child) })
-		}
-	}
-	if e.Events != nil {
-		if err := e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.%s", p.ID, event), ProcessEvent{Event: event, Process: p, Time: p.UpdatedAt}); err != nil {
-			e.log().Warn("publish failed", "err", err)
 		}
 	}
 	return nil

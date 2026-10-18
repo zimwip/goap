@@ -372,7 +372,7 @@ func (e LLMExecutor) Execute(ctx context.Context, ac ActionContext) (ActionResul
 	prompt += guidanceSection(ac.Blackboard)
 	system := llmSystem + ac.Step.section() + briefSection(ac)
 	if ac.Step.responsible() == "" && ac.Action.Role != "" {
-		system += fmt.Sprintf("\n\nYou act as the role %q.\n", ac.Action.Role) // the role of what the action refines (ADR 0136)
+		system += fmt.Sprintf("\n\nYou act as the role %q.\n", ac.Action.Role) // the role of what the action refines (ADR 0139)
 	}
 	if memoryMessages(ac.Process) != nil {
 		system += memoryNote

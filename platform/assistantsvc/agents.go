@@ -270,7 +270,7 @@ func (s *Service) runnable(ctx context.Context, p authz.Principal, project, chan
 }
 
 func (t *turn) listAgents(ctx context.Context) (any, error) {
-	c, err := t.s.runnable(ctx, t.p, t.project, t.in.Context.change())
+	c, err := t.s.runnable(ctx, t.p, t.project, t.workChange(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -335,30 +335,30 @@ func (t *turn) startAgent(ctx context.Context, a args) (any, error) {
 	}
 	method, agent, goal, intent := a.str("methodology"), a.str("agent"), a.str("goal"), a.str("intent")
 	step := a.str("step")
-	if step == "" && t.in.Context.change() == "" && (method == "" || agent == "") {
+	ctxChange := t.workChange(ctx)
+	if step == "" && ctxChange == "" && (method == "" || agent == "") {
 		return nil, errors.New(`"methodology" and "agent" are required (take them from list_agents)`)
 	}
 	if len(intent) > 4000 {
 		return nil, errors.New("the intent is too long (4000 bytes)")
 	}
-	ctxChange := t.in.Context.change()
 	changeID := a.str("changeId")
 	nc, _ := a["newChange"].(map[string]any)
 	switch {
 	case changeID != "" && nc != nil:
 		return nil, errors.New(`give "changeId" or "newChange", not both`)
 	case ctxChange != "" && nc != nil:
-		return nil, errors.New("the person is looking at a change: propose the agent on it (no newChange)")
+		return nil, errors.New("the turn works on a change (the working change): propose the agent on it (no newChange)")
 	case ctxChange != "" && changeID == "":
 		changeID = ctxChange
 	case ctxChange != "" && changeID != ctxChange:
-		return nil, fmt.Errorf("the only change agents are listed for is %q, the one the person is looking at", ctxChange)
+		return nil, fmt.Errorf("the only change agents are listed for is %q, the working change", ctxChange)
 	case ctxChange == "" && changeID != "":
-		return nil, errors.New("no change is open: propose the agent with a newChange {title, intent}")
+		return nil, errors.New("no working change: propose the agent with a newChange {title, intent}")
 	case ctxChange == "" && nc == nil && !t.searched:
-		return nil, errors.New(`no change is open: search the open changes first (search_changes on the intent) and show the person what was found, then propose the agent with a "newChange" {title, intent}`)
+		return nil, errors.New(`no working change: search the open changes first (search_changes on the intent) and show the person what was found, then propose the agent with a "newChange" {title, intent}`)
 	case ctxChange == "" && nc == nil:
-		return nil, errors.New(`no change is open: "newChange" {title, intent} is required`)
+		return nil, errors.New(`no working change: "newChange" {title, intent} is required`)
 	}
 	if nc != nil && !t.searched {
 		// a new change is proposed only once the open changes were searched (frame.go)

@@ -120,7 +120,7 @@ func (e *env) toolResult(round int) string {
 }
 
 func changeCtx(id string) Context {
-	return Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "change", Params: map[string]string{"id": id}}}}
+	return Context{App: App{Project: "PROJ-A", Change: id, Tab: Tab{Kind: "change", Params: map[string]string{"id": id}}}}
 }
 
 func agentNames(t *testing.T, result string) []string {
@@ -267,7 +267,7 @@ func TestStartAgentRefusals(t *testing.T) {
 		"another project":           {`{"methodology":"other","agent":"stranger","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "not one you may run here"},
 		"an unknown goal":           {`{"methodology":"delivery","agent":"builder","goal":"nope","newChange":{"title":"t","intent":"i"}}`, inProject("PROJ-A"), "no goal"},
 		"no change and no new":      {proposeArgs(``), inProject("PROJ-A"), "newChange"},
-		"a change out of context":   {proposeArgs(`,"changeId":"CHG-OTHER"`), changeCtx("CHG-D"), "looking at"},
+		"a change out of context":   {proposeArgs(`,"changeId":"CHG-OTHER"`), changeCtx("CHG-D"), "the working change"},
 		"a new change in a change":  {proposeArgs(`,"newChange":{"title":"t","intent":"i"}`), changeCtx("CHG-D"), "no newChange"},
 		"a closed change":           {stepArgs("delivery/build"), changeCtx("CHG-DONE"), "no step can be started"},
 		"an agent on a change":      {proposeArgs(``), changeCtx("CHG-D"), "possibleSteps"},

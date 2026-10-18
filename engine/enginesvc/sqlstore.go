@@ -16,6 +16,7 @@ import (
 
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/engine/intent"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Migrations holds the PostgreSQL process schema; SQLiteMigrations the local mode one.
@@ -42,7 +43,7 @@ type SQLStore struct {
 }
 
 var (
-	_ engine.Store        = SQLStore{}
+	_ engine.EventStore   = SQLStore{}
 	_ engine.Locker       = SQLStore{}
 	_ engine.OrphanFinder = SQLStore{}
 )
@@ -99,6 +100,48 @@ func (s SQLStore) Get(ctx context.Context, id string) (*engine.Process, error) {
 // folded back in by Get/List. The write is refused (engine.ErrFenced) while
 // another replica holds the lock of the process (ADR 0124).
 func (s SQLStore) Put(ctx context.Context, p *engine.Process) error {
+	return s.put(ctx, s.DB, p)
+}
+
+// PutEmitting implements engine.EventStore: the process and its events in one transaction (ADR 0136), none of them
+// written when the process is fenced.
+func (s SQLStore) PutEmitting(ctx context.Context, p *engine.Process, msgs ...outbox.Message) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if p != nil {
+		if err := s.put(ctx, tx, p); err != nil {
+			return err
+		}
+	}
+	if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s SQLStore) outbox() outbox.SQL {
+	return outbox.SQL{DB: s.DB, Postgres: s.Dollar, Table: "process_outbox"}
+}
+
+// Pending implements outbox.Store.
+func (s SQLStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.outbox().Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s SQLStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.outbox().MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s SQLStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.outbox().PurgePublished(ctx, before)
+}
+
+func (s SQLStore) put(ctx context.Context, db outbox.Execer, p *engine.Process) error {
 	stripped := *p
 	stripped.Intent.Turns = nil
 	body, err := json.Marshal(&stripped)
@@ -106,7 +149,7 @@ func (s SQLStore) Put(ctx context.Context, p *engine.Process) error {
 		return err
 	}
 	now := millis(time.Now())
-	res, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO process (id, status, created_at, updated_at, body)
+	res, err := db.ExecContext(ctx, s.q(`INSERT INTO process (id, status, created_at, updated_at, body)
 		SELECT CAST(? AS TEXT), CAST(? AS TEXT), CAST(? AS TEXT), CAST(? AS BIGINT), CAST(? AS TEXT)
 		WHERE NOT EXISTS (SELECT 1 FROM engine_lock WHERE key = ? AND holder <> ? AND lease_until > ?)
 		ON CONFLICT (id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, body = excluded.body`),

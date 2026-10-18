@@ -115,13 +115,9 @@ func (t *triggerRef) onChange(ctx context.Context, ev domain.ChangeEvent) {
 	t.handle(ctx, engine.TriggerEventOf(ev))
 }
 
-// changePublisher forwards the change events of the graph handler (calls from
-// the IDE) to the triggers.
-type changePublisher func(ctx context.Context, ev domain.ChangeEvent)
-
-func (f changePublisher) Publish(ctx context.Context, _ string, v any) error {
-	if ev, ok := v.(domain.ChangeEvent); ok {
-		f(ctx, ev)
+// onProcess forwards a process event of the engine to the triggers.
+func (t *triggerRef) onProcess(ctx context.Context, ev engine.ProcessEvent) {
+	if m := t.m.Load(); m != nil {
+		m.OnProcess(ctx, ev)
 	}
-	return nil
 }

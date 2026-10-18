@@ -12,7 +12,7 @@ import (
 )
 
 // ProjectScopeValidator keeps the writes of Assignments and projects within the rights of the person committing them
-// (ADR 0135), judged on the state before the change (the versions it starts from): a platform Assignment is a platform
+// (ADR 0138), judged on the state before the change (the versions it starts from): a platform Assignment is a platform
 // administrator's; an Assignment of a project, its administrators' (the flags, its owners'); a new project, the
 // administrators' of its parent; an edit of a project, its administrators'; stopping or restarting it, its owners';
 // its move, the owners' of its old and its new parent. A platform service acting by itself and a platform administrator
@@ -142,7 +142,7 @@ func (ProjectScopeValidator) project(ctx context.Context, q graphapi.ValidatorQu
 	return need(key, false, "editing "+what)
 }
 
-// ProjectOwnerValidator refuses a change that leaves a project that had an owner with none (ADR 0135): an owner
+// ProjectOwnerValidator refuses a change that leaves a project that had an owner with none (ADR 0138): an owner
 // Assignment on it or above it, as the change leaves the graph. A project never owned (a platform administrator's
 // alone) is not asked for one.
 type ProjectOwnerValidator struct{}

@@ -22,6 +22,8 @@ export interface LlmProvider {
   apiKeyRef?: string;
   /** loaded in the running router */
   active?: boolean;
+  /** why an enabled provider is not loaded; empty when active */
+  reason?: string;
 }
 
 export interface DiscoveredModel {

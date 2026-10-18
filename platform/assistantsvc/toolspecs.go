@@ -45,7 +45,7 @@ var serverTools = []llm.ToolSpec{
 		Description: "Asks the interface to make that project the active one; the next steps of this turn get the tools of that project. It is refused when the person may not work on it."},
 	{Name: ToolCreateChange, InputSchema: obj(map[string]any{"title": str("short title"), "intent": str("why the change is needed"),
 		"methodology": str("optional: one that list_methodologies returned")}, "title", "intent"),
-		Description: "Creates a change, in the active project, for the person. Offered once search_changes has run in the conversation: only do it when no change found fits, or the person asked for a new change or agreed to it."},
+		Description: "Creates a change, in the active project, for the person; it becomes their working change. Offered once search_changes has run in the conversation: only do it when no change found fits, or the person asked for a new change or agreed to it."},
 	{Name: ToolSearchChanges, InputSchema: obj(map[string]any{
 		"q": str("words of the intent (title and intent of the changes are searched, words of 3 characters or more)"),
 		"status": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"draft", "active", "committed", "applied", "abandoned"}},
@@ -53,25 +53,25 @@ var serverTools = []llm.ToolSpec{
 	}, "q"),
 		Description: "Searches the changes of the active project (and the projects below it; outside any project, of every project the person may work on) whose title or intent holds the words of q, as the person: at most 10, best first, with \"total\". Call it on the intent before creating a change, and show the person what was found."},
 	{Name: ToolOpenChange, InputSchema: obj(map[string]any{"changeId": str("the change id")}, "changeId"),
-		Description: "Asks the interface to open that change; the next steps of this turn work on it, with the tools of a change. It is refused when it does not exist or is not visible to the person."},
+		Description: "Asks the interface to open that change and make it the working change (its project becomes the active one); the next steps of this turn work on it, with the tools of a change. It is refused when it does not exist or is not visible to the person."},
 	{Name: ToolListAgents, InputSchema: obj(map[string]any{}),
-		Description: "Lists the agents the person may run HERE: when they are looking at a change, those of that change's methodology (with the change's status, state and the processes already running, \"running\": true marks an agent already at work on it), with \"possibleSteps\" (the steps possible NOW towards its goal: id, \"why\", what it produces, \"mayRun\") and \"waitingSteps\" (a count of the steps waiting for conditions, never proposable); otherwise the agents of the methodologies of the active project that can start a change. Only agents whose required roles the person holds are listed; an agent flagged \"ready\" would carry out one of the possible steps."},
+		Description: "Lists the agents the person may run HERE: on the working change, those of that change's methodology (with the change's status, state and the processes already running, \"running\": true marks an agent already at work on it), with \"possibleSteps\" (the steps possible NOW towards its goal: id, \"why\", what it produces, \"mayRun\") and \"waitingSteps\" (a count of the steps waiting for conditions, never proposable); otherwise the agents of the methodologies of the active project that can start a change. Only agents whose required roles the person holds are listed; an agent flagged \"ready\" would carry out one of the possible steps."},
 	{Name: ToolStartAgent, InputSchema: obj(map[string]any{
 		"step":        str("on a change: the id of a step of possibleSteps"),
 		"methodology": str("with no change open: the methodology, from list_agents"),
 		"agent":       str("with no change open: the agent, from list_agents"),
 		"goal":        str("the goal of the agent, optional"),
 		"intent":      str("what the person wants, optional"),
-		"changeId":    str("the change they are looking at, optional"),
+		"changeId":    str("the working change, optional"),
 		"newChange":   obj(map[string]any{"title": str("short title"), "intent": str("why")}, "title", "intent"),
 		"rationale":   str("why this step or agent, one sentence"),
 	}), Description: "Starts NOTHING: records a proposal to start an agent that the person confirms or rejects in the interface. On a change give \"step\" only; otherwise \"methodology\" and \"agent\" from list_agents (and \"newChange\" only when no change is open)."},
 	{Name: ToolAttachChange, InputSchema: obj(map[string]any{
 		"parent":    str("id of the change whose methodology integrates this one (a release), from search_changes"),
 		"rationale": rationaleProp,
-	}, "parent"), Description: "Changes NOTHING: records a proposal, which the person confirms, to attach the change they are looking at to a change integrating it (a release taking a candidate): it becomes its sub-change and merges into it."},
+	}, "parent"), Description: "Changes NOTHING: records a proposal, which the person confirms, to attach the working change to a change integrating it (a release taking a candidate): it becomes its sub-change and merges into it."},
 	{Name: ToolDetachChange, InputSchema: obj(map[string]any{"rationale": rationaleProp}),
-		Description: "Changes NOTHING: records a proposal, which the person confirms, to detach the change they are looking at from the change integrating it (a candidate deferred or rejected): a root change again."},
+		Description: "Changes NOTHING: records a proposal, which the person confirms, to detach the working change from the change integrating it (a candidate deferred or rejected): a root change again."},
 }
 
 // uiToolSpec is a screen tool as the model gets it: its arguments' schema, plus the rationale of its proposal.

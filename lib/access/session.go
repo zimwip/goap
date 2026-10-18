@@ -36,7 +36,7 @@ type Capabilities struct {
 	// LowerCriticality: the caller may lower the criticality of a change of their active project (change:lower-criticality,
 	// ADR 0075 §3); raising it asks nothing more than writing the change.
 	LowerCriticality bool `json:"lowerCriticality"`
-	// AdministerProject and OwnProject (ADR 0135): the caller administers, or owns, their active project (a flag of an
+	// AdministerProject and OwnProject (ADR 0138): the caller administers, or owns, their active project (a flag of an
 	// Assignment on it or above it): they manage its Assignments' roles and its sub-projects; the owner also the flags of
 	// the Assignments, the retirement and the place of the projects. A platform administrator does both.
 	AdministerProject bool `json:"administerProject"`

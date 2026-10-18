@@ -211,6 +211,8 @@ message Provider {
   string api_key_ref = 7;
   // whether the provider is loaded in the running router
   bool active = 8;
+  // why an enabled provider is not loaded (no API key, a key that does not resolve, ...); empty when active
+  string reason = 9;
 }
 
 message ListProvidersRequest {}

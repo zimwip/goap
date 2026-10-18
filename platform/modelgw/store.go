@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/lib/llmcfg"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // The configuration is graph data (pkg/llmcfg); these are the shapes the service works with.
@@ -71,9 +72,10 @@ type MemoryStore struct {
 	seq   int64
 	costs map[CostKey]BehaviorCost
 	bases map[[2]string]ModelBaseline
+	out   outbox.Memory
 }
 
-var _ Store = (*MemoryStore)(nil)
+var _ EmittingStore = (*MemoryStore)(nil)
 
 // NewMemoryStore returns an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
@@ -93,11 +95,23 @@ func (s *MemoryStore) AddUsage(_ context.Context, model, period string, tokens i
 	return nil
 }
 
-func (s *MemoryStore) AppendCall(_ context.Context, c Call, x *Exchange) (int64, error) {
+func (s *MemoryStore) AppendCall(ctx context.Context, c Call, x *Exchange) (int64, error) {
+	return s.AppendCallEmitting(ctx, c, x, nil)
+}
+
+// AppendCallEmitting implements EmittingStore: the events are appended to the outbox under the lock of the row.
+func (s *MemoryStore) AppendCallEmitting(_ context.Context, c Call, x *Exchange, events CallEvents) (int64, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.seq++
-	c.Seq = s.seq
+	c.Seq = s.seq + 1
+	var msgs []outbox.Message
+	if events != nil {
+		var err error
+		if msgs, err = events(c); err != nil {
+			return 0, err
+		}
+	}
+	s.seq = c.Seq
 	c.HasExchange = x != nil
 	if x != nil {
 		xc := *x
@@ -105,7 +119,23 @@ func (s *MemoryStore) AppendCall(_ context.Context, c Call, x *Exchange) (int64,
 		s.xs[c.Seq] = xc
 	}
 	s.calls = append(s.calls, c)
+	s.out.Append(msgs...)
 	return c.Seq, nil
+}
+
+// Pending implements outbox.Store.
+func (s *MemoryStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.out.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s *MemoryStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.out.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s *MemoryStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.out.PurgePublished(ctx, before)
 }
 
 func (s *MemoryStore) Call(_ context.Context, seq int64) (Call, error) {

@@ -13,7 +13,7 @@ namespace: alm
 criticality: C1
 goal: conclude
 
-# ADR 0136: a developer builds the POC, the tech lead answers for its verdicts
+# ADR 0139: a developer builds the POC, the tech lead answers for its verdicts
 roles:
   - {name: developer, description: Builds and runs the probes}
   - {name: tech_lead, description: Answers for the verdicts of the POC}

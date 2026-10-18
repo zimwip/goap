@@ -45,7 +45,7 @@
     org: string;
     project: string;
     roles: string[];
-    /** flags of a project Assignment (ADR 0135): the owner possesses the project, an admin administers it */
+    /** flags of a project Assignment (ADR 0138): the owner possesses the project, an admin administers it */
     owner: boolean;
     admin: boolean;
     description: string;
@@ -189,7 +189,7 @@
     }
     // platform-wide either way: explicitly chosen, or this real project falls back to a platform role because
     // it needs none of its own (ADR 0047)
-    // a flag holds on a project only (ADR 0135): a project with no role of its own keeps a project Assignment then
+    // a flag holds on a project only (ADR 0138): a project with no role of its own keeps a project Assignment then
     const platform = isPlatformChoice || (platformFallback && !flagged);
     if (flagged && platformFallback && fRoles.length) {
       error = 'A platform role holds everywhere: an Assignment flagged owner or admin of this project carries no role.';

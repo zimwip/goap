@@ -1851,7 +1851,7 @@ type Action struct {
 	Loop *ActionLoop `protobuf:"bytes,30,opt,name=loop,proto3" json:"loop,omitempty"`
 	// roles allowed to run the action (ADR 0043), declared by the methodology; empty: those of the agent
 	Roles []string `protobuf:"bytes,31,rep,name=roles,proto3" json:"roles,omitempty"`
-	// the role the action acts as (ADR 0136): its own; the compiler gives the others the role of what refines them
+	// the role the action acts as (ADR 0139): its own; the compiler gives the others the role of what refines them
 	Role          string `protobuf:"bytes,32,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -2268,7 +2268,7 @@ type Agent struct {
 	Persistent *Persistence `protobuf:"bytes,10,opt,name=persistent,proto3" json:"persistent,omitempty"`
 	// roles allowed to run the agent (ADR 0043), declared by the methodology; empty: any member of the project
 	Roles []string `protobuf:"bytes,11,rep,name=roles,proto3" json:"roles,omitempty"`
-	// the role the agent acts as (ADR 0050, 0136)
+	// the role the agent acts as (ADR 0050, 0139)
 	Role          string `protobuf:"bytes,12,opt,name=role,proto3" json:"role,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3660,7 +3660,7 @@ type Process struct {
 	References []*Reference `protobuf:"bytes,6,rep,name=references,proto3" json:"references,omitempty"`
 	// the events that make it reactive: it runs again on a change of its methodology for each of them (ADR 0110)
 	On []*Subscription `protobuf:"bytes,7,rep,name=on,proto3" json:"on,omitempty"`
-	// the roles of the process, RACI style (ADR 0136): its responsible role is required, its steps inherit them
+	// the roles of the process, RACI style (ADR 0139): its responsible role is required, its steps inherit them
 	Roles         *Responsibilities `protobuf:"bytes,8,opt,name=roles,proto3" json:"roles,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

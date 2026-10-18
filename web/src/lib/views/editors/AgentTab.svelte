@@ -135,7 +135,7 @@
         <div class="field">
           <label for="ag-role">Acts as <span class="opt">(optional, a role of the methodology)</span></label>
           <input id="ag-role" type="text" class="mono" bind:value={item.role} class:bad={d.bad(`${p}.role`)} data-path="{p}.role" placeholder="inherited" />
-          <span class="hint">The role the agent acts as (ADR 0136). Empty: the one role its actions act as; the agents of processes and methods act as their responsible role.</span>
+          <span class="hint">The role the agent acts as (ADR 0139). Empty: the one role its actions act as; the agents of processes and methods act as their responsible role.</span>
         </div>
         {#if noUtility.length}
           <div class="alert warn">
