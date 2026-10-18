@@ -93,6 +93,9 @@ func draftReason(d Draft) string {
 	if d.Base == nil {
 		return ReasonCreate
 	}
+	if d.MergedWith != nil && d.MergedWith.Version != d.Base.Version {
+		return ReasonRebase
+	}
 	return ReasonRevise
 }
 

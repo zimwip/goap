@@ -189,6 +189,32 @@ func BaselineToPB(b domain.Baseline) *graphv1.Baseline {
 		Branch: domain.BranchOf(b.Branch), Namespace: domain.NamespaceOf(b.Namespace), MergedFrom: string(b.MergedFrom), Kind: b.Kind, RebasedFrom: string(b.RebasedFrom)}
 }
 
+// ChangeStackToPB converts a change-stack (ADR 0133).
+func ChangeStackToPB(s domain.ChangeStack) *graphv1.ChangeStack {
+	out := &graphv1.ChangeStack{Changes: StackChangesToPB(s.Changes), Truncated: s.Truncated}
+	for _, v := range s.Versions {
+		pv := &graphv1.VersionStep{Version: int32(v.Version), Branch: v.Branch, Reason: v.Reason, Parents: versionsToPB(v.Parents), Change: string(v.Change), CreatedAt: Time(v.CreatedAt)}
+		for _, j := range v.Joined {
+			pv.Joined = append(pv.Joined, &graphv1.VersionJoin{Branch: j.Branch, Change: string(j.Change)})
+		}
+		out.Versions = append(out.Versions, pv)
+	}
+	for _, b := range s.Baselines {
+		out.Baselines = append(out.Baselines, &graphv1.BaselineStep{Id: string(b.ID), Name: b.Name, Branch: b.Branch, Kind: b.Kind, Change: string(b.Change),
+			Parent: string(b.Parent), MergedFrom: string(b.MergedFrom), RebasedFrom: string(b.RebasedFrom), CreatedAt: Time(b.CreatedAt)})
+	}
+	return out
+}
+
+// StackChangesToPB converts the changes of a stack.
+func StackChangesToPB(cs []domain.StackChange) []*graphv1.StackChange {
+	out := make([]*graphv1.StackChange, 0, len(cs))
+	for _, c := range cs {
+		out = append(out, &graphv1.StackChange{Id: string(c.ID), Parent: string(c.Parent), Title: c.Title, Status: string(c.Status)})
+	}
+	return out
+}
+
 func TagToPB(t domain.Tag) *graphv1.Tag {
 	return &graphv1.Tag{Id: string(t.ID), Name: t.Name, Namespace: t.Namespace, ChangeId: string(t.ChangeID), BaselineId: string(t.BaselineID), By: t.By, CreatedAt: Time(t.CreatedAt)}
 }

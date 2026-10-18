@@ -1,7 +1,7 @@
 import { rpc } from './transport';
 import type { Empty, Struct } from './types/common';
 import type { BaselineDiff, BoardIssue, DecisionPoint, Flow, FlowDiff, LinkWrite, MergePlan, NodeCreateSpec, NodeName, Resolution, Restructured } from './types/engine';
-import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, Tag, TypeCount } from './types/graph';
+import type { Baseline, BaselineLinksQuery, GraphExport, GraphImport, GraphImportResult, BaselineNodesQuery, Branch, Change, ChangeDependencies, ChangeStack, ChangeImpact, CommitState, ChangeItem, ChangeLogQuery, ExecutionRecord, GraphNode, ItemTypeInfo, ImpactEvent, Link, LogEntry, NodeEdit, NodeRef, PendingSettings, RebasedImpact, RebaseState, ReviewEdit, ReviewRecord, SettingEdit, SharedNode, StackChange, Tag, TypeCount } from './types/graph';
 
 import type { LoadDemoDataResponseJson } from '../../gen/goap/graph/v1/graph_pb';
 
@@ -118,7 +118,10 @@ export const graph = {
   deleteTag: (id: string) => rpc<{ id: string }, Record<string, never>>(GRAPH, 'DeleteTag', { id }),
   /** What going from a baseline to another changes, node by node. */
   diffBaselines: (from: string, to: string, signal?: AbortSignal) =>
-    rpc<{ from: string; to: string }, { nodes?: BaselineDiff[] }>(GRAPH, 'DiffBaselines', { from, to }, signal),
+    rpc<{ from: string; to: string }, { nodes?: BaselineDiff[]; changesAdded?: StackChange[]; changesRemoved?: StackChange[] }>(GRAPH, 'DiffBaselines', { from, to }, signal),
+  /** The change-stack of a node version (version 0: its latest on main) or of a baseline (ADR 0133). */
+  getChangeStack: (q: { nodeId?: string; version?: number; baselineId?: string; limit?: number }, signal?: AbortSignal) =>
+    rpc<{ nodeId?: string; version?: number; baselineId?: string; limit?: number }, { stack?: ChangeStack }>(GRAPH, 'GetChangeStack', q, signal),
   /** The changes that acted on a node (headers only). */
   listNodeChanges: (nodeId: string, signal?: AbortSignal) =>
     rpc<{ nodeId: string }, { changes?: Change[] }>(GRAPH, 'ListNodeChanges', { nodeId }, signal),

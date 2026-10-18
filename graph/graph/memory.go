@@ -400,6 +400,32 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 	return nil
 }
 
+func (t *memTx) BaselineHeaders(_ context.Context, namespace string) ([]domain.Baseline, error) {
+	namespace = domain.NamespaceOf(namespace)
+	var out []domain.Baseline
+	for _, b := range t.st.baselines {
+		if b.Namespace == namespace {
+			b.Nodes = nil
+			out = append(out, b)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
+func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.VersionJoin, error) {
+	var out []domain.VersionJoin
+	for k, c := range t.st.joins {
+		if k.ref.ID == id {
+			out = append(out, domain.VersionJoin{Version: k.ref.Version, Branch: k.branch, Change: c})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].Version < out[j].Version || out[i].Version == out[j].Version && out[i].Branch < out[j].Branch
+	})
+	return out, nil
+}
+
 func (t *memTx) BranchJoins(_ context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
 	namespace, branch = domain.NamespaceOf(namespace), domain.BranchOf(branch)
 	var out []domain.NodeRef

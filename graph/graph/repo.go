@@ -49,6 +49,10 @@ type Tx interface {
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
+	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
+	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
+	// VersionJoins lists the branches the versions of a node joined, with the changes whose merge made them join.
+	VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
 
