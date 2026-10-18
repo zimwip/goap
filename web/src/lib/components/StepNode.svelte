@@ -1,4 +1,20 @@
 <script lang="ts" module>
+  import type { StepGate } from '../api';
+
+  /** gateTitle says what a gate checks and who decides it (ADR 0132). */
+  export function gateTitle(g: StepGate): string {
+    const lines = [`A gate: its go takes ${g.transition} of the lifecycle of the change; people decide it, the engine carries out the move`];
+    for (const it of g.checklist ?? []) {
+      lines.push(`${it.veto ? 'veto' : 'objective'}: ${it.name}${it.role ? ` (${it.role}${it.attest ? ', attested' : ''})` : ''}${it.when ? ` when ${it.when}` : ''}`);
+    }
+    const d = g.decision;
+    if (d?.board?.length) lines.push(`board: ${d.board.join(', ')} by ${d.rule || 'unanimity'}`);
+    if (d?.back) lines.push(`may send the change back by ${d.back}`);
+    const f = g.freezes;
+    if (f?.fields?.length || f?.types?.length) lines.push(`freezes: ${[...(f.fields ?? []), ...(f.types ?? [])].join(', ')}`);
+    return lines.join('\n');
+  }
+
   export interface StepNodeData {
     [key: string]: unknown;
     name: string;
@@ -21,6 +37,8 @@
     groupBy?: string;
     /** the step reviews a subject of the change; automatic: it starts by itself (ADR 0130) */
     review?: { subject?: string; automatic?: boolean };
+    /** the step is a gate of the lifecycle of the change: a milestone decided by people (ADR 0132) */
+    gate?: StepGate;
     /** rules this step breaks (compilation issues), and how many are in the steps below it */
     issues?: string[];
     issuesInside?: number;
@@ -105,6 +123,11 @@
     <div class="zoom">
       {#if data.issues?.length}<span class="incomplete" title={data.issues.join('\n')}>⚠ {data.issues[0]}{data.issues.length > 1 ? ` (+${data.issues.length - 1})` : ''}</span>
       {:else}<span class="incomplete" title="Rules are broken in the steps below">⚠ {data.issuesInside} inside</span>{/if}
+    </div>
+  {/if}
+  {#if data.gate?.transition}
+    <div class="zoom">
+      <span class="chip gate" title={gateTitle(data.gate)}>◆ gate · {data.gate.transition}{data.gate.decision?.board?.length ? ` · board of ${data.gate.decision.board.length}` : ''}</span>
     </div>
   {/if}
   {#if data.review?.subject}
@@ -349,6 +372,10 @@
     background: var(--accent-soft);
     color: var(--accent);
     cursor: pointer;
+  }
+  .chip.gate {
+    border-style: solid;
+    font-weight: 600;
   }
   .ports {
     display: flex;

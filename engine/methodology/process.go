@@ -105,6 +105,9 @@ type Step struct {
 	// Review declares the step a review of a subject of the change (ADR 0130); an automatic one starts by itself on
 	// the events of its subject.
 	Review *Review `yaml:"review,omitempty" json:"review,omitempty"`
+	// Gate declares the step a gate of its process (ADR 0132): a checklist, a go decision, a move of the lifecycle of
+	// the change. Its method, when it names one, is how the decision is reached.
+	Gate *Gate `yaml:"gate,omitempty" json:"gate,omitempty"`
 }
 
 // Step methods.
@@ -118,6 +121,8 @@ const (
 // Method returns how the step is done.
 func (s Step) Method() string {
 	switch {
+	case s.Gate != nil:
+		return MethodGate
 	case len(s.Steps) > 0:
 		return MethodSteps
 	case s.Action != "" || len(s.Actions) > 0:
@@ -169,6 +174,8 @@ type compiledProcesses struct {
 	criteria map[string]stepCriteria
 	// extend gives an agent that performs a method the activities that compose it and their goal
 	extend map[string]agentExt
+	// gates are the gates of the processes (ADR 0132)
+	gates []GateInfo
 }
 
 type agentExt struct{ actions, goals []string }
@@ -205,7 +212,8 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 	if m.checkProcessCycles(add) {
 		return out
 	}
-	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, methods: methods, roles: roles, root: &out, done: map[string]*processCriteria{}}
+	w := &stepWalker{m: m, add: add, actions: actions, known: known, agents: agents, methods: methods, roles: roles, root: &out, done: map[string]*processCriteria{},
+		gates: map[string]string{}}
 	for i, p := range m.Processes {
 		if names[p.Name] {
 			w.process(i)
@@ -322,6 +330,8 @@ type stepWalker struct {
 	done map[string]*processCriteria
 	// refs are the conditions the steps name, checked once every step condition exists
 	refs []conditionRef
+	// gates gives the gate step of each transition a gate takes (ADR 0132); nil while walking methods, which have none
+	gates map[string]string
 }
 
 type conditionRef struct{ path, cond string }
@@ -380,6 +390,13 @@ func (w *stepWalker) walk(steps []Step, path, prefix string, inherited map[strin
 
 // step generates one step and returns its exit criteria.
 func (w *stepWalker) step(s Step, sp, path string, need map[string]bool) map[string]bool {
+	if s.Gate != nil {
+		if w.gates == nil {
+			w.add(sp+".gate", "a gate is a milestone of a process: a method says how, it has no gate")
+			return nil
+		}
+		return w.gate(s, sp, path, need)
+	}
 	if s.GroupBy != "" && s.Foreach == "" {
 		w.add(sp+".groupBy", "groupBy groups the elements of foreach: declare foreach")
 		return nil

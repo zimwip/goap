@@ -1,4 +1,4 @@
-# ADR 0132 — JavaScript in WebAssembly, compiled at save; Go scripts and yaegi removed
+# ADR 0134 — JavaScript in WebAssembly, compiled at save; Go scripts and yaegi removed
 
 **Status**: accepted, implemented (first step) · **Date**: 2026-10 · Builds on ADR 0018 (algorithms), 0019 (adapters),
 0062 (builtins and sandboxes)
@@ -29,7 +29,7 @@ What can be embedded:
 
 `go` is no longer a script language: `algo.JavaScript` is the only one (`algo.Go`, the yaegi interpreter, the
 `dsl.Symbols` export and the `func Run(ctx *dsl.<Usage>Ctx) error` convention are gone). The two shipped Go scripts are
-rewritten in JavaScript: `not-blank` of `alm` (1.6.1) and `design_tests` of `test-design` (1.3.1). The web offers
+rewritten in JavaScript: `not-blank` of `alm` (1.7.1) and `design_tests` of `test-design` (1.3.1). The web offers
 JavaScript only.
 
 ### 2. Two engines behind one seam

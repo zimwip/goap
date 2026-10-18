@@ -708,6 +708,31 @@ and runs it again on the change as it is now, instead of waiting in its inbox (`
 edited description so); an event trigger on the change of the event takes the same flag and cancels its runs still at
 work on that change before it starts the new one (`Engine.supersedeRuns`). The graph publishes
 `change.edited` (`event.fields`: `{<field>: {from, to}}`, title, intent, goal, `data.<key>`) when the header changes.
+A process step may be declared a **gate** of the lifecycle of the change ([ADR 0132](adr/0132-process-gates.md)):
+`gate: {transition, checklist, decision, freezes}` (`methodology.Gate`, `engine/methodology/gate.go`). The checklist
+is split among roles: each item names a condition of the methodology (or one a person of its role attests, `attest`,
+the human action `attest:<path>/<item>` writing the artifact `attestation:<path>/<item>`, CEL `attestations`), is a
+veto or an objective (a derogation may cover it, ADR 0075), and may apply only `when` a CEL condition holds. The
+compiler generates the conditions `gate:<path>` (the transition stands: `change.passed`), `gate_open:<path>`,
+`gate_go:<path>` (a decided go not consumed by a move: `change.consumed`) and `attested:<path>/<item>`, and the
+actions `<path>:open` (builtin `gate.open`: opens a decision point with the choices go / no_go / back and the policy
+of the gate, once the unconditional vetos hold; a decided back takes the `back` transition), `<path>:rule` (the human
+action the people of the board rule it with, seat by seat, form widget `decision` with `roles`; or `<path>:decide`, a
+call to the decision method when the step names a capability) and `<path>` (builtin `gate.pass`: `TransitionChange`
+with the decided go). The accountable role of the step chairs and sits on the board; `contracts/decision` folds the
+rulings of a board (`board`, `rule` unanimity | majority | consent, `chair` breaks a split, votes kept in the policy);
+the graph checks the seat (`RuleRequest.Role`, `domain.SeatedPolicy`, `Graph.SeatAuthorizer` = `decision:sit`,
+`graphsvc.SeatAuthorizer`). The registry merges the criteria of the gates into the transitions they take
+(`registrysvc.WithGates`: the items, then the veto `decision`) and their freezes (`domain.Freezes`: `fields` title /
+intent / description, node `types`, `transitions` lets a frozen type still move, `keepPhase` leaves the impacts of
+the state left editable), recorded on the transition fact; the graph refuses an edit of a frozen field
+(`UpdateChange`) or a node of a frozen type (`work.checkTypeFreeze`; a candidate never written may still be
+withdrawn) while the move stands (`Change.InForceFreezes`). An agent with no `actions:` plans the gates too; a gate
+follows the gate before it by its `pre`. Choices of a decision point that are no flow: `OpenDecisionRequest.Choices`.
+`sdlc` 0.11.0 follows `alm`'s `maturity_of_change` (framing, analysing, designing, building, releasing, delivered,
+abandoned): the framing confirmation, the analysis (a board by consent, the architecture attested), the design, the
+build and the delivery are gates, and the change lands delivered. The web edits a gate as JSON (*Gate* section of
+`StepEditor.svelte`, `parseGate` in `methodologyForm.ts`) and draws it as a chip of `StepNode.svelte`.
 A step may be declared a **review** ([ADR 0130](adr/0130-reviewing-steps.md)): `review: {subject, automatic}` names
 the subject it rates (`description`, `title`, `intent`, `impact:<key>`, `item:<key>`); an automatic review starts by
 itself, without anyone launching it, on the events of its subject (for a header subject: the change created, its fields
@@ -717,8 +742,8 @@ other runs of its process leave its actions alone and wait for its exit (`Compil
 impact (the floor of ADR 0129 holds) and a person decides after it. `sdlc` (0.9.0) reviews the description in its
 framing: the step `software_delivery/framing/review` names the goap method `description_rating` (an llm action first,
 a human one as the fallback the planner takes when the model cannot rate) (items `assessment`, `contracts/assess`) and
-answers the requester's `comment` items, then a person confirms the framing (`framing/confirmation`, after the rating);
-the analysis waits for that confirmation and for `description_accepted`; the web shows every assessment
+answers the requester's `comment` items, then the product owner rules the go of the framing (`framing/confirmation`,
+after the rating, a gate since 0.10.0 vetoed by `description_accepted`); the analysis waits for that gate; the web shows every assessment
 by its subject as a comment bubble (`AssessmentBubble.svelte`, `web/src/lib/descriptionReview.ts`): the description wraps
 the intent, its badge coloured by the state of the rating and the bubble opened by a click (by itself only for a
 state the methodology declares `open`); the title, the intent, the impacts (rows of the
@@ -823,7 +848,7 @@ change CR-42
 ### 2.10 Script actions and DSL
 
 `kind: script` actions are **JavaScript** code entered in the IDE, run by goja or by QuickJS compiled to
-WebAssembly on wazero (`GOAP_JS_ENGINE`, [ADR 0132](adr/0132-javascript-in-webassembly.md)). The engine
+WebAssembly on wazero (`GOAP_JS_ENGINE`, [ADR 0134](adr/0134-javascript-in-webassembly.md)). The engine
 injects a `ctx` object (reference: [docs/dsl.md](dsl.md)):
 
 - **reading** the blackboard (hydrated items) and the reference **domain** (`node`, `nodes`, `links`);
@@ -1067,7 +1092,7 @@ each start (nodes, baselines and changes). The compose image is `pgvector/pgvect
   (`.goap/goap.db`, pure Go driver), rebuilt by air on a code change, and the IDE from vite on
   http://localhost:5173. `GOAP_STORE=memory` (the default of a bare `go run ./platform/cmd/goap-dev`) keeps the
   ephemeral mode.
-- A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`.
+- A single multi-target image (`Dockerfile`, `ARG SERVICE`), static binary on `distroless`; its `services` target holds every binary (`/goap/<service>`), the one image `goap/goap:dev` the compose stack runs with an entrypoint per service (`make images`, done by `make up`), so it compiles once.
 - Kubernetes 🟡: one Helm chart per service (or kustomize); engine as a scalable `Deployment` (HPA on
   the work-queue stream depth), NATS via the official chart, Vault Agent Injector.
 

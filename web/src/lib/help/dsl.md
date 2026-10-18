@@ -9,7 +9,7 @@ The DSL is a generic capability: the same JavaScript engine runs the code of a
 `kind: script` actions are written in **JavaScript** and run in the process's **sandbox** (`goap-runner`).
 The engine injects a `ctx` object (methods in `camelCase`).
 
-Two engines run the same JavaScript ([ADR 0132](adr/0132-javascript-in-webassembly.md)), chosen by `GOAP_JS_ENGINE`:
+Two engines run the same JavaScript ([ADR 0134](adr/0134-javascript-in-webassembly.md)), chosen by `GOAP_JS_ENGINE`:
 `goja` (the default, interpreted in the Go process) or `wasm` (QuickJS compiled to WebAssembly, run by wazero in the
 process, with no cgo: memory capped, stopped for real at the deadline). Either compiles a script once, when it is
 saved (the check of an algorithm) or at its first run, and keeps it by the hash of its source. With `wasm` the code

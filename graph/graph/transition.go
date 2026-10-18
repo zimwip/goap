@@ -141,6 +141,10 @@ func (g *Graph) TransitionChange(ctx context.Context, id domain.ChangeID, in Tra
 		if in.Decision != "" {
 			data["decision"] = in.Decision
 		}
+		if !t.Freezes.Empty() {
+			// what the move freezes beyond its phase (ADR 0132 §4), read back from the move by the guards of the edits
+			data["freezes"] = *t.Freezes
+		}
 		if gate.WithReserve() {
 			// go with reserve (ADR 0075 §3): which objectives were not met and the derogation that covered each
 			data["unmet"], data["reserve"] = gate.Unmet, gate.Reserve
@@ -277,7 +281,17 @@ func (g *Graph) frozen(ctx context.Context, tx Tx, c domain.Change, impact domai
 		return false, "", err
 	}
 	p, ok := ph[impact]
-	return ok && p.State != c.State, p.State, nil
+	if !ok || p.State == c.State {
+		return false, p.State, nil
+	}
+	// the move that left the state of the impact may keep its phase editable (ADR 0132 §4)
+	moves := c.StateMoves()
+	for i := len(moves) - 1; i >= 0; i-- {
+		if moves[i].From == p.State {
+			return moves[i].Freezes == nil || !moves[i].Freezes.KeepPhase, p.State, nil
+		}
+	}
+	return true, p.State, nil
 }
 
 // reopenPhase is made when a change goes back to a state it already occupied: what was written after it entered

@@ -62,7 +62,7 @@ function Build {
 
 function Test { Run go test @Pkgs }
 
-# every test with the scripts run by the wasm JavaScript engine (ADR 0132)
+# every test with the scripts run by the wasm JavaScript engine (ADR 0134)
 function TestWasm {
     $prev = $env:GOAP_JS_ENGINE
     $env:GOAP_JS_ENGINE = 'wasm'
@@ -149,26 +149,28 @@ function DevReset { Remove-Item -Recurse -Force .goap -ErrorAction SilentlyConti
 
 function RunnerImage { Run docker build --build-arg SERVICE=goap-runner -t goap/runner:dev . }
 
+function Images { RunnerImage; Run docker build --target services -t goap/goap:dev . }
+
 function ClaudeAgentRunner { Run go run ./platform/cmd/connector-claude-coding-agent install }
 
 # Engine socket for the docker-proxy service: Docker Desktop keeps it in its VM, at the default path
 function DockerSock { if (-not $env:GOAP_DOCKER_SOCK) { $env:GOAP_DOCKER_SOCK = '/var/run/docker.sock' } }
 
 function Up {
-    RunnerImage
+    Images
     DockerSock
-    Run docker @Compose up --build -d
-    @'
-
-PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):
-  host localhost, port 5432, database goap, user goap, password goap
-  JDBC URL: jdbc:postgresql://localhost:5432/goap
-  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials),
-  each also reachable as its own role, password = name (e.g. graph / graph)
-'@ | Write-Host
+    Run docker @Compose up -d
+    Urls
 }
 
+function Urls { Get-Content deploy/compose/urls.txt | Write-Host }
+
 function Down { DockerSock; Run docker @Compose down }
+function Reset {
+    DockerSock
+    Run docker @Compose down --volumes --remove-orphans
+    & docker image rm goap/goap:dev goap/runner:dev # absent images are not an error
+}
 function Logs { DockerSock; Run docker @Compose logs -f engine graph registry modelgw gateway }
 
 function Help {
@@ -195,9 +197,12 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   dev-reset         drop the local SQLite database
   web               same as dev-web
   runner-image      image of the script sandboxes (goap-runner)
+  images            the image of every Go service of the compose stack (goap/goap:dev), built once
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
-  up | down | logs  docker compose stack (up prints how to reach its database, DBeaver)
+  up | down | logs  docker compose stack (up prints its URLs and how to reach its database, DBeaver)
+  reset             stop the stack and drop its containers, volumes (database, NATS, web modules) and images
+  urls              the URLs of the compose stack: IDE, gateway, each service, tools, database
 '@ | Write-Host
 }
 
@@ -219,9 +224,12 @@ switch ($Target) {
     'dev-reset'        { DevReset }
     'web'              { DevWeb }
     'runner-image'     { RunnerImage }
+    'images'           { Images }
     'claude-agent-runner' { ClaudeAgentRunner }
     'up'               { Up }
+    'urls'             { Urls }
     'down'             { Down }
+    'reset'            { Reset }
     'logs'             { Logs }
     { $_ -in 'help', '-h', '--help' } { Help }
     default            { Help; throw "unknown target: $Target" }

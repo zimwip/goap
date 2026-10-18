@@ -21,6 +21,8 @@ make dev-reset                # start from an empty database (demo and methodolo
 
 # 2. Full stack: postgres, nats, vault, services, web
 ANTHROPIC_API_KEY=... make up # without a key: "fake" LLM provider
+#    ANTHROPIC_API_KEY, MISTRAL_API_KEY, OPENAI_API_KEY and OPENAI_KEY of your shell reach the model gateway:
+#    a provider whose key is env:MISTRAL_API_KEY (the key reference of a provider, in the settings) finds it
 ```
 
 On Windows there is no `make`: use `make.cmd <target>` (or `.\make.ps1 <target>`) from cmd or PowerShell. It has the same targets as the Makefile (`make.cmd help` lists them) and needs nothing beyond what Windows ships with.

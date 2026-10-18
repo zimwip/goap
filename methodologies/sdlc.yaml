@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.10.0
+version: 0.11.0
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -12,6 +12,9 @@ description: >
 
 namespace: alm
 goal: deliver
+# the phases of a change (ADR 0132): the gates of the delivery process take its transitions, framing → analysing →
+# designing → building → releasing → delivered; the change lands delivered
+lifecycle: maturity_of_change
 
 # the proofs of concept and prototypes it opens as its sub-changes (ADR 0131): the poc methodology, whose conclusion it
 # takes back (`poc.concluded` from an integrated change)
@@ -1168,7 +1171,8 @@ actions:
     kind: builtin
     builtin: graph.apply
     description: Apply the change to the ALM repository (new baseline, including releases and deployments)
-    pre: {reviewed: true, requirements_approved: true, rolled_out: true}
+    # the change lands delivered (ADR 0132): the gate of the delivery took it there
+    pre: {reviewed: true, requirements_approved: true, rolled_out: true, "gate:software_delivery/delivery_gate": true}
     effects: {applied: true}
     cost: 1
     permission: change:apply
@@ -1512,15 +1516,18 @@ processes:
             description: Rate the title and the description, propose a better wording, answer the requester's remarks
             method: description_rating
             review: {subject: description, automatic: true}
+          # the go of the framing is a gate (ADR 0132): the product owner decides it once the description is accepted;
+          # the go freezes the title and the intent of the change
           - name: confirmation
-            description: A person confirms the framing, in the light of the review of the description and of its prototypes
+            description: The product owner confirms the framing, in the light of the review of the description and of its prototypes
             # a prototype of the framing (ADR 0131) holds the confirmation until it is concluded: its findings are read here
             pre: {description_rated: true, prototypes_concluded: true}
+            roles: {accountable: product_owner}
             instructions: >
               Read the review of the description and the findings of its prototypes, if any (prototype_findings: a verdict
-              per statement, a refuted one being a need the prototype answers); check with the requester that the intent states a concrete outcome,
-              its scope (what it touches) and why it is needed; amend the intent of the change if it does not (the
-              review rates it again by itself), then mark the step done.
+              per statement, a refuted one being a need the prototype answers); check with the requester that the intent
+              states a concrete outcome, its scope (what it touches) and why it is needed; have the intent amended if it
+              does not (the review rates it again by itself), then rule the go of the framing.
             guidance: >
               A well-framed change can be analysed without going back to the requester: the outcome is observable, the
               scope names the applications or requirements concerned, and the reason says what happens if nothing is
@@ -1532,12 +1539,18 @@ processes:
               - The reason for the change is stated
             references:
               - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md", section: Framing a change}
+            gate:
+              transition: analyse
+              checklist:
+                - {name: description_accepted, role: business_analyst, veto: true, description: "The description is rated acceptable"}
+              decision: {question: "Is the change framed well enough to be analysed?"}
+              freezes: {fields: [title, intent], keepPhase: true}
       - name: analysis
         description: Impacts, requirements, traceability and test plan, once the change is framed and its description accepted
         roles: {responsible: business_analyst, accountable: product_owner, consulted: [solution_architect]}
         # the rating of the current description accepts it (ADR 0110): the requester edits the description, the
         # automatic review of the framing rates it again by itself, and the run waiting here is tried again
-        pre: {"step:software_delivery/framing/confirmation": true, description_accepted: true}
+        pre: {"gate:software_delivery/framing/confirmation": true}
         steps:
           - name: impacts
             description: The impact analysis, in four passes (the impact_analysis method)
@@ -1548,10 +1561,38 @@ processes:
               - {name: requirements, actions: [specify_requirements, write_requirements]}
               - {name: traceability, actions: [trace_requirements, trace_manually]}
               - {name: test_plan, action: plan_tests}
+          # the go of the analysis is collegial (ADR 0132): the tech lead, the solution architect and the product owner
+          # (who chairs) rule it by consent, once the solution architect attested that the change keeps to the
+          # architecture; the go freezes the requirements (they are still approved in the release)
+          - name: gate
+            description: The board decides whether the analysis is complete enough to design the solution
+            # a gate follows the gate before it: the phases are passed in order, whoever plans them
+            pre: {"gate:software_delivery/framing/confirmation": true, impact_analysis_validated: true, requirements_specified: true, requirements_traced: true, tests_planned: true}
+            roles: {accountable: product_owner, consulted: [solution_architect, tech_lead]}
+            gate:
+              transition: design
+              checklist:
+                - {name: impact_analysis_validated, role: business_analyst, veto: true}
+                - {name: requirements_specified, role: business_analyst, veto: true}
+                - {name: architecture_compliant, role: solution_architect, attest: true, veto: true, description: "The change keeps to the target architecture"}
+                - {name: requirements_traced, role: business_analyst}
+                - {name: tests_planned, role: business_analyst}
+              decision: {board: [tech_lead, solution_architect, product_owner], rule: consent, back: reframe}
+              freezes: {types: [alm@Requirement], transitions: true, keepPhase: true}
       - name: design
-        description: Allocate the functions and design the solution, by the method that fits the change, once the requirements are specified
-        pre: {impact_analysis_validated: true, requirements_specified: true, requirements_traced: true}
+        description: Allocate the functions and design the solution, by the method that fits the change, once the analysis passed its gate
+        pre: {"gate:software_delivery/analysis/gate": true}
         method: design
+      - name: design_gate
+        description: The tech lead decides whether the design is checked enough to build
+        pre: {"gate:software_delivery/analysis/gate": true, design_checked: true}
+        roles: {accountable: tech_lead}
+        gate:
+          transition: build
+          checklist:
+            - {name: design_checked, role: solution_architect, veto: true}
+          decision: {back: reanalyse}
+          freezes: {keepPhase: true}
       - name: proofs
         description: Prove what is uncertain by building the least that shows it, before investing in it (ADR 0131)
         roles: {responsible: tech_lead, accountable: product_owner}
@@ -1571,24 +1612,45 @@ processes:
             on:
               - {event: poc.concluded, from: integrated}
       - name: build
-        description: Build every component in scope, from its sources in the workspace of the change when its repository is known, else according to its technology (once the design is checked and its proofs of concept concluded)
+        description: Build every component in scope, from its sources in the workspace of the change when its repository is known, else according to its technology (once the design passed its gate and its proofs of concept are concluded)
         roles: {responsible: developer, accountable: tech_lead}
         # a proof of concept against the risks (ADR 0131) holds the build: what it checks decides what is built
-        pre: {impact_analysis_validated: true, design_checked: true, pocs_concluded: true}
+        pre: {"gate:software_delivery/design_gate": true, pocs_concluded: true}
         method: build
+      # the transverse risk management (methodologies/risk-management.yaml) answers risks_under_control: no live high
+      # risk without an action; the run waiting for it is tried again when the change moves
+      - name: build_gate
+        description: The change approver decides whether the change is built and its risks under control to release it
+        pre: {"gate:software_delivery/design_gate": true, build_complete: true}
+        roles: {accountable: change_approver}
+        gate:
+          transition: release
+          checklist:
+            - {name: build_complete, role: developer, veto: true}
+            - {name: risks_under_control, role: tech_lead, veto: true}
+          decision: {back: redesign}
+          freezes: {keepPhase: true}
       - name: release
-        description: Plan, note, review and roll out the releases, once what the release train needs holds and the risks are under control
+        description: Plan, note, review and roll out the releases, once the build passed its gate
         roles: {responsible: release_manager, accountable: service_owner, informed: [product_owner]}
-        # the transverse risk management (methodologies/risk-management.yaml) answers it: no live high risk without an
-        # action; the process is tried again when the change moves
-        pre: {risks_under_control: true}
+        pre: {"gate:software_delivery/build_gate": true}
         process: release_train
+      - name: delivery_gate
+        description: The service owner confirms the change is delivered, its releases rolled out and its requirements approved
+        pre: {"gate:software_delivery/build_gate": true, rolled_out: true}
+        roles: {accountable: service_owner}
+        gate:
+          transition: deliver
+          checklist:
+            - {name: rolled_out, role: release_manager, veto: true}
+            - {name: requirements_approved, role: tech_lead, veto: true}
+          freezes: {keepPhase: true}
       - name: application
-        description: Apply the change to the ALM repository once reviewed and rolled out, after the changes it depends on
+        description: Apply the change to the ALM repository once delivered, after the changes it depends on
         roles: {responsible: release_manager, accountable: change_approver, informed: [product_owner, service_owner]}
         # the changes it depends on (ADR 0108) have landed where it merges: the run waits for them, and is tried again
         # when one of them moves
-        pre: {dependencies_met: true}
+        pre: {"gate:software_delivery/delivery_gate": true, dependencies_met: true}
         action: apply_change
 
   - name: release_train

@@ -18,6 +18,16 @@ COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/ ./platform/cmd/...
 
+# every service in one image, /goap/<service> (docker build --target services -t goap/goap:dev .): the compose
+# stack runs it with one entrypoint per service, so it is built once, by docker and podman alike
+FROM gcr.io/distroless/static-debian12:nonroot AS services
+COPY --from=build /out/ /goap/
+COPY methodologies /methodologies
+COPY domains /domains
+EXPOSE 8080
+USER nonroot
+
+# one service (the default target): docker build --build-arg SERVICE=graph .
 FROM gcr.io/distroless/static-debian12:nonroot
 ARG SERVICE
 COPY --from=build /out/${SERVICE} /service

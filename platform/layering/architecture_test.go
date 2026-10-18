@@ -38,8 +38,8 @@ func TestArchitectureOverview(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// the services built from this repository: `build: {..., args: {SERVICE: <binary>}}` under `  <service>:`
-	service := regexp.MustCompile(`(?m)^  ([a-z][a-z0-9-]*):\n(?:    .*\n)*?    build: \{[^}]*SERVICE: [a-z0-9-]+`)
+	// the services run from this repository's image: `entrypoint: ["/goap/<binary>"]` under `  <service>:`
+	service := regexp.MustCompile(`(?m)^  ([a-z][a-z0-9-]*):\n(?:    .*\n)*?    entrypoint: \["/goap/[a-z0-9-]+"\]`)
 	found := service.FindAllStringSubmatch(string(compose), -1)
 	if len(found) == 0 {
 		t.Fatal("no service built from the repository found in deploy/compose/docker-compose.yml")

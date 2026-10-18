@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/fastschema/qjs"
 )
@@ -189,6 +191,7 @@ type wasmVM struct {
 	rt      *qjs.Runtime
 	bind    *qjs.Value
 	bound   reflect.Type
+	ctx     *runContext
 	cur     *wasmBinding
 	globals int
 	runs    int
@@ -232,11 +235,15 @@ func newWasmVM(opt qjs.Option) (vm *wasmVM, err error) {
 			err = fmt.Errorf("wasm engine: %v", r)
 		}
 	}()
+	// wazero watches the context of a call from a goroutine of its own: the runtime gets a context of its own from the
+	// start, whose deadline a run sets through an atomic pointer
+	rc := newRunContext()
+	opt.Context = rc
 	rt, err := qjs.New(opt)
 	if err != nil {
 		return nil, fmt.Errorf("wasm engine: %w", err)
 	}
-	vm = &wasmVM{rt: rt}
+	vm = &wasmVM{rt: rt, ctx: rc}
 	c := rt.Context()
 	c.SetFunc("__goap_call", func(this *qjs.This) (*qjs.Value, error) {
 		args := this.Args()
@@ -263,6 +270,25 @@ func newWasmVM(opt qjs.Option) (vm *wasmVM, err error) {
 	return vm, nil
 }
 
+// runContext is the context of the run in progress, for the calls of the module: a context.Context whose methods
+// delegate to the one set last.
+type runContext struct {
+	cur atomic.Pointer[context.Context]
+}
+
+func newRunContext() *runContext {
+	r := &runContext{}
+	r.set(context.Background())
+	return r
+}
+
+func (r *runContext) set(ctx context.Context)     { r.cur.Store(&ctx) }
+func (r *runContext) get() context.Context        { return *r.cur.Load() }
+func (r *runContext) Deadline() (time.Time, bool) { return r.get().Deadline() }
+func (r *runContext) Done() <-chan struct{}       { return r.get().Done() }
+func (r *runContext) Err() error                  { return r.get().Err() }
+func (r *runContext) Value(key any) any           { return r.get().Value(key) }
+
 // exec binds ctx then runs the bytecode, answering its JSON. A panic of qjs (the module closed at the deadline) marks
 // the runtime dead.
 func (vm *wasmVM) exec(ctx context.Context, bc []byte) (out string, err error) {
@@ -273,8 +299,8 @@ func (vm *wasmVM) exec(ctx context.Context, bc []byte) (out string, err error) {
 		}
 	}()
 	c := vm.rt.Context()
-	c.Context = ctx
-	defer func() { c.Context = context.Background() }()
+	vm.ctx.set(ctx)
+	defer vm.ctx.set(context.Background())
 	// ctx keeps its methods while the runs are of the same type of context object
 	if t := vm.cur.obj.Type(); t != vm.bound {
 		names, _ := json.Marshal(vm.cur.names())

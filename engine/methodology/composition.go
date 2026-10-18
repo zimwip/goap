@@ -57,7 +57,36 @@ func (m *Methodology) CompositionIssues(c Composition) def.Issues {
 	ck.guardian()
 	ck.consumers()
 	ck.composite()
+	ck.gates()
 	return ck.out
+}
+
+// gates: the transitions a gate takes and goes back by are transitions of the lifecycle of m (ADR 0132).
+func (ck *compositionCheck) gates() {
+	lc := ck.c.lifecycle(ck.m)
+	if lc == nil {
+		return
+	}
+	var walk func(path string, steps []Step)
+	walk = func(path string, steps []Step) {
+		for i, st := range steps {
+			p := fmt.Sprintf("%s.steps[%d]", path, i)
+			if g := st.Gate; g != nil {
+				if !hasTransition(lc, g.Transition) {
+					ck.add(p+".gate.transition", suggest(g.Transition, transitionNames(lc), "transitions"),
+						"no transition %s in the lifecycle %s: the gate never passes", g.Transition, lc.Name)
+				}
+				if d := g.Decision; d != nil && d.Back != "" && !hasTransition(lc, d.Back) {
+					ck.add(p+".gate.decision.back", suggest(d.Back, transitionNames(lc), "transitions"),
+						"no transition %s in the lifecycle %s: the decision cannot send the change back", d.Back, lc.Name)
+				}
+			}
+			walk(p, st.Steps)
+		}
+	}
+	for i, pr := range ck.m.Processes {
+		walk(fmt.Sprintf("processes[%d]", i), pr.Steps)
+	}
 }
 
 type compositionCheck struct {

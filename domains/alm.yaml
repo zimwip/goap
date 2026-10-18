@@ -1,5 +1,5 @@
 name: alm
-version: 1.6.1
+version: 1.7.1
 description: >
   Application lifecycle management domain: needs, requirements, functions, components, builds, releases and deployments. Shared by the delivery methodologies (impact-analysis, test-design, sdlc).
 enums:
@@ -131,6 +131,33 @@ nodeTypes:
       - {name: date, label: Deployed on, description: Date of the deployment, type: date, section: Outcome, order: 3}
       - {name: checks, label: Checks, description: Results of the post-deployment checks (structured), type: json, widget: textarea, section: Outcome, order: 4}
 lifecycles:
+  # The maturity of a delivery change (ADR 0132): the phases it goes through. The domain says which states exist; the
+  # methodology says what it takes to leave one (the gates of its processes, their checklists and decisions).
+  - name: maturity_of_change
+    description: How a delivery change matures, from its framing to its delivery, phase by phase
+    initial: framing
+    states:
+      - {name: framing, description: "The change is framed with its requester"}
+      - {name: analysing, description: "Its impacts, requirements and tests are analysed"}
+      - {name: designing, description: "Its solution is designed"}
+      - {name: building, description: "Its components are built"}
+      - {name: releasing, description: "Its releases are planned, reviewed and rolled out"}
+      - {name: delivered, final: true, description: "Delivered: the change lands"}
+      - {name: abandoned, final: true, description: "Given up"}
+    transitions:
+      - {name: analyse, description: Go from the framing to the analysis, from: framing, to: analysing}
+      - {name: design, description: Go from the analysis to the design, from: analysing, to: designing}
+      - {name: build, description: Go from the design to the build, from: designing, to: building}
+      - {name: release, description: Go from the build to the release, from: building, to: releasing}
+      - {name: deliver, description: The change is rolled out, from: releasing, to: delivered}
+      - {name: reframe, description: Back to the framing, from: analysing, to: framing}
+      - {name: reanalyse, description: Back to the analysis, from: designing, to: analysing}
+      - {name: redesign, description: Back to the design, from: building, to: designing}
+      - {name: abandon, description: Give the change up, from: framing, to: abandoned}
+      - {name: abandon, description: Give the change up, from: analysing, to: abandoned}
+      - {name: abandon, description: Give the change up, from: designing, to: abandoned}
+      - {name: abandon, description: Give the change up, from: building, to: abandoned}
+      - {name: abandon, description: Give the change up, from: releasing, to: abandoned}
   # The lifecycle of a release change (ADR 0106, methodologies/release-based.yaml): the parent of the changes it
   # integrates. The integrated changes merge into it while it integrates; it lands once delivered.
   - name: delivery

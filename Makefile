@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test test-wasm tidy web-test test-pg lint eval generate tools up down logs dev dev-backend dev-web dev-reset web runner-image claude-agent-runner
+.PHONY: help all build test test-wasm tidy web-test test-pg lint eval generate tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -35,7 +35,7 @@ build: ## build all services into bin/
 test: ## go test of every module of the go.work
 	go test $(PKGS)
 
-test-wasm: ## every go test with the scripts run by the wasm JavaScript engine (GOAP_JS_ENGINE=wasm, ADR 0132)
+test-wasm: ## every go test with the scripts run by the wasm JavaScript engine (GOAP_JS_ENGINE=wasm, ADR 0134)
 	GOAP_JS_ENGINE=wasm go test -count=1 $(PKGS)
 
 tidy: ## go mod tidy in every module
@@ -90,23 +90,28 @@ web: dev-web ## same as dev-web
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
 
+images: runner-image ## the image of every Go service of the compose stack (goap/goap:dev), built once
+	docker build --target services -t goap/goap:dev .
+
 claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
 	go run ./platform/cmd/connector-claude-coding-agent install
 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)
 
-up: runner-image ## start the docker compose stack, then print how to reach its database (DBeaver)
-	$(COMPOSE) up --build -d
-	@echo
-	@echo "PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):"
-	@echo "  host localhost, port 5432, database goap, user goap, password goap"
-	@echo "  JDBC URL: jdbc:postgresql://localhost:5432/goap"
-	@echo "  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials),"
-	@echo "  each also reachable as its own role, password = name (e.g. graph / graph)"
+up: images ## start the docker compose stack, then print its URLs and how to reach its database (DBeaver)
+	$(COMPOSE) up -d
+	@cat deploy/compose/urls.txt
+
+urls: ## the URLs of the compose stack: IDE, gateway, each service, tools, database (DBeaver)
+	@cat deploy/compose/urls.txt
 
 down: ## stop the docker compose stack
 	$(COMPOSE) down
+
+reset: ## stop the docker compose stack and drop everything it keeps: containers, volumes (database, NATS, web modules), images built for it
+	$(COMPOSE) down --volumes --remove-orphans
+	-docker image rm goap/goap:dev goap/runner:dev
 
 logs: ## follow the logs of the docker compose stack
 	$(COMPOSE) logs -f engine graph registry modelgw gateway

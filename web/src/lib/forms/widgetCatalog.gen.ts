@@ -33,6 +33,11 @@ export const WIDGET_CATALOG: WidgetSpec[] = [
         "name": "justify",
         "type": "boolean",
         "description": "the justification is required"
+      },
+      {
+        "name": "roles",
+        "type": "strings",
+        "description": "the seats of a collegial decision: the person rules in one of these roles (ADR 0132)"
       }
     ]
   },

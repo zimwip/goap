@@ -59,7 +59,7 @@ type compiled struct {
 
 // Variables exposed to expressions.
 var Variables = []string{"change", "items", "changeImpacts", "decisions", "artifacts", "vars",
-	"options", "activeOption", "decisionPoints", "questions", "risks", "actions", "verifications", "derogations", "criticalityPolicy", "dependencies", "history", "assessments"}
+	"options", "activeOption", "decisionPoints", "questions", "risks", "actions", "verifications", "derogations", "criticalityPolicy", "dependencies", "history", "assessments", "attestations"}
 
 // NewEnv returns the CEL environment used for conditions.
 func NewEnv() (*cel.Env, error) {
@@ -89,6 +89,8 @@ func NewEnv() (*cel.Env, error) {
 		cel.Variable("dependencies", cel.ListType(cel.DynType)),
 		// the history of the change: its runs and the runs of its steps, with their outcome (ADR 0109 §4)
 		cel.Variable("history", cel.MapType(cel.StringType, cel.DynType)),
+		// the attestations of the items of the checklists of the gates, by key (ADR 0132 §1)
+		cel.Variable("attestations", cel.MapType(cel.StringType, cel.DynType)),
 		ext.Strings(),
 		ext.Lists(),
 		ext.Sets(),

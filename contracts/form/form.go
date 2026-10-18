@@ -370,6 +370,8 @@ type Ruling struct {
 	Point         string `json:"point"`
 	Option        string `json:"option"`
 	Justification string `json:"justification,omitempty"`
+	// Role is the seat the person rules in, for a collegial decision (ADR 0132).
+	Role string `json:"role,omitempty"`
 }
 
 // Rulings lists the rulings of the decision fields of validated values, in the order of the fields.
@@ -383,8 +385,9 @@ func Rulings(f Form, values map[string]any) []Ruling {
 			p, _ := m["point"].(string)
 			o, _ := m["option"].(string)
 			j, _ := m["justification"].(string)
+			r, _ := m["role"].(string)
 			if p != "" && o != "" {
-				out = append(out, Ruling{Field: fd.Name, Point: p, Option: o, Justification: j})
+				out = append(out, Ruling{Field: fd.Name, Point: p, Option: o, Justification: j, Role: r})
 			}
 		}
 	}

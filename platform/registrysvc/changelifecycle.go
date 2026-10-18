@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/condition"
@@ -39,7 +40,78 @@ func (s *Service) Lifecycle(ctx context.Context, methodology string) (*domain.Li
 	if found == nil {
 		return nil, fmt.Errorf("methodology %s names lifecycle %q, which no domain defines: %w", m.Name, m.Lifecycle, ErrInvalid)
 	}
-	return found, nil
+	if !hasGates(&m) {
+		return found, nil
+	}
+	c, err := s.Methodology(ctx, methodology)
+	if err != nil {
+		return nil, fmt.Errorf("gates of methodology %s: %w", m.Name, err)
+	}
+	return WithGates(found, c.Gates())
+}
+
+// hasGates says whether a process of m has a gate step (ADR 0132).
+func hasGates(m *methodology.Methodology) bool {
+	var in func([]methodology.Step) bool
+	in = func(steps []methodology.Step) bool {
+		for _, st := range steps {
+			if st.Gate != nil || in(st.Steps) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, p := range m.Processes {
+		if in(p.Steps) {
+			return true
+		}
+	}
+	return false
+}
+
+// WithGates is the lifecycle with the criteria and the freezes of the gates of the methodology merged into the
+// transitions they take (ADR 0132 §2, §4): the graph enforces them as it does the ones the domain declares.
+func WithGates(lc *domain.Lifecycle, gates []methodology.GateInfo) (*domain.Lifecycle, error) {
+	out := *lc
+	out.Transitions = slices.Clone(lc.Transitions)
+	for _, g := range gates {
+		found := false
+		for i := range out.Transitions {
+			t := &out.Transitions[i]
+			if t.Name != g.Transition {
+				continue
+			}
+			found = true
+			vetos, objectives := g.Criteria()
+			t.Vetos = append(slices.Clone(t.Vetos), vetos...)
+			t.Objectives = append(slices.Clone(t.Objectives), objectives...)
+			if g.Freezes != nil && !g.Freezes.Empty() {
+				f := *g.Freezes
+				if t.Freezes != nil {
+					f = mergeFreezes(*t.Freezes, f)
+				}
+				t.Freezes = &f
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("gate %s takes transition %s, which lifecycle %s has not: %w", g.Path, g.Transition, lc.Name, ErrInvalid)
+		}
+	}
+	return &out, nil
+}
+
+func mergeFreezes(a, b domain.Freezes) domain.Freezes {
+	add := func(x, y []string) []string {
+		out := slices.Clone(x)
+		for _, v := range y {
+			if !slices.Contains(out, v) {
+				out = append(out, v)
+			}
+		}
+		return out
+	}
+	return domain.Freezes{Fields: add(a.Fields, b.Fields), Types: add(a.Types, b.Types),
+		Transitions: a.Transitions || b.Transitions, KeepPhase: a.KeepPhase || b.KeepPhase}
 }
 
 // lifecycleIn is the lifecycle m names among the domains: the one of its namespace, else of any domain (nil: none).
