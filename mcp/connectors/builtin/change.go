@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/criticality"
 	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
 	connectorv1 "github.com/zimwip/goap/contracts/gen/goap/connector/v1"
@@ -33,7 +34,8 @@ type Change struct{ p Ports }
 var _ connectorkit.Connector = Change{}
 
 var changeOps = []op{
-	{"create", "Open a change on the head of main of a namespace: {change}", schema(map[string]string{"title": "string", "intent": "string", "namespace": "string", "methodology": "string", "unit": "string", "project": "string"}, "title", "intent", "namespace")},
+	{"create", "Open a change on the head of main of a namespace, or a sub-change of a parent (on its branch, its namespace and project): {change}", schema(map[string]string{"title": "string", "intent": "string", "namespace": "string", "methodology": "string", "unit": "string", "project": "string", "parent": "string", "criticality": "string", "data": "object"}, "title", "intent")},
+	{"close", "Abandon an open change with the reason (the calling change or one of its sub-changes, from a process): {change}", schema(map[string]string{"change": "string", "reason": "string"}, "change", "reason")},
 	{"move", "Move a root change, draft or active, with its sub-changes, to another project: {change}", schema(map[string]string{"change": "string", "project": "string"}, "project")},
 	{"attach", "Attach a root change to a change whose methodology integrates its own, as its sub-change: {change}", schema(map[string]string{"change": "string", "parent": "string"}, "parent")},
 	{"detach", "Detach a sub-change from the change integrating it, a root change again: {change}", schema(map[string]string{"change": "string"})},
@@ -81,7 +83,7 @@ var changeOps = []op{
 	{"review_discard", "Discard an open review that was never submitted: {review}", schema(map[string]string{"change": "string", "review": "string"}, "review")},
 	{"action", "Create an action, or update one by its key; status open|done|cancelled, for: the risk key or decision point it answers: {action}",
 		schema(map[string]string{"change": "string", "key": "string", "title": "string", "status": "string", "owner": "string", "due": "string", "for": "string",
-			"result": "string"})},
+			"result": "string", "kind": "string", "purpose": "string", "risks": "array", "hypotheses": "array", "subChange": "string"})},
 }
 
 // Info implements connectorkit.Connector.
@@ -118,6 +120,8 @@ func (c Change) Invoke(ctx context.Context, op string, raw, _ map[string]any, _ 
 		return nil, err
 	}
 	switch op {
+	case "close":
+		return c.close(ctx, id, a)
 	case "move":
 		moved, err := c.p.Graph.MoveChange(ctx, id, a.str("project"))
 		if err != nil {
@@ -515,9 +519,34 @@ func (c Change) decisions(ctx context.Context, who authz.Principal, id domain.Ch
 
 // create opens a change: intent (why), unit (who), methodology (how) and namespace (what).
 func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[string]any, error) {
-	title, intent, ns := a.str("title"), a.str("intent"), a.str("namespace")
-	if title == "" || intent == "" || ns == "" {
-		return nil, errors.New(`arguments "title", "intent" and "namespace" are required`)
+	title, intent, ns, parent := a.str("title"), a.str("intent"), a.str("namespace"), domain.ChangeID(a.str("parent"))
+	if title == "" || intent == "" || (ns == "" && parent == "") {
+		return nil, errors.New(`arguments "title", "intent" and "namespace" (or "parent") are required`)
+	}
+	// the free-form data of the change (ADR 0065), then what the platform stamps
+	data := map[string]any{}
+	for k, v := range a.object("data") {
+		data[k] = v
+	}
+	if l := a.str("criticality"); l != "" {
+		if !criticality.Valid(criticality.Level(l)) {
+			return nil, fmt.Errorf("criticality %q: C1, C2 or C3", l)
+		}
+		data[domain.DataCriticality] = l
+	}
+	data["createdBy"], data["via"] = who.Subject, mcpbuiltin.Change
+	if parent != "" {
+		// a sub-change (ADR 0103): forked from its parent's branch, in its namespace and project
+		p, err := c.p.Graph.Change(ctx, parent)
+		if err != nil {
+			return nil, err
+		}
+		ch, err := c.p.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: p.Namespace,
+			ParentID: parent, OwnerOrg: cmp.Or(a.str("unit"), p.OwnerOrg), ProjectID: p.ProjectID, Data: data})
+		if err != nil {
+			return nil, err
+		}
+		return result(map[string]any{"change": changeSummary(ch)})
 	}
 	head, err := c.p.Graph.BranchHead(ctx, ns, domain.MainBranch)
 	if err != nil {
@@ -533,11 +562,33 @@ func (c Change) create(ctx context.Context, who authz.Principal, a args) (map[st
 		project = st.Project().Root
 	}
 	ch, err := c.p.Graph.CreateChange(ctx, graphapi.NewChange{Title: title, Intent: intent, Methodology: a.str("methodology"), Namespace: ns,
-		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), ProjectID: project, Data: map[string]any{"createdBy": who.Subject, "via": mcpbuiltin.Change}})
+		BaselineID: head.ID, OwnerOrg: a.unit(ctx, who), ProjectID: project, Data: data})
 	if err != nil {
 		return nil, err
 	}
 	return result(map[string]any{"change": changeSummary(ch)})
+}
+
+// close abandons an open change, with the reason in its data (closedBecause). From a process it reaches only the
+// calling change and its sub-changes: a proof of concept concluded, a sub-change that lands nothing (ADR 0131).
+func (c Change) close(ctx context.Context, id domain.ChangeID, a args) (map[string]any, error) {
+	reason, err := a.required("reason")
+	if err != nil {
+		return nil, err
+	}
+	ch, err := c.p.Graph.Change(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if from := domain.ChangeID(mcp.CallFrom(ctx).Change); from != "" && from != id && ch.ParentID != from {
+		return nil, fmt.Errorf("change %s is neither the calling change nor one of its sub-changes", id)
+	}
+	abandoned := domain.ChangeAbandoned
+	closed, err := c.p.Graph.UpdateChange(ctx, id, graphapi.ChangePatch{Status: &abandoned, Data: map[string]any{"closedBecause": reason}})
+	if err != nil {
+		return nil, err
+	}
+	return result(map[string]any{"change": changeSummary(closed)})
 }
 
 // intentItemType is the item type reformulate uses to keep the history of a change's definition:
@@ -895,7 +946,7 @@ func nodeResult(out domain.ChangeImpact) (map[string]any, error) {
 func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a args) (map[string]any, error) {
 	kind, prefix, fields := risk.TypeRisk, "RSK-", []string{"title", "description", "status", "owner"}
 	if op == "action" {
-		kind, prefix, fields = risk.TypeAction, "ACT-", []string{"title", "status", "owner", "due", "for", "result"}
+		kind, prefix, fields = risk.TypeAction, "ACT-", []string{"title", "status", "owner", "due", "for", "result", "kind", "purpose"}
 	}
 	key := a.str("key")
 	var existing bool
@@ -931,6 +982,16 @@ func (c Change) record(ctx context.Context, bb domain.Blackboard, op string, a a
 		}
 		if r := a.str("rationale"); r != "" {
 			data["rationale"] = r
+		}
+	} else {
+		// a proof of concept or a prototype (ADR 0131): what it checks, the sub-change carrying it
+		for _, f := range []string{"risks", "hypotheses"} {
+			if l, ok := a[f].([]any); ok {
+				data[f] = l
+			}
+		}
+		if sub := a.str("subChange"); sub != "" {
+			data["change"] = sub
 		}
 	}
 	if !existing && a.str("title") == "" {

@@ -39,7 +39,9 @@ const HighRisk = 9
 // LibraryNames lists the built-in libraries, in a stable order.
 var LibraryNames = []string{LibraryDecisions, LibraryRisks, LibraryVerification, LibraryDerogations, LibraryDependencies, LibraryAssessments}
 
-var unmitigated = fmt.Sprintf(`risks.exists(r, r.live && r.score >= %d && !actions.exists(a, a.for == r.key && a.status != "cancelled"))`, HighRisk)
+// an action covers a risk while it mitigates it (risk.ActionItem.Covers): neither cancelled nor a concluded proof of
+// concept, whose verdict settled the risk (ADR 0131)
+var unmitigated = fmt.Sprintf(`risks.exists(r, r.live && r.score >= %d && !actions.exists(a, r.key in a.covers))`, HighRisk)
 
 var libraries = map[string][]Definition{
 	LibraryDecisions: {
@@ -63,6 +65,8 @@ var libraries = map[string][]Definition{
 		{Name: "risks_under_control", Expr: "!" + unmitigated, Description: "every high risk has a mitigation action"},
 		{Name: "open_actions", Expr: `actions.exists(a, a.status == "open")`, Description: "an action of the register is still open"},
 		{Name: "no_open_actions", Expr: `!actions.exists(a, a.status == "open")`, Description: "every action of the register is done or cancelled"},
+		// proofs of concept and prototypes (ADR 0131): open ones hold the steps that wait for them
+		{Name: "pocs_pending", Expr: `actions.exists(a, a.kind == "poc" && a.status == "open")`, Description: "a proof of concept or a prototype of the change is not concluded"},
 	},
 	LibraryVerification: {
 		// an effect produced or verified, with no verdict yet; rejected effects are not open: they await a new run

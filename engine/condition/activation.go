@@ -2,6 +2,7 @@ package condition
 
 import (
 	"math"
+	"slices"
 	"sync"
 	"time"
 
@@ -133,8 +134,24 @@ func actionItems(c *domain.Change) []any {
 	as := risk.Actions(*c)
 	out := make([]any, 0, len(as))
 	for _, a := range as {
+		// covers: the risks it mitigates now (risk.ActionItem.Covers, ADR 0131)
+		covers := []any{}
+		for _, k := range append([]string{a.For}, a.Risks...) {
+			if k != "" && a.Covers(k) && !slices.Contains(covers, any(k)) {
+				covers = append(covers, k)
+			}
+		}
 		out = append(out, map[string]any{"key": a.Key, "title": a.Title, "status": a.Status, "owner": a.Owner, "due": a.Due, "for": a.For,
-			"result": a.Result, "item": string(a.Item), "versions": int64(a.Versions)})
+			"result": a.Result, "kind": a.Kind, "purpose": a.Purpose, "risks": anyStrings(a.Risks), "hypotheses": anyStrings(a.Hypotheses),
+			"change": a.Change, "covers": covers, "item": string(a.Item), "versions": int64(a.Versions)})
+	}
+	return out
+}
+
+func anyStrings(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
 	}
 	return out
 }

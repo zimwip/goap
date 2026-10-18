@@ -117,7 +117,7 @@ describe('descriptionReview', () => {
 });
 
 describe('bubbleView', () => {
-  const rating = { key: 'description', score: 2, verdict: 'vague', findings: [], suggestion: '', reply: '', rated: '', current: true, answered: true, versions: 1, by: '', item: 'a1' };
+  const rating = { key: 'description', score: 2, verdict: 'vague', findings: [], suggestion: '', reply: '', prototype: [], rated: '', current: true, answered: true, versions: 1, by: '', item: 'a1' };
   it('takes the state the methodology declares, evaluated by the server', () => {
     const v = bubbleView(rating, [{ subject: 'description', score: 2, current: true, tone: 'danger', label: 'to be rewritten', open: true }]);
     expect(v).toEqual({ tone: 'danger', label: 'to be rewritten', open: true, declared: true });
@@ -130,5 +130,13 @@ describe('bubbleView', () => {
   });
   it('shows an unknown tone as neutral', () => {
     expect(bubbleView(rating, [{ subject: 'description', score: 2, current: true, tone: 'purple' }]).tone).toBe('neutral');
+  });
+});
+
+describe('a prototype the rater proposes (ADR 0131)', () => {
+  it('reads the statements only a prototype would settle', () => {
+    const items = [{ id: 'a1', type: 'assessment', data: { key: 'description', score: 2, prototype: [' the voucher is validated in place ', ''] } }] as ChangeItem[];
+    expect(assessmentOf({ ...change, items })?.prototype).toEqual(['the voucher is validated in place']);
+    expect(assessmentOf({ ...change, items: [{ id: 'a2', type: 'assessment', data: { key: 'description', score: 4 } }] as ChangeItem[] })?.prototype).toEqual([]);
   });
 });

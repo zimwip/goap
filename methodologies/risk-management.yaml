@@ -1,5 +1,5 @@
 name: risk-management
-version: 1.1.0
+version: 1.2.0
 description: >
   Transverse risk management (ADR 0036 §3): runs alongside every change of the methodologies it applies to, on the
   same change, coupled to them by events only. At each step they complete it reviews the risks that step introduces
@@ -73,6 +73,11 @@ actions:
         {"type":"action","data":{"key":"<ACT-n: the next free number>","title":"<what to do>","owner":"<the role that does it>","for":"<RSK-n>","status":"open"}}
         {"type":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"mitigating","actions":["<ACT-n>"]}}
       If a risk is better accepted than mitigated, say so: {"type":"risk","data":{"key":"<RSK-n>","title":"<its title>","status":"accepted"}}.
+      A risk that only running code can settle (does the library do it, do the two systems talk, does it hold the load)
+      may be mitigated by a proof of concept instead (ADR 0131): one action for the risks it checks, which a person
+      opens as a sub-change, built under relaxed rules:
+        {"type":"action","data":{"key":"<ACT-n>","title":"<what the POC shows>","owner":"<the role>","for":"<RSK-n>","kind":"poc","purpose":"derisk","risks":["<RSK-n>",...],"status":"open"}}
+      A risk the RISKS show was confirmed by a concluded proof of concept needs another mitigation, not a second POC.
       Answer {"items":[...]}.
 
   - name: mitigate_by_hand
@@ -83,7 +88,8 @@ actions:
     cost: 6
     instructions: >
       For every live risk of score 9 or more without an action, add an action on the Risks & actions pane (for the
-      risk), or accept the risk.
+      risk), or accept the risk. A risk only running code can settle may get a proof of concept: an action of kind
+      poc, purpose derisk, naming the risks it checks (ADR 0131).
 
 processes:
   - name: risk_management

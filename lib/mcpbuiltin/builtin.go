@@ -90,10 +90,15 @@ func Defs() []mcp.Def {
 				InputSchema: schemaObj(map[string]any{"namespace": argNamespace, "limit": argLimit}, "namespace")},
 		}},
 		{Name: Change, Description: "Work on a change, the blackboard every modification of the graph goes through (built in).", Tools: []mcp.Tool{
-			{Name: "create", Description: "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how).",
+			{Name: "create", Description: "Open a change on the head of main of a namespace: its intent (why), unit (who) and methodology (how); with parent, a sub-change forked from the parent's branch, in its namespace and project.",
 				InputSchema: schemaObj(map[string]any{"title": str("title"), "intent": str("why the change is made"), "namespace": argNamespace,
 					"methodology": str("methodology performing it"), "unit": str("unit holding the change (default: the unit of the calling change)"),
-					"project": str("project the change acts in (default: the active project of the caller)")}, "title", "intent", "namespace")},
+					"project":     str("project the change acts in (default: the active project of the caller)"),
+					"parent":      str("id of the parent change: the new change is its sub-change (namespace and project are the parent's)"),
+					"criticality": str("C1, C2 or C3 (default: none)"),
+					"data":        map[string]any{"type": "object", "description": "free-form data of the change, read by its methodology"}}, "title", "intent")},
+			{Name: "close", Description: "Abandon an open change, with the reason: a proof of concept concluded, a sub-change that lands nothing. From a process, only the calling change or one of its sub-changes.",
+				InputSchema: schemaObj(map[string]any{"change": str("id of the change to close"), "reason": str("why it is closed")}, "change", "reason")},
 			{Name: "move", Description: "Move a root change, draft or active, with its sub-changes, to another project whose methodologies include the change's: the nodes it already acts on keep their project, the nodes it creates take the new one.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "project": str("key of the target project")}, "project")},
 			{Name: "attach", Description: "Attach a root change to a change whose methodology integrates its own (a release taking a candidate): it becomes its sub-change, what it committed rebased onto the parent's branch, and merges into it.",
@@ -201,7 +206,9 @@ func Defs() []mcp.Def {
 			{Name: "action", Description: "Create an action, or update one by its key: what must be done, by which role, for which risk or decision.",
 				InputSchema: schemaObj(map[string]any{"change": argChange, "key": str("ACT-n to update (default: a new action)"), "title": str("what to do"),
 					"status": str("open, done or cancelled"), "owner": str("the role that does it"), "due": str("due date"), "for": str("the risk key or decision point it answers"),
-					"result": str("what was done")})},
+					"result": str("what was done"), "kind": str("mitigation (default) or poc: a proof of concept or a prototype, built in a sub-change"),
+					"purpose": str("of a poc: derisk (check its risks) or explore (the need)"), "risks": list("of a poc: the risk keys it checks"),
+					"hypotheses": list("of a poc: the statements it checks"), "subChange": str("of a poc: the id of the sub-change carrying it")})},
 		}},
 		// orchestration: only the agent level may start other agents (scope agent)
 		{Name: Scheduler, Scope: mcp.ScopeAgent, Description: "Start and follow processes (agents running methodologies) and fire triggers (built in, agent level only).", Tools: []mcp.Tool{
