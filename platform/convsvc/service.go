@@ -214,7 +214,8 @@ type Content struct {
 	ProcessID string
 	Status    string
 	Error     string
-	// Context describes, in a few words, what the user was looking at (user messages only).
+	// Context describes, in a few words, what the user was looking at (a user message) or where the assistant worked:
+	// outside any project, a project, a change (an assistant message, written with its answer by UpdateMessage).
 	Context string
 }
 
@@ -293,7 +294,7 @@ func (s *Service) Append(ctx context.Context, p authz.Principal, conversationID,
 }
 
 // UpdateMessage replaces the content of an assistant message (a platform service only): its text, actions, status
-// and error; the process is set when given. A cancelled message stays cancelled (ErrCancelled otherwise): the turn
+// and error; the process and the context are set when given. A cancelled message stays cancelled (ErrCancelled otherwise): the turn
 // that was stopped may still record what it did, never an answer.
 func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id string, c Content) (Message, error) {
 	if p.Anonymous() {
@@ -316,6 +317,9 @@ func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id strin
 			return Message{}, ErrCancelled
 		}
 		m.Text, m.Actions, m.Status, m.Error = c.Text, c.Actions, c.Status, c.Error
+		if c.Context != "" {
+			m.Context = c.Context
+		}
 		if c.ProcessID != "" {
 			m.ProcessID = c.ProcessID
 		}

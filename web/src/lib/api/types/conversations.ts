@@ -34,7 +34,8 @@ export interface ConversationMessage {
   processId?: string;
   status: MessageStatus;
   error?: string;
-  /** a short description of what the user was looking at when they wrote a user message (never the page itself) */
+  /** a user message: a short description of what the user was looking at (never the page itself); an assistant
+   *  message: where the assistant worked (outside any project, a project, a change) */
   context?: string;
   createdAt?: string;
 }

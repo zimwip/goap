@@ -24,13 +24,14 @@ const (
 	ToolSelectProject     = "select_project"
 	ToolCreateChange      = "create_change"
 	ToolOpenChange        = "open_change"
+	ToolListProjects      = "list_projects"
 	// ToolListAgents and ToolStartAgent are in agents.go, ToolMethodologyQuery in methodtool.go, ToolSearchChanges in
 	// searchtool.go, ToolAttachChange and ToolDetachChange in relate.go
 )
 
 // Tools lists the names of every server tool; nothing else is ever run, and a turn offers only those of its frame.
 func Tools() []string {
-	return []string{ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange, ToolListAgents, ToolStartAgent, ToolMethodologyQuery, ToolSearchChanges, ToolAttachChange, ToolDetachChange}
+	return []string{ToolListProjects, ToolListMethodologies, ToolSelectProject, ToolCreateChange, ToolOpenChange, ToolListAgents, ToolStartAgent, ToolMethodologyQuery, ToolSearchChanges, ToolAttachChange, ToolDetachChange}
 }
 
 // turn is the answer to one user message.
@@ -58,9 +59,11 @@ type turn struct {
 	// searched: the open changes were searched in this conversation (an earlier turn, or this one): creating a change
 	// is offered from then on (frame.go)
 	searched bool
-	// the change of the context as the frame reads it, once per turn
-	changeRead, changeOK          bool
-	changeMethodology, changeNote string
+	// opened is the change open_change opened in this turn: the frame moves to it
+	opened string
+	// the change of the frame as it reads it, once per change (changeRead is its id)
+	changeRead, changeMethodology, changeProject, changeNote string
+	changeOK                                                 bool
 }
 
 type toolCall struct {
@@ -85,13 +88,16 @@ func (t *turn) run(ctx context.Context) {
 	end(err)
 	// a stopped turn keeps what it recorded (proposals to decide, screen actions), never an answer
 	stopped := convsvc.Content{Actions: t.actions, Status: convsvc.StatusCancelled}
-	c := convsvc.Content{Text: text, Actions: t.actions, Status: convsvc.StatusDone}
+	// every answer records where it worked: the frame at its end (an opened change, a selected project)
+	where := t.frame(context.WithoutCancel(ctx)).describe()
+	stopped.Context = where
+	c := convsvc.Content{Text: text, Actions: t.actions, Status: convsvc.StatusDone, Context: where}
 	switch {
 	case errors.Is(err, errStopped) || errors.Is(context.Cause(ctx), errStopped):
 		c = stopped
 	case err != nil:
 		t.s.log().Warn("assistant turn failed", "conversation", t.conversation, "subject", t.p.Subject, "err", err)
-		c = convsvc.Content{Status: convsvc.StatusError, Error: clip(err.Error(), maxErrorText)}
+		c = convsvc.Content{Status: convsvc.StatusError, Error: clip(err.Error(), maxErrorText), Context: where}
 	}
 	// the answer is written by the platform, not by the caller; the caller's context may have ended
 	wctx := authz.With(context.WithoutCancel(ctx), Principal)
@@ -245,7 +251,8 @@ func (t *turn) final(msg string) string {
 }
 
 // settling reports whether every call hands something to the person and returns no data the model would build on: a
-// screen tool (ui.*, run or proposed by the interface), a proposal to start an agent, a change to open. The answer
+// screen tool (ui.*, run or proposed by the interface), a proposal to start an agent, a change to open (to work on it
+// in the turn, the model calls open_change with no message). The answer
 // that came with them is then final once they succeeded (a model call saved per turn: the first-order latency).
 func settling(calls []toolCall) bool {
 	for _, c := range calls {
@@ -338,6 +345,8 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 		return nil, err
 	}
 	switch c.Name {
+	case ToolListProjects:
+		return t.listProjects(ctx)
 	case ToolListMethodologies:
 		return t.listMethodologies(ctx)
 	case ToolSelectProject:
@@ -364,7 +373,12 @@ func (t *turn) tool(ctx context.Context, c toolCall) (any, error) {
 
 // applicable returns the methodologies of the active project.
 func (t *turn) applicable(ctx context.Context) ([]string, error) {
-	names, err := t.s.Projects.ApplicableMethodologies(ctx, t.project)
+	return t.applicableIn(ctx, t.project)
+}
+
+// applicableIn returns the methodologies of a project.
+func (t *turn) applicableIn(ctx context.Context, project string) ([]string, error) {
+	names, err := t.s.Projects.ApplicableMethodologies(ctx, project)
 	if err != nil {
 		return nil, fmt.Errorf("the organisation cannot be read: %w", err)
 	}
@@ -421,7 +435,59 @@ func (t *turn) selectProject(ctx context.Context, a args) (any, error) {
 	t.project = project
 	t.p.Project = project
 	t.actions = append(t.actions, convsvc.Action{"type": ToolSelectProject, "args": map[string]any{"project": project}})
-	return map[string]any{"selected": project}, nil
+	return map[string]any{"selected": project, "note": "the tools of this project are offered from the next step"}, nil
+}
+
+// projectEntry is a project as list_projects returns it.
+type projectEntry struct {
+	Project       string   `json:"project"`
+	Methodologies []string `json:"methodologies"`
+}
+
+// listProjects lists the projects the caller may work on (the root and the projects below it), with the methodologies
+// that apply to each.
+func (t *turn) listProjects(ctx context.Context) (any, error) {
+	root, err := t.s.Projects.RootProject(ctx)
+	if err != nil {
+		return nil, err
+	}
+	keys := []string{root}
+	if sp, ok := t.s.Projects.(subProjects); ok {
+		subs, err := sp.SubProjects(ctx, root)
+		if err != nil {
+			return nil, fmt.Errorf("the organisation cannot be read: %w", err)
+		}
+		for _, k := range subs {
+			if !slices.Contains(keys, k) {
+				keys = append(keys, k)
+			}
+		}
+	}
+	out := []projectEntry{}
+	for _, k := range keys {
+		if ok, err := t.s.Projects.MayAccessProject(ctx, t.p, k); err != nil || !ok {
+			continue
+		}
+		ms, err := t.applicableIn(ctx, k)
+		if err != nil {
+			return nil, err
+		}
+		if out = append(out, projectEntry{Project: k, Methodologies: nonNilStrings(ms)}); len(out) == maxProjects {
+			break
+		}
+	}
+	res := map[string]any{"projects": out}
+	if len(out) == 0 {
+		res["note"] = "the person may work on no project: an administrator assigns them to one"
+	}
+	return res, nil
+}
+
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // createChange creates a change in the active project, as the caller: the graph's own rules apply.
@@ -486,5 +552,9 @@ func (t *turn) openChange(ctx context.Context, a args) (any, error) {
 	}
 	res := map[string]any{"changeId": string(ch.ID), "title": ch.Title, "project": ch.ProjectID, "status": string(ch.Status)}
 	t.actions = append(t.actions, convsvc.Action{"type": ToolOpenChange, "args": map[string]any{"changeId": id}, "result": res})
-	return res, nil
+	// the turn now works on that change: the next rounds get its tools (frame.go)
+	t.opened = id
+	out := maps.Clone(res)
+	out["note"] = "opened for the person; the tools of this change are offered from the next step"
+	return out, nil
 }

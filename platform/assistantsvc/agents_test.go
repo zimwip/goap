@@ -614,7 +614,7 @@ func TestAgentToolsNeedTheEngine(t *testing.T) {
 }
 
 func TestToolsAreDeclared(t *testing.T) {
-	if got := Tools(); len(got) != 10 {
+	if got := Tools(); len(got) != 11 {
 		t.Fatalf("%v", got)
 	}
 	// each is declared to the model with what it does and the schema of its arguments (ADR 0098), and nothing else is

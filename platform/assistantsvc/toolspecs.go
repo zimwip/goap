@@ -26,6 +26,8 @@ var rationaleProp = str("why you propose it, one sentence (shown to the person)"
 
 // serverTools are every tool the server runs, as the caller; a turn declares those of its frame.
 var serverTools = []llm.ToolSpec{
+	{Name: ToolListProjects, InputSchema: obj(map[string]any{}),
+		Description: "Lists the projects the person may work on, with the methodologies that apply to each (a project naming none offers no agent). Use it outside any project, then select_project."},
 	{Name: ToolListMethodologies, InputSchema: obj(map[string]any{}),
 		Description: "Lists the methodologies applicable to the active project (name, description, goal examples). Use it before proposing a methodology."},
 	{Name: ToolMethodologyQuery, InputSchema: obj(map[string]any{
@@ -40,7 +42,7 @@ var serverTools = []llm.ToolSpec{
 		"offset":      map[string]any{"type": "integer", "description": "page start"},
 	}), Description: "Reads what a methodology declares, read-only and as the person. The result is {total, returned, offset, truncated, next, items} (with \"counts\" by kind when no kind is given and one methodology is queried)."},
 	{Name: ToolSelectProject, InputSchema: obj(map[string]any{"project": str("the project key")}, "project"),
-		Description: "Asks the interface to make that project the active one. It is refused when the person may not work on it."},
+		Description: "Asks the interface to make that project the active one; the next steps of this turn get the tools of that project. It is refused when the person may not work on it."},
 	{Name: ToolCreateChange, InputSchema: obj(map[string]any{"title": str("short title"), "intent": str("why the change is needed"),
 		"methodology": str("optional: one that list_methodologies returned")}, "title", "intent"),
 		Description: "Creates a change, in the active project, for the person. Offered once search_changes has run in the conversation: only do it when no change found fits, or the person asked for a new change or agreed to it."},
@@ -49,9 +51,9 @@ var serverTools = []llm.ToolSpec{
 		"status": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"draft", "active", "committed", "applied", "abandoned"}},
 			"description": "default: the open ones (draft, active, committed)"},
 	}, "q"),
-		Description: "Searches the changes of the active project (and the projects below it) whose title or intent holds the words of q, as the person: at most 10, best first, with \"total\". Call it on the intent before creating a change, and show the person what was found."},
+		Description: "Searches the changes of the active project (and the projects below it; outside any project, of every project the person may work on) whose title or intent holds the words of q, as the person: at most 10, best first, with \"total\". Call it on the intent before creating a change, and show the person what was found."},
 	{Name: ToolOpenChange, InputSchema: obj(map[string]any{"changeId": str("the change id")}, "changeId"),
-		Description: "Asks the interface to open that change. It is refused when it does not exist or is not visible to the person."},
+		Description: "Asks the interface to open that change; the next steps of this turn work on it, with the tools of a change. It is refused when it does not exist or is not visible to the person."},
 	{Name: ToolListAgents, InputSchema: obj(map[string]any{}),
 		Description: "Lists the agents the person may run HERE: when they are looking at a change, those of that change's methodology (with the change's status, state and the processes already running, \"running\": true marks an agent already at work on it), with \"possibleSteps\" (the steps possible NOW towards its goal: id, \"why\", what it produces, \"mayRun\") and \"waitingSteps\" (a count of the steps waiting for conditions, never proposable); otherwise the agents of the methodologies of the active project that can start a change. Only agents whose required roles the person holds are listed; an agent flagged \"ready\" would carry out one of the possible steps."},
 	{Name: ToolStartAgent, InputSchema: obj(map[string]any{

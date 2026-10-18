@@ -567,8 +567,8 @@ func (s SQLStore) UpdateMessage(ctx context.Context, id string, now time.Time, f
 	if err != nil {
 		return Message{}, err
 	}
-	if _, err := tx.ExecContext(ctx, s.q(`UPDATE conversation_message SET body = ?, actions = ?, process_id = ?, status = ?, error = ? WHERE id = ?`),
-		out.Text, actions, out.ProcessID, out.Status, out.Error, id); err != nil {
+	if _, err := tx.ExecContext(ctx, s.q(`UPDATE conversation_message SET body = ?, actions = ?, process_id = ?, status = ?, error = ?, context = ? WHERE id = ?`),
+		out.Text, actions, out.ProcessID, out.Status, out.Error, out.Context, id); err != nil {
 		return Message{}, err
 	}
 	if _, err := tx.ExecContext(ctx, s.q(`UPDATE conversation SET updated_at = ? WHERE id = ?`), micros(now), cur.ConversationID); err != nil {

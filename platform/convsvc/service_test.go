@@ -362,8 +362,19 @@ func TestMessageContext(t *testing.T) {
 			if _, err := s.Append(ctx, alice, c.ID, "", convsvc.Content{Text: "hi", Context: "tab change, project PROJ-A"}); err != nil {
 				t.Fatal(err)
 			}
+			// an answer records where the assistant worked, kept when an update gives none
+			a, err := s.Append(ctx, system, c.ID, convsvc.RoleAssistant, convsvc.Content{Status: convsvc.StatusPending})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.UpdateMessage(ctx, system, a.ID, convsvc.Content{Text: "ok", Context: "project PROJ-A · change CHG-1"}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := s.UpdateMessage(ctx, system, a.ID, convsvc.Content{Text: "ok again"}); err != nil {
+				t.Fatal(err)
+			}
 			_, ms, err := s.Get(ctx, alice, c.ID)
-			if err != nil || len(ms) != 1 || ms[0].Context != "tab change, project PROJ-A" {
+			if err != nil || len(ms) != 2 || ms[0].Context != "tab change, project PROJ-A" || ms[1].Context != "project PROJ-A · change CHG-1" {
 				t.Fatalf("%v %+v", err, ms)
 			}
 		})

@@ -72,6 +72,7 @@ const (
 	maxAnswerBytes  = 8 << 10
 	maxToolResult   = 8 << 10
 	maxMethodologys = 30
+	maxProjects     = 50
 	maxErrorText    = 500
 )
 
