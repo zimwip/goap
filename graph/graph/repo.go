@@ -55,6 +55,9 @@ type Tx interface {
 	VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
 	Changes(ctx context.Context) ([]domain.Change, error)
+	// SubChanges returns the changes whose parent is a change, oldest first: what a merge, a purge or a move asks of a
+	// change, read by its parent rather than by a scan of every change.
+	SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error)
 
 	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
 	// node in a change is a draft, the version is written when the change lands.

@@ -163,6 +163,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite Baselines", lite, q, a, `SELECT id FROM baseline WHERE namespace = ? ORDER BY created_at, rowid`, []any{"default"})
 	check("pg Changes", pg, pg.sqlChangeIDs(), nil, `SELECT id::text FROM change ORDER BY created_at`, nil)
 	check("sqlite Changes", lite, lite.sqlChangeIDs(), nil, `SELECT id FROM change ORDER BY created_at, rowid`, nil)
+	q, a = pg.sqlSubChangeIDs("c1")
+	check("pg SubChanges", pg, q, a, `SELECT id::text FROM change WHERE parent_id = $1 ORDER BY created_at`, []any{"c1"})
+	q, a = lite.sqlSubChangeIDs("c1")
+	check("sqlite SubChanges", lite, q, a, `SELECT id FROM change WHERE parent_id = ? ORDER BY created_at, rowid`, []any{"c1"})
 	check("pg OpenChangeIDs", pg, pg.sqlOpenChangeIDs(), nil, `SELECT id::text FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at`, nil)
 	check("sqlite OpenChangeIDs", lite, lite.sqlOpenChangeIDs(), nil, `SELECT id FROM change WHERE status NOT IN ('applied', 'abandoned') ORDER BY created_at, rowid`, nil)
 

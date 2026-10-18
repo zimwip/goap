@@ -227,17 +227,7 @@ func (g *Graph) SubChanges(ctx context.Context, id domain.ChangeID) (out []domai
 }
 
 func subChanges(ctx context.Context, tx Tx, id domain.ChangeID) ([]domain.Change, error) {
-	all, err := tx.Changes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var out []domain.Change
-	for _, c := range all {
-		if c.ParentID == id {
-			out = append(out, c)
-		}
-	}
-	return out, nil
+	return tx.SubChanges(ctx, id)
 }
 
 // openSubChanges are the sub-changes that still have to be applied or abandoned.

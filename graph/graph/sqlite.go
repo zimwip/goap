@@ -428,6 +428,23 @@ func (t *sqliteTx) Changes(ctx context.Context) ([]domain.Change, error) {
 	return out, nil
 }
 
+func (t *sqliteTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error) {
+	q, args := dialectSQLite.sqlSubChangeIDs(parent)
+	ids, err := t.ids(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Change, 0, len(ids))
+	for _, id := range ids {
+		c, err := t.Change(ctx, domain.ChangeID(id))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
 		if _, err := t.tx.ExecContext(ctx, `INSERT INTO node (id, namespace, key, type, latest, project_id) VALUES (?, ?, ?, ?, 1, ?)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, nullUUID(string(n.Project))); err != nil {

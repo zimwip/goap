@@ -531,6 +531,27 @@ func (t *pgTx) Changes(ctx context.Context) ([]domain.Change, error) {
 	return out, nil
 }
 
+func (t *pgTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error) {
+	q, args := dialectPG.sqlSubChangeIDs(parent)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return nil, err
+	}
+	out := make([]domain.Change, 0, len(ids))
+	for _, id := range ids {
+		c, err := t.Change(ctx, domain.ChangeID(id))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, nil
+}
+
 func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 	if n.Version == 1 {
 		if _, err := t.tx.Exec(ctx, `INSERT INTO node (id, namespace, key, type, latest, project_id) VALUES ($1, $2, $3, $4, 1, $5)`, string(n.ID), domain.NamespaceOf(n.Namespace), n.Key, n.Type, nullUUID(string(n.Project))); err != nil {

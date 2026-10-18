@@ -221,6 +221,11 @@ func (d dialect) sqlChangeIDs() string {
 	return `SELECT ` + d.id("id") + ` FROM change` + d.orderBy("created_at", "")
 }
 
+// sqlSubChangeIDs reads the ids of the changes whose parent is a change, oldest first (index change_parent).
+func (d dialect) sqlSubChangeIDs(parent domain.ChangeID) (string, []any) {
+	return `SELECT ` + d.id("id") + ` FROM change WHERE parent_id = ` + d.ph(1) + d.orderBy("created_at", ""), []any{string(parent)}
+}
+
 // sqlOpenChangeIDs reads the ids of the changes neither applied nor abandoned, oldest first.
 func (d dialect) sqlOpenChangeIDs() string {
 	return `SELECT ` + d.id("id") + ` FROM change WHERE status NOT IN ('applied', 'abandoned')` + d.orderBy("created_at", "")

@@ -335,6 +335,18 @@ func (t *memTx) Changes(ctx context.Context) ([]domain.Change, error) {
 	return out, nil
 }
 
+func (t *memTx) SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error) {
+	var out []domain.Change
+	for id, c := range t.st.changes {
+		if c.ParentID == parent {
+			c, _ := t.Change(ctx, id)
+			out = append(out, c)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
 func (t *memTx) PutNode(_ context.Context, n domain.Node) error {
 	vs := t.st.versions[n.ID]
 	if int(n.Version) != len(vs)+1 {
