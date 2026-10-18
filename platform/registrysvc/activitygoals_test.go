@@ -3,6 +3,7 @@ package registrysvc
 import (
 	"context"
 	"errors"
+	"github.com/zimwip/goap/contracts/authz"
 	"strings"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestActivityGoalsMetGatesApply(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	store := NewGraphStore(g)
-	reg := &Service{Store: store}
+	reg := &Service{Authz: authz.AllowAll{}, Store: store}
 	g.Lifecycles = reg
 
 	m := methodology.Methodology{
@@ -81,7 +82,7 @@ func TestActivityGoalsMetRefusesAnUnresolvableRef(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	store := NewGraphStore(g)
-	reg := &Service{Store: store}
+	reg := &Service{Authz: authz.AllowAll{}, Store: store}
 	g.Lifecycles = reg
 
 	base, err := g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch)

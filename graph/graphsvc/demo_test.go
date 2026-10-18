@@ -22,7 +22,7 @@ func TestLoadDemoDataIsForAdministrators(t *testing.T) {
 		t.Fatal(err)
 	}
 	var by authz.Principal
-	h := &graphsvc.Handler{Graph: g, Floor: floor, Demo: func(ctx context.Context, _ *graph.Graph) (bool, string, error) {
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g, Floor: floor, Demo: func(ctx context.Context, _ *graph.Graph) (bool, string, error) {
 		by = authz.From(ctx)
 		return true, "PROJ-DEMO", nil
 	}}

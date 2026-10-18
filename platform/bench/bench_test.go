@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/gen/goap/graph/v1/graphv1connect"
@@ -47,7 +48,8 @@ func server(t *testing.T) (*graph.Graph, string) {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	mux.Handle(graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g}))
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: enf, Graph: g}
+	mux.Handle(graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.Identify())))
 	mux.Handle(registryv1connect.NewDomainServiceHandler(&domainsvc.Handler{Service: domains}))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

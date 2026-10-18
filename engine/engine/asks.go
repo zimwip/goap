@@ -123,11 +123,14 @@ func (e *Engine) processAsk(ctx context.Context, p *Process, who authz.Principal
 	var allowed error
 	switch t.Kind {
 	case TaskInput:
-		if act, ok := m.Action(t.Action); ok {
+		act, found := m.Action(t.Action)
+		if found {
 			a.Roles = e.runRoles(m, p, act)
 		}
-		if t.Context != nil && t.Context.Roles != nil && t.Context.Roles.Responsible != "" {
-			a.Roles = appendRole(a.Roles, t.Context.Roles.Responsible)
+		if r := t.Context.responsible(); r != "" {
+			a.Roles = appendRole(a.Roles, r)
+		} else if found && act.Role != "" {
+			a.Roles = appendRole(a.Roles, act.Role) // the role the action acts as (ADR 0139)
 		}
 		allowed = e.maySubmit(ctx, p, m, who)
 	case TaskApproval:

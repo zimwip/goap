@@ -3,6 +3,7 @@ package registrysvc
 import (
 	"context"
 	"errors"
+	"github.com/zimwip/goap/contracts/authz"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -16,7 +17,7 @@ func TestSubChangeActivityCascade(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	store := NewGraphStore(g)
-	reg := &Service{Store: store}
+	reg := &Service{Authz: authz.AllowAll{}, Store: store}
 	g.SubChangeValidator = reg.SubChangeValidator
 
 	mk := func(key string, links ...graph.LinkEdit) graph.NodeEdit {

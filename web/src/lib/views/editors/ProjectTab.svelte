@@ -3,7 +3,7 @@
   // It names the methodologies that apply (inherited by its sub-projects), which identifies the roles the
   // project needs (ADR 0043); its Assignments pane is the meeting point with organisation: which org units or
   // users hold which of those roles here.
-  import { types as nodeTypes, links as linkTypes, ns, isUserKey } from '../../stores/session.svelte';
+  import { types as nodeTypes, links as linkTypes, ns, isUserKey, can } from '../../stores/session.svelte';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import type { Tab } from '../../shell/types';
   import Icon from '../../shell/Icon.svelte';
@@ -13,6 +13,7 @@
   import { headGraph, findNode, applyOnMain, updateNodeItem, type HeadGraph } from '../../graphEdit';
   import { openTab } from '../../shell/tabs.svelte';
   import { notify, provideActions } from '../../shell/workbench.svelte';
+  import { confirmDialog } from '../../shell/confirmState.svelte';
   import { methodologies, refreshMethodologies } from '../../stores/catalog.svelte';
   import { applicableMethodologies, projectRoles, holders, type ProjectRole } from '../../projectRoles';
 
@@ -106,6 +107,21 @@
     fMethodologies = on ? [...fMethodologies, name] : fMethodologies.filter((m) => m !== name);
   }
 
+  /** a stopped project takes no new change (ADR 0138); stopping or restarting it is its owner's */
+  const stopped = $derived(project?.props?.['stopped'] === true);
+  async function setStopped(on: boolean) {
+    if (!project || !head) return;
+    if (on && !(await confirmDialog({ message: `Stop the project ${key}? It takes no new change until an owner restarts it.`, danger: true }))) return;
+    error = '';
+    try {
+      await applyOnMain(ns.organisation, `${on ? 'Stop' : 'Restart'} project ${key}`, `${on ? 'Stop' : 'Restart'} the project ${key}`, head.baselineId, [updateNodeItem(project, { stopped: on || null })]);
+      notify(`Project ${key} ${on ? 'stopped' : 'restarted'}.`, 'ok');
+      await load();
+    } catch (e) {
+      error = errorMessage(e);
+    }
+  }
+
   async function save() {
     if (!project || !head) return;
     saving = true;
@@ -141,6 +157,7 @@
                 <dt>Key</dt><dd><code>{key}</code></dd>
                 {#if project.props?.['kind']}<dt>Kind</dt><dd>{project.props['kind']}</dd>{/if}
                 {#if project.props?.['status']}<dt>Status</dt><dd>{project.props['status']}</dd>{/if}
+                {#if stopped}<dt>Stopped</dt><dd>yes: it takes no new change</dd>{/if}
                 {#if project.props?.['description']}<dt>Description</dt><dd>{project.props['description']}</dd>{/if}
                 <dt>Part of</dt>
                 <dd>
@@ -161,7 +178,12 @@
                 </dd>
               </dl>
               <p class="hint">A project names the methodologies that apply to it (its sub-projects inherit them): the roles they declare are the ones the project needs, and an Assignment grants some of them to an org unit or a user here. From one project to another, the same person can hold different roles, and so do different things.</p>
-              <button type="button" class="small" onclick={startEdit}>Edit</button>
+              <div class="row">
+                <button type="button" class="small" onclick={startEdit}>Edit</button>
+                {#if can.administer || can.ownProject}
+                  <button type="button" class={`small${stopped ? '' : ' danger'}`} title="Only an owner of the project stops or restarts it" onclick={() => setStopped(!stopped)}>{stopped ? 'Restart' : 'Stop'}</button>
+                {/if}
+              </div>
             {:else}
               <div class="grid">
                 <div class="field">

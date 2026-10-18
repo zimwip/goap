@@ -23,7 +23,7 @@ import (
 // handler receives the principal of the request (Handler.Identify).
 func TestAnonymousCallsAreRefused(t *testing.T) {
 	g := typedGraph(t)
-	h := &graphsvc.Handler{Graph: g}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g}
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.Identify()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
@@ -66,7 +66,7 @@ func TestServiceSubjectsDoNotTakeTheFirstAdminGrant(t *testing.T) {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	h := &graphsvc.Handler{Graph: g}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g}
 	path, handler := graphv1connect.NewGraphServiceHandler(h, connect.WithInterceptors(h.Identify(), h.EnsureCaller()))
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)

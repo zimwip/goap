@@ -85,38 +85,13 @@ func NewGraphStore(g StoreGraph) *GraphStore {
 	return s
 }
 
-// suspectReader is a graph that gives the suspect links of a baseline (*graph.Graph, the graph service client).
-type suspectReader interface {
-	SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error)
-}
-
 // withSuspects reads a baseline with its suspect links too: a link to an element is a link to the version the element
 // had when the reference was written (ADR 0003), and editing the element (a new version of its node) leaves the
 // references to it in place, suspect. They are references all the same (ADR 0120).
 type withSuspects struct{ StoreGraph }
 
-// withSuspectsReader reads both at once (the graph service client: one call).
-type withSuspectsReader interface {
-	BaselineGraphWithSuspects(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, []domain.Link, error)
-}
-
 func (w withSuspects) BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
-	if r, ok := w.StoreGraph.(withSuspectsReader); ok {
-		nodes, links, sus, err := r.BaselineGraphWithSuspects(ctx, id)
-		return nodes, append(links, sus...), err
-	}
-	nodes, links, err := w.StoreGraph.BaselineGraph(ctx, id)
-	if err != nil {
-		return nil, nil, err
-	}
-	if sr, ok := w.StoreGraph.(suspectReader); ok {
-		sus, err := sr.SuspectLinks(ctx, id)
-		if err != nil {
-			return nil, nil, err
-		}
-		links = append(links, sus...)
-	}
-	return nodes, links, nil
+	return graphsnap.BaselineWithSuspects(ctx, w.StoreGraph, id)
 }
 
 // defs is the versions of a baseline, decoded once per head of main.

@@ -28,6 +28,8 @@ type Cache[T any] struct {
 	TTL       time.Duration
 	// Build makes the view of a baseline; the graph without any baseline yields Build("", nil, nil).
 	Build func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) T
+	// Suspects reads the suspect links too (BaselineWithSuspects): a view following references.
+	Suspects bool
 
 	mu      sync.Mutex
 	have    bool
@@ -71,10 +73,49 @@ func (c *Cache[T]) get(ctx context.Context, fresh bool) (T, domain.BaselineID, e
 	if c.have && c.id == head.ID {
 		return c.cur, c.id, nil
 	}
-	nodes, links, err := c.Graph.BaselineGraph(ctx, head.ID)
+	read := c.Graph.BaselineGraph
+	if c.Suspects {
+		read = func(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+			return BaselineWithSuspects(ctx, c.Graph, id)
+		}
+	}
+	nodes, links, err := read(ctx, head.ID)
 	if err != nil {
 		return c.cur, c.id, err
 	}
 	c.cur, c.id, c.have = c.Build(head.ID, nodes, links), head.ID, true
 	return c.cur, c.id, nil
+}
+
+// SuspectReader is a graph that gives the suspect links of a baseline (*graph.Graph, the graph service client): the
+// links whose source is in the baseline and whose target is there at another version.
+type SuspectReader interface {
+	SuspectLinks(ctx context.Context, id domain.BaselineID) ([]domain.Link, error)
+}
+
+// suspectsAtOnce reads a baseline and its suspect links in one call (the graph service client).
+type suspectsAtOnce interface {
+	BaselineGraphWithSuspects(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, []domain.Link, error)
+}
+
+// BaselineWithSuspects reads a baseline with its suspect links too. A link names the version its target had when it
+// was written, and editing the target leaves it in place, suspect: it is a reference all the same (a sub-project's
+// parent, the project of an Assignment, ADR 0120). A graph that gives no suspect links gives the baseline alone.
+func BaselineWithSuspects(ctx context.Context, g Graph, id domain.BaselineID) ([]domain.Node, []domain.Link, error) {
+	if r, ok := g.(suspectsAtOnce); ok {
+		nodes, links, sus, err := r.BaselineGraphWithSuspects(ctx, id)
+		return nodes, append(links, sus...), err
+	}
+	nodes, links, err := g.BaselineGraph(ctx, id)
+	if err != nil {
+		return nil, nil, err
+	}
+	if sr, ok := g.(SuspectReader); ok {
+		sus, err := sr.SuspectLinks(ctx, id)
+		if err != nil {
+			return nil, nil, err
+		}
+		links = append(links, sus...)
+	}
+	return nodes, links, nil
 }

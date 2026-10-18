@@ -44,8 +44,8 @@ func TestItemAuthorizer(t *testing.T) {
 			t.Errorf("%s: %v", name, err)
 		}
 	}
-	if err := ItemAuthorizer(nil, nil)(context.Background(), domain.Change{}, item("x"), perm); err != nil {
-		t.Errorf("no authorizer: %v", err)
+	if err := ItemAuthorizer(nil, nil)(authz.With(context.Background(), authz.Principal{Subject: "bob"}), domain.Change{}, item("x"), perm); !errors.Is(err, authz.ErrForbidden) {
+		t.Errorf("no authorizer must refuse (ADR 0138): %v", err)
 	}
 }
 
@@ -90,7 +90,7 @@ func TestItemAuthorizerSignatoryRole(t *testing.T) {
 // (ADR 0128).
 func TestListItemTypes(t *testing.T) {
 	risk.Register()
-	h := &Handler{Graph: graph.New(graph.NewMemory())}
+	h := &Handler{Projects: EveryProject, Authz: authz.AllowAll{}, Graph: graph.New(graph.NewMemory())}
 	r, err := h.ListItemTypes(context.Background(), connect.NewRequest(&graphv1.ListItemTypesRequest{}))
 	if err != nil {
 		t.Fatal(err)

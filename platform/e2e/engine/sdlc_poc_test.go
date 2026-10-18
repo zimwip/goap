@@ -150,13 +150,13 @@ func TestSDLCDerisksByAProofOfConcept(t *testing.T) {
 	if run.Pending == nil || !strings.Contains(run.Pending.Action, "confirmation") {
 		t.Fatalf("the POC waits for its probes to be confirmed: %s %s %+v", run.Status, run.Error, run.Pending)
 	}
-	if _, err = e.Submit(ctx, run.ID, nil); err != nil {
+	if _, err = e.Submit(lead, run.ID, nil); err != nil { // the tech lead confirms (ADR 0139)
 		t.Fatal(err)
 	}
 	if run, err = e.Run(context.Background(), run.ID); err != nil || run.Pending == nil || !strings.HasSuffix(run.Pending.Action, "closing") {
 		t.Fatalf("the POC builds, checks, judges, then waits for its conclusion: %v %s %s %+v", err, run.Status, run.Error, run.Pending)
 	}
-	if _, err = e.SubmitForm(ctx, run.ID, map[string]any{"summary": "the PSP splits a payment in three"}); err != nil {
+	if _, err = e.SubmitForm(lead, run.ID, map[string]any{"summary": "the PSP splits a payment in three"}); err != nil {
 		t.Fatal(err)
 	}
 	if run, err = e.Run(context.Background(), run.ID); err != nil || run.Status != engine.StatusCompleted {

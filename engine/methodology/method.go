@@ -316,13 +316,11 @@ func (m *Methodology) Restricts() bool {
 	return false
 }
 
-// OperationRoles returns the roles of the methodology that allow the operation of code (ADR 0103): the roles listing
-// it, or its kind, and the roles listing no operation. restricted is false when no role lists any: every operation
-// is then allowed, whatever the roles.
+// OperationRoles returns the roles of the methodology that allow the operation of code (ADR 0103, 0138): the roles
+// listing it, or its kind, and the roles listing no operation. It always restricts (ADR 0138: without an explicit
+// grant, everything is refused): when no role lists any operation, every role of the methodology allows every
+// operation, and a methodology declaring no role leaves its operations to the administrators.
 func (m *Methodology) OperationRoles(code string) (roles []string, restricted bool) {
-	if !m.Restricts() {
-		return nil, false
-	}
 	for _, r := range m.Roles {
 		if len(r.Operations) == 0 || operations.Allows(r.Operations, code) {
 			roles = append(roles, r.Name)
@@ -342,11 +340,18 @@ func (m *Methodology) checkElementRoles(add func(path, format string, args ...an
 			}
 		}
 	}
+	one := func(path, r string) {
+		if r != "" && !roles[r] {
+			add(path, "unknown role %q (declare it in roles)", r)
+		}
+	}
 	for i, ag := range m.Agents {
 		check(fmt.Sprintf("agents[%d].roles", i), ag.Roles)
+		one(fmt.Sprintf("agents[%d].role", i), ag.Role)
 	}
 	for i, a := range m.Actions {
 		check(fmt.Sprintf("actions[%d].roles", i), a.Roles)
+		one(fmt.Sprintf("actions[%d].role", i), a.Role)
 	}
 }
 

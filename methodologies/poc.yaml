@@ -1,5 +1,5 @@
 name: poc
-version: 0.1.0
+version: 0.1.1
 description: >
   Proof of concept or prototype (ADR 0131): a relaxed build, in a sub-change of the change it serves, to check that
   something works as expected before the change invests in it. Its requirements are hypotheses: the risks of the
@@ -12,6 +12,11 @@ namespace: alm
 # ADR 0075: the lowest level, the oracles accept a tool or a model; a POC lands nothing
 criticality: C1
 goal: conclude
+
+# ADR 0139: a developer builds the POC, the tech lead answers for its verdicts
+roles:
+  - {name: developer, description: Builds and runs the probes}
+  - {name: tech_lead, description: Answers for the verdicts of the POC}
 
 events:
   - {name: poc.concluded, description: "A person confirmed the verdicts of the proof of concept on its hypotheses"}
@@ -273,6 +278,7 @@ processes:
   - name: proof_of_concept
     description: Check hypotheses by building the least that shows them, under relaxed rules, then conclude
     examples: ["build a proof of concept", "prototype the need"]
+    roles: {responsible: developer, accountable: tech_lead}
     # it starts by itself on the sub-change its parent opens, once the parent wrote what it checks
     on:
       - {event: change.created}
@@ -288,6 +294,7 @@ processes:
         done: {hypotheses_probed: true}
       - name: confirmation
         description: A person confirms the probes before anything is built
+        roles: {responsible: tech_lead}
         pre: {hypotheses_probed: true}
         instructions: >
           Read the probes: each must check its hypothesis with a command whose result can be trusted, and the whole
@@ -308,6 +315,7 @@ processes:
         action: keep_probes
       - name: closing
         description: A person confirms the verdicts; the change that opened the POC takes them back
+        roles: {responsible: tech_lead}
         action: confirm_conclusion
 
 goals:

@@ -2,6 +2,7 @@ package graphsvc_test
 
 import (
 	"context"
+	"github.com/zimwip/goap/contracts/authz"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -20,7 +21,7 @@ import (
 func TestOptionsThroughTheService(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
-	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
@@ -91,7 +92,7 @@ func TestDecisionsThroughTheService(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	g.DecisionPolicy = decision.Policy{}
-	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Graph: g})
+	path, handler := graphv1connect.NewGraphServiceHandler(&graphsvc.Handler{Projects: graphsvc.EveryProject, Authz: authz.AllowAll{}, Graph: g})
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)

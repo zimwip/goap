@@ -125,7 +125,7 @@ func (h *Handler) callerResource(ctx context.Context, hdr http.Header, typ, name
 // platform services (system: subjects) may name any unit.
 func (h *Handler) unitOf(ctx context.Context, hdr http.Header, requested string) (string, error) {
 	who := authz.From(h.Identity.Context(ctx, hdr))
-	if who.System() || slices.Contains(who.Roles, "admin") {
+	if who.System() || who.HasRole("admin") {
 		return requested, nil
 	}
 	if requested == "" {

@@ -87,7 +87,7 @@ func (m bearerMode) Validate(cfg Config) error {
 	return requireSecret(m, cfg)
 }
 func (bearerMode) Authenticate(c *echo.Context, cfg Config) (authz.Principal, error) {
-	return authenticateToken(c, cfg)
+	return authenticateToken(c, cfg, cfg.TrustTokenRoles)
 }
 func (bearerMode) Routes(e *echo.Echo, cfg Config) {
 	if cfg.DevTokens { // never in production
@@ -103,6 +103,11 @@ type localMode struct{ bearerMode }
 
 func (localMode) Name() string   { return "local" }
 func (localMode) Sessions() bool { return true }
+
+// Authenticate never takes the roles of a token: they come from the graph (ADR 0138).
+func (localMode) Authenticate(c *echo.Context, cfg Config) (authz.Principal, error) {
+	return authenticateToken(c, cfg, false)
+}
 func (m localMode) Validate(cfg Config) error {
 	if err := requireSecret(m, cfg); err != nil {
 		return err
@@ -129,7 +134,7 @@ func requireSecret(m Mode, cfg Config) error {
 }
 
 // authenticateToken verifies the bearer token of a request (and its session, when the mode keeps them).
-func authenticateToken(c *echo.Context, cfg Config) (authz.Principal, error) {
+func authenticateToken(c *echo.Context, cfg Config, trustRoles bool) (authz.Principal, error) {
 	claims, err := parseToken(cfg, c.Request().Header.Get("Authorization"))
 	if err != nil {
 		return authz.Principal{}, unauthorized(err)
@@ -138,5 +143,9 @@ func authenticateToken(c *echo.Context, cfg Config) (authz.Principal, error) {
 		return authz.Principal{}, err
 	}
 	c.Request().Header.Del("Authorization")
-	return authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project, Roles: claims.Roles}, nil
+	p := authz.Principal{Subject: claims.Subject, Org: claims.Org, Project: claims.Project}
+	if trustRoles {
+		p.Roles = claims.Roles // an external identity provider's (ADR 0138); a session of ours carries the graph's
+	}
+	return p, nil
 }

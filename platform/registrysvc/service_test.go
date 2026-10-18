@@ -179,7 +179,7 @@ func normalize(m methodology.Methodology) methodology.Methodology {
 func TestAgentsAndScriptsRoundTrip(t *testing.T) {
 	for name, mk := range stores(t) {
 		t.Run(name, func(t *testing.T) {
-			s := &Service{Store: mk(t)}
+			s := &Service{Authz: authz.AllowAll{}, Store: mk(t)}
 			if _, err := domainsOf(s).SeedDomains(as("admin"), "../../domains"); err != nil {
 				t.Fatal(err)
 			}
@@ -227,7 +227,7 @@ func pendingAliasImpacts(t *testing.T, g *graph.Graph, alias string) []domain.Ch
 
 func TestPublishStubsMissingAlias(t *testing.T) {
 	g := graph.New(graph.NewMemory())
-	s := &Service{Store: NewGraphStore(g)}
+	s := &Service{Authz: authz.AllowAll{}, Store: NewGraphStore(g)}
 	withALM(t, s)
 	ctx := as("admin")
 	m := example(t)
@@ -263,7 +263,7 @@ func TestPublishStubsMissingAlias(t *testing.T) {
 // Two methodologies referencing the same missing alias, published concurrently, leave exactly one open stub.
 func TestPublishStubsMissingAliasOnce(t *testing.T) {
 	g := graph.New(graph.NewMemory())
-	s := &Service{Store: NewGraphStore(g)}
+	s := &Service{Authz: authz.AllowAll{}, Store: NewGraphStore(g)}
 	withALM(t, s)
 	ctx := as("admin")
 	var srcs [][]byte

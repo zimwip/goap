@@ -1206,6 +1206,14 @@ func (e *Engine) maySubmit(ctx context.Context, p *Process, m *methodology.Compi
 			p.Pending.Context.Path, authz.ErrForbidden)
 	}
 	if a, ok := m.Action(p.Pending.Action); ok {
+		if a.Role != "" && p.Pending.Context.responsible() == "" {
+			// the role the action acts as performs it when no step says who (ADR 0139)
+			if ok, err := e.mayRun(ctx, p, who, "action", a.Name, []string{a.Role}); err != nil {
+				return err
+			} else if !ok {
+				return fmt.Errorf("%q does not hold the role %s on the project for %s: %w", who.Subject, a.Role, a.Name, authz.ErrForbidden)
+			}
+		}
 		if roles := e.runRoles(m, p, a); len(roles) > 0 {
 			if ok, err := e.mayRun(ctx, p, who, "action", a.Name, roles); err != nil {
 				return err

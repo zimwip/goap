@@ -25,7 +25,10 @@ type Process struct {
 	Examples    []string `yaml:"examples,omitempty" json:"examples,omitempty"`
 	// References are the reference documents that describe the process.
 	References []Reference `yaml:"references,omitempty" json:"references,omitempty"`
-	Steps      []Step      `yaml:"steps" json:"steps"`
+	// Roles assign the process, RACI style (ADR 0139): its responsible role is required; the agent running the process
+	// acts as it, and its steps without roles of their own inherit them.
+	Roles *Responsibilities `yaml:"roles,omitempty" json:"roles,omitempty"`
+	Steps []Step            `yaml:"steps" json:"steps"`
 	// On makes the process reactive (ADR 0110): it runs again on a change of its methodology for each matching event.
 	On []Subscription `yaml:"on,omitempty" json:"on,omitempty"`
 }
@@ -208,6 +211,7 @@ func (m *Methodology) compileProcesses(add func(path, format string, args ...any
 		}
 		names[p.Name] = true
 		checkReferences(add, path+".references", p.References)
+		checkResponsibilities(add, path+".roles", p.Roles, roles)
 	}
 	if m.checkProcessCycles(add) {
 		return out
@@ -284,7 +288,7 @@ func (w *stepWalker) process(i int) *processCriteria {
 	}
 	w.root.goals = append(w.root.goals, Goal{Name: p.Name, Description: p.Description, Examples: p.Examples, Pre: done})
 	w.root.agents = append(w.root.agents, Agent{Name: p.Name, Description: p.Description, Examples: p.Examples, Planner: PlannerGOAP,
-		Actions: own, Goals: []string{p.Name}, process: p.Name})
+		Actions: own, Goals: []string{p.Name}, Role: p.Roles.responsible(), process: p.Name})
 	return c
 }
 
@@ -609,7 +613,8 @@ func (m *Methodology) checkProcessCycles(add func(path, format string, args ...a
 // actions it compiled to (none for a step of sub-steps).
 type StepInfo struct {
 	Step
-	// Effective are the roles in force for the step: its own, else those of the steps containing it.
+	// Effective are the roles in force for the step (ADR 0139): its own, what they leave unsaid taken from the steps
+	// containing it, then from its process or method.
 	Effective *Responsibilities
 	// Owner is the process or the method whose step tree holds the step; Path its path in that tree (ADR 0034).
 	Owner   string
@@ -663,10 +668,7 @@ func (c *Compiled) stepTree(top []Step, owner string) []StepInfo {
 		for _, s := range steps {
 			path := prefix + "/" + s.Name
 			cr := c.processes.criteria[path]
-			eff := roles
-			if s.Roles != nil {
-				eff = s.Roles
-			}
+			eff := s.Roles.Over(roles)
 			info := StepInfo{Step: s, Effective: eff, Owner: owner, Path: path, Entry: cr.entry, Exit: cr.done, Steps: build(s.Steps, path, eff)}
 			info.Step.Steps = nil
 			for i, a := range planned[path] {
@@ -679,7 +681,7 @@ func (c *Compiled) stepTree(top []Step, owner string) []StepInfo {
 		}
 		return out
 	}
-	return build(top, owner, nil)
+	return build(top, owner, c.definition.OwnerRoles(owner))
 }
 
 // StepWithin reports whether the step of path is the step of ancestor or one of its sub-steps.

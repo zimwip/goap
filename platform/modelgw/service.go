@@ -324,7 +324,7 @@ func (s *Service) recordUsage(ctx context.Context, t Target, m ModelEntry, perio
 // services. The roles a model requires are held on the caller's project (ADR 0043): resolved by Authz (resource
 // model, act use) when set.
 func (s *Service) allowed(ctx context.Context, p authz.Principal, m ModelEntry) bool {
-	if p.Anonymous() || len(m.Roles) == 0 || slices.Contains(p.Roles, "admin") {
+	if p.Anonymous() || len(m.Roles) == 0 || p.HasRole("admin") {
 		return true
 	}
 	if s.Authz != nil {
@@ -332,7 +332,7 @@ func (s *Service) allowed(ctx context.Context, p authz.Principal, m ModelEntry) 
 			Resource: authz.Resource{Type: "model", Name: m.Key(), ProjectID: p.Project, Roles: m.Roles}})
 		return err == nil && ok
 	}
-	return slices.ContainsFunc(m.Roles, func(r string) bool { return slices.Contains(p.Roles, r) })
+	return slices.ContainsFunc(m.Roles, func(r string) bool { return p.HasRole(r) })
 }
 
 func findModel(snap *llmcfg.Snapshot, provider, model string) (ModelEntry, bool) {

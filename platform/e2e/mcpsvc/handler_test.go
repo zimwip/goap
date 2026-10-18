@@ -19,7 +19,7 @@ import (
 // unit of a request is checked against the caller's. Administrators and platform services name any unit.
 func TestCallToolStaysWithinTheCallersUnit(t *testing.T) {
 	inv := &fakeInvoker{resp: &connectorv1.InvokeResponse{Result: pbconv.Struct(map[string]any{"text": "hi"})}}
-	h := &mcpsvc.Handler{Service: newHub(t, world(t), inv), ConnectorToken: "t"}
+	h := &mcpsvc.Handler{Service: newHub(t, world(t), inv), Authz: authz.AllowAll{}, ConnectorToken: "t"}
 	call := func(who authz.Principal, unit string) (string, error) {
 		req := connect.NewRequest(&mcpv1.CallToolRequest{Unit: unit, Name: "document-repository/read", Arguments: pbconv.Struct(map[string]any{"path": "n.txt"})})
 		identity.SetHeaders(who, req.Header())

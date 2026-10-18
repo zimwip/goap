@@ -104,7 +104,8 @@ func TestWarningsDoNotBlockPublish(t *testing.T) {
 	m.Goal = "p"
 	m.Conditions = append(m.Conditions, methodology.Condition{Name: "wk_a", Expr: "false"}, methodology.Condition{Name: "wk_c", Expr: "false"})
 	m.Actions = append(m.Actions, methodology.Action{Name: "wk_x", Kind: methodology.KindHuman, Pre: map[string]bool{"wk_c": true}, Effects: map[string]bool{"wk_a": true}})
-	m.Processes = []methodology.Process{{Name: "p", Steps: []methodology.Step{{Name: "one", Action: "wk_x"}}}}
+	m.Roles = append(m.Roles, methodology.Role{Name: "wk_doer"})
+	m.Processes = []methodology.Process{{Name: "p", Roles: &methodology.Responsibilities{Responsible: "wk_doer"}, Steps: []methodology.Step{{Name: "one", Action: "wk_x"}}}}
 	_, issues, err := s.Save(as("admin"), m)
 	if err != nil || issues.HasErrors() || len(issues.Warnings()) != 1 || issues.Warnings()[0].Path != "goal" {
 		t.Fatalf("save: %v %v", issues, err)

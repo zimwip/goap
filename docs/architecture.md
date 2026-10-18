@@ -521,13 +521,16 @@ p, <rule on attributes>, <resource type | *>, <action | *>, <allow | deny>
 
 | Attribute | Content |
 |---|---|
-| `r.sub` | caller: `Subject`, `Org`, `Roles` — `admin` for an administrator (a platform Assignment, ADR 0047), the roles its token carries, and the roles it holds on the resource's project (merged by the authorizer, ADR 0043) |
+| `r.sub` | caller: `Subject`, `Org`, `Roles` (the roles it holds on the resource's project, merged by the authorizer, ADR 0043; a token's only from an external identity provider, ADR 0138), `Global` (the platform roles, `admin` for an administrator, a platform Assignment, ADR 0047), `ProjectAdmin` / `ProjectOwner` (the flags of its Assignments on the resource's project chain, ADR 0138) |
 | `r.obj` | resource: `Type`, `ID`, `Org`, `Owner`, `Name`, `ProjectID`, `Roles` (roles allowed to run an agent / action) |
 | `r.act` | action: `read`, `start`, `submit`, `write`, `publish`, `delete`, `apply`, `run`… |
 
-Functions available in rules: `hasRole(r.sub, "x")`, `hasAnyRole(r.sub, "a", "b")`, `hasRoleIn(r.sub, role, r.obj)`,
-`onProject(r.sub)` (holds a role on the resource's project), `mayRun(r.sub, r.obj)` (one of `r.obj.Roles`, any role
-on the project when it lists none), `isAnonymous(r.sub)`. A matching `deny` overrides any `allow`.
+Functions available in rules: `hasRole(r.sub, "x")` (on the project or platform-wide), `hasAnyRole(r.sub, "a", "b")`,
+`hasRoleIn(r.sub, role, r.obj)`, `onProject(r.sub)` (holds a role on the resource's project, or a flag),
+`mayRun(r.sub, r.obj)` (one of `r.obj.Roles`, any role on the project when it lists `"*"`, nobody when it lists
+none, a project administrator always), `isProjectAdmin(r.sub)`, `isProjectOwner(r.sub)`, `isAnonymous(r.sub)`. A
+matching `deny` overrides any `allow`. **Without an explicit grant everything is refused** ([ADR 0138](adr/0138-deny-by-default-owner-and-admin-assignments.md)):
+a nil authorizer refuses (`authz.Check`; tests pass `authz.AllowAll`), an empty list of roles grants nothing.
 
 Default policies (compiled in `contracts/authz`; seeded as `Policy` nodes at the first start, and applied as they are while
 the graph holds none; a graph still holding the defaults of before ADR 0043 unchanged gets these instead,
@@ -536,22 +539,36 @@ the graph holds none; a graph still holding the defaults of before ADR 0043 unch
 | Rule | Resource | Action |
 |---|---|---|
 | `hasRole(r.sub, "admin")` | `*` | `*` |
-| `!isAnonymous(r.sub) && (r.obj.Org == "" \|\| r.obj.Org == r.sub.Org \|\| onProject(r.sub))` | `*` | `read` |
+| `hasRole(r.sub, "reader")` | `*` | `read` |
+| `!isAnonymous(r.sub) && ((r.obj.Org != "" && r.obj.Org == r.sub.Org) \|\| onProject(r.sub))` | `*` | `read` |
+| `!isAnonymous(r.sub) && r.obj.Namespace != ""`; `!isAnonymous(r.sub)` | `*`; `trigger` | `read` |
+| `isProjectAdmin(r.sub)` | `*` | `*` |
+| deny unless `isProjectOwner(r.sub)` or `admin` | `assignment`, `project` | `flag`, `stop`, `move` |
 | `onProject(r.sub)` | `process`, `object`, `node`, `tool` | `*`, `create`, `transition`, `call` |
-| `onProject(r.sub) && r.sub.Subject != r.obj.Owner` | `change` | `apply` |
+| `onProject(r.sub)`, deny `r.sub.Subject == r.obj.Owner` but `admin` | `change` | `apply` |
 | `hasRole(r.sub, "release_manager") && r.sub.Subject != r.obj.Owner` | `release` | `deploy` |
 | `hasRoleIn(r.sub, r.obj.Role, r.obj)` | `step` | `perform` |
-| `hasRoleIn(r.sub, r.obj.Accountable, r.obj) && r.sub.Subject != r.obj.Owner` | `step` | `approve` |
+| `hasRoleIn(r.sub, r.obj.Accountable, r.obj)`, deny `r.sub.Subject == r.obj.Owner` but `admin` | `step` | `approve` |
 | `mayRun(r.sub, r.obj)` | `action`, `agent`, `model` | `run`, `run`, `use` |
 
 Methodologies, domains, triggers, the organisation, policies and adapters have no rule of their own: administrators
-administer them.
+administer them. **Project owners and administrators** (ADR 0138): a project Assignment carries the flags `owner`
+and `admin` (never a platform one); they hold on the project and its sub-projects, inherited, never taken. An
+administrator does everything on the resources of the project, manages the roles of its Assignments and creates its
+sub-projects; an owner also sets the flags, stops and restarts the project (`stopped` attribute of `ProjectUnit`: a
+stopped project, or one below it, takes no new change) and moves it. `access.ProjectScopeValidator` judges every
+write of an Assignment or a project at commit against the state it started from, `ProjectOwnerValidator` keeps an
+owner on a project that had one; the graph handler reads a node or a change only for who may access its project.
 
 **Roles** ([ADR 0035](adr/0035-methods-roles-operations-documents.md) §2, [ADR 0043](adr/0043-project-scoped-roles-admin-flag.md)):
 a methodology declares its roles (`methodology@Role` nodes, ADR 0039); its processes and methods assign them RACI
-style (`roles: {responsible, accountable, consulted, informed}` on a step, inherited by its sub-steps, or on a method),
-its agents and actions name the roles allowed to run them (`roles: [...]`; an action without roles takes its agent's,
-none at all: any member of the project). It names roles, never people. A user holds no role of their own (administration is a
+style (`roles: {responsible, accountable, consulted, informed}` on a process, a method or a step; a process and a method
+must name their responsible role, [ADR 0139](adr/0139-roles-of-processes-methods-agents-actions.md): an error once
+stored, a warning in a draft; a step inherits what it leaves unsaid from its parent step, then its process or method,
+field by field), the agent running a process or a method acts as its responsible role (`Agent.role`, unless declared),
+an action acts as the role of what refines it (`Action.role`: its step, the methods listing it, else the action it
+specializes), and its agents and actions name the roles allowed to run them (`roles: [...]`; an action without roles takes its agent's,
+none at all: no role check beyond the run's own permission, held by the members of the project). It names roles, never people. A user holds no role of their own (administration is a
 platform Assignment, ADR 0047): a project names the methodologies that apply to it (inherited by its sub-projects), which identifies the
 roles it needs, and an `Assignment` grants some of them to a unit or a user on the project. The authorizer resolves
 the roles of the subject — its own `User` node, then its unit and that unit's ancestors (`Snapshot.SubjectChain`) — on

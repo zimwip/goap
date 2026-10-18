@@ -1,5 +1,5 @@
 name: risk-management
-version: 1.2.0
+version: 1.2.1
 description: >
   Transverse risk management (ADR 0036 §3): runs alongside every change of the methodologies it applies to, on the
   same change, coupled to them by events only. At each step they complete it reviews the risks that step introduces
@@ -95,6 +95,7 @@ processes:
   - name: risk_management
     description: Risks of the change — identification and assessment, then mitigation of the high ones — as the change goes
     examples: ["review the risks of the change", "what are the risks of this change"]
+    roles: {responsible: risk_manager, accountable: product_owner}
     references:
       - {title: Risk management policy, ref: "document-repository:governance/risk-management-policy.md"}
     steps:

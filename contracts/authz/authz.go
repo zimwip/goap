@@ -20,6 +20,14 @@ type Principal struct {
 	// of its own (Change.ProjectID, StartProcessRequest.project_id, ...) defaults to it.
 	Project string   `json:"project,omitempty"`
 	Roles   []string `json:"roles,omitempty"`
+	// Global are the platform roles (ADR 0046, 0047: admin, reader) the principal holds everywhere, kept apart from
+	// Roles so that holding one is never mistaken for working on a project (OnProject). hasRole sees both.
+	Global []string `json:"global,omitempty"`
+	// ProjectAdmin and ProjectOwner are the flags of the project Assignments of the subject's chain covering the
+	// project of the resource being checked (ADR 0138): set by the authorizer that knows the organisation, for that one
+	// request. The owner possesses the project (ProjectOwner implies ProjectAdmin), the administrator administers it.
+	ProjectAdmin bool `json:"projectAdmin,omitempty"`
+	ProjectOwner bool `json:"projectOwner,omitempty"`
 	// OnBehalfOf is the person a platform service acts for (System): the end user whose action led, from one
 	// consequence to the next (an event, a trigger, a run, a sub-agent), to what the service does. It attributes the
 	// work (the LLM call ledger, ADR 0114) and never grants anything: authorization reads the Subject. Ignored on a
@@ -85,6 +93,27 @@ type Resource struct {
 	Roles []string `json:"roles,omitempty"`
 }
 
+// HasRole reports whether the principal holds a role, on the project of the request (Roles) or platform-wide (Global).
+// AllRoles are the roles held on the project and the platform roles, once each: what the identity headers carry
+// (ADR 0138), the receiving side telling the platform roles apart again.
+func (p Principal) AllRoles() []string {
+	out := slices.Clone(p.Roles)
+	for _, r := range p.Global {
+		if !slices.Contains(out, r) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+func (p Principal) HasRole(role string) bool {
+	return slices.Contains(p.Roles, role) || slices.Contains(p.Global, role)
+}
+
+// AnyRole is the role an agent, an action, an operation or a model lists to be open to every member of the project
+// (ADR 0138): an empty list grants nothing.
+const AnyRole = "*"
+
 // RoleScope separates a role from the unit it is held in: "developer@TEAM-PAY".
 const RoleScope = "@"
 
@@ -110,18 +139,26 @@ func (p Principal) HasRoleIn(role string, res Resource) bool {
 	return false
 }
 
-// OnProject reports whether the principal holds a role on the resource it is checked against: one an
-// Assignment grants on the resource's project (merged by the authorizer that knows the organisation, ADR
-// 0043), one its token carries (an external identity provider, a service identity), or RoleAdmin.
-func (p Principal) OnProject() bool { return len(p.Roles) > 0 }
+// OnProject reports whether the principal works on the project of the resource it is checked against: it holds a role
+// an Assignment grants there (merged by the authorizer that knows the organisation, ADR 0043), one its token carries
+// (an external identity provider, a service identity), or administers the project (ADR 0138). A platform role
+// (Global) is not a role on a project.
+func (p Principal) OnProject() bool { return len(p.Roles) > 0 || p.ProjectAdmin || p.ProjectOwner }
 
-// MayRun reports whether the principal may run an agent or an action allowed to res.Roles: one of them, or
-// any role on the project when it lists none.
+// MayRun reports whether the principal may run an agent or an action allowed to res.Roles (ADR 0138): one of them held
+// on the project, any role there when the list holds AnyRole, and an administrator of the project whatever the list. An
+// empty list grants nothing else: it is explicit or it is closed.
 func (p Principal) MayRun(res Resource) bool {
-	if len(res.Roles) == 0 {
-		return p.OnProject()
+	if p.ProjectAdmin || p.ProjectOwner {
+		return true
 	}
 	for _, r := range res.Roles {
+		if r == AnyRole {
+			if len(p.Roles) > 0 {
+				return true
+			}
+			continue
+		}
 		if p.HasRoleIn(r, res) {
 			return true
 		}
@@ -166,11 +203,18 @@ type Authorizer interface {
 	Authorize(ctx context.Context, req Request) (bool, error)
 }
 
-// Check returns ErrForbidden when the request is denied. A nil authorizer
-// grants everything.
+// AllowAll grants every request: the explicit opening of a test or of the gateway-less dev mode (ADR 0138), never a
+// default.
+type AllowAll struct{}
+
+// Authorize implements Authorizer.
+func (AllowAll) Authorize(context.Context, Request) (bool, error) { return true, nil }
+
+// Check returns ErrForbidden when the request is denied. A nil authorizer denies everything (ADR 0138: without an
+// explicit grant, everything is refused); AllowAll is the explicit opening.
 func Check(ctx context.Context, a Authorizer, req Request) error {
 	if a == nil {
-		return nil
+		return fmtForbidden(req)
 	}
 	ok, err := a.Authorize(ctx, req)
 	if err != nil {

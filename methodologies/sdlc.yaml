@@ -1,5 +1,5 @@
 name: sdlc
-version: 0.11.0
+version: 0.11.1
 description: >
   Software Development Life Cycle (SDLC) on the ALM repository: needs →
   requirements → functions → components → build artifacts → applications →
@@ -1501,6 +1501,8 @@ processes:
   - name: software_delivery
     description: Deliver a change phase by phase — framing, analysis, design, build, release, application
     examples: ["deliver the change step by step", "run the software delivery process"]
+    # ADR 0139: the analyst carries the change through its phases, the product owner answers for it
+    roles: {responsible: business_analyst, accountable: product_owner}
     references:
       - {title: Software delivery guide, ref: "document-repository:sdlc/software-delivery-guide.md"}
     steps:
@@ -1656,6 +1658,7 @@ processes:
   - name: release_train
     description: Release — plan the releases, write the release note, review, deploy environment by environment
     examples: ["release the change", "run the release train"]
+    roles: {responsible: release_manager, accountable: product_owner}
     references:
       - {title: Release management procedure, ref: "document-repository:sdlc/release-management.md"}
     steps:

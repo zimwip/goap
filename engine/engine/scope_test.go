@@ -125,8 +125,9 @@ func TestMayRunByRoles(t *testing.T) {
 	}{
 		{"one of the roles", rm, []string{"developer", "release_manager"}, true},
 		{"none of the roles", dev, []string{"release_manager"}, false},
-		{"no role required: any member", dev, nil, true},
-		{"no role required: not a stranger", authz.Principal{Subject: "eve"}, nil, false},
+		{"any role: any member", dev, []string{authz.AnyRole}, true},
+		{"any role: not a stranger", authz.Principal{Subject: "eve"}, []string{authz.AnyRole}, false},
+		{"an empty list grants nothing", dev, nil, false},
 	} {
 		if ok, err := e.mayRun(ctx, p, tc.who, "action", "release", tc.roles); err != nil || ok != tc.want {
 			t.Errorf("%s: %v %v, want %v", tc.name, ok, err, tc.want)

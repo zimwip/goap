@@ -3,6 +3,7 @@ package registrysvc
 import (
 	"context"
 	"fmt"
+	"github.com/zimwip/goap/contracts/authz"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 
 // An agent-scoped MCP (goap-scheduler) is declared by agents only, an action-scoped one by actions only (ADR 0028).
 func TestMCPScopesAreValidated(t *testing.T) {
-	s := &Service{Store: NewMemoryStore(), MCPScopes: func(context.Context) (map[string]string, error) {
+	s := &Service{Authz: authz.AllowAll{}, Store: NewMemoryStore(), MCPScopes: func(context.Context) (map[string]string, error) {
 		return map[string]string{mcpbuiltin.Scheduler: mcp.ScopeAgent, "files": mcp.ScopeAction, "notes": mcp.ScopeBoth}, nil
 	}}
 	withALM(t, s)

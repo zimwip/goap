@@ -135,10 +135,10 @@ func TestAdminAssignmentAndUnitOfTheUserNode(t *testing.T) {
 		t.Fatal("the platform admin assignment of the User node was not granted")
 	}
 	dir := &access.Directory{Graph: g, TTL: 1}
-	if p := dir.Enrich(ctx, alice); p.Org != "team-a" || !slices.Equal(p.Roles, []string{access.RoleAdmin}) {
+	if p := dir.Enrich(ctx, alice); p.Org != "team-a" || !slices.Equal(p.Global, []string{access.RoleAdmin}) || len(p.Roles) != 0 {
 		t.Fatalf("enriched principal: %+v", p)
 	}
-	if p := dir.Enrich(ctx, authz.Principal{Subject: "bob"}); len(p.Roles) != 0 || p.Org != "" {
+	if p := dir.Enrich(ctx, authz.Principal{Subject: "bob"}); len(p.Roles) != 0 || len(p.Global) != 0 || p.Org != "" {
 		t.Fatalf("unknown subject must be left alone: %+v", p)
 	}
 }
@@ -419,8 +419,9 @@ func TestRolesDependOnTheProject(t *testing.T) {
 		{"PROJ-A", []string{"tech_lead"}, false}, // held on another project
 		{"PROJ-B", []string{"tech_lead"}, true},
 		{"PROJ-B", []string{"developer"}, false},
-		{"PROJ-C", nil, false}, // not a member of PROJ-C at all
-		{"PROJ-B", nil, true},  // any role on PROJ-B
+		{"PROJ-C", []string{authz.AnyRole}, false}, // not a member of PROJ-C at all
+		{"PROJ-B", []string{authz.AnyRole}, true},  // any role on PROJ-B
+		{"PROJ-B", nil, false},                     // an empty list grants nothing (ADR 0138)
 	} {
 		if got := run(eve, tc.project, tc.roles...); got != tc.want {
 			t.Errorf("eve on %s for %v: %v, want %v", tc.project, tc.roles, got, tc.want)

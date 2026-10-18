@@ -81,7 +81,7 @@ func TestLifecycleIsEnforcedByTheService(t *testing.T) {
 		t.Fatal(err)
 	}
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
-	h := &graphsvc.Handler{Graph: g, Authz: authorizer}
+	h := &graphsvc.Handler{Projects: graphsvc.EveryProject, Graph: g, Authz: authorizer}
 
 	d, err := def.ParseDomain([]byte(`
 name: docs

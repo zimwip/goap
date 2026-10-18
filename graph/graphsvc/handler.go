@@ -43,9 +43,15 @@ type Handler struct {
 	// Events receives what RepublishIndex sends (nil: the RPC is refused).
 	Events Publisher
 	// Authz gates the creation of a node in a change (resource "object": ImpactNodeCreate, the successors of a
-	// merge or split, a graph import), the tags and the reading of prompts. Nil grants everything. The other
+	// merge or split, a graph import), the tags and the reading of prompts. Nil refuses (ADR 0138). The other
 	// impact operations are not gated by it.
 	Authz authz.Authorizer
+	// Projects tells whether a person works on a project (access.Directory.MayAccessProject): a change, and a node
+	// read outside a change, are read by those who work on its project (ADR 0138), the PersonalScope interceptor and
+	// the lists of changes asking it. Nil: no person reads them (a platform service, acting by itself, still does).
+	Projects func(ctx context.Context, p authz.Principal, project string) (bool, error)
+	// Stopped tells whether a project takes no new change (access.Directory.ProjectStopped, ADR 0138); nil: none is.
+	Stopped func(ctx context.Context, project string) (bool, error)
 	// Floor gates changes to User and Policy nodes (resource "policy", action "write"). It must not depend
 	// on the policies themselves, so that no policy can lock the administrators out; nil falls back to Authz.
 	Floor authz.Authorizer
@@ -57,6 +63,10 @@ type Handler struct {
 }
 
 var _ graphv1connect.GraphServiceHandler = (*Handler)(nil)
+
+// EveryProject is the explicit opening of Handler.Projects (ADR 0138): every person works on every project. For the
+// tests and the gateway-less dev mode, never a default.
+func EveryProject(context.Context, authz.Principal, string) (bool, error) { return true, nil }
 
 func res[T any](m *T, err error) (*connect.Response[T], error) {
 	if err != nil {
@@ -85,7 +95,25 @@ func (h *Handler) GetNode(ctx context.Context, r *connect.Request[graphv1.GetNod
 		ref = n.Ref()
 	}
 	v, err := h.Graph.View(ctx, ref)
+	if err == nil && !h.mayReadNode(ctx, v.Node) {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("node %s: not found", ref.ID))
+	}
 	return res(&graphv1.GetNodeResponse{View: pbconv.ViewToPB(v)}, err)
+}
+
+// mayReadNode tells whether the caller reads a node outside a change (ADR 0138): those who work on its project; the
+// nodes of the built-in namespaces (the organisation, the platform, the methodologies) describe the platform and are
+// every person's to read. Read through a change, a node is the change's (PersonalScope).
+func (h *Handler) mayReadNode(ctx context.Context, n domain.Node) bool {
+	switch n.Namespace {
+	case access.NamespaceOrganisation, domain.NamespacePlatform, domain.NamespaceMethodology:
+		return !authz.From(ctx).Anonymous()
+	}
+	if n.Project == "" {
+		return h.worksOn(ctx, "")
+	}
+	project, err := h.Graph.Node(ctx, domain.NodeRef{ID: n.Project})
+	return err == nil && h.worksOn(ctx, project.Key)
 }
 
 func (h *Handler) TagChange(ctx context.Context, r *connect.Request[graphv1.TagChangeRequest]) (*connect.Response[graphv1.TagChangeResponse], error) {
@@ -431,12 +459,45 @@ func (h *Handler) CreateChange(ctx context.Context, r *connect.Request[graphv1.C
 		}
 	}
 	projectID := h.projectOf(ctx, r.Msg.ProjectId)
+	if h.Stopped != nil {
+		if stopped, err := h.Stopped(ctx, projectID); err != nil {
+			return nil, rpcerr.ToConnect(err)
+		} else if stopped {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project %s is stopped: it takes no new change", projectID))
+		}
+	}
 	if err := validCriticality(pbconv.Map(r.Msg.Data)); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	c, err := h.Graph.CreateChange(ctx, graph.NewChange{ParentID: domain.ChangeID(r.Msg.ParentId), OwnerOrg: owner, OwnBranch: r.Msg.OwnBranch, Namespace: r.Msg.Namespace, Title: r.Msg.Title, Intent: r.Msg.Intent, Methodology: r.Msg.Methodology, MethodologyVersion: r.Msg.MethodologyVersion,
 		BaselineID: domain.BaselineID(r.Msg.BaselineId), Branch: r.Msg.Branch, Data: pbconv.Map(r.Msg.Data), ProjectID: projectID})
 	return res(&graphv1.CreateChangeResponse{Change: pbconv.ChangeToPB(c)}, err)
+}
+
+// mayRead tells whether the caller may read a change (ADR 0037, 0138): a personal change is its subject's alone; any
+// other, those who work on its project, platform services acting by themselves.
+func (h *Handler) mayRead(ctx context.Context, c domain.Change) bool {
+	if access.IsPersonal(c) {
+		return access.IsPersonalTo(c, subjectOf(ctx))
+	}
+	return h.worksOn(ctx, c.ProjectID)
+}
+
+// worksOn tells whether the caller works on a project: a platform service acting by itself does; a person when
+// Projects says so (a platform administrator or reader, a role or a flag of an Assignment on it or above it).
+func (h *Handler) worksOn(ctx context.Context, project string) bool {
+	who := authz.From(ctx)
+	if who.System() {
+		return true
+	}
+	if h.Projects == nil || who.Anonymous() {
+		return false
+	}
+	if project == "" {
+		project = h.Graph.Structure(domain.StructureProject).Root
+	}
+	ok, err := h.Projects(ctx, who, project)
+	return err == nil && ok
 }
 
 func (h *Handler) GetChange(ctx context.Context, r *connect.Request[graphv1.GetChangeRequest]) (*connect.Response[graphv1.GetChangeResponse], error) {
@@ -453,7 +514,7 @@ func (h *Handler) ListChanges(ctx context.Context, r *connect.Request[graphv1.Li
 	cs, err := h.Graph.ListChanges(ctx, f)
 	out := &graphv1.ListChangesResponse{}
 	for _, c := range cs {
-		if !visibleTo(ctx, c) {
+		if !h.mayRead(ctx, c) {
 			continue
 		}
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
@@ -475,7 +536,7 @@ func (h *Handler) ListNodeChanges(ctx context.Context, r *connect.Request[graphv
 	cs, err := h.Graph.NodeChanges(ctx, domain.NodeID(r.Msg.NodeId))
 	out := &graphv1.ListNodeChangesResponse{}
 	for _, c := range cs {
-		if !visibleTo(ctx, c) {
+		if !h.mayRead(ctx, c) {
 			continue
 		}
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
@@ -598,11 +659,31 @@ func (h *Handler) gateAccess(ctx context.Context, typ string) error {
 		if gate == nil {
 			gate = h.Authz
 		}
-		if err := authz.Check(ctx, gate, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: access.ResourcePolicy, Org: who.Org}}); err != nil {
+		err := authz.Check(ctx, gate, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: access.ResourcePolicy, Org: who.Org}})
+		if err != nil && (typ == access.NodeTypeAssignment || typ == access.NodeTypeProjectUnit) {
+			// the Assignments and the projects are also their owners' and administrators' (ADR 0138): one who
+			// administers their active project may try, access.ProjectScopeValidator judges each write at commit
+			err = h.mayAdministerProjects(ctx, who, typ)
+		}
+		if err != nil {
 			return rpcerr.ToConnect(err)
 		}
 	}
 	return nil
+}
+
+// mayAdministerProjects is the early gate of the Assignments and projects for a person who is no platform
+// administrator (ADR 0138): they administer their active project (the root one when they name none).
+func (h *Handler) mayAdministerProjects(ctx context.Context, who authz.Principal, typ string) error {
+	project := who.Project
+	if project == "" {
+		project = h.Graph.Structure(domain.StructureProject).Root
+	}
+	res := "assignment"
+	if typ == access.NodeTypeProjectUnit {
+		res = "project"
+	}
+	return authz.Check(ctx, h.Authz, authz.Request{Subject: who, Action: "write", Resource: authz.Resource{Type: res, Org: who.Org, ProjectID: project}})
 }
 
 func (h *Handler) ProposeImpact(ctx context.Context, r *connect.Request[graphv1.ProposeImpactRequest]) (*connect.Response[graphv1.ProposeImpactResponse], error) {

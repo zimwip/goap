@@ -2,6 +2,7 @@ package registrysvc
 
 import (
 	"context"
+	"github.com/zimwip/goap/contracts/authz"
 	"slices"
 	"strings"
 	"testing"
@@ -17,7 +18,7 @@ func TestGuardianChain(t *testing.T) {
 	ctx := context.Background()
 	g := graph.New(graph.NewMemory())
 	store := NewGraphStore(g)
-	reg := &Service{Store: store, Applicable: func(context.Context, string) ([]string, error) {
+	reg := &Service{Authz: authz.AllowAll{}, Store: store, Applicable: func(context.Context, string) ([]string, error) {
 		return []string{"portfolio", "release", "work"}, nil
 	}}
 	save := func(m methodology.Methodology) {

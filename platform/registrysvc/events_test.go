@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/graph/graph"
 	"github.com/zimwip/goap/lib/outbox"
 )
@@ -32,7 +33,8 @@ func TestMethodologyEventsRideOnTheGraphCommit(t *testing.T) {
 		return nil
 	}))
 	direct := 0
-	s := &Service{Store: NewGraphStore(g), Events: publisherFunc(func() { direct++ })}
+	enf, _ := authz.NewCasbin(nil)
+	s := &Service{Store: NewGraphStore(g), Authz: enf, Events: publisherFunc(func() { direct++ })}
 	withALM(t, s)
 	ctx := as("admin")
 	m := example(t)
