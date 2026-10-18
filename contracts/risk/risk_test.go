@@ -35,3 +35,39 @@ func TestRiskScaleIsOneToFive(t *testing.T) {
 		}
 	}
 }
+
+// A proof of concept covers its risks while it runs, and no longer once concluded: its verdict settled them (ADR 0131).
+func TestPOCCoversItsRisksWhileItRuns(t *testing.T) {
+	Register()
+	c := domain.Change{Items: []domain.ChangeItem{
+		{ID: "1", Type: TypeAction, Data: map[string]any{"key": "ACT-1", "title": "poc", "kind": "poc", "for": "RSK-1", "risks": []any{"RSK-1", "RSK-2"}}},
+		{ID: "2", Type: TypeAction, Data: map[string]any{"key": "ACT-2", "title": "patch", "for": "RSK-3"}},
+	}}
+	as := Actions(c)
+	if as[0].Kind != KindPOC || as[0].Purpose != PurposeDerisk || as[1].Kind != KindMitigation {
+		t.Fatalf("kinds %+v", as)
+	}
+	if !as[0].Covers("RSK-1") || !as[0].Covers("RSK-2") || as[0].Covers("RSK-3") || !as[1].Covers("RSK-3") {
+		t.Fatalf("coverage %+v", as)
+	}
+	// the POC concluded, the same version scheme: the kind is kept, the coverage ends; a mitigation done still covers
+	c.Items = append(c.Items, domain.ChangeItem{ID: "3", Type: TypeAction, Data: map[string]any{"key": "ACT-1", "title": "poc", "status": "done"}},
+		domain.ChangeItem{ID: "4", Type: TypeAction, Data: map[string]any{"key": "ACT-2", "title": "patch", "status": "done"}})
+	as = Actions(c)
+	if as[0].Kind != KindPOC || as[0].Covers("RSK-1") || !as[1].Covers("RSK-3") {
+		t.Fatalf("after the conclusion %+v", as)
+	}
+	for _, bad := range []map[string]any{{"kind": "spike"}, {"kind": "poc", "purpose": "fun"}} {
+		d := map[string]any{"key": "ACT-9", "title": "t"}
+		for k, v := range bad {
+			d[k] = v
+		}
+		if err := (domain.ChangeItem{Type: TypeAction, Data: d}).Validate(); err == nil {
+			t.Errorf("%v accepted", bad)
+		}
+	}
+	h := domain.ChangeItem{Type: TypeHypothesis, Data: map[string]any{"key": "HYP-1"}}
+	if err := h.Validate(); err == nil {
+		t.Error("a hypothesis without a statement is accepted")
+	}
+}

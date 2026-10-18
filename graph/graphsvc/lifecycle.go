@@ -54,6 +54,23 @@ func ChangeTransitionAuthorizer(a authz.Authorizer) graph.ChangeTransitionAuthor
 	}
 }
 
+// SeatAuthorizer decides whether the caller sits on a board in a role (ADR 0132): decision:sit with the role as the
+// one the resource allows (the default policy mayRun: the caller holds it on the project of the change). System
+// principals are not asked.
+func SeatAuthorizer(a authz.Authorizer) graph.SeatAuthorizer {
+	return func(ctx context.Context, c domain.Change, role string) error {
+		if a == nil {
+			return nil
+		}
+		who := authz.From(ctx)
+		if who.System() {
+			return nil
+		}
+		return authz.Check(ctx, a, authz.Request{Subject: who, Action: "sit",
+			Resource: authz.Resource{Type: "decision", ID: string(c.ID), Name: c.Title, Org: c.OwnerOrg, ProjectID: c.ProjectID, Roles: []string{role}}})
+	}
+}
+
 // ItemAuthorizer authorizes the write of the items whose kind asks a permission of its writer (domain.RequireItemPermission,
 // ADR 0075: a derogation asks derogation:sign), checked on the project of the change. When the kind names the field that
 // holds who answers for the item, that must be the writer: one signs for oneself. A platform service acting by itself

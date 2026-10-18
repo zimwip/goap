@@ -65,7 +65,7 @@ func stepsToPB(steps []methodology.Step) []*registryv1.Step {
 	out := make([]*registryv1.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, &registryv1.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: s.Pre, Done: s.Done,
-			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Process: s.Process, On: subsToPB(s.On), Where: s.Where, Review: reviewToPB(s.Review)})
+			References: refsToPB(s.References), Guidance: s.Guidance, Checklist: s.Checklist, Deliverables: s.Deliverables, Method: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respToPB(s.Roles), Steps: stepsToPB(s.Steps), Action: s.Action, Actions: s.Actions, Process: s.Process, On: subsToPB(s.On), Where: s.Where, Review: reviewToPB(s.Review), Gate: GateToPB(s.Gate)})
 	}
 	return out
 }
@@ -77,7 +77,7 @@ func stepsFromPB(steps []*registryv1.Step) []methodology.Step {
 	out := make([]methodology.Step, 0, len(steps))
 	for _, s := range steps {
 		out = append(out, methodology.Step{Name: s.Name, Description: s.Description, Instructions: s.Instructions, Pre: nilIfEmpty(s.Pre), Done: nilIfEmpty(s.Done),
-			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process, On: subsFromPB(s.On), Where: s.Where, Review: reviewFromPB(s.Review)})
+			References: refsFromPB(s.References), Guidance: s.Guidance, Checklist: nilIfNone(s.Checklist), Deliverables: nilIfNone(s.Deliverables), Capability: s.Method, Foreach: s.Foreach, GroupBy: s.GroupBy, Roles: respFromPB(s.Roles), Steps: stepsFromPB(s.Steps), Action: s.Action, Actions: nilIfNone(s.Actions), Process: s.Process, On: subsFromPB(s.On), Where: s.Where, Review: reviewFromPB(s.Review), Gate: GateFromPB(s.Gate)})
 	}
 	return out
 }
@@ -298,7 +298,7 @@ func LevelsToPB(ls []methodology.LevelCheck) []*registryv1.LevelCheck {
 		}
 		for _, n := range l.Steps {
 			pb.Steps = append(pb.Steps, &registryv1.LevelNode{Name: n.Name, Path: n.Path, Method: n.Method, Target: n.Target, Capability: n.Capability,
-				Entry: n.Entry, Exit: n.Exit, Composite: n.Composite, Broken: n.Broken, SubSteps: int32(n.SubSteps), Foreach: n.Foreach, GroupBy: n.GroupBy, Review: reviewToPB(n.Review)})
+				Entry: n.Entry, Exit: n.Exit, Composite: n.Composite, Broken: n.Broken, SubSteps: int32(n.SubSteps), Foreach: n.Foreach, GroupBy: n.GroupBy, Review: reviewToPB(n.Review), Gate: GateToPB(n.Gate)})
 		}
 		for _, e := range l.Edges {
 			pb.Edges = append(pb.Edges, &registryv1.GraphEdge{From: e.From, To: e.To, Conditions: e.Conditions})
@@ -317,7 +317,7 @@ func ProcessGraphToPB(g methodology.ProcessGraph) *registryv1.ProcessGraph {
 	for _, s := range g.Steps {
 		out.Steps = append(out.Steps, &registryv1.GraphStep{Path: s.Path, Name: s.Name, Description: s.Description, Parent: s.Parent, Depth: int32(s.Depth),
 			Leaf: s.Leaf, Method: s.Method, Target: s.Target, Entry: s.Entry, Exit: s.Exit, Roles: respToPB(s.Roles), Guidance: s.Guidance,
-			References: refsToPB(s.References), Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Review: reviewToPB(s.Review)})
+			References: refsToPB(s.References), Process: s.Process, Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Review: reviewToPB(s.Review), Gate: GateToPB(s.Gate)})
 	}
 	for _, e := range g.Edges {
 		out.Edges = append(out.Edges, &registryv1.GraphEdge{From: e.From, To: e.To, Conditions: e.Conditions})
@@ -348,6 +348,42 @@ func PlanPreviewToPB(p *engine.PlanPreview) *registryv1.PlanPreview {
 }
 
 // persistToPB and persistFromPB convert the persistence of an agent or a method (ADR 0112).
+// GateToPB converts the gate of a step (ADR 0132).
+func GateToPB(g *methodology.Gate) *registryv1.StepGate {
+	if g == nil {
+		return nil
+	}
+	out := &registryv1.StepGate{Transition: g.Transition}
+	for _, it := range g.Checklist {
+		out.Checklist = append(out.Checklist, &registryv1.GateItem{Name: it.Name, Description: it.Description, Role: it.Role, Veto: it.Veto, When: it.When, Attest: it.Attest})
+	}
+	if d := g.Decision; d != nil {
+		out.Decision = &registryv1.GateDecision{Question: d.Question, Back: d.Back, Board: d.Board, Rule: d.Rule, MaxDuration: d.MaxDuration}
+	}
+	if f := g.Freezes; f != nil {
+		out.Freezes = &registryv1.GateFreezes{Fields: f.Fields, Types: f.Types, Transitions: f.Transitions, KeepPhase: f.KeepPhase}
+	}
+	return out
+}
+
+// GateFromPB converts the gate of a step back (ADR 0132).
+func GateFromPB(g *registryv1.StepGate) *methodology.Gate {
+	if g == nil {
+		return nil
+	}
+	out := &methodology.Gate{Transition: g.Transition}
+	for _, it := range g.Checklist {
+		out.Checklist = append(out.Checklist, methodology.GateItem{Name: it.Name, Description: it.Description, Role: it.Role, Veto: it.Veto, When: it.When, Attest: it.Attest})
+	}
+	if d := g.Decision; d != nil {
+		out.Decision = &methodology.GateDecision{Question: d.Question, Back: d.Back, Board: nilIfNone(d.Board), Rule: d.Rule, MaxDuration: d.MaxDuration}
+	}
+	if f := g.Freezes; f != nil {
+		out.Freezes = &domain.Freezes{Fields: nilIfNone(f.Fields), Types: nilIfNone(f.Types), Transitions: f.Transitions, KeepPhase: f.KeepPhase}
+	}
+	return out
+}
+
 func reviewToPB(r *methodology.Review) *registryv1.StepReview {
 	if r == nil {
 		return nil
@@ -417,7 +453,7 @@ func stepViewsToPB(steps []methodology.StepView) []*registryv1.ViewStep {
 		out = append(out, &registryv1.ViewStep{Path: s.Path, Name: s.Name, Owner: s.Owner, Method: s.Method, Target: s.Target,
 			Capability: s.Capability, Foreach: s.Foreach, Description: s.Description, Guidance: s.Guidance, Checklist: s.Checklist,
 			References: refsToPB(s.References), Roles: respToPB(s.Roles), Entry: s.Entry, Exit: s.Exit, Planned: s.Planned,
-			Unavailable: s.Unavailable, Steps: stepViewsToPB(s.Steps), Review: reviewToPB(s.Review)})
+			Unavailable: s.Unavailable, Steps: stepViewsToPB(s.Steps), Review: reviewToPB(s.Review), Gate: GateToPB(s.Gate)})
 	}
 	return out
 }

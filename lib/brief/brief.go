@@ -169,7 +169,26 @@ func Of(bb domain.Blackboard, step *Step) string {
 				line("- … %d more", len(open)-maxActions)
 				break
 			}
-			line("- %s %s %s %s %q", a.Key, cmp.Or(a.Owner, "-"), cmp.Or(a.Due, "-"), cmp.Or(a.For, "-"), short(a.Title, 70))
+			s := fmt.Sprintf("- %s %s %s %s %q", a.Key, cmp.Or(a.Owner, "-"), cmp.Or(a.Due, "-"), cmp.Or(a.For, "-"), short(a.Title, 70))
+			if a.IsPOC() {
+				// a proof of concept or a prototype (ADR 0131): what it checks, the sub-change carrying it
+				s += " " + a.Purpose
+				if len(a.Risks) > 0 {
+					s += " risks=" + strings.Join(a.Risks, ",")
+				}
+				if len(a.Hypotheses) > 0 {
+					s += fmt.Sprintf(" hypotheses=%d", len(a.Hypotheses))
+				}
+				s += " change=" + cmp.Or(a.Change, "not opened")
+			}
+			line("%s", s)
+		}
+	}
+	// what a proof of concept checks (ADR 0131): its verdicts are the assessments of item:<key>
+	if hs := risk.Hypotheses(c); len(hs) > 0 {
+		line("HYPOTHESES %d (key source statement)", len(hs))
+		for _, h := range hs {
+			line("- %s %s %q", h.Key, cmp.Or(h.Source, "-"), short(h.Statement, 160))
 		}
 	}
 

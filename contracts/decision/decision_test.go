@@ -164,3 +164,63 @@ func TestPolicyOpen(t *testing.T) {
 		t.Fatalf("no limit: %+v", d)
 	}
 }
+
+func TestBoard(t *testing.T) {
+	open := func(rule string) domain.DecisionPoint {
+		p, err := Policy{}.Open(map[string]any{KeyBoard: []any{"a", "b", "c"}, KeyRule: rule, KeyChair: "a", KeyGate: "p/g"}, time.Now())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if p[KeyDecider] != DeciderHuman {
+			t.Fatalf("a board is people: %v", p)
+		}
+		return domain.DecisionPoint{Policy: p}
+	}
+	rule := func(p *domain.DecisionPoint, role, option string) (bool, string) {
+		p.Ruling = &domain.Ruling{Outcome: domain.OutcomeDecided, Option: option}
+		r := p.Ruling
+		ok := Policy{}.Fold(p, domain.DecisionEvent{Op: domain.DecisionRuleOp, Outcome: domain.OutcomeDecided, Option: option, Role: role, Human: true})
+		return ok, r.Option
+	}
+	p := open(RuleUnanimity)
+	if ok, _ := rule(&p, "a", OptionGo); ok || p.Ruling != nil {
+		t.Fatalf("one seat of three settles nothing: %v %+v", ok, p.Ruling)
+	}
+	if ok, _ := rule(&p, "a", OptionGo); ok {
+		t.Fatal("a seat rules once")
+	}
+	if ok, _ := rule(&p, "x", OptionGo); ok {
+		t.Fatal("no seat, no vote")
+	}
+	rule(&p, "b", OptionGo)
+	if ok, o := rule(&p, "c", OptionGo); !ok || o != OptionGo {
+		t.Fatalf("unanimity: %v %s", ok, o)
+	}
+	p = open(RuleUnanimity)
+	if ok, o := rule(&p, "b", OptionNoGo); !ok || o != OptionNoGo {
+		t.Fatalf("a no-go settles a unanimity: %v %s", ok, o)
+	}
+	p = open(RuleConsent)
+	rule(&p, "a", OptionGo)
+	rule(&p, "b", OptionAbstain)
+	if ok, o := rule(&p, "c", OptionAbstain); !ok || o != OptionGo {
+		t.Fatalf("consent without objection goes: %v %s", ok, o)
+	}
+	p = open(RuleMajority)
+	rule(&p, "a", OptionGo)
+	if ok, o := rule(&p, "b", OptionGo); !ok || o != OptionGo {
+		t.Fatalf("majority: %v %s", ok, o)
+	}
+	p = open(RuleMajority)
+	rule(&p, "a", OptionGo)
+	rule(&p, "b", OptionNoGo)
+	if ok, _ := rule(&p, "c", OptionAbstain); ok {
+		t.Fatal("a split board settles nothing")
+	}
+	if ok, o := rule(&p, "a", OptionNoGo); !ok || o != OptionNoGo {
+		t.Fatalf("the chair decides a split board: %v %s", ok, o)
+	}
+	if _, err := (Policy{}).Open(map[string]any{KeyRule: RuleMajority}, time.Now()); err == nil {
+		t.Fatal("a rule without a board")
+	}
+}

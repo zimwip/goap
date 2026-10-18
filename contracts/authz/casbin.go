@@ -98,6 +98,8 @@ var DefaultPolicies = []Policy{
 	// the level of a change asks its signatory a role (policy of the organisation, ADR 0075 §3): one of r.obj.Roles, held
 	// on the project
 	{Rule: `mayRun(r.sub, r.obj)`, Resource: "derogation", Action: "sign-role", Effect: "allow"},
+	// a seat of a collegial decision of a gate (ADR 0132 §3): a person holding the role of the seat on the project
+	{Rule: `mayRun(r.sub, r.obj)`, Resource: "decision", Action: "sit", Effect: "allow"},
 	// lowering the criticality of a change is an administrator's unless a policy grants it (ADR 0075 §3): no default
 	// rule for change:lower-criticality
 	// a model of the catalog restricted to some roles (ADR 0021): one of them, held on the caller's project

@@ -719,6 +719,8 @@ func DefaultBuiltins() BuiltinExecutor {
 	b.Register(builtins.GraphApply, ApplyChange)
 	b.Register(builtins.DecisionInvestigate, Investigate)
 	b.Register(builtins.DerogationExpire, expireAllDerogations)
+	b.Register(builtins.GateOpen, GateOpen)
+	b.Register(builtins.GatePass, GatePass)
 	return b
 }
 

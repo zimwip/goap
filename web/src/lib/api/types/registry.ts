@@ -501,6 +501,53 @@ export interface ProcessStep {
   where?: string;
   /** the step reviews a subject of the change; an automatic one starts by itself (ADR 0130) */
   review?: StepReview;
+  /** the step is a gate of the lifecycle of the change (ADR 0132) */
+  gate?: StepGate;
+}
+
+/** A gate of a process (ADR 0132): the transition its go takes, its checklist split among roles, its decision. */
+export interface StepGate {
+  /** the transition of the lifecycle of the change the go takes */
+  transition?: string;
+  checklist?: GateItem[];
+  decision?: GateDecision;
+  freezes?: GateFreezes;
+}
+
+/** An item of the checklist of a gate: a condition of the methodology, or an attestation of a person. */
+export interface GateItem {
+  name?: string;
+  description?: string;
+  /** the role that answers for it */
+  role?: string;
+  /** a veto blocks the go; otherwise an objective, which a derogation may cover */
+  veto?: boolean;
+  /** CEL: the item applies only when it holds */
+  when?: string;
+  /** a person of its role attests it (met / not met) */
+  attest?: boolean;
+}
+
+/** How the go of a gate is decided: by its board, seat by seat, under its rule; the accountable role chairs. */
+export interface GateDecision {
+  question?: string;
+  /** the transition a back decision takes */
+  back?: string;
+  board?: string[];
+  /** unanimity | majority | consent */
+  rule?: string;
+  maxDuration?: string;
+}
+
+/** What the go of a gate freezes beyond the impacts of the state it leaves. */
+export interface GateFreezes {
+  /** title, intent, description */
+  fields?: string[];
+  types?: string[];
+  /** the nodes of a frozen type may still move along their lifecycle */
+  transitions?: boolean;
+  /** the impacts of the state left stay editable */
+  keepPhase?: boolean;
 }
 
 /** A step that reviews a subject of the change (ADR 0130): its verdict is an assessment, which advises. */
@@ -605,6 +652,7 @@ export interface LevelNode {
   broken?: boolean;
   subSteps?: number;
   review?: StepReview;
+  gate?: StepGate;
 }
 
 export interface LevelGap {
@@ -634,6 +682,7 @@ export interface GraphStep {
   foreach?: string;
   groupBy?: string;
   review?: StepReview;
+  gate?: StepGate;
 }
 
 /** The exit criteria of from meet the entry of to, on these conditions. */

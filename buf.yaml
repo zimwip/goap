@@ -4,6 +4,13 @@ modules:
 lint:
   use:
     - STANDARD
+  except:
+    # some RPCs share one response on purpose (the merge and the split, the
+    # review steps, the settings steps all answer the same state), and the
+    # event stream answers Event: renaming them would change the wire
+    # contract of the web and the services for no gain
+    - RPC_REQUEST_RESPONSE_UNIQUE
+    - RPC_RESPONSE_STANDARD_NAME
 breaking:
   use:
     - FILE

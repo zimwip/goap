@@ -226,7 +226,7 @@ func TestCompositionOfTheRepository(t *testing.T) {
 		t.Fatal(err)
 	}
 	others := map[string]*Methodology{}
-	for _, f := range []string{"sdlc", "release-based", "risk-management", "methodology-improvement"} {
+	for _, f := range []string{"sdlc", "release-based", "risk-management", "methodology-improvement", "poc"} {
 		m, err := LoadFile("../../methodologies/" + f + ".yaml")
 		if err != nil {
 			t.Fatal(err)
@@ -247,7 +247,8 @@ func TestCompositionOfTheRepository(t *testing.T) {
 			got = append(got, n+": "+i.Path)
 		}
 	}
-	if want := []string{"release-based: on[1].event", "sdlc: lifecycle"}; !slices.Equal(got, want) {
+	// sdlc follows a lifecycle since its gates (ADR 0132): the transitions release-based follows exist
+	if want := []string(nil); !slices.Equal(got, want) {
 		t.Fatalf("composition of the repository: %v, want %v", got, want)
 	}
 }

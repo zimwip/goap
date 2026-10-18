@@ -11,6 +11,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/assess"
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/contracts/decision"
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/llm"
 	"github.com/zimwip/goap/engine/engine"
@@ -23,6 +24,7 @@ import (
 	"github.com/zimwip/goap/lib/dsl"
 	"github.com/zimwip/goap/lib/typecat"
 	"github.com/zimwip/goap/platform/devseed"
+	"github.com/zimwip/goap/platform/registrysvc"
 )
 
 // sdlcModel answers the LLM actions of methodologies/sdlc.yaml. The matched
@@ -126,6 +128,19 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
+	// the changes follow the maturity of the alm domain, with the criteria of the gates of sdlc (ADR 0132)
+	var maturity *domain.Lifecycle
+	for _, d := range ds {
+		if lc := d.Lifecycle(m.Lifecycle); lc != nil {
+			maturity = lc
+		}
+	}
+	lc, err := registrysvc.WithGates(maturity, cm.Gates())
+	if err != nil {
+		t.Fatal(err)
+	}
+	g.Lifecycles = gatedLifecycles{mainGoals{cm}, lc}
+	g.DecisionPolicy = decision.Policy{}
 	g.Caller = graphsvc.Caller
 	if _, err := devseed.Demo(ctx, g); err != nil {
 		t.Fatal(err)
@@ -154,6 +169,68 @@ func sdlcSetup(t *testing.T) (*engine.Engine, *graph.Graph, domain.BaselineID) {
 		Types:  func() def.TypeSet { return cat },
 	}
 	return e, g, head.ID
+}
+
+// boardCtx is a person holding every role of sdlc: the seats of its boards, the attestations of its gates.
+var boardCtx = authz.With(context.Background(), authz.Principal{Subject: "board", Org: "acme", Roles: []string{"product_owner", "business_analyst",
+	"solution_architect", "tech_lead", "developer", "release_manager", "service_owner", "change_approver"}})
+
+// passGate answers the gate the run is at (ADR 0132): its attestations met, then a go in each seat of its board, until
+// the run moves past it. It returns the run as the gate left it.
+func passGate(t *testing.T, e *engine.Engine, g *graph.Graph, p *engine.Process) *engine.Process {
+	t.Helper()
+	m, err := e.Methodologies.Methodology(boardCtx, "sdlc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; p.Pending != nil && i < 10; i++ {
+		action := p.Pending.Action
+		switch {
+		case strings.HasPrefix(action, "attest:"):
+			_, err = e.SubmitForm(boardCtx, p.ID, map[string]any{"verdict": "met", "comment": "checked"})
+		case strings.HasSuffix(action, ":rule"):
+			path := strings.TrimSuffix(action, ":rule")
+			gate, _ := m.GateAt(path)
+			bb, err := g.BlackboardIn(boardCtx, p.ChangeID, "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			var point domain.DecisionPoint
+			for _, d := range domain.DecisionPointsOf(bb) {
+				if d.Policy["gate"] == path && d.Status != domain.PointDecided {
+					point = d
+				}
+			}
+			ruled := decision.Votes(point)
+			for _, seat := range gate.Board {
+				if _, done := ruled[seat]; !done {
+					_, err = e.SubmitForm(boardCtx, p.ID, map[string]any{"ruling": map[string]any{"point": point.ID, "option": methodology.OptionGo,
+						"role": seat, "justification": "ready"}})
+					break
+				}
+			}
+		default:
+			return p
+		}
+		if err != nil {
+			t.Fatalf("%s: %v", action, err)
+		}
+		if p, err = e.Run(context.Background(), p.ID); err != nil { // the run acts for its initiator
+			t.Fatal(err)
+		}
+	}
+	return p
+}
+
+// rateDescription rates the description of a change sdlcSetup starts ("Payment in 3 installments") acceptable, as the
+// automatic review of the framing would (ADR 0130).
+func rateDescription(t *testing.T, g *graph.Graph, id domain.ChangeID) {
+	t.Helper()
+	if _, err := g.AddItems(devCtx, id, []domain.ChangeItem{{Type: assess.TypeAssessment, Status: domain.ItemProposed, ProducedBy: "rate_description",
+		Data: map[string]any{"key": assess.SubjectDescription, "score": 4, "verdict": assess.VerdictClear,
+			"rated": "Payment in 3 installments\n\nAllow payment in 3 installments with no fees"}}}); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // validation is what a person submits to validate the impact analysis.
@@ -215,10 +292,13 @@ func TestSDLCDelivery(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// the description is rated acceptable (ADR 0110): the framing gate lets the analysis start (ADR 0132)
+	rateDescription(t, g, p.ChangeID)
 	// run as the background scheduler does, without a caller: the run acts for the initiator
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
+	p = passGate(t, e, g, p)
 	// the impact analysis runs its four passes, then a person validates it
 	if p.Status != engine.StatusWaiting || p.Pending.Action != "validate_impact_analysis" {
 		t.Fatalf("must wait for the validation of the impact analysis: %s %s %+v", p.Status, p.Error, p.Pending)
@@ -230,6 +310,8 @@ func TestSDLCDelivery(t *testing.T) {
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
+	// the gates the change passes on its way (ADR 0132)
+	p = passGate(t, e, g, p)
 	if p.Status != engine.StatusWaiting || p.Pending.Action != "review" {
 		t.Fatalf("must wait for the review: %s %s %+v", p.Status, p.Error, p.Steps)
 	}
@@ -299,8 +381,11 @@ func TestSDLCDelivery(t *testing.T) {
 	if p, err = e.Approve(rm, p.ID, true, "Thursday window"); err != nil {
 		t.Fatal(err)
 	}
-	// the change itself is applied by an approver (four-eyes)
-	if p, err = e.Run(ctx, p.ID); err != nil || p.Status != engine.StatusWaiting || p.Pending.Permission != "change:apply" {
+	// the change itself is applied by an approver (four-eyes), once its gate delivered it
+	if p, err = e.Run(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	if p = passGate(t, e, g, p); p.Status != engine.StatusWaiting || p.Pending.Permission != "change:apply" {
 		t.Fatalf("apply must wait for an approver: %v %s %+v", err, p.Status, p.Pending)
 	}
 	if p, err = e.Approve(approver, p.ID, true, ""); err != nil {
@@ -374,17 +459,16 @@ func TestSDLCProcess(t *testing.T) {
 	if p, err = e.Run(context.Background(), p.ID); err != nil {
 		t.Fatal(err)
 	}
-	if p.Agent != "software_delivery" || p.Status != engine.StatusWaiting || p.Pending.Action != "software_delivery/framing/confirmation" || p.Pending.Instructions == "" {
+	// the framing ends on its gate (ADR 0132): the product owner rules its go
+	if p.Agent != "software_delivery" || p.Status != engine.StatusWaiting || p.Pending.Action != methodology.RuleAction("software_delivery/framing/confirmation") || p.Pending.Instructions == "" {
 		t.Fatalf("the process starts with the confirmation of the framing, its description reviewed: %s %s %+v %s", p.Agent, p.Status, p.Pending, p.Error)
 	}
 	if c := p.Pending.Context; c == nil || c.Guidance == "" || len(c.Checklist) != 3 || len(c.References) != 1 {
 		t.Fatalf("the framing task carries its guidance, checklist and references: %+v", c)
 	}
-	if _, err = e.Submit(ctx, p.ID, nil); err != nil {
-		t.Fatal(err)
-	}
-	if p, err = e.Run(context.Background(), p.ID); err != nil {
-		t.Fatal(err)
+	p = passGate(t, e, g, p)
+	if c, _ := g.Change(ctx, p.ChangeID); c.State != "analysing" {
+		t.Fatalf("the go of the framing moved the change: %s", c.State)
 	}
 	// the impacts step names a capability: the impact_analysis method runs its four passes as a sub-agent, then
 	// waits for a person to validate them
@@ -419,6 +503,17 @@ func TestSDLCProcess(t *testing.T) {
 	if p, err = e.Store.Get(ctx, p.ID); err != nil {
 		t.Fatal(err)
 	}
+	// the gates of the analysis, the design and the build (ADR 0132): each ruled by its board, the run goes on
+	for i := 0; i < 6 && p.Pending != nil && p.Pending.Action != "software_delivery/release"; i++ {
+		p = passGate(t, e, g, p)
+		e.Drain()
+		if p, err = e.Store.Get(ctx, p.ID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c, _ := g.Change(ctx, p.ChangeID); c.State != "releasing" {
+		t.Fatalf("the gates moved the change to the release: %s", c.State)
+	}
 	// the nested release process waits for the review
 	if p.Status != engine.StatusWaiting || p.Pending.Kind != engine.TaskAgent || p.Pending.Action != "software_delivery/release" {
 		t.Fatalf("expected the release train: %s %s %+v", p.Status, p.Error, p.Pending)
@@ -429,9 +524,14 @@ func TestSDLCProcess(t *testing.T) {
 			steps = append(steps, s.Action)
 		}
 	}
-	want := []string{"software_delivery/framing/confirmation", "software_delivery/analysis/impacts",
+	want := []string{"software_delivery/framing/confirmation:open", "software_delivery/framing/confirmation:rule", "software_delivery/framing/confirmation",
+		"software_delivery/analysis/impacts",
 		// the traceability sub-step is skipped: its criteria hold (the new requirement satisfies a need)
-		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/design", "software_delivery/analysis/specification/test_plan", "software_delivery/build", "software_delivery/release"}
+		"software_delivery/analysis/specification/requirements:specify_requirements", "software_delivery/analysis/specification/test_plan",
+		"attest:software_delivery/analysis/gate/architecture_compliant", "software_delivery/analysis/gate:open", "software_delivery/analysis/gate:rule", "software_delivery/analysis/gate",
+		"software_delivery/design", "software_delivery/design_gate:open", "software_delivery/design_gate:rule", "software_delivery/design_gate",
+		"software_delivery/build", "software_delivery/build_gate:open", "software_delivery/build_gate:rule", "software_delivery/build_gate",
+		"software_delivery/release"}
 	if !slices.Equal(steps, want) {
 		t.Fatalf("steps %v", steps)
 	}
@@ -453,12 +553,17 @@ func TestSDLCProcess(t *testing.T) {
 		"software_delivery/framing": engine.StepDone, "software_delivery/analysis": engine.StepDone,
 		"software_delivery/analysis/specification/traceability": engine.StepSkipped, "software_delivery/design": engine.StepDone,
 		"software_delivery/build": engine.StepDone, "software_delivery/release": engine.StepActive, "software_delivery/application": engine.StepTodo,
+		"software_delivery/analysis/gate": engine.StepDone, "software_delivery/build_gate": engine.StepDone, "software_delivery/delivery_gate": engine.StepTodo,
+		// no proof of concept was proposed (ADR 0131): nothing to open, nothing to conclude
+		"software_delivery/proofs": engine.StepSkipped,
 	} {
 		if states[path] != want {
 			t.Fatalf("%s is %s, want %s (%v)", path, states[path], want, states)
 		}
 	}
-	if pr.Total != 10 || pr.Done != 8 { // the framing counts its review and its confirmation
+	// the framing counts its review and its confirmation, the proofs their two steps; the gates of the analysis, the
+	// design, the build and the delivery count
+	if pr.Total != 16 || pr.Done != 11 {
 		t.Fatalf("progress %d/%d", pr.Done, pr.Total)
 	}
 	// the build step names a capability: no component has a repository, so the recorded_build method was chosen
@@ -526,7 +631,15 @@ func TestSDLCProcess(t *testing.T) {
 		t.Fatalf("release train: %v %s %s", err, train.Status, train.Error)
 	}
 	e.Drain()
-	// back in the delivery: the application waits for an approver (four-eyes)
+	// back in the delivery: its gate delivers the change (a final state: it may land), then the application waits for
+	// an approver (four-eyes)
+	if p, err = e.Store.Get(ctx, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	p = passGate(t, e, g, p)
+	if c, _ := g.Change(ctx, p.ChangeID); c.State != "delivered" {
+		t.Fatalf("the delivery gate delivered the change: %s", c.State)
+	}
 	if p, err = e.Store.Get(ctx, p.ID); err != nil || p.Status != engine.StatusWaiting || p.Pending.Permission != "change:apply" || p.Pending.Action != "software_delivery/application" {
 		t.Fatalf("application must wait for an approver: %v %s %+v", err, p.Status, p.Pending)
 	}

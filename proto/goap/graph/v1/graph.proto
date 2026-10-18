@@ -2164,6 +2164,8 @@ message OpenDecisionRequest {
   // the policy values the opener gives (who decides, a threshold, rounds, a duration): resolved by the graph's
   // decision policy (ADR 0067)
   google.protobuf.Struct policy = 10;
+  // what it chooses among beyond the options of the change: plain labels (go, no_go, back of a gate, ADR 0132)
+  repeated string choices = 11;
 }
 
 message OpenDecisionResponse {
@@ -2183,6 +2185,8 @@ message RuleDecisionRequest {
   // ruled by an agent of a process (the engine): below the threshold it waits for a ratification, and it is refused
   // on a point a person rules; unset, the caller rules as a person
   bool agent = 8;
+  // the seat of the board the person rules in, for a collegial decision (ADR 0132)
+  string role = 9;
 }
 
 message RuleDecisionResponse {

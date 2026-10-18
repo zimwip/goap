@@ -1442,7 +1442,7 @@ func (h *Handler) GetChangeGraph(ctx context.Context, r *connect.Request[graphv1
 func (h *Handler) OpenDecision(ctx context.Context, r *connect.Request[graphv1.OpenDecisionRequest]) (*connect.Response[graphv1.OpenDecisionResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
-	in := graph.OpenDecisionRequest{Question: m.Question, Options: m.Options, Criteria: m.Criteria, Policy: pbconv.Map(m.Policy), By: authz.From(ctx).Subject}
+	in := graph.OpenDecisionRequest{Question: m.Question, Options: m.Options, Criteria: m.Criteria, Policy: pbconv.Map(m.Policy), Choices: m.Choices, By: authz.From(ctx).Subject}
 	if m.AllOptions {
 		in.Options = nil
 	} else if in.Options == nil {
@@ -1459,7 +1459,7 @@ func (h *Handler) RuleDecision(ctx context.Context, r *connect.Request[graphv1.R
 	ctx = h.Identity.Context(ctx, r.Header())
 	m := r.Msg
 	d, err := h.Graph.RuleDecision(ctx, domain.ChangeID(m.ChangeId), graph.RuleRequest{Point: m.Point, Outcome: m.Outcome, Option: m.Option,
-		Confidence: m.Confidence, Justification: m.Justification, Questions: m.Questions, Human: !m.Agent, By: authz.From(ctx).Subject})
+		Confidence: m.Confidence, Justification: m.Justification, Questions: m.Questions, Human: !m.Agent, By: authz.From(ctx).Subject, Role: m.Role})
 	if err == nil {
 		h.publish(ctx, "goap.change."+m.ChangeId+".decision_ruled", d)
 	}

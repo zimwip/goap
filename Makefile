@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test tidy web-test test-pg lint eval generate tools up down logs dev devlocal devlocal-backend devlocal-web devlocal-reset web runner-image claude-agent-runner
+.PHONY: help all build test tidy web-test test-pg lint eval generate tools up urls down reset logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -62,33 +62,33 @@ lint: ## go vet + gofmt + tidy go.mod files + dsl.md sync check
 	@for m in $(MODULES); do (cd $$m && go mod tidy -diff >/dev/null) || { echo "$$m/go.mod is not tidy: make tidy"; exit 1; }; done
 	@cmp -s docs/dsl.md web/src/lib/help/dsl.md || (echo 'web/src/lib/help/dsl.md is out of sync with docs/dsl.md' && exit 1)
 
-dev: ## single process, in-memory, demo data: http://localhost:8080
-	go run ./platform/cmd/goap-dev
-
-devlocal: ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
+dev: ## on this machine, no docker: SQLite (.goap/goap.db), backend + IDE both reload on code change: http://localhost:5173
 	@command -v air >/dev/null 2>&1 || go install github.com/air-verse/air@latest
 	@trap 'kill 0' EXIT INT TERM; \
-	$(MAKE) devlocal-backend & \
-	$(MAKE) devlocal-web & \
+	$(MAKE) dev-backend & \
+	$(MAKE) dev-web & \
 	wait
 
-devlocal-backend: ## SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080
+dev-backend: ## SQLite backend only, rebuilt and restarted by air on .go changes: http://localhost:8080
 	air -c .air.toml
 
-devlocal-web: ## IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
+dev-web: ## IDE only, hot-reloaded by vite, proxied to the backend: http://localhost:5173
 	cd web && npm install --no-audit --no-fund && npm run dev
 
-devlocal-reset: ## drop the local SQLite database (demo data and methodologies are seeded again)
+dev-reset: ## drop the local SQLite database (demo data and methodologies are seeded again)
 	rm -rf .goap
 
-# static build of the IDE, served by goap-dev itself (used by `make dev`, not devlocal)
+# static build of the IDE, served by goap-dev itself (when web/dist exists; `make dev` serves it from vite instead)
 web/dist/index.html: web/package.json web/index.html web/vite.config.ts $(shell find web/src -type f 2>/dev/null)
 	cd web && npm install --no-audit --no-fund && npm run build
 
-web: devlocal-web ## same as devlocal-web
+web: dev-web ## same as dev-web
 
 runner-image: ## image of the script sandboxes (goap-runner)
 	docker build --build-arg SERVICE=goap-runner -t goap/runner:dev .
+
+images: runner-image ## the image of every Go service of the compose stack (goap/goap:dev), built once
+	docker build --target services -t goap/goap:dev .
 
 claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent connector (GOAP_CLAUDE_AGENT_DIR, default .goap/claude-agent; needs npm)
 	go run ./platform/cmd/connector-claude-coding-agent install
@@ -96,17 +96,19 @@ claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)
 
-up: runner-image ## start the docker compose stack, then print how to reach its database (DBeaver)
-	$(COMPOSE) up --build -d
-	@echo
-	@echo "PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):"
-	@echo "  host localhost, port 5432, database goap, user goap, password goap"
-	@echo "  JDBC URL: jdbc:postgresql://localhost:5432/goap"
-	@echo "  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials),"
-	@echo "  each also reachable as its own role, password = name (e.g. graph / graph)"
+up: images ## start the docker compose stack, then print its URLs and how to reach its database (DBeaver)
+	$(COMPOSE) up -d
+	@cat deploy/compose/urls.txt
+
+urls: ## the URLs of the compose stack: IDE, gateway, each service, tools, database (DBeaver)
+	@cat deploy/compose/urls.txt
 
 down: ## stop the docker compose stack
 	$(COMPOSE) down
+
+reset: ## stop the docker compose stack and drop everything it keeps: containers, volumes (database, NATS, web modules), images built for it
+	$(COMPOSE) down --volumes --remove-orphans
+	-docker image rm goap/goap:dev goap/runner:dev
 
 logs: ## follow the logs of the docker compose stack
 	$(COMPOSE) logs -f engine graph registry modelgw gateway

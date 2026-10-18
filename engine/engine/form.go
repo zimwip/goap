@@ -43,7 +43,7 @@ func (e *Engine) formItems(ctx context.Context, p *Process, m *methodology.Compi
 	items := []ItemInput{{Type: "artifact", Target: typ, Data: clean}}
 	for _, r := range form.Rulings(*action.Form, clean) {
 		items = append(items, ItemInput{Type: "decisionPoint", DecisionPoint: &DecisionOp{
-			Op: "rule", Point: r.Point, Outcome: domain.OutcomeDecided, Option: r.Option, Justification: r.Justification}})
+			Op: "rule", Point: r.Point, Outcome: domain.OutcomeDecided, Option: r.Option, Justification: r.Justification, Role: r.Role}})
 	}
 	ops := createOps(form.NewNodes(*action.Form, clean), impacted)
 	return items, append(ops, linkOps(form.Links(*action.Form, clean), impacted)...), nil
@@ -71,6 +71,10 @@ func (e *Engine) runFormCode(ctx context.Context, p *Process, m *methodology.Com
 	var agentMCPs []string
 	if ag, ok := m.Agent(p.Agent); ok {
 		agentMCPs = ag.MCPs
+	}
+	if action.IsScoped() && step.Subject != "" {
+		// a scoped human action: its code sees the subject the task is for (vars.item, vars.subject), as a script does
+		bb = bindSubject(bb, action, step.Subject, step)
 	}
 	host := e.newHost(p, action, agentMCPs)
 	host.step, host.base = p.Pending.Step, len(step.LLMCalls)

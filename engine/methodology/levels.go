@@ -61,7 +61,9 @@ type LevelNode struct {
 	// Foreach and GroupBy: the step runs once per element (or group) of the list, in parallel streams (ADR 0050).
 	Foreach, GroupBy string
 	// Review: the step reviews a subject, automatic when it starts by itself (ADR 0130).
-	Review      *Review
+	Review *Review
+	// Gate: the step is a gate of its process (ADR 0132).
+	Gate        *Gate
 	Entry, Exit map[string]bool
 	// Composite: the step has sub-steps, a level of its own. Broken: that level, or one below it, is not resolved.
 	Composite, Broken bool
@@ -311,7 +313,7 @@ func checkLevel(parent StepInfo, kind string) LevelCheck {
 	lc := LevelCheck{Path: parent.Path, Kind: kind, Inputs: maps.Clone(parent.Entry), Outputs: maps.Clone(parent.Exit)}
 	var nodes []GraphStep
 	for _, s := range parent.Steps {
-		n := LevelNode{Name: s.Name, Path: s.Path, Method: s.Method(), Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Review: s.Review, Entry: s.Entry, Exit: s.Exit,
+		n := LevelNode{Name: s.Name, Path: s.Path, Method: s.Method(), Capability: s.Capability, Foreach: s.Foreach, GroupBy: s.GroupBy, Review: s.Review, Gate: s.Gate, Entry: s.Entry, Exit: s.Exit,
 			Composite: len(s.Steps) > 0, SubSteps: len(s.Steps)}
 		switch n.Method {
 		case MethodAction:

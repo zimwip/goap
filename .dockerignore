@@ -1,4 +1,23 @@
-.git
-web/node_modules
-web/dist
-bin
+# The images (Dockerfile) need the Go sources, the domains and the methodologies, nothing else:
+# everything is left out, then only what the build reads is let in, so a local web/node_modules,
+# .goap (workspaces, SQLite, the claude agent's npm install), bin/, binaries built at the root or a
+# Rust target/ never reach the build context.
+*
+
+!go.work
+!go.work.sum
+!contracts/
+!lib/
+!graph/
+!engine/
+!mcp/
+!gateway/
+!platform/
+!domains/
+!methodologies/
+
+# what go build never reads, inside the modules
+**/*_test.go
+**/testdata/
+**/node_modules/
+**/*.md

@@ -76,6 +76,9 @@ type Port interface {
 	AnswerQuestion(ctx context.Context, id domain.ChangeID, question, answer, process, by string) (domain.DecisionPoint, error)
 	RatifyDecision(ctx context.Context, id domain.ChangeID, point string, accept bool, by, comment string) (domain.DecisionPoint, error)
 	DecisionPoints(ctx context.Context, id domain.ChangeID) ([]domain.DecisionPoint, error)
+	// TransitionChange moves the lifecycle of a change along a transition (ADR 0058): a gate of a methodology takes its
+	// transition once its decision says go (ADR 0132 §3).
+	TransitionChange(ctx context.Context, id domain.ChangeID, in TransitionRequest) (domain.Change, error)
 	Apply(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error)
 	// Branch, PlanMerge and IntegrateChange are the second step of Apply: the merge of a committed change into the
 	// branch it was forked from, with the resolutions of the conflicts a person settled (ADR 0056).

@@ -2,6 +2,8 @@ package condition
 
 import (
 	"math"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,11 +47,16 @@ func Activation(bb domain.Blackboard) map[string]any {
 	dep := lazy(func() []any { return dependencies(bb) })
 	hist := lazy(func() map[string]any { return history(bb) })
 	asm := lazy(func() []any { return assessments(bb) })
+	att := lazy(func() map[string]any { return attestations(&c) })
 	return map[string]any{
 		"change": map[string]any{
 			"id": string(c.ID), "title": c.Title, "intent": c.Intent, "status": string(c.Status),
 			"criticality": string(criticality.Of(c.Data)), "lifecycle": c.Lifecycle, "state": c.State, "goal": c.Goal, "methodology": c.Methodology, "branch": domain.BranchOf(c.Branch), "baseline": string(c.BaselineID), "resultBaseline": string(c.ResultBaselineID), "data": orEmpty(c.Data),
 			"dependsOn": changeIDs(c.DependsOn),
+			// the transitions of the lifecycle that stand: taken, not gone back from since (ADR 0132 §1)
+			"passed": stringsOf(c.Passed()),
+			// the decision points a move consumed
+			"consumed": stringsOf(c.ConsumedDecisions()),
 		},
 		"items":          items,
 		"changeImpacts":  h.changeImpacts(),
@@ -74,7 +81,37 @@ func Activation(bb domain.Blackboard) map[string]any {
 		"history": func() any { return hist() },
 		// assessments are the latest ratings of the subjects of the change, the description first (ADR 0110)
 		"assessments": func() any { return asm() },
+		// attestations are the latest attestation of each item of a gate's checklist a person attests (ADR 0132 §1)
+		"attestations": func() any { return att() },
 	}
+}
+
+// AttestationPrefix starts the target of the artifact of an attestation of an item of a gate (ADR 0132 §1):
+// attestation:<gate step path>/<item>.
+const AttestationPrefix = "attestation:"
+
+// attestations are the latest attestation of each item, by key (<gate step path>/<item>): its verdict (met, not_met),
+// comment and who attested it.
+func attestations(c *domain.Change) map[string]any {
+	out := map[string]any{}
+	for _, it := range c.Items {
+		key, ok := strings.CutPrefix(it.Target, AttestationPrefix)
+		if !ok || it.Type != domain.TypeArtifact || !c.Active(it.ID) {
+			continue
+		}
+		verdict, _ := it.Data["verdict"].(string)
+		comment, _ := it.Data["comment"].(string)
+		out[key] = map[string]any{"verdict": verdict, "comment": comment, "by": it.ProducedBy, "item": string(it.ID)}
+	}
+	return out
+}
+
+func stringsOf(l []string) []any {
+	out := make([]any, len(l))
+	for i, s := range l {
+		out[i] = s
+	}
+	return out
 }
 
 // Resolve returns the value of an activation entry, computing a lazy one.
@@ -133,8 +170,24 @@ func actionItems(c *domain.Change) []any {
 	as := risk.Actions(*c)
 	out := make([]any, 0, len(as))
 	for _, a := range as {
+		// covers: the risks it mitigates now (risk.ActionItem.Covers, ADR 0131)
+		covers := []any{}
+		for _, k := range append([]string{a.For}, a.Risks...) {
+			if k != "" && a.Covers(k) && !slices.Contains(covers, any(k)) {
+				covers = append(covers, k)
+			}
+		}
 		out = append(out, map[string]any{"key": a.Key, "title": a.Title, "status": a.Status, "owner": a.Owner, "due": a.Due, "for": a.For,
-			"result": a.Result, "item": string(a.Item), "versions": int64(a.Versions)})
+			"result": a.Result, "kind": a.Kind, "purpose": a.Purpose, "risks": anyStrings(a.Risks), "hypotheses": anyStrings(a.Hypotheses),
+			"change": a.Change, "covers": covers, "item": string(a.Item), "versions": int64(a.Versions)})
+	}
+	return out
+}
+
+func anyStrings(ss []string) []any {
+	out := make([]any, len(ss))
+	for i, s := range ss {
+		out[i] = s
 	}
 	return out
 }

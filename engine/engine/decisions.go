@@ -39,6 +39,8 @@ type DecisionOp struct {
 	Confidence    float64  `json:"confidence,omitempty"`
 	Justification string   `json:"justification,omitempty"`
 	Questions     []string `json:"questions,omitempty"`
+	// Role is the seat a person rules in, for a collegial decision (ADR 0132).
+	Role string `json:"role,omitempty"`
 	// answer
 	QuestionID string `json:"questionId,omitempty"`
 	Answer     string `json:"answer,omitempty"`
@@ -101,7 +103,7 @@ func (e *Engine) applyDecisionOps(ctx context.Context, p *Process, ops []Decisio
 			}
 		case domain.DecisionRuleOp:
 			in := graphapi.RuleRequest{Point: point(op.Point), Outcome: op.Outcome, Confidence: op.Confidence, Justification: op.Justification,
-				Questions: op.Questions, Human: human, By: by}
+				Questions: op.Questions, Human: human, By: by, Role: op.Role}
 			if op.Option != "" {
 				in.Option = option(op.Option)
 			}
