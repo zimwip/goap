@@ -575,7 +575,7 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch,
 		  lifecycle = excluded.lifecycle, state = excluded.state, project_id = excluded.project_id,
 		  parent_id = excluded.parent_id, guardians = excluded.guardians, depends_on = excluded.depends_on,
-		  methodology_version = excluded.methodology_version`,
+		  methodology = excluded.methodology, methodology_version = excluded.methodology_version`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
 		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, string(guardiansJSON(c.Guardians)), string(dependsOnJSON(c.DependsOn)), c.MethodologyVersion)
 	return sqliteErr(err, "change")

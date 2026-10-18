@@ -582,6 +582,18 @@ func (h *Handler) UpgradeChange(ctx context.Context, r *connect.Request[graphv1.
 	return connect.NewResponse(&graphv1.UpgradeChangeResponse{Change: pbconv.ChangeToPB(c)}), nil
 }
 
+// SetChangeMethodology gives an open change that follows no methodology one; the graph's MethodologyGate checks that it
+// applies to the project of the change.
+func (h *Handler) SetChangeMethodology(ctx context.Context, r *connect.Request[graphv1.SetChangeMethodologyRequest]) (*connect.Response[graphv1.SetChangeMethodologyResponse], error) {
+	ctx = h.Identity.Context(ctx, r.Header())
+	c, err := h.Graph.SetChangeMethodology(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.Methodology)
+	if err != nil {
+		return nil, rpcerr.ToConnect(err)
+	}
+	c.Items, c.Nodes = nil, nil
+	return connect.NewResponse(&graphv1.SetChangeMethodologyResponse{Change: pbconv.ChangeToPB(c)}), nil
+}
+
 // GetChangeDependencies reads the dependencies of a change, its dependents and the merge order of its sub-changes
 // (ADR 0108).
 func (h *Handler) GetChangeDependencies(ctx context.Context, r *connect.Request[graphv1.GetChangeDependenciesRequest]) (*connect.Response[graphv1.GetChangeDependenciesResponse], error) {

@@ -661,7 +661,7 @@ func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
 		  result_baseline_id = EXCLUDED.result_baseline_id, data = EXCLUDED.data, baseline_id = EXCLUDED.baseline_id, branch = EXCLUDED.branch,
 		  lifecycle = EXCLUDED.lifecycle, state = EXCLUDED.state, project_id = EXCLUDED.project_id,
 		  parent_id = EXCLUDED.parent_id, guardians = EXCLUDED.guardians, depends_on = EXCLUDED.depends_on,
-		  methodology_version = EXCLUDED.methodology_version`,
+		  methodology = EXCLUDED.methodology, methodology_version = EXCLUDED.methodology_version`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)), jsonb(c.Data), c.CreatedAt,
 		domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, guardiansJSON(c.Guardians), dependsOnJSON(c.DependsOn), c.MethodologyVersion)
 	return mapErr(err, "change")

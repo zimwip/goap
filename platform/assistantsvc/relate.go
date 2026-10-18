@@ -39,9 +39,9 @@ func (t *turn) relateChange(ctx context.Context, attach bool, a args) (any, erro
 			return nil, errors.New("one proposal per answer: the person decides the first before another is made")
 		}
 	}
-	id := t.in.Context.change()
+	id := t.workChange(ctx)
 	if id == "" {
-		return nil, errors.New("no change is open: the person must look at the change to attach or detach")
+		return nil, errors.New("no working change: the person (or open_change) must select the change to attach or detach")
 	}
 	ch, err := t.s.readChange(ctx, t.p, id)
 	if err != nil {

@@ -4,7 +4,8 @@ import { runTool } from '../assist/registry.svelte';
 import { openTab } from '../shell/tabs.svelte';
 import { notify } from '../shell/workbench.svelte';
 import { changes, refreshChanges } from '../stores/catalog.svelte';
-import { followChangeProject, selectProject } from '../stores/project.svelte';
+import { selectProject } from '../stores/project.svelte';
+import { workIn } from '../stores/workingChange.svelte';
 
 const str = (o: unknown, k: string): string => {
   const v = (o as Record<string, unknown> | undefined)?.[k];
@@ -25,7 +26,7 @@ export function actionLabel(a: ConversationAction): string {
     case 'select_project':
       return `Switched to project ${str(a.args, 'project')}`;
     case 'open_change':
-      return `Opened change ${str(a.result, 'title') || actionChangeId(a)}`;
+      return `Working in change ${str(a.result, 'title') || actionChangeId(a)}`;
     case 'create_change':
       return `Created change ${str(a.result, 'title') || str(a.args, 'title') || actionChangeId(a)}`;
     case 'search_changes': {
@@ -80,8 +81,9 @@ export async function runAction(a: ConversationAction): Promise<void> {
         if (!id) break;
         // the catalog lists the change a person has just been given
         if (a.type === 'create_change' || !changes.items.some((c) => c.id === id)) await refreshChanges();
+        // the assistant works in the change it opened or created: it becomes the working change (its project first)
         const known = changes.items.find((c) => c.id === id);
-        await followChangeProject({ id, projectId: known?.projectId || str(a.result, 'project') });
+        await workIn(known ?? { id, title: str(a.result, 'title') || str(a.args, 'title'), projectId: str(a.result, 'project') || str(a.args, 'project'), status: str(a.result, 'status') || 'draft' });
         openTab({ kind: 'change', params: { id } }, { pin: true });
         break;
       }

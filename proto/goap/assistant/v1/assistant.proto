@@ -36,7 +36,7 @@ service AssistantService {
 
 // What the person was looking at when they wrote the message, in three layers, the most specific first (ADR 0092):
 // the focus (the element they act on, their selection, the dialog and the action in progress), the screen (what the
-// open view shows) and the application (project and tab). Used for this turn only, never stored (the user message keeps
+// open view shows) and the application (project, working change and tab). Used for this turn only, never stored (the user message keeps
 // a short description of it). The server caps and sanitises everything.
 message PageContext {
   AppContext app = 1;
@@ -45,9 +45,12 @@ message PageContext {
 }
 
 message AppContext {
-  // the active project key
+  // the active project key ("" when none is selected)
   string project = 1;
   PageTab tab = 2;
+  // the working change: the change the person works in, selected in the header or the change editor ("" for none);
+  // the change the turn works on
+  string change = 3;
 }
 
 message PageTab {

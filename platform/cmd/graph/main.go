@@ -130,6 +130,7 @@ func main() {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
 	g.ProjectMoveGate = graphsvc.ProjectMoveGate(authorizer, directory)
+	g.MethodologyGate = graphsvc.MethodologyGate(directory)
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.SeatAuthorizer = graphsvc.SeatAuthorizer(authorizer)
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)

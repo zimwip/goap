@@ -15,7 +15,8 @@ vi.mock('../api', () => ({
   errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
 }));
 vi.mock('./assistant.svelte', () => store);
-vi.mock('./project.svelte', () => ({ project: { current: 'PROJ-A' }, selectProject: vi.fn(), followChangeProject: vi.fn() }));
+vi.mock('./project.svelte', () => ({ project: { current: 'PROJ-A' }, selectProject: vi.fn() }));
+vi.mock('./workingChange.svelte', () => ({ working: { change: undefined }, workIn: vi.fn() }));
 vi.mock('./catalog.svelte', () => ({ changes: { items: [] }, refreshChanges: vi.fn() }));
 vi.mock('../shell/tabs.svelte', () => ({ activeTab: () => undefined, openTab: vi.fn() }));
 vi.mock('../shell/workbench.svelte', () => ({ notify: vi.fn() }));

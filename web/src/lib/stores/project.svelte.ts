@@ -1,5 +1,6 @@
 // The active project (ADR 0039): selected before any non-administrative action, shown in the header
-// between the live indicator and the notification bell. Switching it reissues the caller's token
+// between the live indicator and the notification bell. None is selected at first: the user (or the assistant, through
+// select_project) picks the project they work in; the root project is a project like the others, picked by its key. Switching it reissues the caller's token
 // (api.switchProject) so every call from here on carries it — best effort: a deployment with no token
 // (AuthMode "none", e.g. goap-dev with GOAP_AUTH_MODE=none) has nothing to reissue, so the selection stays local-display only there.
 import { headGraph } from '../graphEdit';
@@ -14,7 +15,7 @@ export interface ProjectOption {
 }
 
 export const project = $state({
-  /** the selected project's key ('': the root project) */
+  /** the selected project's key ('': none selected yet) */
   current: '',
   options: [] as ProjectOption[],
   loading: false,
@@ -42,52 +43,49 @@ export async function refreshProjects(): Promise<void> {
  * is kept in the browser). Without a token (auth mode "none") there is nothing to reissue and the selection
  * only changes the display; any other failure is the caller's to see (a refused token ends the session).
  */
-export async function selectProject(key: string): Promise<void> {
+export async function selectProject(key: string): Promise<boolean> {
   if (!getToken()) {
     project.current = key;
     notify('Project selection is local to this browser only: no token to carry it to the server.', 'info');
-    return;
+    return true;
   }
   try {
     await reissueToken(key);
+    project.current = key;
     await refreshIdentity();
+    return true;
   } catch (e) {
     notify(errorMessage(e), 'error');
+    return false;
   }
 }
 
 /**
- * The methodologies attached to the active project, its own and its ancestors' (ADR 0039); undefined until
- * read. Loaded on demand by `loadApplicable`, which the assistant calls when it opens and on a project switch.
+ * The methodologies attached to a project (the active one unless named), its own and its ancestors' (ADR 0039);
+ * undefined until read, none outside any project. Loaded on demand by `loadApplicable`, which the assistant calls when
+ * it opens and on a project switch.
  */
 export const applicable = $state({ names: undefined as string[] | undefined });
 
-export async function loadApplicable(): Promise<void> {
-  const key = project.current || rootProject();
+export async function loadApplicable(of?: string): Promise<void> {
+  const key = of || project.current;
+  if (!key) {
+    applicable.names = [];
+    return;
+  }
   try {
     const h = await headGraph(ns.organisation);
-    if (key === (project.current || rootProject())) applicable.names = applicableMethodologies(h, key);
+    if (key === (of || project.current)) applicable.names = applicableMethodologies(h, key);
   } catch {
     applicable.names = undefined;
   }
 }
 
-/** Whether a change belongs to the active project (the claim '' being the root project). */
-export const inActiveProject = (projectId?: string): boolean => !projectId || projectId === (project.current || rootProject());
+/** Whether a change belongs to the active project; with none selected, every change does (a change with no project
+ * is the root project's). */
+export const inActiveProject = (projectId?: string): boolean => !project.current || (projectId || rootProject()) === project.current;
 
-const followed = new Set<string>();
-
-/**
- * Makes the active project the one of a change opened from elsewhere. The token reissue is refused for a
- * project the caller may not access (the selection then stays, the refusal is notified); tried once per change.
- */
-export async function followChangeProject(c?: { id?: string; projectId?: string }): Promise<void> {
-  if (!c?.id || !c.projectId || inActiveProject(c.projectId) || followed.has(c.id)) return;
-  followed.add(c.id);
-  await selectProject(c.projectId);
-}
-
-// the project is the identity's claim ('' for the root project): follows every token the identity comes from
+// the project is the identity's claim ('' for none): follows every token the identity comes from
 $effect.root(() => {
   $effect(() => {
     const p = session.principal;

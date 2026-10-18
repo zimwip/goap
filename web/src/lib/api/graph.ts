@@ -163,6 +163,9 @@ export const graph = {
   /** Moves an open change to another version of its methodology, the latest when version is empty (ADR 0113). */
   upgradeChange: (changeId: string, version = '') =>
     rpc<{ changeId: string; version: string }, { change?: Change }>(GRAPH, 'UpgradeChange', { changeId, version }),
+  /** Gives an open change that follows no methodology one of the methodologies of its project (its latest version). */
+  setChangeMethodology: (changeId: string, methodology: string) =>
+    rpc<{ changeId: string; methodology: string }, { change?: Change }>(GRAPH, 'SetChangeMethodology', { changeId, methodology }),
   /** The dependencies of a change, the open changes depending on it and the merge order of its sub-changes (ADR 0108). */
   getChangeDependencies: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, ChangeDependencies>(GRAPH, 'GetChangeDependencies', { changeId }, signal),

@@ -2,6 +2,7 @@
   // Node editor: one tab for a node, its information organized in panes —
   // details (properties), relations (parents, children, graph), lifecycle,
   // history. Modifications are proposals of a working change (created on demand).
+  import { working, workIn } from '../../stores/workingChange.svelte';
   import {
     graph,
     errorMessage,
@@ -76,6 +77,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     posts: PostVersions;
   }
   let workId = $state(untrack(() => tab.params.change) ?? '');
+  // the change the node is edited in, unless the tab names one or the person picked one: the working change of the
+  // header when it acts on the namespace of the node (stores/workingChange.svelte.ts)
+  let workPicked = untrack(() => tab.params.change !== undefined);
   /** the flow of the working change the node is seen and edited on: 'main' or an option (ADR 0032 §6); empty: the
    * change as a whole (its edits go to its active option) */
   let workFlow = $state(untrack(() => tab.params.flow) ?? '');
@@ -193,6 +197,12 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   ]);
 
   // --- working change ---------------------------------------------------------------
+  $effect(() => {
+    const w = working.change;
+    if (workPicked || workId || !w || !stored) return;
+    if (!stored.namespace || w.namespace === stored.namespace) workId = w.id;
+  });
+
   async function ensureChange(): Promise<string> {
     if (workId) return workId;
     const baselineId = head?.baselineId;
@@ -202,6 +212,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     if (!c?.id) throw new Error('The change could not be created.');
     workId = c.id;
     await loadWork();
+    // a change created to edit a node is the change the person works in from now on
+    await workIn(c);
     notify(`Change “${c.title}” created.`, 'ok');
     return c.id;
   }
@@ -368,6 +380,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   }
 
   function pickChange(value: string) {
+    workPicked = true;
     editing = false;
     workFlow = ''; // another change: seen as a whole
     workId = value;

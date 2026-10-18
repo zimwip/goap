@@ -37,11 +37,12 @@ describe('moving a change to another project', () => {
     expect(alone.blocked).toContain('No other project lists');
   });
 
-  it('starts a new change in the active project, the root for an empty claim', () => {
-    expect(defaultChangeProject('B', 'PROJ-ROOT', projects)).toBe('B');
-    expect(defaultChangeProject('', 'PROJ-ROOT', projects)).toBe('PROJ-ROOT');
-    expect(defaultChangeProject('GONE', 'PROJ-ROOT', projects)).toBe('PROJ-ROOT');
-    expect(defaultChangeProject('', 'PROJ-ROOT', [])).toBe('PROJ-ROOT');
+  it('starts a new change in the active project, none when no project is selected', () => {
+    expect(defaultChangeProject('B', projects)).toBe('B');
+    expect(defaultChangeProject('', projects)).toBe('');
+    expect(defaultChangeProject('GONE', projects)).toBe('');
+    expect(defaultChangeProject('B', [])).toBe('B');
+    expect(defaultChangeProject('', [])).toBe('');
   });
 });
 

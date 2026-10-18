@@ -125,6 +125,9 @@ type Graph struct {
 	// ProjectMoveGate, when set, is asked before a change moves to another project (ADR 0091): who may move it and
 	// whether its methodology applies to both projects. Nil: no check beyond the graph's own rules.
 	ProjectMoveGate ProjectMoveGate
+	// MethodologyGate, when set, is asked before a change that follows no methodology takes one (SetChangeMethodology):
+	// whether the methodology applies to its project.
+	MethodologyGate MethodologyGate
 
 	// MaterializeEvery is how many baselines of a chain pass between two that are materialised (their state stored,
 	// ADR 0056); the others are computed from the log. 0: DefaultMaterializeEvery.

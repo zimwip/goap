@@ -17,6 +17,7 @@ vi.mock('../api', () => ({
 }));
 vi.mock('../shell/tabs.svelte', () => ({ activeTab: () => ({ id: 'change:C1', kind: 'change', params: { id: 'C1' }, pinned: true }) }));
 vi.mock('./project.svelte', () => ({ project: { current: 'PROJ-A' } }));
+vi.mock('./workingChange.svelte', () => ({ working: { change: undefined } }));
 vi.mock('../assistant/actions', () => ({ runActions }));
 
 import { assistant, attachView, deleteConversation, isPending, newConversation, openConversation, pollDelay, POLL_FAST_COUNT, POLL_FAST_MS, POLL_MS, resetAssistant, retry, send } from './assistant.svelte';

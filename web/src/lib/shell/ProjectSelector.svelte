@@ -1,7 +1,7 @@
 <script lang="ts">
   // Project selector (ADR 0039): the project the user is working on, selected before any non-administrative
-  // action. Sits between the live indicator and the notification bell. Switching it reissues the token
-  // (project store) so every call from here on carries it.
+  // action. Sits between the live indicator and the notification bell. None is selected at first: the user (or the
+  // assistant) picks one. Switching it reissues the token (project store) so every call from here on carries it.
   import Icon from './Icon.svelte';
   import Popover from './Popover.svelte';
   import { project, refreshProjects, selectProject } from '../stores/project.svelte';
@@ -12,7 +12,7 @@
     if (open && !project.options.length && !project.loading) void refreshProjects();
   });
 
-  const label = $derived(project.options.find((o) => o.key === project.current)?.label || project.current || 'Root project');
+  const label = $derived(project.current ? project.options.find((o) => o.key === project.current)?.label || project.current : 'Select a project');
 
   async function pick(key: string): Promise<void> {
     open = false;
@@ -21,7 +21,7 @@
 </script>
 
 <div class="item-wrap">
-  <button type="button" class="proj" aria-haspopup="dialog" aria-expanded={open} title="Active project" onclick={() => (open = !open)}>
+  <button type="button" class="proj" class:none={!project.current} aria-haspopup="dialog" aria-expanded={open} title={project.current ? `Active project: ${project.current}` : 'No project selected: pick the project you work in'} onclick={() => (open = !open)}>
     <Icon name="diff" size={14} />
     <span class="pl">{label}</span>
   </button>
@@ -33,11 +33,6 @@
     </div>
     {#if project.error}<p class="pad hint">{project.error}</p>{/if}
     <ul class="list">
-      <li>
-        <button type="button" class="row-btn" class:active={!project.current} onclick={() => pick('')}>
-          <span class="main"><strong>Root project</strong></span>
-        </button>
-      </li>
       {#each project.options as o (o.key)}
         <li>
           <button type="button" class="row-btn" class:active={project.current === o.key} onclick={() => pick(o.key)}>
@@ -47,6 +42,13 @@
       {:else}
         {#if !project.loading}<li><p class="pad hint">No project yet.</p></li>{/if}
       {/each}
+      {#if project.current}
+        <li class="sep">
+          <button type="button" class="row-btn" onclick={() => pick('')}>
+            <span class="main hint">Work outside any project</span>
+          </button>
+        </li>
+      {/if}
     </ul>
   </Popover>
 </div>
@@ -67,6 +69,10 @@
     color: inherit;
     font: inherit;
     cursor: pointer;
+  }
+  .proj.none {
+    border-style: dashed;
+    color: var(--muted, inherit);
   }
   .proj:hover {
     background: var(--hover, #8882);
@@ -119,6 +125,11 @@
     flex: 1;
     min-width: 0;
     display: grid;
+  }
+  .sep {
+    border-top: 1px solid var(--border);
+    margin-top: 0.2rem;
+    padding-top: 0.2rem;
   }
   .el {
     white-space: nowrap;

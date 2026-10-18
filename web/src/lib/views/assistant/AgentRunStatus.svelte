@@ -4,8 +4,6 @@
   import { engine, type Process } from '../../api';
   import { runStatus } from '../../assistant/proposal';
   import { ingestProcess, processes } from '../../stores/live.svelte';
-  import { changes } from '../../stores/catalog.svelte';
-  import { followChangeProject } from '../../stores/project.svelte';
   import { openTab } from '../../shell/tabs.svelte';
 
   let { processId, changeId = '' }: { processId: string; changeId?: string } = $props();
@@ -27,8 +25,6 @@
   });
 
   async function openChange() {
-    const known = changes.items.find((c) => c.id === change);
-    await followChangeProject({ id: change, projectId: known?.projectId });
     openTab({ kind: 'change', params: { id: change } }, { pin: true });
   }
 </script>

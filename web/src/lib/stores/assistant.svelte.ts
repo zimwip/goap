@@ -9,6 +9,7 @@ import { describeTools } from '../assist/registry.svelte';
 import { forgetSelection } from '../assist/capture';
 import { untrack } from 'svelte';
 import { project } from './project.svelte';
+import { working } from './workingChange.svelte';
 
 /** The server accepts a message of at most 4 KiB (assistantsvc `MaxTextBytes`). */
 export const MAX_TEXT_BYTES = 4 << 10;
@@ -254,7 +255,7 @@ export async function send(text: string): Promise<boolean> {
       assistant.conversations = [created, ...assistant.conversations.filter((c) => c.id !== id)];
     }
     const tab = activeTab();
-    const r = await assistantApi.send(id, t, assistantContext(tab, project.current), describeTools(tab?.id ?? ''));
+    const r = await assistantApi.send(id, t, assistantContext(tab, project.current, Date.now(), working.change?.id), describeTools(tab?.id ?? ''));
     forgetSelection();
     if (mine !== epoch) return true;
     watching.add(r.assistantMessage.id);

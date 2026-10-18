@@ -842,7 +842,7 @@ func TestTurnOverheadIsNegligible(t *testing.T) {
 	for i := range ent {
 		ent[i] = Entity{Type: "impact", ID: fmt.Sprintf("IMP-%d", i), Label: fmt.Sprintf("key-%d", i), State: "proposed", Props: map[string]string{"type": "alm@Requirement", "intent": "created"}}
 	}
-	c := Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "change", Params: map[string]string{"id": "CHG-D"}}}, Screen: Screen{Kind: "change", Title: "t", Summary: "s", Entities: ent}}
+	c := Context{App: App{Project: "PROJ-A", Change: "CHG-D", Tab: Tab{Kind: "change", Params: map[string]string{"id": "CHG-D"}}}, Screen: Screen{Kind: "change", Title: "t", Summary: "s", Entities: ent}}
 	e := newEnv(t, call(ToolListAgents, `{}`), call(ToolListMethodologies, `{}`), `{"message":"done"}`)
 	var sendMs, total time.Duration
 	for i := 0; i < turns; i++ {

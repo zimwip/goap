@@ -24,7 +24,7 @@ const (
 
 // What the person was looking at when they wrote the message, in three layers, the most specific first (ADR 0092):
 // the focus (the element they act on, their selection, the dialog and the action in progress), the screen (what the
-// open view shows) and the application (project and tab). Used for this turn only, never stored (the user message keeps
+// open view shows) and the application (project, working change and tab). Used for this turn only, never stored (the user message keeps
 // a short description of it). The server caps and sanitises everything.
 type PageContext struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -88,9 +88,12 @@ func (x *PageContext) GetFocus() *FocusContext {
 
 type AppContext struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// the active project key
-	Project       string   `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
-	Tab           *PageTab `protobuf:"bytes,2,opt,name=tab,proto3" json:"tab,omitempty"`
+	// the active project key ("" when none is selected)
+	Project string   `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	Tab     *PageTab `protobuf:"bytes,2,opt,name=tab,proto3" json:"tab,omitempty"`
+	// the working change: the change the person works in, selected in the header or the change editor ("" for none);
+	// the change the turn works on
+	Change        string `protobuf:"bytes,3,opt,name=change,proto3" json:"change,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -137,6 +140,13 @@ func (x *AppContext) GetTab() *PageTab {
 		return x.Tab
 	}
 	return nil
+}
+
+func (x *AppContext) GetChange() string {
+	if x != nil {
+		return x.Change
+	}
+	return ""
 }
 
 type PageTab struct {
@@ -1176,11 +1186,12 @@ const file_goap_assistant_v1_assistant_proto_rawDesc = "" +
 	"\vPageContext\x12/\n" +
 	"\x03app\x18\x01 \x01(\v2\x1d.goap.assistant.v1.AppContextR\x03app\x128\n" +
 	"\x06screen\x18\x02 \x01(\v2 .goap.assistant.v1.ScreenContextR\x06screen\x125\n" +
-	"\x05focus\x18\x03 \x01(\v2\x1f.goap.assistant.v1.FocusContextR\x05focus\"T\n" +
+	"\x05focus\x18\x03 \x01(\v2\x1f.goap.assistant.v1.FocusContextR\x05focus\"l\n" +
 	"\n" +
 	"AppContext\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12,\n" +
-	"\x03tab\x18\x02 \x01(\v2\x1a.goap.assistant.v1.PageTabR\x03tab\"\x98\x01\n" +
+	"\x03tab\x18\x02 \x01(\v2\x1a.goap.assistant.v1.PageTabR\x03tab\x12\x16\n" +
+	"\x06change\x18\x03 \x01(\tR\x06change\"\x98\x01\n" +
 	"\aPageTab\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12>\n" +
 	"\x06params\x18\x02 \x03(\v2&.goap.assistant.v1.PageTab.ParamsEntryR\x06params\x1a9\n" +

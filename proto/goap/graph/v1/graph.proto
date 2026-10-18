@@ -64,6 +64,8 @@ service GraphService {
   rpc GetChangeDependencies(GetChangeDependenciesRequest) returns (GetChangeDependenciesResponse);
   // Move an open change to another version of its methodology (ADR 0113).
   rpc UpgradeChange(UpgradeChangeRequest) returns (UpgradeChangeResponse);
+  // SetChangeMethodology gives an open change that follows no methodology one of the methodologies of its project.
+  rpc SetChangeMethodology(SetChangeMethodologyRequest) returns (SetChangeMethodologyResponse);
   rpc AddItems(AddItemsRequest) returns (AddItemsResponse);
   // Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
   // change branch, and accept or reject them (a comment is mandatory).
@@ -875,6 +877,16 @@ message UpgradeChangeRequest {
 }
 
 message UpgradeChangeResponse {
+  Change change = 1;
+}
+
+message SetChangeMethodologyRequest {
+  string change_id = 1;
+  // the methodology the change follows from now on (its latest published version)
+  string methodology = 2;
+}
+
+message SetChangeMethodologyResponse {
   Change change = 1;
 }
 
