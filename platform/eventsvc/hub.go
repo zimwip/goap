@@ -20,6 +20,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/pbconv"
 	"github.com/zimwip/goap/lib/platform"
+	"github.com/zimwip/goap/platform/convsvc"
 )
 
 // Defaults of the hub.
@@ -172,6 +173,12 @@ func (h *Hub) Ingest(subject string, data []byte, st platform.Stamp) {
 			return
 		}
 		v = ev
+	case strings.HasPrefix(subject, "goap.conversation."):
+		var ev convsvc.Event
+		if json.Unmarshal(data, &ev) != nil {
+			return
+		}
+		v = ev
 	case strings.HasPrefix(subject, "goap.registry."):
 		var m map[string]string
 		if json.Unmarshal(data, &m) != nil {
@@ -234,6 +241,19 @@ func (h *Hub) accept(subject string, v any, actor, command string) {
 		if ev.Type == "change.purged" {
 			delete(h.personal, string(c.ID))
 		}
+	case convsvc.Event:
+		// goap.conversation.<id>.<event> (ADR 0136): the owner's alone, like a personal change; an event naming no
+		// owner is for nobody
+		if m.Subject == "" || m.ConversationID == "" {
+			return
+		}
+		ev.Kind, ev.Type = "conversation", "conversation."+m.Event
+		ev.Id, ev.Label = m.ConversationID, m.MessageID
+		ev.Time = pbconv.Time(m.At)
+		if m.At.IsZero() {
+			ev.Time = pbconv.Time(h.now())
+		}
+		r.personalTo = m.Subject
 	case map[string]string:
 		// goap.registry.<methodology|domain>.<event>
 		parts := strings.Split(subject, ".")

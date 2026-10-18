@@ -2,6 +2,7 @@ package registrysvc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/builtins"
+	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/engine/engine"
 	"github.com/zimwip/goap/engine/methodology"
 	"github.com/zimwip/goap/lib/def"
@@ -62,11 +64,29 @@ func (s *Service) authorize(ctx context.Context, action string, m *methodology.M
 		Resource: authz.Resource{Type: "methodology", ID: m.Name + "@" + m.Version, Name: m.Name, Org: authz.From(ctx).Org}})
 }
 
-func (s *Service) publish(ctx context.Context, event string, r Record) {
-	s.compiled.clear() // every write of a methodology version goes through here
-	if s.Events != nil {
-		_ = s.Events.Publish(ctx, "goap.registry.methodology."+event, map[string]string{"name": r.Methodology.Name, "version": r.Methodology.Version, "status": string(r.Status)})
+// MethodologyEvent is the payload of the registry's events about a methodology version (goap.registry.methodology.*).
+type MethodologyEvent struct {
+	Name    string `json:"name"`
+	Version string `json:"version"`
+	Status  string `json:"status"`
+}
+
+// event is the registry's event about a version, written with it (ADR 0136): saved, published, deleted.
+func event(name string, r Record, st Status) graphapi.CarriedEvent {
+	b, _ := json.Marshal(MethodologyEvent{Name: r.Methodology.Name, Version: r.Methodology.Version, Status: string(st)})
+	return graphapi.CarriedEvent{Subject: "goap.registry.methodology." + name, Payload: b}
+}
+
+// written follows a write of a methodology version (every one goes through here): the compiled forms are dropped, and
+// the event, which a store keeping its facts in the graph wrote with them, is published when the store did not.
+func (s *Service) written(ctx context.Context, ev graphapi.CarriedEvent) {
+	s.compiled.clear()
+	if _, ok := s.Store.(carriesEvents); ok || s.Events == nil {
+		return
 	}
+	var payload map[string]string
+	_ = json.Unmarshal(ev.Payload, &payload)
+	_ = s.Events.Publish(ctx, ev.Subject, payload)
 }
 
 // Get returns a version (empty version: latest published).
@@ -114,14 +134,15 @@ func (s *Service) Save(ctx context.Context, m methodology.Methodology) (Record, 
 	}
 	now := s.clock()
 	r := Record{Methodology: m, Status: StatusDraft, CreatedAt: now, UpdatedAt: now, UpdatedBy: authz.From(ctx).Subject}
-	if err := s.Store.Save(ctx, r); err != nil {
+	ev := event("saved", r, StatusDraft)
+	if err := s.Store.Save(ctx, r, ev); err != nil {
 		return Record{}, nil, err
 	}
+	s.written(ctx, ev)
 	saved, err := s.Store.Get(ctx, m.Name, m.Version)
 	if err != nil {
 		return Record{}, nil, err
 	}
-	s.publish(ctx, "saved", saved)
 	return saved, s.validate(ctx, &m), nil
 }
 
@@ -170,13 +191,14 @@ func (s *Service) Publish(ctx context.Context, name, version string) (Record, er
 			return Record{}, err
 		}
 	}
-	if err := s.Store.SetStatus(ctx, name, version, StatusPublished, s.clock()); err != nil {
+	ev := event("published", r, StatusPublished)
+	if err := s.Store.SetStatus(ctx, name, version, StatusPublished, s.clock(), ev); err != nil {
 		return Record{}, err
 	}
+	s.written(ctx, ev)
 	r, err = s.Store.Get(ctx, name, version)
 	if err == nil {
 		s.ensureAliasStubs(ctx, &r.Methodology)
-		s.publish(ctx, "published", r)
 	}
 	return r, err
 }
@@ -211,16 +233,17 @@ func (s *Service) Delete(ctx context.Context, name, version string) error {
 	if err := s.authorize(ctx, "delete", &r.Methodology); err != nil {
 		return err
 	}
+	ev := event("deleted", r, r.Status)
 	switch r.Status {
 	case StatusDraft:
-		err = s.Store.Delete(ctx, name, version)
+		err = s.Store.Delete(ctx, name, version, ev)
 	case StatusPublished:
-		err = s.Store.SetStatus(ctx, name, version, StatusArchived, s.clock())
+		err = s.Store.SetStatus(ctx, name, version, StatusArchived, s.clock(), ev)
 	default:
 		return nil
 	}
 	if err == nil {
-		s.publish(ctx, "deleted", r)
+		s.written(ctx, ev)
 	}
 	return err
 }
@@ -261,15 +284,16 @@ func (s *Service) importPublished(ctx context.Context, m methodology.Methodology
 	}
 	now := s.clock()
 	r := Record{Methodology: m, Status: StatusPublished, CreatedAt: now, UpdatedAt: now, PublishedAt: now, UpdatedBy: authz.From(ctx).Subject}
-	if err := s.Store.Save(ctx, r); err != nil {
+	ev := event("published", r, StatusPublished)
+	if err := s.Store.Save(ctx, r, ev); err != nil {
 		return Record{}, nil, err
 	}
+	s.written(ctx, ev)
 	saved, err := s.Store.Get(ctx, m.Name, m.Version)
 	if err != nil {
 		return Record{}, nil, err
 	}
 	s.ensureAliasStubs(ctx, &saved.Methodology)
-	s.publish(ctx, "published", saved)
 	return saved, nil, nil
 }
 

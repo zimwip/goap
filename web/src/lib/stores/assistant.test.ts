@@ -17,9 +17,29 @@ vi.mock('../api', () => ({
 }));
 vi.mock('../shell/tabs.svelte', () => ({ activeTab: () => ({ id: 'change:C1', kind: 'change', params: { id: 'C1' }, pinned: true }) }));
 vi.mock('./project.svelte', () => ({ project: { current: 'PROJ-A' } }));
+vi.mock('./workingChange.svelte', () => ({ working: { change: undefined } }));
 vi.mock('../assistant/actions', () => ({ runActions }));
+const eventStream = vi.hoisted(() => ({ status: 'stopped' }));
+vi.mock('../flux/events.svelte', () => ({ stream: eventStream }));
 
-import { assistant, attachView, deleteConversation, isPending, newConversation, openConversation, pollDelay, POLL_FAST_COUNT, POLL_FAST_MS, POLL_MS, resetAssistant, retry, send } from './assistant.svelte';
+import { keyOf, touch } from '../flux/signals.svelte';
+import {
+  assistant,
+  attachView,
+  deleteConversation,
+  isPending,
+  newConversation,
+  openConversation,
+  pollDelay,
+  POLL_FALLBACK_MS,
+  POLL_FAST_COUNT,
+  POLL_FAST_MS,
+  POLL_MS,
+  resetAssistant,
+  retry,
+  send,
+  syncWithEvents,
+} from './assistant.svelte';
 
 const user = (seq: number, text = 'hi') => ({ id: `U${seq}`, conversationId: 'C1', seq, role: 'user' as const, text, status: 'done' as const });
 const bot = (seq: number, status: 'pending' | 'done' | 'error', extra = {}) => ({ id: `A${seq}`, conversationId: 'C1', seq, role: 'assistant' as const, status, ...extra });
@@ -36,6 +56,7 @@ async function flush() {
 
 beforeEach(() => {
   vi.useFakeTimers();
+  eventStream.status = 'stopped';
   resetAssistant();
   Object.values(api).forEach((f) => f.mockReset());
   runActions.mockReset();
@@ -244,5 +265,56 @@ describe('assistant store', () => {
     expect(pollDelay(0, 2)).toBe(POLL_FAST_MS * 4);
     expect(pollDelay(100, 10)).toBe(15000);
     expect(POLL_FAST_MS).toBeLessThan(POLL_MS);
+  });
+
+  it('polls slowly while the event stream is open', () => {
+    expect(pollDelay(0, 0, true)).toBe(POLL_FALLBACK_MS);
+    expect(pollDelay(0, 1, true)).toBe(POLL_FALLBACK_MS * 2);
+    expect(pollDelay(0, 10, true)).toBe(60000);
+    expect(POLL_FALLBACK_MS).toBeGreaterThan(POLL_MS);
+  });
+
+  it('reads the conversation again when its event comes, and the list when one is created', async () => {
+    eventStream.status = 'open';
+    api.list.mockResolvedValue({ conversations: [conv] });
+    api.get
+      .mockResolvedValueOnce({ conversation: conv, messages: [user(1), bot(2, 'pending')] })
+      .mockResolvedValueOnce({ conversation: conv, messages: [user(1), bot(2, 'done', { text: 'there', actions: [act] })] });
+    const detach = attachView();
+    await flush();
+    syncWithEvents();
+    expect(api.get).toHaveBeenCalledTimes(1);
+    // no fast polling while the stream is open
+    await tick(5 * POLL_MS);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    touch(keyOf.conversation('C1'));
+    syncWithEvents();
+    await flush();
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(isPending()).toBe(false);
+    expect(runActions).toHaveBeenCalledTimes(1);
+    // another conversation's event reads nothing; the list follows a created one
+    touch(keyOf.conversation('C9'));
+    syncWithEvents();
+    await flush();
+    expect(api.get).toHaveBeenCalledTimes(2);
+    expect(api.list).toHaveBeenCalledTimes(1);
+    touch(keyOf.conversations);
+    syncWithEvents();
+    await flush();
+    expect(api.list).toHaveBeenCalledTimes(2);
+    detach();
+  });
+
+  it('falls back to a slow poll when the stream is open but no event comes', async () => {
+    eventStream.status = 'open';
+    api.get.mockResolvedValue({ conversation: conv, messages: [user(1), bot(2, 'pending')] });
+    const detach = attachView();
+    await openConversation('C1');
+    await tick(POLL_FALLBACK_MS - 100);
+    expect(api.get).toHaveBeenCalledTimes(1);
+    await tick(200);
+    expect(api.get).toHaveBeenCalledTimes(2);
+    detach();
   });
 });

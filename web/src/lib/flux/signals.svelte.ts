@@ -51,6 +51,10 @@ export const keyOf = {
   methodologies: 'methodologies',
   domain: (name: string) => `domain:${name}`,
   domains: 'domains',
+  /** a conversation of the caller (ADR 0085): its header or one of its messages */
+  conversation: (id: string) => `conversation:${id}`,
+  /** the caller's list of conversations: one was created, renamed or deleted */
+  conversations: 'conversations',
 };
 
 /**

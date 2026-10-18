@@ -7,6 +7,7 @@ import (
 	"maps"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/contracts/events"
 	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/contracts/operations"
 )
@@ -77,8 +78,14 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 				return err
 			}
 		}
-		result, err = g.commitOnBranch(ctx, tx, id, baselineName)
-		return err
+		if result, err = g.commitOnBranch(ctx, tx, id, baselineName); err != nil {
+			return err
+		}
+		if c, err = tx.Change(ctx, id); err != nil {
+			return err
+		}
+		g.raiseBaseline(ctx, tx, events.ChangeCommitted, c, result)
+		return nil
 	})
 	return result, err
 }

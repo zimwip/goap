@@ -263,3 +263,46 @@ func TestSearchWordsAndScore(t *testing.T) {
 		t.Fatalf("%d", n)
 	}
 }
+
+// A change the person only looks at is not the frame: the turn works on the working change (none here: the project),
+// and the prompt names the change shown so the assistant can open it to work on it.
+func TestAViewedChangeIsNotTheWorkingChange(t *testing.T) {
+	e := newEnv(t, `{"message":"ok"}`)
+	viewed := Context{App: App{Project: "PROJ-A", Tab: Tab{Kind: "change", Params: map[string]string{"id": "CHG-D"}}}}
+	if _, _, err := e.send("hi", viewed); err != nil {
+		t.Fatal(err)
+	}
+	sys := e.model.got[0].System
+	if !strings.Contains(sys, "level: project") || !strings.Contains(sys, "looking at change CHG-D, which is not the working change") {
+		t.Fatalf("system %s", sys)
+	}
+	// the working change frames the turn whatever tab is shown, and goes with the context
+	e.model.answers, e.model.got = []string{`{"message":"ok"}`}, nil
+	user, _, err := e.send("and now?", Context{App: App{Project: "PROJ-A", Change: "CHG-D", Tab: Tab{Kind: "node"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sys = e.model.got[0].System
+	if !strings.Contains(sys, "level: change") || !strings.Contains(sys, "change: CHG-D") || strings.Contains(sys, "looking at change") ||
+		!strings.Contains(sys, `"workingChange":"CHG-D"`) || !strings.Contains(user.Context, "working change CHG-D") {
+		t.Fatalf("system %s / %q", sys, user.Context)
+	}
+}
+
+// select_project to another project leaves the working change of the project left: the next step is at the project.
+func TestSelectingAnotherProjectLeavesTheWorkingChange(t *testing.T) {
+	e := newEnv(t, call(ToolSelectProject, `{"project":"PROJ-B"}`), `{"message":"ok"}`)
+	if _, _, err := e.send("move to B", changeCtx("CHG-D")); err != nil {
+		t.Fatal(err)
+	}
+	if sys := e.model.got[0].System; !strings.Contains(sys, "level: change") {
+		t.Fatalf("first step %s", sys)
+	}
+	sys := e.model.got[1].System
+	if !strings.Contains(sys, "level: project") || !strings.Contains(sys, "project: PROJ-B") || !strings.Contains(sys, "belongs to project PROJ-A") {
+		t.Fatalf("system %s", sys)
+	}
+	if got := toolNames(e.model.got[1].Tools); !slices.Contains(got, ToolListMethodologies) || slices.Contains(got, ToolAttachChange) {
+		t.Fatalf("tools %v", got)
+	}
+}

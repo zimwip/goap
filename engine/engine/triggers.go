@@ -17,6 +17,7 @@ import (
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/engine/condition"
 	"github.com/zimwip/goap/engine/methodology"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // TriggerEvent is an event that may start agents.
@@ -40,6 +41,17 @@ type TriggerEvent struct {
 
 // endUser is the person the runs an event sets off act for (ADR 0114): the one who raised a change event, else the end
 // user of the process the event comes from.
+// changeID is the change the event is about: its change, else the change of its process ("" for none).
+func (ev TriggerEvent) changeID() domain.ChangeID {
+	switch {
+	case ev.Change != nil:
+		return ev.Change.ID
+	case ev.Process != nil:
+		return ev.Process.ChangeID
+	}
+	return ""
+}
+
 func (ev TriggerEvent) endUser() string {
 	if ev.EndUser != "" {
 		return ev.EndUser
@@ -147,6 +159,40 @@ type TriggerManager struct {
 	entries map[string]*triggerEntry
 	cron    *cron.Cron
 	now     func() time.Time
+	// fired is when a trigger last fired for a change (key, change), seen the ids of the events handled lately.
+	fired map[firedKey]time.Time
+	seen  eventIDs
+}
+
+type firedKey struct {
+	trigger string
+	change  domain.ChangeID
+}
+
+// eventIDs remembers the last ids of events handled, so an event delivered again (at least once, ADR 0136) is
+// handled once.
+type eventIDs struct {
+	set  map[string]bool
+	ring []string
+	next int
+}
+
+const seenEvents = 4096
+
+// add records id and reports whether it was new.
+func (s *eventIDs) add(id string) bool {
+	if s.set[id] {
+		return false
+	}
+	if s.set == nil {
+		s.set, s.ring = map[string]bool{}, make([]string, seenEvents)
+	}
+	if old := s.ring[s.next]; old != "" {
+		delete(s.set, old)
+	}
+	s.ring[s.next], s.set[id] = id, true
+	s.next = (s.next + 1) % seenEvents
+	return true
 }
 
 func (t *TriggerManager) isLeader() bool {
@@ -272,6 +318,14 @@ func (t *TriggerManager) States() []TriggerState {
 // Handle fires the event triggers matching ev, and runs the transverse processes alongside the changes it concerns.
 // Items added to a change raise, after it, the events of the methodologies their signals name (ADR 0110).
 func (t *TriggerManager) Handle(ctx context.Context, ev TriggerEvent) {
+	if id := outbox.EventID(ctx); id != "" {
+		t.mu.Lock()
+		fresh := t.seen.add(id)
+		t.mu.Unlock()
+		if !fresh {
+			return
+		}
+	}
 	t.handle(ctx, ev)
 	for _, own := range DeclaredEvents(ev) {
 		t.handle(ctx, own)
@@ -364,12 +418,25 @@ func (t *TriggerManager) fireKey(ctx context.Context, key string, ev *TriggerEve
 			t.mu.Unlock()
 			return nil, errSkipped
 		}
-		// a superseding trigger is not rate limited: the latest event is the one that counts
-		if !def.Supersede && !state.LastFired.IsZero() && t.clock().Sub(state.LastFired) < minInterval {
+		// a trigger reacting again to the same change at once is a loop: rate limited per trigger and change, so the
+		// events of other changes still fire it; a superseding trigger is not, the latest event is the one that counts
+		fk := firedKey{key, ev.changeID()}
+		if last, ok := t.fired[fk]; ok && !def.Supersede && t.clock().Sub(last) < minInterval {
 			t.mu.Unlock()
-			t.log().Warn("trigger rate limited", "trigger", key)
+			t.log().Warn("trigger rate limited", "trigger", key, "change", fk.change)
 			return nil, errSkipped
 		}
+		if t.fired == nil {
+			t.fired = map[firedKey]time.Time{}
+		}
+		if len(t.fired) >= seenEvents {
+			for k, at := range t.fired {
+				if t.clock().Sub(at) >= minInterval {
+					delete(t.fired, k)
+				}
+			}
+		}
+		t.fired[fk] = t.clock()
 	}
 	e.state.LastFired = t.clock()
 	e.state.Fires++

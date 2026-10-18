@@ -49,7 +49,7 @@ function entityOf(e: AssistantEntity, shown?: string): AssistantEntity {
 }
 
 /** The context of one turn. Empty fields are left out. */
-export function assistantContext(tab: Tab | undefined, project: string, now: number = Date.now()): AssistantContext {
+export function assistantContext(tab: Tab | undefined, project: string, now: number = Date.now(), change = ''): AssistantContext {
   const ctx: AssistantContext = {};
   const tid = tab?.id ?? '';
 
@@ -61,7 +61,8 @@ export function assistantContext(tab: Tab | undefined, project: string, now: num
     app.tab = { kind: tab.kind, params };
   }
   if (project) app.project = project;
-  if (app.tab || app.project) ctx.app = app;
+  if (change) app.change = clipBytes(change, MAX.id);
+  if (app.tab || app.project || app.change) ctx.app = app;
 
   // focus: what the person is doing
   const fi = tab ? focusContext(tid) : {};

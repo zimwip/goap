@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Migrations holds the PostgreSQL schema; SQLiteMigrations the local mode one.
@@ -28,7 +30,7 @@ type SQLStore struct {
 	Dollar bool
 }
 
-var _ Store = SQLStore{}
+var _ EmittingStore = SQLStore{}
 
 func (s SQLStore) q(query string) string {
 	if !s.Dollar {
@@ -110,6 +112,11 @@ func (s SQLStore) Exchange(ctx context.Context, seq int64) (Exchange, error) {
 }
 
 func (s SQLStore) AppendCall(ctx context.Context, c Call, x *Exchange) (int64, error) {
+	return s.AppendCallEmitting(ctx, c, x, nil)
+}
+
+// AppendCallEmitting implements EmittingStore: the row, its exchange and its events in one transaction.
+func (s SQLStore) AppendCallEmitting(ctx context.Context, c Call, x *Exchange, events CallEvents) (int64, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -138,7 +145,36 @@ func (s SQLStore) AppendCall(ctx context.Context, c Call, x *Exchange) (int64, e
 			return 0, err
 		}
 	}
+	if events != nil {
+		c.Seq = seq
+		msgs, err := events(c)
+		if err != nil {
+			return 0, err
+		}
+		if err := s.outbox().Append(ctx, tx, msgs...); err != nil {
+			return 0, err
+		}
+	}
 	return seq, tx.Commit()
+}
+
+func (s SQLStore) outbox() outbox.SQL {
+	return outbox.SQL{DB: s.DB, Postgres: s.Dollar, Table: "model_outbox"}
+}
+
+// Pending implements outbox.Store.
+func (s SQLStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.outbox().Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s SQLStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.outbox().MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s SQLStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.outbox().PurgePublished(ctx, before)
 }
 
 // where is the WHERE clause of a filter (AfterSeq included) with its arguments.

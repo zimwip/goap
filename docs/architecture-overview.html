@@ -152,11 +152,11 @@ footer { font-size: 13px; color: var(--muted); }
 
   <section>
     <h2>Physical: services at run time</h2>
-    <p>The compose stack: each box is a container running one binary, <code>platform/cmd/&lt;name&gt;</code>, with its host port. Boxes take the colour of the module whose service they run; every call is connect-rpc, and the graph's events go over NATS JetStream.</p>
+    <p>The compose stack: each box is a container running one binary, <code>platform/cmd/&lt;name&gt;</code>, with its host port. Boxes take the colour of the module whose service they run; every call is connect-rpc, and every service's events go over NATS JetStream: each service writes them in an outbox table in the transaction of their fact, and its relay publishes them (ADR 0136).</p>
     <div class="fig">
       <svg viewBox="0 0 940 600" role="img" aria-labelledby="rt-t rt-d">
         <title id="rt-t">Runtime services and flows</title>
-        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. The graph publishes changes on NATS, read by the event stream, the indexer and the engine; the event stream pushes them to the browser.</desc>
+        <desc id="rt-d">The browser calls the gateway, which routes to graph, registry, engine, MCP hub and model gateway. The engine calls graph, registry, model gateway, MCP hub and its sandbox. The MCP hub calls connectors. Every service publishes its events on NATS through its outbox: the graph its changes, nodes and baselines (and the methodology registry's, carried by its commits), the engine its processes, the conversations, the hub, the model gateway, the preferences and the credentials theirs; the event stream, the indexer and the engine read them, and the event stream pushes them to the browser.</desc>
         <defs>
           <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker>
         </defs>
@@ -229,9 +229,12 @@ footer { font-size: 13px; color: var(--muted); }
 
         <!-- bus -->
         <rect class="bus" x="20" y="430" width="900" height="36" rx="18"/>
-        <text class="t" x="470" y="453" text-anchor="middle">NATS JetStream · goap.changed.&gt; · registry and index events</text>
+        <text class="t" x="470" y="453" text-anchor="middle">NATS JetStream · each service's events, through its outbox</text>
         <path class="w ev" d="M320 276V426" marker-end="url(#a)"/>
         <text class="lbl" x="326" y="410">publishes</text>
+        <!-- the engine's process events, the conversations' (ADR 0136); the hub's and the gateway's go the same way -->
+        <path class="w ev" d="M400 268H388V426" marker-end="url(#a)"/>
+        <path class="w ev" d="M60 386V426" marker-end="url(#a)"/>
         <path class="w ev" d="M845 430V390" marker-end="url(#a)"/>
         <path class="w ev" d="M575 430V262H564" marker-end="url(#a)"/>
         <text class="lbl" x="581" y="414">triggers</text>
@@ -249,7 +252,7 @@ footer { font-size: 13px; color: var(--muted); }
           <text class="s" x="740" y="548" text-anchor="middle">a schema per service · secrets by reference · traces</text></g>
       </svg>
     </div>
-    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs</span></div>
+    <div class="legend"><span><i></i>connect-rpc call</span><span><i class="d"></i>event over NATS</span><span>not drawn: preferences and credentials (called by the gateway only), the MCP hub calling the graph and engine for the built-in MCPs, the events the hub, the gateway, the preferences and the credentials publish through their outboxes</span></div>
   </section>
 
   <section>
@@ -289,7 +292,7 @@ footer { font-size: 13px; color: var(--muted); }
       <li><div><b>It reads the blackboard.</b> Change, nodes, items, decision points and history come from the graph through <code>graphapi.Port</code>; conditions are evaluated on it and the planner picks the next action. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-graph">graph</span></div></div></li>
       <li><div><b>The action runs.</b> An <code>llm</code> action goes through the model gateway (one ledger row per call); a <code>tool</code> action through the MCP hub, which resolves the unit's adapter and calls the connector (the Claude coding agent's sessions calling the model back through the gateway's <code>/anthropic</code> endpoint, a ledger row per call); a <code>script</code> in the sandbox. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-platform">modelgw</span> · <span class="chip m-mcp">mcp hub</span> → connector</div></div></li>
       <li><div><b>The result lands on the change.</b> Impacts become drafts and items on the change log; nothing is a version until review, commit and merge. <div class="who"><span class="chip m-engine">engine</span> → <span class="chip m-graph">graph</span></div></div></li>
-      <li><div><b>Everyone sees it.</b> The graph publishes <code>change.updated</code>; the event stream pushes it to every open IDE, the indexer reindexes, and companion runs react. <div class="who"><span class="chip m-graph">graph</span> ⇢ NATS ⇢ <span class="chip m-platform">events</span> · <span class="chip m-graph">indexer</span> · <span class="chip m-engine">engine</span></div></div></li>
+      <li><div><b>Everyone sees it.</b> The graph writes <code>change.updated</code> in its outbox with the fact, and its relay publishes it; the event stream pushes it to every open IDE, the indexer reindexes, and companion runs react. <div class="who"><span class="chip m-graph">graph</span> ⇢ NATS ⇢ <span class="chip m-platform">events</span> · <span class="chip m-graph">indexer</span> · <span class="chip m-engine">engine</span></div></div></li>
     </ol>
   </section>
 

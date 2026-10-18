@@ -102,7 +102,7 @@ func (p *AnthropicProxy) messages(ctx context.Context, w http.ResponseWriter, r 
 		m, period, err = s.admitModel(ctx, t, endUserOf(ctx), false)
 	}
 	if err != nil {
-		rec.finish(ctx, t.Provider, t.Model, 0, 0, err)
+		rec.refuse(ctx, t.Provider, t.Model, err)
 		anthropicError(w, statusOf(err), "permission_error", err.Error())
 		return
 	}

@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const openTab = vi.hoisted(() => vi.fn());
 const refreshChanges = vi.hoisted(() => vi.fn(async () => {}));
 const selectProject = vi.hoisted(() => vi.fn(async () => {}));
-const followChangeProject = vi.hoisted(() => vi.fn(async () => {}));
+const workIn = vi.hoisted(() => vi.fn(async () => true));
 const notify = vi.hoisted(() => vi.fn());
 const cat = vi.hoisted(() => ({ changes: { items: [] as { id: string; projectId?: string }[] } }));
 vi.mock('../shell/tabs.svelte', async (orig) => ({ ...(await orig<object>()), openTab }));
 vi.mock('../shell/workbench.svelte', () => ({ notify }));
 vi.mock('../stores/catalog.svelte', () => ({ changes: cat.changes, refreshChanges }));
-vi.mock('../stores/project.svelte', () => ({ selectProject, followChangeProject, applicable: { names: undefined } }));
+vi.mock('../stores/project.svelte', () => ({ selectProject, applicable: { names: undefined } }));
+vi.mock('../stores/workingChange.svelte', () => ({ workIn }));
 const choices = vi.hoisted(() => ({ aliases: [] as { alias: string; provider?: string; model?: string }[], loaded: true }));
 vi.mock('../stores/modelChoices.svelte', () => ({
   modelChoices: choices,
@@ -29,7 +30,7 @@ import { COMMANDS } from '../shell/commands';
 beforeEach(() => {
   openTab.mockReset();
   selectProject.mockReset();
-  followChangeProject.mockReset();
+  workIn.mockReset();
   refreshChanges.mockReset();
   notify.mockReset();
   cat.changes.items = [];
@@ -47,13 +48,15 @@ describe('assistant actions', () => {
     expect(selectProject).toHaveBeenCalledWith('PROJ-B');
     expect(refreshChanges).toHaveBeenCalled();
     expect(openTab).toHaveBeenCalledWith({ kind: 'change', params: { id: 'CHG-9' } }, { pin: true });
+    // the assistant works in the change it created
+    expect(workIn).toHaveBeenCalledWith(expect.objectContaining({ id: 'CHG-9', projectId: 'PROJ-B' }));
   });
 
   it('opens a known change without refreshing and ignores unknown types', async () => {
     cat.changes.items = [{ id: 'CHG-1', projectId: 'PROJ-A' }];
     await runActions({ actions: [{ type: 'open_change', args: { changeId: 'CHG-1' } }, { type: 'mystery' }] });
     expect(refreshChanges).not.toHaveBeenCalled();
-    expect(followChangeProject).toHaveBeenCalledWith({ id: 'CHG-1', projectId: 'PROJ-A' });
+    expect(workIn).toHaveBeenCalledWith({ id: 'CHG-1', projectId: 'PROJ-A' });
     expect(openTab).toHaveBeenCalledTimes(1);
     expect(actionLabel({ type: 'mystery' })).toBe('');
     // the chip of a type this web does not know still says what happened
@@ -63,7 +66,7 @@ describe('assistant actions', () => {
 
   it('labels the chips', () => {
     expect(actionLabel({ type: 'select_project', args: { project: 'P' } })).toBe('Switched to project P');
-    expect(actionLabel({ type: 'open_change', args: { changeId: 'CHG-1' } })).toBe('Opened change CHG-1');
+    expect(actionLabel({ type: 'open_change', args: { changeId: 'CHG-1' } })).toBe('Working in change CHG-1');
     expect(actionLabel({ type: 'create_change', args: { title: 'T' }, result: { changeId: 'CHG-2', title: 'Fix' } })).toBe('Created change Fix');
     const search = { type: 'search_changes', args: { q: 'payment' }, result: { count: 2 } };
     expect(actionLabel(search)).toBe('Searched the changes for "payment" (2 found)');

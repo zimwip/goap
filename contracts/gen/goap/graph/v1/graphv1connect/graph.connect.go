@@ -123,6 +123,9 @@ const (
 	// GraphServiceUpgradeChangeProcedure is the fully-qualified name of the GraphService's
 	// UpgradeChange RPC.
 	GraphServiceUpgradeChangeProcedure = "/goap.graph.v1.GraphService/UpgradeChange"
+	// GraphServiceSetChangeMethodologyProcedure is the fully-qualified name of the GraphService's
+	// SetChangeMethodology RPC.
+	GraphServiceSetChangeMethodologyProcedure = "/goap.graph.v1.GraphService/SetChangeMethodology"
 	// GraphServiceAddItemsProcedure is the fully-qualified name of the GraphService's AddItems RPC.
 	GraphServiceAddItemsProcedure = "/goap.graph.v1.GraphService/AddItems"
 	// GraphServiceProposeImpactProcedure is the fully-qualified name of the GraphService's
@@ -390,6 +393,8 @@ type GraphServiceClient interface {
 	GetChangeDependencies(context.Context, *connect.Request[v1.GetChangeDependenciesRequest]) (*connect.Response[v1.GetChangeDependenciesResponse], error)
 	// Move an open change to another version of its methodology (ADR 0113).
 	UpgradeChange(context.Context, *connect.Request[v1.UpgradeChangeRequest]) (*connect.Response[v1.UpgradeChangeResponse], error)
+	// SetChangeMethodology gives an open change that follows no methodology one of the methodologies of its project.
+	SetChangeMethodology(context.Context, *connect.Request[v1.SetChangeMethodologyRequest]) (*connect.Response[v1.SetChangeMethodologyResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
@@ -733,6 +738,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			httpClient,
 			baseURL+GraphServiceUpgradeChangeProcedure,
 			connect.WithSchema(graphServiceMethods.ByName("UpgradeChange")),
+			connect.WithClientOptions(opts...),
+		),
+		setChangeMethodology: connect.NewClient[v1.SetChangeMethodologyRequest, v1.SetChangeMethodologyResponse](
+			httpClient,
+			baseURL+GraphServiceSetChangeMethodologyProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("SetChangeMethodology")),
 			connect.WithClientOptions(opts...),
 		),
 		addItems: connect.NewClient[v1.AddItemsRequest, v1.AddItemsResponse](
@@ -1210,6 +1221,7 @@ type graphServiceClient struct {
 	setChangeDependencies  *connect.Client[v1.SetChangeDependenciesRequest, v1.SetChangeDependenciesResponse]
 	getChangeDependencies  *connect.Client[v1.GetChangeDependenciesRequest, v1.GetChangeDependenciesResponse]
 	upgradeChange          *connect.Client[v1.UpgradeChangeRequest, v1.UpgradeChangeResponse]
+	setChangeMethodology   *connect.Client[v1.SetChangeMethodologyRequest, v1.SetChangeMethodologyResponse]
 	addItems               *connect.Client[v1.AddItemsRequest, v1.AddItemsResponse]
 	proposeImpact          *connect.Client[v1.ProposeImpactRequest, v1.ProposeImpactResponse]
 	impactNodeCreate       *connect.Client[v1.ImpactNodeCreateRequest, v1.ImpactNodeCreateResponse]
@@ -1443,6 +1455,11 @@ func (c *graphServiceClient) GetChangeDependencies(ctx context.Context, req *con
 // UpgradeChange calls goap.graph.v1.GraphService.UpgradeChange.
 func (c *graphServiceClient) UpgradeChange(ctx context.Context, req *connect.Request[v1.UpgradeChangeRequest]) (*connect.Response[v1.UpgradeChangeResponse], error) {
 	return c.upgradeChange.CallUnary(ctx, req)
+}
+
+// SetChangeMethodology calls goap.graph.v1.GraphService.SetChangeMethodology.
+func (c *graphServiceClient) SetChangeMethodology(ctx context.Context, req *connect.Request[v1.SetChangeMethodologyRequest]) (*connect.Response[v1.SetChangeMethodologyResponse], error) {
+	return c.setChangeMethodology.CallUnary(ctx, req)
 }
 
 // AddItems calls goap.graph.v1.GraphService.AddItems.
@@ -1866,6 +1883,8 @@ type GraphServiceHandler interface {
 	GetChangeDependencies(context.Context, *connect.Request[v1.GetChangeDependenciesRequest]) (*connect.Response[v1.GetChangeDependenciesResponse], error)
 	// Move an open change to another version of its methodology (ADR 0113).
 	UpgradeChange(context.Context, *connect.Request[v1.UpgradeChangeRequest]) (*connect.Response[v1.UpgradeChangeResponse], error)
+	// SetChangeMethodology gives an open change that follows no methodology one of the methodologies of its project.
+	SetChangeMethodology(context.Context, *connect.Request[v1.SetChangeMethodologyRequest]) (*connect.Response[v1.SetChangeMethodologyResponse], error)
 	AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error)
 	// Change impacts (ADR 0024): declare the nodes a change acts on, write the version each produces on the
 	// change branch, and accept or reject them (a comment is mandatory).
@@ -2205,6 +2224,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		GraphServiceUpgradeChangeProcedure,
 		svc.UpgradeChange,
 		connect.WithSchema(graphServiceMethods.ByName("UpgradeChange")),
+		connect.WithHandlerOptions(opts...),
+	)
+	graphServiceSetChangeMethodologyHandler := connect.NewUnaryHandler(
+		GraphServiceSetChangeMethodologyProcedure,
+		svc.SetChangeMethodology,
+		connect.WithSchema(graphServiceMethods.ByName("SetChangeMethodology")),
 		connect.WithHandlerOptions(opts...),
 	)
 	graphServiceAddItemsHandler := connect.NewUnaryHandler(
@@ -2711,6 +2736,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceGetChangeDependenciesHandler.ServeHTTP(w, r)
 		case GraphServiceUpgradeChangeProcedure:
 			graphServiceUpgradeChangeHandler.ServeHTTP(w, r)
+		case GraphServiceSetChangeMethodologyProcedure:
+			graphServiceSetChangeMethodologyHandler.ServeHTTP(w, r)
 		case GraphServiceAddItemsProcedure:
 			graphServiceAddItemsHandler.ServeHTTP(w, r)
 		case GraphServiceProposeImpactProcedure:
@@ -2992,6 +3019,10 @@ func (UnimplementedGraphServiceHandler) GetChangeDependencies(context.Context, *
 
 func (UnimplementedGraphServiceHandler) UpgradeChange(context.Context, *connect.Request[v1.UpgradeChangeRequest]) (*connect.Response[v1.UpgradeChangeResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.UpgradeChange is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) SetChangeMethodology(context.Context, *connect.Request[v1.SetChangeMethodologyRequest]) (*connect.Response[v1.SetChangeMethodologyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("goap.graph.v1.GraphService.SetChangeMethodology is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) AddItems(context.Context, *connect.Request[v1.AddItemsRequest]) (*connect.Response[v1.AddItemsResponse], error) {

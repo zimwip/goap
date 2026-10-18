@@ -40,10 +40,13 @@ type Context struct {
 	Focus  Focus
 }
 
-// App is the application: the active project and the tab.
+// App is the application: the active project, the working change and the tab.
 type App struct {
 	Project string
-	Tab     Tab
+	// Change is the working change: the change the person selected to work in (in the header, the change editor), or
+	// the assistant (open_change, create_change); "" for none. It is the change the turn works on, whatever tab is shown.
+	Change string
+	Tab    Tab
 }
 
 // Tab is the active tab (kind and parameters, opaque but for a change: kind "change", parameter "id").
@@ -82,9 +85,13 @@ type Focus struct {
 	LastAction    string
 }
 
-// change is the change the page of the turn is about ("" for none): a change tab (its "id" parameter), else the
-// focused element when it is a change.
-func (c Context) change() string {
+// change is the change the turn works on: the working change ("" for none). A change only looked at (a change tab, a
+// focused change) is not worked on: the person selects the working change.
+func (c Context) change() string { return c.App.Change }
+
+// viewed is the change the page shows ("" for none): a change tab (its "id" parameter), else the focused element when
+// it is a change.
+func (c Context) viewed() string {
 	if c.App.Tab.Kind == "change" {
 		if id := strings.TrimSpace(c.App.Tab.Params["id"]); id != "" {
 			return id
@@ -155,7 +162,7 @@ func (c Context) normalise() (Context, error) {
 		return c, fmt.Errorf("%w: the selection is %d bytes, at most %d", ErrInvalid, len(c.Focus.Selection), MaxSelectionBytes)
 	}
 	o := Context{
-		App: App{Project: clean(c.App.Project, maxIDBytes, false), Tab: Tab{Kind: clean(c.App.Tab.Kind, maxKindBytes, false), Params: cleanMap(c.App.Tab.Params, maxParams, 40, maxParamBytes)}},
+		App: App{Project: clean(c.App.Project, maxIDBytes, false), Change: clean(c.App.Change, maxIDBytes, false), Tab: Tab{Kind: clean(c.App.Tab.Kind, maxKindBytes, false), Params: cleanMap(c.App.Tab.Params, maxParams, 40, maxParamBytes)}},
 		Screen: Screen{Kind: clean(c.Screen.Kind, maxKindBytes, false), Title: clean(c.Screen.Title, maxLabelBytes, false),
 			Summary: clean(c.Screen.Summary, maxSummaryBytes, true)},
 		Focus: Focus{Selection: clean(c.Focus.Selection, MaxSelectionBytes, true),
@@ -238,6 +245,7 @@ type (
 	}
 	jsonApp struct {
 		Project string   `json:"activeProject,omitempty"`
+		Change  string   `json:"workingChange,omitempty"`
 		Tab     *jsonTab `json:"tab,omitempty"`
 	}
 	jsonTab struct {
@@ -273,8 +281,8 @@ func (c Context) render(project string) string {
 	if project == "" {
 		project = c.App.Project
 	}
-	if project != "" || c.App.Tab.Kind != "" || len(c.App.Tab.Params) > 0 {
-		ja := &jsonApp{Project: project}
+	if project != "" || c.App.Change != "" || c.App.Tab.Kind != "" || len(c.App.Tab.Params) > 0 {
+		ja := &jsonApp{Project: project, Change: c.App.Change}
 		if c.App.Tab.Kind != "" || len(c.App.Tab.Params) > 0 {
 			ja.Tab = &jsonTab{c.App.Tab.Kind, c.App.Tab.Params}
 		}
@@ -310,6 +318,9 @@ func (c Context) describe() string {
 	}
 	if c.App.Project != "" {
 		parts = append(parts, "project "+clip(c.App.Project, 60))
+	}
+	if c.App.Change != "" {
+		parts = append(parts, "working change "+clip(c.App.Change, 60))
 	}
 	if c.Focus.Selection != "" {
 		parts = append(parts, fmt.Sprintf("%d selected characters", len([]rune(c.Focus.Selection))))

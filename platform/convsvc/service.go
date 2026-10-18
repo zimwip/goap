@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Errors of the Service.
@@ -55,6 +56,9 @@ type Service struct {
 	// Now is the clock (time.Now when nil); NewID makes the ids (random when nil).
 	Now   func() time.Time
 	NewID func() string
+
+	// relay delivers the events of the outbox (ADR 0136); nil until Emit, and then no event is written.
+	relay *outbox.Relay
 }
 
 func (s *Service) now() time.Time {
@@ -126,9 +130,14 @@ func (s *Service) Create(ctx context.Context, p authz.Principal, title string) (
 	}
 	now := s.now()
 	c := Conversation{ID: s.newID("CONV-"), Subject: p.Subject, Title: title, CreatedAt: now, UpdatedAt: now}
-	if err := s.Store.Create(ctx, c, MaxConversationsPerSubject); err != nil {
+	msgs, err := s.event(ctx, Event{Event: EventCreated, ConversationID: c.ID, Subject: c.Subject, At: now})
+	if err != nil {
+		return Conversation{}, err
+	}
+	if err := s.Store.Create(ctx, c, MaxConversationsPerSubject, msgs...); err != nil {
 		return Conversation{}, s.storeErr(err)
 	}
+	s.delivered(ctx)
 	return c, nil
 }
 
@@ -186,25 +195,45 @@ func (s *Service) Get(ctx context.Context, p authz.Principal, id string) (Conver
 
 // Rename retitles a conversation of the caller.
 func (s *Service) Rename(ctx context.Context, p authz.Principal, id, title string) (Conversation, error) {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	c, err := s.owned(ctx, p, id)
+	if err != nil {
 		return Conversation{}, err
 	}
-	title, err := checkTitle(title)
+	title, err = checkTitle(title)
 	if err != nil {
 		return Conversation{}, err
 	}
 	if title == "" {
 		return Conversation{}, fmt.Errorf("%w: a title is needed", ErrInvalid)
 	}
-	return s.Store.Rename(ctx, id, title, s.now())
+	now := s.now()
+	msgs, err := s.event(ctx, Event{Event: EventRenamed, ConversationID: id, Subject: c.Subject, At: now})
+	if err != nil {
+		return Conversation{}, err
+	}
+	out, err := s.Store.Rename(ctx, id, title, now, msgs...)
+	if err != nil {
+		return Conversation{}, err
+	}
+	s.delivered(ctx)
+	return out, nil
 }
 
 // Delete forgets a conversation of the caller and its messages.
 func (s *Service) Delete(ctx context.Context, p authz.Principal, id string) error {
-	if _, err := s.owned(ctx, p, id); err != nil {
+	c, err := s.owned(ctx, p, id)
+	if err != nil {
 		return err
 	}
-	return s.Store.Delete(ctx, id)
+	msgs, err := s.event(ctx, Event{Event: EventDeleted, ConversationID: id, Subject: c.Subject, At: s.now()})
+	if err != nil {
+		return err
+	}
+	if err := s.Store.Delete(ctx, id, msgs...); err != nil {
+		return err
+	}
+	s.delivered(ctx)
+	return nil
 }
 
 // Content is what a message says.
@@ -263,11 +292,14 @@ func (s *Service) Append(ctx context.Context, p authz.Principal, conversationID,
 	if c.Status == "" {
 		c.Status = StatusDone
 	}
+	var owner string
 	switch role {
 	case RoleUser:
-		if _, err := s.owned(ctx, p, conversationID); err != nil {
+		conv, err := s.owned(ctx, p, conversationID)
+		if err != nil {
 			return Message{}, err
 		}
+		owner = conv.Subject
 		if len(c.Actions) > 0 || c.ProcessID != "" || c.Status != StatusDone || c.Error != "" {
 			return Message{}, fmt.Errorf("%w: a user message carries a text only", ErrInvalid)
 		}
@@ -287,10 +319,27 @@ func (s *Service) Append(ctx context.Context, p authz.Principal, conversationID,
 	if err := c.check(); err != nil {
 		return Message{}, err
 	}
+	if owner == "" && s.emitting() {
+		// the event names the owner; a conversation never changes hands, so a read before the write is enough
+		conv, err := s.Store.Get(ctx, conversationID)
+		if err != nil {
+			return Message{}, s.storeErr(err)
+		}
+		owner = conv.Subject
+	}
 	m := Message{ID: s.newID("MSG-"), ConversationID: conversationID, Role: role, Text: c.Text, Actions: c.Actions,
 		ProcessID: c.ProcessID, Status: c.Status, Error: c.Error, Context: c.Context, CreatedAt: s.now()}
-	out, err := s.Store.Append(ctx, m, MaxMessagesPerConversation)
-	return out, s.storeErr(err)
+	msgs, err := s.event(ctx, Event{Event: EventMessageAppended, ConversationID: conversationID, Subject: owner,
+		MessageID: m.ID, Role: role, Status: m.Status, At: m.CreatedAt})
+	if err != nil {
+		return Message{}, err
+	}
+	out, err := s.Store.Append(ctx, m, MaxMessagesPerConversation, msgs...)
+	if err != nil {
+		return Message{}, s.storeErr(err)
+	}
+	s.delivered(ctx)
+	return out, nil
 }
 
 // UpdateMessage replaces the content of an assistant message (a platform service only): its text, actions, status
@@ -309,7 +358,8 @@ func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id strin
 	if err := c.check(); err != nil {
 		return Message{}, err
 	}
-	out, err := s.Store.UpdateMessage(ctx, id, s.now(), func(m Message) (Message, error) {
+	now := s.now()
+	out, err := s.Store.UpdateMessage(ctx, id, now, func(m Message) (Message, error) {
 		if m.Role != RoleAssistant {
 			return Message{}, fmt.Errorf("%w: only an assistant message is updated", ErrInvalid)
 		}
@@ -324,8 +374,12 @@ func (s *Service) UpdateMessage(ctx context.Context, p authz.Principal, id strin
 			m.ProcessID = c.ProcessID
 		}
 		return m, nil
-	})
-	return out, s.storeErr(err)
+	}, s.messageEvents(ctx, now))
+	if err != nil {
+		return Message{}, s.storeErr(err)
+	}
+	s.delivered(ctx)
+	return out, nil
 }
 
 // Summary returns the rolling summary of a conversation (the zero Summary when it has none) to a platform service (the
@@ -358,7 +412,23 @@ func (s *Service) SetSummary(ctx context.Context, p authz.Principal, id, text st
 	if len(text) > MaxSummaryBytes || upTo < 1 {
 		return fmt.Errorf("%w: a summary of at most %d bytes covering at least one message", ErrInvalid, MaxSummaryBytes)
 	}
-	return s.storeErr(s.Store.SetSummary(ctx, Summary{ConversationID: id, Text: text, UpTo: upTo, UpdatedAt: s.now()}))
+	now := s.now()
+	var msgs []outbox.Message
+	if s.emitting() {
+		// the event names the owner; a conversation never changes hands, so a read before the write is enough
+		conv, err := s.Store.Get(ctx, id)
+		if err != nil {
+			return s.storeErr(err)
+		}
+		if msgs, err = s.event(ctx, Event{Event: EventSummarized, ConversationID: id, Subject: conv.Subject, At: now}); err != nil {
+			return err
+		}
+	}
+	if err := s.Store.SetSummary(ctx, Summary{ConversationID: id, Text: text, UpTo: upTo, UpdatedAt: now}, msgs...); err != nil {
+		return s.storeErr(err)
+	}
+	s.delivered(ctx)
+	return nil
 }
 
 // ErrActionMissing is returned by UpdateAction when the message has no action at that index.
@@ -375,7 +445,8 @@ func (s *Service) UpdateAction(ctx context.Context, p authz.Principal, id string
 	if !p.System() {
 		return Message{}, ErrForbidden
 	}
-	out, err := s.Store.UpdateMessage(ctx, id, s.now(), func(m Message) (Message, error) {
+	now := s.now()
+	out, err := s.Store.UpdateMessage(ctx, id, now, func(m Message) (Message, error) {
 		if m.Role != RoleAssistant {
 			return Message{}, fmt.Errorf("%w: only an assistant message is updated", ErrInvalid)
 		}
@@ -398,6 +469,10 @@ func (s *Service) UpdateAction(ctx context.Context, p authz.Principal, id string
 		}
 		m.Actions = acts
 		return m, nil
-	})
-	return out, s.storeErr(err)
+	}, s.actionEvents(ctx, index, now))
+	if err != nil {
+		return Message{}, s.storeErr(err)
+	}
+	s.delivered(ctx)
+	return out, nil
 }

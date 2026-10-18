@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // SQLiteMigrations holds the SQLite schema of the graph (local development mode).
@@ -39,6 +40,26 @@ func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
 }
 
 type sqliteTx struct{ tx *sql.Tx }
+
+// AppendOutbox implements Tx.
+func (t *sqliteTx) AppendOutbox(ctx context.Context, msgs []outbox.Message) error {
+	return outbox.SQL{}.Append(ctx, t.tx, msgs...)
+}
+
+// Pending implements outbox.Store.
+func (s *SQLite) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return outbox.SQL{DB: s.db}.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s *SQLite) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return outbox.SQL{DB: s.db}.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s *SQLite) PurgePublished(ctx context.Context, before time.Time) error {
+	return outbox.SQL{DB: s.db}.PurgePublished(ctx, before)
+}
 
 // sqliteTime is a fixed-width UTC layout: text order is time order.
 const sqliteTime = "2006-01-02T15:04:05.000000000Z"
@@ -575,7 +596,7 @@ func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
 		  result_baseline_id = excluded.result_baseline_id, data = excluded.data, baseline_id = excluded.baseline_id, branch = excluded.branch,
 		  lifecycle = excluded.lifecycle, state = excluded.state, project_id = excluded.project_id,
 		  parent_id = excluded.parent_id, guardians = excluded.guardians, depends_on = excluded.depends_on,
-		  methodology_version = excluded.methodology_version`,
+		  methodology = excluded.methodology, methodology_version = excluded.methodology_version`,
 		string(c.ID), c.Title, c.Intent, c.Methodology, c.Goal, string(c.Status), nullUUID(string(c.BaselineID)), nullUUID(string(c.ResultBaselineID)),
 		string(jsonb(c.Data)), tsText(c.CreatedAt), domain.BranchOf(c.Branch), domain.NamespaceOf(c.Namespace), nullUUID(string(c.ParentID)), c.OwnerOrg, c.ProjectID, c.Lifecycle, c.State, string(guardiansJSON(c.Guardians)), string(dependsOnJSON(c.DependsOn)), c.MethodologyVersion)
 	return sqliteErr(err, "change")

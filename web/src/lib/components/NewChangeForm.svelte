@@ -12,7 +12,8 @@
   import { openTab } from '../shell/tabs.svelte';
   import { loadTypes, typeCatalog } from '../stores/types.svelte';
   import { project, refreshProjects } from '../stores/project.svelte';
-  import { rootProject, ns as sessionNs } from '../stores/session.svelte';
+  import { ns as sessionNs } from '../stores/session.svelte';
+  import { workIn } from '../stores/workingChange.svelte';
   import { defaultChangeProject, methodologyOffer } from '../changeProject';
   import { assistField, registerAssist, type FieldSpec, type ToolImpl } from '../assist/registry.svelte';
 
@@ -25,7 +26,8 @@
   let baselineId = $state('');
   let ownBranch = $state(true);
   let parentId = $state('');
-  // a change is created in a project (ADR 0091): the active one unless another is picked; a sub-change has its parent's
+  // a change is created in a project (ADR 0091): the active one unless another is picked (none selected: the person picks
+  // one); a sub-change has its parent's
   let projectKey = $state('');
   let methodology = $state('');
   // the methodologies of the project (its own and its ancestors'); undefined while read
@@ -41,7 +43,7 @@
     if (!project.options.length && !project.loading) void refreshProjects();
   });
   $effect(() => {
-    if (!projectKey) projectKey = defaultChangeProject(project.current, rootProject(), project.options);
+    if (!projectKey) projectKey = defaultChangeProject(project.current, project.options);
   });
   $effect(() => {
     const key = projectKey;
@@ -129,6 +131,8 @@
       ).change;
       if (!c?.id) throw new Error('The change could not be created.');
       await refreshChanges();
+      // a change created by hand is created to work in it: it becomes the working change (its project the active one)
+      await workIn(c);
       oncreated(c.id);
       return true;
     } catch (e) {
@@ -248,7 +252,7 @@
     <label for="nc-project">Project</label>
     <select id="nc-project" bind:value={projectKey} use:assistField={projectField} title="The project the change acts in: the nodes it creates belong to it">
       {#each project.options as o (o.key)}<option value={o.key}>{o.label}</option>{/each}
-      {#if !project.options.some((o) => o.key === projectKey)}<option value={projectKey}>{projectKey}</option>{/if}
+      {#if !projectKey}<option value="" disabled>Choose a project…</option>{:else if !project.options.some((o) => o.key === projectKey)}<option value={projectKey}>{projectKey}</option>{/if}
     </select>
     <label for="nc-branch">Lands on</label>
     <select id="nc-branch" value={branch} onchange={(e) => pickBranch(e.currentTarget.value)}>

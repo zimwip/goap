@@ -6,14 +6,18 @@
 package credsvc
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/zimwip/goap/lib/outbox"
 )
 
 // Migrations holds the PostgreSQL schema; SQLiteMigrations the local mode one.
@@ -30,25 +34,40 @@ var ErrExists = errors.New("credential already exists")
 // ErrNotFound is returned when a subject has no credential.
 var ErrNotFound = errors.New("credential not found")
 
-// Store keeps the password hashes.
+// Store keeps the password hashes. Every write of a fact takes the events of that fact (ADR 0136) and writes them in
+// its outbox in the same transaction: a write refused or failed writes none. A Store the service emits from
+// (Service.Emit) is an outbox.Store too, as MemoryStore and SQLStore are.
 type Store interface {
-	// Create inserts the hash of a new subject. ErrExists if one is already there.
-	Create(ctx context.Context, subject, hash string) error
+	// Create inserts the hash of a new subject, with msgs. ErrExists if one is already there.
+	Create(ctx context.Context, subject, hash string, msgs ...outbox.Message) error
 	// Hash returns the stored hash of a subject. ErrNotFound if there is none.
 	Hash(ctx context.Context, subject string) (string, error)
-	// Set replaces the hash of a subject. ErrNotFound if there is none.
-	Set(ctx context.Context, subject, hash string) error
+	// Set replaces the hash of a subject, with msgs. ErrNotFound if there is none.
+	Set(ctx context.Context, subject, hash string, msgs ...outbox.Message) error
 	// Exists reports whether a subject has a credential.
 	Exists(ctx context.Context, subject string) (bool, error)
 
-	// CreateSession records a new sign-in session (ADR 0045), and forgets the sessions expired before purgeBefore.
-	CreateSession(ctx context.Context, sess Session, purgeBefore time.Time) error
+	// CreateSession records a new sign-in session (ADR 0045), with msgs, and forgets the sessions expired before
+	// purgeBefore.
+	CreateSession(ctx context.Context, sess Session, purgeBefore time.Time, msgs ...outbox.Message) error
 	// Session returns a session. ErrNotFound if there is none.
 	Session(ctx context.Context, id string) (Session, error)
-	// RevokeSession ends a session (no error when it is unknown or already ended).
-	RevokeSession(ctx context.Context, id string, at time.Time) error
-	// RevokeSessions ends every session of a subject still open.
-	RevokeSessions(ctx context.Context, subject string, at time.Time) error
+	// RevokeSession ends a session (no error when it is unknown or already ended), with the events ended gives for
+	// it (nil: none; not called with an empty list when nothing ended).
+	RevokeSession(ctx context.Context, id string, at time.Time, ended Ended) error
+	// RevokeSessions ends every session of a subject still open, with the events ended gives for them.
+	RevokeSessions(ctx context.Context, subject string, at time.Time, ended Ended) error
+}
+
+// Ended gives the events of the sessions a revocation ends, written in its transaction; an error refuses the
+// revocation. It is called only when at least one session ended.
+type Ended func(sessions []Session) ([]outbox.Message, error)
+
+func (f Ended) events(sessions []Session) ([]outbox.Message, error) {
+	if f == nil || len(sessions) == 0 {
+		return nil, nil
+	}
+	return f(sessions)
 }
 
 // Session is a sign-in (ADR 0045): every token issued from it carries its id; it ends when its subject signs out
@@ -69,22 +88,42 @@ type MemoryStore struct {
 	mu       sync.Mutex
 	hashes   map[string]string
 	sessions map[string]Session
+	out      outbox.Memory
 }
 
-var _ Store = (*MemoryStore)(nil)
+var (
+	_ Store        = (*MemoryStore)(nil)
+	_ outbox.Store = (*MemoryStore)(nil)
+)
+
+// Pending implements outbox.Store.
+func (s *MemoryStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.out.Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s *MemoryStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.out.MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s *MemoryStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.out.PurgePublished(ctx, before)
+}
 
 // NewMemoryStore returns an empty in-memory store.
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{hashes: map[string]string{}, sessions: map[string]Session{}}
 }
 
-func (s *MemoryStore) Create(_ context.Context, subject, hash string) error {
+func (s *MemoryStore) Create(_ context.Context, subject, hash string, msgs ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.hashes[subject]; ok {
 		return ErrExists
 	}
 	s.hashes[subject] = hash
+	s.out.Append(msgs...)
 	return nil
 }
 
@@ -98,13 +137,14 @@ func (s *MemoryStore) Hash(_ context.Context, subject string) (string, error) {
 	return h, nil
 }
 
-func (s *MemoryStore) Set(_ context.Context, subject, hash string) error {
+func (s *MemoryStore) Set(_ context.Context, subject, hash string, msgs ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.hashes[subject]; !ok {
 		return ErrNotFound
 	}
 	s.hashes[subject] = hash
+	s.out.Append(msgs...)
 	return nil
 }
 
@@ -115,7 +155,7 @@ func (s *MemoryStore) Exists(_ context.Context, subject string) (bool, error) {
 	return ok, nil
 }
 
-func (s *MemoryStore) CreateSession(_ context.Context, sess Session, purgeBefore time.Time) error {
+func (s *MemoryStore) CreateSession(_ context.Context, sess Session, purgeBefore time.Time, msgs ...outbox.Message) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for id, o := range s.sessions {
@@ -127,6 +167,7 @@ func (s *MemoryStore) CreateSession(_ context.Context, sess Session, purgeBefore
 		return ErrExists
 	}
 	s.sessions[sess.ID] = sess
+	s.out.Append(msgs...)
 	return nil
 }
 
@@ -140,25 +181,41 @@ func (s *MemoryStore) Session(_ context.Context, id string) (Session, error) {
 	return sess, nil
 }
 
-func (s *MemoryStore) RevokeSession(_ context.Context, id string, at time.Time) error {
+func (s *MemoryStore) RevokeSession(_ context.Context, id string, at time.Time, ended Ended) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if sess, ok := s.sessions[id]; ok && sess.Revoked.IsZero() {
-		sess.Revoked = at
-		s.sessions[id] = sess
+		return s.revoke([]Session{sess}, at, ended)
 	}
 	return nil
 }
 
-func (s *MemoryStore) RevokeSessions(_ context.Context, subject string, at time.Time) error {
+func (s *MemoryStore) RevokeSessions(_ context.Context, subject string, at time.Time, ended Ended) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for id, sess := range s.sessions {
+	var open []Session
+	for _, sess := range s.sessions {
 		if sess.Subject == subject && sess.Revoked.IsZero() {
-			sess.Revoked = at
-			s.sessions[id] = sess
+			open = append(open, sess)
 		}
 	}
+	slices.SortFunc(open, func(a, b Session) int { return cmp.Or(a.Created.Compare(b.Created), cmp.Compare(a.ID, b.ID)) })
+	return s.revoke(open, at, ended)
+}
+
+// revoke ends the open sessions with their events, none of them when the events cannot be built (s.mu held).
+func (s *MemoryStore) revoke(open []Session, at time.Time, ended Ended) error {
+	for i := range open {
+		open[i].Revoked = at
+	}
+	msgs, err := ended.events(open)
+	if err != nil {
+		return err
+	}
+	for _, sess := range open {
+		s.sessions[sess.ID] = sess
+	}
+	s.out.Append(msgs...)
 	return nil
 }
 
@@ -170,7 +227,46 @@ type SQLStore struct {
 	Dollar bool
 }
 
-var _ Store = SQLStore{}
+var (
+	_ Store        = SQLStore{}
+	_ outbox.Store = SQLStore{}
+)
+
+// OutboxTable is the outbox of the SQL store (ADR 0136), named apart from the outboxes of the other services sharing a
+// database in the local mode.
+const OutboxTable = "credentials_outbox"
+
+func (s SQLStore) outbox() outbox.SQL {
+	return outbox.SQL{DB: s.DB, Postgres: s.Dollar, Table: OutboxTable}
+}
+
+// Pending implements outbox.Store.
+func (s SQLStore) Pending(ctx context.Context, limit int) ([]outbox.Message, error) {
+	return s.outbox().Pending(ctx, limit)
+}
+
+// MarkPublished implements outbox.Store.
+func (s SQLStore) MarkPublished(ctx context.Context, seqs []int64, at time.Time) error {
+	return s.outbox().MarkPublished(ctx, seqs, at)
+}
+
+// PurgePublished implements outbox.Store.
+func (s SQLStore) PurgePublished(ctx context.Context, before time.Time) error {
+	return s.outbox().PurgePublished(ctx, before)
+}
+
+// inTx runs fn in a transaction, committed when it succeeds.
+func (s SQLStore) inTx(ctx context.Context, fn func(tx *sql.Tx) error) error {
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := fn(tx); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
 func (s SQLStore) q(query string) string {
 	if !s.Dollar {
@@ -189,13 +285,18 @@ func (s SQLStore) q(query string) string {
 	return b.String()
 }
 
-func (s SQLStore) Create(ctx context.Context, subject, hash string) error {
+func (s SQLStore) Create(ctx context.Context, subject, hash string, msgs ...outbox.Message) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO credential (subject, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)`), subject, hash, now, now)
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
-		return ErrExists
-	}
-	return err
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, s.q(`INSERT INTO credential (subject, password_hash, created_at, updated_at) VALUES (?, ?, ?, ?)`), subject, hash, now, now)
+		if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return ErrExists
+		}
+		if err != nil {
+			return err
+		}
+		return s.outbox().Append(ctx, tx, msgs...)
+	})
 }
 
 func (s SQLStore) Hash(ctx context.Context, subject string) (string, error) {
@@ -207,18 +308,20 @@ func (s SQLStore) Hash(ctx context.Context, subject string) (string, error) {
 	return hash, err
 }
 
-func (s SQLStore) Set(ctx context.Context, subject, hash string) error {
+func (s SQLStore) Set(ctx context.Context, subject, hash string, msgs ...outbox.Message) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	res, err := s.DB.ExecContext(ctx, s.q(`UPDATE credential SET password_hash = ?, updated_at = ? WHERE subject = ?`), hash, now, subject)
-	if err != nil {
-		return err
-	}
-	if n, err := res.RowsAffected(); err != nil {
-		return err
-	} else if n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, s.q(`UPDATE credential SET password_hash = ?, updated_at = ? WHERE subject = ?`), hash, now, subject)
+		if err != nil {
+			return err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return err
+		} else if n == 0 {
+			return ErrNotFound
+		}
+		return s.outbox().Append(ctx, tx, msgs...)
+	})
 }
 
 func (s SQLStore) Exists(ctx context.Context, subject string) (bool, error) {
@@ -259,16 +362,21 @@ func (s sqlTime) parse(v string) error {
 	return err
 }
 
-func (s SQLStore) CreateSession(ctx context.Context, sess Session, purgeBefore time.Time) error {
-	if _, err := s.DB.ExecContext(ctx, s.q(`DELETE FROM auth_session WHERE expires_at < ?`), stamp(purgeBefore)); err != nil {
-		return err
-	}
-	_, err := s.DB.ExecContext(ctx, s.q(`INSERT INTO auth_session (id, subject, created_at, expires_at) VALUES (?, ?, ?, ?)`),
-		sess.ID, sess.Subject, stamp(sess.Created), stamp(sess.Expires))
-	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
-		return ErrExists
-	}
-	return err
+func (s SQLStore) CreateSession(ctx context.Context, sess Session, purgeBefore time.Time, msgs ...outbox.Message) error {
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, s.q(`DELETE FROM auth_session WHERE expires_at < ?`), stamp(purgeBefore)); err != nil {
+			return err
+		}
+		_, err := tx.ExecContext(ctx, s.q(`INSERT INTO auth_session (id, subject, created_at, expires_at) VALUES (?, ?, ?, ?)`),
+			sess.ID, sess.Subject, stamp(sess.Created), stamp(sess.Expires))
+		if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return ErrExists
+		}
+		if err != nil {
+			return err
+		}
+		return s.outbox().Append(ctx, tx, msgs...)
+	})
 }
 
 func (s SQLStore) Session(ctx context.Context, id string) (Session, error) {
@@ -281,12 +389,40 @@ func (s SQLStore) Session(ctx context.Context, id string) (Session, error) {
 	return sess, err
 }
 
-func (s SQLStore) RevokeSession(ctx context.Context, id string, at time.Time) error {
-	_, err := s.DB.ExecContext(ctx, s.q(`UPDATE auth_session SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL`), stamp(at), id)
-	return err
+func (s SQLStore) RevokeSession(ctx context.Context, id string, at time.Time, ended Ended) error {
+	return s.revoke(ctx, `id = ?`, id, at, ended)
 }
 
-func (s SQLStore) RevokeSessions(ctx context.Context, subject string, at time.Time) error {
-	_, err := s.DB.ExecContext(ctx, s.q(`UPDATE auth_session SET revoked_at = ? WHERE subject = ? AND revoked_at IS NULL`), stamp(at), subject)
-	return err
+func (s SQLStore) RevokeSessions(ctx context.Context, subject string, at time.Time, ended Ended) error {
+	return s.revoke(ctx, `subject = ?`, subject, at, ended)
+}
+
+// revoke ends the open sessions matching where (one placeholder, arg), with their events, in one transaction: the
+// UPDATE returns the sessions it ended, so two revocations racing never both report one.
+func (s SQLStore) revoke(ctx context.Context, where string, arg any, at time.Time, ended Ended) error {
+	return s.inTx(ctx, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, s.q(`UPDATE auth_session SET revoked_at = ? WHERE `+where+` AND revoked_at IS NULL
+			RETURNING id, subject, created_at, expires_at`), stamp(at), arg)
+		if err != nil {
+			return err
+		}
+		var done []Session
+		for rows.Next() {
+			sess := Session{Revoked: at}
+			if err := rows.Scan(&sess.ID, &sess.Subject, sqlTime{&sess.Created}, sqlTime{&sess.Expires}); err != nil {
+				_ = rows.Close()
+				return err
+			}
+			done = append(done, sess)
+		}
+		if err := errors.Join(rows.Err(), rows.Close()); err != nil {
+			return err
+		}
+		slices.SortFunc(done, func(a, b Session) int { return cmp.Or(a.Created.Compare(b.Created), cmp.Compare(a.ID, b.ID)) })
+		msgs, err := ended.events(done)
+		if err != nil {
+			return err
+		}
+		return s.outbox().Append(ctx, tx, msgs...)
+	})
 }

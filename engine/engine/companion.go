@@ -431,7 +431,7 @@ type StepEvent struct {
 
 // stepCompleted publishes that a step of p's process completed (step.completed).
 func (e *Engine) stepCompleted(ctx context.Context, p *Process, m *methodology.Compiled, a methodology.Action, st *Step) {
-	if e.Events == nil {
+	if e.Events == nil && e.outbox == nil {
 		return
 	}
 	step := &StepEvent{Path: a.Step, Action: a.Name, Method: st.Specialization}
@@ -439,7 +439,7 @@ func (e *Engine) stepCompleted(ctx context.Context, p *Process, m *methodology.C
 		step.Process, step.Name = s.Owner, s.Name
 	}
 	ev := ProcessEvent{Event: events.BrokerStepCompleted, Process: p, Time: e.clock(), Step: step}
-	if err := e.Events.Publish(ctx, fmt.Sprintf("goap.process.%s.%s", p.ID, events.BrokerStepCompleted), ev); err != nil {
-		e.log().Warn("publish failed", "err", err)
+	if err := e.emit(ctx, nil, fmt.Sprintf("goap.process.%s.%s", p.ID, events.BrokerStepCompleted), ev); err != nil {
+		e.log().Warn("step.completed not recorded", "process", p.ID, "err", err)
 	}
 }

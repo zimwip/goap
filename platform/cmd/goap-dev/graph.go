@@ -23,6 +23,7 @@ type graphPart struct {
 func buildGraph(e *env, st stores) (*graphPart, error) {
 	g := graph.New(st.graph)
 	g.Caller = graphsvc.Caller           // the principal behind each event of the impact logs (ADR 0029)
+	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
 	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
@@ -41,6 +42,7 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.Authorizer = graphsvc.TransitionAuthorizer(authorizer)
 	g.ChangeAuthorizer = graphsvc.ChangeTransitionAuthorizer(authorizer)
 	g.ProjectMoveGate = graphsvc.ProjectMoveGate(authorizer, directory)
+	g.MethodologyGate = graphsvc.MethodologyGate(directory)
 	g.ItemAuthorizer = graphsvc.ItemAuthorizer(authorizer, directory.CriticalityResolver())
 	g.SeatAuthorizer = graphsvc.SeatAuthorizer(authorizer)
 	g.ItemPolicy = criticality.ItemPolicy(directory.CriticalityResolver()) // the oracle and the lifetime a level accepts (ADR 0075 §3)

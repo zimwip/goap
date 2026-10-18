@@ -114,6 +114,7 @@ func contextFromPB(c *assistantv1.PageContext) Context {
 	var o Context
 	if a := c.GetApp(); a != nil {
 		o.App.Project = a.GetProject()
+		o.App.Change = a.GetChange()
 		if t := a.GetTab(); t != nil {
 			o.App.Tab = Tab{Kind: t.GetKind(), Params: t.GetParams()}
 		}

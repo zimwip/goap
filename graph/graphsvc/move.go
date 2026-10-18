@@ -54,3 +54,22 @@ func ProjectMoveGate(a authz.Authorizer, d *access.Directory) graph.ProjectMoveG
 		return nil
 	}
 }
+
+// MethodologyGate is the gate of a change taking a methodology (graph.SetChangeMethodology), plugged by the compositions
+// that hold the organisation (cmd/graph, goap-dev): the methodology must apply to the project of the change, its own or
+// inherited (Snapshot.ApplicableMethodologies), as the form of a new change offers it. A nil directory checks nothing.
+func MethodologyGate(d *access.Directory) graph.MethodologyGate {
+	return func(ctx context.Context, c domain.Change, methodology string) error {
+		if d == nil {
+			return nil
+		}
+		snap, err := d.Snapshot(ctx)
+		if err != nil {
+			return fmt.Errorf("the organisation cannot be read: %w", err)
+		}
+		if !slices.Contains(snap.ApplicableMethodologies(c.ProjectID), methodology) {
+			return fmt.Errorf("methodology %s does not apply to project %s, the project of change %s: %w", methodology, c.ProjectID, c.ID, graph.ErrInvalid)
+		}
+		return nil
+	}
+}

@@ -18,6 +18,8 @@ export interface Prefs {
   usagePeriod: string;
   /** default scope of the token usage dashboard (administrators): mine | platform */
   usageScope: 'mine' | 'platform';
+  /** the working change last selected in each project, by project key (stores/workingChange.svelte.ts) */
+  workingChanges: Record<string, string>;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -27,6 +29,7 @@ export const DEFAULT_PREFS: Prefs = {
   voiceLanguage: 'auto',
   usagePeriod: '7d',
   usageScope: 'mine',
+  workingChanges: {},
 };
 
 export const prefs = $state({
@@ -45,6 +48,8 @@ function normalize(raw: Record<string, unknown> | undefined): Prefs {
   if (raw.voiceLanguage === 'auto' || raw.voiceLanguage === 'fr' || raw.voiceLanguage === 'en') p.voiceLanguage = raw.voiceLanguage;
   if (typeof raw.usagePeriod === 'string' && raw.usagePeriod) p.usagePeriod = raw.usagePeriod;
   if (raw.usageScope === 'mine' || raw.usageScope === 'platform') p.usageScope = raw.usageScope;
+  if (raw.workingChanges && typeof raw.workingChanges === 'object' && !Array.isArray(raw.workingChanges))
+    p.workingChanges = Object.fromEntries(Object.entries(raw.workingChanges).filter((e): e is [string, string] => typeof e[1] === 'string' && !!e[1]));
   return p;
 }
 
