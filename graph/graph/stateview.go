@@ -9,8 +9,7 @@ import (
 )
 
 // stateView is the state a baseline leaves as an operation builds on it (ADR 0137): the versions it reads are read
-// node by node from the baseline (Tx.BaselineVersions, the nearest materialised baseline with what the changes since
-// did), what it changes is kept apart (the delta the next baseline is written with), and the whole state is read only
+// node by node from the baseline (versionsAt: the chain its state is stored over, ADR 0140), what it changes is kept apart (the delta the next baseline is written with), and the whole state is read only
 // for a question about every node (all).
 type stateView struct {
 	ctx     context.Context
@@ -43,7 +42,7 @@ func (s *stateView) load(ids ...domain.NodeID) error {
 	}
 	slices.Sort(missing)
 	missing = slices.Compact(missing)
-	got, err := s.tx.BaselineVersions(s.ctx, s.at, missing)
+	got, err := versionsAt(s.ctx, s.tx, s.at, missing)
 	if err != nil {
 		return err
 	}
@@ -90,12 +89,26 @@ func (s *stateView) all() (map[domain.NodeID]domain.Version, error) {
 	return out, nil
 }
 
-// versionsAt reads the versions of some nodes in a baseline (Tx.BaselineVersions).
+// versionsAt reads the versions of some nodes in a baseline (guardTx.BaselineVersions; a transaction without the guard
+// reads the whole state).
 func versionsAt(ctx context.Context, tx Tx, at domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 	if at == "" || len(ids) == 0 {
 		return map[domain.NodeID]domain.Version{}, nil
 	}
-	return tx.BaselineVersions(ctx, at, ids)
+	if gt, ok := unwrapGuard(tx); ok {
+		return gt.BaselineVersions(ctx, at, ids)
+	}
+	b, err := tx.Baseline(ctx, at)
+	if err != nil {
+		return nil, err
+	}
+	out := map[domain.NodeID]domain.Version{}
+	for _, id := range ids {
+		if v, ok := b.Nodes[id]; ok {
+			out[id] = v
+		}
+	}
+	return out, nil
 }
 
 // branchHeadHeader returns the head baseline of a branch without its state (ADR 0137); the empty state (no change

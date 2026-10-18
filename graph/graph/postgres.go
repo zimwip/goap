@@ -32,7 +32,11 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	return pgx.BeginFunc(ctx, p.pool, func(tx pgx.Tx) error { return fn(&pgTx{tx: tx}) })
 }
 
-type pgTx struct{ tx pgx.Tx }
+type pgTx struct {
+	tx pgx.Tx
+	// seq is the order of the last baseline the transaction allocated (ADR 0140)
+	seq int64
+}
 
 // AppendOutbox implements Tx.
 func (t *pgTx) AppendOutbox(ctx context.Context, msgs []outbox.Message) error {
@@ -379,13 +383,17 @@ func (t *pgTx) NodeByKey(ctx context.Context, namespace, key string) (domain.Nod
 }
 
 func (t *pgTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error) {
-	if _, err := t.Baseline(ctx, baseline); err != nil {
-		return nil, err
+	return storedNodesIn(ctx, t, baseline, nodeType)
+}
+
+func (t *pgTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType string) ([]domain.Node, error) {
+	if len(refs) == 0 {
+		return nil, nil
 	}
-	q, args := dialectPG.sqlNodesIn(baseline, nodeType)
+	q, args := dialectPG.sqlNodesAt(refs, nodeType)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
-		return nil, mapErr(err, "baseline nodes")
+		return nil, mapErr(err, "nodes")
 	}
 	return collectNodes(rows)
 }
@@ -446,50 +454,63 @@ func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, 
 }
 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	var b domain.Baseline
-	var parent, mergedFrom, change, rebased *string
-	err := t.tx.QueryRow(ctx, `SELECT id::text, name, parent_id::text, merged_from::text, change_id::text, created_at, branch, namespace, gap, kind, rebased_from::text FROM baseline WHERE id = $1`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &b.CreatedAt, &b.Branch, &b.Namespace, &b.Gap, &b.Kind, &rebased)
-	if err != nil {
-		return b, mapErr(err, "baseline "+string(id))
-	}
-	b.ParentID, b.MergedFrom, b.ChangeID = domain.BaselineID(str(parent)), domain.BaselineID(str(mergedFrom)), domain.ChangeID(str(change))
-	b.RebasedFrom = domain.BaselineID(str(rebased))
-	b.Nodes = map[domain.NodeID]domain.Version{}
-	if b.Gap > 0 {
-		return b, nil // only the header is stored
-	}
-	q, args := dialectPG.sqlBaselineEntries(id)
-	rows, err := t.tx.Query(ctx, q, args...)
+	b, err := t.BaselineHeader(ctx, id)
 	if err != nil {
 		return b, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var nid string
-		var v int
-		if err := rows.Scan(&nid, &v); err != nil {
-			return b, err
-		}
-		b.Nodes[domain.NodeID(nid)] = domain.Version(v)
-	}
-	return b, rows.Err()
+	b.Nodes, err = storedNodes(ctx, t, b)
+	return b, err
 }
 
 func (t *pgTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	var b domain.Baseline
 	q, args := dialectPG.sqlBaselineHeader(id)
 	err := t.tx.QueryRow(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt,
-		&b.Branch, &b.Namespace, &b.Gap, &b.Kind, (*string)(&b.RebasedFrom))
+		&b.Branch, &b.Namespace, &b.Gap, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.BaseID), &b.Depth)
 	return b, mapErr(err, "baseline "+string(id))
 }
 
-func (t *pgTx) BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+func (t *pgTx) StoredVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, domain.BaselineID, error) {
 	out := map[domain.NodeID]domain.Version{}
-	if len(ids) == 0 {
+	if ids != nil && len(ids) == 0 {
+		return out, "", nil
+	}
+	q, args := dialectPG.sqlStoredVersions(id, ids)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, "", err
+	}
+	for rows.Next() {
+		var nid string
+		var v int
+		var removed bool
+		if err := rows.Scan(&nid, &v, &removed); err != nil {
+			rows.Close()
+			return nil, "", err
+		}
+		if removed {
+			v = 0
+		}
+		out[domain.NodeID(nid)] = domain.Version(v)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	var tail string
+	q, args = dialectPG.sqlStoredTail(id)
+	if err := t.tx.QueryRow(ctx, q, args...).Scan(&tail); err != nil {
+		return nil, "", mapErr(err, "baseline "+string(id))
+	}
+	return out, domain.BaselineID(tail), nil
+}
+
+func (t *pgTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	out := map[domain.NodeID]domain.Version{}
+	if ids != nil && len(ids) == 0 {
 		return out, nil
 	}
-	q, args := dialectPG.sqlBaselineVersions(id, ids)
+	q, args := dialectPG.sqlLandedVersions(namespace, branch, after, upTo, ids)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -498,12 +519,39 @@ func (t *pgTx) BaselineVersions(ctx context.Context, id domain.BaselineID, ids [
 	for rows.Next() {
 		var nid string
 		var v int
-		if err := rows.Scan(&nid, &v); err != nil {
+		var deleted bool
+		if err := rows.Scan(&nid, &v, &deleted); err != nil {
 			return nil, err
+		}
+		if deleted {
+			v = 0
 		}
 		out[domain.NodeID(nid)] = domain.Version(v)
 	}
 	return out, rows.Err()
+}
+
+// NextLanding allocates the greatest order stored or allocated plus one: two transactions landing on one branch from
+// the same head may take the same, one of them fails to move the head (advanceBranch); a baseline built on another is
+// written once that one is committed, and sees it.
+func (t *pgTx) LatestStored(ctx context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error) {
+	q, args := dialectPG.sqlLatestStored(namespace, branch, after, upTo)
+	var id string
+	if err := t.tx.QueryRow(ctx, q, args...).Scan(&id); errors.Is(err, pgx.ErrNoRows) {
+		return "", nil
+	} else if err != nil {
+		return "", err
+	}
+	return domain.BaselineID(id), nil
+}
+
+func (t *pgTx) NextLanding(ctx context.Context) (int64, error) {
+	var stored int64
+	if err := t.tx.QueryRow(ctx, `SELECT coalesce(max(seq), 0) FROM baseline`).Scan(&stored); err != nil {
+		return 0, err
+	}
+	t.seq = max(t.seq, stored) + 1
+	return t.seq, nil
 }
 
 func (t *pgTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
@@ -666,7 +714,7 @@ func (t *pgTx) PutNode(ctx context.Context, n domain.Node) error {
 		parents[i] = int32(pv)
 	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("node_version", nodeVersionColumns, ""),
-		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), originsJSON(n.Origins))
+		string(n.ID), int(n.Version), jsonb(n.Properties), n.Deleted, nullUUID(string(n.ChangeID)), n.CreatedAt, domain.BranchOf(n.Branch), parents, n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), originsJSON(n.Origins), n.Landed)
 	return mapErr(err, "node "+n.Ref().String())
 }
 
@@ -704,70 +752,39 @@ func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
 	return mapErr(err, "link")
 }
 
-// PutBaseline stores the baseline as a delta from its parent, or whole at a checkpoint (ADR 0032).
+// PutBaseline stores the baseline as the graph says (ADR 0140): its header, and its entries when it has a Gap of 0.
 func (t *pgTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	var parent *domain.Baseline
-	parentDepth := 0
-	if b.ParentID != "" && b.Gap == 0 {
-		var parentGap int
-		if err := t.tx.QueryRow(ctx, `SELECT depth, gap FROM baseline WHERE id = $1`, string(b.ParentID)).Scan(&parentDepth, &parentGap); err != nil {
-			return mapErr(err, "baseline "+string(b.ParentID))
-		}
-		// a delta is only stored over a parent whose entries are stored: else the baseline is stored whole
-		if parentGap == 0 {
-			p, err := t.Baseline(ctx, b.ParentID)
-			if err != nil {
-				return err
-			}
-			parent = &p
-		}
-	}
-	depth, entries := storedEntries(parent, parentDepth, b.Nodes)
-	if b.Gap > 0 {
-		depth, entries = 0, nil
-	}
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("baseline", baselineColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b), nullUUID(string(b.RebasedFrom)))
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), b.CreatedAt, domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), b.Depth, b.Gap, kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq, nullUUID(string(b.BaseID)))
 	if err != nil {
 		return mapErr(err, "baseline")
 	}
-	rows := make([][]any, 0, len(entries))
-	for _, e := range entries {
-		rows = append(rows, []any{string(b.ID), string(e.node), int(e.version), e.removed})
+	if b.Gap > 0 {
+		return nil
 	}
-	_, err = t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
-	return mapErr(err, "baseline entries")
+	return t.putEntries(ctx, b.ID, b.Nodes)
 }
 
-func (t *pgTx) BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
-	q, args := dialectPG.sqlBranchJoins(namespace, branch, change)
-	rows, err := t.tx.Query(ctx, q, args...)
-	if err != nil {
-		return nil, err
+// putEntries writes the entries of a baseline: a version, minus the version for a node it removes.
+func (t *pgTx) putEntries(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+	rows := make([][]any, 0, len(nodes))
+	for nid, v := range nodes {
+		rows = append(rows, []any{string(id), string(nid), int(max(v, -v)), v < 0})
 	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.NodeRef, error) {
-		var id string
-		var v int
-		err := r.Scan(&id, &v)
-		return domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)}, err
-	})
+	_, err := t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
+	return mapErr(err, "baseline entries")
 }
 
 func (t *pgTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
 	if _, err := t.tx.Exec(ctx, `DELETE FROM baseline_entry WHERE baseline_id = $1`, string(id)); err != nil {
 		return mapErr(err, "baseline "+string(id))
 	}
-	if res, err := t.tx.Exec(ctx, `UPDATE baseline SET depth = 0, gap = 0 WHERE id = $1`, string(id)); err != nil {
+	if res, err := t.tx.Exec(ctx, `UPDATE baseline SET depth = 0, gap = 0, base_id = NULL WHERE id = $1`, string(id)); err != nil {
 		return mapErr(err, "baseline "+string(id))
 	} else if res.RowsAffected() != 1 {
 		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
 	}
-	rows := make([][]any, 0, len(nodes))
-	for nid, v := range nodes {
-		rows = append(rows, []any{string(id), string(nid), int(v), false})
-	}
-	_, err := t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
-	return mapErr(err, "baseline entries")
+	return t.putEntries(ctx, id, nodes)
 }
 
 func (t *pgTx) PutChange(ctx context.Context, c domain.Change) error {
@@ -910,36 +927,9 @@ func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change dom
 	return nil
 }
 
-func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
-	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)))
+func (t *pgTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error {
+	_, err := t.tx.Exec(ctx, dialectPG.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), landed)
 	return mapErr(err, "node "+ref.String())
-}
-
-func (t *pgTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
-	rows, err := t.tx.Query(ctx, dialectPG.sqlBaselineHeaders())
-	if err != nil {
-		return nil, err
-	}
-	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (baselineHeader, error) {
-		var h baselineHeader
-		err := r.Scan((*string)(&h.id), (*string)(&h.parent), &h.depth)
-		return h, err
-	})
-}
-
-func (t *pgTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, depth int, entries []baselineEntry) error {
-	if _, err := t.tx.Exec(ctx, `DELETE FROM baseline_entry WHERE baseline_id = $1`, string(id)); err != nil {
-		return err
-	}
-	if _, err := t.tx.Exec(ctx, `UPDATE baseline SET depth = $2 WHERE id = $1`, string(id), depth); err != nil {
-		return err
-	}
-	rows := make([][]any, 0, len(entries))
-	for _, e := range entries {
-		rows = append(rows, []any{string(id), string(e.node), int(e.version), e.removed})
-	}
-	_, err := t.tx.CopyFrom(ctx, pgx.Identifier{"baseline_entry"}, []string{"baseline_id", "node_id", "version", "removed"}, pgx.CopyFromRows(rows))
-	return mapErr(err, "baseline entries")
 }
 
 func (t *pgTx) PutTag(ctx context.Context, tag domain.Tag) error {

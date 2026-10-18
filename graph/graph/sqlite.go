@@ -39,7 +39,12 @@ func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	return tx.Commit()
 }
 
-type sqliteTx struct{ tx *sql.Tx }
+type sqliteTx struct {
+	tx *sql.Tx
+	// seq is the order of the last baseline the transaction allocated (ADR 0140): SQLite transactions are serialized,
+	// the next one is the greatest stored or allocated plus one
+	seq int64
+}
 
 // AppendOutbox implements Tx.
 func (t *sqliteTx) AppendOutbox(ctx context.Context, msgs []outbox.Message) error {
@@ -243,10 +248,14 @@ func (t *sqliteTx) NodeByKey(ctx context.Context, namespace, key string) (domain
 }
 
 func (t *sqliteTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error) {
-	if _, err := t.Baseline(ctx, baseline); err != nil {
-		return nil, err
+	return storedNodesIn(ctx, t, baseline, nodeType)
+}
+
+func (t *sqliteTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType string) ([]domain.Node, error) {
+	if len(refs) == 0 {
+		return nil, nil
 	}
-	q, args := dialectSQLite.sqlNodesIn(baseline, nodeType)
+	q, args := dialectSQLite.sqlNodesAt(refs, nodeType)
 	return t.nodes(ctx, q, args...)
 }
 
@@ -300,35 +309,12 @@ func (t *sqliteTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Li
 }
 
 func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
-	var b domain.Baseline
-	var parent, mergedFrom, change, rebased sql.NullString
-	var created string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, name, parent_id, merged_from, change_id, created_at, branch, namespace, gap, kind, rebased_from FROM baseline WHERE id = ?`, string(id)).
-		Scan((*string)(&b.ID), &b.Name, &parent, &mergedFrom, &change, &created, &b.Branch, &b.Namespace, &b.Gap, &b.Kind, &rebased)
-	if err != nil {
-		return b, sqliteErr(err, "baseline "+string(id))
-	}
-	b.ParentID, b.MergedFrom, b.ChangeID, b.CreatedAt = domain.BaselineID(parent.String), domain.BaselineID(mergedFrom.String), domain.ChangeID(change.String), tsParse(created)
-	b.RebasedFrom = domain.BaselineID(rebased.String)
-	b.Nodes = map[domain.NodeID]domain.Version{}
-	if b.Gap > 0 {
-		return b, nil // only the header is stored
-	}
-	q, args := dialectSQLite.sqlBaselineEntries(id)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
+	b, err := t.BaselineHeader(ctx, id)
 	if err != nil {
 		return b, err
 	}
-	defer rows.Close()
-	for rows.Next() {
-		var nid string
-		var v int
-		if err := rows.Scan(&nid, &v); err != nil {
-			return b, err
-		}
-		b.Nodes[domain.NodeID(nid)] = domain.Version(v)
-	}
-	return b, rows.Err()
+	b.Nodes, err = storedNodes(ctx, t, b)
+	return b, err
 }
 
 func (t *sqliteTx) ids(ctx context.Context, q string, args ...any) ([]string, error) {
@@ -353,7 +339,7 @@ func (t *sqliteTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (do
 	var created string
 	q, args := dialectSQLite.sqlBaselineHeader(id)
 	err := t.tx.QueryRowContext(ctx, q, args...).Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created,
-		&b.Branch, &b.Namespace, &b.Gap, &b.Kind, (*string)(&b.RebasedFrom))
+		&b.Branch, &b.Namespace, &b.Gap, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq, (*string)(&b.BaseID), &b.Depth)
 	if err != nil {
 		return b, sqliteErr(err, "baseline "+string(id))
 	}
@@ -361,12 +347,47 @@ func (t *sqliteTx) BaselineHeader(ctx context.Context, id domain.BaselineID) (do
 	return b, nil
 }
 
-func (t *sqliteTx) BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+func (t *sqliteTx) StoredVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, domain.BaselineID, error) {
 	out := map[domain.NodeID]domain.Version{}
-	if len(ids) == 0 {
+	if ids != nil && len(ids) == 0 {
+		return out, "", nil
+	}
+	q, args := dialectSQLite.sqlStoredVersions(id, ids)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, "", err
+	}
+	for rows.Next() {
+		var nid string
+		var v int
+		var removed bool
+		if err := rows.Scan(&nid, &v, &removed); err != nil {
+			rows.Close()
+			return nil, "", err
+		}
+		if removed {
+			v = 0
+		}
+		out[domain.NodeID(nid)] = domain.Version(v)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, "", err
+	}
+	var tail string
+	q, args = dialectSQLite.sqlStoredTail(id)
+	if err := t.tx.QueryRowContext(ctx, q, args...).Scan(&tail); err != nil {
+		return nil, "", sqliteErr(err, "baseline "+string(id))
+	}
+	return out, domain.BaselineID(tail), nil
+}
+
+func (t *sqliteTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	out := map[domain.NodeID]domain.Version{}
+	if ids != nil && len(ids) == 0 {
 		return out, nil
 	}
-	q, args := dialectSQLite.sqlBaselineVersions(id, ids)
+	q, args := dialectSQLite.sqlLandedVersions(namespace, branch, after, upTo, ids)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -375,12 +396,36 @@ func (t *sqliteTx) BaselineVersions(ctx context.Context, id domain.BaselineID, i
 	for rows.Next() {
 		var nid string
 		var v int
-		if err := rows.Scan(&nid, &v); err != nil {
+		var deleted bool
+		if err := rows.Scan(&nid, &v, &deleted); err != nil {
 			return nil, err
+		}
+		if deleted {
+			v = 0
 		}
 		out[domain.NodeID(nid)] = domain.Version(v)
 	}
 	return out, rows.Err()
+}
+
+func (t *sqliteTx) LatestStored(ctx context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error) {
+	q, args := dialectSQLite.sqlLatestStored(namespace, branch, after, upTo)
+	var id string
+	if err := t.tx.QueryRowContext(ctx, q, args...).Scan(&id); errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	} else if err != nil {
+		return "", err
+	}
+	return domain.BaselineID(id), nil
+}
+
+func (t *sqliteTx) NextLanding(ctx context.Context) (int64, error) {
+	var stored int64
+	if err := t.tx.QueryRowContext(ctx, `SELECT coalesce(max(seq), 0) FROM baseline`).Scan(&stored); err != nil {
+		return 0, err
+	}
+	t.seq = max(t.seq, stored) + 1
+	return t.seq, nil
 }
 
 func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
@@ -532,7 +577,7 @@ func (t *sqliteTx) PutNode(ctx context.Context, n domain.Node) error {
 	pj, _ := json.Marshal(parents)
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("node_version", nodeVersionColumns, ""),
 		string(n.ID), int(n.Version), string(jsonb(n.Properties)), n.Deleted, nullUUID(string(n.ChangeID)), tsText(n.CreatedAt),
-		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), string(originsJSON(n.Origins)))
+		domain.BranchOf(n.Branch), string(pj), n.Reason, n.State, nullUUID(string(n.ChangeImpact)), n.Comment, n.Execution, nullUUID(string(n.Owner)), string(originsJSON(n.Origins)), n.Landed)
 	return sqliteErr(err, "node "+n.Ref().String())
 }
 
@@ -570,85 +615,44 @@ func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
 	return sqliteErr(err, "link")
 }
 
-// PutBaseline stores the baseline as a delta from its parent, or whole at a checkpoint (ADR 0032).
+// PutBaseline stores the baseline as the graph says (ADR 0140): its header, and its entries when it has a Gap of 0.
 func (t *sqliteTx) PutBaseline(ctx context.Context, b domain.Baseline) error {
-	var parent *domain.Baseline
-	parentDepth := 0
-	if b.ParentID != "" && b.Gap == 0 {
-		var parentGap int
-		if err := t.tx.QueryRowContext(ctx, `SELECT depth, gap FROM baseline WHERE id = ?`, string(b.ParentID)).Scan(&parentDepth, &parentGap); err != nil {
-			return sqliteErr(err, "baseline "+string(b.ParentID))
-		}
-		// a delta is only stored over a parent whose entries are stored: else the baseline is stored whole
-		if parentGap == 0 {
-			p, err := t.Baseline(ctx, b.ParentID)
-			if err != nil {
-				return err
-			}
-			parent = &p
-		}
-	}
-	depth, entries := storedEntries(parent, parentDepth, b.Nodes)
-	if b.Gap > 0 {
-		depth, entries = 0, nil
-	}
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("baseline", baselineColumns, ""),
-		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), depth, b.Gap, kindOf(b), nullUUID(string(b.RebasedFrom)))
+		string(b.ID), b.Name, nullUUID(string(b.ParentID)), nullUUID(string(b.MergedFrom)), nullUUID(string(b.ChangeID)), tsText(b.CreatedAt), domain.BranchOf(b.Branch), domain.NamespaceOf(b.Namespace), b.Depth, b.Gap, kindOf(b), nullUUID(string(b.RebasedFrom)), b.Seq, nullUUID(string(b.BaseID)))
 	if err != nil {
 		return sqliteErr(err, "baseline")
 	}
-	stmt, err := t.tx.PrepareContext(ctx, `INSERT INTO baseline_entry (baseline_id, node_id, version, removed) VALUES (?, ?, ?, ?)`)
-	if err != nil {
-		return err
+	if b.Gap > 0 {
+		return nil
 	}
-	defer stmt.Close()
-	for _, e := range entries {
-		if _, err := stmt.ExecContext(ctx, string(b.ID), string(e.node), int(e.version), e.removed); err != nil {
-			return sqliteErr(err, "baseline entries")
-		}
-	}
-	return nil
+	return t.putEntries(ctx, b.ID, b.Nodes)
 }
 
-func (t *sqliteTx) BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
-	q, args := dialectSQLite.sqlBranchJoins(namespace, branch, change)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []domain.NodeRef
-	for rows.Next() {
-		var id string
-		var v int
-		if err := rows.Scan(&id, &v); err != nil {
-			return nil, err
-		}
-		out = append(out, domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)})
-	}
-	return out, rows.Err()
-}
-
-func (t *sqliteTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
-	if _, err := t.tx.ExecContext(ctx, `DELETE FROM baseline_entry WHERE baseline_id = ?`, string(id)); err != nil {
-		return err
-	}
-	if res, err := t.tx.ExecContext(ctx, `UPDATE baseline SET depth = 0, gap = 0 WHERE id = ?`, string(id)); err != nil {
-		return sqliteErr(err, "baseline "+string(id))
-	} else if k, _ := res.RowsAffected(); k != 1 {
-		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
-	}
+// putEntries writes the entries of a baseline: a version, minus the version for a node it removes.
+func (t *sqliteTx) putEntries(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
 	stmt, err := t.tx.PrepareContext(ctx, `INSERT INTO baseline_entry (baseline_id, node_id, version, removed) VALUES (?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for nid, v := range nodes {
-		if _, err := stmt.ExecContext(ctx, string(id), string(nid), int(v), false); err != nil {
+		if _, err := stmt.ExecContext(ctx, string(id), string(nid), int(max(v, -v)), v < 0); err != nil {
 			return sqliteErr(err, "baseline entries")
 		}
 	}
 	return nil
+}
+
+func (t *sqliteTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+	if _, err := t.tx.ExecContext(ctx, `DELETE FROM baseline_entry WHERE baseline_id = ?`, string(id)); err != nil {
+		return err
+	}
+	if res, err := t.tx.ExecContext(ctx, `UPDATE baseline SET depth = 0, gap = 0, base_id = NULL WHERE id = ?`, string(id)); err != nil {
+		return sqliteErr(err, "baseline "+string(id))
+	} else if k, _ := res.RowsAffected(); k != 1 {
+		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
+	}
+	return t.putEntries(ctx, id, nodes)
 }
 
 func (t *sqliteTx) PutChange(ctx context.Context, c domain.Change) error {
@@ -812,46 +816,9 @@ func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change
 	return nil
 }
 
-func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
-	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)))
+func (t *sqliteTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error {
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlJoinBranch(), string(ref.ID), int(ref.Version), domain.BranchOf(branch), nullUUID(string(change)), landed)
 	return sqliteErr(err, "node "+ref.String())
-}
-
-func (t *sqliteTx) baselineHeaders(ctx context.Context) ([]baselineHeader, error) {
-	rows, err := t.tx.QueryContext(ctx, dialectSQLite.sqlBaselineHeaders())
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []baselineHeader
-	for rows.Next() {
-		var h baselineHeader
-		if err := rows.Scan((*string)(&h.id), (*string)(&h.parent), &h.depth); err != nil {
-			return nil, err
-		}
-		out = append(out, h)
-	}
-	return out, rows.Err()
-}
-
-func (t *sqliteTx) rewriteBaseline(ctx context.Context, id domain.BaselineID, depth int, entries []baselineEntry) error {
-	if _, err := t.tx.ExecContext(ctx, `DELETE FROM baseline_entry WHERE baseline_id = ?`, string(id)); err != nil {
-		return err
-	}
-	if _, err := t.tx.ExecContext(ctx, `UPDATE baseline SET depth = ? WHERE id = ?`, depth, string(id)); err != nil {
-		return err
-	}
-	stmt, err := t.tx.PrepareContext(ctx, `INSERT INTO baseline_entry (baseline_id, node_id, version, removed) VALUES (?, ?, ?, ?)`)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
-	for _, e := range entries {
-		if _, err := stmt.ExecContext(ctx, string(id), string(e.node), int(e.version), e.removed); err != nil {
-			return sqliteErr(err, "baseline entries")
-		}
-	}
-	return nil
 }
 
 func (t *sqliteTx) PutTag(ctx context.Context, tag domain.Tag) error {

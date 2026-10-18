@@ -497,6 +497,8 @@ func (r *Runner) sampleNode(rnd *rand.Rand, hot bool) *node {
 
 func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 	g, m := r.Clients.Graph, r.Metrics
+	// the node is sampled before the head is read: one landed later is not in that head
+	sampled := r.sampleNode(rnd, false)
 	br, err := timed(ctx, m, "GetBranch", func(ctx context.Context) (*connect.Response[graphv1.GetBranchResponse], error) {
 		return g.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: Namespace, Name: "main"}))
 	})
@@ -504,7 +506,7 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 		return
 	}
 	head := br.Msg.Head.GetId()
-	if n := r.sampleNode(rnd, false); n != nil {
+	if n := sampled; n != nil {
 		if v, err := timed(ctx, m, "GetNode", func(ctx context.Context) (*connect.Response[graphv1.GetNodeResponse], error) {
 			return g.GetNode(ctx, connect.NewRequest(&graphv1.GetNodeRequest{Namespace: Namespace, Key: n.key}))
 		}); err == nil {

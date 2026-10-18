@@ -33,13 +33,18 @@ type guardRepo struct {
 }
 
 func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
-	return r.Repo.InTx(ctx, func(tx Tx) error {
-		gt := &guardTx{Tx: tx, g: r.g}
+	var gt *guardTx
+	err := r.Repo.InTx(ctx, func(tx Tx) error {
+		gt = &guardTx{Tx: tx, g: r.g}
 		if err := fn(gt); err != nil {
 			return err
 		}
 		return gt.verify(ctx)
 	})
+	if err == nil && len(gt.checkpoints) > 0 {
+		r.g.checkpoints.store(r.g, gt.checkpoints)
+	}
+	return err
 }
 
 type guardTx struct {
@@ -50,8 +55,13 @@ type guardTx struct {
 	owners     map[domain.NodeID]string
 	projects   map[domain.NodeID]string
 	changes    map[domain.ChangeID]domain.Change
-	// newBaselines are the baselines the transaction wrote (their moves are not cached before it ends)
+	// newBaselines are the baselines the transaction wrote (their headers are not cached before it ends)
 	newBaselines map[domain.BaselineID]bool
+	// landing is, per branch, the order of the baseline the versions the transaction writes or joins there land in
+	// (ADR 0140): taken by the first of them, given to the baseline written after them
+	landing map[string]int64
+	// checkpoints are the headers the transaction wrote whose whole state is to be stored once it is over
+	checkpoints []domain.BaselineID
 	// headers caches the changes read to stamp versions
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote
@@ -217,6 +227,13 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	}
 	t.owners[n.Owner] = what
 	t.projects[n.Project] = what
+	if n.Landed >= 0 { // a negative order lands the version in no baseline (a test fixture)
+		landed, err := t.landingOn(ctx, n.Branch)
+		if err != nil {
+			return err
+		}
+		n.Landed = landed
+	}
 	if err := t.Tx.PutNode(ctx, n); err != nil {
 		return err
 	}
@@ -251,11 +268,15 @@ func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change 
 	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment)
 }
 
-func (t *guardTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
+func (t *guardTx) JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, _ int64) error {
 	if err := t.needChange(change, "node "+ref.String()+" joining "+branch); err != nil {
 		return err
 	}
-	return t.Tx.JoinBranch(ctx, ref, branch, change)
+	landed, err := t.landingOn(ctx, branch)
+	if err != nil {
+		return err
+	}
+	return t.Tx.JoinBranch(ctx, ref, branch, change, landed)
 }
 
 func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
@@ -285,17 +306,8 @@ func (t *guardTx) PutChange(ctx context.Context, c domain.Change) error {
 }
 
 func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, branch string) error {
-	// the store checks that no baseline holds what the change wrote from the entries: every baseline of the namespace
-	// must have its own (a baseline kept as a header only is materialised first)
-	bs, err := t.Tx.Baselines(ctx, namespace)
-	if err != nil {
-		return err
-	}
-	for _, b := range bs {
-		if err := t.materialize(ctx, b.ID); err != nil {
-			return err
-		}
-	}
+	// a version lands only in a baseline of the change that wrote or joined it (ADR 0140): the store refuses a change
+	// that produced a baseline, and checks the entries stored
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
 	}
@@ -307,8 +319,12 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	return nil
 }
 
-// verify checks, at the end of the transaction, that what it wrote names changes, units and projects that exist.
+// verify checks, at the end of the transaction, that what it wrote names changes, units and projects that exist, and
+// that every version it landed is in a baseline.
 func (t *guardTx) verify(ctx context.Context) error {
+	for branch := range t.landing {
+		return fmt.Errorf("versions landed on branch %s in no baseline: a version is written when its change lands (ADR 0079, 0140): %w", branch, ErrInvalid)
+	}
 	for id, what := range t.changeRefs {
 		if _, ok := t.changes[id]; ok {
 			continue

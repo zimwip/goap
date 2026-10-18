@@ -88,19 +88,12 @@ func main() {
 	g := graph.New(repo)
 	// the principal behind each event of the impact logs (ADR 0029)
 	g.Caller = graphsvc.Caller
-	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
-	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
-	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
+	g.EndUser = graphsvc.EndUser                     // the person the events of the changes are for (ADR 0114)
+	g.DecisionPolicy = decision.Policy{}             // confidence, rounds and deadline settle the decision points (ADR 0067)
+	g.CheckpointEvery = graph.DefaultCheckpointEvery // a baseline of a branch in 50 stores its state, off the commit (ADR 0140)
+	g.ReviewPolicy = verify.Policy{}                 // a verifier is not the producer (ADR 0075)
 	// the events of the graph (changes, nodes, baselines) go through its outbox to the bus (ADR 0136)
 	outbox.Start(ctx, g.Observe(outbox.NATS(events)), log)
-	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
-	go func() {
-		if n, err := g.CompactBaselines(ctx); err != nil {
-			log.Error("compact baselines", "err", err)
-		} else if n > 0 {
-			log.Info("baselines compacted", "rewritten", n)
-		}
-	}()
 	// the graph judges nodes by the types of the published domains (ADR 0012): the domain registry served here is the
 	// reference (ADR 0125 §3), the graph holds a copy reloaded when a version is published or archived; the methodology
 	// registry follows the same publications through the events

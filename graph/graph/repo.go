@@ -41,21 +41,37 @@ type Tx interface {
 	NodeByKey(ctx context.Context, namespace, key string) (domain.Node, error)
 	// NodeIDByKey resolves a key whatever the branch the node lives on.
 	NodeIDByKey(ctx context.Context, namespace, key string) (domain.NodeID, error)
+	// NodesIn lists the nodes of a baseline, of one type when nodeType is not empty, by key: through the guard of the
+	// graph, which computes the state; a store lists the nodes of the entries it stores.
 	NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error)
+	// NodesAt reads node versions by reference, of one type when nodeType is not empty, by key.
+	NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType string) ([]domain.Node, error)
 	// LatestNodes returns the latest version of every node of a namespace on a branch.
 	LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error)
 	// Namespaces returns the distinct namespaces holding at least one node (admin/reindex use).
 	Namespaces(ctx context.Context) ([]string, error)
 	OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
+	// Baseline reads a baseline with its state and Baselines the baselines of a namespace, oldest first, with theirs:
+	// through the guard of the graph, which computes the state (ADR 0140); a store gives the entries it stores (none
+	// for a baseline kept as a header, the entries of the chain of stored ones down to a whole one or a header).
 	Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
 	Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error)
-	// BaselineHeader reads a baseline without its state (Nodes nil).
+	// BaselineHeader reads a baseline without its state (Nodes nil), with how it is stored (Seq, BaseID, Depth, Gap).
 	BaselineHeader(ctx context.Context, id domain.BaselineID) (domain.Baseline, error)
-	// BaselineVersions reads the versions some nodes have in a baseline, the nodes it does not hold left out (ADR 0137).
-	// A store reads a materialised baseline (Gap 0); through the guard of the graph any baseline: the nearest
-	// materialised one before it with what the changes in between did to those nodes.
-	BaselineVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
+	// StoredVersions reads the entries in effect, for some nodes (nil: every node), in a baseline whose entries are
+	// stored (Gap 0) and the stored ones its entries are put in (BaseID), down to a whole one: a version, 0 for a node an
+	// entry removes. tail is the baseline kept as a header the chain ends on, empty when it reaches a whole one (ADR 0140).
+	StoredVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (versions map[domain.NodeID]domain.Version, tail domain.BaselineID, err error)
+	// LandedVersions reads the last version of each node (nil ids: every node of the namespace) that landed on a branch
+	// in a baseline whose order is after `after`, up to upTo (Baseline.Seq, ADR 0140): written there or joined; 0 for a
+	// version that deletes its node.
+	LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
+	// LatestStored returns the last baseline of a branch of a namespace storing its state (Gap 0) whose order is after
+	// `after`, up to upTo: the checkpoint a header is stored over (empty: none, ADR 0140).
+	LatestStored(ctx context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error)
+	// NextLanding allocates the order of a new baseline (Baseline.Seq): greater than every order allocated before.
+	NextLanding(ctx context.Context) (int64, error)
 	// BranchNodeIDs lists the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
 	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
@@ -74,13 +90,11 @@ type Tx interface {
 	// PutLink writes a link of a version written in the same transaction; Link reads one.
 	PutLink(ctx context.Context, l domain.Link) error
 	Link(ctx context.Context, id domain.LinkID) (domain.Link, error)
-	// PutBaseline stores a baseline: its entries when b.Gap is 0, else only its header (ADR 0056); a Baseline read
-	// back with a Gap holds no nodes, the graph computes them.
+	// PutBaseline stores a baseline as the graph says (ADR 0140): only its header when b.Gap > 0, else its entries
+	// (b.Nodes: a version, or minus the version a node had in BaseID for a node the baseline removes), put in the state
+	// of b.BaseID when it names one.
 	PutBaseline(ctx context.Context, b domain.Baseline) error
-	// BranchJoins lists the node versions a change joined to a branch (ADR 0032: a fast-forward), of the nodes of a
-	// namespace.
-	BranchJoins(ctx context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error)
-	// MaterializeBaseline stores the state of a baseline stored with a Gap: whole, its Gap becomes 0.
+	// MaterializeBaseline stores the whole state of a baseline: its Gap and Depth become 0, it has no BaseID.
 	MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error
 	// PutTag stores a tag (ADR 0056); DeleteTag removes it (ErrNotFound when absent); Tags lists the tags matching
 	// f, oldest first.
@@ -116,8 +130,9 @@ type Tx interface {
 
 	// JoinBranch makes a node version part of a branch it was not written on (a merge that lands it as is,
 	// ADR 0032): the version is not copied and keeps the branch it was written on. change is the change whose merge
-	// makes it join (ADR 0054: no membership without a change).
-	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error
+	// makes it join (ADR 0054: no membership without a change), landed the order of the baseline it lands in (the guard
+	// of the graph sets it, ADR 0140).
+	JoinBranch(ctx context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error
 
 	// DeleteChange removes a change that landed nothing (ADR 0037): its log, impacts, node versions and links,
 	// the nodes it alone created, and its branch when it has one of its own (empty: none). It refuses (ErrConflict) when

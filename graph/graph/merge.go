@@ -576,7 +576,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 		}
 		if m.join {
 			n = *m.from
-			if err := tx.JoinBranch(ctx, n.Ref(), plan.Into, c.ID); err != nil {
+			if err := tx.JoinBranch(ctx, n.Ref(), plan.Into, c.ID, 0); err != nil {
 				return res, err
 			}
 		} else {

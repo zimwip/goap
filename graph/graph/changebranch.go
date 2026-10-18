@@ -268,7 +268,7 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		}
 	}
 	for _, r := range moves {
-		if err := tx.JoinBranch(ctx, r, target, c.ID); err != nil {
+		if err := tx.JoinBranch(ctx, r, target, c.ID, 0); err != nil {
 			return false, err
 		}
 	}

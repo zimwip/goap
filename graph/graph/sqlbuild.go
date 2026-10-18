@@ -151,35 +151,96 @@ func (d dialect) sqlNodeIDByKey(namespace, key string) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM node WHERE namespace = ` + d.ph(1) + ` AND key = ` + d.ph(2), []any{domain.NamespaceOf(namespace), key}
 }
 
-// sqlNodesIn reads the nodes of a baseline, of one type when nodeType is not empty.
-func (d dialect) sqlNodesIn(baseline domain.BaselineID, nodeType string) (string, []any) {
-	return baselineEntriesSQL(d.ph(1)) + ` SELECT ` + d.nodeCols() + ` FROM eff e JOIN node n ON n.id = e.node_id
-		      JOIN node_version v ON v.node_id = e.node_id AND v.version = e.version
-		      WHERE e.rn = 1 AND NOT e.removed AND (` + d.ph(2) + ` = '' OR n.type = ` + d.ph(2) + `) ORDER BY n.key`, []any{string(baseline), nodeType}
-}
-
-// sqlBaselineEntries reads the entries in effect in a baseline.
-func (d dialect) sqlBaselineEntries(id domain.BaselineID) (string, []any) {
-	return baselineEntriesSQL(d.ph(1)) + ` SELECT ` + d.id("node_id") + `, version FROM eff WHERE rn = 1 AND NOT removed`, []any{string(id)}
-}
-
-// sqlBaselineVersions reads the entries in effect in a baseline for some nodes (ADR 0137): the chain of the baseline is
-// walked as for the whole state, only the entries of those nodes are read (the primary key of baseline_entry).
-func (d dialect) sqlBaselineVersions(id domain.BaselineID, ids []domain.NodeID) (string, []any) {
-	in := `e.node_id IN (SELECT value FROM json_each(` + d.ph(2) + `))`
+// sqlNodesAt reads node versions by reference, of one type when nodeType is not empty, ordered by key.
+func (d dialect) sqlNodesAt(refs []domain.NodeRef, nodeType string) (string, []any) {
 	if d.pg {
-		in = `e.node_id = ANY(` + d.ph(2) + `::uuid[])`
+		ids, vs := make([]string, len(refs)), make([]int32, len(refs))
+		for i, r := range refs {
+			ids[i], vs[i] = string(r.ID), int32(r.Version)
+		}
+		return `SELECT ` + d.nodeCols() + nodeFrom + ` JOIN unnest($1::uuid[], $2::int[]) AS r(id, version) ON r.id = v.node_id AND r.version = v.version
+		      WHERE ($3 = '' OR n.type = $3) ORDER BY n.key`, []any{ids, vs, nodeType}
 	}
+	pairs := make([][2]any, len(refs))
+	for i, r := range refs {
+		pairs[i] = [2]any{string(r.ID), int(r.Version)}
+	}
+	b, _ := json.Marshal(pairs)
+	return `SELECT ` + d.nodeCols() + nodeFrom + ` JOIN json_each(?1) r ON json_extract(r.value, '$[0]') = v.node_id AND json_extract(r.value, '$[1]') = v.version
+		      WHERE (?2 = '' OR n.type = ?2) ORDER BY n.key`, []any{string(b), nodeType}
+}
+
+// nodeIDList tests col against a list of node ids given as the n-th argument: an array for PostgreSQL, a JSON list for
+// SQLite.
+func (d dialect) nodeIDList(col string, n int, ids []domain.NodeID) (string, any) {
 	list := make([]string, len(ids))
-	for i, n := range ids {
-		list[i] = string(n)
+	for i, id := range ids {
+		list[i] = string(id)
 	}
-	var arg any = list
-	if !d.pg {
-		b, _ := json.Marshal(list)
-		arg = string(b)
+	if d.pg {
+		return col + ` = ANY(` + d.ph(n) + `::uuid[])`, list
 	}
-	return baselineEntriesWhereSQL(d.ph(1), in) + ` SELECT ` + d.id("node_id") + `, version FROM eff WHERE rn = 1 AND NOT removed`, []any{string(id), arg}
+	b, _ := json.Marshal(list)
+	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
+}
+
+// storedChainSQL is the chain of the baselines whose entries are stored, from the first parameter down along base_id
+// (ADR 0140): d is the distance from the baseline; it stops at a whole baseline (no base) or before a baseline kept as a
+// header.
+const storedChainSQL = `WITH RECURSIVE chain(id, base_id, d) AS (
+		SELECT id, base_id, 0 FROM baseline WHERE id = %[1]s AND gap = 0
+		UNION ALL
+		SELECT b.id, b.base_id, c.d + 1 FROM baseline b JOIN chain c ON b.id = c.base_id WHERE b.gap = 0
+	)`
+
+// sqlStoredVersions reads the entries in effect in a baseline whose entries are stored (ADR 0140), for some nodes (nil:
+// every node): for each node the entry of the nearest baseline of its chain, a version or a removal.
+func (d dialect) sqlStoredVersions(id domain.BaselineID, ids []domain.NodeID) (string, []any) {
+	args := []any{string(id)}
+	where := ""
+	if ids != nil {
+		in, arg := d.nodeIDList("e.node_id", 2, ids)
+		where, args = ` WHERE `+in, append(args, arg)
+	}
+	return fmt.Sprintf(storedChainSQL, d.ph(1)) + `, eff AS (
+		SELECT e.node_id, e.version, e.removed, row_number() OVER (PARTITION BY e.node_id ORDER BY c.d) AS rn
+		FROM chain c JOIN baseline_entry e ON e.baseline_id = c.id` + where + `
+	) SELECT ` + d.id("node_id") + `, version, removed FROM eff WHERE rn = 1`, args
+}
+
+// sqlStoredTail reads where the chain of stored baselines of a baseline ends: the baseline kept as a header it is
+// stored over, empty when the chain reaches a whole baseline.
+func (d dialect) sqlStoredTail(id domain.BaselineID) (string, []any) {
+	return fmt.Sprintf(storedChainSQL, d.ph(1)) + ` SELECT ` + d.idOr("coalesce", "base_id") + ` FROM chain ORDER BY d DESC LIMIT 1`, []any{string(id)}
+}
+
+// sqlLandedVersions reads the versions that landed on a branch of a namespace in the baselines after the order after,
+// up to upTo (Baseline.Seq, ADR 0140): written on the branch or joined to it, the last landing of each node, for some
+// nodes (nil: every node), with whether that version deletes the node.
+func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, ids []domain.NodeID) (string, []any) {
+	args := []any{domain.BranchOf(branch), after, upTo, domain.NamespaceOf(namespace)}
+	inV, inJ := "", ""
+	if ids != nil {
+		in, arg := d.nodeIDList("v.node_id", 5, ids)
+		inJ = ` AND ` + strings.Replace(in, "v.node_id", "j.node_id", 1)
+		inV, args = ` AND `+in, append(args, arg)
+	}
+	return `SELECT ` + d.id("node_id") + `, version, deleted FROM (
+		SELECT x.node_id, x.version, x.deleted, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
+		FROM (
+			SELECT v.node_id, v.version, v.deleted, v.landed FROM node_version v
+			WHERE v.branch = ` + d.ph(1) + ` AND v.landed > ` + d.ph(2) + ` AND v.landed <= ` + d.ph(3) + inV + `
+			UNION ALL
+			SELECT j.node_id, j.version, v.deleted, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+			WHERE j.branch = ` + d.ph(1) + ` AND j.landed > ` + d.ph(2) + ` AND j.landed <= ` + d.ph(3) + inJ + `
+		) x JOIN node n ON n.id = x.node_id WHERE n.namespace = ` + d.ph(4) + `
+	) y WHERE rn = 1`, args
+}
+
+// sqlLatestStored reads the last baseline of a branch storing its state between two orders (index baseline_stored).
+func (d dialect) sqlLatestStored(namespace, branch string, after, upTo int64) (string, []any) {
+	return `SELECT ` + d.id("id") + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` AND gap = 0 AND seq > ` + d.ph(3) +
+		` AND seq <= ` + d.ph(4) + ` ORDER BY seq DESC LIMIT 1`, []any{domain.NamespaceOf(namespace), domain.BranchOf(branch), after, upTo}
 }
 
 // sqlBranchNodeIDs reads the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
@@ -191,7 +252,7 @@ func (d dialect) sqlBranchNodeIDs(branch string) (string, []any) {
 // sqlBaselineHeader reads the header of a baseline.
 func (d dialect) sqlBaselineHeader(id domain.BaselineID) (string, []any) {
 	return `SELECT ` + d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
-		`, created_at, branch, namespace, gap, kind, ` + d.idOr("coalesce", "rebased_from") + ` FROM baseline WHERE id = ` + d.ph(1), []any{string(id)}
+		`, created_at, branch, namespace, gap, kind, ` + d.idOr("coalesce", "rebased_from") + `, seq, ` + d.idOr("coalesce", "base_id") + `, depth FROM baseline WHERE id = ` + d.ph(1), []any{string(id)}
 }
 
 // sqlLinks reads the links leaving (out) or entering the version ref.
@@ -223,17 +284,6 @@ func (d dialect) sqlBranch(namespace, name string) (string, []any) {
 // sqlBranches reads the branches of a namespace, oldest first.
 func (d dialect) sqlBranches(namespace string) (string, []any) {
 	return `SELECT ` + d.branchCols() + ` FROM branch WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ""), []any{domain.NamespaceOf(namespace)}
-}
-
-// sqlBranchJoins reads the node versions a change made join a branch.
-func (d dialect) sqlBranchJoins(namespace, branch string, change domain.ChangeID) (string, []any) {
-	return `SELECT ` + d.id("j.node_id") + `, j.version FROM node_branch j JOIN node n ON n.id = j.node_id WHERE n.namespace = ` + d.ph(1) +
-		` AND j.branch = ` + d.ph(2) + ` AND j.change_id = ` + d.ph(3), []any{domain.NamespaceOf(namespace), domain.BranchOf(branch), string(change)}
-}
-
-// sqlBaselineHeaders reads the header of every materialised baseline.
-func (d dialect) sqlBaselineHeaders() string {
-	return `SELECT ` + d.id("id") + `, ` + d.idOr("coalesce", "parent_id") + `, depth FROM baseline WHERE gap = 0` + d.orderBy("created_at", ", id")
 }
 
 // sqlNamespaceBaselineHeaders reads the header of every baseline of a namespace, oldest first (ADR 0133).
@@ -350,9 +400,10 @@ func (d dialect) sqlSetNodeOrigin() string {
 	return `UPDATE node_version SET change_id = ` + d.ph(3) + `, change_impact = ` + d.ph(4) + `, comment = ` + d.ph(5) + ` WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2)
 }
 
-// sqlJoinBranch makes a version join a branch: arguments node, version, branch, change.
+// sqlJoinBranch makes a version join a branch: arguments node, version, branch, change, the order of the baseline it
+// lands in.
 func (d dialect) sqlJoinBranch() string {
-	return `INSERT INTO node_branch (node_id, version, branch, change_id) SELECT node_id, version, ` + d.ph(3) + `, ` + d.ph(4) + ` FROM node_version
+	return `INSERT INTO node_branch (node_id, version, branch, change_id, landed) SELECT node_id, version, ` + d.ph(3) + `, ` + d.ph(4) + `, ` + d.ph(5) + ` FROM node_version
 		WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2) + ` AND branch <> ` + d.ph(3) + ` ON CONFLICT DO NOTHING`
 }
 
@@ -407,8 +458,8 @@ func (d dialect) sqlDeleteChange() string { return `DELETE FROM change WHERE id 
 
 // The columns of the inserts both repositories run, in the order of their arguments.
 var (
-	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins"}
+	nodeVersionColumns = []string{"node_id", "version", "props", "deleted", "change_id", "created_at", "branch", "parents", "reason", "state", "change_impact", "comment", "execution", "owner_id", "origins", "landed"}
 	linkColumns        = []string{"id", "type", "from_id", "from_version", "to_id", "to_version", "props", "change_id"}
-	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind", "rebased_from"}
+	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind", "rebased_from", "seq", "base_id"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload"}
 )

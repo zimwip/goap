@@ -145,7 +145,7 @@ func testVirtualBaselines(t *testing.T, repo Repo) {
 			t.Fatalf("baseline %d: graph of %d nodes, want %d", i, len(nodes), len(want.Nodes))
 		}
 	}
-	// browsing a computed baseline by type materialises it
+	// browsing a computed baseline by type reads it, without storing its state (ADR 0140)
 	for i, b := range written {
 		if gaps[i] == 0 {
 			continue
@@ -154,8 +154,8 @@ func testVirtualBaselines(t *testing.T, repo Repo) {
 		if page.Total == 0 {
 			t.Fatalf("baseline %d: no Design node listed", i)
 		}
-		if got := must[domain.Baseline](t)(fresh.Baseline(ctx, b.ID)); got.Gap != 0 {
-			t.Fatalf("baseline %d was browsed by type, it is stored now: gap %d", i, got.Gap)
+		if got := must[domain.Baseline](t)(fresh.Baseline(ctx, b.ID)); got.Gap != gaps[i] {
+			t.Fatalf("baseline %d was browsed by type, its gap is %d now, not %d", i, got.Gap, gaps[i])
 		}
 		break
 	}

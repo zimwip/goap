@@ -18,22 +18,14 @@ type graphPart struct {
 	authorizer *access.Authorizer
 }
 
-// buildGraph opens the graph on its repository, compacts its old baselines in the background and wires the access
-// hooks. The registry hooks (types, landing gate, lifecycles) come with buildRegistry.
+// buildGraph opens the graph on its repository and wires the access hooks. The registry hooks (types, landing gate, lifecycles) come with buildRegistry.
 func buildGraph(e *env, st stores) (*graphPart, error) {
 	g := graph.New(st.graph)
-	g.Caller = graphsvc.Caller           // the principal behind each event of the impact logs (ADR 0029)
-	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
-	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
-	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
-	// baselines written whole before they were stored as deltas are compacted, once, in the background (ADR 0032)
-	go func() {
-		if n, err := g.CompactBaselines(e.ctx); err != nil {
-			e.log.Error("compact baselines", "err", err)
-		} else if n > 0 {
-			e.log.Info("baselines compacted", "rewritten", n)
-		}
-	}()
+	g.Caller = graphsvc.Caller                       // the principal behind each event of the impact logs (ADR 0029)
+	g.EndUser = graphsvc.EndUser                     // the person the events of the changes are for (ADR 0114)
+	g.DecisionPolicy = decision.Policy{}             // confidence, rounds and deadline settle the decision points (ADR 0067)
+	g.CheckpointEvery = graph.DefaultCheckpointEvery // a baseline of a branch in 50 stores its state, off the commit (ADR 0140)
+	g.ReviewPolicy = verify.Policy{}                 // a verifier is not the producer (ADR 0075)
 	directory := &access.Directory{Graph: g}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {

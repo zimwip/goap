@@ -144,162 +144,231 @@ func checkLandings(t *testing.T, repo Repo) {
 	}
 }
 
-// Baselines stored whole (before ADR 0032, or under another checkpoint interval) are compacted to deltas without
-// changing their content, and compacting again changes nothing.
-func TestCompactBaselines(t *testing.T) { forEachRepo(t, testCompactBaselines) }
+// A commit writes no entry (ADR 0140): its baseline is a header, its state the versions it landed put in the state of
+// the baseline before, read back the same through every chain of headers.
+func TestCommitWritesNoEntry(t *testing.T) { forEachRepo(t, testCommitWritesNoEntry) }
 
-func testCompactBaselines(t *testing.T, repo Repo) {
+func testCommitWritesNoEntry(t *testing.T, repo Repo) {
+	if DefaultMaterializeEvery != 0 {
+		t.Skip("GOAP_MATERIALIZE_EVERY stores entries")
+	}
 	ctx := context.Background()
-	old, oldEvery := checkpointEvery, DefaultMaterializeEvery
-	defer func() { checkpointEvery, DefaultMaterializeEvery = old, oldEvery }()
-	checkpointEvery, DefaultMaterializeEvery = 1, 1 // every baseline written whole, as before deltas
 	f := newFixture(t, repo)
 	g := f.g
-	written := []domain.Baseline{f.base}
+	var written []domain.Baseline
 	head := f.base
 	for i := range 6 {
-		head = commitOn(t, g, "", head.ID, NodeEdit{Key: fmt.Sprintf("DES-%d", i), Type: "Design"})
+		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
+		if i == 3 {
+			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": i}})
+		}
+		head = commitOn(t, g, "", head.ID, edits...)
 		written = append(written, head)
-	}
-	before := storedEntryCounts(t, repo, written)
-	checkpointEvery = 4
-	n, err := g.CompactBaselines(ctx)
-	if err != nil {
-		t.Fatal(err)
 	}
 	for i, want := range written {
 		got := must[domain.Baseline](t)(g.Baseline(ctx, want.ID))
 		if !maps.Equal(got.Nodes, want.Nodes) {
-			t.Fatalf("baseline %d after compaction: %v, want %v", i, got.Nodes, want.Nodes)
+			t.Fatalf("baseline %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
+		}
+		var some map[domain.NodeID]domain.Version
+		if err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+			some, err = versionsAt(ctx, tx, want.ID, []domain.NodeID{f.req.ID, "nope"})
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if len(some) != 1 || some[f.req.ID] != want.Nodes[f.req.ID] {
+			t.Fatalf("baseline %d: versions %v, want %s v%d", i, some, f.req.ID, want.Nodes[f.req.ID])
 		}
 	}
-	if before == nil {
-		if n != 0 {
-			t.Fatalf("the memory store keeps whole maps, %d compacted", n)
+	counts := storedEntryCounts(t, repo, written)
+	for i, c := range counts {
+		if c != 0 {
+			t.Fatalf("baseline %d stores %d entries: %v", i, c, counts)
 		}
-		return
-	}
-	after := storedEntryCounts(t, repo, written)
-	total := func(cs []int) (s int) {
-		for _, c := range cs {
-			s += c
-		}
-		return
-	}
-	if n == 0 || total(after) >= total(before) {
-		t.Fatalf("compacted %d: entries %v -> %v", n, before, after)
-	}
-	if again, err := g.CompactBaselines(ctx); err != nil || again != 0 {
-		t.Fatalf("second compaction: %d %v", again, err)
-	}
-	// a baseline written after the compaction continues the chains
-	next := commitOn(t, g, "", head.ID, NodeEdit{Key: "DES-X", Type: "Design"})
-	if got := must[domain.Baseline](t)(g.Baseline(ctx, next.ID)); !maps.Equal(got.Nodes, next.Nodes) {
-		t.Fatalf("next baseline: %v", got.Nodes)
 	}
 }
 
-// checkStates verifies that what the changes did tells the state of every baseline (ADR 0056): replaying from the
-// state of its parent the `landed` events of a commit baseline, or the versions the change joined to the branch for a
-// fast-forward, gives exactly the entries stored for it, whatever the baselines in between
-// were stored as (an entry-less baseline is a header only). A snapshot is not derived and is skipped.
+func TestCheckpoints(t *testing.T) { forEachRepo(t, testCheckpoints) }
+
+// testCheckpoints: every CheckpointEvery-th header of a branch stores its state after its commit, and the headers
+// committed after it are kept over it, their states unchanged (ADR 0140).
+func testCheckpoints(t *testing.T, repo Repo) {
+	if DefaultMaterializeEvery != 0 {
+		t.Skip("GOAP_MATERIALIZE_EVERY stores entries")
+	}
+	ctx := context.Background()
+	f := newFixture(t, repo)
+	g := f.g
+	g.CheckpointEvery = 3
+	var written []domain.Baseline
+	head := f.base
+	for i := range 8 {
+		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
+		if i%2 == 1 {
+			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": i}})
+		}
+		head = commitOn(t, g, "", head.ID, edits...)
+		g.WaitCheckpoints()
+		written = append(written, head)
+	}
+	var stored []domain.BaselineID
+	headers := map[domain.BaselineID]domain.Baseline{}
+	if err := repo.InTx(ctx, func(tx Tx) error {
+		for _, b := range written {
+			h, err := tx.BaselineHeader(ctx, b.ID)
+			if err != nil {
+				return err
+			}
+			headers[b.ID] = h
+			if h.Gap == 0 {
+				stored = append(stored, b.ID)
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if len(stored) != 3 { // the fixture committed twice before: the 1st, 4th and 7th commits are 3rd headers
+		t.Fatalf("stored %v, want 3 checkpoints out of 8 commits", stored)
+	}
+	for _, b := range written {
+		h := headers[b.ID]
+		if h.Gap == 0 {
+			continue
+		}
+		var want domain.BaselineID
+		for _, cp := range stored {
+			if headers[cp].Seq < h.Seq {
+				want = cp
+			}
+		}
+		if h.BaseID != want {
+			t.Fatalf("header %s is kept over %s, want the checkpoint %s", b.ID, h.BaseID, want)
+		}
+	}
+	// a header committed after a checkpoint stored late (here by hand) is kept over it
+	g.CheckpointEvery = 0
+	head = commitOn(t, g, "", head.ID, NodeEdit{Key: "DES-8", Type: "Design"})
+	written = append(written, head)
+	if err := g.Materialize(ctx, written[7].ID); err != nil {
+		t.Fatal(err)
+	}
+	head = commitOn(t, g, "", head.ID, NodeEdit{Key: "DES-9", Type: "Design"})
+	written = append(written, head)
+	if err := repo.InTx(ctx, func(tx Tx) error {
+		h, err := tx.BaselineHeader(ctx, head.ID)
+		if err == nil && h.BaseID != written[7].ID {
+			t.Errorf("header kept over %s, want the late checkpoint %s", h.BaseID, written[7].ID)
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	reread := New(repo) // no cache
+	for i, want := range written {
+		got := must[domain.Baseline](t)(reread.Baseline(ctx, want.ID))
+		if !maps.Equal(got.Nodes, want.Nodes) {
+			t.Fatalf("baseline %d: read %v, wrote %v", i, got.Nodes, want.Nodes)
+		}
+	}
+}
+
+// checkStates verifies that what the changes did tells the state of every baseline (ADR 0056, 0140): replaying, from
+// the state of its parent, the `landed` events naming a baseline whose state is derived gives the state the graph reads
+// for it, whatever the baselines in between are stored as. A baseline that is not derived is a source and is skipped.
 func checkStates(t *testing.T, repo Repo) {
 	t.Helper()
 	if t.Failed() {
 		return
 	}
 	ctx := context.Background()
-	err := repo.InTx(ctx, func(tx Tx) error {
+	err := New(repo).repo.InTx(ctx, func(tx Tx) error { // through the guard: the state of a header is computed
 		nss, err := tx.Namespaces(ctx)
 		if err != nil {
 			return err
 		}
-		byID := map[domain.BaselineID]domain.Baseline{}
-		memo := map[domain.BaselineID]map[domain.NodeID]domain.Version{}
-		var state func(b domain.Baseline) (map[domain.NodeID]domain.Version, error)
-		state = func(b domain.Baseline) (map[domain.NodeID]domain.Version, error) {
-			if s, ok := memo[b.ID]; ok {
-				return s, nil
+		landed := map[domain.BaselineID][]domain.NodeRef{}
+		cs, err := tx.Changes(ctx)
+		if err != nil {
+			return err
+		}
+		for _, c := range cs {
+			events, err := impactEvents(ctx, tx, c.ID)
+			if err != nil {
+				return err
 			}
-			if !domain.DerivedKind(b.Kind) {
-				return b.Nodes, nil // stored whole
-			}
-			from := map[domain.NodeID]domain.Version{}
-			if b.ParentID != "" {
-				p, ok := byID[b.ParentID]
-				if !ok {
-					return nil, fmt.Errorf("baseline %s: parent %s is unknown", b.ID, b.ParentID)
-				}
-				var err error
-				if from, err = state(p); err != nil {
-					return nil, err
+			for _, e := range events {
+				if e.Op == domain.ImpactLanded && e.Baseline != "" && e.Landed != nil {
+					landed[e.Baseline] = append(landed[e.Baseline], *e.Landed)
 				}
 			}
-			out := maps.Clone(from)
-			put := func(ref domain.NodeRef) error {
-				n, err := tx.Node(ctx, ref)
-				if err != nil {
-					return err
-				}
-				if n.Deleted {
-					delete(out, n.ID)
-				} else {
-					out[n.ID] = n.Version
-				}
-				return nil
-			}
-			if b.Kind != domain.BaselineFastForward {
-				events, err := impactEvents(ctx, tx, b.ChangeID)
-				if err != nil {
-					return nil, err
-				}
-				for _, e := range events {
-					if e.Op == domain.ImpactLanded && e.Baseline == b.ID {
-						if err := put(*e.Landed); err != nil {
-							return nil, err
-						}
-					}
-				}
-			} else {
-				refs, err := tx.BranchJoins(ctx, b.Namespace, b.Branch, b.ChangeID)
-				if err != nil {
-					return nil, err
-				}
-				latest := map[domain.NodeID]domain.NodeRef{}
-				for _, r := range refs {
-					if r.Version > latest[r.ID].Version {
-						latest[r.ID] = r
-					}
-				}
-				for _, r := range latest {
-					if err := put(r); err != nil {
-						return nil, err
-					}
-				}
-			}
-			memo[b.ID] = out
-			return out, nil
 		}
 		for _, ns := range nss {
 			bs, err := tx.Baselines(ctx, ns)
 			if err != nil {
 				return err
 			}
+			byID := map[domain.BaselineID]domain.Baseline{}
 			for _, b := range bs {
 				byID[b.ID] = b
 			}
 			for _, b := range bs {
-				got, err := state(b)
-				if err != nil {
-					t.Errorf("%v", err)
-				} else if b.Gap == 0 && !maps.Equal(got, b.Nodes) {
-					diff := ""
-					for id, v := range b.Nodes {
-						if got[id] != v {
-							diff += fmt.Sprintf(" %s: stored v%d, replayed v%d;", id, v, got[id])
+				if !domain.DerivedKind(b.Kind) || b.ParentID == "" {
+					continue
+				}
+				p, ok := byID[b.ParentID]
+				if !ok {
+					t.Errorf("baseline %s: parent %s is unknown", b.ID, b.ParentID)
+					continue
+				}
+				want := maps.Clone(p.Nodes)
+				refs := landed[b.ID]
+				if b.Kind == domain.BaselineFastForward {
+					// a fast-forward lands what its change joined to the branch, the last version of each node
+					refs = nil
+					ids := maps.Clone(p.Nodes)
+					maps.Copy(ids, b.Nodes)
+					for id := range ids {
+						js, err := tx.VersionJoins(ctx, id)
+						if err != nil {
+							return err
+						}
+						last := domain.Version(0)
+						for _, j := range js {
+							if j.Branch == domain.BranchOf(b.Branch) && j.Change == b.ChangeID && j.Version > last {
+								last = j.Version
+							}
+						}
+						if last > 0 {
+							refs = append(refs, domain.NodeRef{ID: id, Version: last})
 						}
 					}
-					t.Errorf("baseline %s (%s, %s): replayed %d nodes, %d are stored:%s", b.ID, b.Name, b.Kind, len(got), len(b.Nodes), diff)
+				}
+				for _, ref := range refs {
+					n, err := tx.Node(ctx, ref)
+					if err != nil {
+						return err
+					}
+					if n.Deleted {
+						delete(want, n.ID)
+					} else {
+						want[n.ID] = n.Version
+					}
+				}
+				if !maps.Equal(want, b.Nodes) {
+					diff := ""
+					for id, v := range b.Nodes {
+						if want[id] != v {
+							diff += fmt.Sprintf(" %s: read v%d, replayed v%d;", id, v, want[id])
+						}
+					}
+					for id, v := range want {
+						if _, ok := b.Nodes[id]; !ok {
+							diff += fmt.Sprintf(" %s: not read, replayed v%d;", id, v)
+						}
+					}
+					t.Errorf("baseline %s (%s, %s): replayed %d nodes, %d read:%s", b.ID, b.Name, b.Kind, len(want), len(b.Nodes), diff)
 				}
 			}
 		}

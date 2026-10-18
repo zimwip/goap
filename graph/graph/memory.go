@@ -32,7 +32,9 @@ type memState struct {
 	branches  map[string]domain.Branch
 	// joins are the branches a version is part of besides the one it was written on (ADR 0032), with the change
 	// whose merge made it join
-	joins map[joinKey]domain.ChangeID
+	joins map[joinKey]memJoin
+	// seq is the order of the last baseline allocated (ADR 0140)
+	seq   int64
 	nodes map[domain.ChangeID][]domain.ChangeImpact
 	// log holds the entries of every change's log, in their order (ADR 0030)
 	log []domain.LogEntry
@@ -48,7 +50,7 @@ func NewMemory() *Memory {
 		baselines: map[domain.BaselineID]domain.Baseline{},
 		changes:   map[domain.ChangeID]domain.Change{},
 		branches:  map[string]domain.Branch{},
-		joins:     map[joinKey]domain.ChangeID{},
+		joins:     map[joinKey]memJoin{},
 		nodes:     map[domain.ChangeID][]domain.ChangeImpact{},
 	}}
 }
@@ -64,6 +66,7 @@ func (s memState) clone() memState {
 		joins:     maps.Clone(s.joins),
 		log:       slices.Clone(s.log),
 		tags:      slices.Clone(s.tags),
+		seq:       s.seq,
 		nodes:     make(map[domain.ChangeID][]domain.ChangeImpact, len(s.nodes)),
 	}
 	for k, v := range s.nodes {
@@ -123,10 +126,16 @@ type joinKey struct {
 	branch string
 }
 
+// memJoin is a version joining a branch: the change whose merge made it join, the order of the baseline it landed in.
+type memJoin struct {
+	change domain.ChangeID
+	landed int64
+}
+
 // on reports whether a version is part of a branch: written there, or joined.
 func (t *memTx) on(n domain.Node, branch string) bool {
 	branch = domain.BranchOf(branch)
-	return domain.BranchOf(n.Branch) == branch || t.st.joins[joinKey{n.Ref(), branch}] != ""
+	return domain.BranchOf(n.Branch) == branch || t.st.joins[joinKey{n.Ref(), branch}].change != ""
 }
 
 func (t *memTx) Node(_ context.Context, ref domain.NodeRef) (domain.Node, error) {
@@ -248,22 +257,7 @@ func (t *memTx) NodeByKey(ctx context.Context, namespace, key string) (domain.No
 }
 
 func (t *memTx) NodesIn(ctx context.Context, baseline domain.BaselineID, nodeType string) ([]domain.Node, error) {
-	b, err := t.Baseline(ctx, baseline)
-	if err != nil {
-		return nil, err
-	}
-	var out []domain.Node
-	for id, v := range b.Nodes {
-		n, err := t.Node(ctx, domain.NodeRef{ID: id, Version: v})
-		if err != nil {
-			return nil, err
-		}
-		if nodeType == "" || n.Type == nodeType {
-			out = append(out, n)
-		}
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out, nil
+	return storedNodesIn(ctx, t, baseline, nodeType)
 }
 
 func (t *memTx) LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error) {
@@ -317,23 +311,27 @@ func (t *memTx) InLinks(_ context.Context, ref domain.NodeRef) ([]domain.Link, e
 	return out, nil
 }
 
-func (t *memTx) Baseline(_ context.Context, id domain.BaselineID) (domain.Baseline, error) {
+func (t *memTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
 	b, ok := t.st.baselines[id]
 	if !ok {
 		return domain.Baseline{}, fmt.Errorf("baseline %s: %w", id, ErrNotFound)
 	}
-	b.Nodes = maps.Clone(b.Nodes)
-	return b, nil
+	var err error
+	b.Nodes, err = storedNodes(ctx, t, b)
+	return b, err
 }
 
-func (t *memTx) Baselines(_ context.Context, namespace string) ([]domain.Baseline, error) {
+func (t *memTx) Baselines(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	namespace = domain.NamespaceOf(namespace)
 	out := make([]domain.Baseline, 0, len(t.st.baselines))
 	for _, b := range t.st.baselines {
 		if b.Namespace != namespace {
 			continue
 		}
-		b.Nodes = maps.Clone(b.Nodes)
+		var err error
+		if b.Nodes, err = storedNodes(ctx, t, b); err != nil {
+			return nil, err
+		}
 		out = append(out, b)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
@@ -424,10 +422,13 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 		return fmt.Errorf("baseline %s: %w", b.ID, ErrConflict)
 	}
 	b.Namespace = domain.NamespaceOf(b.Namespace)
-	for id := range b.Nodes {
+	for id, v := range b.Nodes {
 		vs := t.st.versions[id]
-		if len(vs) == 0 {
-			return fmt.Errorf("baseline %s: node %s: %w", b.ID, id, ErrNotFound)
+		if v < 0 {
+			v = -v
+		}
+		if len(vs) < int(v) {
+			return fmt.Errorf("baseline %s: node %s v%d: %w", b.ID, id, v, ErrNotFound)
 		}
 		if vs[0].Namespace != b.Namespace {
 			return fmt.Errorf("baseline %s is of namespace %s, node %s is of namespace %s: %w",
@@ -436,7 +437,7 @@ func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
 	}
 	b.Nodes = maps.Clone(b.Nodes)
 	if b.Gap > 0 {
-		b.Nodes = map[domain.NodeID]domain.Version{} // only the header is kept: the graph computes the state
+		b.Nodes = nil // only the header is kept: the graph computes the state (ADR 0140)
 	}
 	t.st.baselines[b.ID] = b
 	return nil
@@ -451,17 +452,97 @@ func (t *memTx) BaselineHeader(_ context.Context, id domain.BaselineID) (domain.
 	return b, nil
 }
 
-func (t *memTx) BaselineVersions(_ context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	b, ok := t.st.baselines[id]
-	if !ok {
-		return nil, fmt.Errorf("baseline %s: %w", id, ErrNotFound)
-	}
+func (t *memTx) StoredVersions(_ context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, domain.BaselineID, error) {
 	out := map[domain.NodeID]domain.Version{}
-	for _, n := range ids {
-		if v, ok := b.Nodes[n]; ok {
-			out[n] = v
+	want := func(n domain.NodeID) bool {
+		_, done := out[n]
+		return !done && (ids == nil || slices.Contains(ids, n))
+	}
+	for cur := id; ; {
+		b, ok := t.st.baselines[cur]
+		if !ok {
+			return nil, "", fmt.Errorf("baseline %s: %w", cur, ErrNotFound)
+		}
+		if b.Gap > 0 {
+			return out, cur, nil
+		}
+		for n, v := range b.Nodes {
+			if want(n) {
+				out[n] = max(v, 0)
+			}
+		}
+		if b.BaseID == "" {
+			return out, "", nil
+		}
+		cur = b.BaseID
+	}
+}
+
+func (t *memTx) LandedVersions(_ context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	namespace, branch = domain.NamespaceOf(namespace), domain.BranchOf(branch)
+	type landing struct {
+		landed int64
+		v      domain.Node
+	}
+	last := map[domain.NodeID]landing{}
+	put := func(landed int64, v domain.Node) {
+		if landed <= after || landed > upTo || domain.NamespaceOf(v.Namespace) != namespace || ids != nil && !slices.Contains(ids, v.ID) {
+			return
+		}
+		if l, ok := last[v.ID]; !ok || landed > l.landed || landed == l.landed && v.Version > l.v.Version {
+			last[v.ID] = landing{landed, v}
 		}
 	}
+	for _, vs := range t.st.versions {
+		for _, v := range vs {
+			if domain.BranchOf(v.Branch) == branch {
+				put(v.Landed, v)
+			}
+		}
+	}
+	for k, j := range t.st.joins {
+		if k.branch == branch {
+			put(j.landed, t.st.versions[k.ref.ID][k.ref.Version-1])
+		}
+	}
+	out := make(map[domain.NodeID]domain.Version, len(last))
+	for id, l := range last {
+		if l.v.Deleted {
+			out[id] = 0
+		} else {
+			out[id] = l.v.Version
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) LatestStored(_ context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error) {
+	var best domain.Baseline
+	for _, b := range t.st.baselines {
+		if b.Gap == 0 && b.Namespace == domain.NamespaceOf(namespace) && domain.BranchOf(b.Branch) == domain.BranchOf(branch) && b.Seq > after && b.Seq <= upTo && b.Seq > best.Seq {
+			best = b
+		}
+	}
+	return best.ID, nil
+}
+
+func (t *memTx) NextLanding(context.Context) (int64, error) {
+	t.st.seq++
+	return t.st.seq, nil
+}
+
+func (t *memTx) NodesAt(ctx context.Context, refs []domain.NodeRef, nodeType string) ([]domain.Node, error) {
+	var out []domain.Node
+	for _, r := range refs {
+		n, err := t.Node(ctx, r)
+		if err != nil {
+			return nil, err
+		}
+		if nodeType == "" || n.Type == nodeType {
+			out = append(out, n)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out, nil
 }
 
@@ -507,9 +588,9 @@ func (t *memTx) BaselineHeaders(_ context.Context, namespace string) ([]domain.B
 
 func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.VersionJoin, error) {
 	var out []domain.VersionJoin
-	for k, c := range t.st.joins {
+	for k, j := range t.st.joins {
 		if k.ref.ID == id {
-			out = append(out, domain.VersionJoin{Version: k.ref.Version, Branch: k.branch, Change: c})
+			out = append(out, domain.VersionJoin{Version: k.ref.Version, Branch: k.branch, Change: j.change})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -518,26 +599,12 @@ func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.Vers
 	return out, nil
 }
 
-func (t *memTx) BranchJoins(_ context.Context, namespace, branch string, change domain.ChangeID) ([]domain.NodeRef, error) {
-	namespace, branch = domain.NamespaceOf(namespace), domain.BranchOf(branch)
-	var out []domain.NodeRef
-	for k, c := range t.st.joins {
-		if c != change || k.branch != branch {
-			continue
-		}
-		if vs := t.st.versions[k.ref.ID]; len(vs) > 0 && domain.NamespaceOf(vs[0].Namespace) == namespace {
-			out = append(out, k.ref)
-		}
-	}
-	return out, nil
-}
-
 func (t *memTx) MaterializeBaseline(_ context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
 	b, ok := t.st.baselines[id]
 	if !ok {
 		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
 	}
-	b.Nodes, b.Gap = maps.Clone(nodes), 0
+	b.Nodes, b.Gap, b.Depth, b.BaseID = maps.Clone(nodes), 0, 0, ""
 	t.st.baselines[id] = b
 	return nil
 }
@@ -654,14 +721,14 @@ func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change doma
 	return nil
 }
 
-func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string, change domain.ChangeID) error {
+func (t *memTx) JoinBranch(_ context.Context, ref domain.NodeRef, branch string, change domain.ChangeID, landed int64) error {
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {
 		return fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
 	if branch = domain.BranchOf(branch); domain.BranchOf(vs[ref.Version-1].Branch) != branch {
 		if _, ok := t.st.joins[joinKey{ref, branch}]; !ok {
-			t.st.joins[joinKey{ref, branch}] = change
+			t.st.joins[joinKey{ref, branch}] = memJoin{change: change, landed: landed}
 		}
 	}
 	return nil
@@ -767,8 +834,8 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 			t.st.versions[nid] = t.st.versions[nid][:i]
 		}
 	}
-	for k, c := range t.st.joins {
-		if removed(k.ref) || c == id {
+	for k, j := range t.st.joins {
+		if removed(k.ref) || j.change == id {
 			delete(t.st.joins, k)
 		}
 	}

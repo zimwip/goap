@@ -127,6 +127,9 @@ type Node struct {
 	// node).
 	Origins   []NodeRef `json:"origins,omitempty"`
 	CreatedAt time.Time `json:"createdAt"`
+	// Landed is the order (Baseline.Seq) of the baseline the version landed in on its branch (ADR 0140): the graph sets
+	// it when it writes the version, and the state of a baseline follows from it.
+	Landed int64 `json:"-"`
 }
 
 // Ref returns the exact reference of this node version.
@@ -179,7 +182,16 @@ type Baseline struct {
 	// Gap is how far the baseline is from a snapshot of its state (ADR 0056): 0, the state is materialised (its
 	// entries are stored); n > 0, only its header is stored and the state is computed from the baseline n steps back
 	// and what the changes in between did (see Kind). The graph hides it: a baseline it returns always holds its nodes.
-	Gap       int                `json:"gap,omitempty"`
+	Gap int `json:"gap,omitempty"`
+	// Seq orders the baselines (ADR 0140): a baseline has a greater one than every baseline before it on its branch.
+	// Seq, BaseID and Depth are how the graph stores the state; it hides them.
+	Seq int64 `json:"-"`
+	// BaseID is the baseline the state is stored over (ADR 0140): for a baseline kept as a header, the versions that
+	// landed on its branch since BaseID put in the state of BaseID; for one whose entries are stored, its entries put in
+	// the state of BaseID; none: the entries are the whole state.
+	BaseID BaselineID `json:"-"`
+	// Depth counts the baselines with entries stored over one another down to a whole one (a checkpoint).
+	Depth     int                `json:"-"`
 	Nodes     map[NodeID]Version `json:"nodes"`
 	CreatedAt time.Time          `json:"createdAt"`
 }

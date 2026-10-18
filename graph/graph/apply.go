@@ -42,6 +42,9 @@ func (g *Graph) Apply(ctx context.Context, id domain.ChangeID, baselineName stri
 // namespace, ADR 0137).
 func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName string, whole bool) (domain.Baseline, error) {
 	var result domain.Baseline
+	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
+		return result, err
+	}
 	if _, err := g.commitChange(ctx, id, baselineName); err != nil && !errors.Is(err, ErrNothingToCommit) {
 		return result, err
 	}
@@ -71,6 +74,9 @@ func (g *Graph) apply(ctx context.Context, id domain.ChangeID, baselineName stri
 //
 //goap:operation change.commit doer
 func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
+		return domain.Baseline{}, err
+	}
 	result, err := g.commitChange(ctx, id, baselineName)
 	if err != nil {
 		return result, err
@@ -78,11 +84,8 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 	return g.Baseline(ctx, result.ID)
 }
 
-// commitChange is CommitChange, its baseline returned without its state (ADR 0137).
+// commitChange is CommitChange once allowed, its baseline returned without its state (ADR 0137).
 func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
-	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
-		return result, err
-	}
 	err = g.changeTx(ctx, id, func(tx Tx) error {
 		c, err := tx.Change(ctx, id)
 		if err != nil {

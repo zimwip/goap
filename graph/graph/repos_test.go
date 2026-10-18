@@ -47,7 +47,7 @@ func testChange(t *testing.T, g *Graph, namespace string) domain.ChangeID {
 // transition to get there — something no real caller needs, since every production write is change-shaped.
 func seedNode(ctx context.Context, g *Graph, in newNode) (domain.Node, error) {
 	n := domain.Node{ID: domain.NodeID(g.newID()), Version: 1, Branch: domain.MainBranch, Reason: domain.ReasonCreate,
-		Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State}
+		Namespace: domain.NamespaceOf(in.Namespace), Key: in.Key, Type: in.Type, Properties: in.Properties, CreatedAt: g.now(), State: in.State, Landed: -1}
 	if n.Key == "" {
 		n.Key = string(n.ID)
 	}
