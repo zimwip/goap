@@ -449,6 +449,12 @@ func (c *Ctx) AddArtifact(artifactType string, data map[string]any) string {
 	return c.emit(map[string]any{"type": "artifact", "target": artifactType, "data": data})
 }
 
+// AddItem records an item of a declared item type (ADR 0128): a risk, an action, a hypothesis, an assessment... The
+// data is checked by the graph against the attributes of the type.
+func (c *Ctx) AddItem(itemType string, data map[string]any) string {
+	return c.emit(map[string]any{"type": itemType, "data": data})
+}
+
 // Signal emits a named notification other agents or a live parent may react
 // to. recipient addresses a process id ("" = broadcast, visible to triggers and
 // to readers of the change).

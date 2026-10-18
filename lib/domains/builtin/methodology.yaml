@@ -1,5 +1,5 @@
 name: methodology
-version: 1.14.0
+version: 1.15.0
 description: >
   Built-in meta-domain (ADR 0012 §4, ADR 0023): the definition of a methodology version, one node per element, in the
   "methodology" namespace. Its types are in every type catalogue, before anything is loaded from the registry.
@@ -392,6 +392,17 @@ itemTypes:
       - {name: due, label: Due, description: "When it is due", type: string}
       - {name: for, label: For, description: "The risk key or the decision point it answers", type: string}
       - {name: result, label: Result, description: "What came of it", type: string, widget: textarea}
+      - {name: kind, label: Kind, description: "mitigation (default) or poc: a proof of concept or a prototype, a relaxed build in a sub-change (ADR 0131)", type: string}
+      - {name: purpose, label: Purpose, description: "Of a poc: derisk (check its risks) or explore (the need, during the framing)", type: string}
+      - {name: risks, label: Risks, description: "Of a poc: the keys of the risks it checks", type: json}
+      - {name: hypotheses, label: Hypotheses, description: "Of a poc: the statements it checks (explore)", type: json}
+      - {name: change, label: Change, description: "Of a poc: the sub-change carrying it, once opened", type: string}
+  - name: hypothesis
+    description: "A statement a proof of concept or a prototype checks, the requirement of its sub-change; its verdict is the assessment of item:<key> (ADR 0131)."
+    attributes:
+      - {name: key, label: Key, description: "The hypothesis the item is a version of", type: string}
+      - {name: statement, label: Statement, description: "What is to be confirmed or refuted", type: string, widget: textarea}
+      - {name: source, label: Source, description: "The risk of the parent change it checks, or framing", type: string}
   - name: derogation
     description: "A signed waiver of a rule on a target of the change, until it expires (ADR 0075)."
     attributes:

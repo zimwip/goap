@@ -54,3 +54,27 @@ func TestDependencyConditions(t *testing.T) {
 		t.Fatalf("the guards see the dependencies: %v %v", ok, err)
 	}
 }
+
+// A proof of concept covers its risks while it runs; concluded, its verdict settles them and the risk the POC
+// confirmed needs another mitigation (ADR 0131).
+func TestConcludedPOCNoLongerCovers(t *testing.T) {
+	risk.Register()
+	set, err := Compile(MustLibrary(LibraryRisks))
+	if err != nil {
+		t.Fatal(err)
+	}
+	item := func(id string, kind domain.ItemType, data map[string]any) domain.ChangeItem {
+		return domain.ChangeItem{ID: domain.ItemID(id), Type: kind, Status: domain.ItemProposed, Data: data}
+	}
+	bb := domain.Blackboard{Change: domain.Change{Items: []domain.ChangeItem{
+		item("1", risk.TypeRisk, map[string]any{"key": "RSK-1", "title": "sdk", "probability": 4, "impact": 4}),
+		item("2", risk.TypeAction, map[string]any{"key": "ACT-1", "title": "poc", "kind": "poc", "risks": []any{"RSK-1"}}),
+	}}}
+	if st := set.Evaluate(bb).State; !st["risks_under_control"] || !st["pocs_pending"] {
+		t.Fatalf("a running POC covers its risk: %v", st)
+	}
+	bb.Change.Items = append(bb.Change.Items, item("3", risk.TypeAction, map[string]any{"key": "ACT-1", "title": "poc", "status": "done"}))
+	if st := set.Evaluate(bb).State; st["risks_under_control"] || st["pocs_pending"] {
+		t.Fatalf("a concluded POC confirming the risk no longer covers it: %v", st)
+	}
+}

@@ -244,7 +244,7 @@ methodology (`Graph.frozen` widened; the graph keeps the mechanism, ADR 0067). G
 - The brief (`lib/brief`): the next gate and its unmet items, so an llm action knows what the change is being matured
   towards.
 
-### 6. `sdlc` 0.10.0 and `alm`
+### 6. `sdlc` 0.11.0 and `alm`
 
 `alm` gains a lifecycle of the changes of `sdlc`, `maturity_of_change`: `framing` (initial) → `analysing` → `designing`
 → `building` → `releasing` → `delivered` (final), `abandoned` (final), with back transitions `reframe`, `reanalyse`,
@@ -276,7 +276,7 @@ lifecycle; its `merge` guardian may then read `integrated.state == "releasing"`.
 - No entry by default on the `from` state of the transition: the methodology does not know its lifecycle at compile
   time, so a gate names the gate before it in its `pre` (`sdlc` does), and the graph refuses a move from another state.
 - A no go opens a new decision at once (the board is asked again); a back takes the back transition with the point.
-- `sdlc` 0.10.0: no `risks_identified` objective (a register to open would block every change without a derogation);
+- `sdlc` 0.11.0: no `risks_identified` objective (a register to open would block every change without a derogation);
   the analysis gate is ruled by the default workflow (no `gate_decision` method yet); the build gate vetoes
   `build_complete` and `risks_under_control`, the delivery gate `rolled_out` and `requirements_approved`; every gate
   keeps the impacts of its phase editable (`keepPhase`), since the release approves the requirements of the analysis
@@ -321,5 +321,5 @@ lifecycle; its `merge` guardian may then read `integrated.state == "releasing"`.
 4. Engine: the gate step as a reactive step opening its decision, the decision method run with `vars.gate`, the builtin
    `change.transition`, `GateState` in `ChangeState`, the asks per role in `ChangeAsks`.
 5. Web: milestone in the flow, gate checklist on the change tab, *Gate* section of the step editor.
-6. `alm` lifecycle `maturity_of_change`, `sdlc` 0.10.0 with its gates, `platform/e2e/engine/sdlc_test.go` through the
+6. `alm` lifecycle `maturity_of_change`, `sdlc` 0.11.0 with its gates, `platform/e2e/engine/sdlc_test.go` through the
    gates.

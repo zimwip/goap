@@ -32,6 +32,7 @@ export const DSL_FUNCTIONS: DslFunction[] = [
     group: 'read',
   },
   { name: 'addArtifact', args: ['type', 'data'], returns: '', doc: 'Free-form data (report…).', group: 'write' },
+  { name: 'addItem', args: ['itemType', 'data'], returns: '', doc: 'An item of a type the domains declare (hypothesis, risk, assessment…).', group: 'write' },
   { name: 'changeImpacts', args: [], returns: 'ChangeImpact[]', doc: 'Nodes the change reads, modifies or creates.', group: 'read' },
   { name: 'impactNode', args: ['key', 'rationale'], returns: '"#nN"', doc: 'The change acts on a baseline node, and why (no version written yet).', group: 'write' },
   { name: 'impactNodeCreate', args: ['type', 'key', 'rationale'], returns: '"#nN"', doc: 'The change creates a node, and why.', group: 'write' },

@@ -571,8 +571,9 @@ func (s *compileState) checkInvocation(path string, a Action) {
 			s.add(path+".mcps", "invalid MCP name %q", name)
 		}
 	}
-	if len(a.MCPs) > 0 && a.Kind != KindLLM && a.Kind != KindScript {
-		s.add(path+".mcps", "mcps apply to llm and script actions (a tool action names its tool)")
+	// the code of a human action's form runs as a script does (ADR 0115) and may call the tools it declares (ADR 0131)
+	if len(a.MCPs) > 0 && a.Kind != KindLLM && a.Kind != KindScript && (a.Kind != KindHuman || a.Code == "") {
+		s.add(path+".mcps", "mcps apply to llm and script actions, and to the code of a human action's form (a tool action names its tool)")
 	}
 	if a.Permission != "" && !strings.Contains(a.Permission, ":") {
 		s.add(path+".permission", "permission must be <resource>:<action>")

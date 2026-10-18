@@ -729,7 +729,7 @@ the state left editable), recorded on the transition fact; the graph refuses an 
 (`UpdateChange`) or a node of a frozen type (`work.checkTypeFreeze`; a candidate never written may still be
 withdrawn) while the move stands (`Change.InForceFreezes`). An agent with no `actions:` plans the gates too; a gate
 follows the gate before it by its `pre`. Choices of a decision point that are no flow: `OpenDecisionRequest.Choices`.
-`sdlc` 0.10.0 follows `alm`'s `maturity_of_change` (framing, analysing, designing, building, releasing, delivered,
+`sdlc` 0.11.0 follows `alm`'s `maturity_of_change` (framing, analysing, designing, building, releasing, delivered,
 abandoned): the framing confirmation, the analysis (a board by consent, the architecture attested), the design, the
 build and the delivery are gates, and the change lands delivered. The web edits a gate as JSON (*Gate* section of
 `StepEditor.svelte`, `parseGate` in `methodologyForm.ts`) and draws it as a chip of `StepNode.svelte`.
@@ -768,6 +768,13 @@ signals of a `change.item_added` into those events (`engine.DeclaredEvents`). Th
 (`SubscriptionsEditor.svelte`, `web/src/lib/subscriptions.ts`: standard and declared events, unknown ones flagged).
 `methodologies/risk-management.yaml` applies to `sdlc`: at each step of its processes the risks that step introduces
 are reviewed, and every high one gets an action; sdlc's release waits for `risks_under_control`.
+**Proofs of concept** ([ADR 0131](adr/0131-proof-of-concept-sub-change.md)): an action of kind `poc` (purpose
+`derisk`, the risks it checks; or `explore`, a prototype of the need) is opened by a person (`sdlc` step `proofs/open`)
+as a sub-change of the `poc` methodology, which states its hypotheses, builds a probe per hypothesis in its workspace
+under relaxed rules, judges it (an assessment `item:HYP-n`, `confirmed` / `refuted`) and is concluded by a person
+(`poc.concluded`); the parent's reaction (`proofs/conclusion`, `from: integrated`) closes the refuted risks, reopens
+the confirmed ones (a concluded POC covers no risk), marks the action done and abandons the sub-change, which lands
+nothing. The build waits for `pocs_concluded`, the confirmation of the framing for `prototypes_concluded`.
 **Persistent agents** ([ADR 0112](adr/0112-persistent-agents-and-the-current-state-of-a-change.md)): an agent or a
 method declaring `persistent: {scope, until, memory}` has one instance per scope (the change, or a path into the
 event: `event.process.methodology`), a process (`Process.Instance`) that every new execution of the agent there runs

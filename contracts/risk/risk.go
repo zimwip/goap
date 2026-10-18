@@ -36,9 +36,24 @@ const (
 )
 
 // RiskStatuses and ActionStatuses list the statuses a record may have.
+// Action kinds (ADR 0131): a mitigation is done outside the platform; a proof of concept (poc) is a relaxed build in a
+// sub-change of the methodology poc, to check its risks (purpose derisk) or to explore the need (purpose explore).
+const (
+	KindMitigation = "mitigation"
+	KindPOC        = "poc"
+)
+
+// Purposes of a poc action (ADR 0131).
+const (
+	PurposeDerisk  = "derisk"
+	PurposeExplore = "explore"
+)
+
 var (
 	RiskStatuses   = []string{RiskOpen, RiskMitigating, RiskAccepted, RiskOccurred, RiskClosed}
 	ActionStatuses = []string{ActionOpen, ActionDone, ActionCancelled}
+	ActionKinds    = []string{KindMitigation, KindPOC}
+	Purposes       = []string{PurposeDerisk, PurposeExplore}
 )
 
 // Risk is the current version of a risk of the change.
@@ -72,11 +87,18 @@ type ActionItem struct {
 	Owner  string `json:"owner,omitempty"`
 	Due    string `json:"due,omitempty"`
 	// For is the risk key or the decision point the action answers.
-	For      string        `json:"for,omitempty"`
-	Result   string        `json:"result,omitempty"`
-	Item     domain.ItemID `json:"item"`
-	By       string        `json:"by,omitempty"`
-	Versions int           `json:"versions"`
+	For    string `json:"for,omitempty"`
+	Result string `json:"result,omitempty"`
+	// Kind is mitigation (the default) or poc; a poc has a Purpose, the Risks it checks (derisk) or the Hypotheses it
+	// explores (explore), and the Change carrying it once opened (ADR 0131).
+	Kind       string        `json:"kind"`
+	Purpose    string        `json:"purpose,omitempty"`
+	Risks      []string      `json:"risks,omitempty"`
+	Hypotheses []string      `json:"hypotheses,omitempty"`
+	Change     string        `json:"change,omitempty"`
+	Item       domain.ItemID `json:"item"`
+	By         string        `json:"by,omitempty"`
+	Versions   int           `json:"versions"`
 }
 
 func dataString(d map[string]any, k string) string {
@@ -135,9 +157,29 @@ func validateRecord(it domain.ChangeItem) error {
 		if status != "" && !slices.Contains(ActionStatuses, status) {
 			return fmt.Errorf("action status must be one of %s", strings.Join(ActionStatuses, ", "))
 		}
+		// a version that does not restate the kind keeps it (ADR 0036): only a kind given is checked
+		if kind := dataString(d, "kind"); kind != "" && !slices.Contains(ActionKinds, kind) {
+			return fmt.Errorf("action kind must be one of %s", strings.Join(ActionKinds, ", "))
+		}
+		if p := dataString(d, "purpose"); p != "" && !slices.Contains(Purposes, p) {
+			return fmt.Errorf("action purpose must be one of %s", strings.Join(Purposes, ", "))
+		}
 	}
 	return nil
 }
+
+// Covers reports whether the action covers the risk (ADR 0131): it names it (for, or one of its risks) and still
+// mitigates it, neither cancelled nor a concluded proof of concept (whose verdict settled the risk: refuted, the risk is
+// closed; confirmed, the risk needs another mitigation).
+func (a ActionItem) Covers(riskKey string) bool {
+	if a.For != riskKey && !slices.Contains(a.Risks, riskKey) {
+		return false
+	}
+	return a.Status != ActionCancelled && !(a.Kind == KindPOC && a.Status == ActionDone)
+}
+
+// IsPOC reports whether the action is a proof of concept or a prototype (ADR 0131).
+func (a ActionItem) IsPOC() bool { return a.Kind == KindPOC }
 
 // registerOf folds the items of a kind in effect into the last version of each key, in the order the keys appeared.
 func registerOf(c *domain.Change, kind domain.ItemType) (order []string, last map[string]domain.ChangeItem, versions map[string]int) {
@@ -195,9 +237,17 @@ func Actions(c domain.Change) []ActionItem {
 		it := last[key]
 		d := it.Data
 		a := ActionItem{Key: key, Title: dataString(d, "title"), Status: dataString(d, "status"), Owner: dataString(d, "owner"),
-			Due: dataString(d, "due"), For: dataString(d, "for"), Result: dataString(d, "result"), Item: it.ID, By: it.ProducedBy, Versions: versions[key]}
+			Due: dataString(d, "due"), For: dataString(d, "for"), Result: dataString(d, "result"), Kind: dataString(d, "kind"),
+			Purpose: dataString(d, "purpose"), Risks: dataStrings(d, "risks"), Hypotheses: dataStrings(d, "hypotheses"),
+			Change: dataString(d, "change"), Item: it.ID, By: it.ProducedBy, Versions: versions[key]}
 		if a.Status == "" {
 			a.Status = ActionOpen
+		}
+		if a.Kind == "" {
+			a.Kind = KindMitigation
+		}
+		if a.Kind == KindPOC && a.Purpose == "" {
+			a.Purpose = PurposeDerisk
 		}
 		out = append(out, a)
 	}

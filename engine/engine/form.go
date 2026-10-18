@@ -72,6 +72,10 @@ func (e *Engine) runFormCode(ctx context.Context, p *Process, m *methodology.Com
 	if ag, ok := m.Agent(p.Agent); ok {
 		agentMCPs = ag.MCPs
 	}
+	if action.IsScoped() && step.Subject != "" {
+		// a scoped human action: its code sees the subject the task is for (vars.item, vars.subject), as a script does
+		bb = bindSubject(bb, action, step.Subject, step)
+	}
 	host := e.newHost(p, action, agentMCPs)
 	host.step, host.base = p.Pending.Step, len(step.LLMCalls)
 	res, err := exec.Execute(ctx, ActionContext{Process: p, Action: action, Blackboard: bb, Graph: e.Graph, Host: host, Step: p.Pending.Context, Form: values})

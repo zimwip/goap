@@ -57,6 +57,7 @@ the point (with the platform's policy: `decider`, `threshold`, `maxRounds`, `rou
 | JavaScript | Effect |
 |---|---|
 | `ctx.addArtifact(type, data)` | free-form data (report…) |
+| `ctx.addItem(type, data)` | an item of a declared item type (`risk`, `action`, `hypothesis`, `assessment`…, ADR 0128): a new version of the record of its `data.key` |
 | `ctx.impactNode(key, rationale)` | the change acts on a baseline node, and why → `"#nN"` (a change impact with no version yet) |
 | `ctx.impactNodeCreate(type, key, rationale)` | the change creates a node → `"#nN"`; the node is created (one `created` event, with its properties) by the first `writeNode` of the reference, or bare when the script ends; any other operation on it creates it first |
 | `ctx.impactNodePlan(type, key, rationale)` | the change will create a node, not written yet → `"#nN"`: a change impact of intent created with no draft (an impact analysis planning what is new, green field included); a later `writeNode` of its key, in this script or another action, creates it; a change holding a planned creation does not merge (create or withdraw it) |
