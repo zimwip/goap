@@ -5,7 +5,7 @@ MODULES  := contracts lib graph engine mcp gateway platform
 PKGS     := $(foreach m,$(MODULES),./$(m)/...)
 export PATH := $(PATH):$(shell go env GOPATH)/bin
 
-.PHONY: help all build test tidy web-test test-pg lint eval generate tools up down logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
+.PHONY: help all build test tidy web-test test-pg lint eval generate tools up urls down logs dev dev-backend dev-web dev-reset web runner-image images claude-agent-runner
 
 .DEFAULT_GOAL := help
 
@@ -96,14 +96,12 @@ claude-agent-runner: ## install the Claude Agent SDK of the claude-coding-agent 
 # Engine socket for the docker-proxy service (docker / podman / Docker Desktop)
 export GOAP_DOCKER_SOCK ?= $(shell ./deploy/compose/docker-sock.sh)
 
-up: images ## start the docker compose stack, then print how to reach its database (DBeaver)
+up: images ## start the docker compose stack, then print its URLs and how to reach its database (DBeaver)
 	$(COMPOSE) up -d
-	@echo
-	@echo "PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):"
-	@echo "  host localhost, port 5432, database goap, user goap, password goap"
-	@echo "  JDBC URL: jdbc:postgresql://localhost:5432/goap"
-	@echo "  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials),"
-	@echo "  each also reachable as its own role, password = name (e.g. graph / graph)"
+	@cat deploy/compose/urls.txt
+
+urls: ## the URLs of the compose stack: IDE, gateway, each service, tools, database (DBeaver)
+	@cat deploy/compose/urls.txt
 
 down: ## stop the docker compose stack
 	$(COMPOSE) down

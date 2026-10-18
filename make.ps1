@@ -153,15 +153,10 @@ function Up {
     Images
     DockerSock
     Run docker @Compose up -d
-    @'
-
-PostgreSQL of the stack (DBeaver: New connection > PostgreSQL):
-  host localhost, port 5432, database goap, user goap, password goap
-  JDBC URL: jdbc:postgresql://localhost:5432/goap
-  one schema per service (graph, engine, modelgw, preferences, conversations, mcp, index, credentials),
-  each also reachable as its own role, password = name (e.g. graph / graph)
-'@ | Write-Host
+    Urls
 }
+
+function Urls { Get-Content deploy/compose/urls.txt | Write-Host }
 
 function Down { DockerSock; Run docker @Compose down }
 function Logs { DockerSock; Run docker @Compose logs -f engine graph registry modelgw gateway }
@@ -192,7 +187,8 @@ Usage: .\make.ps1 <target>   (or .\make.cmd <target>)
   images            the image of every Go service of the compose stack (goap/goap:dev), built once
   claude-agent-runner  install the Claude Agent SDK of the claude-coding-agent connector
                     (GOAP_CLAUDE_AGENT_DIR, default .goap\claude-agent; needs npm)
-  up | down | logs  docker compose stack (up prints how to reach its database, DBeaver)
+  up | down | logs  docker compose stack (up prints its URLs and how to reach its database, DBeaver)
+  urls              the URLs of the compose stack: IDE, gateway, each service, tools, database
 '@ | Write-Host
 }
 
@@ -216,6 +212,7 @@ switch ($Target) {
     'images'           { Images }
     'claude-agent-runner' { ClaudeAgentRunner }
     'up'               { Up }
+    'urls'             { Urls }
     'down'             { Down }
     'logs'             { Logs }
     { $_ -in 'help', '-h', '--help' } { Help }
