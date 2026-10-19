@@ -56,7 +56,11 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    holding an impact on a node it lands, the lineage of a baseline (`branchOfChange`, one query for every change),
    the stack of changes, the changes of a node, and the filter of `ListChanges`, which reads whole only the changes it
    keeps. The graph service's `CommitChange` answers the header of its baseline (`Graph.CommitChangeHeader`), not
-   its state.
+   its state. The fold also carries the change's items (from its `fact.*` entries), so the guard never reads the
+   facts of a change again at each operation.
+   A merge locks the branch it lands on before it rebases (`mergeIn`): no other merge lands between the rebase and the
+   fast-forward, which would make the merge a three-way one (a merge change, its own impacts and landed events). A
+   landing rewrites the origin of a node only when it differs.
 
 ## Consequences
 
@@ -81,3 +85,6 @@ records the branch it was written on (`node_version.branch`). The versions a bra
   MergeChange, ListChanges and DiffBaselines grow with the history (1.26 s, 0.63 s and 0.87 s at 8,000 versions).
   Reading their heads keeps them flat: at 28,000 versions MergeChange is 0.22 s, ListChanges 15 ms and DiffBaselines
   45 ms (p50).
+- Write rate of the same bench (4 writers, 5,000 versions): concurrent merges raced between the rebase and the
+  fast-forward, and a third of them became three-way merges. The log went from 8.7 to 6.8 entries per version written
+  (44,900 to 33,900), `node_version` is no longer updated after its insert, and every merge is a fast-forward.

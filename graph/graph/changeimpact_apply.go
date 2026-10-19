@@ -252,8 +252,12 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		if len(cn.Reviews) > 0 {
 			comment = cn.Reviews[len(cn.Reviews)-1].Comment
 		}
-		if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
-			return err
+		// a version the change wrote itself already names it (a fast-forward): rewriting the row would only cost a new
+		// tuple and its index entries
+		if head.ChangeID != c.ID || head.ChangeImpact != cn.ID || head.Comment != comment {
+			if err := tx.SetNodeOrigin(ctx, ref, c.ID, cn.ID, comment); err != nil {
+				return err
+			}
 		}
 		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)}); err != nil {
 			return err

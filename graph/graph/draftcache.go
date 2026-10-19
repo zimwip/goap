@@ -5,6 +5,7 @@ import (
 	"context"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -49,13 +50,16 @@ type draftState struct {
 	nodes map[domain.NodeID][]domain.ChangeImpactID
 	// conflicts are the pending conflicts of the change impacts that have some (domain.PendingConflicts)
 	conflicts map[domain.ChangeImpactID][]string
+	// items are the items of the change, the facts of its log in their order (itemsOf): folded with the impact events,
+	// so that reading a change does not decode its facts again
+	items []domain.ChangeItem
 	// frozen: a reader of the transaction still reads it (draftReader), so its next fold is a copy
 	frozen bool
 }
 
 // copy is a state the caller may fold in place (the values it holds are never modified, only replaced).
 func (s *draftState) copy() *draftState {
-	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts)}
+	n := &draftState{change: s.change, seq: s.seq, impacts: slices.Clone(s.impacts), at: maps.Clone(s.at), drafts: maps.Clone(s.drafts), nodes: maps.Clone(s.nodes), conflicts: maps.Clone(s.conflicts), items: slices.Clip(s.items)}
 	if n.at == nil {
 		n.at = map[domain.ChangeImpactID]int{}
 	}
@@ -271,7 +275,7 @@ func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 	if st == nil {
 		st = &draftState{change: id}
 	}
-	entries, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: []string{domain.LogImpact + "."}, AfterSeq: st.seq})
+	entries, err := tx.Log(ctx, domain.LogFilter{Change: id, Types: []string{domain.LogImpact + ".", domain.LogFact + "."}, AfterSeq: st.seq})
 	if err != nil {
 		return nil, err
 	}
@@ -279,7 +283,19 @@ func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 		readLog(tx, st)
 		return st, nil
 	}
-	events, err := decodeLog(entries, func(e *domain.ImpactEvent, l domain.LogEntry) { e.Seq = int(l.Seq) })
+	var impacts, facts []domain.LogEntry
+	for _, l := range entries {
+		if strings.HasPrefix(l.Type, domain.LogFact+".") {
+			facts = append(facts, l)
+		} else {
+			impacts = append(impacts, l)
+		}
+	}
+	events, err := decodeLog(impacts, func(e *domain.ImpactEvent, l domain.LogEntry) { e.Seq = int(l.Seq) })
+	if err != nil {
+		return nil, err
+	}
+	items, err := itemsOf(facts)
 	if err != nil {
 		return nil, err
 	}
@@ -291,6 +307,8 @@ func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 	for _, e := range events {
 		next.apply(e)
 	}
+	next.items = append(next.items, items...)
+	next.seq = entries[len(entries)-1].Seq
 	g.draftStates.folded.Add(int64(len(events)))
 	readLog(tx, next)
 	if wroteLog(tx, id) {

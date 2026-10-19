@@ -80,7 +80,7 @@ type guardTx struct {
 	logged map[domain.ChangeID]bool
 	// drafts are the folds of the logs the transaction appended to, as it sees them (never published to the draft cache)
 	drafts map[domain.ChangeID]*draftState
-	// impactSeq is, per change, the seq of the last impact event the transaction appended
+	// impactSeq is, per change, the seq of the last impact event or fact the transaction appended (what the fold holds)
 	impactSeq map[domain.ChangeID]int64
 	// fresh is, per change whose lock the transaction holds, the fold it last read the log for: only its own appends can
 	// follow it (ADR 0127)
@@ -181,7 +181,7 @@ type changeHeaderReader interface {
 // they are the same as, ADR 0029), so that an operation on a change of N impacts decodes none of them. A store that
 // cannot read the header alone is read once per transaction, later reads being copies kept up to date by its writes.
 func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	h, ok := t.Tx.(changeHeaderReader)
+	_, ok := t.Tx.(changeHeaderReader)
 	if !ok {
 		if c, ok := t.reads[id]; ok {
 			return copyChange(c), nil
@@ -199,7 +199,7 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 	c, ok := t.heads[id]
 	if !ok {
 		var err error
-		if c, err = h.changeHeader(ctx, id); err != nil {
+		if c, err = t.Tx.ChangeHead(ctx, id); err != nil {
 			return c, err
 		}
 		if t.heads == nil {
@@ -214,7 +214,7 @@ func (t *guardTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change
 	c.Data = maps.Clone(c.Data)
 	c.Guardians = slices.Clone(c.Guardians)
 	c.DependsOn = slices.Clone(c.DependsOn)
-	c.Items = slices.Clone(c.Items)
+	c.Items = slices.Clone(st.items)
 	c.Nodes = slices.Clone(st.impacts) // values the fold replaces, never edits
 	return c, nil
 }
@@ -258,7 +258,7 @@ func (t *guardTx) AppendLog(ctx context.Context, e domain.LogEntry) (domain.LogE
 		delete(t.heads, e.Change)
 	}
 	out, err := t.Tx.AppendLog(ctx, e)
-	if err == nil && strings.HasPrefix(e.Type, domain.LogImpact+".") {
+	if err == nil && (strings.HasPrefix(e.Type, domain.LogImpact+".") || strings.HasPrefix(e.Type, domain.LogFact+".")) {
 		if t.impactSeq == nil {
 			t.impactSeq = map[domain.ChangeID]int64{}
 		}

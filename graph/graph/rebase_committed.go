@@ -174,6 +174,15 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 	}
 	var res RebaseResult
 	err = g.changeTx(ctx, id, func(tx Tx) error {
+		// the target is locked before the rebase reads its head (ADR 0127, 0140): the merge runs in one transaction, so no
+		// other merge lands between the rebase and the fast-forward, which would turn it into a three-way merge
+		if own, ok, err := ownBranch(ctx, tx, c); err != nil {
+			return err
+		} else if ok {
+			if err := tx.LockBranch(ctx, c.Namespace, domain.BranchOf(own.Parent)); err != nil {
+				return err
+			}
+		}
 		res, err = g.rebaseTx(ctx, tx, c)
 		return err
 	})
