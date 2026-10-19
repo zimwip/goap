@@ -84,6 +84,15 @@ func (g *Graph) CommitChange(ctx context.Context, id domain.ChangeID, baselineNa
 	return g.Baseline(ctx, result.ID)
 }
 
+// CommitChangeHeader is CommitChange answering the header of the baseline it records, without its state: what a caller
+// that does not read the nodes asks (the graph service), at a cost that does not grow with the namespace.
+func (g *Graph) CommitChangeHeader(ctx context.Context, id domain.ChangeID, baselineName string) (domain.Baseline, error) {
+	if err := g.allow(ctx, id, operations.ChangeCommit); err != nil {
+		return domain.Baseline{}, err
+	}
+	return g.commitChange(ctx, id, baselineName)
+}
+
 // commitChange is CommitChange once allowed, its baseline returned without its state (ADR 0137).
 func (g *Graph) commitChange(ctx context.Context, id domain.ChangeID, baselineName string) (result domain.Baseline, err error) {
 	err = g.changeTx(ctx, id, func(tx Tx) error {

@@ -637,20 +637,8 @@ func (t *pgTx) Change(ctx context.Context, id domain.ChangeID) (domain.Change, e
 
 // changeHeader reads a change without its change impacts (the guard takes them from the fold of its log).
 func (t *pgTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	var c domain.Change
-	var result *string
-	var data, guardians, dependsOn []byte
-	err := t.tx.QueryRow(ctx, `SELECT id::text, title, intent, methodology, goal, status, COALESCE(baseline_id::text, ''), result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version
-		FROM change WHERE id = $1`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion)
+	c, err := t.ChangeHead(ctx, id)
 	if err != nil {
-		return c, mapErr(err, "change "+string(id))
-	}
-	c.ResultBaselineID, c.Data = domain.BaselineID(str(result)), props(data)
-	if c.Guardians, err = guardiansOf(guardians); err != nil {
-		return c, err
-	}
-	if c.DependsOn, err = dependsOnOf(dependsOn); err != nil {
 		return c, err
 	}
 	facts, err := t.Log(ctx, factsFilter(id))
@@ -661,6 +649,52 @@ func (t *pgTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain.Cha
 		return c, err
 	}
 	return c, nil
+}
+
+// pgChangeHead is the select list of a change's head, in the order scanPGChangeHead reads it.
+const pgChangeHead = `id::text, title, intent, methodology, goal, status, COALESCE(baseline_id::text, ''), result_baseline_id::text, data, created_at, branch, namespace, COALESCE(parent_id::text, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version`
+
+func scanPGChangeHead(scan func(...any) error) (domain.Change, error) {
+	var c domain.Change
+	var result *string
+	var data, guardians, dependsOn []byte
+	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), (*string)(&c.BaselineID), &result, &data, &c.CreatedAt, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion); err != nil {
+		return c, err
+	}
+	c.ResultBaselineID, c.Data = domain.BaselineID(str(result)), props(data)
+	var err error
+	if c.Guardians, err = guardiansOf(guardians); err != nil {
+		return c, err
+	}
+	c.DependsOn, err = dependsOnOf(dependsOn)
+	return c, err
+}
+
+// ChangeHead implements Tx.
+func (t *pgTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	c, err := scanPGChangeHead(t.tx.QueryRow(ctx, `SELECT `+pgChangeHead+` FROM change WHERE id = $1`, string(id)).Scan)
+	if err != nil {
+		return c, mapErr(err, "change "+string(id))
+	}
+	return c, nil
+}
+
+// ChangeHeads implements Tx.
+func (t *pgTx) ChangeHeads(ctx context.Context) ([]domain.Change, error) {
+	rows, err := t.tx.Query(ctx, `SELECT `+pgChangeHead+` FROM change`+dialectPG.orderBy("created_at", ""))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Change
+	for rows.Next() {
+		c, err := scanPGChangeHead(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func (t *pgTx) Changes(ctx context.Context) ([]domain.Change, error) {

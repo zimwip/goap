@@ -353,6 +353,27 @@ func (t *memTx) Change(_ context.Context, id domain.ChangeID) (domain.Change, er
 	return c, nil
 }
 
+// ChangeHead implements Tx.
+func (t *memTx) ChangeHead(_ context.Context, id domain.ChangeID) (domain.Change, error) {
+	c, ok := t.st.changes[id]
+	if !ok {
+		return domain.Change{}, fmt.Errorf("change %s: %w", id, ErrNotFound)
+	}
+	c.Items, c.Nodes = nil, nil
+	return c, nil
+}
+
+// ChangeHeads implements Tx.
+func (t *memTx) ChangeHeads(ctx context.Context) ([]domain.Change, error) {
+	out := make([]domain.Change, 0, len(t.st.changes))
+	for id := range t.st.changes {
+		c, _ := t.ChangeHead(ctx, id)
+		out = append(out, c)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
+	return out, nil
+}
+
 func (t *memTx) Changes(ctx context.Context) ([]domain.Change, error) {
 	out := make([]domain.Change, 0, len(t.st.changes))
 	for id := range t.st.changes {

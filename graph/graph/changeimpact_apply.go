@@ -262,16 +262,21 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		if err != nil {
 			return err
 		}
-		for _, oid := range others {
-			if oid == c.ID {
+		for i, oid := range others {
+			if oid == c.ID || slices.Contains(others[:i], oid) {
+				continue
+			}
+			// the head tells the changes still open: the others of a node's history are not read
+			oh, err := tx.ChangeHead(ctx, oid)
+			if err != nil {
+				return err
+			}
+			if oh.Status == domain.ChangeApplied || oh.Status == domain.ChangeAbandoned || domain.BranchOf(oh.Branch) == domain.BranchOf(c.Branch) {
 				continue
 			}
 			oc, err := tx.Change(ctx, oid)
 			if err != nil {
 				return err
-			}
-			if oc.Status == domain.ChangeApplied || oc.Status == domain.ChangeAbandoned || domain.BranchOf(oc.Branch) == domain.BranchOf(c.Branch) {
-				continue
 			}
 			for _, o := range oc.Nodes {
 				if o.Post != nil || o.Pre == nil || o.Pre.ID != ref.ID || o.Pre.Version >= ref.Version {

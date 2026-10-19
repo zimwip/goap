@@ -82,18 +82,20 @@ func (g *Graph) DiffStacks(ctx context.Context, from, to domain.BaselineID) (add
 	return added, removed, err
 }
 
-// branchOfChange names the own branch of a change ("" when it has none or the graph no longer holds it).
+// branchOfChange names the own branch of a change ("" when it has none or the graph no longer holds it). The heads of
+// every change are read once, at the first call: a lineage asks it of every change of a namespace's history.
 func branchOfChange(ctx context.Context, tx Tx) func(domain.ChangeID) string {
-	seen := map[domain.ChangeID]string{}
+	var branches map[domain.ChangeID]string
 	return func(id domain.ChangeID) string {
-		b, ok := seen[id]
-		if !ok {
-			if c, err := tx.Change(ctx, id); err == nil {
-				b = c.Branch
+		if branches == nil {
+			branches = map[domain.ChangeID]string{}
+			if cs, err := tx.ChangeHeads(ctx); err == nil {
+				for _, c := range cs {
+					branches[c.ID] = c.Branch
+				}
 			}
-			seen[id] = b
 		}
-		return b
+		return branches[id]
 	}
 }
 
@@ -102,7 +104,7 @@ func stackChanges(ctx context.Context, tx Tx, ids []domain.ChangeID) ([]domain.S
 	out := make([]domain.StackChange, 0, len(ids))
 	for _, id := range ids {
 		sc := domain.StackChange{ID: id}
-		c, err := tx.Change(ctx, id)
+		c, err := tx.ChangeHead(ctx, id)
 		switch {
 		case err == nil:
 			sc.Parent, sc.Title, sc.Status, sc.OwnerOrg = c.ParentID, c.Title, c.Status, c.OwnerOrg

@@ -506,20 +506,8 @@ func (t *sqliteTx) Change(ctx context.Context, id domain.ChangeID) (domain.Chang
 
 // changeHeader reads a change without its change impacts (the guard takes them from the fold of its log).
 func (t *sqliteTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
-	var c domain.Change
-	var start, result sql.NullString
-	var data, created, guardians, dependsOn string
-	err := t.tx.QueryRowContext(ctx, `SELECT id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version
-		FROM change WHERE id = ?`, string(id)).
-		Scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion)
+	c, err := t.ChangeHead(ctx, id)
 	if err != nil {
-		return c, sqliteErr(err, "change "+string(id))
-	}
-	c.BaselineID, c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(start.String), domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
-	if c.Guardians, err = guardiansOf([]byte(guardians)); err != nil {
-		return c, err
-	}
-	if c.DependsOn, err = dependsOnOf([]byte(dependsOn)); err != nil {
 		return c, err
 	}
 	facts, err := t.Log(ctx, factsFilter(id))
@@ -530,6 +518,52 @@ func (t *sqliteTx) changeHeader(ctx context.Context, id domain.ChangeID) (domain
 		return c, err
 	}
 	return c, nil
+}
+
+// sqliteChangeHead is the select list of a change's head, in the order scanSQLiteChangeHead reads it.
+const sqliteChangeHead = `id, title, intent, methodology, goal, status, baseline_id, result_baseline_id, data, created_at, branch, namespace, COALESCE(parent_id, ''), owner_org, project_id, lifecycle, state, guardians, depends_on, methodology_version`
+
+func scanSQLiteChangeHead(scan func(...any) error) (domain.Change, error) {
+	var c domain.Change
+	var start, result sql.NullString
+	var data, created, guardians, dependsOn string
+	if err := scan((*string)(&c.ID), &c.Title, &c.Intent, &c.Methodology, &c.Goal, (*string)(&c.Status), &start, &result, &data, &created, &c.Branch, &c.Namespace, (*string)(&c.ParentID), &c.OwnerOrg, &c.ProjectID, &c.Lifecycle, &c.State, &guardians, &dependsOn, &c.MethodologyVersion); err != nil {
+		return c, err
+	}
+	c.BaselineID, c.ResultBaselineID, c.Data, c.CreatedAt = domain.BaselineID(start.String), domain.BaselineID(result.String), props([]byte(data)), tsParse(created)
+	var err error
+	if c.Guardians, err = guardiansOf([]byte(guardians)); err != nil {
+		return c, err
+	}
+	c.DependsOn, err = dependsOnOf([]byte(dependsOn))
+	return c, err
+}
+
+// ChangeHead implements Tx.
+func (t *sqliteTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Change, error) {
+	c, err := scanSQLiteChangeHead(t.tx.QueryRowContext(ctx, `SELECT `+sqliteChangeHead+` FROM change WHERE id = ?`, string(id)).Scan)
+	if err != nil {
+		return c, sqliteErr(err, "change "+string(id))
+	}
+	return c, nil
+}
+
+// ChangeHeads implements Tx.
+func (t *sqliteTx) ChangeHeads(ctx context.Context) ([]domain.Change, error) {
+	rows, err := t.tx.QueryContext(ctx, `SELECT `+sqliteChangeHead+` FROM change`+dialectSQLite.orderBy("created_at", ""))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []domain.Change
+	for rows.Next() {
+		c, err := scanSQLiteChangeHead(rows.Scan)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 func (t *sqliteTx) Changes(ctx context.Context) ([]domain.Change, error) {

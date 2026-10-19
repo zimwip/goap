@@ -494,18 +494,26 @@ func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 }
 
 // ListChanges lists the changes matching a filter, in no particular order (the caller sorts and caps).
-func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) ([]domain.Change, error) {
-	cs, err := g.Changes(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]domain.Change, 0, len(cs))
-	for _, c := range cs {
-		if f.Match(c) {
+func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) (out []domain.Change, err error) {
+	// the filter reads the heads; only the changes it keeps are read whole
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		heads, err := tx.ChangeHeads(ctx)
+		if err != nil {
+			return err
+		}
+		for _, h := range heads {
+			if !f.Match(h) {
+				continue
+			}
+			c, err := tx.Change(ctx, h.ID)
+			if err != nil {
+				return err
+			}
 			out = append(out, c)
 		}
-	}
-	return out, nil
+		return nil
+	})
+	return out, err
 }
 
 // UpdateChange patches a change header.
@@ -879,11 +887,10 @@ func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []doma
 			if slices.ContainsFunc(out, func(c domain.Change) bool { return c.ID == id }) {
 				continue
 			}
-			c, err := tx.Change(ctx, id)
+			c, err := tx.ChangeHead(ctx, id)
 			if err != nil {
 				return err
 			}
-			c.Items, c.Nodes = nil, nil
 			out = append(out, c)
 		}
 		slices.SortStableFunc(out, func(a, b domain.Change) int { return a.CreatedAt.Compare(b.CreatedAt) })

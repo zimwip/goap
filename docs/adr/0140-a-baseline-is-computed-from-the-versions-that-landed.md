@@ -51,6 +51,12 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    asks the log once. The guard reads a change's header alone and takes its impacts from the fold (the projection they
    equal, ADR 0029). `emit` writes the one projection row its event changes. A reader of drafts (`draftReader`) finds
    the drafts it is asked for, and gathers them all only to go over every one.
+   An operation that only asks of other changes their status, branch or title reads their head (`Tx.ChangeHead`,
+   `Tx.ChangeHeads`: no impacts, no items, no log), never the change whole: the landing looking for the open changes
+   holding an impact on a node it lands, the lineage of a baseline (`branchOfChange`, one query for every change),
+   the stack of changes, the changes of a node, and the filter of `ListChanges`, which reads whole only the changes it
+   keeps. The graph service's `CommitChange` answers the header of its baseline (`Graph.CommitChangeHeader`), not
+   its state.
 
 ## Consequences
 
@@ -71,3 +77,7 @@ records the branch it was written on (`node_version.branch`). The versions a bra
   baselines.
 - Schema: migration 0007 (both dialects) adds `baseline.seq`, `baseline.base_id`, `node_version.landed` and
   `node_branch.landed`, plus their indexes. It drops the indexes of 0006 that only the compaction used.
+- `goap-bench -mode lifecycle` (4 writers, 50 nodes per change, PostgreSQL): reading other changes whole made
+  MergeChange, ListChanges and DiffBaselines grow with the history (1.26 s, 0.63 s and 0.87 s at 8,000 versions).
+  Reading their heads keeps them flat: at 28,000 versions MergeChange is 0.22 s, ListChanges 15 ms and DiffBaselines
+  45 ms (p50).

@@ -1141,7 +1141,7 @@ func (h *Handler) ApplyChange(ctx context.Context, r *connect.Request[graphv1.Ap
 // (MergeChange) is a later, separate act. The change header write publishes change.updated by itself.
 func (h *Handler) CommitChange(ctx context.Context, r *connect.Request[graphv1.CommitChangeRequest]) (*connect.Response[graphv1.CommitChangeResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header()) // lifecycle transitions are authorized for the caller
-	b, err := h.Graph.CommitChange(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
+	b, err := h.Graph.CommitChangeHeader(ctx, domain.ChangeID(r.Msg.ChangeId), r.Msg.BaselineName)
 	return res(&graphv1.CommitChangeResponse{Baseline: pbconv.BaselineToPB(b)}, err)
 }
 
