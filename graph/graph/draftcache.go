@@ -291,7 +291,7 @@ func (g *Graph) draftState(ctx context.Context, tx Tx, id domain.ChangeID) (*dra
 			impacts = append(impacts, l)
 		}
 	}
-	events, err := decodeLog(impacts, func(e *domain.ImpactEvent, l domain.LogEntry) { e.Seq = int(l.Seq) })
+	events, err := decodeImpacts(ctx, tx, impacts)
 	if err != nil {
 		return nil, err
 	}

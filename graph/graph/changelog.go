@@ -39,7 +39,55 @@ func impactEvents(ctx context.Context, tx Tx, change domain.ChangeID) ([]domain.
 	if err != nil {
 		return nil, err
 	}
-	return decodeLog(entries, func(e *domain.ImpactEvent, l domain.LogEntry) { e.Seq = int(l.Seq) })
+	return decodeImpacts(ctx, tx, entries)
+}
+
+// decodeImpacts reads impact events from their log entries (domain.ImpactEventOf), the drafts that copy a version as is
+// rebuilt from it (ADR 0142).
+func decodeImpacts(ctx context.Context, tx Tx, entries []domain.LogEntry) ([]domain.ImpactEvent, error) {
+	var out []domain.ImpactEvent // nil when empty, as the stores returned before
+	var bases []domain.NodeRef
+	for _, l := range entries {
+		e, err := domain.ImpactEventOf(l)
+		if err != nil {
+			return nil, fmt.Errorf("log entry %d (%s): %w", l.Seq, l.Type, err)
+		}
+		if !e.Hydrated() && e.Draft.Base != nil {
+			bases = append(bases, *e.Draft.Base)
+		}
+		out = append(out, e)
+	}
+	if len(bases) == 0 {
+		return out, nil
+	}
+	nodes, err := tx.NodesAt(ctx, bases, "")
+	if err != nil {
+		return nil, err
+	}
+	byRef := make(map[domain.NodeRef]domain.Node, len(nodes))
+	for _, n := range nodes {
+		byRef[n.Ref()] = n
+	}
+	links, err := tx.LinksFrom(ctx, bases)
+	if err != nil {
+		return nil, err
+	}
+	from := map[domain.NodeRef][]domain.Link{}
+	for _, l := range links {
+		from[l.From] = append(from[l.From], l)
+	}
+	for i, e := range out {
+		if e.Hydrated() || e.Draft.Base == nil {
+			continue
+		}
+		base, ok := byRef[*e.Draft.Base]
+		if !ok {
+			return nil, fmt.Errorf("impact event %s copies version %s, which is not stored", e.ID, *e.Draft.Base)
+		}
+		d := domain.CopyDraft(e, base, from[base.Ref()])
+		out[i].Draft = &d
+	}
+	return out, nil
 }
 
 // itemsOf decodes the facts of a log.

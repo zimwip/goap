@@ -1,9 +1,14 @@
 import type { Int64 } from './types/common';
 import type { ExecutionRecord, GraphNode, LogEntry, NodeRef } from './types/graph';
 
-/** Decodes a log entry's payload (ADR 0030) as T: a fact, a journal record or an impact event. */
+/** Decodes a log entry's payload (ADR 0030) as T: a fact, a journal record or an impact event. An impact event's
+ * payload leaves its envelope to the columns of the entry (ADR 0142): it is put back. */
 export function decodeLogEntry<T>(l: LogEntry): T {
-  return JSON.parse(l.payload ?? '{}') as T;
+  const payload = JSON.parse(l.payload ?? '{}');
+  if (!l.type?.startsWith('impact.')) return payload as T;
+  const envelope = { id: l.id, changeId: l.changeId, seq: l.seq, impactId: l.subject || undefined, flow: l.flow, execution: l.execution, by: l.by, at: l.at };
+  const state = payload.state && !payload.state.id ? { ...payload.state, id: l.subject } : payload.state;
+  return { ...envelope, ...payload, ...(state ? { state } : {}) } as T;
 }
 
 /** The execution journal records among log entries (ADR 0011 records, stored as journal.* entries, ADR 0030). */

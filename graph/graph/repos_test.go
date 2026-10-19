@@ -292,8 +292,8 @@ func checkVerdictCauses(ctx context.Context, tx Tx, id domain.ChangeID) error {
 		if e.Type != domain.LogImpact+"."+string(domain.ImpactReviewed) {
 			continue
 		}
-		var ev domain.ImpactEvent
-		if err := json.Unmarshal(e.Payload, &ev); err != nil {
+		ev, err := domain.ImpactEventOf(e)
+		if err != nil {
 			return err
 		}
 		if ev.Review == nil || (ev.Review.Status != domain.ReviewAccepted && ev.Review.Status != domain.ReviewRejected) {

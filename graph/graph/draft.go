@@ -490,15 +490,17 @@ func (w *work) normalizeTo(to domain.NodeRef) domain.NodeRef {
 	return to
 }
 
-// draftFrom is the draft of a stored version: a checkout copies it (the outgoing links get ids of their own).
-func (g *Graph) draftFrom(w *work, base domain.Node, links []domain.Link, execution string) domain.Draft {
-	b := base.Ref()
-	d := domain.Draft{Change: w.c.ID, Impact: w.cn.ID, Flow: w.flow, Node: base.ID, Key: base.Key, Type: base.Type, State: base.State, Owner: base.Owner,
-		Properties: cloneMap(base.Properties), Base: &b, Execution: execution}
+// draftFrom is the draft of a stored version a checkout event copies: the version as is, its outgoing links with ids
+// derived from the event's (domain.BaseLinkID), so the log records the version only (ADR 0142).
+func (g *Graph) draftFrom(w *work, event string, base domain.Node, links []domain.Link, execution string) (domain.Draft, *domain.BaseCopy) {
+	cp := &domain.BaseCopy{}
 	for _, l := range links {
-		d.Links = append(d.Links, domain.DraftLink{ID: domain.LinkID(g.newID()), Type: l.Type, To: w.normalizeTo(l.To), Properties: cloneMap(l.Properties)})
+		if to := w.normalizeTo(l.To); to != l.To && !slices.Contains(cp.Drafted, l.To) {
+			cp.Drafted = append(cp.Drafted, l.To)
+		}
 	}
-	return d
+	e := domain.ImpactEvent{ID: event, Change: w.c.ID, Impact: w.cn.ID, Flow: w.flow, Execution: execution, FromBase: cp}
+	return domain.CopyDraft(e, base, links), cp
 }
 
 // forkDraft is the draft a flow starts from when it checks a node out that a parent flow holds a draft of: a copy, the

@@ -264,8 +264,8 @@ func (g *Graph) phases(ctx context.Context, tx Tx, c domain.Change) (map[domain.
 				state = m.To
 			}
 		case len(l.Type) > len(domain.LogImpact) && l.Type[:len(domain.LogImpact)] == domain.LogImpact:
-			var ev domain.ImpactEvent
-			if err := json.Unmarshal(l.Payload, &ev); err != nil {
+			ev, err := domain.ImpactEventOf(l)
+			if err != nil {
 				return nil, err
 			}
 			if ev.StartsDraft() && ev.Flow == "" {

@@ -88,9 +88,11 @@ type ImpactEvent struct {
 	Post *NodeRef `json:"post,omitempty"`
 	// Draft is, on created, checkedOut and an adopting transitioned, the draft the event installs for (impact, flow):
 	// its initial state, so the log alone rebuilds the drafts (ADR 0079).
-	Draft  *Draft   `json:"draft,omitempty"`
-	Pre    *NodeRef `json:"pre,omitempty"` // rebased; transitioned: the rebase of a draft moved its pre (ADR 0101)
-	Landed *NodeRef `json:"landed,omitempty"`
+	Draft *Draft `json:"draft,omitempty"`
+	// FromBase marks, on checkedOut, a draft that copies its base version as is: the log stores the base only (ADR 0142).
+	FromBase *BaseCopy `json:"fromBase,omitempty"`
+	Pre      *NodeRef  `json:"pre,omitempty"` // rebased; transitioned: the rebase of a draft moved its pre (ADR 0101)
+	Landed   *NodeRef  `json:"landed,omitempty"`
 	// Baseline is, on landed, the baseline of the branch the version landed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
 	// Branch is, on landed, the branch the version landed on: the change's own branch at commit, the branch it is

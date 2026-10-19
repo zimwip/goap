@@ -446,6 +446,8 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 		return domain.NodeRef{}, fmt.Errorf("%s is already checked out: %w", draftOf(w.cn), ErrConflict)
 	}
 	var d domain.Draft
+	var event string
+	var copied *domain.BaseCopy
 	if parent, err := g.seenDraft(ctx, tx, w.c, w.flow, w.cn.ID); err != nil {
 		return domain.NodeRef{}, err
 	} else if parent != nil {
@@ -473,10 +475,11 @@ func (g *Graph) checkoutTx(ctx context.Context, tx Tx, w *work, execution string
 		if err != nil {
 			return domain.NodeRef{}, err
 		}
-		d = g.draftFrom(w, *base, links, execution)
+		event = g.newID()
+		d, copied = g.draftFrom(w, event, *base, links, execution)
 	}
 	ref := d.Ref()
-	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: id, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: execution, Post: &ref, Draft: &d}); err != nil {
+	if err := g.emit(ctx, tx, domain.ImpactEvent{ID: event, Change: id, Impact: w.cn.ID, Op: domain.ImpactCheckedOut, Flow: w.flow, Execution: execution, Post: &ref, Draft: &d, FromBase: copied}); err != nil {
 		return ref, err
 	}
 	return ref, nil

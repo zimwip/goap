@@ -133,9 +133,10 @@ func FactEntry(change ChangeID, it ChangeItem) (LogEntry, error) {
 	return e, err
 }
 
-// ImpactEntry is the log entry of an impact event.
+// ImpactEntry is the log entry of an impact event: its envelope in the columns, the rest in the payload (ADR 0142;
+// ImpactEventOf reads it back).
 func ImpactEntry(e ImpactEvent) (LogEntry, error) {
-	raw, err := json.Marshal(e)
+	raw, err := marshalImpact(e)
 	return LogEntry{ID: e.ID, Change: e.Change, Type: LogImpact + "." + string(e.Op), Flow: e.Flow, Execution: e.Execution,
 		Subject: string(e.Impact), By: e.By, At: e.At, Causation: e.Causation, Payload: raw}, err
 }

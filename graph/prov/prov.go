@@ -71,7 +71,7 @@ func Export(c domain.Change, entries []domain.LogEntry) (Document, error) {
 			b.header(c, e)
 		case domain.LogImpact:
 			var ev domain.ImpactEvent
-			if err = json.Unmarshal(e.Payload, &ev); err == nil {
+			if ev, err = domain.ImpactEventOf(e); err == nil {
 				b.impact(c, e, ev)
 			}
 		}
