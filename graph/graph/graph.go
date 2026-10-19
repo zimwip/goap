@@ -252,6 +252,19 @@ func (g *Graph) Baseline(ctx context.Context, id domain.BaselineID) (b domain.Ba
 	return
 }
 
+// BaselineHeader returns a baseline without its state (Nodes nil): what names it, never what it holds.
+func (g *Graph) BaselineHeader(ctx context.Context, id domain.BaselineID) (b domain.Baseline, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = headerOf(ctx, tx, id); return err }) // "": the empty state
+	b.Nodes = nil
+	return
+}
+
+// BranchHeadHeader returns the head of a branch without its state (Nodes nil).
+func (g *Graph) BranchHeadHeader(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchHeadHeader(ctx, tx, namespace, name); return err })
+	return
+}
+
 // Baselines lists the baselines of a namespace, by creation date.
 func (g *Graph) Baselines(ctx context.Context, namespace string) (bs []domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Baselines(ctx, namespace); return err })

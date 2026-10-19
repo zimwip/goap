@@ -95,8 +95,14 @@ export const graph = {
     rpc<Empty, { changes?: Change[] }>(GRAPH, 'ListChanges', {}, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal),
+  /** A branch and the header of its head (its nodes are not sent, ADR 0140). */
   getBranch: (namespace: string, name: string, signal?: AbortSignal) =>
-    rpc<{ namespace: string; name: string }, { branch?: Branch; head?: Baseline }>(GRAPH, 'GetBranch', { namespace, name }, signal),
+    rpc<{ namespace: string; name: string; headerOnly: boolean }, { branch?: Branch; head?: Baseline }>(
+      GRAPH,
+      'GetBranch',
+      { namespace, name, headerOnly: true },
+      signal,
+    ),
   listBranches: (namespace: string, signal?: AbortSignal) =>
     rpc<{ namespace: string }, { branches?: Branch[] }>(GRAPH, 'ListBranches', { namespace }, signal),
   createBranch: (req: { namespace: string; name: string; fromBaseline: string; origin?: string; description?: string }) =>

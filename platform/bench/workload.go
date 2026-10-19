@@ -539,7 +539,7 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 	// the node is sampled before the head is read: one landed later is not in that head
 	sampled := r.sampleNode(rnd, false)
 	br, err := timed(ctx, m, "GetBranch", func(ctx context.Context) (*connect.Response[graphv1.GetBranchResponse], error) {
-		return g.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: Namespace, Name: "main"}))
+		return g.GetBranch(ctx, connect.NewRequest(&graphv1.GetBranchRequest{Namespace: Namespace, Name: "main", HeaderOnly: true}))
 	})
 	if err != nil {
 		return
@@ -567,11 +567,14 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 			})
 		}
 	}
+	// the nodes of a baseline scoped by a change (the one that left the head): the answer follows the change, not the
+	// size of the graph (ADR 0140)
+	change := br.Msg.Head.GetChangeId()
 	_, _ = timed(ctx, m, "ListBaselineNodes", func(ctx context.Context) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
-		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{BaselineId: head, Type: TypeName(rnd.IntN(max(r.types, 1))), Limit: 100}))
+		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{BaselineId: head, ChangeId: change, Type: TypeName(rnd.IntN(max(r.types, 1))), Limit: 100}))
 	})
 	_, _ = timed(ctx, m, "search.ListBaselineNodes", func(ctx context.Context) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
-		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{BaselineId: head, Query: fmt.Sprintf("w%02d-%07d", rnd.IntN(max(r.Config.Workers, 1)), rnd.IntN(1000)), Limit: 50}))
+		return g.ListBaselineNodes(ctx, connect.NewRequest(&graphv1.ListBaselineNodesRequest{BaselineId: head, ChangeId: change, Query: fmt.Sprintf("w%02d-%07d", rnd.IntN(max(r.Config.Workers, 1)), rnd.IntN(1000)), Limit: 50}))
 	})
 	if parent := br.Msg.Head.GetParentId(); parent != "" {
 		_, _ = timed(ctx, m, "DiffBaselines", func(ctx context.Context) (*connect.Response[graphv1.DiffBaselinesResponse], error) {

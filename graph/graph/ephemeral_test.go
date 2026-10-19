@@ -71,3 +71,64 @@ func testEphemeralBranch(t *testing.T, repo Repo) {
 		t.Fatalf("the last commit holds %d nodes, want 6", len(b.Nodes))
 	}
 }
+
+func TestBaselineNodesOfAChange(t *testing.T) { forEachRepo(t, testBaselineNodesOfAChange) }
+
+// testBaselineNodesOfAChange: the nodes of a baseline scoped by a change are the nodes its impacts act on, whatever
+// else the baseline holds (ADR 0140).
+func testBaselineNodesOfAChange(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	var edits []NodeEdit
+	for i := range 5 {
+		edits = append(edits, NodeEdit{Key: fmt.Sprintf("N-%d", i), Type: "Need"})
+	}
+	if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "seed", By: "t", Edits: edits}); err != nil {
+		t.Fatal(err)
+	}
+	c, err := g.CreateChange(ctx, NewChange{Title: "c", OwnBranch: true, ProjectID: "PROJ-ROOT"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := g.ImpactNodeCreate(ctx, c.ID, NodeCreate{Key: "M-1", Type: "Need", Rationale: "r"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	n2, err := g.NodeByKey(ctx, domain.DefaultNamespace, "N-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ref := n2.Ref()
+	added, err := g.ProposeImpact(ctx, c.ID, []domain.ChangeImpact{{Intent: domain.IntentModified, Pre: &ref, Rationale: "r"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.ImpactNodeCheckout(ctx, c.ID, NodeCheckout{Impact: added[0].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.ImpactNodeUpdate(ctx, c.ID, added[0].ID, NodeUpdate{Properties: map[string]any{"title": "x"}}); err != nil {
+		t.Fatal(err)
+	}
+	batch := domain.ReviewBatch{By: "t"}
+	for _, id := range []domain.ChangeImpactID{created.ID, added[0].ID} {
+		batch.Verdicts = append(batch.Verdicts, domain.ImpactVerdict{Impact: id, Status: domain.ReviewAccepted, Comment: "ok"})
+	}
+	if _, err := g.ImpactNodeReviewBatch(ctx, c.ID, batch); err != nil {
+		t.Fatal(err)
+	}
+	b, err := g.Apply(ctx, c.ID, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := g.BaselineNodes(ctx, b.ID, NodeQuery{Change: c.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var keys []string
+	for _, n := range page.Nodes {
+		keys = append(keys, fmt.Sprintf("%s@%d", n.Key, n.Version))
+	}
+	if fmt.Sprint(keys) != "[M-1@1 N-2@2]" || page.Total != 2 {
+		t.Fatalf("nodes of the change %v (total %d), want [M-1@1 N-2@2]", keys, page.Total)
+	}
+}

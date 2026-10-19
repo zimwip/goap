@@ -2230,8 +2230,11 @@ type ListBaselineNodesRequest struct {
 	// page size (default and max 500)
 	Limit          int32 `protobuf:"varint,5,opt,name=limit,proto3" json:"limit,omitempty"`
 	IncludeDeleted bool  `protobuf:"varint,6,opt,name=include_deleted,json=includeDeleted,proto3" json:"include_deleted,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// the nodes the impacts of this change act on, at their version in the baseline: the answer and its cost follow
+	// the change, not the size of the baseline (ADR 0140); empty: every node of the baseline
+	ChangeId      string `protobuf:"bytes,7,opt,name=change_id,json=changeId,proto3" json:"change_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListBaselineNodesRequest) Reset() {
@@ -2306,6 +2309,13 @@ func (x *ListBaselineNodesRequest) GetIncludeDeleted() bool {
 	return false
 }
 
+func (x *ListBaselineNodesRequest) GetChangeId() string {
+	if x != nil {
+		return x.ChangeId
+	}
+	return ""
+}
+
 type TypeCount struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
@@ -2364,8 +2374,9 @@ type ListBaselineNodesResponse struct {
 	// number of nodes matching the query, all pages
 	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	// nodes per type matching the text query (the type filter aside)
-	Types         []*TypeCount `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
-	Baseline      *Baseline    `protobuf:"bytes,4,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	Types []*TypeCount `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
+	// the header of the baseline: its nodes are not sent
+	Baseline      *Baseline `protobuf:"bytes,4,opt,name=baseline,proto3" json:"baseline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2513,8 +2524,9 @@ type ListBaselineLinksResponse struct {
 	// number of links matching the query, all pages
 	Total int32 `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
 	// links per type matching the text query (the type filter aside)
-	Types         []*TypeCount `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
-	Baseline      *Baseline    `protobuf:"bytes,4,opt,name=baseline,proto3" json:"baseline,omitempty"`
+	Types []*TypeCount `protobuf:"bytes,3,rep,name=types,proto3" json:"types,omitempty"`
+	// the header of the baseline: its nodes are not sent
+	Baseline      *Baseline `protobuf:"bytes,4,opt,name=baseline,proto3" json:"baseline,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7081,9 +7093,11 @@ func (x *ListBranchesResponse) GetBranches() []*Branch {
 }
 
 type GetBranchRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Namespace     string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Name      string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Namespace string                 `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// the head without its nodes: its id and header only, whatever the size of its state (ADR 0140)
+	HeaderOnly    bool `protobuf:"varint,3,opt,name=header_only,json=headerOnly,proto3" json:"header_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7130,6 +7144,13 @@ func (x *GetBranchRequest) GetNamespace() string {
 		return x.Namespace
 	}
 	return ""
+}
+
+func (x *GetBranchRequest) GetHeaderOnly() bool {
+	if x != nil {
+		return x.HeaderOnly
+	}
+	return false
 }
 
 type GetBranchResponse struct {
@@ -17651,7 +17672,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\bbaseline\x18\x01 \x01(\v2\x17.goap.graph.v1.BaselineR\bbaseline\x12)\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x13.goap.graph.v1.NodeR\x05nodes\x12)\n" +
 	"\x05links\x18\x03 \x03(\v2\x13.goap.graph.v1.LinkR\x05links\x128\n" +
-	"\rsuspect_links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\fsuspectLinks\"\xbc\x01\n" +
+	"\rsuspect_links\x18\x04 \x03(\v2\x13.goap.graph.v1.LinkR\fsuspectLinks\"\xd9\x01\n" +
 	"\x18ListBaselineNodesRequest\x12\x1f\n" +
 	"\vbaseline_id\x18\x01 \x01(\tR\n" +
 	"baselineId\x12\x12\n" +
@@ -17659,7 +17680,8 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x05query\x18\x03 \x01(\tR\x05query\x12\x16\n" +
 	"\x06offset\x18\x04 \x01(\x05R\x06offset\x12\x14\n" +
 	"\x05limit\x18\x05 \x01(\x05R\x05limit\x12'\n" +
-	"\x0finclude_deleted\x18\x06 \x01(\bR\x0eincludeDeleted\"5\n" +
+	"\x0finclude_deleted\x18\x06 \x01(\bR\x0eincludeDeleted\x12\x1b\n" +
+	"\tchange_id\x18\a \x01(\tR\bchangeId\"5\n" +
 	"\tTypeCount\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x05R\x05count\"\xc1\x01\n" +
@@ -18004,10 +18026,12 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x13ListBranchesRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"I\n" +
 	"\x14ListBranchesResponse\x121\n" +
-	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\"D\n" +
+	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\"e\n" +
 	"\x10GetBranchRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
-	"\tnamespace\x18\x02 \x01(\tR\tnamespace\"o\n" +
+	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1f\n" +
+	"\vheader_only\x18\x03 \x01(\bR\n" +
+	"headerOnly\"o\n" +
 	"\x11GetBranchResponse\x12-\n" +
 	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\x12+\n" +
 	"\x04head\x18\x02 \x01(\v2\x17.goap.graph.v1.BaselineR\x04head\"b\n" +

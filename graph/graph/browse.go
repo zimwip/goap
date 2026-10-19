@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -23,7 +24,10 @@ type NodeQuery struct {
 	Text string
 	// IncludeDeleted keeps the tombstones.
 	IncludeDeleted bool
-	Offset, Limit  int
+	// Change keeps the nodes the impacts of that change act on, at their version in the baseline: they are read node
+	// by node, so the answer and its cost follow the change, not the size of the baseline.
+	Change        domain.ChangeID
+	Offset, Limit int
 }
 
 // TypeCount is the number of nodes of a type in a baseline.
@@ -49,7 +53,14 @@ func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQ
 	q.Offset = max(q.Offset, 0)
 	text := strings.ToLower(strings.TrimSpace(q.Text))
 	var nodes []domain.Node
-	if err = g.repo.InTx(ctx, func(tx Tx) (err error) { nodes, err = tx.NodesIn(ctx, id, ""); return }); err != nil {
+	if err = g.repo.InTx(ctx, func(tx Tx) (err error) {
+		if q.Change != "" {
+			nodes, err = changeNodesIn(ctx, tx, id, q.Change)
+		} else {
+			nodes, err = tx.NodesIn(ctx, id, "")
+		}
+		return
+	}); err != nil {
 		return page, err
 	}
 	counts := map[string]int{}
@@ -72,6 +83,39 @@ func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQ
 		page.Nodes = matched[q.Offset:min(q.Offset+q.Limit, len(matched))]
 	}
 	return page, nil
+}
+
+// changeNodesIn reads, at baseline id, the nodes the impacts of a change act on, ordered by key (ADR 0137): never the
+// whole state of the baseline.
+func changeNodesIn(ctx context.Context, tx Tx, id domain.BaselineID, change domain.ChangeID) ([]domain.Node, error) {
+	c, err := tx.Change(ctx, change)
+	if err != nil {
+		return nil, err
+	}
+	var ids []domain.NodeID
+	for _, cn := range c.Nodes {
+		if n := nodeOf(cn); n != "" {
+			ids = append(ids, n)
+		}
+		if cn.Landed != nil {
+			ids = append(ids, cn.Landed.ID)
+		}
+	}
+	slices.Sort(ids)
+	at, err := versionsAt(ctx, tx, id, slices.Compact(ids))
+	if err != nil {
+		return nil, err
+	}
+	nodes := make([]domain.Node, 0, len(at))
+	for n, v := range at {
+		node, err := tx.Node(ctx, domain.NodeRef{ID: n, Version: v})
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
+	}
+	slices.SortFunc(nodes, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
+	return nodes, nil
 }
 
 // LinkQuery selects a page of the links of a baseline.

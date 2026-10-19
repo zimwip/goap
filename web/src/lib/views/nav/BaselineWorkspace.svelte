@@ -335,7 +335,8 @@
       .sort((a, b) => Number(a.outgoing) - Number(b.outgoing) || (a.other?.key ?? '').localeCompare(b.other?.key ?? ''));
   });
 
-  const inBaseline = (n: GraphNode | undefined) => !!n?.id && !!baseline?.nodes && n.id in baseline.nodes;
+  // the baseline holds the nodes of its namespace (its header is sent without its nodes, ADR 0140)
+  const inBaseline = (n: GraphNode | undefined) => !!n?.id && !!baseline && (n.namespace ?? '') === (baseline.namespace ?? '');
 
   function selectNode(n: GraphNode | undefined) {
     if (!n?.id) return;
@@ -441,7 +442,7 @@
         <code>{shortId(baseline.id)}</code>
         {#if baseline.createdAt} · {formatDate(baseline.createdAt)}{/if}
         {#if baseline.changeId} · from change <button type="button" class="link mono" onclick={() => openTab({ kind: 'change', params: { id: baseline?.changeId ?? '' } })}>{baseline.changeId.slice(0, 8)}</button>{/if}
-        · {Object.keys(baseline.nodes ?? {}).length} nodes
+        {#if !query} · {typeTotal} nodes{/if}
       </span>
     {/if}
     <span class="grow"></span>

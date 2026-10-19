@@ -505,6 +505,9 @@ message ListBaselineNodesRequest {
   // page size (default and max 500)
   int32 limit = 5;
   bool include_deleted = 6;
+  // the nodes the impacts of this change act on, at their version in the baseline: the answer and its cost follow
+  // the change, not the size of the baseline (ADR 0140); empty: every node of the baseline
+  string change_id = 7;
 }
 
 message TypeCount {
@@ -518,6 +521,7 @@ message ListBaselineNodesResponse {
   int32 total = 2;
   // nodes per type matching the text query (the type filter aside)
   repeated TypeCount types = 3;
+  // the header of the baseline: its nodes are not sent
   Baseline baseline = 4;
 }
 
@@ -538,6 +542,7 @@ message ListBaselineLinksResponse {
   int32 total = 2;
   // links per type matching the text query (the type filter aside)
   repeated TypeCount types = 3;
+  // the header of the baseline: its nodes are not sent
   Baseline baseline = 4;
 }
 
@@ -1069,6 +1074,8 @@ message ListBranchesResponse {
 message GetBranchRequest {
   string name = 1;
   string namespace = 2;
+  // the head without its nodes: its id and header only, whatever the size of its state (ADR 0140)
+  bool header_only = 3;
 }
 
 message GetBranchResponse {

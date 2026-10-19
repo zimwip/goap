@@ -182,6 +182,8 @@ export interface BaselineNodesQuery {
   /** page size (max 500) */
   limit?: number;
   includeDeleted?: boolean;
+  /** the nodes the impacts of this change act on, at their version in the baseline (ADR 0140) */
+  changeId?: string;
 }
 
 export interface BaselineLinksQuery {

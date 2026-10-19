@@ -76,6 +76,11 @@ records the branch it was written on (`node_version.branch`). The versions a bra
 9. **The branch of a change is ephemeral** (`Branch.Ephemeral`, column `branch.ephemeral`, migration 0009, set on
    every change branch): it lives until the change lands and its state is its fork with what it landed, so its
    headers are never checkpointed; only the lasting branches (main, the named ones) store states.
+10. **An answer follows its scope, not the size of the graph.** `ListBaselineNodes` takes a change
+   (`change_id`, `NodeQuery.Change`): the nodes its impacts act on, read node by node at their version in the
+   baseline; it and `ListBaselineLinks` answer the header of the baseline, not its nodes. `GetBranch` with
+   `header_only` answers the head's header (the web and the bench ask it so; the services that read the head's state
+   through `graphclient.BranchHead` still get it whole).
 
 ## Consequences
 

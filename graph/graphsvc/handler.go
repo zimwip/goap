@@ -365,12 +365,12 @@ func (h *Handler) ListChangeEvents(ctx context.Context, r *connect.Request[graph
 
 func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[graphv1.ListBaselineNodesRequest]) (*connect.Response[graphv1.ListBaselineNodesResponse], error) {
 	id := domain.BaselineID(r.Msg.BaselineId)
-	b, err := h.Graph.Baseline(ctx, id)
+	b, err := h.Graph.BaselineHeader(ctx, id) // the header: the page is what is sent
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
 	page, err := h.Graph.BaselineNodes(ctx, id, graph.NodeQuery{Type: r.Msg.Type, Text: r.Msg.Query,
-		IncludeDeleted: r.Msg.IncludeDeleted, Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
+		IncludeDeleted: r.Msg.IncludeDeleted, Change: domain.ChangeID(r.Msg.ChangeId), Offset: int(r.Msg.Offset), Limit: int(r.Msg.Limit)})
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -383,7 +383,7 @@ func (h *Handler) ListBaselineNodes(ctx context.Context, r *connect.Request[grap
 
 func (h *Handler) ListBaselineLinks(ctx context.Context, r *connect.Request[graphv1.ListBaselineLinksRequest]) (*connect.Response[graphv1.ListBaselineLinksResponse], error) {
 	id := domain.BaselineID(r.Msg.BaselineId)
-	b, err := h.Graph.Baseline(ctx, id)
+	b, err := h.Graph.BaselineHeader(ctx, id) // the header: the page is what is sent
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
 	}
@@ -1173,6 +1173,10 @@ func (h *Handler) GetBranch(ctx context.Context, r *connect.Request[graphv1.GetB
 	b, err := h.Graph.Branch(ctx, r.Msg.Namespace, r.Msg.Name)
 	if err != nil {
 		return nil, rpcerr.ToConnect(err)
+	}
+	if r.Msg.HeaderOnly {
+		head, err := h.Graph.BranchHeadHeader(ctx, r.Msg.Namespace, b.Name)
+		return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.BaselineToPB(head)}, err)
 	}
 	head, err := h.Graph.BranchHead(ctx, r.Msg.Namespace, b.Name)
 	return res(&graphv1.GetBranchResponse{Branch: pbconv.BranchToPB(b), Head: pbconv.BaselineToPB(head)}, err)
