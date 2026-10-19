@@ -218,6 +218,43 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   /** the baseline `nodes` was read from */
   let nodesOf = '';
 
+  /** The nodes of the baseline the impacts of a change act on, every page of them. */
+  async function changeNodes(changeId: string, baselineId: string, signal?: AbortSignal): Promise<GraphNode[]> {
+    if (!baselineId) return [];
+    const out: GraphNode[] = [];
+    for (;;) {
+      const r = await graph.listBaselineNodes({ baselineId, changeId, includeDeleted: true, offset: out.length, limit: 500 }, signal);
+      out.push(...(r.nodes ?? []));
+      if (!r.nodes?.length || out.length >= (r.total ?? 0)) return out;
+    }
+  }
+
+  // the nodes of the baseline the change could take on: a page of those matching what the person looks for, searched by
+  // the server as they type
+  let candidateFilter = $state('');
+  let candidateNodes = $state<GraphNode[]>([]);
+  let candidatesOf = '';
+  let candidateSearch: AbortController | undefined;
+  async function searchCandidates() {
+    const baselineId = nodesOf;
+    const query = candidateFilter.trim();
+    candidateSearch?.abort();
+    const ctrl = (candidateSearch = new AbortController());
+    candidatesOf = baselineId;
+    if (!baselineId) return void (candidateNodes = []);
+    try {
+      const r = await graph.listBaselineNodes({ baselineId, query, limit: 200 }, ctrl.signal);
+      if (!ctrl.signal.aborted) candidateNodes = r.nodes ?? [];
+    } catch (e) {
+      if (!ctrl.signal.aborted) error = errorMessage(e);
+    }
+  }
+  const searchSoon = throttled(() => void searchCandidates(), 300);
+  $effect(() => {
+    void candidateFilter;
+    untrack(() => nodesOf && searchSoon.call());
+  });
+
   /** The parents of a sub-change, the root first. */
   async function loadAncestors(c: Change | undefined, signal?: AbortSignal): Promise<Change[]> {
     const chain: Change[] = [];
@@ -239,17 +276,18 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
       // opening a change is looking at it; working in it is a choice (Work in this change), never a side effect
       refreshWorking(c);
       if (!baselineName) baselineName = c?.title ? `${c.title}` : `change-${shortId(id)}`;
-      // independent reads go out together; a baseline never changes, so the one already read is kept (every event of the
-      // change loads again: re-reading its whole graph each time was the heaviest call of the screen)
+      // independent reads go out together; of the baseline, only the nodes the change acts on (ADR 0140): never its
+      // whole graph, whose size is the graph's, not the change's
       const baselineId = c?.baselineId ?? '';
       const [baseNodes, subList, chain] = await Promise.all([
-        !baselineId ? Promise.resolve([] as typeof nodes) : baselineId === nodesOf && nodes.length ? Promise.resolve(nodes) : graph.getBaselineGraph(baselineId, signal).then((g) => g.nodes ?? []),
+        changeNodes(id, baselineId, signal),
         graph.listSubChanges(id, signal).then((r) => r.changes ?? []),
         loadAncestors(c, signal),
         graph.listFlows(id, signal).then((r) => (flows = r.flows ?? [])),
       ]);
       nodes = baseNodes;
       nodesOf = baselineId;
+      if (candidatesOf !== baselineId) searchCandidates();
       subs = subList;
       ancestors = chain;
       // no scope yet, or one decided since: the option agents work on, else the main flow
@@ -574,11 +612,12 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
   const candidates = $derived(candidatesByOption(change?.nodes ?? []));
   const mainImpacts = $derived((change?.nodes ?? []).filter((n) => !n.flow && !n.superseded).length);
   // a change creates and modifies the nodes of its namespace (ADR 0015 §2)
-  const lcCandidates = $derived(reopenable(nodes, lcRows, change?.namespace ?? ''));
+  const lcCandidates = $derived(reopenable(candidateNodes, lcRows, change?.namespace ?? ''));
   const typeNames = $derived(nodeTypeNames(typeCatalog.cat, change?.namespace ?? ''));
   const lifecycleOf = $derived(lifecycleResolver(typeCatalog.cat));
   const takenKeys = $derived([
     ...nodes.map((n) => n.key ?? ''),
+    ...candidateNodes.map((n) => n.key ?? ''),
     ...(view?.nodes ?? []).filter((n) => n.intent === 'created' && !n.superseded && n.review !== 'rejected').map((n) => n.key ?? ''),
   ]);
   // the graph refuses to land a change with an impact awaiting its review (ADR 0079: edits never review)
@@ -645,7 +684,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
 
   /** Declares that the change (on the scope) impacts a node of its baseline, and why: a planned change impact. */
   async function addImpact(id: string, rationale = '') {
-    const n = nodes.find((x) => x.id === id);
+    const n = candidateNodes.find((x) => x.id === id) ?? nodes.find((x) => x.id === id);
     if (!change?.id || !n?.id) return;
     moving = `${id}:add`;
     error = '';
@@ -1399,6 +1438,7 @@ import ChangeLifecycleView from '../../components/ChangeLifecycleView.svelte';
         scope={scope || MAIN_SCOPE}
         rows={shownRows}
         candidates={lcCandidates}
+        bind:filter={candidateFilter}
         disabled={!writable}
         busy={moving}
         onmove={move}

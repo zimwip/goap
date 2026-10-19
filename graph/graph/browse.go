@@ -122,13 +122,13 @@ func changeNodesIn(ctx context.Context, tx Tx, id domain.BaselineID, change doma
 	if err != nil {
 		return nil, err
 	}
-	nodes := make([]domain.Node, 0, len(at))
+	refs := make([]domain.NodeRef, 0, len(at))
 	for n, v := range at {
-		node, err := tx.Node(ctx, domain.NodeRef{ID: n, Version: v})
-		if err != nil {
-			return nil, err
-		}
-		nodes = append(nodes, node)
+		refs = append(refs, domain.NodeRef{ID: n, Version: v})
+	}
+	nodes, err := tx.NodesAt(ctx, refs, "") // one statement, not one per node
+	if err != nil {
+		return nil, err
 	}
 	slices.SortFunc(nodes, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
 	return nodes, nil

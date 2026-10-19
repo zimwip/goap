@@ -43,10 +43,13 @@
     change,
     closed = false,
     onchanged,
+    filter = $bindable(''),
   }: {
     rows: LifecycleRow[];
-    /** nodes the change could take on */
+    /** nodes the change could take on (with `filter`, those its text matches: the caller may search them) */
     candidates: GraphNode[];
+    /** the text the person looks for a node to take on with */
+    filter?: string;
     disabled?: boolean;
     busy?: string;
     onmove: (row: LifecycleRow, t: LifecycleTransition) => void;
@@ -200,7 +203,6 @@
   }
 
   let picked = $state('');
-  let filter = $state('');
   let editing = $state('');
   let draft = $state<Record<string, string>>({});
   let newKey = $state('');
@@ -492,7 +494,7 @@
     {/if}
   {/if}
 
-  {#if !disabled && candidates.length}
+  {#if !disabled && (candidates.length || filter)}
     <div class="add row">
       <input type="search" placeholder="Find a node to work on…" aria-label="Filter nodes" bind:value={filter} />
       <select aria-label="Node to add" bind:value={picked}>
