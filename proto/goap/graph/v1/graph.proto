@@ -830,10 +830,22 @@ message ListChangesRequest {
   string owner_org = 3;
   // the heads of the changes only, without their impacts and items: what a list shows (ADR 0140)
   bool header_only = 4;
+  // key of the project the change acts in (empty: every project)
+  string project = 5;
+  // a text the id, title, intent, methodology or namespace of the change contains, case ignored (empty: every change)
+  string query = 6;
+  // the size of a page, newest first (0: every change, unpaged; at most 500)
+  int32 limit = 7;
+  // next_cursor of the page before (empty: the newest page); only with a limit
+  string cursor = 8;
 }
 
 message ListChangesResponse {
   repeated Change changes = 1;
+  // the cursor of the next (older) page; empty: this page is the last
+  string next_cursor = 2;
+  // the number of changes the request matches, every page together (only with a limit)
+  int32 total = 3;
 }
 
 message UpdateChangeRequest {
