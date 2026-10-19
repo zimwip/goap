@@ -3,8 +3,6 @@ package graph
 import (
 	"context"
 	"fmt"
-	"maps"
-	"slices"
 	"sort"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -29,99 +27,126 @@ type BaselineDiff struct {
 }
 
 // DiffBaselines compares two baselines of a namespace node by node: what going from the first to the second
-// changes. Nodes are ordered by key. When the second follows the first on one branch (its head moving forward), only
-// the nodes landed between them are read (ADR 0140); otherwise both states are read whole.
+// changes. Nodes are ordered by key.
 func (g *Graph) DiffBaselines(ctx context.Context, from, to domain.BaselineID) (out []BaselineDiff, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error {
-		ha, err := headerOf(ctx, tx, from)
+	err = g.repo.InTx(ctx, func(tx Tx) (err error) { out, err = diffBaselines(ctx, tx, from, to); return })
+	return
+}
+
+// diffBaselines is DiffBaselines in a transaction, one way whatever the two baselines (ADR 0140): the changes only one
+// of them takes in (lineageGap) name the nodes the states may differ on, the nodes of their impacts and of their own
+// branches; the versions of those nodes alone are read in each baseline, then compared.
+func diffBaselines(ctx context.Context, tx Tx, from, to domain.BaselineID) ([]BaselineDiff, error) {
+	gap, err := lineageGap(ctx, tx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	var ids []domain.NodeID
+	seen := map[domain.NodeID]bool{}
+	add := func(id domain.NodeID) {
+		if id != "" && !seen[id] {
+			seen[id] = true
+			ids = append(ids, id)
+		}
+	}
+	for _, id := range gap.changes {
+		c, err := tx.ChangeHead(ctx, id)
+		if isNotFound(err) {
+			continue
+		}
 		if err != nil {
-			return err
+			return nil, err
 		}
-		hb, err := headerOf(ctx, tx, to)
+		cns, err := tx.ChangeImpacts(ctx, id)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		if from != "" && to != "" && domain.NamespaceOf(ha.Namespace) != domain.NamespaceOf(hb.Namespace) {
-			return fmt.Errorf("baselines %s and %s are of namespaces %s and %s: %w", from, to, ha.Namespace, hb.Namespace, ErrInvalid)
-		}
-		var a, b map[domain.NodeID]domain.Version
-		ids, ok, err := landedBetween(ctx, tx, ha, hb)
-		if err != nil {
-			return err
-		}
-		if ok {
-			if a, err = versionsAt(ctx, tx, from, ids); err != nil {
-				return err
-			}
-			if b, err = versionsAt(ctx, tx, to, ids); err != nil {
-				return err
-			}
-		} else {
-			if a, err = baselineState(ctx, tx, from); err != nil {
-				return err
-			}
-			if b, err = baselineState(ctx, tx, to); err != nil {
-				return err
-			}
-		}
-		// the versions on both sides, read in one query
-		var refs []domain.NodeRef
-		for id, va := range a {
-			if vb, ok := b[id]; !ok || va != vb {
-				refs = append(refs, domain.NodeRef{ID: id, Version: va})
-				if ok {
-					refs = append(refs, domain.NodeRef{ID: id, Version: vb})
+		for _, cn := range cns {
+			for _, ref := range []*domain.NodeRef{cn.Pre, cn.Post, cn.Landed} {
+				if ref != nil {
+					add(ref.ID)
 				}
 			}
 		}
-		for id, vb := range b {
-			if _, ok := a[id]; !ok {
+		if c.Branch != "" {
+			// what its branch holds: a node it reverted keeps no impact
+			on, err := tx.BranchNodeIDs(ctx, c.Branch)
+			if err != nil {
+				return nil, err
+			}
+			for _, id := range on {
+				add(id)
+			}
+		}
+	}
+	a, err := versionsAt(ctx, tx, from, ids)
+	if err != nil {
+		return nil, err
+	}
+	b, err := versionsAt(ctx, tx, to, ids)
+	if err != nil {
+		return nil, err
+	}
+	return diffStates(ctx, tx, a, b)
+}
+
+// diffStates compares two states over the same nodes, reading the versions on both sides in one query.
+func diffStates(ctx context.Context, tx Tx, a, b map[domain.NodeID]domain.Version) (out []BaselineDiff, err error) {
+	var refs []domain.NodeRef
+	for id, va := range a {
+		if vb, ok := b[id]; !ok || va != vb {
+			refs = append(refs, domain.NodeRef{ID: id, Version: va})
+			if ok {
 				refs = append(refs, domain.NodeRef{ID: id, Version: vb})
 			}
 		}
-		read, err := tx.NodesAt(ctx, refs, "")
-		if err != nil {
-			return err
+	}
+	for id, vb := range b {
+		if _, ok := a[id]; !ok {
+			refs = append(refs, domain.NodeRef{ID: id, Version: vb})
 		}
-		nodes := make(map[domain.NodeRef]*domain.Node, len(read))
-		for i := range read {
-			nodes[read[i].Ref()] = &read[i]
+	}
+	read, err := tx.NodesAt(ctx, refs, "")
+	if err != nil {
+		return nil, err
+	}
+	nodes := make(map[domain.NodeRef]*domain.Node, len(read))
+	for i := range read {
+		nodes[read[i].Ref()] = &read[i]
+	}
+	node := func(id domain.NodeID, v domain.Version) (*domain.Node, error) {
+		if n, ok := nodes[domain.NodeRef{ID: id, Version: v}]; ok {
+			return n, nil
 		}
-		node := func(id domain.NodeID, v domain.Version) (*domain.Node, error) {
-			if n, ok := nodes[domain.NodeRef{ID: id, Version: v}]; ok {
-				return n, nil
-			}
-			return nil, fmt.Errorf("node %s v%d: %w", id, v, ErrNotFound)
+		return nil, fmt.Errorf("node %s v%d: %w", id, v, ErrNotFound)
+	}
+	for id, va := range a {
+		vb, ok := b[id]
+		if ok && va == vb {
+			continue
 		}
-		for id, va := range a {
-			vb, ok := b[id]
-			if ok && va == vb {
-				continue
-			}
-			d := BaselineDiff{Node: id, Kind: DiffRemoved}
-			if d.From, err = node(id, va); err != nil {
-				return err
-			}
-			if ok {
-				d.Kind = DiffChanged
-				if d.To, err = node(id, vb); err != nil {
-					return err
-				}
-			}
-			out = append(out, d)
+		d := BaselineDiff{Node: id, Kind: DiffRemoved}
+		if d.From, err = node(id, va); err != nil {
+			return nil, err
 		}
-		for id, vb := range b {
-			if _, ok := a[id]; ok {
-				continue
-			}
-			d := BaselineDiff{Node: id, Kind: DiffAdded}
+		if ok {
+			d.Kind = DiffChanged
 			if d.To, err = node(id, vb); err != nil {
-				return err
+				return nil, err
 			}
-			out = append(out, d)
 		}
-		return nil
-	})
+		out = append(out, d)
+	}
+	for id, vb := range b {
+		if _, ok := a[id]; ok {
+			continue
+		}
+		d := BaselineDiff{Node: id, Kind: DiffAdded}
+		if d.To, err = node(id, vb); err != nil {
+			return nil, err
+		}
+		out = append(out, d)
+	}
 	for i := range out {
 		n := out[i].To
 		if n == nil {
@@ -130,46 +155,5 @@ func (g *Graph) DiffBaselines(ctx context.Context, from, to domain.BaselineID) (
 		out[i].Key, out[i].Type = n.Key, n.Type
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
-	return out, err
-}
-
-// maxLandedWalk bounds the baselines landedBetween walks from the second baseline back to the first.
-const maxLandedWalk = 256
-
-// landedBetween lists the nodes that may differ between baselines a and b when b follows a on one branch through
-// baselines derived from their landings (a commit, a merge, a fast-forward, ADR 0140): the nodes landed on that branch
-// after a, up to b. ok is false otherwise (another branch, a stored baseline between them, too far apart).
-func landedBetween(ctx context.Context, tx Tx, a, b domain.Baseline) (ids []domain.NodeID, ok bool, err error) {
-	if a.ID == "" || b.ID == "" || domain.BranchOf(a.Branch) != domain.BranchOf(b.Branch) || a.Seq >= b.Seq {
-		return nil, a.ID == b.ID && a.ID != "", nil
-	}
-	cur := b
-	for range maxLandedWalk {
-		if !domain.DerivedKind(cur.Kind) || domain.BranchOf(cur.Branch) != domain.BranchOf(a.Branch) {
-			return nil, false, nil
-		}
-		if cur.ParentID == a.ID {
-			landed, err := tx.LandedVersions(ctx, b.Namespace, domain.BranchOf(b.Branch), a.Seq, b.Seq, nil)
-			if err != nil {
-				return nil, false, err
-			}
-			return slices.Collect(maps.Keys(landed)), true, nil
-		}
-		if cur.ParentID == "" {
-			return nil, false, nil
-		}
-		if cur, err = cachedHeader(ctx, tx, cur.ParentID); err != nil {
-			return nil, false, err
-		}
-	}
-	return nil, false, nil
-}
-
-// baselineState reads the whole state of a baseline ("": the empty state).
-func baselineState(ctx context.Context, tx Tx, id domain.BaselineID) (map[domain.NodeID]domain.Version, error) {
-	if id == "" {
-		return nil, nil
-	}
-	b, err := tx.Baseline(ctx, id)
-	return b.Nodes, err
+	return out, nil
 }

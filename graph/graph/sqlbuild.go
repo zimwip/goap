@@ -343,12 +343,6 @@ func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) 
 	return q + ` ORDER BY 2 DESC LIMIT ` + d.ph(len(args)+1), append(args, limit)
 }
 
-// sqlOpenNodeChanges reads the open changes (neither applied nor abandoned) that have an impact on a node.
-func (d dialect) sqlOpenNodeChanges(node domain.NodeID) (string, []any) {
-	return `SELECT ` + d.id("i.change_id") + ` FROM change_impact i JOIN change c ON c.id = i.change_id WHERE i.node_id = ` + d.ph(1) +
-		` AND c.status NOT IN ('applied', 'abandoned') GROUP BY i.change_id ORDER BY min(i.seq)`, []any{string(node)}
-}
-
 // changeImpactCols is the select list of a change impact (the order both repositories scan).
 func (d dialect) changeImpactCols() string {
 	return d.cols(su("id"), su("node_id"), sc("key"), sc("type"), sc("intent"), sc("rationale"), sc("pre_version"), sc("post_version"), sc("landed_version"),

@@ -138,8 +138,6 @@ type Tx interface {
 	// any), newest first; the cursor of a change is the order of its first impact on the node (ADR 0140: a page of a
 	// history, whatever its length).
 	NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error)
-	// OpenNodeChanges lists the open changes (neither applied nor abandoned) holding a change impact on a node.
-	OpenNodeChanges(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
 	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
 

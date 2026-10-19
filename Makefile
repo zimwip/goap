@@ -118,9 +118,9 @@ PERF      := docker compose -f deploy/compose/perf.yml
 PERF_ARGS ?= -versions 100000
 
 perf: perf-up perf-run ## performance test in docker: the graph service on PostgreSQL loaded by goap-bench (PERF_ARGS, goap-bench -h), measured in Grafana http://localhost:3300
-	@echo "Grafana: http://localhost:3300/d/goap-perf · Prometheus: http://localhost:9390 · reports: .goap/perf/*.csv"
+	@echo "Grafana: http://localhost:3300/d/goap-perf · Prometheus: http://localhost:9390 · web: http://localhost:5174 · reports: .goap/perf/*.csv"
 
-perf-up: ## start the performance stack (builds goap/goap:dev): graph, PostgreSQL, collector, Prometheus, Grafana
+perf-up: ## start the performance stack (builds goap/goap:dev): graph, PostgreSQL, collector, Prometheus, Grafana, gateway and web
 	docker build --target services -t goap/goap:dev .
 	$(PERF) up -d
 

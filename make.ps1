@@ -179,7 +179,7 @@ function PerfRun { $a = PerfArgs; Run docker @Perf run --rm bench @a }
 function Perf {
     PerfUp
     PerfRun
-    Write-Host 'Grafana: http://localhost:3300/d/goap-perf - Prometheus: http://localhost:9390 - reports: .goap\perf\*.csv'
+    Write-Host 'Grafana: http://localhost:3300/d/goap-perf - Prometheus: http://localhost:9390 - web: http://localhost:5174 - reports: .goap\perf\*.csv'
 }
 function PerfDown { Run docker @Perf --profile bench down }
 function PerfReset { Run docker @Perf --profile bench down --volumes --remove-orphans }

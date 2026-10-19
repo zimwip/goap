@@ -85,11 +85,14 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    `before` and `limit` (default 50, at most 500) and answer `next`, the cursor of the older page (`Tx.VersionRange`,
    `Tx.NodeChangePage`); the web loads older pages on demand. Landing a version no longer reads the history of its
    node: the next number, its parent and whether it is on the branch come from its last version
-   (`Tx.VersionRange(id, 0, 1)`), and the open changes to rebase from `Tx.OpenNodeChanges` (one query, instead of
-   the head of every change that ever acted on the node). `DiffBaselines` between two baselines of one branch linked
-   by derived headers reads only the nodes landed between them (`landedBetween`, at most 256 headers apart), else both
-   states whole. `DiffStacks` walks the two lineages together, newest first by order, and stops where they meet
-   (`diffLineages`), instead of reading every header of the namespace, the head of every change and the whole state of
+   (`Tx.VersionRange(id, 0, 1)`), and landing reads no other open change: each starts from the latest version of its
+   nodes when it is rebased at its own merge (ADR 0101), and the board reads a planned impact as outdated when its node
+   moved on the branch it lands on since (`behindHead`). One way to diff two baselines (`diffBaselines`, used by
+   `DiffBaselines` whatever their distance): the lineage walk names the changes between them (`lineageGap`: both
+   lineages painted together, newest first by order, the own branch of a change taken in, stopping where everything left
+   is in both), the nodes their impacts and branches touched are gathered, only those nodes are read in each baseline
+   (`versionsAt`), and the two sets are compared in memory (created, removed, modified). `DiffStacks` uses the same walk
+   instead of reading every header of the namespace, the head of every change and the whole state of
    `from`. Migration 0010 indexes `change_impact (node_id, seq)` and `baseline (namespace, branch, seq)`.
 
 ## Consequences

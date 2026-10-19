@@ -62,26 +62,33 @@ func (g *Graph) ChangeStack(ctx context.Context, q ChangeStackQuery) (s domain.C
 // baselines, not the length of the history.
 func (g *Graph) DiffStacks(ctx context.Context, from, to domain.BaselineID) (added, removed []domain.StackChange, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		ad, rm, err := diffLineages(ctx, tx, from, to)
+		gap, err := lineageGap(ctx, tx, from, to)
 		if err != nil {
 			return err
 		}
-		if added, err = stackChanges(ctx, tx, ad); err != nil {
+		if added, err = stackChanges(ctx, tx, gap.added); err != nil {
 			return err
 		}
-		removed, err = stackChanges(ctx, tx, rm)
+		removed, err = stackChanges(ctx, tx, gap.removed)
 		return err
 	})
 	return added, removed, err
 }
 
-// diffLineages walks the lineages of two baselines (the edges of domain.BaselineLineage: parent, merged head and, for
+// gap is what lies between two baselines: the changes of the stack of the second that the first does not hold (added)
+// and the other way round (removed), and every change of a baseline only one of them reaches (changes), whose nodes
+// are all the two states may differ on.
+type gap struct {
+	added, removed, changes []domain.ChangeID
+}
+
+// lineageGap walks the lineages of two baselines (the edges of domain.BaselineLineage: parent, merged head and, for
 // one taking a change in, the baselines of that change's own branch written before it) newest first by order, each
 // baseline painted with the side(s) reaching it, and stops once every baseline left to walk is reached from both: a
 // baseline's order is above the orders of the ones it follows from, so its paint is final when it is walked. The
 // changes of the baselines only one side reaches, less the ones of a baseline the other side reaches, make the
 // difference.
-func diffLineages(ctx context.Context, tx Tx, from, to domain.BaselineID) (added, removed []domain.ChangeID, err error) {
+func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, err error) {
 	const sideFrom, sideTo, both = 1, 2, 3
 	type walked struct {
 		b    domain.Baseline
@@ -114,10 +121,10 @@ func diffLineages(ctx context.Context, tx Tx, from, to domain.BaselineID) (added
 		return nil
 	}
 	if err := reach(from, sideFrom); err != nil {
-		return nil, nil, err
+		return g, err
 	}
 	if err := reach(to, sideTo); err != nil {
-		return nil, nil, err
+		return g, err
 	}
 	branches := map[domain.ChangeID]string{}
 	ownBranch := func(id domain.ChangeID) (string, error) {
@@ -140,7 +147,7 @@ func diffLineages(ctx context.Context, tx Tx, from, to domain.BaselineID) (added
 		seen = append(seen, walked{b, side})
 		for _, next := range []domain.BaselineID{b.ParentID, b.MergedFrom} {
 			if err := reach(next, side); err != nil {
-				return nil, nil, err
+				return g, err
 			}
 		}
 		// the work a change brought in matters only to a side alone: below a baseline both sides reach, all is both
@@ -149,7 +156,7 @@ func diffLineages(ctx context.Context, tx Tx, from, to domain.BaselineID) (added
 		}
 		own, err := ownBranch(b.ChangeID)
 		if err != nil {
-			return nil, nil, err
+			return g, err
 		}
 		if own == "" || domain.BranchOf(own) == domain.BranchOf(b.Branch) {
 			continue
@@ -157,7 +164,7 @@ func diffLineages(ctx context.Context, tx Tx, from, to domain.BaselineID) (added
 		hs, ok := onBranch[domain.BranchOf(own)]
 		if !ok {
 			if hs, err = tx.BranchBaselineHeaders(ctx, b.Namespace, own); err != nil {
-				return nil, nil, err
+				return g, err
 			}
 			onBranch[domain.BranchOf(own)] = hs
 		}
@@ -165,11 +172,8 @@ func diffLineages(ctx context.Context, tx Tx, from, to domain.BaselineID) (added
 			if o.CreatedAt.After(b.CreatedAt) {
 				continue
 			}
-			if _, ok := headers[o.ID]; !ok {
-				headers[o.ID] = o
-			}
 			if err := reach(o.ID, side); err != nil {
-				return nil, nil, err
+				return g, err
 			}
 		}
 	}
@@ -186,15 +190,20 @@ func diffLineages(ctx context.Context, tx Tx, from, to domain.BaselineID) (added
 	}
 	for _, w := range seen {
 		c := w.b.ChangeID
+		if c == "" || w.side == both {
+			continue
+		}
+		if !slices.Contains(g.changes, c) {
+			g.changes = append(g.changes, c)
+		}
 		switch {
-		case c == "" || w.side == both:
-		case w.side == sideTo && !in[sideFrom][c] && !slices.Contains(added, c):
-			added = append(added, c)
-		case w.side == sideFrom && !in[sideTo][c] && !slices.Contains(removed, c):
-			removed = append(removed, c)
+		case w.side == sideTo && !in[sideFrom][c] && !slices.Contains(g.added, c):
+			g.added = append(g.added, c)
+		case w.side == sideFrom && !in[sideTo][c] && !slices.Contains(g.removed, c):
+			g.removed = append(g.removed, c)
 		}
 	}
-	return added, removed, nil
+	return g, nil
 }
 
 // cachedHeader reads the header of a baseline through the cache of the graph's guard when there is one.

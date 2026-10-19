@@ -279,20 +279,4 @@ func testDiffBaselinesByLandings(t *testing.T, repo Repo) {
 			}
 		}
 	}
-	if err := g.repo.InTx(ctx, func(tx Tx) error {
-		a, err := tx.BaselineHeader(ctx, heads[0])
-		if err != nil {
-			return err
-		}
-		b, err := tx.BaselineHeader(ctx, heads[len(heads)-1])
-		if err != nil {
-			return err
-		}
-		if _, ok, err := landedBetween(ctx, tx, a, b); err != nil || !ok {
-			t.Fatalf("the heads of main are not read from their landings (%v)", err)
-		}
-		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
 }

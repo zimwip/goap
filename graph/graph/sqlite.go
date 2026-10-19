@@ -873,24 +873,6 @@ func (t *sqliteTx) NodeChangePage(ctx context.Context, node domain.NodeID, befor
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) OpenNodeChanges(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	q, args := dialectSQLite.sqlOpenNodeChanges(node)
-	rows, err := t.tx.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []domain.ChangeID
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out = append(out, domain.ChangeID(id))
-	}
-	return out, rows.Err()
-}
-
 func (t *sqliteTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
 	res, err := t.tx.ExecContext(ctx, dialectSQLite.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
 	if err != nil {

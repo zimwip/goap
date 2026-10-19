@@ -989,23 +989,6 @@ func (t *pgTx) NodeChangePage(ctx context.Context, node domain.NodeID, before in
 	return out, rows.Err()
 }
 
-func (t *pgTx) OpenNodeChanges(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	q, args := dialectPG.sqlOpenNodeChanges(node)
-	rows, err := t.tx.Query(ctx, q, args...)
-	if err != nil {
-		return nil, err
-	}
-	ids, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return nil, err
-	}
-	out := make([]domain.ChangeID, len(ids))
-	for i, id := range ids {
-		out[i] = domain.ChangeID(id)
-	}
-	return out, nil
-}
-
 func (t *pgTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
 	tag, err := t.tx.Exec(ctx, dialectPG.sqlSetNodeOrigin(), string(ref.ID), int(ref.Version), nullUUID(string(change)), nullUUID(string(cn)), comment)
 	if err != nil {

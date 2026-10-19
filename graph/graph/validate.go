@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -96,7 +97,15 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		if cn.Pre != nil && base[cn.Pre.ID] != cn.Pre.Version && !cn.Recheck {
 			add(id, "", "reference", fmt.Sprintf("refers to %s which is not in the reference baseline", cn.Pre))
 		}
-		if cn.Recheck {
+		outdated := cn.Recheck
+		if !outdated && cn.Pre != nil && cn.Post == nil && cn.Landed == nil {
+			// a planned impact is read against the latest version of its node where the change lands, never moved
+			// by the changes that landed meanwhile (ADR 0140): it starts from there when the change is rebased
+			if outdated, err = behindHead(ctx, tx, c, *cn.Pre); err != nil {
+				return nil, err
+			}
+		}
+		if outdated {
 			add(id, "", "outdated", fmt.Sprintf("the impact on %s was written against a version that is no longer the head", cn.Key))
 		}
 	}
@@ -107,4 +116,23 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 	}
 	slices.SortStableFunc(out, func(a, b domain.BoardIssue) int { return pos[a.Item] - pos[b.Item] })
 	return out, nil
+}
+
+// behindHead tells whether a node version is no longer the latest of its node on the branch a change lands on.
+func behindHead(ctx context.Context, tx Tx, c domain.Change, ref domain.NodeRef) (bool, error) {
+	target := domain.MainBranch
+	if c.Branch != "" {
+		br, err := tx.Branch(ctx, c.Namespace, c.Branch)
+		if err != nil && !errors.Is(err, ErrNotFound) {
+			return false, err
+		}
+		if br.Parent != "" {
+			target = br.Parent
+		}
+	}
+	latest, err := tx.LatestOn(ctx, ref.ID, target)
+	if errors.Is(err, ErrNotFound) {
+		return false, nil
+	}
+	return err == nil && latest.Version != ref.Version, err
 }

@@ -229,8 +229,8 @@ func joinSorted(s []string) string {
 
 // land records, once the branch of a change is merged into its parent (the baseline result), the
 // version each change impact landed as: the version it wrote, joined to the parent, or the merge
-// version of mergeChange; and moves the planned change impacts of the other open changes on the
-// same nodes to the new head, to be re-checked.
+// version of mergeChange. The other open changes on the same nodes are not read: each starts from the latest version
+// of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
 func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID) error {
 	for _, cn := range c.Nodes {
 		if cn.Post == nil || (cn.Review != domain.ReviewAccepted && cn.Landed == nil) || cn.Flow != "" || cn.Superseded {
@@ -261,36 +261,6 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		}
 		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)}); err != nil {
 			return err
-		}
-		// the open changes acting on the node only: the rest of its history is not read (ADR 0140)
-		others, err := tx.OpenNodeChanges(ctx, ref.ID)
-		if err != nil {
-			return err
-		}
-		for _, oid := range others {
-			if oid == c.ID {
-				continue
-			}
-			oh, err := tx.ChangeHead(ctx, oid)
-			if err != nil {
-				return err
-			}
-			if domain.BranchOf(oh.Branch) == domain.BranchOf(c.Branch) {
-				continue
-			}
-			oc, err := tx.Change(ctx, oid)
-			if err != nil {
-				return err
-			}
-			for _, o := range oc.Nodes {
-				if o.Post != nil || o.Pre == nil || o.Pre.ID != ref.ID || o.Pre.Version >= ref.Version {
-					continue
-				}
-				// moved to the new head, to be re-checked
-				if err := g.emit(ctx, tx, domain.ImpactEvent{Change: oid, Impact: o.ID, Op: domain.ImpactRebased, Pre: &ref}); err != nil {
-					return err
-				}
-			}
 		}
 	}
 	return nil

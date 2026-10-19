@@ -182,13 +182,17 @@ func testApplyChangeImpacts(t *testing.T, repo Repo) {
 		t.Fatalf("change should be applied, is %s", ch.Status)
 	}
 
-	// the other change's impact (no post yet) follows the new head and is flagged to re-check
+	// the other change's impact (no post yet) is left where it was, and reported behind the latest version of its node
+	// (ADR 0140): it starts from there when its change is rebased
 	olist, err := g.ListChangeImpacts(ctx, c2.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if olist[0].ID != other[0].ID || !olist[0].Recheck || olist[0].Pre == nil || *olist[0].Pre != head.Ref() {
-		t.Fatalf("impact should move to the new head: %+v", olist[0])
+	if olist[0].ID != other[0].ID || olist[0].Recheck || olist[0].Pre == nil || *olist[0].Pre == head.Ref() {
+		t.Fatalf("impact should stay where it was: %+v", olist[0])
+	}
+	if o := issuesByCode(mustIssues(t, g, c2.ID, ""))["outdated"]; len(o) != 1 || o[0].Item != domain.ItemID(other[0].ID) {
+		t.Fatalf("the impact should be reported outdated: %+v", o)
 	}
 }
 

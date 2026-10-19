@@ -764,16 +764,6 @@ func (t *memTx) NodeChangePage(_ context.Context, node domain.NodeID, before int
 	return out, nil
 }
 
-func (t *memTx) OpenNodeChanges(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	var out []domain.ChangeID
-	for _, id := range t.nodeChanges(node) {
-		if st := t.st.changes[id].Status; st != domain.ChangeApplied && st != domain.ChangeAbandoned {
-			out = append(out, id)
-		}
-	}
-	return out, nil
-}
-
 func (t *memTx) SetNodeOrigin(_ context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
 	vs := t.st.versions[ref.ID]
 	if ref.Version < 1 || int(ref.Version) > len(vs) {

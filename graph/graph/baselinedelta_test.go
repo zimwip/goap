@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -416,7 +415,7 @@ func testFailedCommitLeavesNothing(t *testing.T, repo Repo) {
 }
 
 // checkDiffs checks the differences read from the distance between two baselines (ADR 0140) against the ones of their
-// whole states and whole lineages: each baseline against its parent, both ways, and against the first one.
+// whole states and whole lineages: each baseline against its parent, the first, the middle and the last one, both ways.
 func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) error {
 	if len(bs) == 0 {
 		return nil
@@ -435,7 +434,7 @@ func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) 
 		return domain.StackChangeIDs(nil, l)
 	}
 	for _, b := range bs {
-		for _, other := range []domain.BaselineID{b.ParentID, bs[0].ID} {
+		for _, other := range []domain.BaselineID{b.ParentID, bs[0].ID, bs[len(bs)/2].ID, bs[len(bs)-1].ID} {
 			o, ok := byID[other]
 			if !ok {
 				continue
@@ -443,29 +442,37 @@ func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) 
 			for _, pair := range [][2]domain.Baseline{{o, b}, {b, o}} {
 				from, to := pair[0], pair[1]
 				wantAdded, wantRemoved := domain.DiffStacks(stack(from.ID), stack(to.ID))
-				added, removed, err := diffLineages(ctx, tx, from.ID, to.ID)
+				gap, err := lineageGap(ctx, tx, from.ID, to.ID)
 				if err != nil {
 					return err
 				}
-				if fmt.Sprint(added) != fmt.Sprint(wantAdded) || fmt.Sprint(removed) != fmt.Sprint(wantRemoved) {
-					t.Errorf("changes from %s (%s) to %s (%s): +%v -%v, the whole lineages give +%v -%v", from.ID, from.Kind, to.ID, to.Kind, added, removed, wantAdded, wantRemoved)
+				if fmt.Sprint(gap.added) != fmt.Sprint(wantAdded) || fmt.Sprint(gap.removed) != fmt.Sprint(wantRemoved) {
+					t.Errorf("changes from %s (%s) to %s (%s): +%v -%v, the whole lineages give +%v -%v", from.ID, from.Kind, to.ID, to.Kind, gap.added, gap.removed, wantAdded, wantRemoved)
 				}
-				ids, ok, err := landedBetween(ctx, tx, from, to)
-				if err != nil || !ok {
-					if err != nil {
-						return err
+				ds, err := diffBaselines(ctx, tx, from.ID, to.ID)
+				if err != nil {
+					return err
+				}
+				got := map[domain.NodeID]domain.Version{}
+				for _, d := range ds {
+					got[d.Node] = 0
+					if d.To != nil {
+						got[d.Node] = d.To.Version
 					}
-					continue
+				}
+				want := map[domain.NodeID]domain.Version{}
+				for id, v := range to.Nodes {
+					if from.Nodes[id] != v {
+						want[id] = v
+					}
 				}
 				for id := range from.Nodes {
-					if to.Nodes[id] != from.Nodes[id] && !slices.Contains(ids, id) {
-						t.Errorf("from %s to %s: node %s moved (v%d to v%d) but did not land between them", from.ID, to.ID, id, from.Nodes[id], to.Nodes[id])
+					if _, ok := to.Nodes[id]; !ok {
+						want[id] = 0
 					}
 				}
-				for id := range to.Nodes {
-					if to.Nodes[id] != from.Nodes[id] && !slices.Contains(ids, id) {
-						t.Errorf("from %s to %s: node %s moved (v%d to v%d) but did not land between them", from.ID, to.ID, id, from.Nodes[id], to.Nodes[id])
-					}
+				if !maps.Equal(got, want) {
+					t.Errorf("diff from %s (%s) to %s (%s): %v, the whole states give %v", from.ID, from.Kind, to.ID, to.Kind, got, want)
 				}
 			}
 		}

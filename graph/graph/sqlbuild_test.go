@@ -218,10 +218,6 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(seq) FROM change_impact WHERE node_id = $1 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})
 	q, a = lite.sqlNodeChangePage("n1", 9, 3)
 	check("sqlite NodeChangePage", lite, q, a, `SELECT change_id, min(seq) FROM change_impact WHERE node_id = ? GROUP BY change_id HAVING min(seq) < ? ORDER BY 2 DESC LIMIT ?`, []any{"n1", int64(9), 3})
-	q, a = pg.sqlOpenNodeChanges("n1")
-	check("pg OpenNodeChanges", pg, q, a, `SELECT i.change_id::text FROM change_impact i JOIN change c ON c.id = i.change_id WHERE i.node_id = $1 AND c.status NOT IN ('applied', 'abandoned') GROUP BY i.change_id ORDER BY min(i.seq)`, []any{"n1"})
-	q, a = lite.sqlOpenNodeChanges("n1")
-	check("sqlite OpenNodeChanges", lite, q, a, `SELECT i.change_id FROM change_impact i JOIN change c ON c.id = i.change_id WHERE i.node_id = ? AND c.status NOT IN ('applied', 'abandoned') GROUP BY i.change_id ORDER BY min(i.seq)`, []any{"n1"})
 
 	// Log, LogCounts: the filter exercises every condition (the where builder is shared and unchanged)
 	f := domain.LogFilter{Change: "c1", Types: []string{"fact.", "journal.schedule"}, Flows: []string{"main"}, Processes: []string{"p1", "p2"}, Execution: "e1", AfterSeq: 7, Limit: 5}
