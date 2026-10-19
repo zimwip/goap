@@ -25,9 +25,13 @@ type Memory struct {
 }
 
 type memState struct {
-	versions  map[domain.NodeID][]domain.Node // index = version-1
-	keys      map[string]domain.NodeID
-	links     []domain.Link
+	versions map[domain.NodeID][]domain.Node // index = version-1
+	keys     map[string]domain.NodeID
+	links    []domain.Link
+	// drops are the rows of a delta taking a link out of the set it is a delta over, sets how a version holds its
+	// links when not its own whole set (ADR 0141)
+	drops     []memDrop
+	sets      map[domain.NodeRef]LinkSet
 	baselines map[domain.BaselineID]domain.Baseline
 	changes   map[domain.ChangeID]domain.Change
 	branches  map[string]domain.Branch
@@ -53,7 +57,17 @@ func NewMemory() *Memory {
 		branches:  map[string]domain.Branch{},
 		joins:     map[joinKey]memJoin{},
 		nodes:     map[domain.ChangeID][]domain.ChangeImpact{},
+		sets:      map[domain.NodeRef]LinkSet{},
 	}}
+}
+
+// memDrop is a row of a delta taking out link removes (ADR 0141).
+type memDrop struct {
+	row     domain.LinkID
+	from    domain.NodeRef
+	removes domain.LinkID
+	to      domain.NodeRef
+	change  domain.ChangeID
 }
 
 func (s memState) clone() memState {
@@ -61,6 +75,8 @@ func (s memState) clone() memState {
 		versions:  make(map[domain.NodeID][]domain.Node, len(s.versions)),
 		keys:      maps.Clone(s.keys),
 		links:     slices.Clone(s.links),
+		drops:     slices.Clone(s.drops),
+		sets:      maps.Clone(s.sets),
 		baselines: maps.Clone(s.baselines),
 		changes:   make(map[domain.ChangeID]domain.Change, len(s.changes)),
 		branches:  maps.Clone(s.branches),
@@ -304,23 +320,71 @@ func (t *memTx) Namespaces(_ context.Context) ([]string, error) {
 }
 
 func (t *memTx) OutLinks(_ context.Context, ref domain.NodeRef) ([]domain.Link, error) {
+	return t.held(ref), nil
+}
+
+// setOf is how a version holds its links (ADR 0141).
+func (t *memTx) setOf(ref domain.NodeRef) LinkSet {
+	if s, ok := t.st.sets[ref]; ok {
+		return s
+	}
+	return LinkSet{Of: ref.Version}
+}
+
+// held is the links a version holds, read as leaving it: the rows of its set and of the sets it is a delta over, minus
+// those a row of the chain drops (ADR 0141).
+func (t *memTx) held(ref domain.NodeRef) []domain.Link {
+	chain := map[domain.Version]bool{}
+	for v := t.setOf(ref).Of; v != 0 && !chain[v]; v = t.setOf(domain.NodeRef{ID: ref.ID, Version: v}).Base {
+		chain[v] = true
+	}
+	dropped := map[domain.LinkID]bool{}
+	for _, d := range t.st.drops {
+		if d.from.ID == ref.ID && chain[d.from.Version] {
+			dropped[d.removes] = true
+		}
+	}
 	var out []domain.Link
 	for _, l := range t.st.links {
-		if l.From == ref {
+		if l.From.ID == ref.ID && chain[l.From.Version] && !dropped[l.ID] {
+			l.From = ref
 			out = append(out, l)
 		}
 	}
-	return out, nil
+	slices.SortFunc(out, func(a, b domain.Link) int { return strings.Compare(string(a.ID), string(b.ID)) })
+	return out
+}
+
+// entering is the links entering the versions of node id that keep (all when nil), one per version holding it, by id
+// then version.
+func (t *memTx) entering(id domain.NodeID, keep func(domain.NodeRef) bool) []domain.Link {
+	sources := map[domain.NodeID]bool{}
+	for _, l := range t.st.links {
+		if l.To.ID == id {
+			sources[l.From.ID] = true
+		}
+	}
+	var out []domain.Link
+	for src := range sources {
+		for _, v := range t.st.versions[src] {
+			for _, l := range t.held(v.Ref()) {
+				if l.To.ID == id && (keep == nil || keep(l.To)) {
+					out = append(out, l)
+				}
+			}
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Link) int {
+		if c := strings.Compare(string(a.ID), string(b.ID)); c != 0 {
+			return c
+		}
+		return int(a.From.Version) - int(b.From.Version)
+	})
+	return out
 }
 
 func (t *memTx) InLinks(_ context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	var out []domain.Link
-	for _, l := range t.st.links {
-		if l.To == ref {
-			out = append(out, l)
-		}
-	}
-	return out, nil
+	return t.entering(ref.ID, func(to domain.NodeRef) bool { return to == ref }), nil
 }
 
 func (t *memTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
@@ -448,6 +512,26 @@ func (t *memTx) Link(_ context.Context, id domain.LinkID) (domain.Link, error) {
 func (t *memTx) PutLink(_ context.Context, l domain.Link) error {
 	t.st.links = append(t.st.links, l)
 	return nil
+}
+
+func (t *memTx) DropLink(_ context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	t.st.drops = append(t.st.drops, memDrop{row: row, from: from, removes: l.ID, to: l.To, change: l.ChangeID})
+	return nil
+}
+
+func (t *memTx) PutLinkSet(_ context.Context, from domain.NodeRef, set LinkSet) error {
+	if set.Of == 0 {
+		set.Of = from.Version
+	}
+	t.st.sets[from] = set
+	return nil
+}
+
+func (t *memTx) LinkSetOf(_ context.Context, ref domain.NodeRef) (LinkSet, error) {
+	if vs := t.st.versions[ref.ID]; ref.Version < 1 || int(ref.Version) > len(vs) {
+		return LinkSet{}, fmt.Errorf("node %s: %w", ref, ErrNotFound)
+	}
+	return t.setOf(ref), nil
 }
 
 func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {
@@ -876,6 +960,22 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 		}
 	}
 	t.st.links = kept
+	var drops []memDrop
+	for _, d := range t.st.drops {
+		switch {
+		case d.change == id, removed(d.from):
+		case removed(d.to):
+			return used
+		default:
+			drops = append(drops, d)
+		}
+	}
+	t.st.drops = drops
+	for r := range t.st.sets {
+		if removed(r) {
+			delete(t.st.sets, r)
+		}
+	}
 	for nid, i := range cut {
 		for _, v := range t.st.versions[nid][i:] {
 			delete(t.st.joins, joinKey{v.Ref(), domain.BranchOf(v.Branch)})
@@ -910,29 +1010,16 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 }
 
 func (t *memTx) LinksFrom(_ context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
-	from := map[domain.NodeRef]bool{}
-	for _, r := range refs {
-		from[r] = true
-	}
 	var out []domain.Link
-	for _, l := range t.st.links {
-		if from[l.From] {
-			out = append(out, l)
-		}
+	for _, r := range refs {
+		out = append(out, t.held(r)...)
 	}
 	slices.SortFunc(out, func(a, b domain.Link) int { return strings.Compare(string(a.ID), string(b.ID)) })
 	return out, nil
 }
 
 func (t *memTx) LinksTo(_ context.Context, id domain.NodeID) ([]domain.Link, error) {
-	var out []domain.Link
-	for _, l := range t.st.links {
-		if l.To.ID == id {
-			out = append(out, l)
-		}
-	}
-	slices.SortFunc(out, func(a, b domain.Link) int { return strings.Compare(string(a.ID), string(b.ID)) })
-	return out, nil
+	return t.entering(id, nil), nil
 }
 
 func (t *memTx) NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (NodePage, error) {

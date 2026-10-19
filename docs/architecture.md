@@ -137,7 +137,10 @@ the platform (§3.9): a unit inherits the adapters of its ancestors, the nearest
 Versioning rule ([ADR 0003](adr/0003-version-to-version-links.md)): **outgoing links belong
 to the source node's version**. Adding/removing an outgoing link creates a new version of the source;
 a node that changes version carries its outgoing links forward; incoming links from unmodified
-nodes stay on the old version and become **suspect**. Baselines thus remain immutable.
+nodes stay on the old version and become **suspect**. Baselines thus remain immutable. The links a
+version carries are held as a **link set** ([ADR 0141](adr/0141-the-links-of-a-version-are-a-set.md)):
+shared as is with an earlier version when unchanged, or written as a delta (added links, drop rows)
+over an earlier set, up to 16 deltas deep before the set is written whole.
 
 #### Version branches ([ADR 0009](adr/0009-branches-options-decisions.md))
 

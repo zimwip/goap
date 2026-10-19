@@ -428,6 +428,33 @@ func (t *guardTx) PutLink(ctx context.Context, l domain.Link) error {
 	return t.Tx.PutLink(ctx, l)
 }
 
+func (t *guardTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	if err := t.needChange(l.ChangeID, "link "+l.Type); err != nil {
+		return err
+	}
+	if !t.written[from] {
+		return fmt.Errorf("link %s: version %s is not written by this transaction, a version never changes (ADR 0079): %w", l.Type, from, ErrConflict)
+	}
+	return t.Tx.DropLink(ctx, from, row, l)
+}
+
+// PutLinkSet sets how a version written in the transaction holds its links, over versions of the same node written
+// before it (ADR 0141).
+func (t *guardTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error {
+	if !t.written[from] {
+		return fmt.Errorf("the links of version %s: it is not written by this transaction, a version never changes (ADR 0079): %w", from, ErrConflict)
+	}
+	for _, v := range []domain.Version{set.Of, set.Base} {
+		if v >= from.Version {
+			return fmt.Errorf("the links of version %s: v%d is not an earlier version of the node: %w", from, v, ErrInvalid)
+		}
+	}
+	if set.Of != 0 && set.Base != 0 {
+		return fmt.Errorf("the links of version %s: a version shares a set or writes a delta, not both: %w", from, ErrInvalid)
+	}
+	return t.Tx.PutLinkSet(ctx, from, set)
+}
+
 func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error {
 	if err := t.needChange(change, "the origin of node "+ref.String()); err != nil {
 		return err

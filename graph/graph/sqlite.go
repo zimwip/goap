@@ -293,11 +293,6 @@ func (t *sqliteTx) Namespaces(ctx context.Context) ([]string, error) {
 	return t.ids(ctx, `SELECT DISTINCT namespace FROM node ORDER BY namespace`)
 }
 
-func (t *sqliteTx) links(ctx context.Context, leaving bool, ref domain.NodeRef) ([]domain.Link, error) {
-	q, args := dialectSQLite.sqlLinks(leaving, ref)
-	return t.queryLinks(ctx, q, args...)
-}
-
 func (t *sqliteTx) queryLinks(ctx context.Context, q string, args ...any) ([]domain.Link, error) {
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -322,11 +317,12 @@ func (t *sqliteTx) queryLinks(ctx context.Context, q string, args ...any) ([]dom
 }
 
 func (t *sqliteTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, true, ref)
+	return t.LinksFrom(ctx, []domain.NodeRef{ref})
 }
 
 func (t *sqliteTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, false, ref)
+	q, args := dialectSQLite.sqlLinksTo(ref)
+	return t.queryLinks(ctx, q, args...)
 }
 
 func (t *sqliteTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
@@ -696,8 +692,33 @@ func (t *sqliteTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, err
 
 func (t *sqliteTx) PutLink(ctx context.Context, l domain.Link) error {
 	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("link", linkColumns, ""),
-		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)))
+		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), nil)
 	return sqliteErr(err, "link")
+}
+
+func (t *sqliteTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlInsert("link", linkColumns, ""),
+		string(row), l.Type, string(from.ID), int(from.Version), string(l.To.ID), int(l.To.Version), string(jsonb(l.Properties)), nullUUID(string(l.ChangeID)), string(l.ID))
+	return sqliteErr(err, "link")
+}
+
+func (t *sqliteTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error {
+	var of, base any
+	if set.Of != 0 && set.Of != from.Version {
+		of = int(set.Of)
+	}
+	if set.Base != 0 {
+		base = int(set.Base)
+	}
+	_, err := t.tx.ExecContext(ctx, dialectSQLite.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth)
+	return sqliteErr(err, "link set")
+}
+
+func (t *sqliteTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error) {
+	var s LinkSet
+	q, args := dialectSQLite.sqlLinkSetOf(ref)
+	err := t.tx.QueryRowContext(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth)
+	return s, sqliteErr(err, "link set of "+ref.String())
 }
 
 // PutBaseline stores the baseline as the graph says (ADR 0140): its header, and its entries when it has a Gap of 0.
@@ -1007,7 +1028,7 @@ func (t *sqliteTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]doma
 }
 
 func (t *sqliteTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {
-	q, args := dialectSQLite.sqlLinksTo(id)
+	q, args := dialectSQLite.sqlLinksTo(domain.NodeRef{ID: id})
 	return t.queryLinks(ctx, q, args...)
 }
 

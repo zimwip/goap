@@ -68,6 +68,7 @@ func (a *applier) prepareChangeImpacts() error {
 	}
 	// 2. their links, to the versions of the change
 	for i, l := range todo {
+		links := make([]domain.Link, 0, len(l.d.Links))
 		for _, dl := range l.d.Links {
 			to := dl.To
 			if v, ok := written[to.ID]; ok && (to.IsDraft() || to.Version == from[to.ID] || (l.d.Base != nil && to.Version == l.d.Base.Version && to.ID == l.d.Node)) {
@@ -76,9 +77,15 @@ func (a *applier) prepareChangeImpacts() error {
 			if to.IsDraft() {
 				return invalidf("%s links to the draft of node %s, which the change does not land", nodes[i].Key, to.ID)
 			}
-			if err := a.tx.PutLink(a.ctx, domain.Link{ID: dl.ID, Type: dl.Type, From: nodes[i].Ref(), To: to, Properties: dl.Properties, ChangeID: a.change.ID}); err != nil {
-				return err
-			}
+			links = append(links, domain.Link{ID: dl.ID, Type: dl.Type, To: to, Properties: dl.Properties})
+		}
+		// the links of a version are a set, shared with the version it was checked out from or a delta over it (ADR 0141)
+		var like []domain.NodeRef
+		for _, p := range nodes[i].Parents {
+			like = append(like, domain.NodeRef{ID: nodes[i].ID, Version: p})
+		}
+		if err := a.g.putLinks(a.ctx, a.tx, nodes[i], links, like...); err != nil {
+			return err
 		}
 	}
 	// 3. what the change leaves

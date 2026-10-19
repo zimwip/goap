@@ -270,6 +270,7 @@ func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
 			Comment: "reverted: its impact was withdrawn from the change", CreatedAt: a.g.now()}
 		v, inFork := fork[id]
 		var links []domain.Link
+		like := []domain.NodeRef{latest.Ref()}
 		if inFork {
 			src, err := a.tx.Node(a.ctx, domain.NodeRef{ID: id, Version: v})
 			if err != nil {
@@ -279,6 +280,7 @@ func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
 			if links, err = a.tx.OutLinks(a.ctx, src.Ref()); err != nil {
 				return 0, err
 			}
+			like = []domain.NodeRef{src.Ref(), latest.Ref()} // the set of the fork's version, shared as is (ADR 0141)
 			a.target.set(id, v)
 		} else {
 			n.Properties, n.State, n.Deleted = cloneMap(latest.Properties), latest.State, true
@@ -287,11 +289,8 @@ func (a *applier) revertWithdrawn(own domain.Branch) (int, error) {
 		if err := a.tx.PutNode(a.ctx, n); err != nil {
 			return 0, err
 		}
-		for _, l := range links {
-			l.ID, l.From, l.ChangeID = domain.LinkID(a.g.newID()), n.Ref(), a.change.ID
-			if err := a.tx.PutLink(a.ctx, l); err != nil {
-				return 0, err
-			}
+		if err := a.g.putLinks(a.ctx, a.tx, n, links, like...); err != nil {
+			return 0, err
 		}
 	}
 	return len(ids), nil

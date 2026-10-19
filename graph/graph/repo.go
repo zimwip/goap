@@ -54,10 +54,12 @@ type Tx interface {
 	LatestNodes(ctx context.Context, namespace, branch string) ([]domain.Node, error)
 	// Namespaces returns the distinct namespaces holding at least one node (admin/reindex use).
 	Namespaces(ctx context.Context) ([]string, error)
+	// OutLinks reads the links a version holds (its link set, ADR 0141), each read as leaving that version; InLinks
+	// the links entering a version, one per version holding it.
 	OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	// LinksFrom reads the links leaving the versions refs in one query, by id; LinksTo the links entering any version
-	// of a node.
+	// of a node, one per version holding it, by id then version.
 	LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error)
 	LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error)
 	// NodePage reads the page q asks of the node versions refs (a state), ordered by key, and LinkPage the page of the
@@ -119,9 +121,17 @@ type Tx interface {
 	// PutNode writes a node version. A version is written once and never changes (ADR 0079): the working state of a
 	// node in a change is a draft, the version is written when the change lands.
 	PutNode(ctx context.Context, n domain.Node) error
-	// PutLink writes a link of a version written in the same transaction; Link reads one.
+	// PutLink writes a link of the set of a version written in the same transaction (ADR 0141); Link reads one, as
+	// leaving the version that wrote it.
 	PutLink(ctx context.Context, l domain.Link) error
 	Link(ctx context.Context, id domain.LinkID) (domain.Link, error)
+	// PutLinkSet says how a version written in the same transaction holds its links (ADR 0141): the set of an earlier
+	// version of the node as is (Of), or its own rows as a delta over the set of one (Base); a version left alone
+	// holds its own rows. DropLink writes a row of the delta of a version taking out a link of the set it is a delta
+	// over. LinkSetOf reads how a version holds its links.
+	PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error
+	DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, dropped domain.Link) error
+	LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error)
 	// PutBaseline stores a baseline as the graph says (ADR 0140): only its header when b.Gap > 0, else its entries
 	// (b.Nodes: a version, or minus the version a node had in BaseID for a node the baseline removes), put in the state
 	// of b.BaseID when it names one.
@@ -186,6 +196,15 @@ type Tx interface {
 type NodeChange struct {
 	Change domain.ChangeID
 	Seq    int64
+}
+
+// LinkSet is how a node version holds its outgoing links (ADR 0141). Of is the version of the node whose rows they
+// are: the version itself when it wrote them, an earlier one whose set it shares as is. Base, for a version holding
+// its own rows, is the version whose set its rows are a delta over (0: a whole set), Depth how many deltas deep.
+type LinkSet struct {
+	Of    domain.Version
+	Base  domain.Version
+	Depth int
 }
 
 // Landing is the last version of a node landed on a branch (Tx.BranchLandings): Deleted when that version deletes the

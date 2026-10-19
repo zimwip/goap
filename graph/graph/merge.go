@@ -678,6 +678,7 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 				return res, err
 			}
 		}
+		var links []domain.Link
 		for _, l := range MergeLinks(anc, ours, theirs) {
 			to := l.To
 			if r, ok := newRef[to.ID]; ok {
@@ -688,9 +689,14 @@ func (g *Graph) mergeBranchTx(ctx context.Context, tx Tx, in MergeRequest) (res 
 			} else if _, ok := target[to.ID]; !ok {
 				continue
 			}
-			if err := tx.PutLink(ctx, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, From: m.next, To: to, Properties: l.Properties, ChangeID: c.ID}); err != nil {
-				return res, err
-			}
+			links = append(links, domain.Link{ID: domain.LinkID(g.newID()), Type: l.Type, To: to, Properties: l.Properties})
+		}
+		like := []domain.NodeRef{m.from.Ref()}
+		if m.anc != nil {
+			like = []domain.NodeRef{m.ours.Ref(), m.from.Ref()}
+		}
+		if err := g.putLinks(ctx, tx, domain.Node{ID: m.next.ID, Version: m.next.Version, ChangeID: c.ID}, links, like...); err != nil {
+			return res, err
 		}
 	}
 	res.Baseline = domain.Baseline{ID: res.Baseline.ID, Name: title, Namespace: namespace, Branch: plan.Into, ParentID: base.ID, MergedFrom: fb.Head, ChangeID: c.ID, Kind: domain.BaselineMerge, Nodes: target, CreatedAt: g.now()}

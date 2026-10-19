@@ -434,11 +434,6 @@ func (t *pgTx) Namespaces(ctx context.Context) ([]string, error) {
 	return pgx.CollectRows(rows, pgx.RowTo[string])
 }
 
-func (t *pgTx) links(ctx context.Context, leaving bool, ref domain.NodeRef) ([]domain.Link, error) {
-	q, args := dialectPG.sqlLinks(leaving, ref)
-	return t.queryLinks(ctx, q, args...)
-}
-
 func (t *pgTx) queryLinks(ctx context.Context, q string, args ...any) ([]domain.Link, error) {
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
@@ -464,11 +459,12 @@ func (t *pgTx) queryLinks(ctx context.Context, q string, args ...any) ([]domain.
 }
 
 func (t *pgTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, true, ref)
+	return t.LinksFrom(ctx, []domain.NodeRef{ref})
 }
 
 func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
-	return t.links(ctx, false, ref)
+	q, args := dialectPG.sqlLinksTo(ref)
+	return t.queryLinks(ctx, q, args...)
 }
 
 func (t *pgTx) Baseline(ctx context.Context, id domain.BaselineID) (domain.Baseline, error) {
@@ -822,8 +818,33 @@ func (t *pgTx) Link(ctx context.Context, id domain.LinkID) (domain.Link, error) 
 
 func (t *pgTx) PutLink(ctx context.Context, l domain.Link) error {
 	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
-		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)))
+		string(l.ID), l.Type, string(l.From.ID), int(l.From.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)), nil)
 	return mapErr(err, "link")
+}
+
+func (t *pgTx) DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, l domain.Link) error {
+	_, err := t.tx.Exec(ctx, dialectPG.sqlInsert("link", linkColumns, ""),
+		string(row), l.Type, string(from.ID), int(from.Version), string(l.To.ID), int(l.To.Version), jsonb(l.Properties), nullUUID(string(l.ChangeID)), string(l.ID))
+	return mapErr(err, "link")
+}
+
+func (t *pgTx) PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error {
+	var of, base any
+	if set.Of != 0 && set.Of != from.Version {
+		of = int(set.Of)
+	}
+	if set.Base != 0 {
+		base = int(set.Base)
+	}
+	_, err := t.tx.Exec(ctx, dialectPG.sqlPutLinkSet(), string(from.ID), int(from.Version), of, base, set.Depth)
+	return mapErr(err, "link set")
+}
+
+func (t *pgTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error) {
+	var s LinkSet
+	q, args := dialectPG.sqlLinkSetOf(ref)
+	err := t.tx.QueryRow(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth)
+	return s, mapErr(err, "link set of "+ref.String())
 }
 
 // PutBaseline stores the baseline as the graph says (ADR 0140): its header, and its entries when it has a Gap of 0.
@@ -1106,7 +1127,7 @@ func (t *pgTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.L
 }
 
 func (t *pgTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {
-	q, args := dialectPG.sqlLinksTo(id)
+	q, args := dialectPG.sqlLinksTo(domain.NodeRef{ID: id})
 	return t.queryLinks(ctx, q, args...)
 }
 

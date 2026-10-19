@@ -605,7 +605,15 @@ func (g *Graph) linkWork(ctx context.Context, tx Tx, id domain.ChangeID, link do
 		var found *domain.DraftLink
 		if l, ok := d.Link(link); ok {
 			found = &l
-		} else if stored != nil && d.Base != nil && *d.Base == stored.From {
+		} else if stored != nil && d.Base != nil && d.Base.ID == stored.From.ID {
+			// the stored link is one the version checked out holds (its set may be an earlier version's, ADR 0141)
+			held, err := tx.OutLinks(ctx, *d.Base)
+			if err != nil {
+				return nil, domain.Draft{}, domain.DraftLink{}, err
+			}
+			if !slices.ContainsFunc(held, func(l domain.Link) bool { return l.ID == stored.ID }) {
+				continue
+			}
 			for _, c := range d.Links {
 				if c.Type == stored.Type && c.To.ID == stored.To.ID {
 					c := c
