@@ -8,9 +8,10 @@
   import ChangeStackView from './ChangeStackView.svelte';
   import { openNode } from '../nodeEditors';
 
-  let { baseline }: { baseline: Baseline } = $props();
+  /** candidates: the baselines offered as "from" (the history the caller read), newest last */
+  let { baseline, candidates = [] }: { baseline: Baseline; candidates?: Baseline[] } = $props();
 
-  let others = $state<Baseline[]>([]);
+  const others = $derived(candidates.filter((x) => x.id !== baseline.id).reverse());
   let from = $state('');
   let diff = $state<BaselineDiff[] | undefined>();
   /** the changes that explain the difference (ADR 0133) */
@@ -20,12 +21,7 @@
   let error = $state('');
 
   $effect(() => {
-    const b = baseline;
-    from = b.parentId ?? '';
-    graph
-      .listBaselines(b.namespace ?? '')
-      .then((r) => (others = (r.baselines ?? []).filter((x) => x.id !== b.id).reverse()))
-      .catch((e) => (error = errorMessage(e)));
+    from = baseline.parentId ?? '';
   });
 
   $effect(() => {

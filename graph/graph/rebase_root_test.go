@@ -80,7 +80,7 @@ func rebasedEvents(t *testing.T, g *Graph, id domain.ChangeID) []domain.ImpactEv
 }
 
 // test1 and test2 start from the same baseline and change different nodes: test2 moves onto test1's result, main reads
-// as two fast-forwards, the rebase is in test2's log and is a baseline of its branch.
+// as two fast-forwards, the move is in test2's log and its branch keeps no rebase baseline (ADR 0140).
 func TestRebaseRootDifferentNodes(t *testing.T) { forEachRepo(t, testRebaseRootDifferentNodes) }
 
 func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
@@ -110,13 +110,15 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 	if got := rebaseMoves(t, g, t1.ID); len(got) != 0 {
 		t.Fatalf("test1 was not behind: %+v", got)
 	}
-	// ADR 0102: test2 committed on its branch from B, the merge rebased the branch onto T1 (a rebase baseline), then
-	// fast-forwarded
+	// ADR 0102, 0140: test2 committed on its branch from B; no node changed on both sides, so the merge moved the fork onto
+	// T1 and fast-forwarded over it, the branch keeping no rebase baseline: main is the one baseline a change adds
 	if got := baselineOfChange(t, g, t2.ID, domain.BaselineCommit); got.RebasedFrom != "" || got.ParentID != f.base.ID {
 		t.Fatalf("test2's commit: %+v", got)
 	}
-	if got := baselineOfChange(t, g, t2.ID, domain.BaselineRebase); got.RebasedFrom != f.base.ID || got.MergedFrom != b1.ID {
-		t.Fatalf("test2's rebase: %+v", got)
+	for _, b := range must[[]domain.Baseline](t)(g.Baselines(ctx, "")) {
+		if b.ChangeID == t2.ID && b.Kind == domain.BaselineRebase {
+			t.Fatalf("a rebase baseline with nothing to merge: %+v", b)
+		}
 	}
 	if got := baselineOfChange(t, g, t1.ID, domain.BaselineCommit); got.RebasedFrom != "" {
 		t.Fatalf("test1's commit was never rebased: %+v", got)

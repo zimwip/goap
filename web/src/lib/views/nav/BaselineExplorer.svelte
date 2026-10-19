@@ -26,7 +26,7 @@
 
   let namespaces = $state<string[]>([]);
   let branches = $state<Branch[]>([]);
-  let baselinesByBranch = $state.raw<Map<string, Baseline[]>>(new Map());
+  let counts = $state.raw<Record<string, number>>({});
   let baselinesById = $state.raw<Map<string, Baseline>>(new Map());
   let loading = $state(false);
   let error = $state('');
@@ -60,21 +60,16 @@
     const ctrl = new AbortController();
     loading = true;
     error = '';
-    Promise.all([graph.listBranches(ns, ctrl.signal), graph.listBaselines(ns, ctrl.signal)])
-      .then(([br, bs]) => {
+    // the branches with their heads and counts, the merged and abandoned ones only when asked: never every baseline of
+    // the namespace (ADR 0140)
+    graph
+      .listBranches(ns, ctrl.signal, showClosed ? {} : { status: ['open'] })
+      .then((br) => {
         let bl = br.branches ?? [];
         if (!bl.some((b) => b.name === 'main')) bl = [{ name: 'main', namespace: ns, status: 'open' }, ...bl];
         branches = bl;
-        const byBranch = new Map<string, Baseline[]>();
-        const byId = new Map<string, Baseline>();
-        for (const b of bs.baselines ?? []) {
-          const k = b.branch || 'main';
-          byBranch.set(k, [...(byBranch.get(k) ?? []), b]);
-          if (b.id) byId.set(b.id, b);
-        }
-        for (const list of byBranch.values()) list.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
-        baselinesByBranch = byBranch;
-        baselinesById = byId;
+        baselinesById = new Map((br.heads ?? []).map((b) => [b.id ?? '', b]));
+        counts = br.counts ?? {};
       })
       .catch((e) => {
         if (!ctrl.signal.aborted) error = errorMessage(e);
@@ -86,7 +81,7 @@
   });
 
   const headOf = (b: Branch) => (b.head ? baselinesById.get(b.head) : undefined);
-  const countOf = (b: Branch) => baselinesByBranch.get(b.name ?? '')?.length ?? 0;
+  const countOf = (b: Branch) => counts[b.name || 'main'] ?? 0;
 
   async function abandon(name: string) {
     if (!(await confirmDialog({ message: `Abandon the branch ${name}? It takes no change any more.`, danger: true }))) return;

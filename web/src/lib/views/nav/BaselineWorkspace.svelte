@@ -65,12 +65,23 @@
   let loading = $state(false);
   let error = $state('');
   let branches = $state<Branch[]>([]);
-  let baselines = $state<Baseline[]>([]);
+  /** the history of the branch read so far, a page at a time (ADR 0140), and what draws it */
+  let history = $state<Baseline[]>([]);
+  let related = $state<Baseline[]>([]);
+  let next = $state('');
+  let older = $state(false);
+  const baselines = $derived.by(() => {
+    const byId = new Map<string, Baseline>();
+    for (const b of [...history, ...related]) if (b.id && !byId.has(b.id)) byId.set(b.id, b);
+    return [...byId.values()];
+  });
+  const PAGE = 100;
 
   // A namespace switch fires a new fetch before the previous one may have resolved: abort the stale one so its
   // (possibly later-arriving) response can't overwrite the current namespace's data.
   $effect(() => {
     const ns = namespace;
+    const branch = baselineTool.branch;
     void reload;
     void baselineTool.reload;
     // a commit, a merge, a branch opened by a change (its first edit, ADR 0102): the lanes follow
@@ -79,10 +90,19 @@
     if (!ns) return;
     const ctrl = new AbortController();
     loading = true;
-    Promise.all([graph.listBranches(ns, ctrl.signal), graph.listBaselines(ns, ctrl.signal)])
-      .then(([br, bs]) => {
+    // the newest page of the branch's history: never every baseline of the namespace (ADR 0140)
+    // the open branches draw their lanes; the branch shown is read too when it is merged or abandoned
+    Promise.all([
+      graph.listBranches(ns, ctrl.signal, { status: ['open'] }),
+      graph.listBaselines(ns, ctrl.signal, { branch, limit: PAGE }),
+      graph.getBranch(ns, branch, ctrl.signal).catch(() => undefined),
+    ])
+      .then(([br, bs, shown]) => {
         branches = br.branches ?? [];
-        baselines = bs.baselines ?? [];
+        if (shown?.branch && !branches.some((b) => b.name === shown.branch?.name)) branches = [...branches, shown.branch];
+        history = bs.baselines ?? [];
+        related = bs.related ?? [];
+        next = bs.next && bs.next !== '0' ? bs.next : '';
         error = '';
       })
       .catch((e) => {
@@ -93,6 +113,23 @@
       });
     return () => ctrl.abort();
   });
+
+  /** Reads the older page of the branch's history. */
+  async function loadOlder() {
+    const ns = namespace;
+    if (!ns || !next || older) return;
+    older = true;
+    try {
+      const r = await graph.listBaselines(ns, undefined, { branch: baselineTool.branch, before: next, limit: PAGE });
+      history = [...(r.baselines ?? []), ...history];
+      related = [...related, ...(r.related ?? [])];
+      next = r.next && r.next !== '0' ? r.next : '';
+    } catch (e) {
+      error = errorMessage(e);
+    } finally {
+      older = false;
+    }
+  }
 
   const branchOf = (b: Baseline) => b.branch || MAIN_BRANCH;
   const own = $derived(baselines.filter((b) => branchOf(b) === baselineTool.branch));
@@ -468,6 +505,7 @@
     <nav class="card history" style:width="{historyWidth}px" aria-label="History">
       <h3>History <span class="hint">{baselineTool.branch}</span></h3>
       <BaselineBranchGraph {baselines} {branches} branch={baselineTool.branch} {forkBaseline} selected={shownId} onselect={selectHistory} onopen={selectHistory} />
+      {#if next}<button type="button" class="link small older" disabled={older} onclick={loadOlder}>{older ? 'Loading…' : 'Older baselines'}</button>{/if}
     </nav>
 
     <Resizer orientation="vertical" value={historyWidth} min={240} max={520} label="History panel width" onresize={resizeHistory} />
@@ -729,7 +767,7 @@
   {#if baseline}
   <Resizer orientation="horizontal" value={compareShown} min={120} max={compareMax} invert label="Compare panel height" onresize={resizeCompare} />
   <div class="compare-wrap" style:height="{compareShown}px">
-    <BaselineCompare {baseline} />
+    <BaselineCompare {baseline} candidates={baselines} />
   </div>
 {/if}
 </div>
@@ -776,6 +814,10 @@
     display: flex;
     flex-direction: column;
     min-height: 0;
+  }
+  .history .older {
+    align-self: center;
+    margin: 0.4rem 0;
   }
   .history h3 {
     margin: 0 0 0.2rem;

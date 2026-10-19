@@ -27,14 +27,14 @@ func (g *Graph) RebaseChange(ctx context.Context, id domain.ChangeID) (res Rebas
 		if err != nil {
 			return err
 		}
-		res, err = g.rebaseTx(ctx, tx, c)
+		res, err = g.rebaseTx(ctx, tx, c, false)
 		return err
 	})
 	return
 }
 
-// rebaseTx is RebaseChange inside a transaction.
-func (g *Graph) rebaseTx(ctx context.Context, tx Tx, c domain.Change) (RebaseResult, error) {
+// rebaseTx is RebaseChange inside a transaction; merging: for the merge that follows (rebaseCommittedTx).
+func (g *Graph) rebaseTx(ctx context.Context, tx Tx, c domain.Change, merging bool) (RebaseResult, error) {
 	switch c.Status {
 	case domain.ChangeApplied, domain.ChangeAbandoned:
 		return RebaseResult{Parent: c.ParentID}, fmt.Errorf("change %s is %s: %w", c.ID, c.Status, ErrConflict)
@@ -43,7 +43,7 @@ func (g *Graph) rebaseTx(ctx context.Context, tx Tx, c domain.Change) (RebaseRes
 	if err != nil || !ok || !hasCommits(c) {
 		return RebaseResult{Parent: c.ParentID}, err
 	}
-	res, err := g.rebaseCommittedTx(ctx, tx, c, own)
+	res, err := g.rebaseCommittedTx(ctx, tx, c, own, merging)
 	res.Parent = c.ParentID
 	return res, err
 }

@@ -2020,8 +2020,16 @@ func (*DeleteTagResponse) Descriptor() ([]byte, []int) {
 }
 
 type ListBaselinesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// a page of the history of this branch (ADR 0140): its baselines landed before `before` (0: the newest), at most
+	// `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every baseline of
+	// the namespace.
+	Branch string `protobuf:"bytes,2,opt,name=branch,proto3" json:"branch,omitempty"`
+	Before int64  `protobuf:"varint,3,opt,name=before,proto3" json:"before,omitempty"`
+	Limit  int32  `protobuf:"varint,4,opt,name=limit,proto3" json:"limit,omitempty"`
+	// the headers of these baselines only
+	Ids           []string `protobuf:"bytes,5,rep,name=ids,proto3" json:"ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2063,10 +2071,43 @@ func (x *ListBaselinesRequest) GetNamespace() string {
 	return ""
 }
 
+func (x *ListBaselinesRequest) GetBranch() string {
+	if x != nil {
+		return x.Branch
+	}
+	return ""
+}
+
+func (x *ListBaselinesRequest) GetBefore() int64 {
+	if x != nil {
+		return x.Before
+	}
+	return 0
+}
+
+func (x *ListBaselinesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListBaselinesRequest) GetIds() []string {
+	if x != nil {
+		return x.Ids
+	}
+	return nil
+}
+
 type ListBaselinesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
-	Baselines     []*Baseline `protobuf:"bytes,1,rep,name=baselines,proto3" json:"baselines,omitempty"`
+	Baselines []*Baseline `protobuf:"bytes,1,rep,name=baselines,proto3" json:"baselines,omitempty"`
+	// with a branch: the baselines the changes of the page left on their own branches, those of the open branches
+	// forked from it (newest page), and the ones their edges reach outside the page
+	Related []*Baseline `protobuf:"bytes,2,rep,name=related,proto3" json:"related,omitempty"`
+	// with a branch: the `before` of the older page; 0: none
+	Next          int64 `protobuf:"varint,3,opt,name=next,proto3" json:"next,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2106,6 +2147,20 @@ func (x *ListBaselinesResponse) GetBaselines() []*Baseline {
 		return x.Baselines
 	}
 	return nil
+}
+
+func (x *ListBaselinesResponse) GetRelated() []*Baseline {
+	if x != nil {
+		return x.Related
+	}
+	return nil
+}
+
+func (x *ListBaselinesResponse) GetNext() int64 {
+	if x != nil {
+		return x.Next
+	}
+	return 0
 }
 
 type GetBaselineGraphRequest struct {
@@ -7015,8 +7070,10 @@ func (x *CreateBranchResponse) GetBranch() *Branch {
 }
 
 type ListBranchesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Namespace string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	// open | merged | abandoned: the branches of these statuses only (empty: every branch)
+	Status        []string `protobuf:"bytes,2,rep,name=status,proto3" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7058,9 +7115,20 @@ func (x *ListBranchesRequest) GetNamespace() string {
 	return ""
 }
 
+func (x *ListBranchesRequest) GetStatus() []string {
+	if x != nil {
+		return x.Status
+	}
+	return nil
+}
+
 type ListBranchesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Branches      []*Branch              `protobuf:"bytes,1,rep,name=branches,proto3" json:"branches,omitempty"`
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Branches []*Branch              `protobuf:"bytes,1,rep,name=branches,proto3" json:"branches,omitempty"`
+	// the headers of the heads of the branches (ADR 0140)
+	Heads []*Baseline `protobuf:"bytes,2,rep,name=heads,proto3" json:"heads,omitempty"`
+	// the number of baselines of each branch
+	Counts        map[string]int32 `protobuf:"bytes,3,rep,name=counts,proto3" json:"counts,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"varint,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7098,6 +7166,20 @@ func (*ListBranchesResponse) Descriptor() ([]byte, []int) {
 func (x *ListBranchesResponse) GetBranches() []*Branch {
 	if x != nil {
 		return x.Branches
+	}
+	return nil
+}
+
+func (x *ListBranchesResponse) GetHeads() []*Baseline {
+	if x != nil {
+		return x.Heads
+	}
+	return nil
+}
+
+func (x *ListBranchesResponse) GetCounts() map[string]int32 {
+	if x != nil {
+		return x.Counts
 	}
 	return nil
 }
@@ -17729,11 +17811,17 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04tags\x18\x01 \x03(\v2\x12.goap.graph.v1.TagR\x04tags\"\"\n" +
 	"\x10DeleteTagRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x13\n" +
-	"\x11DeleteTagResponse\"4\n" +
+	"\x11DeleteTagResponse\"\x8c\x01\n" +
 	"\x14ListBaselinesRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"N\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
+	"\x06branch\x18\x02 \x01(\tR\x06branch\x12\x16\n" +
+	"\x06before\x18\x03 \x01(\x03R\x06before\x12\x14\n" +
+	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x10\n" +
+	"\x03ids\x18\x05 \x03(\tR\x03ids\"\x95\x01\n" +
 	"\x15ListBaselinesResponse\x125\n" +
-	"\tbaselines\x18\x01 \x03(\v2\x17.goap.graph.v1.BaselineR\tbaselines\")\n" +
+	"\tbaselines\x18\x01 \x03(\v2\x17.goap.graph.v1.BaselineR\tbaselines\x121\n" +
+	"\arelated\x18\x02 \x03(\v2\x17.goap.graph.v1.BaselineR\arelated\x12\x12\n" +
+	"\x04next\x18\x03 \x01(\x03R\x04next\")\n" +
 	"\x17GetBaselineGraphRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\xdf\x01\n" +
 	"\x18GetBaselineGraphResponse\x123\n" +
@@ -18092,11 +18180,17 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\tnamespace\x18\x04 \x01(\tR\tnamespace\x12 \n" +
 	"\vdescription\x18\x05 \x01(\tR\vdescription\"E\n" +
 	"\x14CreateBranchResponse\x12-\n" +
-	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\"3\n" +
+	"\x06branch\x18\x01 \x01(\v2\x15.goap.graph.v1.BranchR\x06branch\"K\n" +
 	"\x13ListBranchesRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\"I\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
+	"\x06status\x18\x02 \x03(\tR\x06status\"\xfc\x01\n" +
 	"\x14ListBranchesResponse\x121\n" +
-	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\"e\n" +
+	"\bbranches\x18\x01 \x03(\v2\x15.goap.graph.v1.BranchR\bbranches\x12-\n" +
+	"\x05heads\x18\x02 \x03(\v2\x17.goap.graph.v1.BaselineR\x05heads\x12G\n" +
+	"\x06counts\x18\x03 \x03(\v2/.goap.graph.v1.ListBranchesResponse.CountsEntryR\x06counts\x1a9\n" +
+	"\vCountsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x05R\x05value:\x028\x01\"e\n" +
 	"\x10GetBranchRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12\x1f\n" +
@@ -19043,7 +19137,7 @@ func file_goap_graph_v1_graph_proto_rawDescGZIP() []byte {
 	return file_goap_graph_v1_graph_proto_rawDescData
 }
 
-var file_goap_graph_v1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 274)
+var file_goap_graph_v1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 275)
 var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*RepublishIndexRequest)(nil),          // 0: goap.graph.v1.RepublishIndexRequest
 	(*RepublishIndexResponse)(nil),         // 1: goap.graph.v1.RepublishIndexResponse
@@ -19313,478 +19407,482 @@ var file_goap_graph_v1_graph_proto_goTypes = []any{
 	(*ListDecisionPointsResponse)(nil),     // 265: goap.graph.v1.ListDecisionPointsResponse
 	nil,                                    // 266: goap.graph.v1.Baseline.NodesEntry
 	nil,                                    // 267: goap.graph.v1.ListChangeLogResponse.CountsEntry
-	nil,                                    // 268: goap.graph.v1.MergeBranchRequest.ResolutionsEntry
-	nil,                                    // 269: goap.graph.v1.ExecutionRecord.BeforeEntry
-	nil,                                    // 270: goap.graph.v1.ExecutionRecord.AfterEntry
-	nil,                                    // 271: goap.graph.v1.MergeChangeRequest.ResolutionsEntry
-	nil,                                    // 272: goap.graph.v1.OptionNode.OptionsEntry
-	nil,                                    // 273: goap.graph.v1.OptionNode.PropsEntry
-	(*structpb.Struct)(nil),                // 274: google.protobuf.Struct
-	(*timestamppb.Timestamp)(nil),          // 275: google.protobuf.Timestamp
-	(*structpb.Value)(nil),                 // 276: google.protobuf.Value
+	nil,                                    // 268: goap.graph.v1.ListBranchesResponse.CountsEntry
+	nil,                                    // 269: goap.graph.v1.MergeBranchRequest.ResolutionsEntry
+	nil,                                    // 270: goap.graph.v1.ExecutionRecord.BeforeEntry
+	nil,                                    // 271: goap.graph.v1.ExecutionRecord.AfterEntry
+	nil,                                    // 272: goap.graph.v1.MergeChangeRequest.ResolutionsEntry
+	nil,                                    // 273: goap.graph.v1.OptionNode.OptionsEntry
+	nil,                                    // 274: goap.graph.v1.OptionNode.PropsEntry
+	(*structpb.Struct)(nil),                // 275: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),          // 276: google.protobuf.Timestamp
+	(*structpb.Value)(nil),                 // 277: google.protobuf.Value
 }
 var file_goap_graph_v1_graph_proto_depIdxs = []int32{
-	274, // 0: goap.graph.v1.Node.props:type_name -> google.protobuf.Struct
-	275, // 1: goap.graph.v1.Node.created_at:type_name -> google.protobuf.Timestamp
+	275, // 0: goap.graph.v1.Node.props:type_name -> google.protobuf.Struct
+	276, // 1: goap.graph.v1.Node.created_at:type_name -> google.protobuf.Timestamp
 	2,   // 2: goap.graph.v1.Node.origins:type_name -> goap.graph.v1.NodeRef
 	2,   // 3: goap.graph.v1.Link.from:type_name -> goap.graph.v1.NodeRef
 	2,   // 4: goap.graph.v1.Link.to:type_name -> goap.graph.v1.NodeRef
-	274, // 5: goap.graph.v1.Link.props:type_name -> google.protobuf.Struct
+	275, // 5: goap.graph.v1.Link.props:type_name -> google.protobuf.Struct
 	3,   // 6: goap.graph.v1.NodeView.node:type_name -> goap.graph.v1.Node
 	4,   // 7: goap.graph.v1.NodeView.out:type_name -> goap.graph.v1.Link
 	4,   // 8: goap.graph.v1.NodeView.in:type_name -> goap.graph.v1.Link
 	266, // 9: goap.graph.v1.Baseline.nodes:type_name -> goap.graph.v1.Baseline.NodesEntry
-	275, // 10: goap.graph.v1.Baseline.created_at:type_name -> google.protobuf.Timestamp
+	276, // 10: goap.graph.v1.Baseline.created_at:type_name -> google.protobuf.Timestamp
 	7,   // 11: goap.graph.v1.ChangeItem.decision:type_name -> goap.graph.v1.Decision
-	274, // 12: goap.graph.v1.ChangeItem.data:type_name -> google.protobuf.Struct
-	275, // 13: goap.graph.v1.ChangeItem.created_at:type_name -> google.protobuf.Timestamp
+	275, // 12: goap.graph.v1.ChangeItem.data:type_name -> google.protobuf.Struct
+	276, // 13: goap.graph.v1.ChangeItem.created_at:type_name -> google.protobuf.Timestamp
 	214, // 14: goap.graph.v1.ChangeItem.flow_event:type_name -> goap.graph.v1.FlowEvent
 	252, // 15: goap.graph.v1.ChangeItem.decision_event:type_name -> goap.graph.v1.DecisionEvent
-	274, // 16: goap.graph.v1.Change.data:type_name -> google.protobuf.Struct
+	275, // 16: goap.graph.v1.Change.data:type_name -> google.protobuf.Struct
 	8,   // 17: goap.graph.v1.Change.items:type_name -> goap.graph.v1.ChangeItem
-	275, // 18: goap.graph.v1.Change.created_at:type_name -> google.protobuf.Timestamp
+	276, // 18: goap.graph.v1.Change.created_at:type_name -> google.protobuf.Timestamp
 	12,  // 19: goap.graph.v1.Change.nodes:type_name -> goap.graph.v1.ChangeImpact
 	10,  // 20: goap.graph.v1.Change.guardians:type_name -> goap.graph.v1.GuardianRef
-	275, // 21: goap.graph.v1.Review.at:type_name -> google.protobuf.Timestamp
+	276, // 21: goap.graph.v1.Review.at:type_name -> google.protobuf.Timestamp
 	2,   // 22: goap.graph.v1.ChangeImpact.pre:type_name -> goap.graph.v1.NodeRef
 	2,   // 23: goap.graph.v1.ChangeImpact.post:type_name -> goap.graph.v1.NodeRef
 	2,   // 24: goap.graph.v1.ChangeImpact.landed:type_name -> goap.graph.v1.NodeRef
 	11,  // 25: goap.graph.v1.ChangeImpact.reviews:type_name -> goap.graph.v1.Review
-	275, // 26: goap.graph.v1.ChangeImpact.created_at:type_name -> google.protobuf.Timestamp
+	276, // 26: goap.graph.v1.ChangeImpact.created_at:type_name -> google.protobuf.Timestamp
 	13,  // 27: goap.graph.v1.ChangeImpact.validation:type_name -> goap.graph.v1.ImpactValidation
 	2,   // 28: goap.graph.v1.GetNodeRequest.ref:type_name -> goap.graph.v1.NodeRef
 	5,   // 29: goap.graph.v1.GetNodeResponse.view:type_name -> goap.graph.v1.NodeView
-	275, // 30: goap.graph.v1.Tag.created_at:type_name -> google.protobuf.Timestamp
+	276, // 30: goap.graph.v1.Tag.created_at:type_name -> google.protobuf.Timestamp
 	16,  // 31: goap.graph.v1.TagChangeResponse.tag:type_name -> goap.graph.v1.Tag
 	16,  // 32: goap.graph.v1.ListTagsResponse.tags:type_name -> goap.graph.v1.Tag
 	6,   // 33: goap.graph.v1.ListBaselinesResponse.baselines:type_name -> goap.graph.v1.Baseline
-	6,   // 34: goap.graph.v1.GetBaselineGraphResponse.baseline:type_name -> goap.graph.v1.Baseline
-	3,   // 35: goap.graph.v1.GetBaselineGraphResponse.nodes:type_name -> goap.graph.v1.Node
-	4,   // 36: goap.graph.v1.GetBaselineGraphResponse.links:type_name -> goap.graph.v1.Link
-	4,   // 37: goap.graph.v1.GetBaselineGraphResponse.suspect_links:type_name -> goap.graph.v1.Link
-	3,   // 38: goap.graph.v1.ListBaselineNodesResponse.nodes:type_name -> goap.graph.v1.Node
-	28,  // 39: goap.graph.v1.ListBaselineNodesResponse.types:type_name -> goap.graph.v1.TypeCount
-	6,   // 40: goap.graph.v1.ListBaselineNodesResponse.baseline:type_name -> goap.graph.v1.Baseline
-	4,   // 41: goap.graph.v1.ListBaselineLinksResponse.links:type_name -> goap.graph.v1.Link
-	28,  // 42: goap.graph.v1.ListBaselineLinksResponse.types:type_name -> goap.graph.v1.TypeCount
-	6,   // 43: goap.graph.v1.ListBaselineLinksResponse.baseline:type_name -> goap.graph.v1.Baseline
-	3,   // 44: goap.graph.v1.GetNodeNeighbourhoodResponse.node:type_name -> goap.graph.v1.Node
-	3,   // 45: goap.graph.v1.GetNodeNeighbourhoodResponse.nodes:type_name -> goap.graph.v1.Node
-	4,   // 46: goap.graph.v1.GetNodeNeighbourhoodResponse.links:type_name -> goap.graph.v1.Link
-	275, // 47: goap.graph.v1.ImpactEvent.at:type_name -> google.protobuf.Timestamp
-	12,  // 48: goap.graph.v1.ImpactEvent.state:type_name -> goap.graph.v1.ChangeImpact
-	2,   // 49: goap.graph.v1.ImpactEvent.post:type_name -> goap.graph.v1.NodeRef
-	2,   // 50: goap.graph.v1.ImpactEvent.pre:type_name -> goap.graph.v1.NodeRef
-	2,   // 51: goap.graph.v1.ImpactEvent.landed:type_name -> goap.graph.v1.NodeRef
-	11,  // 52: goap.graph.v1.ImpactEvent.review:type_name -> goap.graph.v1.Review
-	275, // 53: goap.graph.v1.LogEntry.at:type_name -> google.protobuf.Timestamp
-	35,  // 54: goap.graph.v1.ListChangeLogResponse.entries:type_name -> goap.graph.v1.LogEntry
-	267, // 55: goap.graph.v1.ListChangeLogResponse.counts:type_name -> goap.graph.v1.ListChangeLogResponse.CountsEntry
-	9,   // 56: goap.graph.v1.ImportGraphResponse.change:type_name -> goap.graph.v1.Change
-	34,  // 57: goap.graph.v1.ListChangeEventsResponse.events:type_name -> goap.graph.v1.ImpactEvent
-	52,  // 58: goap.graph.v1.ListItemTypesResponse.types:type_name -> goap.graph.v1.ItemTypeInfo
-	274, // 59: goap.graph.v1.Structure.bootstrap:type_name -> google.protobuf.Struct
-	58,  // 60: goap.graph.v1.GetStructuresResponse.structures:type_name -> goap.graph.v1.Structure
-	274, // 61: goap.graph.v1.CreateChangeRequest.data:type_name -> google.protobuf.Struct
-	9,   // 62: goap.graph.v1.CreateChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 63: goap.graph.v1.GetChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 64: goap.graph.v1.ListChangesResponse.changes:type_name -> goap.graph.v1.Change
-	274, // 65: goap.graph.v1.UpdateChangeRequest.data:type_name -> google.protobuf.Struct
-	9,   // 66: goap.graph.v1.UpdateChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 67: goap.graph.v1.MoveChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 68: goap.graph.v1.AttachChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 69: goap.graph.v1.DetachChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 70: goap.graph.v1.SetChangeDependenciesResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 71: goap.graph.v1.UpgradeChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 72: goap.graph.v1.SetChangeMethodologyResponse.change:type_name -> goap.graph.v1.Change
-	81,  // 73: goap.graph.v1.GetChangeDependenciesResponse.depends_on:type_name -> goap.graph.v1.Dependency
-	81,  // 74: goap.graph.v1.GetChangeDependenciesResponse.dependents:type_name -> goap.graph.v1.Dependency
-	81,  // 75: goap.graph.v1.GetChangeDependenciesResponse.order:type_name -> goap.graph.v1.Dependency
-	8,   // 76: goap.graph.v1.AddItemsRequest.items:type_name -> goap.graph.v1.ChangeItem
-	8,   // 77: goap.graph.v1.AddItemsResponse.items:type_name -> goap.graph.v1.ChangeItem
-	9,   // 78: goap.graph.v1.GetBlackboardResponse.change:type_name -> goap.graph.v1.Change
-	5,   // 79: goap.graph.v1.GetBlackboardResponse.nodes:type_name -> goap.graph.v1.NodeView
-	3,   // 80: goap.graph.v1.GetBlackboardResponse.neighbors:type_name -> goap.graph.v1.Node
-	216, // 81: goap.graph.v1.GetBlackboardResponse.options:type_name -> goap.graph.v1.Flow
-	255, // 82: goap.graph.v1.GetBlackboardResponse.decision_points:type_name -> goap.graph.v1.DecisionPoint
-	275, // 83: goap.graph.v1.GetBlackboardResponse.at:type_name -> google.protobuf.Timestamp
-	6,   // 84: goap.graph.v1.CommitChangeResponse.baseline:type_name -> goap.graph.v1.Baseline
-	9,   // 85: goap.graph.v1.TransitionChangeResponse.change:type_name -> goap.graph.v1.Change
-	9,   // 86: goap.graph.v1.DeleteChangeResponse.change:type_name -> goap.graph.v1.Change
-	274, // 87: goap.graph.v1.SettingEdit.props:type_name -> google.protobuf.Struct
-	97,  // 88: goap.graph.v1.StageSettingsRequest.edits:type_name -> goap.graph.v1.SettingEdit
-	274, // 89: goap.graph.v1.StagedSetting.props:type_name -> google.protobuf.Struct
-	99,  // 90: goap.graph.v1.PendingSettings.nodes:type_name -> goap.graph.v1.StagedSetting
-	100, // 91: goap.graph.v1.PendingSettingsResponse.changes:type_name -> goap.graph.v1.PendingSettings
-	6,   // 92: goap.graph.v1.ApplyChangeResponse.baseline:type_name -> goap.graph.v1.Baseline
-	275, // 93: goap.graph.v1.Branch.created_at:type_name -> google.protobuf.Timestamp
-	103, // 94: goap.graph.v1.CreateBranchResponse.branch:type_name -> goap.graph.v1.Branch
-	103, // 95: goap.graph.v1.ListBranchesResponse.branches:type_name -> goap.graph.v1.Branch
-	103, // 96: goap.graph.v1.GetBranchResponse.branch:type_name -> goap.graph.v1.Branch
-	6,   // 97: goap.graph.v1.GetBranchResponse.head:type_name -> goap.graph.v1.Baseline
-	3,   // 98: goap.graph.v1.ListNodeVersionsResponse.versions:type_name -> goap.graph.v1.Node
-	2,   // 99: goap.graph.v1.MergeCandidate.ancestor:type_name -> goap.graph.v1.NodeRef
-	2,   // 100: goap.graph.v1.MergeCandidate.ours:type_name -> goap.graph.v1.NodeRef
-	2,   // 101: goap.graph.v1.MergeCandidate.theirs:type_name -> goap.graph.v1.NodeRef
-	274, // 102: goap.graph.v1.MergeCandidate.base:type_name -> google.protobuf.Struct
-	274, // 103: goap.graph.v1.MergeCandidate.ours_props:type_name -> google.protobuf.Struct
-	274, // 104: goap.graph.v1.MergeCandidate.theirs_props:type_name -> google.protobuf.Struct
-	274, // 105: goap.graph.v1.MergeCandidate.merged:type_name -> google.protobuf.Struct
-	116, // 106: goap.graph.v1.MergePlan.candidates:type_name -> goap.graph.v1.MergeCandidate
-	128, // 107: goap.graph.v1.DiffBaselinesResponse.nodes:type_name -> goap.graph.v1.BaselineDiff
-	124, // 108: goap.graph.v1.DiffBaselinesResponse.changes_added:type_name -> goap.graph.v1.StackChange
-	124, // 109: goap.graph.v1.DiffBaselinesResponse.changes_removed:type_name -> goap.graph.v1.StackChange
-	123, // 110: goap.graph.v1.GetChangeStackResponse.stack:type_name -> goap.graph.v1.ChangeStack
-	124, // 111: goap.graph.v1.ChangeStack.changes:type_name -> goap.graph.v1.StackChange
-	125, // 112: goap.graph.v1.ChangeStack.versions:type_name -> goap.graph.v1.VersionStep
-	127, // 113: goap.graph.v1.ChangeStack.baselines:type_name -> goap.graph.v1.BaselineStep
-	126, // 114: goap.graph.v1.VersionStep.joined:type_name -> goap.graph.v1.VersionJoin
-	275, // 115: goap.graph.v1.VersionStep.created_at:type_name -> google.protobuf.Timestamp
-	275, // 116: goap.graph.v1.BaselineStep.created_at:type_name -> google.protobuf.Timestamp
-	3,   // 117: goap.graph.v1.BaselineDiff.from:type_name -> goap.graph.v1.Node
-	3,   // 118: goap.graph.v1.BaselineDiff.to:type_name -> goap.graph.v1.Node
-	117, // 119: goap.graph.v1.PlanMergeResponse.plan:type_name -> goap.graph.v1.MergePlan
-	274, // 120: goap.graph.v1.Resolution.props:type_name -> google.protobuf.Struct
-	268, // 121: goap.graph.v1.MergeBranchRequest.resolutions:type_name -> goap.graph.v1.MergeBranchRequest.ResolutionsEntry
-	9,   // 122: goap.graph.v1.MergeBranchResponse.change:type_name -> goap.graph.v1.Change
-	6,   // 123: goap.graph.v1.MergeBranchResponse.baseline:type_name -> goap.graph.v1.Baseline
-	117, // 124: goap.graph.v1.MergeBranchResponse.plan:type_name -> goap.graph.v1.MergePlan
-	35,  // 125: goap.graph.v1.AppendLogRequest.entries:type_name -> goap.graph.v1.LogEntry
-	269, // 126: goap.graph.v1.ExecutionRecord.before:type_name -> goap.graph.v1.ExecutionRecord.BeforeEntry
-	270, // 127: goap.graph.v1.ExecutionRecord.after:type_name -> goap.graph.v1.ExecutionRecord.AfterEntry
-	135, // 128: goap.graph.v1.ExecutionRecord.model_calls:type_name -> goap.graph.v1.ModelCall
-	136, // 129: goap.graph.v1.ExecutionRecord.tool_calls:type_name -> goap.graph.v1.ToolUse
-	274, // 130: goap.graph.v1.ExecutionRecord.data:type_name -> google.protobuf.Struct
-	275, // 131: goap.graph.v1.ExecutionRecord.started_at:type_name -> google.protobuf.Timestamp
-	275, // 132: goap.graph.v1.ExecutionRecord.ended_at:type_name -> google.protobuf.Timestamp
-	2,   // 133: goap.graph.v1.ExecutionRecord.reads:type_name -> goap.graph.v1.NodeRef
-	137, // 134: goap.graph.v1.ListExecutionsResponse.records:type_name -> goap.graph.v1.ExecutionRecord
-	2,   // 135: goap.graph.v1.LinkEdit.to:type_name -> goap.graph.v1.NodeRef
-	274, // 136: goap.graph.v1.LinkEdit.props:type_name -> google.protobuf.Struct
-	2,   // 137: goap.graph.v1.NodeEdit.pre:type_name -> goap.graph.v1.NodeRef
-	274, // 138: goap.graph.v1.NodeEdit.props:type_name -> google.protobuf.Struct
-	140, // 139: goap.graph.v1.NodeEdit.links:type_name -> goap.graph.v1.LinkEdit
-	274, // 140: goap.graph.v1.CommitEditsRequest.data:type_name -> google.protobuf.Struct
-	141, // 141: goap.graph.v1.CommitEditsRequest.edits:type_name -> goap.graph.v1.NodeEdit
-	143, // 142: goap.graph.v1.CommitEditsRequest.events:type_name -> goap.graph.v1.CarriedEvent
-	6,   // 143: goap.graph.v1.CommitEditsResponse.baseline:type_name -> goap.graph.v1.Baseline
-	12,  // 144: goap.graph.v1.ProposeImpactRequest.nodes:type_name -> goap.graph.v1.ChangeImpact
-	12,  // 145: goap.graph.v1.ProposeImpactResponse.nodes:type_name -> goap.graph.v1.ChangeImpact
-	2,   // 146: goap.graph.v1.NodeLinkWrite.to:type_name -> goap.graph.v1.NodeRef
-	274, // 147: goap.graph.v1.NodeLinkWrite.props:type_name -> google.protobuf.Struct
-	274, // 148: goap.graph.v1.ImpactNodeCreateRequest.props:type_name -> google.protobuf.Struct
-	147, // 149: goap.graph.v1.ImpactNodeCreateRequest.links:type_name -> goap.graph.v1.NodeLinkWrite
-	274, // 150: goap.graph.v1.NodeCreateSpec.props:type_name -> google.protobuf.Struct
-	147, // 151: goap.graph.v1.NodeCreateSpec.links:type_name -> goap.graph.v1.NodeLinkWrite
-	150, // 152: goap.graph.v1.ImpactNodeMergeRequest.sources:type_name -> goap.graph.v1.NodeName
-	149, // 153: goap.graph.v1.ImpactNodeMergeRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
-	150, // 154: goap.graph.v1.ImpactNodeSplitRequest.source:type_name -> goap.graph.v1.NodeName
-	149, // 155: goap.graph.v1.ImpactNodeSplitRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
-	2,   // 156: goap.graph.v1.SuspectLink.from:type_name -> goap.graph.v1.NodeRef
-	2,   // 157: goap.graph.v1.SuspectLink.to:type_name -> goap.graph.v1.NodeRef
-	12,  // 158: goap.graph.v1.ImpactNodeRestructureResponse.successors:type_name -> goap.graph.v1.ChangeImpact
-	12,  // 159: goap.graph.v1.ImpactNodeRestructureResponse.sources:type_name -> goap.graph.v1.ChangeImpact
-	12,  // 160: goap.graph.v1.ImpactNodeRestructureResponse.parents:type_name -> goap.graph.v1.ChangeImpact
-	153, // 161: goap.graph.v1.ImpactNodeRestructureResponse.suspect:type_name -> goap.graph.v1.SuspectLink
-	2,   // 162: goap.graph.v1.DerivedNodesRequest.ref:type_name -> goap.graph.v1.NodeRef
-	3,   // 163: goap.graph.v1.DerivedNodesResponse.nodes:type_name -> goap.graph.v1.Node
-	12,  // 164: goap.graph.v1.ImpactNodeCreateResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	12,  // 165: goap.graph.v1.ImpactNodeCheckoutResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	274, // 166: goap.graph.v1.ImpactNodeUpdateRequest.props:type_name -> google.protobuf.Struct
-	12,  // 167: goap.graph.v1.ImpactNodeUpdateResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	2,   // 168: goap.graph.v1.ImpactLinkCreateRequest.to:type_name -> goap.graph.v1.NodeRef
-	274, // 169: goap.graph.v1.ImpactLinkCreateRequest.props:type_name -> google.protobuf.Struct
-	4,   // 170: goap.graph.v1.ImpactLinkCreateResponse.link:type_name -> goap.graph.v1.Link
-	274, // 171: goap.graph.v1.ImpactLinkUpdateRequest.props:type_name -> google.protobuf.Struct
-	4,   // 172: goap.graph.v1.ImpactLinkUpdateResponse.link:type_name -> goap.graph.v1.Link
-	12,  // 173: goap.graph.v1.ImpactNodeTransitionResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	12,  // 174: goap.graph.v1.ImpactNodeCancelResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	177, // 175: goap.graph.v1.RebaseChangeResponse.impacts:type_name -> goap.graph.v1.RebasedImpact
-	12,  // 176: goap.graph.v1.ImpactNodeResolveResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	184, // 177: goap.graph.v1.GetRebaseStateResponse.conflicts:type_name -> goap.graph.v1.ImpactConflicts
-	12,  // 178: goap.graph.v1.ImpactNodeReviewResponse.node:type_name -> goap.graph.v1.ChangeImpact
-	188, // 179: goap.graph.v1.ImpactNodeReviewBatchRequest.verdicts:type_name -> goap.graph.v1.ImpactVerdict
-	8,   // 180: goap.graph.v1.ImpactNodeReviewBatchRequest.item:type_name -> goap.graph.v1.ChangeItem
-	12,  // 181: goap.graph.v1.ImpactNodeReviewBatchResponse.nodes:type_name -> goap.graph.v1.ChangeImpact
-	191, // 182: goap.graph.v1.ReviewRecord.entries:type_name -> goap.graph.v1.ReviewEntry
-	275, // 183: goap.graph.v1.ReviewRecord.submitted_at:type_name -> google.protobuf.Timestamp
-	194, // 184: goap.graph.v1.ReviewUpdateRequest.entries:type_name -> goap.graph.v1.ReviewEntryEdit
-	192, // 185: goap.graph.v1.ReviewResponse.review:type_name -> goap.graph.v1.ReviewRecord
-	2,   // 186: goap.graph.v1.GetChangeImpactsResponse.nodes:type_name -> goap.graph.v1.NodeRef
-	9,   // 187: goap.graph.v1.ListNodeChangesResponse.changes:type_name -> goap.graph.v1.Change
-	271, // 188: goap.graph.v1.MergeChangeRequest.resolutions:type_name -> goap.graph.v1.MergeChangeRequest.ResolutionsEntry
-	9,   // 189: goap.graph.v1.MergeChangeResponse.change:type_name -> goap.graph.v1.Change
-	2,   // 190: goap.graph.v1.SharedNode.node:type_name -> goap.graph.v1.NodeRef
-	208, // 191: goap.graph.v1.GetSharedNodesResponse.nodes:type_name -> goap.graph.v1.SharedNode
-	9,   // 192: goap.graph.v1.SplitChangeResponse.changes:type_name -> goap.graph.v1.Change
-	9,   // 193: goap.graph.v1.ListSubChangesResponse.changes:type_name -> goap.graph.v1.Change
-	215, // 194: goap.graph.v1.FlowEvent.option:type_name -> goap.graph.v1.Option
-	274, // 195: goap.graph.v1.FlowEvent.origin:type_name -> google.protobuf.Struct
-	275, // 196: goap.graph.v1.Flow.opened_at:type_name -> google.protobuf.Timestamp
-	275, // 197: goap.graph.v1.Flow.decided_at:type_name -> google.protobuf.Timestamp
-	215, // 198: goap.graph.v1.Flow.option:type_name -> goap.graph.v1.Option
-	274, // 199: goap.graph.v1.Flow.origin:type_name -> google.protobuf.Struct
-	274, // 200: goap.graph.v1.OpenFlowRequest.origin:type_name -> google.protobuf.Struct
-	8,   // 201: goap.graph.v1.OpenFlowRequest.items:type_name -> goap.graph.v1.ChangeItem
-	216, // 202: goap.graph.v1.OpenFlowResponse.flow:type_name -> goap.graph.v1.Flow
-	216, // 203: goap.graph.v1.AdoptFlowResponse.flow:type_name -> goap.graph.v1.Flow
-	216, // 204: goap.graph.v1.DiscardFlowResponse.flow:type_name -> goap.graph.v1.Flow
-	216, // 205: goap.graph.v1.ListFlowsResponse.flows:type_name -> goap.graph.v1.Flow
-	225, // 206: goap.graph.v1.ValidateBoardResponse.issues:type_name -> goap.graph.v1.BoardIssue
-	216, // 207: goap.graph.v1.OpenOptionResponse.option:type_name -> goap.graph.v1.Flow
-	216, // 208: goap.graph.v1.EvaluateOptionResponse.option:type_name -> goap.graph.v1.Flow
-	216, // 209: goap.graph.v1.SelectOptionResponse.option:type_name -> goap.graph.v1.Flow
-	216, // 210: goap.graph.v1.RejectOptionResponse.option:type_name -> goap.graph.v1.Flow
-	216, // 211: goap.graph.v1.ListOptionsResponse.options:type_name -> goap.graph.v1.Flow
-	2,   // 212: goap.graph.v1.OptionNode.main:type_name -> goap.graph.v1.NodeRef
-	272, // 213: goap.graph.v1.OptionNode.options:type_name -> goap.graph.v1.OptionNode.OptionsEntry
-	273, // 214: goap.graph.v1.OptionNode.props:type_name -> goap.graph.v1.OptionNode.PropsEntry
-	216, // 215: goap.graph.v1.CompareOptionsResponse.options:type_name -> goap.graph.v1.Flow
-	241, // 216: goap.graph.v1.CompareOptionsResponse.nodes:type_name -> goap.graph.v1.OptionNode
-	276, // 217: goap.graph.v1.FieldChange.old:type_name -> google.protobuf.Value
-	276, // 218: goap.graph.v1.FieldChange.new:type_name -> google.protobuf.Value
-	245, // 219: goap.graph.v1.ImpactDiff.left:type_name -> goap.graph.v1.ImpactSide
-	245, // 220: goap.graph.v1.ImpactDiff.right:type_name -> goap.graph.v1.ImpactSide
-	244, // 221: goap.graph.v1.ImpactDiff.changes:type_name -> goap.graph.v1.FieldChange
-	246, // 222: goap.graph.v1.DiffFlowsResponse.impacts:type_name -> goap.graph.v1.ImpactDiff
-	6,   // 223: goap.graph.v1.GetChangeViewResponse.baseline:type_name -> goap.graph.v1.Baseline
-	3,   // 224: goap.graph.v1.GetChangeGraphResponse.nodes:type_name -> goap.graph.v1.Node
-	4,   // 225: goap.graph.v1.GetChangeGraphResponse.links:type_name -> goap.graph.v1.Link
-	274, // 226: goap.graph.v1.DecisionEvent.policy:type_name -> google.protobuf.Struct
-	275, // 227: goap.graph.v1.Question.asked_at:type_name -> google.protobuf.Timestamp
-	275, // 228: goap.graph.v1.Ruling.at:type_name -> google.protobuf.Timestamp
-	275, // 229: goap.graph.v1.DecisionPoint.opened_at:type_name -> google.protobuf.Timestamp
-	253, // 230: goap.graph.v1.DecisionPoint.questions:type_name -> goap.graph.v1.Question
-	254, // 231: goap.graph.v1.DecisionPoint.ruling:type_name -> goap.graph.v1.Ruling
-	275, // 232: goap.graph.v1.DecisionPoint.decided_at:type_name -> google.protobuf.Timestamp
-	274, // 233: goap.graph.v1.DecisionPoint.policy:type_name -> google.protobuf.Struct
-	274, // 234: goap.graph.v1.OpenDecisionRequest.policy:type_name -> google.protobuf.Struct
-	255, // 235: goap.graph.v1.OpenDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	255, // 236: goap.graph.v1.RuleDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	255, // 237: goap.graph.v1.AnswerQuestionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	255, // 238: goap.graph.v1.RatifyDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
-	255, // 239: goap.graph.v1.ListDecisionPointsResponse.points:type_name -> goap.graph.v1.DecisionPoint
-	130, // 240: goap.graph.v1.MergeBranchRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
-	130, // 241: goap.graph.v1.MergeChangeRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
-	2,   // 242: goap.graph.v1.OptionNode.OptionsEntry.value:type_name -> goap.graph.v1.NodeRef
-	274, // 243: goap.graph.v1.OptionNode.PropsEntry.value:type_name -> google.protobuf.Struct
-	14,  // 244: goap.graph.v1.GraphService.GetNode:input_type -> goap.graph.v1.GetNodeRequest
-	23,  // 245: goap.graph.v1.GraphService.ListBaselines:input_type -> goap.graph.v1.ListBaselinesRequest
-	17,  // 246: goap.graph.v1.GraphService.TagChange:input_type -> goap.graph.v1.TagChangeRequest
-	19,  // 247: goap.graph.v1.GraphService.ListTags:input_type -> goap.graph.v1.ListTagsRequest
-	21,  // 248: goap.graph.v1.GraphService.DeleteTag:input_type -> goap.graph.v1.DeleteTagRequest
-	25,  // 249: goap.graph.v1.GraphService.GetBaselineGraph:input_type -> goap.graph.v1.GetBaselineGraphRequest
-	27,  // 250: goap.graph.v1.GraphService.ListBaselineNodes:input_type -> goap.graph.v1.ListBaselineNodesRequest
-	30,  // 251: goap.graph.v1.GraphService.ListBaselineLinks:input_type -> goap.graph.v1.ListBaselineLinksRequest
-	32,  // 252: goap.graph.v1.GraphService.GetNodeNeighbourhood:input_type -> goap.graph.v1.GetNodeNeighbourhoodRequest
-	48,  // 253: goap.graph.v1.GraphService.ListNamespaces:input_type -> goap.graph.v1.ListNamespacesRequest
-	50,  // 254: goap.graph.v1.GraphService.GetStructures:input_type -> goap.graph.v1.GetStructuresRequest
-	51,  // 255: goap.graph.v1.GraphService.ListItemTypes:input_type -> goap.graph.v1.ListItemTypesRequest
-	54,  // 256: goap.graph.v1.GraphService.IsAdminOnlyType:input_type -> goap.graph.v1.IsAdminOnlyTypeRequest
-	46,  // 257: goap.graph.v1.GraphService.ListChangeEvents:input_type -> goap.graph.v1.ListChangeEventsRequest
-	36,  // 258: goap.graph.v1.GraphService.ListChangeLog:input_type -> goap.graph.v1.ListChangeLogRequest
-	38,  // 259: goap.graph.v1.GraphService.ExportChangeProvenance:input_type -> goap.graph.v1.ExportChangeProvenanceRequest
-	40,  // 260: goap.graph.v1.GraphService.ExportGraph:input_type -> goap.graph.v1.ExportGraphRequest
-	42,  // 261: goap.graph.v1.GraphService.ExportGraphOkf:input_type -> goap.graph.v1.ExportGraphOkfRequest
-	44,  // 262: goap.graph.v1.GraphService.ImportGraph:input_type -> goap.graph.v1.ImportGraphRequest
-	56,  // 263: goap.graph.v1.GraphService.LoadDemoData:input_type -> goap.graph.v1.LoadDemoDataRequest
-	60,  // 264: goap.graph.v1.GraphService.CreateChange:input_type -> goap.graph.v1.CreateChangeRequest
-	62,  // 265: goap.graph.v1.GraphService.GetChange:input_type -> goap.graph.v1.GetChangeRequest
-	64,  // 266: goap.graph.v1.GraphService.ListChanges:input_type -> goap.graph.v1.ListChangesRequest
-	201, // 267: goap.graph.v1.GraphService.GetChangeImpacts:input_type -> goap.graph.v1.GetChangeImpactsRequest
-	203, // 268: goap.graph.v1.GraphService.ListNodeChanges:input_type -> goap.graph.v1.ListNodeChangesRequest
-	66,  // 269: goap.graph.v1.GraphService.UpdateChange:input_type -> goap.graph.v1.UpdateChangeRequest
-	68,  // 270: goap.graph.v1.GraphService.MoveChange:input_type -> goap.graph.v1.MoveChangeRequest
-	70,  // 271: goap.graph.v1.GraphService.AttachChange:input_type -> goap.graph.v1.AttachChangeRequest
-	72,  // 272: goap.graph.v1.GraphService.DetachChange:input_type -> goap.graph.v1.DetachChangeRequest
-	74,  // 273: goap.graph.v1.GraphService.SetChangeDependencies:input_type -> goap.graph.v1.SetChangeDependenciesRequest
-	80,  // 274: goap.graph.v1.GraphService.GetChangeDependencies:input_type -> goap.graph.v1.GetChangeDependenciesRequest
-	76,  // 275: goap.graph.v1.GraphService.UpgradeChange:input_type -> goap.graph.v1.UpgradeChangeRequest
-	78,  // 276: goap.graph.v1.GraphService.SetChangeMethodology:input_type -> goap.graph.v1.SetChangeMethodologyRequest
-	83,  // 277: goap.graph.v1.GraphService.AddItems:input_type -> goap.graph.v1.AddItemsRequest
-	145, // 278: goap.graph.v1.GraphService.ProposeImpact:input_type -> goap.graph.v1.ProposeImpactRequest
-	148, // 279: goap.graph.v1.GraphService.ImpactNodeCreate:input_type -> goap.graph.v1.ImpactNodeCreateRequest
-	158, // 280: goap.graph.v1.GraphService.ImpactNodeCheckout:input_type -> goap.graph.v1.ImpactNodeCheckoutRequest
-	160, // 281: goap.graph.v1.GraphService.ImpactNodeUpdate:input_type -> goap.graph.v1.ImpactNodeUpdateRequest
-	162, // 282: goap.graph.v1.GraphService.ImpactLinkCreate:input_type -> goap.graph.v1.ImpactLinkCreateRequest
-	164, // 283: goap.graph.v1.GraphService.ImpactLinkUpdate:input_type -> goap.graph.v1.ImpactLinkUpdateRequest
-	166, // 284: goap.graph.v1.GraphService.ImpactLinkDelete:input_type -> goap.graph.v1.ImpactLinkDeleteRequest
-	168, // 285: goap.graph.v1.GraphService.ImpactNodeTransition:input_type -> goap.graph.v1.ImpactNodeTransitionRequest
-	170, // 286: goap.graph.v1.GraphService.ImpactNodeCancel:input_type -> goap.graph.v1.ImpactNodeCancelRequest
-	151, // 287: goap.graph.v1.GraphService.ImpactNodeMerge:input_type -> goap.graph.v1.ImpactNodeMergeRequest
-	152, // 288: goap.graph.v1.GraphService.ImpactNodeSplit:input_type -> goap.graph.v1.ImpactNodeSplitRequest
-	172, // 289: goap.graph.v1.GraphService.WithdrawImpact:input_type -> goap.graph.v1.WithdrawImpactRequest
-	174, // 290: goap.graph.v1.GraphService.WithdrawImpacts:input_type -> goap.graph.v1.WithdrawImpactsRequest
-	176, // 291: goap.graph.v1.GraphService.RebaseChange:input_type -> goap.graph.v1.RebaseChangeRequest
-	179, // 292: goap.graph.v1.GraphService.ImpactNodeResolve:input_type -> goap.graph.v1.ImpactNodeResolveRequest
-	181, // 293: goap.graph.v1.GraphService.GetRebaseState:input_type -> goap.graph.v1.GetRebaseStateRequest
-	182, // 294: goap.graph.v1.GraphService.GetCommitState:input_type -> goap.graph.v1.GetCommitStateRequest
-	186, // 295: goap.graph.v1.GraphService.ImpactNodeReview:input_type -> goap.graph.v1.ImpactNodeReviewRequest
-	189, // 296: goap.graph.v1.GraphService.ImpactNodeReviewBatch:input_type -> goap.graph.v1.ImpactNodeReviewBatchRequest
-	193, // 297: goap.graph.v1.GraphService.ReviewOpen:input_type -> goap.graph.v1.ReviewOpenRequest
-	195, // 298: goap.graph.v1.GraphService.ReviewUpdate:input_type -> goap.graph.v1.ReviewUpdateRequest
-	196, // 299: goap.graph.v1.GraphService.ReviewSubmit:input_type -> goap.graph.v1.ReviewSubmitRequest
-	197, // 300: goap.graph.v1.GraphService.ReviewDiscard:input_type -> goap.graph.v1.ReviewDiscardRequest
-	199, // 301: goap.graph.v1.GraphService.ReopenChangeImpacts:input_type -> goap.graph.v1.ReopenChangeImpactsRequest
-	142, // 302: goap.graph.v1.GraphService.CommitEdits:input_type -> goap.graph.v1.CommitEditsRequest
-	85,  // 303: goap.graph.v1.GraphService.GetBlackboard:input_type -> goap.graph.v1.GetBlackboardRequest
-	87,  // 304: goap.graph.v1.GraphService.ApplyChange:input_type -> goap.graph.v1.ApplyChangeRequest
-	88,  // 305: goap.graph.v1.GraphService.CommitChange:input_type -> goap.graph.v1.CommitChangeRequest
-	90,  // 306: goap.graph.v1.GraphService.TransitionChange:input_type -> goap.graph.v1.TransitionChangeRequest
-	92,  // 307: goap.graph.v1.GraphService.DeleteChange:input_type -> goap.graph.v1.DeleteChangeRequest
-	94,  // 308: goap.graph.v1.GraphService.GetPendingSettings:input_type -> goap.graph.v1.GetPendingSettingsRequest
-	98,  // 309: goap.graph.v1.GraphService.StageSettings:input_type -> goap.graph.v1.StageSettingsRequest
-	95,  // 310: goap.graph.v1.GraphService.SaveSettings:input_type -> goap.graph.v1.SaveSettingsRequest
-	96,  // 311: goap.graph.v1.GraphService.DiscardSettings:input_type -> goap.graph.v1.DiscardSettingsRequest
-	104, // 312: goap.graph.v1.GraphService.CreateBranch:input_type -> goap.graph.v1.CreateBranchRequest
-	106, // 313: goap.graph.v1.GraphService.ListBranches:input_type -> goap.graph.v1.ListBranchesRequest
-	108, // 314: goap.graph.v1.GraphService.GetBranch:input_type -> goap.graph.v1.GetBranchRequest
-	110, // 315: goap.graph.v1.GraphService.SetBranchStatus:input_type -> goap.graph.v1.SetBranchStatusRequest
-	112, // 316: goap.graph.v1.GraphService.SetBranchDescription:input_type -> goap.graph.v1.SetBranchDescriptionRequest
-	114, // 317: goap.graph.v1.GraphService.ListNodeVersions:input_type -> goap.graph.v1.ListNodeVersionsRequest
-	155, // 318: goap.graph.v1.GraphService.DerivedNodes:input_type -> goap.graph.v1.DerivedNodesRequest
-	118, // 319: goap.graph.v1.GraphService.PlanMerge:input_type -> goap.graph.v1.PlanMergeRequest
-	131, // 320: goap.graph.v1.GraphService.MergeBranch:input_type -> goap.graph.v1.MergeBranchRequest
-	119, // 321: goap.graph.v1.GraphService.DiffBaselines:input_type -> goap.graph.v1.DiffBaselinesRequest
-	121, // 322: goap.graph.v1.GraphService.GetChangeStack:input_type -> goap.graph.v1.GetChangeStackRequest
-	205, // 323: goap.graph.v1.GraphService.MergeChange:input_type -> goap.graph.v1.MergeChangeRequest
-	207, // 324: goap.graph.v1.GraphService.GetSharedNodes:input_type -> goap.graph.v1.GetSharedNodesRequest
-	210, // 325: goap.graph.v1.GraphService.SplitChange:input_type -> goap.graph.v1.SplitChangeRequest
-	212, // 326: goap.graph.v1.GraphService.ListSubChanges:input_type -> goap.graph.v1.ListSubChangesRequest
-	217, // 327: goap.graph.v1.GraphService.OpenFlow:input_type -> goap.graph.v1.OpenFlowRequest
-	219, // 328: goap.graph.v1.GraphService.AdoptFlow:input_type -> goap.graph.v1.AdoptFlowRequest
-	221, // 329: goap.graph.v1.GraphService.DiscardFlow:input_type -> goap.graph.v1.DiscardFlowRequest
-	223, // 330: goap.graph.v1.GraphService.ListFlows:input_type -> goap.graph.v1.ListFlowsRequest
-	226, // 331: goap.graph.v1.GraphService.ValidateBoard:input_type -> goap.graph.v1.ValidateBoardRequest
-	228, // 332: goap.graph.v1.GraphService.OpenOption:input_type -> goap.graph.v1.OpenOptionRequest
-	230, // 333: goap.graph.v1.GraphService.ActivateOption:input_type -> goap.graph.v1.ActivateOptionRequest
-	232, // 334: goap.graph.v1.GraphService.EvaluateOption:input_type -> goap.graph.v1.EvaluateOptionRequest
-	234, // 335: goap.graph.v1.GraphService.SelectOption:input_type -> goap.graph.v1.SelectOptionRequest
-	236, // 336: goap.graph.v1.GraphService.RejectOption:input_type -> goap.graph.v1.RejectOptionRequest
-	238, // 337: goap.graph.v1.GraphService.ListOptions:input_type -> goap.graph.v1.ListOptionsRequest
-	240, // 338: goap.graph.v1.GraphService.CompareOptions:input_type -> goap.graph.v1.CompareOptionsRequest
-	243, // 339: goap.graph.v1.GraphService.DiffFlows:input_type -> goap.graph.v1.DiffFlowsRequest
-	248, // 340: goap.graph.v1.GraphService.GetChangeView:input_type -> goap.graph.v1.GetChangeViewRequest
-	256, // 341: goap.graph.v1.GraphService.OpenDecision:input_type -> goap.graph.v1.OpenDecisionRequest
-	258, // 342: goap.graph.v1.GraphService.RuleDecision:input_type -> goap.graph.v1.RuleDecisionRequest
-	260, // 343: goap.graph.v1.GraphService.AnswerQuestion:input_type -> goap.graph.v1.AnswerQuestionRequest
-	262, // 344: goap.graph.v1.GraphService.RatifyDecision:input_type -> goap.graph.v1.RatifyDecisionRequest
-	264, // 345: goap.graph.v1.GraphService.ListDecisionPoints:input_type -> goap.graph.v1.ListDecisionPointsRequest
-	250, // 346: goap.graph.v1.GraphService.GetChangeGraph:input_type -> goap.graph.v1.GetChangeGraphRequest
-	133, // 347: goap.graph.v1.GraphService.AppendLog:input_type -> goap.graph.v1.AppendLogRequest
-	138, // 348: goap.graph.v1.GraphService.ListExecutions:input_type -> goap.graph.v1.ListExecutionsRequest
-	0,   // 349: goap.graph.v1.GraphService.RepublishIndex:input_type -> goap.graph.v1.RepublishIndexRequest
-	15,  // 350: goap.graph.v1.GraphService.GetNode:output_type -> goap.graph.v1.GetNodeResponse
-	24,  // 351: goap.graph.v1.GraphService.ListBaselines:output_type -> goap.graph.v1.ListBaselinesResponse
-	18,  // 352: goap.graph.v1.GraphService.TagChange:output_type -> goap.graph.v1.TagChangeResponse
-	20,  // 353: goap.graph.v1.GraphService.ListTags:output_type -> goap.graph.v1.ListTagsResponse
-	22,  // 354: goap.graph.v1.GraphService.DeleteTag:output_type -> goap.graph.v1.DeleteTagResponse
-	26,  // 355: goap.graph.v1.GraphService.GetBaselineGraph:output_type -> goap.graph.v1.GetBaselineGraphResponse
-	29,  // 356: goap.graph.v1.GraphService.ListBaselineNodes:output_type -> goap.graph.v1.ListBaselineNodesResponse
-	31,  // 357: goap.graph.v1.GraphService.ListBaselineLinks:output_type -> goap.graph.v1.ListBaselineLinksResponse
-	33,  // 358: goap.graph.v1.GraphService.GetNodeNeighbourhood:output_type -> goap.graph.v1.GetNodeNeighbourhoodResponse
-	49,  // 359: goap.graph.v1.GraphService.ListNamespaces:output_type -> goap.graph.v1.ListNamespacesResponse
-	59,  // 360: goap.graph.v1.GraphService.GetStructures:output_type -> goap.graph.v1.GetStructuresResponse
-	53,  // 361: goap.graph.v1.GraphService.ListItemTypes:output_type -> goap.graph.v1.ListItemTypesResponse
-	55,  // 362: goap.graph.v1.GraphService.IsAdminOnlyType:output_type -> goap.graph.v1.IsAdminOnlyTypeResponse
-	47,  // 363: goap.graph.v1.GraphService.ListChangeEvents:output_type -> goap.graph.v1.ListChangeEventsResponse
-	37,  // 364: goap.graph.v1.GraphService.ListChangeLog:output_type -> goap.graph.v1.ListChangeLogResponse
-	39,  // 365: goap.graph.v1.GraphService.ExportChangeProvenance:output_type -> goap.graph.v1.ExportChangeProvenanceResponse
-	41,  // 366: goap.graph.v1.GraphService.ExportGraph:output_type -> goap.graph.v1.ExportGraphResponse
-	43,  // 367: goap.graph.v1.GraphService.ExportGraphOkf:output_type -> goap.graph.v1.ExportGraphOkfResponse
-	45,  // 368: goap.graph.v1.GraphService.ImportGraph:output_type -> goap.graph.v1.ImportGraphResponse
-	57,  // 369: goap.graph.v1.GraphService.LoadDemoData:output_type -> goap.graph.v1.LoadDemoDataResponse
-	61,  // 370: goap.graph.v1.GraphService.CreateChange:output_type -> goap.graph.v1.CreateChangeResponse
-	63,  // 371: goap.graph.v1.GraphService.GetChange:output_type -> goap.graph.v1.GetChangeResponse
-	65,  // 372: goap.graph.v1.GraphService.ListChanges:output_type -> goap.graph.v1.ListChangesResponse
-	202, // 373: goap.graph.v1.GraphService.GetChangeImpacts:output_type -> goap.graph.v1.GetChangeImpactsResponse
-	204, // 374: goap.graph.v1.GraphService.ListNodeChanges:output_type -> goap.graph.v1.ListNodeChangesResponse
-	67,  // 375: goap.graph.v1.GraphService.UpdateChange:output_type -> goap.graph.v1.UpdateChangeResponse
-	69,  // 376: goap.graph.v1.GraphService.MoveChange:output_type -> goap.graph.v1.MoveChangeResponse
-	71,  // 377: goap.graph.v1.GraphService.AttachChange:output_type -> goap.graph.v1.AttachChangeResponse
-	73,  // 378: goap.graph.v1.GraphService.DetachChange:output_type -> goap.graph.v1.DetachChangeResponse
-	75,  // 379: goap.graph.v1.GraphService.SetChangeDependencies:output_type -> goap.graph.v1.SetChangeDependenciesResponse
-	82,  // 380: goap.graph.v1.GraphService.GetChangeDependencies:output_type -> goap.graph.v1.GetChangeDependenciesResponse
-	77,  // 381: goap.graph.v1.GraphService.UpgradeChange:output_type -> goap.graph.v1.UpgradeChangeResponse
-	79,  // 382: goap.graph.v1.GraphService.SetChangeMethodology:output_type -> goap.graph.v1.SetChangeMethodologyResponse
-	84,  // 383: goap.graph.v1.GraphService.AddItems:output_type -> goap.graph.v1.AddItemsResponse
-	146, // 384: goap.graph.v1.GraphService.ProposeImpact:output_type -> goap.graph.v1.ProposeImpactResponse
-	157, // 385: goap.graph.v1.GraphService.ImpactNodeCreate:output_type -> goap.graph.v1.ImpactNodeCreateResponse
-	159, // 386: goap.graph.v1.GraphService.ImpactNodeCheckout:output_type -> goap.graph.v1.ImpactNodeCheckoutResponse
-	161, // 387: goap.graph.v1.GraphService.ImpactNodeUpdate:output_type -> goap.graph.v1.ImpactNodeUpdateResponse
-	163, // 388: goap.graph.v1.GraphService.ImpactLinkCreate:output_type -> goap.graph.v1.ImpactLinkCreateResponse
-	165, // 389: goap.graph.v1.GraphService.ImpactLinkUpdate:output_type -> goap.graph.v1.ImpactLinkUpdateResponse
-	167, // 390: goap.graph.v1.GraphService.ImpactLinkDelete:output_type -> goap.graph.v1.ImpactLinkDeleteResponse
-	169, // 391: goap.graph.v1.GraphService.ImpactNodeTransition:output_type -> goap.graph.v1.ImpactNodeTransitionResponse
-	171, // 392: goap.graph.v1.GraphService.ImpactNodeCancel:output_type -> goap.graph.v1.ImpactNodeCancelResponse
-	154, // 393: goap.graph.v1.GraphService.ImpactNodeMerge:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
-	154, // 394: goap.graph.v1.GraphService.ImpactNodeSplit:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
-	173, // 395: goap.graph.v1.GraphService.WithdrawImpact:output_type -> goap.graph.v1.WithdrawImpactResponse
-	175, // 396: goap.graph.v1.GraphService.WithdrawImpacts:output_type -> goap.graph.v1.WithdrawImpactsResponse
-	178, // 397: goap.graph.v1.GraphService.RebaseChange:output_type -> goap.graph.v1.RebaseChangeResponse
-	180, // 398: goap.graph.v1.GraphService.ImpactNodeResolve:output_type -> goap.graph.v1.ImpactNodeResolveResponse
-	185, // 399: goap.graph.v1.GraphService.GetRebaseState:output_type -> goap.graph.v1.GetRebaseStateResponse
-	183, // 400: goap.graph.v1.GraphService.GetCommitState:output_type -> goap.graph.v1.GetCommitStateResponse
-	187, // 401: goap.graph.v1.GraphService.ImpactNodeReview:output_type -> goap.graph.v1.ImpactNodeReviewResponse
-	190, // 402: goap.graph.v1.GraphService.ImpactNodeReviewBatch:output_type -> goap.graph.v1.ImpactNodeReviewBatchResponse
-	198, // 403: goap.graph.v1.GraphService.ReviewOpen:output_type -> goap.graph.v1.ReviewResponse
-	198, // 404: goap.graph.v1.GraphService.ReviewUpdate:output_type -> goap.graph.v1.ReviewResponse
-	198, // 405: goap.graph.v1.GraphService.ReviewSubmit:output_type -> goap.graph.v1.ReviewResponse
-	198, // 406: goap.graph.v1.GraphService.ReviewDiscard:output_type -> goap.graph.v1.ReviewResponse
-	200, // 407: goap.graph.v1.GraphService.ReopenChangeImpacts:output_type -> goap.graph.v1.ReopenChangeImpactsResponse
-	144, // 408: goap.graph.v1.GraphService.CommitEdits:output_type -> goap.graph.v1.CommitEditsResponse
-	86,  // 409: goap.graph.v1.GraphService.GetBlackboard:output_type -> goap.graph.v1.GetBlackboardResponse
-	102, // 410: goap.graph.v1.GraphService.ApplyChange:output_type -> goap.graph.v1.ApplyChangeResponse
-	89,  // 411: goap.graph.v1.GraphService.CommitChange:output_type -> goap.graph.v1.CommitChangeResponse
-	91,  // 412: goap.graph.v1.GraphService.TransitionChange:output_type -> goap.graph.v1.TransitionChangeResponse
-	93,  // 413: goap.graph.v1.GraphService.DeleteChange:output_type -> goap.graph.v1.DeleteChangeResponse
-	101, // 414: goap.graph.v1.GraphService.GetPendingSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	101, // 415: goap.graph.v1.GraphService.StageSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	101, // 416: goap.graph.v1.GraphService.SaveSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	101, // 417: goap.graph.v1.GraphService.DiscardSettings:output_type -> goap.graph.v1.PendingSettingsResponse
-	105, // 418: goap.graph.v1.GraphService.CreateBranch:output_type -> goap.graph.v1.CreateBranchResponse
-	107, // 419: goap.graph.v1.GraphService.ListBranches:output_type -> goap.graph.v1.ListBranchesResponse
-	109, // 420: goap.graph.v1.GraphService.GetBranch:output_type -> goap.graph.v1.GetBranchResponse
-	111, // 421: goap.graph.v1.GraphService.SetBranchStatus:output_type -> goap.graph.v1.SetBranchStatusResponse
-	113, // 422: goap.graph.v1.GraphService.SetBranchDescription:output_type -> goap.graph.v1.SetBranchDescriptionResponse
-	115, // 423: goap.graph.v1.GraphService.ListNodeVersions:output_type -> goap.graph.v1.ListNodeVersionsResponse
-	156, // 424: goap.graph.v1.GraphService.DerivedNodes:output_type -> goap.graph.v1.DerivedNodesResponse
-	129, // 425: goap.graph.v1.GraphService.PlanMerge:output_type -> goap.graph.v1.PlanMergeResponse
-	132, // 426: goap.graph.v1.GraphService.MergeBranch:output_type -> goap.graph.v1.MergeBranchResponse
-	120, // 427: goap.graph.v1.GraphService.DiffBaselines:output_type -> goap.graph.v1.DiffBaselinesResponse
-	122, // 428: goap.graph.v1.GraphService.GetChangeStack:output_type -> goap.graph.v1.GetChangeStackResponse
-	206, // 429: goap.graph.v1.GraphService.MergeChange:output_type -> goap.graph.v1.MergeChangeResponse
-	209, // 430: goap.graph.v1.GraphService.GetSharedNodes:output_type -> goap.graph.v1.GetSharedNodesResponse
-	211, // 431: goap.graph.v1.GraphService.SplitChange:output_type -> goap.graph.v1.SplitChangeResponse
-	213, // 432: goap.graph.v1.GraphService.ListSubChanges:output_type -> goap.graph.v1.ListSubChangesResponse
-	218, // 433: goap.graph.v1.GraphService.OpenFlow:output_type -> goap.graph.v1.OpenFlowResponse
-	220, // 434: goap.graph.v1.GraphService.AdoptFlow:output_type -> goap.graph.v1.AdoptFlowResponse
-	222, // 435: goap.graph.v1.GraphService.DiscardFlow:output_type -> goap.graph.v1.DiscardFlowResponse
-	224, // 436: goap.graph.v1.GraphService.ListFlows:output_type -> goap.graph.v1.ListFlowsResponse
-	227, // 437: goap.graph.v1.GraphService.ValidateBoard:output_type -> goap.graph.v1.ValidateBoardResponse
-	229, // 438: goap.graph.v1.GraphService.OpenOption:output_type -> goap.graph.v1.OpenOptionResponse
-	231, // 439: goap.graph.v1.GraphService.ActivateOption:output_type -> goap.graph.v1.ActivateOptionResponse
-	233, // 440: goap.graph.v1.GraphService.EvaluateOption:output_type -> goap.graph.v1.EvaluateOptionResponse
-	235, // 441: goap.graph.v1.GraphService.SelectOption:output_type -> goap.graph.v1.SelectOptionResponse
-	237, // 442: goap.graph.v1.GraphService.RejectOption:output_type -> goap.graph.v1.RejectOptionResponse
-	239, // 443: goap.graph.v1.GraphService.ListOptions:output_type -> goap.graph.v1.ListOptionsResponse
-	242, // 444: goap.graph.v1.GraphService.CompareOptions:output_type -> goap.graph.v1.CompareOptionsResponse
-	247, // 445: goap.graph.v1.GraphService.DiffFlows:output_type -> goap.graph.v1.DiffFlowsResponse
-	249, // 446: goap.graph.v1.GraphService.GetChangeView:output_type -> goap.graph.v1.GetChangeViewResponse
-	257, // 447: goap.graph.v1.GraphService.OpenDecision:output_type -> goap.graph.v1.OpenDecisionResponse
-	259, // 448: goap.graph.v1.GraphService.RuleDecision:output_type -> goap.graph.v1.RuleDecisionResponse
-	261, // 449: goap.graph.v1.GraphService.AnswerQuestion:output_type -> goap.graph.v1.AnswerQuestionResponse
-	263, // 450: goap.graph.v1.GraphService.RatifyDecision:output_type -> goap.graph.v1.RatifyDecisionResponse
-	265, // 451: goap.graph.v1.GraphService.ListDecisionPoints:output_type -> goap.graph.v1.ListDecisionPointsResponse
-	251, // 452: goap.graph.v1.GraphService.GetChangeGraph:output_type -> goap.graph.v1.GetChangeGraphResponse
-	134, // 453: goap.graph.v1.GraphService.AppendLog:output_type -> goap.graph.v1.AppendLogResponse
-	139, // 454: goap.graph.v1.GraphService.ListExecutions:output_type -> goap.graph.v1.ListExecutionsResponse
-	1,   // 455: goap.graph.v1.GraphService.RepublishIndex:output_type -> goap.graph.v1.RepublishIndexResponse
-	350, // [350:456] is the sub-list for method output_type
-	244, // [244:350] is the sub-list for method input_type
-	244, // [244:244] is the sub-list for extension type_name
-	244, // [244:244] is the sub-list for extension extendee
-	0,   // [0:244] is the sub-list for field type_name
+	6,   // 34: goap.graph.v1.ListBaselinesResponse.related:type_name -> goap.graph.v1.Baseline
+	6,   // 35: goap.graph.v1.GetBaselineGraphResponse.baseline:type_name -> goap.graph.v1.Baseline
+	3,   // 36: goap.graph.v1.GetBaselineGraphResponse.nodes:type_name -> goap.graph.v1.Node
+	4,   // 37: goap.graph.v1.GetBaselineGraphResponse.links:type_name -> goap.graph.v1.Link
+	4,   // 38: goap.graph.v1.GetBaselineGraphResponse.suspect_links:type_name -> goap.graph.v1.Link
+	3,   // 39: goap.graph.v1.ListBaselineNodesResponse.nodes:type_name -> goap.graph.v1.Node
+	28,  // 40: goap.graph.v1.ListBaselineNodesResponse.types:type_name -> goap.graph.v1.TypeCount
+	6,   // 41: goap.graph.v1.ListBaselineNodesResponse.baseline:type_name -> goap.graph.v1.Baseline
+	4,   // 42: goap.graph.v1.ListBaselineLinksResponse.links:type_name -> goap.graph.v1.Link
+	28,  // 43: goap.graph.v1.ListBaselineLinksResponse.types:type_name -> goap.graph.v1.TypeCount
+	6,   // 44: goap.graph.v1.ListBaselineLinksResponse.baseline:type_name -> goap.graph.v1.Baseline
+	3,   // 45: goap.graph.v1.GetNodeNeighbourhoodResponse.node:type_name -> goap.graph.v1.Node
+	3,   // 46: goap.graph.v1.GetNodeNeighbourhoodResponse.nodes:type_name -> goap.graph.v1.Node
+	4,   // 47: goap.graph.v1.GetNodeNeighbourhoodResponse.links:type_name -> goap.graph.v1.Link
+	276, // 48: goap.graph.v1.ImpactEvent.at:type_name -> google.protobuf.Timestamp
+	12,  // 49: goap.graph.v1.ImpactEvent.state:type_name -> goap.graph.v1.ChangeImpact
+	2,   // 50: goap.graph.v1.ImpactEvent.post:type_name -> goap.graph.v1.NodeRef
+	2,   // 51: goap.graph.v1.ImpactEvent.pre:type_name -> goap.graph.v1.NodeRef
+	2,   // 52: goap.graph.v1.ImpactEvent.landed:type_name -> goap.graph.v1.NodeRef
+	11,  // 53: goap.graph.v1.ImpactEvent.review:type_name -> goap.graph.v1.Review
+	276, // 54: goap.graph.v1.LogEntry.at:type_name -> google.protobuf.Timestamp
+	35,  // 55: goap.graph.v1.ListChangeLogResponse.entries:type_name -> goap.graph.v1.LogEntry
+	267, // 56: goap.graph.v1.ListChangeLogResponse.counts:type_name -> goap.graph.v1.ListChangeLogResponse.CountsEntry
+	9,   // 57: goap.graph.v1.ImportGraphResponse.change:type_name -> goap.graph.v1.Change
+	34,  // 58: goap.graph.v1.ListChangeEventsResponse.events:type_name -> goap.graph.v1.ImpactEvent
+	52,  // 59: goap.graph.v1.ListItemTypesResponse.types:type_name -> goap.graph.v1.ItemTypeInfo
+	275, // 60: goap.graph.v1.Structure.bootstrap:type_name -> google.protobuf.Struct
+	58,  // 61: goap.graph.v1.GetStructuresResponse.structures:type_name -> goap.graph.v1.Structure
+	275, // 62: goap.graph.v1.CreateChangeRequest.data:type_name -> google.protobuf.Struct
+	9,   // 63: goap.graph.v1.CreateChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 64: goap.graph.v1.GetChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 65: goap.graph.v1.ListChangesResponse.changes:type_name -> goap.graph.v1.Change
+	275, // 66: goap.graph.v1.UpdateChangeRequest.data:type_name -> google.protobuf.Struct
+	9,   // 67: goap.graph.v1.UpdateChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 68: goap.graph.v1.MoveChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 69: goap.graph.v1.AttachChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 70: goap.graph.v1.DetachChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 71: goap.graph.v1.SetChangeDependenciesResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 72: goap.graph.v1.UpgradeChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 73: goap.graph.v1.SetChangeMethodologyResponse.change:type_name -> goap.graph.v1.Change
+	81,  // 74: goap.graph.v1.GetChangeDependenciesResponse.depends_on:type_name -> goap.graph.v1.Dependency
+	81,  // 75: goap.graph.v1.GetChangeDependenciesResponse.dependents:type_name -> goap.graph.v1.Dependency
+	81,  // 76: goap.graph.v1.GetChangeDependenciesResponse.order:type_name -> goap.graph.v1.Dependency
+	8,   // 77: goap.graph.v1.AddItemsRequest.items:type_name -> goap.graph.v1.ChangeItem
+	8,   // 78: goap.graph.v1.AddItemsResponse.items:type_name -> goap.graph.v1.ChangeItem
+	9,   // 79: goap.graph.v1.GetBlackboardResponse.change:type_name -> goap.graph.v1.Change
+	5,   // 80: goap.graph.v1.GetBlackboardResponse.nodes:type_name -> goap.graph.v1.NodeView
+	3,   // 81: goap.graph.v1.GetBlackboardResponse.neighbors:type_name -> goap.graph.v1.Node
+	216, // 82: goap.graph.v1.GetBlackboardResponse.options:type_name -> goap.graph.v1.Flow
+	255, // 83: goap.graph.v1.GetBlackboardResponse.decision_points:type_name -> goap.graph.v1.DecisionPoint
+	276, // 84: goap.graph.v1.GetBlackboardResponse.at:type_name -> google.protobuf.Timestamp
+	6,   // 85: goap.graph.v1.CommitChangeResponse.baseline:type_name -> goap.graph.v1.Baseline
+	9,   // 86: goap.graph.v1.TransitionChangeResponse.change:type_name -> goap.graph.v1.Change
+	9,   // 87: goap.graph.v1.DeleteChangeResponse.change:type_name -> goap.graph.v1.Change
+	275, // 88: goap.graph.v1.SettingEdit.props:type_name -> google.protobuf.Struct
+	97,  // 89: goap.graph.v1.StageSettingsRequest.edits:type_name -> goap.graph.v1.SettingEdit
+	275, // 90: goap.graph.v1.StagedSetting.props:type_name -> google.protobuf.Struct
+	99,  // 91: goap.graph.v1.PendingSettings.nodes:type_name -> goap.graph.v1.StagedSetting
+	100, // 92: goap.graph.v1.PendingSettingsResponse.changes:type_name -> goap.graph.v1.PendingSettings
+	6,   // 93: goap.graph.v1.ApplyChangeResponse.baseline:type_name -> goap.graph.v1.Baseline
+	276, // 94: goap.graph.v1.Branch.created_at:type_name -> google.protobuf.Timestamp
+	103, // 95: goap.graph.v1.CreateBranchResponse.branch:type_name -> goap.graph.v1.Branch
+	103, // 96: goap.graph.v1.ListBranchesResponse.branches:type_name -> goap.graph.v1.Branch
+	6,   // 97: goap.graph.v1.ListBranchesResponse.heads:type_name -> goap.graph.v1.Baseline
+	268, // 98: goap.graph.v1.ListBranchesResponse.counts:type_name -> goap.graph.v1.ListBranchesResponse.CountsEntry
+	103, // 99: goap.graph.v1.GetBranchResponse.branch:type_name -> goap.graph.v1.Branch
+	6,   // 100: goap.graph.v1.GetBranchResponse.head:type_name -> goap.graph.v1.Baseline
+	3,   // 101: goap.graph.v1.ListNodeVersionsResponse.versions:type_name -> goap.graph.v1.Node
+	2,   // 102: goap.graph.v1.MergeCandidate.ancestor:type_name -> goap.graph.v1.NodeRef
+	2,   // 103: goap.graph.v1.MergeCandidate.ours:type_name -> goap.graph.v1.NodeRef
+	2,   // 104: goap.graph.v1.MergeCandidate.theirs:type_name -> goap.graph.v1.NodeRef
+	275, // 105: goap.graph.v1.MergeCandidate.base:type_name -> google.protobuf.Struct
+	275, // 106: goap.graph.v1.MergeCandidate.ours_props:type_name -> google.protobuf.Struct
+	275, // 107: goap.graph.v1.MergeCandidate.theirs_props:type_name -> google.protobuf.Struct
+	275, // 108: goap.graph.v1.MergeCandidate.merged:type_name -> google.protobuf.Struct
+	116, // 109: goap.graph.v1.MergePlan.candidates:type_name -> goap.graph.v1.MergeCandidate
+	128, // 110: goap.graph.v1.DiffBaselinesResponse.nodes:type_name -> goap.graph.v1.BaselineDiff
+	124, // 111: goap.graph.v1.DiffBaselinesResponse.changes_added:type_name -> goap.graph.v1.StackChange
+	124, // 112: goap.graph.v1.DiffBaselinesResponse.changes_removed:type_name -> goap.graph.v1.StackChange
+	123, // 113: goap.graph.v1.GetChangeStackResponse.stack:type_name -> goap.graph.v1.ChangeStack
+	124, // 114: goap.graph.v1.ChangeStack.changes:type_name -> goap.graph.v1.StackChange
+	125, // 115: goap.graph.v1.ChangeStack.versions:type_name -> goap.graph.v1.VersionStep
+	127, // 116: goap.graph.v1.ChangeStack.baselines:type_name -> goap.graph.v1.BaselineStep
+	126, // 117: goap.graph.v1.VersionStep.joined:type_name -> goap.graph.v1.VersionJoin
+	276, // 118: goap.graph.v1.VersionStep.created_at:type_name -> google.protobuf.Timestamp
+	276, // 119: goap.graph.v1.BaselineStep.created_at:type_name -> google.protobuf.Timestamp
+	3,   // 120: goap.graph.v1.BaselineDiff.from:type_name -> goap.graph.v1.Node
+	3,   // 121: goap.graph.v1.BaselineDiff.to:type_name -> goap.graph.v1.Node
+	117, // 122: goap.graph.v1.PlanMergeResponse.plan:type_name -> goap.graph.v1.MergePlan
+	275, // 123: goap.graph.v1.Resolution.props:type_name -> google.protobuf.Struct
+	269, // 124: goap.graph.v1.MergeBranchRequest.resolutions:type_name -> goap.graph.v1.MergeBranchRequest.ResolutionsEntry
+	9,   // 125: goap.graph.v1.MergeBranchResponse.change:type_name -> goap.graph.v1.Change
+	6,   // 126: goap.graph.v1.MergeBranchResponse.baseline:type_name -> goap.graph.v1.Baseline
+	117, // 127: goap.graph.v1.MergeBranchResponse.plan:type_name -> goap.graph.v1.MergePlan
+	35,  // 128: goap.graph.v1.AppendLogRequest.entries:type_name -> goap.graph.v1.LogEntry
+	270, // 129: goap.graph.v1.ExecutionRecord.before:type_name -> goap.graph.v1.ExecutionRecord.BeforeEntry
+	271, // 130: goap.graph.v1.ExecutionRecord.after:type_name -> goap.graph.v1.ExecutionRecord.AfterEntry
+	135, // 131: goap.graph.v1.ExecutionRecord.model_calls:type_name -> goap.graph.v1.ModelCall
+	136, // 132: goap.graph.v1.ExecutionRecord.tool_calls:type_name -> goap.graph.v1.ToolUse
+	275, // 133: goap.graph.v1.ExecutionRecord.data:type_name -> google.protobuf.Struct
+	276, // 134: goap.graph.v1.ExecutionRecord.started_at:type_name -> google.protobuf.Timestamp
+	276, // 135: goap.graph.v1.ExecutionRecord.ended_at:type_name -> google.protobuf.Timestamp
+	2,   // 136: goap.graph.v1.ExecutionRecord.reads:type_name -> goap.graph.v1.NodeRef
+	137, // 137: goap.graph.v1.ListExecutionsResponse.records:type_name -> goap.graph.v1.ExecutionRecord
+	2,   // 138: goap.graph.v1.LinkEdit.to:type_name -> goap.graph.v1.NodeRef
+	275, // 139: goap.graph.v1.LinkEdit.props:type_name -> google.protobuf.Struct
+	2,   // 140: goap.graph.v1.NodeEdit.pre:type_name -> goap.graph.v1.NodeRef
+	275, // 141: goap.graph.v1.NodeEdit.props:type_name -> google.protobuf.Struct
+	140, // 142: goap.graph.v1.NodeEdit.links:type_name -> goap.graph.v1.LinkEdit
+	275, // 143: goap.graph.v1.CommitEditsRequest.data:type_name -> google.protobuf.Struct
+	141, // 144: goap.graph.v1.CommitEditsRequest.edits:type_name -> goap.graph.v1.NodeEdit
+	143, // 145: goap.graph.v1.CommitEditsRequest.events:type_name -> goap.graph.v1.CarriedEvent
+	6,   // 146: goap.graph.v1.CommitEditsResponse.baseline:type_name -> goap.graph.v1.Baseline
+	12,  // 147: goap.graph.v1.ProposeImpactRequest.nodes:type_name -> goap.graph.v1.ChangeImpact
+	12,  // 148: goap.graph.v1.ProposeImpactResponse.nodes:type_name -> goap.graph.v1.ChangeImpact
+	2,   // 149: goap.graph.v1.NodeLinkWrite.to:type_name -> goap.graph.v1.NodeRef
+	275, // 150: goap.graph.v1.NodeLinkWrite.props:type_name -> google.protobuf.Struct
+	275, // 151: goap.graph.v1.ImpactNodeCreateRequest.props:type_name -> google.protobuf.Struct
+	147, // 152: goap.graph.v1.ImpactNodeCreateRequest.links:type_name -> goap.graph.v1.NodeLinkWrite
+	275, // 153: goap.graph.v1.NodeCreateSpec.props:type_name -> google.protobuf.Struct
+	147, // 154: goap.graph.v1.NodeCreateSpec.links:type_name -> goap.graph.v1.NodeLinkWrite
+	150, // 155: goap.graph.v1.ImpactNodeMergeRequest.sources:type_name -> goap.graph.v1.NodeName
+	149, // 156: goap.graph.v1.ImpactNodeMergeRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
+	150, // 157: goap.graph.v1.ImpactNodeSplitRequest.source:type_name -> goap.graph.v1.NodeName
+	149, // 158: goap.graph.v1.ImpactNodeSplitRequest.into:type_name -> goap.graph.v1.NodeCreateSpec
+	2,   // 159: goap.graph.v1.SuspectLink.from:type_name -> goap.graph.v1.NodeRef
+	2,   // 160: goap.graph.v1.SuspectLink.to:type_name -> goap.graph.v1.NodeRef
+	12,  // 161: goap.graph.v1.ImpactNodeRestructureResponse.successors:type_name -> goap.graph.v1.ChangeImpact
+	12,  // 162: goap.graph.v1.ImpactNodeRestructureResponse.sources:type_name -> goap.graph.v1.ChangeImpact
+	12,  // 163: goap.graph.v1.ImpactNodeRestructureResponse.parents:type_name -> goap.graph.v1.ChangeImpact
+	153, // 164: goap.graph.v1.ImpactNodeRestructureResponse.suspect:type_name -> goap.graph.v1.SuspectLink
+	2,   // 165: goap.graph.v1.DerivedNodesRequest.ref:type_name -> goap.graph.v1.NodeRef
+	3,   // 166: goap.graph.v1.DerivedNodesResponse.nodes:type_name -> goap.graph.v1.Node
+	12,  // 167: goap.graph.v1.ImpactNodeCreateResponse.node:type_name -> goap.graph.v1.ChangeImpact
+	12,  // 168: goap.graph.v1.ImpactNodeCheckoutResponse.node:type_name -> goap.graph.v1.ChangeImpact
+	275, // 169: goap.graph.v1.ImpactNodeUpdateRequest.props:type_name -> google.protobuf.Struct
+	12,  // 170: goap.graph.v1.ImpactNodeUpdateResponse.node:type_name -> goap.graph.v1.ChangeImpact
+	2,   // 171: goap.graph.v1.ImpactLinkCreateRequest.to:type_name -> goap.graph.v1.NodeRef
+	275, // 172: goap.graph.v1.ImpactLinkCreateRequest.props:type_name -> google.protobuf.Struct
+	4,   // 173: goap.graph.v1.ImpactLinkCreateResponse.link:type_name -> goap.graph.v1.Link
+	275, // 174: goap.graph.v1.ImpactLinkUpdateRequest.props:type_name -> google.protobuf.Struct
+	4,   // 175: goap.graph.v1.ImpactLinkUpdateResponse.link:type_name -> goap.graph.v1.Link
+	12,  // 176: goap.graph.v1.ImpactNodeTransitionResponse.node:type_name -> goap.graph.v1.ChangeImpact
+	12,  // 177: goap.graph.v1.ImpactNodeCancelResponse.node:type_name -> goap.graph.v1.ChangeImpact
+	177, // 178: goap.graph.v1.RebaseChangeResponse.impacts:type_name -> goap.graph.v1.RebasedImpact
+	12,  // 179: goap.graph.v1.ImpactNodeResolveResponse.node:type_name -> goap.graph.v1.ChangeImpact
+	184, // 180: goap.graph.v1.GetRebaseStateResponse.conflicts:type_name -> goap.graph.v1.ImpactConflicts
+	12,  // 181: goap.graph.v1.ImpactNodeReviewResponse.node:type_name -> goap.graph.v1.ChangeImpact
+	188, // 182: goap.graph.v1.ImpactNodeReviewBatchRequest.verdicts:type_name -> goap.graph.v1.ImpactVerdict
+	8,   // 183: goap.graph.v1.ImpactNodeReviewBatchRequest.item:type_name -> goap.graph.v1.ChangeItem
+	12,  // 184: goap.graph.v1.ImpactNodeReviewBatchResponse.nodes:type_name -> goap.graph.v1.ChangeImpact
+	191, // 185: goap.graph.v1.ReviewRecord.entries:type_name -> goap.graph.v1.ReviewEntry
+	276, // 186: goap.graph.v1.ReviewRecord.submitted_at:type_name -> google.protobuf.Timestamp
+	194, // 187: goap.graph.v1.ReviewUpdateRequest.entries:type_name -> goap.graph.v1.ReviewEntryEdit
+	192, // 188: goap.graph.v1.ReviewResponse.review:type_name -> goap.graph.v1.ReviewRecord
+	2,   // 189: goap.graph.v1.GetChangeImpactsResponse.nodes:type_name -> goap.graph.v1.NodeRef
+	9,   // 190: goap.graph.v1.ListNodeChangesResponse.changes:type_name -> goap.graph.v1.Change
+	272, // 191: goap.graph.v1.MergeChangeRequest.resolutions:type_name -> goap.graph.v1.MergeChangeRequest.ResolutionsEntry
+	9,   // 192: goap.graph.v1.MergeChangeResponse.change:type_name -> goap.graph.v1.Change
+	2,   // 193: goap.graph.v1.SharedNode.node:type_name -> goap.graph.v1.NodeRef
+	208, // 194: goap.graph.v1.GetSharedNodesResponse.nodes:type_name -> goap.graph.v1.SharedNode
+	9,   // 195: goap.graph.v1.SplitChangeResponse.changes:type_name -> goap.graph.v1.Change
+	9,   // 196: goap.graph.v1.ListSubChangesResponse.changes:type_name -> goap.graph.v1.Change
+	215, // 197: goap.graph.v1.FlowEvent.option:type_name -> goap.graph.v1.Option
+	275, // 198: goap.graph.v1.FlowEvent.origin:type_name -> google.protobuf.Struct
+	276, // 199: goap.graph.v1.Flow.opened_at:type_name -> google.protobuf.Timestamp
+	276, // 200: goap.graph.v1.Flow.decided_at:type_name -> google.protobuf.Timestamp
+	215, // 201: goap.graph.v1.Flow.option:type_name -> goap.graph.v1.Option
+	275, // 202: goap.graph.v1.Flow.origin:type_name -> google.protobuf.Struct
+	275, // 203: goap.graph.v1.OpenFlowRequest.origin:type_name -> google.protobuf.Struct
+	8,   // 204: goap.graph.v1.OpenFlowRequest.items:type_name -> goap.graph.v1.ChangeItem
+	216, // 205: goap.graph.v1.OpenFlowResponse.flow:type_name -> goap.graph.v1.Flow
+	216, // 206: goap.graph.v1.AdoptFlowResponse.flow:type_name -> goap.graph.v1.Flow
+	216, // 207: goap.graph.v1.DiscardFlowResponse.flow:type_name -> goap.graph.v1.Flow
+	216, // 208: goap.graph.v1.ListFlowsResponse.flows:type_name -> goap.graph.v1.Flow
+	225, // 209: goap.graph.v1.ValidateBoardResponse.issues:type_name -> goap.graph.v1.BoardIssue
+	216, // 210: goap.graph.v1.OpenOptionResponse.option:type_name -> goap.graph.v1.Flow
+	216, // 211: goap.graph.v1.EvaluateOptionResponse.option:type_name -> goap.graph.v1.Flow
+	216, // 212: goap.graph.v1.SelectOptionResponse.option:type_name -> goap.graph.v1.Flow
+	216, // 213: goap.graph.v1.RejectOptionResponse.option:type_name -> goap.graph.v1.Flow
+	216, // 214: goap.graph.v1.ListOptionsResponse.options:type_name -> goap.graph.v1.Flow
+	2,   // 215: goap.graph.v1.OptionNode.main:type_name -> goap.graph.v1.NodeRef
+	273, // 216: goap.graph.v1.OptionNode.options:type_name -> goap.graph.v1.OptionNode.OptionsEntry
+	274, // 217: goap.graph.v1.OptionNode.props:type_name -> goap.graph.v1.OptionNode.PropsEntry
+	216, // 218: goap.graph.v1.CompareOptionsResponse.options:type_name -> goap.graph.v1.Flow
+	241, // 219: goap.graph.v1.CompareOptionsResponse.nodes:type_name -> goap.graph.v1.OptionNode
+	277, // 220: goap.graph.v1.FieldChange.old:type_name -> google.protobuf.Value
+	277, // 221: goap.graph.v1.FieldChange.new:type_name -> google.protobuf.Value
+	245, // 222: goap.graph.v1.ImpactDiff.left:type_name -> goap.graph.v1.ImpactSide
+	245, // 223: goap.graph.v1.ImpactDiff.right:type_name -> goap.graph.v1.ImpactSide
+	244, // 224: goap.graph.v1.ImpactDiff.changes:type_name -> goap.graph.v1.FieldChange
+	246, // 225: goap.graph.v1.DiffFlowsResponse.impacts:type_name -> goap.graph.v1.ImpactDiff
+	6,   // 226: goap.graph.v1.GetChangeViewResponse.baseline:type_name -> goap.graph.v1.Baseline
+	3,   // 227: goap.graph.v1.GetChangeGraphResponse.nodes:type_name -> goap.graph.v1.Node
+	4,   // 228: goap.graph.v1.GetChangeGraphResponse.links:type_name -> goap.graph.v1.Link
+	275, // 229: goap.graph.v1.DecisionEvent.policy:type_name -> google.protobuf.Struct
+	276, // 230: goap.graph.v1.Question.asked_at:type_name -> google.protobuf.Timestamp
+	276, // 231: goap.graph.v1.Ruling.at:type_name -> google.protobuf.Timestamp
+	276, // 232: goap.graph.v1.DecisionPoint.opened_at:type_name -> google.protobuf.Timestamp
+	253, // 233: goap.graph.v1.DecisionPoint.questions:type_name -> goap.graph.v1.Question
+	254, // 234: goap.graph.v1.DecisionPoint.ruling:type_name -> goap.graph.v1.Ruling
+	276, // 235: goap.graph.v1.DecisionPoint.decided_at:type_name -> google.protobuf.Timestamp
+	275, // 236: goap.graph.v1.DecisionPoint.policy:type_name -> google.protobuf.Struct
+	275, // 237: goap.graph.v1.OpenDecisionRequest.policy:type_name -> google.protobuf.Struct
+	255, // 238: goap.graph.v1.OpenDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	255, // 239: goap.graph.v1.RuleDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	255, // 240: goap.graph.v1.AnswerQuestionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	255, // 241: goap.graph.v1.RatifyDecisionResponse.point:type_name -> goap.graph.v1.DecisionPoint
+	255, // 242: goap.graph.v1.ListDecisionPointsResponse.points:type_name -> goap.graph.v1.DecisionPoint
+	130, // 243: goap.graph.v1.MergeBranchRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
+	130, // 244: goap.graph.v1.MergeChangeRequest.ResolutionsEntry.value:type_name -> goap.graph.v1.Resolution
+	2,   // 245: goap.graph.v1.OptionNode.OptionsEntry.value:type_name -> goap.graph.v1.NodeRef
+	275, // 246: goap.graph.v1.OptionNode.PropsEntry.value:type_name -> google.protobuf.Struct
+	14,  // 247: goap.graph.v1.GraphService.GetNode:input_type -> goap.graph.v1.GetNodeRequest
+	23,  // 248: goap.graph.v1.GraphService.ListBaselines:input_type -> goap.graph.v1.ListBaselinesRequest
+	17,  // 249: goap.graph.v1.GraphService.TagChange:input_type -> goap.graph.v1.TagChangeRequest
+	19,  // 250: goap.graph.v1.GraphService.ListTags:input_type -> goap.graph.v1.ListTagsRequest
+	21,  // 251: goap.graph.v1.GraphService.DeleteTag:input_type -> goap.graph.v1.DeleteTagRequest
+	25,  // 252: goap.graph.v1.GraphService.GetBaselineGraph:input_type -> goap.graph.v1.GetBaselineGraphRequest
+	27,  // 253: goap.graph.v1.GraphService.ListBaselineNodes:input_type -> goap.graph.v1.ListBaselineNodesRequest
+	30,  // 254: goap.graph.v1.GraphService.ListBaselineLinks:input_type -> goap.graph.v1.ListBaselineLinksRequest
+	32,  // 255: goap.graph.v1.GraphService.GetNodeNeighbourhood:input_type -> goap.graph.v1.GetNodeNeighbourhoodRequest
+	48,  // 256: goap.graph.v1.GraphService.ListNamespaces:input_type -> goap.graph.v1.ListNamespacesRequest
+	50,  // 257: goap.graph.v1.GraphService.GetStructures:input_type -> goap.graph.v1.GetStructuresRequest
+	51,  // 258: goap.graph.v1.GraphService.ListItemTypes:input_type -> goap.graph.v1.ListItemTypesRequest
+	54,  // 259: goap.graph.v1.GraphService.IsAdminOnlyType:input_type -> goap.graph.v1.IsAdminOnlyTypeRequest
+	46,  // 260: goap.graph.v1.GraphService.ListChangeEvents:input_type -> goap.graph.v1.ListChangeEventsRequest
+	36,  // 261: goap.graph.v1.GraphService.ListChangeLog:input_type -> goap.graph.v1.ListChangeLogRequest
+	38,  // 262: goap.graph.v1.GraphService.ExportChangeProvenance:input_type -> goap.graph.v1.ExportChangeProvenanceRequest
+	40,  // 263: goap.graph.v1.GraphService.ExportGraph:input_type -> goap.graph.v1.ExportGraphRequest
+	42,  // 264: goap.graph.v1.GraphService.ExportGraphOkf:input_type -> goap.graph.v1.ExportGraphOkfRequest
+	44,  // 265: goap.graph.v1.GraphService.ImportGraph:input_type -> goap.graph.v1.ImportGraphRequest
+	56,  // 266: goap.graph.v1.GraphService.LoadDemoData:input_type -> goap.graph.v1.LoadDemoDataRequest
+	60,  // 267: goap.graph.v1.GraphService.CreateChange:input_type -> goap.graph.v1.CreateChangeRequest
+	62,  // 268: goap.graph.v1.GraphService.GetChange:input_type -> goap.graph.v1.GetChangeRequest
+	64,  // 269: goap.graph.v1.GraphService.ListChanges:input_type -> goap.graph.v1.ListChangesRequest
+	201, // 270: goap.graph.v1.GraphService.GetChangeImpacts:input_type -> goap.graph.v1.GetChangeImpactsRequest
+	203, // 271: goap.graph.v1.GraphService.ListNodeChanges:input_type -> goap.graph.v1.ListNodeChangesRequest
+	66,  // 272: goap.graph.v1.GraphService.UpdateChange:input_type -> goap.graph.v1.UpdateChangeRequest
+	68,  // 273: goap.graph.v1.GraphService.MoveChange:input_type -> goap.graph.v1.MoveChangeRequest
+	70,  // 274: goap.graph.v1.GraphService.AttachChange:input_type -> goap.graph.v1.AttachChangeRequest
+	72,  // 275: goap.graph.v1.GraphService.DetachChange:input_type -> goap.graph.v1.DetachChangeRequest
+	74,  // 276: goap.graph.v1.GraphService.SetChangeDependencies:input_type -> goap.graph.v1.SetChangeDependenciesRequest
+	80,  // 277: goap.graph.v1.GraphService.GetChangeDependencies:input_type -> goap.graph.v1.GetChangeDependenciesRequest
+	76,  // 278: goap.graph.v1.GraphService.UpgradeChange:input_type -> goap.graph.v1.UpgradeChangeRequest
+	78,  // 279: goap.graph.v1.GraphService.SetChangeMethodology:input_type -> goap.graph.v1.SetChangeMethodologyRequest
+	83,  // 280: goap.graph.v1.GraphService.AddItems:input_type -> goap.graph.v1.AddItemsRequest
+	145, // 281: goap.graph.v1.GraphService.ProposeImpact:input_type -> goap.graph.v1.ProposeImpactRequest
+	148, // 282: goap.graph.v1.GraphService.ImpactNodeCreate:input_type -> goap.graph.v1.ImpactNodeCreateRequest
+	158, // 283: goap.graph.v1.GraphService.ImpactNodeCheckout:input_type -> goap.graph.v1.ImpactNodeCheckoutRequest
+	160, // 284: goap.graph.v1.GraphService.ImpactNodeUpdate:input_type -> goap.graph.v1.ImpactNodeUpdateRequest
+	162, // 285: goap.graph.v1.GraphService.ImpactLinkCreate:input_type -> goap.graph.v1.ImpactLinkCreateRequest
+	164, // 286: goap.graph.v1.GraphService.ImpactLinkUpdate:input_type -> goap.graph.v1.ImpactLinkUpdateRequest
+	166, // 287: goap.graph.v1.GraphService.ImpactLinkDelete:input_type -> goap.graph.v1.ImpactLinkDeleteRequest
+	168, // 288: goap.graph.v1.GraphService.ImpactNodeTransition:input_type -> goap.graph.v1.ImpactNodeTransitionRequest
+	170, // 289: goap.graph.v1.GraphService.ImpactNodeCancel:input_type -> goap.graph.v1.ImpactNodeCancelRequest
+	151, // 290: goap.graph.v1.GraphService.ImpactNodeMerge:input_type -> goap.graph.v1.ImpactNodeMergeRequest
+	152, // 291: goap.graph.v1.GraphService.ImpactNodeSplit:input_type -> goap.graph.v1.ImpactNodeSplitRequest
+	172, // 292: goap.graph.v1.GraphService.WithdrawImpact:input_type -> goap.graph.v1.WithdrawImpactRequest
+	174, // 293: goap.graph.v1.GraphService.WithdrawImpacts:input_type -> goap.graph.v1.WithdrawImpactsRequest
+	176, // 294: goap.graph.v1.GraphService.RebaseChange:input_type -> goap.graph.v1.RebaseChangeRequest
+	179, // 295: goap.graph.v1.GraphService.ImpactNodeResolve:input_type -> goap.graph.v1.ImpactNodeResolveRequest
+	181, // 296: goap.graph.v1.GraphService.GetRebaseState:input_type -> goap.graph.v1.GetRebaseStateRequest
+	182, // 297: goap.graph.v1.GraphService.GetCommitState:input_type -> goap.graph.v1.GetCommitStateRequest
+	186, // 298: goap.graph.v1.GraphService.ImpactNodeReview:input_type -> goap.graph.v1.ImpactNodeReviewRequest
+	189, // 299: goap.graph.v1.GraphService.ImpactNodeReviewBatch:input_type -> goap.graph.v1.ImpactNodeReviewBatchRequest
+	193, // 300: goap.graph.v1.GraphService.ReviewOpen:input_type -> goap.graph.v1.ReviewOpenRequest
+	195, // 301: goap.graph.v1.GraphService.ReviewUpdate:input_type -> goap.graph.v1.ReviewUpdateRequest
+	196, // 302: goap.graph.v1.GraphService.ReviewSubmit:input_type -> goap.graph.v1.ReviewSubmitRequest
+	197, // 303: goap.graph.v1.GraphService.ReviewDiscard:input_type -> goap.graph.v1.ReviewDiscardRequest
+	199, // 304: goap.graph.v1.GraphService.ReopenChangeImpacts:input_type -> goap.graph.v1.ReopenChangeImpactsRequest
+	142, // 305: goap.graph.v1.GraphService.CommitEdits:input_type -> goap.graph.v1.CommitEditsRequest
+	85,  // 306: goap.graph.v1.GraphService.GetBlackboard:input_type -> goap.graph.v1.GetBlackboardRequest
+	87,  // 307: goap.graph.v1.GraphService.ApplyChange:input_type -> goap.graph.v1.ApplyChangeRequest
+	88,  // 308: goap.graph.v1.GraphService.CommitChange:input_type -> goap.graph.v1.CommitChangeRequest
+	90,  // 309: goap.graph.v1.GraphService.TransitionChange:input_type -> goap.graph.v1.TransitionChangeRequest
+	92,  // 310: goap.graph.v1.GraphService.DeleteChange:input_type -> goap.graph.v1.DeleteChangeRequest
+	94,  // 311: goap.graph.v1.GraphService.GetPendingSettings:input_type -> goap.graph.v1.GetPendingSettingsRequest
+	98,  // 312: goap.graph.v1.GraphService.StageSettings:input_type -> goap.graph.v1.StageSettingsRequest
+	95,  // 313: goap.graph.v1.GraphService.SaveSettings:input_type -> goap.graph.v1.SaveSettingsRequest
+	96,  // 314: goap.graph.v1.GraphService.DiscardSettings:input_type -> goap.graph.v1.DiscardSettingsRequest
+	104, // 315: goap.graph.v1.GraphService.CreateBranch:input_type -> goap.graph.v1.CreateBranchRequest
+	106, // 316: goap.graph.v1.GraphService.ListBranches:input_type -> goap.graph.v1.ListBranchesRequest
+	108, // 317: goap.graph.v1.GraphService.GetBranch:input_type -> goap.graph.v1.GetBranchRequest
+	110, // 318: goap.graph.v1.GraphService.SetBranchStatus:input_type -> goap.graph.v1.SetBranchStatusRequest
+	112, // 319: goap.graph.v1.GraphService.SetBranchDescription:input_type -> goap.graph.v1.SetBranchDescriptionRequest
+	114, // 320: goap.graph.v1.GraphService.ListNodeVersions:input_type -> goap.graph.v1.ListNodeVersionsRequest
+	155, // 321: goap.graph.v1.GraphService.DerivedNodes:input_type -> goap.graph.v1.DerivedNodesRequest
+	118, // 322: goap.graph.v1.GraphService.PlanMerge:input_type -> goap.graph.v1.PlanMergeRequest
+	131, // 323: goap.graph.v1.GraphService.MergeBranch:input_type -> goap.graph.v1.MergeBranchRequest
+	119, // 324: goap.graph.v1.GraphService.DiffBaselines:input_type -> goap.graph.v1.DiffBaselinesRequest
+	121, // 325: goap.graph.v1.GraphService.GetChangeStack:input_type -> goap.graph.v1.GetChangeStackRequest
+	205, // 326: goap.graph.v1.GraphService.MergeChange:input_type -> goap.graph.v1.MergeChangeRequest
+	207, // 327: goap.graph.v1.GraphService.GetSharedNodes:input_type -> goap.graph.v1.GetSharedNodesRequest
+	210, // 328: goap.graph.v1.GraphService.SplitChange:input_type -> goap.graph.v1.SplitChangeRequest
+	212, // 329: goap.graph.v1.GraphService.ListSubChanges:input_type -> goap.graph.v1.ListSubChangesRequest
+	217, // 330: goap.graph.v1.GraphService.OpenFlow:input_type -> goap.graph.v1.OpenFlowRequest
+	219, // 331: goap.graph.v1.GraphService.AdoptFlow:input_type -> goap.graph.v1.AdoptFlowRequest
+	221, // 332: goap.graph.v1.GraphService.DiscardFlow:input_type -> goap.graph.v1.DiscardFlowRequest
+	223, // 333: goap.graph.v1.GraphService.ListFlows:input_type -> goap.graph.v1.ListFlowsRequest
+	226, // 334: goap.graph.v1.GraphService.ValidateBoard:input_type -> goap.graph.v1.ValidateBoardRequest
+	228, // 335: goap.graph.v1.GraphService.OpenOption:input_type -> goap.graph.v1.OpenOptionRequest
+	230, // 336: goap.graph.v1.GraphService.ActivateOption:input_type -> goap.graph.v1.ActivateOptionRequest
+	232, // 337: goap.graph.v1.GraphService.EvaluateOption:input_type -> goap.graph.v1.EvaluateOptionRequest
+	234, // 338: goap.graph.v1.GraphService.SelectOption:input_type -> goap.graph.v1.SelectOptionRequest
+	236, // 339: goap.graph.v1.GraphService.RejectOption:input_type -> goap.graph.v1.RejectOptionRequest
+	238, // 340: goap.graph.v1.GraphService.ListOptions:input_type -> goap.graph.v1.ListOptionsRequest
+	240, // 341: goap.graph.v1.GraphService.CompareOptions:input_type -> goap.graph.v1.CompareOptionsRequest
+	243, // 342: goap.graph.v1.GraphService.DiffFlows:input_type -> goap.graph.v1.DiffFlowsRequest
+	248, // 343: goap.graph.v1.GraphService.GetChangeView:input_type -> goap.graph.v1.GetChangeViewRequest
+	256, // 344: goap.graph.v1.GraphService.OpenDecision:input_type -> goap.graph.v1.OpenDecisionRequest
+	258, // 345: goap.graph.v1.GraphService.RuleDecision:input_type -> goap.graph.v1.RuleDecisionRequest
+	260, // 346: goap.graph.v1.GraphService.AnswerQuestion:input_type -> goap.graph.v1.AnswerQuestionRequest
+	262, // 347: goap.graph.v1.GraphService.RatifyDecision:input_type -> goap.graph.v1.RatifyDecisionRequest
+	264, // 348: goap.graph.v1.GraphService.ListDecisionPoints:input_type -> goap.graph.v1.ListDecisionPointsRequest
+	250, // 349: goap.graph.v1.GraphService.GetChangeGraph:input_type -> goap.graph.v1.GetChangeGraphRequest
+	133, // 350: goap.graph.v1.GraphService.AppendLog:input_type -> goap.graph.v1.AppendLogRequest
+	138, // 351: goap.graph.v1.GraphService.ListExecutions:input_type -> goap.graph.v1.ListExecutionsRequest
+	0,   // 352: goap.graph.v1.GraphService.RepublishIndex:input_type -> goap.graph.v1.RepublishIndexRequest
+	15,  // 353: goap.graph.v1.GraphService.GetNode:output_type -> goap.graph.v1.GetNodeResponse
+	24,  // 354: goap.graph.v1.GraphService.ListBaselines:output_type -> goap.graph.v1.ListBaselinesResponse
+	18,  // 355: goap.graph.v1.GraphService.TagChange:output_type -> goap.graph.v1.TagChangeResponse
+	20,  // 356: goap.graph.v1.GraphService.ListTags:output_type -> goap.graph.v1.ListTagsResponse
+	22,  // 357: goap.graph.v1.GraphService.DeleteTag:output_type -> goap.graph.v1.DeleteTagResponse
+	26,  // 358: goap.graph.v1.GraphService.GetBaselineGraph:output_type -> goap.graph.v1.GetBaselineGraphResponse
+	29,  // 359: goap.graph.v1.GraphService.ListBaselineNodes:output_type -> goap.graph.v1.ListBaselineNodesResponse
+	31,  // 360: goap.graph.v1.GraphService.ListBaselineLinks:output_type -> goap.graph.v1.ListBaselineLinksResponse
+	33,  // 361: goap.graph.v1.GraphService.GetNodeNeighbourhood:output_type -> goap.graph.v1.GetNodeNeighbourhoodResponse
+	49,  // 362: goap.graph.v1.GraphService.ListNamespaces:output_type -> goap.graph.v1.ListNamespacesResponse
+	59,  // 363: goap.graph.v1.GraphService.GetStructures:output_type -> goap.graph.v1.GetStructuresResponse
+	53,  // 364: goap.graph.v1.GraphService.ListItemTypes:output_type -> goap.graph.v1.ListItemTypesResponse
+	55,  // 365: goap.graph.v1.GraphService.IsAdminOnlyType:output_type -> goap.graph.v1.IsAdminOnlyTypeResponse
+	47,  // 366: goap.graph.v1.GraphService.ListChangeEvents:output_type -> goap.graph.v1.ListChangeEventsResponse
+	37,  // 367: goap.graph.v1.GraphService.ListChangeLog:output_type -> goap.graph.v1.ListChangeLogResponse
+	39,  // 368: goap.graph.v1.GraphService.ExportChangeProvenance:output_type -> goap.graph.v1.ExportChangeProvenanceResponse
+	41,  // 369: goap.graph.v1.GraphService.ExportGraph:output_type -> goap.graph.v1.ExportGraphResponse
+	43,  // 370: goap.graph.v1.GraphService.ExportGraphOkf:output_type -> goap.graph.v1.ExportGraphOkfResponse
+	45,  // 371: goap.graph.v1.GraphService.ImportGraph:output_type -> goap.graph.v1.ImportGraphResponse
+	57,  // 372: goap.graph.v1.GraphService.LoadDemoData:output_type -> goap.graph.v1.LoadDemoDataResponse
+	61,  // 373: goap.graph.v1.GraphService.CreateChange:output_type -> goap.graph.v1.CreateChangeResponse
+	63,  // 374: goap.graph.v1.GraphService.GetChange:output_type -> goap.graph.v1.GetChangeResponse
+	65,  // 375: goap.graph.v1.GraphService.ListChanges:output_type -> goap.graph.v1.ListChangesResponse
+	202, // 376: goap.graph.v1.GraphService.GetChangeImpacts:output_type -> goap.graph.v1.GetChangeImpactsResponse
+	204, // 377: goap.graph.v1.GraphService.ListNodeChanges:output_type -> goap.graph.v1.ListNodeChangesResponse
+	67,  // 378: goap.graph.v1.GraphService.UpdateChange:output_type -> goap.graph.v1.UpdateChangeResponse
+	69,  // 379: goap.graph.v1.GraphService.MoveChange:output_type -> goap.graph.v1.MoveChangeResponse
+	71,  // 380: goap.graph.v1.GraphService.AttachChange:output_type -> goap.graph.v1.AttachChangeResponse
+	73,  // 381: goap.graph.v1.GraphService.DetachChange:output_type -> goap.graph.v1.DetachChangeResponse
+	75,  // 382: goap.graph.v1.GraphService.SetChangeDependencies:output_type -> goap.graph.v1.SetChangeDependenciesResponse
+	82,  // 383: goap.graph.v1.GraphService.GetChangeDependencies:output_type -> goap.graph.v1.GetChangeDependenciesResponse
+	77,  // 384: goap.graph.v1.GraphService.UpgradeChange:output_type -> goap.graph.v1.UpgradeChangeResponse
+	79,  // 385: goap.graph.v1.GraphService.SetChangeMethodology:output_type -> goap.graph.v1.SetChangeMethodologyResponse
+	84,  // 386: goap.graph.v1.GraphService.AddItems:output_type -> goap.graph.v1.AddItemsResponse
+	146, // 387: goap.graph.v1.GraphService.ProposeImpact:output_type -> goap.graph.v1.ProposeImpactResponse
+	157, // 388: goap.graph.v1.GraphService.ImpactNodeCreate:output_type -> goap.graph.v1.ImpactNodeCreateResponse
+	159, // 389: goap.graph.v1.GraphService.ImpactNodeCheckout:output_type -> goap.graph.v1.ImpactNodeCheckoutResponse
+	161, // 390: goap.graph.v1.GraphService.ImpactNodeUpdate:output_type -> goap.graph.v1.ImpactNodeUpdateResponse
+	163, // 391: goap.graph.v1.GraphService.ImpactLinkCreate:output_type -> goap.graph.v1.ImpactLinkCreateResponse
+	165, // 392: goap.graph.v1.GraphService.ImpactLinkUpdate:output_type -> goap.graph.v1.ImpactLinkUpdateResponse
+	167, // 393: goap.graph.v1.GraphService.ImpactLinkDelete:output_type -> goap.graph.v1.ImpactLinkDeleteResponse
+	169, // 394: goap.graph.v1.GraphService.ImpactNodeTransition:output_type -> goap.graph.v1.ImpactNodeTransitionResponse
+	171, // 395: goap.graph.v1.GraphService.ImpactNodeCancel:output_type -> goap.graph.v1.ImpactNodeCancelResponse
+	154, // 396: goap.graph.v1.GraphService.ImpactNodeMerge:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
+	154, // 397: goap.graph.v1.GraphService.ImpactNodeSplit:output_type -> goap.graph.v1.ImpactNodeRestructureResponse
+	173, // 398: goap.graph.v1.GraphService.WithdrawImpact:output_type -> goap.graph.v1.WithdrawImpactResponse
+	175, // 399: goap.graph.v1.GraphService.WithdrawImpacts:output_type -> goap.graph.v1.WithdrawImpactsResponse
+	178, // 400: goap.graph.v1.GraphService.RebaseChange:output_type -> goap.graph.v1.RebaseChangeResponse
+	180, // 401: goap.graph.v1.GraphService.ImpactNodeResolve:output_type -> goap.graph.v1.ImpactNodeResolveResponse
+	185, // 402: goap.graph.v1.GraphService.GetRebaseState:output_type -> goap.graph.v1.GetRebaseStateResponse
+	183, // 403: goap.graph.v1.GraphService.GetCommitState:output_type -> goap.graph.v1.GetCommitStateResponse
+	187, // 404: goap.graph.v1.GraphService.ImpactNodeReview:output_type -> goap.graph.v1.ImpactNodeReviewResponse
+	190, // 405: goap.graph.v1.GraphService.ImpactNodeReviewBatch:output_type -> goap.graph.v1.ImpactNodeReviewBatchResponse
+	198, // 406: goap.graph.v1.GraphService.ReviewOpen:output_type -> goap.graph.v1.ReviewResponse
+	198, // 407: goap.graph.v1.GraphService.ReviewUpdate:output_type -> goap.graph.v1.ReviewResponse
+	198, // 408: goap.graph.v1.GraphService.ReviewSubmit:output_type -> goap.graph.v1.ReviewResponse
+	198, // 409: goap.graph.v1.GraphService.ReviewDiscard:output_type -> goap.graph.v1.ReviewResponse
+	200, // 410: goap.graph.v1.GraphService.ReopenChangeImpacts:output_type -> goap.graph.v1.ReopenChangeImpactsResponse
+	144, // 411: goap.graph.v1.GraphService.CommitEdits:output_type -> goap.graph.v1.CommitEditsResponse
+	86,  // 412: goap.graph.v1.GraphService.GetBlackboard:output_type -> goap.graph.v1.GetBlackboardResponse
+	102, // 413: goap.graph.v1.GraphService.ApplyChange:output_type -> goap.graph.v1.ApplyChangeResponse
+	89,  // 414: goap.graph.v1.GraphService.CommitChange:output_type -> goap.graph.v1.CommitChangeResponse
+	91,  // 415: goap.graph.v1.GraphService.TransitionChange:output_type -> goap.graph.v1.TransitionChangeResponse
+	93,  // 416: goap.graph.v1.GraphService.DeleteChange:output_type -> goap.graph.v1.DeleteChangeResponse
+	101, // 417: goap.graph.v1.GraphService.GetPendingSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	101, // 418: goap.graph.v1.GraphService.StageSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	101, // 419: goap.graph.v1.GraphService.SaveSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	101, // 420: goap.graph.v1.GraphService.DiscardSettings:output_type -> goap.graph.v1.PendingSettingsResponse
+	105, // 421: goap.graph.v1.GraphService.CreateBranch:output_type -> goap.graph.v1.CreateBranchResponse
+	107, // 422: goap.graph.v1.GraphService.ListBranches:output_type -> goap.graph.v1.ListBranchesResponse
+	109, // 423: goap.graph.v1.GraphService.GetBranch:output_type -> goap.graph.v1.GetBranchResponse
+	111, // 424: goap.graph.v1.GraphService.SetBranchStatus:output_type -> goap.graph.v1.SetBranchStatusResponse
+	113, // 425: goap.graph.v1.GraphService.SetBranchDescription:output_type -> goap.graph.v1.SetBranchDescriptionResponse
+	115, // 426: goap.graph.v1.GraphService.ListNodeVersions:output_type -> goap.graph.v1.ListNodeVersionsResponse
+	156, // 427: goap.graph.v1.GraphService.DerivedNodes:output_type -> goap.graph.v1.DerivedNodesResponse
+	129, // 428: goap.graph.v1.GraphService.PlanMerge:output_type -> goap.graph.v1.PlanMergeResponse
+	132, // 429: goap.graph.v1.GraphService.MergeBranch:output_type -> goap.graph.v1.MergeBranchResponse
+	120, // 430: goap.graph.v1.GraphService.DiffBaselines:output_type -> goap.graph.v1.DiffBaselinesResponse
+	122, // 431: goap.graph.v1.GraphService.GetChangeStack:output_type -> goap.graph.v1.GetChangeStackResponse
+	206, // 432: goap.graph.v1.GraphService.MergeChange:output_type -> goap.graph.v1.MergeChangeResponse
+	209, // 433: goap.graph.v1.GraphService.GetSharedNodes:output_type -> goap.graph.v1.GetSharedNodesResponse
+	211, // 434: goap.graph.v1.GraphService.SplitChange:output_type -> goap.graph.v1.SplitChangeResponse
+	213, // 435: goap.graph.v1.GraphService.ListSubChanges:output_type -> goap.graph.v1.ListSubChangesResponse
+	218, // 436: goap.graph.v1.GraphService.OpenFlow:output_type -> goap.graph.v1.OpenFlowResponse
+	220, // 437: goap.graph.v1.GraphService.AdoptFlow:output_type -> goap.graph.v1.AdoptFlowResponse
+	222, // 438: goap.graph.v1.GraphService.DiscardFlow:output_type -> goap.graph.v1.DiscardFlowResponse
+	224, // 439: goap.graph.v1.GraphService.ListFlows:output_type -> goap.graph.v1.ListFlowsResponse
+	227, // 440: goap.graph.v1.GraphService.ValidateBoard:output_type -> goap.graph.v1.ValidateBoardResponse
+	229, // 441: goap.graph.v1.GraphService.OpenOption:output_type -> goap.graph.v1.OpenOptionResponse
+	231, // 442: goap.graph.v1.GraphService.ActivateOption:output_type -> goap.graph.v1.ActivateOptionResponse
+	233, // 443: goap.graph.v1.GraphService.EvaluateOption:output_type -> goap.graph.v1.EvaluateOptionResponse
+	235, // 444: goap.graph.v1.GraphService.SelectOption:output_type -> goap.graph.v1.SelectOptionResponse
+	237, // 445: goap.graph.v1.GraphService.RejectOption:output_type -> goap.graph.v1.RejectOptionResponse
+	239, // 446: goap.graph.v1.GraphService.ListOptions:output_type -> goap.graph.v1.ListOptionsResponse
+	242, // 447: goap.graph.v1.GraphService.CompareOptions:output_type -> goap.graph.v1.CompareOptionsResponse
+	247, // 448: goap.graph.v1.GraphService.DiffFlows:output_type -> goap.graph.v1.DiffFlowsResponse
+	249, // 449: goap.graph.v1.GraphService.GetChangeView:output_type -> goap.graph.v1.GetChangeViewResponse
+	257, // 450: goap.graph.v1.GraphService.OpenDecision:output_type -> goap.graph.v1.OpenDecisionResponse
+	259, // 451: goap.graph.v1.GraphService.RuleDecision:output_type -> goap.graph.v1.RuleDecisionResponse
+	261, // 452: goap.graph.v1.GraphService.AnswerQuestion:output_type -> goap.graph.v1.AnswerQuestionResponse
+	263, // 453: goap.graph.v1.GraphService.RatifyDecision:output_type -> goap.graph.v1.RatifyDecisionResponse
+	265, // 454: goap.graph.v1.GraphService.ListDecisionPoints:output_type -> goap.graph.v1.ListDecisionPointsResponse
+	251, // 455: goap.graph.v1.GraphService.GetChangeGraph:output_type -> goap.graph.v1.GetChangeGraphResponse
+	134, // 456: goap.graph.v1.GraphService.AppendLog:output_type -> goap.graph.v1.AppendLogResponse
+	139, // 457: goap.graph.v1.GraphService.ListExecutions:output_type -> goap.graph.v1.ListExecutionsResponse
+	1,   // 458: goap.graph.v1.GraphService.RepublishIndex:output_type -> goap.graph.v1.RepublishIndexResponse
+	353, // [353:459] is the sub-list for method output_type
+	247, // [247:353] is the sub-list for method input_type
+	247, // [247:247] is the sub-list for extension type_name
+	247, // [247:247] is the sub-list for extension extendee
+	0,   // [0:247] is the sub-list for field type_name
 }
 
 func init() { file_goap_graph_v1_graph_proto_init() }
@@ -19800,7 +19898,7 @@ func file_goap_graph_v1_graph_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_goap_graph_v1_graph_proto_rawDesc), len(file_goap_graph_v1_graph_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   274,
+			NumMessages:   275,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

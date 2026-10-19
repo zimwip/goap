@@ -30,9 +30,16 @@ export function reviewUpdateRequest(changeId: string, key: string, e: ReviewEdit
 }
 
 export const graph = {
-  /** namespace is required: baselines are scoped to one namespace each. */
-  listBaselines: (namespace: string, signal?: AbortSignal) =>
-    rpc<{ namespace: string }, { baselines?: Baseline[] }>(GRAPH, 'ListBaselines', { namespace }, signal),
+  /** namespace is required: baselines are scoped to one namespace each. With `branch`, a page of its history (ADR
+   * 0140): the baselines landed before `before` (none: the newest), at most `limit`, with what draws them in `related`
+   * and the `before` of the older page in `next` ("0" or absent: none); with `ids`, those headers only. */
+  listBaselines: (namespace: string, signal?: AbortSignal, opts: { branch?: string; before?: string; limit?: number; ids?: string[] } = {}) =>
+    rpc<{ namespace: string; branch?: string; before?: string; limit?: number; ids?: string[] }, { baselines?: Baseline[]; related?: Baseline[]; next?: string }>(
+      GRAPH,
+      'ListBaselines',
+      { namespace, ...opts },
+      signal,
+    ),
   getBaselineGraph: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { baseline?: Baseline; nodes?: GraphNode[]; links?: Link[]; suspectLinks?: Link[] }>(
       GRAPH,
@@ -104,8 +111,15 @@ export const graph = {
       { namespace, name, headerOnly: true },
       signal,
     ),
-  listBranches: (namespace: string, signal?: AbortSignal) =>
-    rpc<{ namespace: string }, { branches?: Branch[] }>(GRAPH, 'ListBranches', { namespace }, signal),
+  /** The branches (of these statuses, when given), with the header of each head and the number of baselines of each
+   * branch (ADR 0140). */
+  listBranches: (namespace: string, signal?: AbortSignal, opts: { status?: string[] } = {}) =>
+    rpc<{ namespace: string; status?: string[] }, { branches?: Branch[]; heads?: Baseline[]; counts?: Record<string, number> }>(
+      GRAPH,
+      'ListBranches',
+      { namespace, ...opts },
+      signal,
+    ),
   createBranch: (req: { namespace: string; name: string; fromBaseline: string; origin?: string; description?: string }) =>
     rpc<typeof req, { branch?: Branch }>(GRAPH, 'CreateBranch', req),
   /** open | merged | abandoned (an abandoned branch takes no change any more). */

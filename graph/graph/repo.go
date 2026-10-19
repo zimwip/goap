@@ -91,6 +91,13 @@ type Tx interface {
 	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
 	// BranchBaselineHeaders returns the header of every baseline of a branch of a namespace, oldest first.
 	BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error)
+	// BaselinePage returns the headers of the baselines of a branch landed before the order before (0: the newest),
+	// newest first, at most limit; BaselineHeadersOf the headers of baselines by id and ChangeBaselineHeaders the ones
+	// the changes left, oldest first; BaselineCounts the number of baselines of each branch of a namespace.
+	BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error)
+	BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error)
+	ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error)
+	BaselineCounts(ctx context.Context, namespace string) (map[string]int, error)
 	// VersionJoins lists the branches the versions of a node joined, with the changes whose merge made them join.
 	VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)

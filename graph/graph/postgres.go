@@ -606,7 +606,7 @@ func (t *pgTx) baselineHeaders(ctx context.Context, namespace, q string, args []
 	var out []domain.Baseline
 	for rows.Next() {
 		b := domain.Baseline{Namespace: domain.NamespaceOf(namespace)}
-		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom)); err != nil {
+		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &b.CreatedAt, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq); err != nil {
 			return nil, err
 		}
 		out = append(out, b)
@@ -1153,4 +1153,30 @@ func (t *pgTx) typeCounts(ctx context.Context, q string, args []any) (map[string
 		out[typ] = n
 	}
 	return out, rows.Err()
+}
+
+func (t *pgTx) BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error) {
+	q, args := dialectPG.sqlBaselinePage(namespace, branch, before, limit)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *pgTx) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	q, args := dialectPG.sqlBaselineHeadersOf(namespace, ids)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *pgTx) ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error) {
+	if len(changes) == 0 {
+		return nil, nil
+	}
+	q, args := dialectPG.sqlChangeBaselineHeaders(namespace, changes)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *pgTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
+	q, args := dialectPG.sqlBaselineCounts(namespace)
+	return t.typeCounts(ctx, q, args)
 }

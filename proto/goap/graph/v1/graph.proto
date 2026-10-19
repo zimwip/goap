@@ -478,11 +478,24 @@ message DeleteTagResponse {}
 
 message ListBaselinesRequest {
   string namespace = 1;
+  // a page of the history of this branch (ADR 0140): its baselines landed before `before` (0: the newest), at most
+  // `limit` (default 100, at most 500), with what draws them in `related`. Neither branch nor ids: every baseline of
+  // the namespace.
+  string branch = 2;
+  int64 before = 3;
+  int32 limit = 4;
+  // the headers of these baselines only
+  repeated string ids = 5;
 }
 
 message ListBaselinesResponse {
   // the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
   repeated Baseline baselines = 1;
+  // with a branch: the baselines the changes of the page left on their own branches, those of the open branches
+  // forked from it (newest page), and the ones their edges reach outside the page
+  repeated Baseline related = 2;
+  // with a branch: the `before` of the older page; 0: none
+  int64 next = 3;
 }
 
 message GetBaselineGraphRequest {
@@ -1068,10 +1081,16 @@ message CreateBranchResponse {
 
 message ListBranchesRequest {
   string namespace = 1;
+  // open | merged | abandoned: the branches of these statuses only (empty: every branch)
+  repeated string status = 2;
 }
 
 message ListBranchesResponse {
   repeated Branch branches = 1;
+  // the headers of the heads of the branches (ADR 0140)
+  repeated Baseline heads = 2;
+  // the number of baselines of each branch
+  map<string, int32> counts = 3;
 }
 
 message GetBranchRequest {

@@ -183,7 +183,7 @@ func (g *Graph) mergeIn(ctx context.Context, id domain.ChangeID, resolutions map
 				return err
 			}
 		}
-		res, err = g.rebaseTx(ctx, tx, c)
+		res, err = g.rebaseTx(ctx, tx, c, true)
 		return err
 	})
 	if err != nil {
@@ -353,7 +353,7 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 // version on the target), its Base the committed version and MergedWith the target's. A rebase with no conflict keeps the
 // reviews and commits the merged drafts; a conflict sends its impact back to proposed, named as ADR 0101 does, to be
 // settled, accepted and committed.
-func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (RebaseResult, error) {
+func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, merging bool) (RebaseResult, error) {
 	target := domain.BranchOf(own.Parent)
 	res := RebaseResult{Branch: target, From: own.ForkBaseline}
 	headB, err := branchHeadHeader(ctx, tx, c.Namespace, target)
@@ -455,6 +455,7 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 			Merged: true, Conflicts: conflicts})
 	}
 	// the impacts that committed nothing start from the target's version of their node too (to check again, ADR 0101)
+	moved := len(res.Impacts) > 0
 	for _, cn := range mainImpactsOf(c) {
 		if cn.Landed != nil || cn.Pre == nil {
 			continue
@@ -464,7 +465,13 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 			if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactRebased, Pre: &ref}); err != nil {
 				return res, err
 			}
+			moved = true
 		}
+	}
+	if merging && !moved {
+		// no node changed on both sides: the merge lands what the branch committed over the head of the target as it is,
+		// a fast-forward over that head, and the branch keeps no rebase of its own (fastForward, ADR 0140)
+		return res, nil
 	}
 	rb := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: own.Name, ParentID: mineB.ID, ChangeID: c.ID,
 		Kind: domain.BaselineRebase, MergedFrom: headB.ID, RebasedFrom: own.ForkBaseline, CreatedAt: g.now()}

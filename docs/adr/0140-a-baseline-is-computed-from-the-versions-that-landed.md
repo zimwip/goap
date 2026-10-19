@@ -98,6 +98,16 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    (`versionsAt`), and the two sets are compared in memory (created, removed, modified). `DiffStacks` uses the same walk
    instead of reading every header of the namespace, the head of every change and the whole state of
    `from`. Migration 0010 indexes `change_impact (node_id, seq)` and `baseline (namespace, branch, seq)`.
+12. **A change leaves two baselines, not three.** At its merge, a root change whose committed nodes did not move on the
+   branch it lands on since its fork writes no rebase baseline: the rebase that brings nothing to merge is skipped
+   (`rebaseCommittedTx(..., merging)`), and the fast-forward moves the fork of its branch onto the head
+   (`forkOnto`: the nodes it changed are read at the fork and at the head, `versionsAt`; equal, a header entry records
+   the move and `RebasedFrom` the old fork). A change thus writes its commit (its own branch) and one landing on main.
+   `ListBaselines` is a page of a branch (`branch`, `before` the order `seq`, `limit` 100, `next`; `Tx.BaselinePage`)
+   with `related`, the baselines of the page's changes and of the open branches forked from it, and the headers its
+   lineage names (`Graph.BaselineHistory`), or the headers asked by `ids` (`Tx.BaselineHeadersOf`); `ListBranches`
+   filters on `status` and answers the head of each branch and its number of baselines (`Graph.BranchHeads`,
+   `Tx.BaselineCounts`). The Baseline view loads older pages on demand.
 
 ## Consequences
 

@@ -302,14 +302,59 @@ func (d dialect) sqlBranches(namespace string) (string, []any) {
 
 // sqlNamespaceBaselineHeaders reads the header of every baseline of a namespace, oldest first (ADR 0133).
 func (d dialect) sqlNamespaceBaselineHeaders(namespace string) (string, []any) {
-	return `SELECT ` + d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
-		`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + ` FROM baseline WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ", id"), []any{domain.NamespaceOf(namespace)}
+	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ", id"), []any{domain.NamespaceOf(namespace)}
+}
+
+// headerListCols is the select list of a baseline header in a listing.
+func (d dialect) headerListCols() string {
+	return d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
+		`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + `, seq`
+}
+
+// sqlBaselinePage reads the headers of the baselines of a branch landed before the order before (0: the newest), newest
+// first, at most limit.
+func (d dialect) sqlBaselinePage(namespace, branch string, before int64, limit int) (string, []any) {
+	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` AND (` + d.ph(3) + ` = 0 OR seq < ` + d.ph(3) +
+		`) ORDER BY seq DESC LIMIT ` + d.ph(4), []any{domain.NamespaceOf(namespace), domain.BranchOf(branch), before, limit}
+}
+
+// sqlBaselineHeadersOf reads the headers of baselines of a namespace by id, oldest first.
+func (d dialect) sqlBaselineHeadersOf(namespace string, ids []domain.BaselineID) (string, []any) {
+	list := make([]string, len(ids))
+	for i, id := range ids {
+		list[i] = string(id)
+	}
+	in, arg := d.uuidList("id", 2, list)
+	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND ` + in + ` ORDER BY seq`, []any{domain.NamespaceOf(namespace), arg}
+}
+
+// sqlChangeBaselineHeaders reads the headers of the baselines the changes left in a namespace, oldest first.
+func (d dialect) sqlChangeBaselineHeaders(namespace string, changes []domain.ChangeID) (string, []any) {
+	list := make([]string, len(changes))
+	for i, id := range changes {
+		list[i] = string(id)
+	}
+	in, arg := d.uuidList("change_id", 2, list)
+	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND ` + in + ` ORDER BY seq`, []any{domain.NamespaceOf(namespace), arg}
+}
+
+// sqlBaselineCounts counts the baselines of each branch of a namespace.
+func (d dialect) sqlBaselineCounts(namespace string) (string, []any) {
+	return `SELECT branch, count(*) FROM baseline WHERE namespace = ` + d.ph(1) + ` GROUP BY branch`, []any{domain.NamespaceOf(namespace)}
+}
+
+// uuidList tests col against a list of uuids given as the n-th argument: an array for PostgreSQL, a JSON list for SQLite.
+func (d dialect) uuidList(col string, n int, list []string) (string, any) {
+	if d.pg {
+		return col + ` = ANY(` + d.ph(n) + `::uuid[])`, list
+	}
+	b, _ := json.Marshal(list)
+	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
 }
 
 // sqlBranchBaselineHeaders reads the header of every baseline of a branch of a namespace, oldest first.
 func (d dialect) sqlBranchBaselineHeaders(namespace, branch string) (string, []any) {
-	return `SELECT ` + d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
-			`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` ORDER BY seq`,
+	return `SELECT ` + d.headerListCols() + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` ORDER BY seq`,
 		[]any{domain.NamespaceOf(namespace), domain.BranchOf(branch)}
 }
 

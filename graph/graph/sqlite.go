@@ -474,7 +474,7 @@ func (t *sqliteTx) baselineHeaders(ctx context.Context, namespace, q string, arg
 	for rows.Next() {
 		b := domain.Baseline{Namespace: domain.NamespaceOf(namespace)}
 		var created string
-		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom)); err != nil {
+		if err := rows.Scan((*string)(&b.ID), &b.Name, (*string)(&b.ParentID), (*string)(&b.MergedFrom), (*string)(&b.ChangeID), &created, &b.Branch, &b.Kind, (*string)(&b.RebasedFrom), &b.Seq); err != nil {
 			return nil, err
 		}
 		b.CreatedAt = tsParse(created)
@@ -1035,4 +1035,30 @@ func (t *sqliteTx) typeCounts(ctx context.Context, q string, args []any) (map[st
 		out[typ] = n
 	}
 	return out, rows.Err()
+}
+
+func (t *sqliteTx) BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error) {
+	q, args := dialectSQLite.sqlBaselinePage(namespace, branch, before, limit)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *sqliteTx) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	q, args := dialectSQLite.sqlBaselineHeadersOf(namespace, ids)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *sqliteTx) ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error) {
+	if len(changes) == 0 {
+		return nil, nil
+	}
+	q, args := dialectSQLite.sqlChangeBaselineHeaders(namespace, changes)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *sqliteTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
+	q, args := dialectSQLite.sqlBaselineCounts(namespace)
+	return t.typeCounts(ctx, q, args)
 }

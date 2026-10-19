@@ -269,7 +269,7 @@ func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target str
 	if !hasCommits(c) {
 		return c, nil
 	}
-	res, err := g.rebaseCommittedTx(ctx, tx, c, own)
+	res, err := g.rebaseCommittedTx(ctx, tx, c, own, false)
 	if err != nil {
 		return c, err
 	}

@@ -956,3 +956,37 @@ func (t *memTx) LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery
 	}
 	return pageLinks(links, q), nil
 }
+
+func (t *memTx) BaselinePage(ctx context.Context, namespace, branch string, before int64, limit int) ([]domain.Baseline, error) {
+	all, err := t.BranchBaselineHeaders(ctx, namespace, branch)
+	if err != nil {
+		return nil, err
+	}
+	sort.SliceStable(all, func(i, j int) bool { return all[i].Seq > all[j].Seq })
+	out := all[:0]
+	for _, b := range all {
+		if (before == 0 || b.Seq < before) && len(out) < limit {
+			out = append(out, b)
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) ([]domain.Baseline, error) {
+	all, err := t.BaselineHeaders(ctx, namespace)
+	return slices.DeleteFunc(all, func(b domain.Baseline) bool { return !slices.Contains(ids, b.ID) }), err
+}
+
+func (t *memTx) ChangeBaselineHeaders(ctx context.Context, namespace string, changes []domain.ChangeID) ([]domain.Baseline, error) {
+	all, err := t.BaselineHeaders(ctx, namespace)
+	return slices.DeleteFunc(all, func(b domain.Baseline) bool { return !slices.Contains(changes, b.ChangeID) }), err
+}
+
+func (t *memTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
+	all, err := t.BaselineHeaders(ctx, namespace)
+	out := map[string]int{}
+	for _, b := range all {
+		out[domain.BranchOf(b.Branch)]++
+	}
+	return out, err
+}

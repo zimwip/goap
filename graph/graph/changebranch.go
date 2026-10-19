@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -221,7 +222,7 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 // no merge version is made, and each change impact lands as the version it wrote.
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
 	into, err := branchHeadHeader(ctx, tx, c.Namespace, own.Parent)
-	if err != nil || into.ID != own.ForkBaseline {
+	if err != nil {
 		return false, err
 	}
 	from, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
@@ -237,6 +238,13 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 		return false, err
 	}
 	slices.Sort(ids)
+	if into.ID != own.ForkBaseline {
+		// the target moved since the fork: still a fast-forward over its head when none of the nodes the branch changed
+		// moved there, the rebase that would only move the fork left out (ADR 0140)
+		if ok, err := g.forkOnto(ctx, tx, &c, &own, into.ID, ids); err != nil || !ok {
+			return false, err
+		}
+	}
 	fromNodes, err := versionsAt(ctx, tx, from.ID, ids)
 	if err != nil {
 		return false, err
@@ -291,6 +299,36 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 	}
 	g.raiseApplied(ctx, tx, c, res)
 	return true, tx.PutChange(ctx, c)
+}
+
+// forkOnto moves the fork of a change's branch onto head when no node of ids changed between the fork and head: the
+// work of the branch then stands over head as it is. The move is journaled as a rebase is (HeaderBaselineID).
+func (g *Graph) forkOnto(ctx context.Context, tx Tx, c *domain.Change, own *domain.Branch, head domain.BaselineID, ids []domain.NodeID) (bool, error) {
+	at, err := versionsAt(ctx, tx, own.ForkBaseline, ids)
+	if err != nil {
+		return false, err
+	}
+	now, err := versionsAt(ctx, tx, head, ids)
+	if err != nil {
+		return false, err
+	}
+	if !maps.Equal(at, now) {
+		return false, nil
+	}
+	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(head)}}})
+	if err != nil {
+		return false, err
+	}
+	if _, err := tx.AppendLog(ctx, e); err != nil {
+		return false, err
+	}
+	if own.RebasedFrom == "" {
+		own.RebasedFrom = own.ForkBaseline
+	}
+	own.ForkBaseline = head
+	c.BaselineID = head
+	return true, nil
 }
 
 // ensureOwnBranch gives a change the branch of its own that the versions it writes live on

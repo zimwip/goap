@@ -151,8 +151,26 @@ func (h *Handler) DeleteTag(ctx context.Context, r *connect.Request[graphv1.Dele
 }
 
 func (h *Handler) ListBaselines(ctx context.Context, r *connect.Request[graphv1.ListBaselinesRequest]) (*connect.Response[graphv1.ListBaselinesResponse], error) {
-	bs, err := h.Graph.BaselineHeaders(ctx, r.Msg.Namespace) // their headers: the states are read one at a time
 	out := &graphv1.ListBaselinesResponse{}
+	var bs []domain.Baseline
+	var err error
+	switch {
+	case r.Msg.Branch != "":
+		var hist graph.BaselineHistory
+		hist, err = h.Graph.BaselineHistory(ctx, r.Msg.Namespace, r.Msg.Branch, r.Msg.Before, int(r.Msg.Limit))
+		bs, out.Next = hist.Baselines, hist.Next
+		for _, b := range hist.Related {
+			out.Related = append(out.Related, pbconv.BaselineToPB(b))
+		}
+	case len(r.Msg.Ids) > 0:
+		ids := make([]domain.BaselineID, len(r.Msg.Ids))
+		for i, id := range r.Msg.Ids {
+			ids[i] = domain.BaselineID(id)
+		}
+		bs, err = h.Graph.BaselineHeadersOf(ctx, r.Msg.Namespace, ids)
+	default:
+		bs, err = h.Graph.BaselineHeaders(ctx, r.Msg.Namespace) // their headers: the states are read one at a time
+	}
 	for _, b := range bs {
 		out.Baselines = append(out.Baselines, pbconv.BaselineToPB(b))
 	}
@@ -1161,10 +1179,16 @@ func (h *Handler) CreateBranch(ctx context.Context, r *connect.Request[graphv1.C
 }
 
 func (h *Handler) ListBranches(ctx context.Context, r *connect.Request[graphv1.ListBranchesRequest]) (*connect.Response[graphv1.ListBranchesResponse], error) {
-	bs, err := h.Graph.Branches(ctx, r.Msg.Namespace)
-	out := &graphv1.ListBranchesResponse{}
+	bs, heads, counts, err := h.Graph.BranchHeads(ctx, r.Msg.Namespace, r.Msg.Status...)
+	out := &graphv1.ListBranchesResponse{Counts: map[string]int32{}}
 	for _, b := range bs {
 		out.Branches = append(out.Branches, pbconv.BranchToPB(b))
+	}
+	for _, b := range heads {
+		out.Heads = append(out.Heads, pbconv.BaselineToPB(b))
+	}
+	for k, n := range counts {
+		out.Counts[k] = int32(n)
 	}
 	return res(out, err)
 }

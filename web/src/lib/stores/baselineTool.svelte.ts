@@ -40,7 +40,7 @@ export function refreshBranches(): void {
 export async function viewBaseline(id: string, namespace: string): Promise<void> {
   selectNamespace(namespace);
   try {
-    const r = await graph.listBaselines(namespace);
+    const r = await graph.listBaselines(namespace, undefined, { ids: [id] });
     const b = r.baselines?.find((x) => x.id === id);
     if (b?.branch) baselineTool.branch = b.branch;
   } catch {

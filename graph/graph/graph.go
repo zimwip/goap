@@ -936,3 +936,130 @@ func pageLimit(limit int) int {
 	}
 	return min(limit, 500)
 }
+
+// BaselineHistory is a page of the history of a branch (ADR 0140).
+type BaselineHistory struct {
+	// Baselines are the baselines of the branch of the page, oldest first.
+	Baselines []domain.Baseline
+	// Related are what draws the page: the baselines the changes of the page left on their own branches, those of the
+	// open branches forked from it (on the newest page), and the baselines their edges reach outside the page.
+	Related []domain.Baseline
+	// Next is the order to ask the older page with (before); 0: none.
+	Next int64
+}
+
+// BaselineHistory returns the page of the history of a branch landed before the order before (0: the newest), at most
+// limit baselines of the branch (default 100, at most MaxBrowseLimit): headers only, never the whole namespace.
+func (g *Graph) BaselineHistory(ctx context.Context, namespace, branch string, before int64, limit int) (h BaselineHistory, err error) {
+	if limit <= 0 || limit > MaxBrowseLimit {
+		limit = 100
+	}
+	branch = domain.BranchOf(branch)
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		page, err := tx.BaselinePage(ctx, namespace, branch, before, limit+1)
+		if err != nil {
+			return err
+		}
+		if len(page) > limit {
+			page = page[:limit]
+			h.Next = page[limit-1].Seq
+		}
+		slices.Reverse(page)
+		h.Baselines = page
+		seen := map[domain.BaselineID]bool{}
+		var changes []domain.ChangeID
+		for _, b := range page {
+			seen[b.ID] = true
+			if b.ChangeID != "" {
+				changes = append(changes, b.ChangeID)
+			}
+		}
+		add := func(bs []domain.Baseline) {
+			for _, b := range bs {
+				if !seen[b.ID] {
+					seen[b.ID] = true
+					h.Related = append(h.Related, b)
+				}
+			}
+		}
+		slices.Sort(changes)
+		related, err := tx.ChangeBaselineHeaders(ctx, namespace, slices.Compact(changes))
+		if err != nil {
+			return err
+		}
+		add(related)
+		if before == 0 {
+			brs, err := tx.Branches(ctx, namespace)
+			if err != nil {
+				return err
+			}
+			for _, br := range brs {
+				if br.Status != domain.BranchOpen || br.Name == branch || domain.BranchOf(br.Parent) != branch {
+					continue
+				}
+				bs, err := tx.BranchBaselineHeaders(ctx, namespace, br.Name)
+				if err != nil {
+					return err
+				}
+				add(bs)
+			}
+		}
+		var reach []domain.BaselineID
+		for _, list := range [][]domain.Baseline{h.Baselines, h.Related} {
+			for _, b := range list {
+				for _, id := range []domain.BaselineID{b.ParentID, b.MergedFrom, b.RebasedFrom} {
+					if id != "" && !seen[id] {
+						reach = append(reach, id)
+					}
+				}
+			}
+		}
+		slices.Sort(reach)
+		ghosts, err := tx.BaselineHeadersOf(ctx, namespace, slices.Compact(reach))
+		add(ghosts)
+		return err
+	})
+	for _, list := range [][]domain.Baseline{h.Baselines, h.Related} {
+		for i := range list {
+			list[i].Nodes, list[i].Namespace = nil, domain.NamespaceOf(namespace)
+		}
+	}
+	return h, err
+}
+
+// BaselineHeadersOf returns the headers of baselines of a namespace by id, oldest first.
+func (g *Graph) BaselineHeadersOf(ctx context.Context, namespace string, ids []domain.BaselineID) (bs []domain.Baseline, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.BaselineHeadersOf(ctx, namespace, ids); return err })
+	for i := range bs {
+		bs[i].Nodes, bs[i].Namespace = nil, domain.NamespaceOf(namespace)
+	}
+	return
+}
+
+// BranchHeads returns the branches of a namespace (of these statuses, when given) with the header of each head and the number of baselines of each
+// branch: what a list of the branches shows, without listing their baselines (ADR 0140).
+func (g *Graph) BranchHeads(ctx context.Context, namespace string, status ...string) (bs []domain.Branch, heads []domain.Baseline, counts map[string]int, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		if bs, err = tx.Branches(ctx, namespace); err != nil {
+			return err
+		}
+		if len(status) > 0 {
+			bs = slices.DeleteFunc(bs, func(b domain.Branch) bool { return !slices.Contains(status, b.Status) })
+		}
+		var ids []domain.BaselineID
+		for _, b := range bs {
+			if b.Head != "" {
+				ids = append(ids, b.Head)
+			}
+		}
+		if heads, err = tx.BaselineHeadersOf(ctx, namespace, ids); err != nil {
+			return err
+		}
+		counts, err = tx.BaselineCounts(ctx, namespace)
+		return err
+	})
+	for i := range heads {
+		heads[i].Nodes, heads[i].Namespace = nil, domain.NamespaceOf(namespace)
+	}
+	return
+}
