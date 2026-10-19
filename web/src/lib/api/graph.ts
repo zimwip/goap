@@ -99,8 +99,12 @@ export const graph = {
   /** The namespaces holding at least one node. */
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
   /** The changes; `headerOnly`: their heads only, without impacts nor items (what a list shows, ADR 0140). */
-  listChanges: (signal?: AbortSignal, opts: { headerOnly?: boolean } = {}) =>
-    rpc<{ headerOnly?: boolean }, { changes?: Change[] }>(GRAPH, 'ListChanges', opts, signal),
+  /** The changes, every one; with a limit, a page of them newest first, after the cursor (nextCursor of the page
+   * before), with the number of changes the request matches. */
+  listChanges: (
+    signal?: AbortSignal,
+    opts: { headerOnly?: boolean; status?: string[]; project?: string; query?: string; limit?: number; cursor?: string } = {},
+  ) => rpc<typeof opts, { changes?: Change[]; nextCursor?: string; total?: number }>(GRAPH, 'ListChanges', opts, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal),
   /** A branch and the header of its head (its nodes are not sent, ADR 0140). */

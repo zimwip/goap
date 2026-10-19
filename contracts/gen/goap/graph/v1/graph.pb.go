@@ -4745,7 +4745,15 @@ type ListChangesRequest struct {
 	// key of the responsible OrgUnit (empty: every unit)
 	OwnerOrg string `protobuf:"bytes,3,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
 	// the heads of the changes only, without their impacts and items: what a list shows (ADR 0140)
-	HeaderOnly    bool `protobuf:"varint,4,opt,name=header_only,json=headerOnly,proto3" json:"header_only,omitempty"`
+	HeaderOnly bool `protobuf:"varint,4,opt,name=header_only,json=headerOnly,proto3" json:"header_only,omitempty"`
+	// key of the project the change acts in (empty: every project)
+	Project string `protobuf:"bytes,5,opt,name=project,proto3" json:"project,omitempty"`
+	// a text the id, title, intent, methodology or namespace of the change contains, case ignored (empty: every change)
+	Query string `protobuf:"bytes,6,opt,name=query,proto3" json:"query,omitempty"`
+	// the size of a page, newest first (0: every change, unpaged; at most 500)
+	Limit int32 `protobuf:"varint,7,opt,name=limit,proto3" json:"limit,omitempty"`
+	// next_cursor of the page before (empty: the newest page); only with a limit
+	Cursor        string `protobuf:"bytes,8,opt,name=cursor,proto3" json:"cursor,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4808,9 +4816,41 @@ func (x *ListChangesRequest) GetHeaderOnly() bool {
 	return false
 }
 
+func (x *ListChangesRequest) GetProject() string {
+	if x != nil {
+		return x.Project
+	}
+	return ""
+}
+
+func (x *ListChangesRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *ListChangesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+func (x *ListChangesRequest) GetCursor() string {
+	if x != nil {
+		return x.Cursor
+	}
+	return ""
+}
+
 type ListChangesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Changes       []*Change              `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Changes []*Change              `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
+	// the cursor of the next (older) page; empty: this page is the last
+	NextCursor string `protobuf:"bytes,2,opt,name=next_cursor,json=nextCursor,proto3" json:"next_cursor,omitempty"`
+	// the number of changes the request matches, every page together (only with a limit)
+	Total         int32 `protobuf:"varint,3,opt,name=total,proto3" json:"total,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4850,6 +4890,20 @@ func (x *ListChangesResponse) GetChanges() []*Change {
 		return x.Changes
 	}
 	return nil
+}
+
+func (x *ListChangesResponse) GetNextCursor() string {
+	if x != nil {
+		return x.NextCursor
+	}
+	return ""
+}
+
+func (x *ListChangesResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
 }
 
 type UpdateChangeRequest struct {
@@ -18034,15 +18088,22 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x10GetChangeRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"B\n" +
 	"\x11GetChangeResponse\x12-\n" +
-	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\x88\x01\n" +
+	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\xe6\x01\n" +
 	"\x12ListChangesRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06status\x18\x02 \x03(\tR\x06status\x12\x1b\n" +
 	"\towner_org\x18\x03 \x01(\tR\bownerOrg\x12\x1f\n" +
 	"\vheader_only\x18\x04 \x01(\bR\n" +
-	"headerOnly\"F\n" +
+	"headerOnly\x12\x18\n" +
+	"\aproject\x18\x05 \x01(\tR\aproject\x12\x14\n" +
+	"\x05query\x18\x06 \x01(\tR\x05query\x12\x14\n" +
+	"\x05limit\x18\a \x01(\x05R\x05limit\x12\x16\n" +
+	"\x06cursor\x18\b \x01(\tR\x06cursor\"}\n" +
 	"\x13ListChangesResponse\x12/\n" +
-	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\"\xe9\x01\n" +
+	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\x12\x1f\n" +
+	"\vnext_cursor\x18\x02 \x01(\tR\n" +
+	"nextCursor\x12\x14\n" +
+	"\x05total\x18\x03 \x01(\x05R\x05total\"\xe9\x01\n" +
 	"\x13UpdateChangeRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\x04goal\x18\x02 \x01(\tH\x00R\x04goal\x88\x01\x01\x12\x1b\n" +
