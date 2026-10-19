@@ -29,9 +29,16 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    nothing, is stored whole. A rebase or a revert writes exactly the nodes it touched.
 4. **Checkpoints are taken in the background.** With `Graph.CheckpointEvery` set (the compositions use
    `DefaultCheckpointEvery`, 50), every 50th header of a run on a branch is queued during its commit. One goroutine
-   stores its whole state after the transaction commits (`checkpointer`, `Graph.WaitCheckpoints` for tests). A later
+   stores it after the transaction commits (`checkpointer`, `Graph.WaitCheckpoints` for tests). A later
    header is computed over the newest checkpoint of its branch (`Tx.LatestStored`), so a read walks at most 50 landings.
-   A checkpoint that fails is only logged, because the state is still computed.
+   A checkpoint that fails is only logged, because the state is still computed. A checkpoint stores only the versions
+   landed on its branch since the stored baseline it is read over (`guardTx.checkpoint`, `Tx.MaterializeBaseline` with
+   its base and depth), one deeper; it is whole when it is over no stored baseline, would be `checkpointEvery` deep, or
+   when the overlays of its chain would weigh more than half the whole state they sit on (`Tx.StoredSizes`), so a whole
+   read stays within one and a half states. Storing every checkpoint whole wrote the namespace again every 50
+   baselines: on a graph of 96,000 nodes, 97 entry rows per version written, a cost growing with the graph, and each
+   checkpoint read the previous one whole. PostgreSQL walks a chain of stored baselines by the primary key, one step at
+   a time (`dialect.storedChain`, a lateral read): as a join, each step read every stored baseline of the table.
 5. `MaterializeEvery` (`GOAP_MATERIALIZE_EVERY`) now defaults to 0, so a commit never stores entries. A positive value
    stores every n-th baseline as an overlay, which the test suites use to exercise both paths (1, 3, 100000). The
    compaction of ADR 0032 (`CompactBaselines`, `baselinedelta.go`) is removed.

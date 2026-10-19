@@ -198,14 +198,21 @@ func (d dialect) nodeIDList(col string, n int, ids []domain.NodeID) (string, any
 	return col + ` IN (SELECT value FROM json_each(` + d.ph(n) + `))`, string(b)
 }
 
-// storedChainSQL is the chain of the baselines whose entries are stored, from the first parameter down along base_id
+// storedChain is the chain of the baselines whose entries are stored, from the first parameter down along base_id
 // (ADR 0140): d is the distance from the baseline; it stops at a whole baseline (no base) or before a baseline kept as a
-// header.
-const storedChainSQL = `WITH RECURSIVE chain(id, base_id, d) AS (
-		SELECT id, base_id, 0 FROM baseline WHERE id = %[1]s AND gap = 0
+// header. PostgreSQL reads each step by the primary key (a lateral read the planner cannot turn into a join over the
+// stored baselines: that join read them all at each step of a chain of checkpoints).
+func (d dialect) storedChain() string {
+	step := `SELECT b.id, b.base_id, c.d + 1 FROM baseline b JOIN chain c ON b.id = c.base_id WHERE b.gap = 0`
+	if d.pg {
+		step = `SELECT b.id, b.base_id, c.d + 1 FROM chain c CROSS JOIN LATERAL (SELECT id, base_id FROM baseline WHERE id = c.base_id AND gap = 0 LIMIT 1) b`
+	}
+	return `WITH RECURSIVE chain(id, base_id, d) AS (
+		SELECT id, base_id, 0 FROM baseline WHERE id = ` + d.ph(1) + ` AND gap = 0
 		UNION ALL
-		SELECT b.id, b.base_id, c.d + 1 FROM baseline b JOIN chain c ON b.id = c.base_id WHERE b.gap = 0
+		` + step + `
 	)`
+}
 
 // sqlStoredVersions reads the entries in effect in a baseline whose entries are stored (ADR 0140), for some nodes (nil:
 // every node): for each node the entry of the nearest baseline of its chain, a version or a removal.
@@ -216,16 +223,21 @@ func (d dialect) sqlStoredVersions(id domain.BaselineID, ids []domain.NodeID) (s
 		in, arg := d.nodeIDList("e.node_id", 2, ids)
 		where, args = ` WHERE `+in, append(args, arg)
 	}
-	return fmt.Sprintf(storedChainSQL, d.ph(1)) + `, eff AS (
+	return d.storedChain() + `, eff AS (
 		SELECT e.node_id, e.version, e.removed, row_number() OVER (PARTITION BY e.node_id ORDER BY c.d) AS rn
 		FROM chain c JOIN baseline_entry e ON e.baseline_id = c.id` + where + `
 	) SELECT ` + d.id("node_id") + `, version, removed FROM eff WHERE rn = 1`, args
 }
 
+// sqlStoredSizes counts the entries of each baseline of the stored chain of a baseline, with whether it is whole.
+func (d dialect) sqlStoredSizes(id domain.BaselineID) (string, []any) {
+	return d.storedChain() + ` SELECT CASE WHEN c.base_id IS NULL THEN 1 ELSE 0 END, (SELECT count(*) FROM baseline_entry e WHERE e.baseline_id = c.id) FROM chain c`, []any{string(id)}
+}
+
 // sqlStoredTail reads where the chain of stored baselines of a baseline ends: the baseline kept as a header it is
 // stored over, empty when the chain reaches a whole baseline.
 func (d dialect) sqlStoredTail(id domain.BaselineID) (string, []any) {
-	return fmt.Sprintf(storedChainSQL, d.ph(1)) + ` SELECT ` + d.idOr("coalesce", "base_id") + ` FROM chain ORDER BY d DESC LIMIT 1`, []any{string(id)}
+	return d.storedChain() + ` SELECT ` + d.idOr("coalesce", "base_id") + ` FROM chain ORDER BY d DESC LIMIT 1`, []any{string(id)}
 }
 
 // sqlLandedVersions reads the versions that landed on a branch of a namespace in the baselines after the order after,

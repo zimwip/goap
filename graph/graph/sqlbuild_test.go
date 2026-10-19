@@ -47,7 +47,15 @@ const (
 	)`
 )
 
-func chain(p string) string { return strings.Replace(goldChain, "%s", p, 1) }
+// chain is the stored chain of a dialect: PostgreSQL reads each step by the primary key.
+func chain(p string) string {
+	c := strings.Replace(goldChain, "%s", p, 1)
+	if p == "$1" {
+		c = strings.Replace(c, `SELECT b.id, b.base_id, c.d + 1 FROM baseline b JOIN chain c ON b.id = c.base_id WHERE b.gap = 0`,
+			`SELECT b.id, b.base_id, c.d + 1 FROM chain c CROSS JOIN LATERAL (SELECT id, base_id FROM baseline WHERE id = c.base_id AND gap = 0 LIMIT 1) b`, 1)
+	}
+	return c
+}
 
 func TestSQLBuildersGolden(t *testing.T) {
 	ref := domain.NodeRef{ID: "n1", Version: 3}
@@ -136,6 +144,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg StoredTail", pg, q, a, chain("$1")+` SELECT coalesce(base_id::text, '') FROM chain ORDER BY d DESC LIMIT 1`, []any{"b1"})
 	q, a = lite.sqlStoredTail("b1")
 	check("sqlite StoredTail", lite, q, a, chain("?")+` SELECT coalesce(base_id, '') FROM chain ORDER BY d DESC LIMIT 1`, []any{"b1"})
+	sizes := ` SELECT CASE WHEN c.base_id IS NULL THEN 1 ELSE 0 END, (SELECT count(*) FROM baseline_entry e WHERE e.baseline_id = c.id) FROM chain c`
+	q, a = pg.sqlStoredSizes("b1")
+	check("pg StoredSizes", pg, q, a, chain("$1")+sizes, []any{"b1"})
+	q, a = lite.sqlStoredSizes("b1")
+	check("sqlite StoredSizes", lite, q, a, chain("?")+sizes, []any{"b1"})
 	landed := func(id, inV, inJ, ns string) string {
 		return `SELECT ` + id + `, version, deleted, reason FROM (
 		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn

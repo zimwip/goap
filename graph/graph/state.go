@@ -587,9 +587,69 @@ func (t *guardTx) materialize(ctx context.Context, id domain.BaselineID) error {
 	start := time.Now()
 	nodes, err := t.nodesOf(ctx, id)
 	if err == nil {
-		err = t.Tx.MaterializeBaseline(ctx, id, nodes)
+		err = t.Tx.MaterializeBaseline(ctx, id, "", 0, nodes)
 	}
 	recordCheckpoint(ctx, start, len(nodes), err)
+	return err
+}
+
+// checkpoint stores the entries of a baseline kept as a header over the stored baseline its state is read over: the
+// versions landed on its branch since, one deeper; whole when it would be checkpointEvery deep or is over no stored
+// baseline (materialize). Writing the whole state at every checkpoint wrote the namespace again every CheckpointEvery
+// baselines, a cost growing with the graph.
+func (t *guardTx) checkpoint(ctx context.Context, id domain.BaselineID) error {
+	b, err := t.Tx.BaselineHeader(ctx, id)
+	if err != nil || b.Gap == 0 {
+		return err
+	}
+	if b.BaseID == "" {
+		return t.materialize(ctx, id)
+	}
+	base, err := t.header(ctx, b.BaseID)
+	if err != nil {
+		return err
+	}
+	if base.Gap > 0 || base.Depth+1 >= checkpointEvery {
+		return t.materialize(ctx, id)
+	}
+	start := time.Now()
+	var after int64
+	if domain.BranchOf(base.Branch) == domain.BranchOf(b.Branch) {
+		after = base.Seq
+	}
+	delta, err := t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, after, b.Seq, nil)
+	if err != nil {
+		return err
+	}
+	// a whole read walks the whole state and every overlay of its chain: stored whole once the overlays would weigh
+	// more than half the whole state, so a read stays within one and a half states and the writes stay what landed
+	overlays, whole, err := t.Tx.StoredSizes(ctx, base.ID)
+	if err != nil {
+		return err
+	}
+	if whole == 0 || 2*(overlays+len(delta)) > whole {
+		return t.materialize(ctx, id)
+	}
+	{
+		var removed []domain.NodeID
+		for n, v := range delta {
+			if v == 0 {
+				removed = append(removed, n)
+			}
+		}
+		var had map[domain.NodeID]domain.Version
+		if had, err = t.BaselineVersions(ctx, base.ID, removed); err == nil {
+			for _, n := range removed {
+				if had[n] > 0 {
+					delta[n] = -had[n] // a removal records the version the node had
+				} else {
+					delete(delta, n)
+				}
+			}
+			err = t.Tx.MaterializeBaseline(ctx, id, base.ID, base.Depth+1, delta)
+		}
+	}
+	recordCheckpoint(ctx, start, len(delta), err)
 	return err
 }
 
@@ -629,7 +689,7 @@ func (c *checkpointer) store(g *Graph, ids []domain.BaselineID) {
 			c.pending = c.pending[1:]
 			c.mu.Unlock()
 			stateMeter().cpPending.Add(context.Background(), -1)
-			if err := g.Materialize(context.Background(), id); err != nil {
+			if err := g.storeCheckpoint(context.Background(), id); err != nil {
 				slog.Warn("checkpoint of a baseline", "baseline", id, "err", err)
 			}
 		}
@@ -645,6 +705,20 @@ func (g *Graph) Materialize(ctx context.Context, id domain.BaselineID) error {
 	err := g.repo.InTx(ctx, func(tx Tx) error {
 		if gt, ok := unwrapGuard(tx); ok {
 			return gt.materialize(ctx, id)
+		}
+		return fmt.Errorf("the transaction of the graph is not guarded: %w", ErrInvalid)
+	})
+	if err == nil {
+		g.headers.drop(id)
+	}
+	return err
+}
+
+// storeCheckpoint stores a checkpoint over the one before it (guardTx.checkpoint).
+func (g *Graph) storeCheckpoint(ctx context.Context, id domain.BaselineID) error {
+	err := g.repo.InTx(ctx, func(tx Tx) error {
+		if gt, ok := unwrapGuard(tx); ok {
+			return gt.checkpoint(ctx, id)
 		}
 		return fmt.Errorf("the transaction of the graph is not guarded: %w", ErrInvalid)
 	})

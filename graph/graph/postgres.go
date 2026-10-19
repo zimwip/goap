@@ -519,6 +519,27 @@ func (t *pgTx) StoredVersions(ctx context.Context, id domain.BaselineID, ids []d
 	return out, domain.BaselineID(tail), nil
 }
 
+func (t *pgTx) StoredSizes(ctx context.Context, id domain.BaselineID) (overlays, whole int, err error) {
+	q, args := dialectPG.sqlStoredSizes(id)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return 0, 0, mapErr(err, "baseline "+string(id))
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var isWhole, n int
+		if err := rows.Scan(&isWhole, &n); err != nil {
+			return 0, 0, err
+		}
+		if isWhole == 1 {
+			whole += n
+		} else {
+			overlays += n
+		}
+	}
+	return overlays, whole, rows.Err()
+}
+
 func (t *pgTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 	ls, err := t.landings(ctx, namespace, branch, after, upTo, ids)
 	return landedVersions(ls), err
@@ -870,11 +891,11 @@ func (t *pgTx) putEntries(ctx context.Context, id domain.BaselineID, nodes map[d
 	return mapErr(err, "baseline entries")
 }
 
-func (t *pgTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+func (t *pgTx) MaterializeBaseline(ctx context.Context, id, over domain.BaselineID, depth int, nodes map[domain.NodeID]domain.Version) error {
 	if _, err := t.tx.Exec(ctx, `DELETE FROM baseline_entry WHERE baseline_id = $1`, string(id)); err != nil {
 		return mapErr(err, "baseline "+string(id))
 	}
-	if res, err := t.tx.Exec(ctx, `UPDATE baseline SET depth = 0, gap = 0, base_id = NULL WHERE id = $1`, string(id)); err != nil {
+	if res, err := t.tx.Exec(ctx, `UPDATE baseline SET depth = $2, gap = 0, base_id = $3 WHERE id = $1`, string(id), depth, nullUUID(string(over))); err != nil {
 		return mapErr(err, "baseline "+string(id))
 	} else if res.RowsAffected() != 1 {
 		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)

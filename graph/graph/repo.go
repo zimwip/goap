@@ -78,6 +78,9 @@ type Tx interface {
 	// stored (Gap 0) and the stored ones its entries are put in (BaseID), down to a whole one: a version, 0 for a node an
 	// entry removes. tail is the baseline kept as a header the chain ends on, empty when it reaches a whole one (ADR 0140).
 	StoredVersions(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (versions map[domain.NodeID]domain.Version, tail domain.BaselineID, err error)
+	// StoredSizes counts the entries along the chain StoredVersions reads: those of the baselines stored over another
+	// (overlays) and those of the whole one it reaches (0 when it ends on a header).
+	StoredSizes(ctx context.Context, id domain.BaselineID) (overlays, whole int, err error)
 	// LandedVersions reads the last version of each node (nil ids: every node of the namespace) that landed on a branch
 	// in a baseline whose order is after `after`, up to upTo (Baseline.Seq, ADR 0140): written there or joined; 0 for a
 	// version that deletes its node.
@@ -136,8 +139,9 @@ type Tx interface {
 	// (b.Nodes: a version, or minus the version a node had in BaseID for a node the baseline removes), put in the state
 	// of b.BaseID when it names one.
 	PutBaseline(ctx context.Context, b domain.Baseline) error
-	// MaterializeBaseline stores the whole state of a baseline: its Gap and Depth become 0, it has no BaseID.
-	MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error
+	// MaterializeBaseline stores the entries of a baseline kept as a header: its Gap becomes 0, its entries nodes (as
+	// PutBaseline's), put in the state of over at the given Depth; over "" stores its whole state (Depth 0).
+	MaterializeBaseline(ctx context.Context, id, over domain.BaselineID, depth int, nodes map[domain.NodeID]domain.Version) error
 	// PutTag stores a tag (ADR 0056); DeleteTag removes it (ErrNotFound when absent); Tags lists the tags matching
 	// f, oldest first.
 	PutTag(ctx context.Context, t domain.Tag) error

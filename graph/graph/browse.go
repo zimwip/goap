@@ -237,19 +237,44 @@ type Neighbourhood struct {
 	Suspect []domain.LinkID
 }
 
-// NodeNeighbourhood returns a node of a baseline with its direct neighbours.
+// NodeNeighbourhood returns a node of a baseline with its direct neighbours; it reads the versions of the node and of
+// its neighbours in the baseline, never its whole state (ADR 0137).
 func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nodeID domain.NodeID) (nb Neighbourhood, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		b, err := tx.Baseline(ctx, id)
+		if _, err := tx.BaselineHeader(ctx, id); err != nil {
+			return err
+		}
+		at, err := versionsAt(ctx, tx, id, []domain.NodeID{nodeID})
 		if err != nil {
 			return err
 		}
-		v, ok := b.Nodes[nodeID]
+		v, ok := at[nodeID]
 		if !ok {
 			return fmt.Errorf("node %s in baseline %s: %w", nodeID, id, ErrNotFound)
 		}
 		ref := domain.NodeRef{ID: nodeID, Version: v}
 		if nb.Node, err = tx.Node(ctx, ref); err != nil {
+			return err
+		}
+		// Outgoing links belong to the source version: all of them are the node's. Incoming links may target any
+		// earlier version of the node (suspect links): keep those whose source is the baseline's version.
+		out, err := tx.OutLinks(ctx, ref)
+		if err != nil {
+			return err
+		}
+		in, err := tx.LinksTo(ctx, nodeID)
+		if err != nil {
+			return err
+		}
+		var near []domain.NodeID
+		for _, l := range out {
+			near = append(near, l.To.ID)
+		}
+		for _, l := range in {
+			near = append(near, l.From.ID)
+		}
+		slices.Sort(near)
+		if at, err = versionsAt(ctx, tx, id, slices.Compact(near)); err != nil {
 			return err
 		}
 		seen := map[domain.NodeRef]bool{ref: true}
@@ -265,14 +290,9 @@ func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nod
 			nb.Nodes = append(nb.Nodes, n)
 			return nil
 		}
-		// Outgoing links belong to the source version: all of them are the node's.
-		out, err := tx.OutLinks(ctx, ref)
-		if err != nil {
-			return err
-		}
 		for _, l := range out {
 			to := l.To
-			if tv, ok := b.Nodes[to.ID]; ok && tv != to.Version {
+			if tv, ok := at[to.ID]; ok && tv != to.Version {
 				to.Version = tv
 				nb.Suspect = append(nb.Suspect, l.ID)
 			}
@@ -281,15 +301,9 @@ func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nod
 			}
 			nb.Links = append(nb.Links, l)
 		}
-		// Incoming links may target any earlier version of the node (suspect links): keep those whose source is
-		// the baseline's version, read in one query.
-		in, err := tx.LinksTo(ctx, nodeID)
-		if err != nil {
-			return err
-		}
 		slices.SortStableFunc(in, func(a, b domain.Link) int { return int(a.To.Version) - int(b.To.Version) })
 		for _, l := range in {
-			if l.To.Version > v || l.From.ID == nodeID || !b.Contains(l.From) { // a self link is already among the outgoing ones
+			if l.To.Version > v || l.From.ID == nodeID || at[l.From.ID] != l.From.Version { // a self link is already among the outgoing ones
 				continue
 			}
 			if err := add(l.From); err != nil {

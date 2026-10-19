@@ -206,6 +206,11 @@ func testCheckpoints(t *testing.T, repo Repo) {
 	head := f.base
 	for i := range 8 {
 		edits := []NodeEdit{{Key: fmt.Sprintf("DES-%d", i), Type: "Design"}}
+		if i == 0 { // a state large enough for the next checkpoints to store what landed over it
+			for j := range 30 {
+				edits = append(edits, NodeEdit{Key: fmt.Sprintf("BULK-%d", j), Type: "Design"})
+			}
+		}
 		if i%2 == 1 {
 			edits = append(edits, NodeEdit{Pre: &domain.NodeRef{ID: f.req.ID, Version: head.Nodes[f.req.ID]}, Props: map[string]any{"step": i}})
 		}
@@ -232,6 +237,11 @@ func testCheckpoints(t *testing.T, repo Repo) {
 	}
 	if len(stored) != 3 { // the fixture committed twice before: the 1st, 4th and 7th commits are 3rd headers
 		t.Fatalf("stored %v, want 3 checkpoints out of 8 commits", stored)
+	}
+	for i, cp := range stored[1:] { // a checkpoint stores what landed since the one before it
+		if h, prev := headers[cp], headers[stored[i]]; h.BaseID != prev.ID || h.Depth != prev.Depth+1 {
+			t.Fatalf("checkpoint %s is stored over %s at depth %d, want over %s at depth %d", cp, h.BaseID, h.Depth, prev.ID, prev.Depth+1)
+		}
 	}
 	for _, b := range written {
 		h := headers[b.ID]

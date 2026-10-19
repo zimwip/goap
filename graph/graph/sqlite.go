@@ -399,6 +399,27 @@ func (t *sqliteTx) StoredVersions(ctx context.Context, id domain.BaselineID, ids
 	return out, domain.BaselineID(tail), nil
 }
 
+func (t *sqliteTx) StoredSizes(ctx context.Context, id domain.BaselineID) (overlays, whole int, err error) {
+	q, args := dialectSQLite.sqlStoredSizes(id)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return 0, 0, sqliteErr(err, "baseline "+string(id))
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var isWhole, n int
+		if err := rows.Scan(&isWhole, &n); err != nil {
+			return 0, 0, err
+		}
+		if isWhole == 1 {
+			whole += n
+		} else {
+			overlays += n
+		}
+	}
+	return overlays, whole, rows.Err()
+}
+
 func (t *sqliteTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 	ls, err := t.landings(ctx, namespace, branch, after, upTo, ids)
 	return landedVersions(ls), err
@@ -749,11 +770,11 @@ func (t *sqliteTx) putEntries(ctx context.Context, id domain.BaselineID, nodes m
 	return nil
 }
 
-func (t *sqliteTx) MaterializeBaseline(ctx context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+func (t *sqliteTx) MaterializeBaseline(ctx context.Context, id, over domain.BaselineID, depth int, nodes map[domain.NodeID]domain.Version) error {
 	if _, err := t.tx.ExecContext(ctx, `DELETE FROM baseline_entry WHERE baseline_id = ?`, string(id)); err != nil {
 		return err
 	}
-	if res, err := t.tx.ExecContext(ctx, `UPDATE baseline SET depth = 0, gap = 0, base_id = NULL WHERE id = ?`, string(id)); err != nil {
+	if res, err := t.tx.ExecContext(ctx, `UPDATE baseline SET depth = ?, gap = 0, base_id = ? WHERE id = ?`, depth, nullUUID(string(over)), string(id)); err != nil {
 		return sqliteErr(err, "baseline "+string(id))
 	} else if k, _ := res.RowsAffected(); k != 1 {
 		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)

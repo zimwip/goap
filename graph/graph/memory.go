@@ -595,6 +595,25 @@ func (t *memTx) StoredVersions(_ context.Context, id domain.BaselineID, ids []do
 	}
 }
 
+func (t *memTx) StoredSizes(_ context.Context, id domain.BaselineID) (overlays, whole int, err error) {
+	for cur := id; cur != ""; {
+		b, ok := t.st.baselines[cur]
+		if !ok {
+			return 0, 0, fmt.Errorf("baseline %s: %w", cur, ErrNotFound)
+		}
+		if b.Gap > 0 {
+			break
+		}
+		if b.BaseID == "" {
+			whole += len(b.Nodes)
+		} else {
+			overlays += len(b.Nodes)
+		}
+		cur = b.BaseID
+	}
+	return overlays, whole, nil
+}
+
 func (t *memTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
 	ls, err := t.landings(namespace, branch, after, upTo, ids)
 	return landedVersions(ls), err
@@ -726,12 +745,12 @@ func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.Vers
 	return out, nil
 }
 
-func (t *memTx) MaterializeBaseline(_ context.Context, id domain.BaselineID, nodes map[domain.NodeID]domain.Version) error {
+func (t *memTx) MaterializeBaseline(_ context.Context, id, over domain.BaselineID, depth int, nodes map[domain.NodeID]domain.Version) error {
 	b, ok := t.st.baselines[id]
 	if !ok {
 		return fmt.Errorf("baseline %s: %w", id, ErrNotFound)
 	}
-	b.Nodes, b.Gap, b.Depth, b.BaseID = maps.Clone(nodes), 0, 0, ""
+	b.Nodes, b.Gap, b.Depth, b.BaseID = maps.Clone(nodes), 0, depth, over
 	t.st.baselines[id] = b
 	return nil
 }
