@@ -79,7 +79,7 @@ func TestRun(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			g, url := server(t)
 			r, report := runner(t, url, bench.Config{Run: "t", Domain: bench.DomainShape{Types: 3, Attributes: 2}, Workers: 2, Edits: 5,
-				CreateRatio: 0.5, Links: 1, HotNodes: 2, HotRatio: 0.5, TextBytes: 40, Mode: mode, MaxChanges: 12, ProbeEvery: 10 * time.Millisecond,
+				CreateRatio: 0.5, Links: 2, AddLinks: 0.5, HotNodes: 2, HotRatio: 0.5, TextBytes: 40, Mode: mode, MaxChanges: 12, ProbeEvery: 10 * time.Millisecond,
 				ReportEvery: time.Hour, Seed: 1})
 			if err := r.WaitReady(t.Context(), time.Second); err != nil {
 				t.Fatal(err)
@@ -95,13 +95,22 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			versions := 0
-			for id := range head.Nodes {
+			versions, links := 0, 0
+			for id, v := range head.Nodes {
 				vs, err := g.Versions(t.Context(), id)
 				if err != nil {
 					t.Fatal(err)
 				}
 				versions += len(vs)
+				ls, err := g.OutLinksOf(t.Context(), domain.NodeRef{ID: id, Version: v})
+				if err != nil {
+					t.Fatal(err)
+				}
+				links += len(ls)
+			}
+			// the modifications add links too: a node gathers more than the ones it was created with
+			if int64(links) != tot.Links.Load() || links <= int(tot.Nodes.Load()) {
+				t.Fatalf("the graph holds %d links, the bench counted %d for %d nodes", links, tot.Links.Load(), tot.Nodes.Load())
 			}
 			if int64(len(head.Nodes)) != tot.Nodes.Load() || int64(versions) != tot.Versions.Load() {
 				t.Fatalf("the graph holds %d nodes and %d versions, the bench counted %d and %d", len(head.Nodes), versions, tot.Nodes.Load(), tot.Versions.Load())
@@ -121,7 +130,7 @@ func TestRun(t *testing.T) {
 			if mode == bench.ModeCommit {
 				want = append(want, "CommitEdits")
 			} else {
-				want = append(want, "CreateChange", "ImpactNodeCreate", "ImpactNodeCheckout", "ImpactNodeReview", "CommitChange", "MergeChange")
+				want = append(want, "CreateChange", "ImpactNodeCreate", "ImpactNodeCheckout", "ImpactLinkCreate", "ImpactNodeReview", "CommitChange", "MergeChange")
 			}
 			for _, op := range want {
 				if !ops[op] {

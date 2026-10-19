@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,6 +41,7 @@ type Config struct {
 	Edits       int     // nodes per change
 	CreateRatio float64 // share of the edits of a change that create a node (the others modify one), 0..1
 	Links       int     // links of a created node to earlier nodes
+	AddLinks    float64 // share of the modifications that also add a link to another node, 0..1 (links keep growing)
 	HotNodes    int     // nodes per worker that take HotRatio of the modifications: deep histories
 	HotRatio    float64
 	TextBytes   int    // size of the description of a created node
@@ -94,6 +96,8 @@ type node struct {
 	key, typ string
 	id       string
 	version  int32
+	// out are the nodes it links to (landed): a node links to another once
+	out []*node
 }
 
 type worker struct {
@@ -125,6 +129,10 @@ func (r *Runner) Run(ctx context.Context) error {
 		ctx, cancel = context.WithTimeout(ctx, cfg.Duration)
 		defer cancel()
 	}
+	// the workers exist before the probe samples them
+	for i := range cfg.Workers {
+		r.workers = append(r.workers, &worker{id: i, rnd: rand.New(rand.NewPCG(cfg.Seed, uint64(i)))})
+	}
 	var bg sync.WaitGroup
 	bg.Go(func() { r.report(ctx) })
 	if cfg.ProbeEvery > 0 {
@@ -134,9 +142,7 @@ func (r *Runner) Run(ctx context.Context) error {
 		bg.Go(func() { r.growDomain(ctx) })
 	}
 	var wg sync.WaitGroup
-	for i := range cfg.Workers {
-		w := &worker{id: i, rnd: rand.New(rand.NewPCG(cfg.Seed, uint64(i)))}
-		r.workers = append(r.workers, w)
+	for _, w := range r.workers {
 		wg.Go(func() {
 			for ctx.Err() == nil && !r.done() {
 				r.change(ctx, w)
@@ -283,11 +289,7 @@ func (r *Runner) plan(w *worker) []edit {
 				props["a"+strconv.Itoa(a)] = "v" + strconv.Itoa(w.rnd.IntN(1000))
 			}
 			e := edit{n: n, create: true, props: props}
-			for range cfg.Links {
-				if len(w.all) > 0 {
-					e.links = append(e.links, w.all[w.rnd.IntN(len(w.all))])
-				}
-			}
+			e.links = w.linkTargets(cfg.Links, nil)
 			edits = append(edits, e)
 			continue
 		}
@@ -306,9 +308,28 @@ func (r *Runner) plan(w *worker) []edit {
 			continue
 		}
 		picked[n] = true
-		edits = append(edits, edit{n: n, props: map[string]any{"value": w.rnd.Float64() * 1000, "rev": float64(n.version)}})
+		e := edit{n: n, props: map[string]any{"value": w.rnd.Float64() * 1000, "rev": float64(n.version)}}
+		if w.rnd.Float64() < cfg.AddLinks {
+			e.links = w.linkTargets(1, n)
+		}
+		edits = append(edits, e)
 	}
 	return edits
+}
+
+// linkTargets picks up to n distinct earlier nodes of the worker to link to, from aside.
+func (w *worker) linkTargets(n int, from *node) []*node {
+	var out []*node
+	for range n {
+		if len(w.all) == 0 {
+			break
+		}
+		to := w.all[w.rnd.IntN(len(w.all))]
+		if to != from && !slices.Contains(out, to) && (from == nil || !slices.Contains(from.out, to)) {
+			out = append(out, to)
+		}
+	}
+	return out
 }
 
 // change writes one change of a worker.
@@ -318,6 +339,16 @@ func (r *Runner) change(ctx context.Context, w *worker) {
 		if !e.create && e.n.id == "" {
 			if err := r.resolve(ctx, e.n); err != nil {
 				return
+			}
+		}
+		if r.Config.Mode != ModeLifecycle {
+			continue // a commit links by key
+		}
+		for _, to := range e.links {
+			if to.id == "" {
+				if err := r.resolve(ctx, to); err != nil {
+					return
+				}
 			}
 		}
 	}
@@ -354,10 +385,11 @@ func (r *Runner) landed(w *worker, edits []edit) {
 			e.n.version = 1
 			w.all = append(w.all, e.n)
 			t.Nodes.Add(1)
-			t.Links.Add(int64(len(e.links)))
 		} else {
 			e.n.version++
 		}
+		e.n.out = append(e.n.out, e.links...)
+		t.Links.Add(int64(len(e.links)))
 	}
 	w.mu.Unlock()
 	t.Versions.Add(int64(len(edits)))
@@ -382,11 +414,11 @@ func (r *Runner) commit(ctx context.Context, w *worker, edits []edit) error {
 		pe := &graphv1.NodeEdit{Props: structOf(e.props)}
 		if e.create {
 			pe.Key, pe.Type = e.n.key, e.n.typ
-			for _, to := range e.links {
-				pe.Links = append(pe.Links, &graphv1.LinkEdit{Type: LinkType, ToKey: to.key})
-			}
 		} else {
 			pe.Pre = &graphv1.NodeRef{Id: e.n.id, Version: e.n.version}
+		}
+		for _, to := range e.links {
+			pe.Links = append(pe.Links, &graphv1.LinkEdit{Type: LinkType, ToKey: to.key})
 		}
 		req.Edits = append(req.Edits, pe)
 	}
@@ -438,6 +470,13 @@ func (r *Runner) lifecycle(ctx context.Context, w *worker, edits []edit) error {
 			return g.ImpactNodeUpdate(ctx, connect.NewRequest(&graphv1.ImpactNodeUpdateRequest{ChangeId: id, ChangeImpactId: imp, Props: structOf(e.props)}))
 		}); err != nil {
 			return abandon(err)
+		}
+		for _, to := range e.links {
+			if _, err := timed(ctx, m, "ImpactLinkCreate", func(ctx context.Context) (*connect.Response[graphv1.ImpactLinkCreateResponse], error) {
+				return g.ImpactLinkCreate(ctx, connect.NewRequest(&graphv1.ImpactLinkCreateRequest{ChangeId: id, ChangeImpactId: imp, Type: LinkType, To: &graphv1.NodeRef{Id: to.id, Version: to.version}}))
+			}); err != nil {
+				return abandon(err)
+			}
 		}
 		impacts = append(impacts, imp)
 	}

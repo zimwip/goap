@@ -1231,9 +1231,10 @@ collector (`deploy/otel/collector-perf.yaml`: metrics only, the services sample 
 would (identity headers of `system:bench`, admin; or `-token` through the gateway), on the two axes: the **domain** (it publishes
 a generated domain `bench`, `bench@T000...` extending `bench@Item`, link `bench@relates`, through `ImportDomain`, a new version
 at each run and every `-domain-every` versions written) and the **change** (`-workers` writers on their own nodes, each change
-of `-edits` nodes, `-create` of them created with `-links` links, the others modified, `-hot` nodes taking `-hot-ratio` of the
-modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`, `ImpactNodeCreate` /
-`ImpactNodeCheckout` + `ImpactNodeUpdate`, `ImpactNodeReview` by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every
+of `-edits` nodes, `-create` of them created with `-links` links (2 by default), the others modified, `-add-links` of the
+modifications adding a link to another node (a node links to another once, so the links keep growing), `-hot` nodes taking
+`-hot-ratio` of the modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`,
+`ImpactNodeCreate` / `ImpactNodeCheckout` + `ImpactNodeUpdate` + `ImpactLinkCreate`, `ImpactNodeReview` by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every
 `-probe` it measures the reads (`GetBranch`, `GetNode`, `ListNodeVersions` of a hot node, `ListNodeChanges`,
 `GetNodeNeighbourhood`, `ListBaselineNodes` by type and by text, `DiffBaselines`, `ListChanges`). It records `bench.op.duration`
 (by `op`, `outcome` ok / conflict / error), `bench.response.size` and the gauges `bench.versions`, `nodes`, `links`,
