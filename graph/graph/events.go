@@ -238,6 +238,11 @@ func (t *observedTx) putBaselineOver(ctx context.Context, b domain.Baseline, ove
 		return err
 	}
 	if over != b.ParentID {
+		if domain.BranchOf(b.Branch) != domain.MainBranch {
+			b.Nodes = nil // its event carries no diff (BaselineEvent): no state is read for it
+			t.baselines = append(t.baselines, b)
+			return nil
+		}
 		full, err := t.Tx.Baseline(ctx, b.ID)
 		if err != nil {
 			return err
@@ -346,6 +351,12 @@ func (g *Graph) eventsOf(ctx context.Context, tx Tx, ot *observedTx) ([]publishe
 					ev.Set[id] = v
 				}
 			}
+			out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
+			continue
+		}
+		if ev.Branch != domain.MainBranch {
+			// the index follows main only: the baseline of another branch (a rebase on a change's own branch) names
+			// itself, without reading two states to diff them
 			out = append(out, published{fmt.Sprintf(domain.SubjectBaselineAdvanced, subjectToken(ev.Branch)), ev})
 			continue
 		}

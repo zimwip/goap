@@ -13,7 +13,8 @@
 //     primary key is not compared (SQLite only generates a rowid key: the repository assigns such a column);
 //   - DEFAULT now() has no SQLite counterpart (the repositories write the timestamp themselves): it is ignored;
 //   - a boolean in an index predicate (WHERE NOT superseded) is the test of its integer (superseded = 0);
-//   - a foreign key declared inline or by ALTER TABLE is the same constraint.
+//   - a foreign key declared inline or by ALTER TABLE is the same constraint;
+//   - the storage parameters of a PostgreSQL table (ALTER TABLE ... SET (fillfactor = 70)) are not part of the schema.
 package sqlschematest
 
 import (
@@ -119,6 +120,7 @@ var (
 	reAddFK       = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (FOREIGN KEY .*)$`)
 	reAddColumn   = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) ADD (?:COLUMN )?(\w+ .*)$`)
 	reDropColumn  = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) DROP (?:COLUMN )?(\w+)$`)
+	reStorage     = regexp.MustCompile(`(?is)^ALTER TABLE (\w+) (?:RE)?SET \(.*\)$`)
 )
 
 func (s *Schema) apply(stmt string) error {
@@ -126,6 +128,9 @@ func (s *Schema) apply(stmt string) error {
 	switch {
 	case strings.HasPrefix(up, "INSERT "), strings.HasPrefix(up, "UPDATE "), strings.HasPrefix(up, "DELETE "):
 		return nil // data, not schema
+	}
+	if reStorage.MatchString(stmt) {
+		return nil // storage parameters, not schema
 	}
 	if m := reCreateTable.FindStringSubmatch(stmt); m != nil {
 		t, err := parseTable(m[1], m[2])

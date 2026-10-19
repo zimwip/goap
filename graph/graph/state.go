@@ -203,13 +203,17 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 			}
 			read.source, read.stored = stateFromStored, read.stored+len(got)
 		} else {
+			// the landings of its branch since its base; a base on another branch (the fork of a change's branch, the
+			// head a rebase brought it onto) is under every landing of the branch: all of them up to the header
 			var after int64
 			if b.BaseID != "" {
 				base, err := t.header(ctx, b.BaseID)
 				if err != nil {
 					return nil, err
 				}
-				after = base.Seq
+				if domain.BranchOf(base.Branch) == domain.BranchOf(b.Branch) {
+					after = base.Seq
+				}
 			}
 			if got, err = t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, after, b.Seq, want); err != nil {
 				return nil, err
@@ -442,8 +446,52 @@ func (t *guardTx) putBaselineOver(ctx context.Context, b domain.Baseline, over d
 		} else if ok {
 			return t.Tx.PutBaseline(ctx, b)
 		}
+	} else if b.Kind == domain.BaselineRebase {
+		if ok, err := t.asRebaseHeader(ctx, &b, over, delta); err != nil {
+			return err
+		} else if ok {
+			return t.Tx.PutBaseline(ctx, b)
+		}
 	}
 	return t.putOver(ctx, b, over, delta)
+}
+
+// asRebaseHeader makes a rebase a header over the head it brings its branch onto (over) when what it puts there (delta)
+// is every last version its branch landed: its state is then the state of over with the landings of its branch, as
+// stateAt reads a header over another branch. A branch storing a baseline (a revert, an earlier rebase stored) or
+// holding a version the rebase leaves out (a node withdrawn since its commit) keeps the stored rebase.
+func (t *guardTx) asRebaseHeader(ctx context.Context, b *domain.Baseline, over domain.BaselineID, delta map[domain.NodeID]domain.Version) (bool, error) {
+	if over == "" || domain.BranchOf(b.Branch) == domain.MainBranch {
+		return false, nil
+	}
+	if every := t.g.materializeEvery(); every == 1 {
+		return false, nil
+	}
+	base, err := t.header(ctx, over)
+	if err != nil || domain.BranchOf(base.Branch) == domain.BranchOf(b.Branch) {
+		return false, err
+	}
+	if stored, err := t.Tx.LatestStored(ctx, b.Namespace, b.Branch, 0, b.Seq); err != nil || stored != "" {
+		return false, err
+	}
+	ids, err := t.Tx.BranchNodeIDs(ctx, b.Branch)
+	if err != nil {
+		return false, err
+	}
+	landed, err := t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, 0, b.Seq, ids)
+	if err != nil {
+		return false, err
+	}
+	if len(landed) != len(delta) {
+		return false, nil
+	}
+	for id, v := range landed {
+		if d, ok := delta[id]; !ok || d != v {
+			return false, nil
+		}
+	}
+	b.Gap, b.Depth, b.Nodes, b.BaseID = 1, 0, nil, over
+	return true, nil
 }
 
 // PutBaseline writes a baseline given its whole state: a header when its state follows from the versions its change

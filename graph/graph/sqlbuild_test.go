@@ -68,9 +68,9 @@ func TestSQLBuildersGolden(t *testing.T) {
 
 	// LatestOn (the branch is named by BranchOf: "" is main)
 	q, a = pg.sqlLatestOn("n1", "")
-	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND `+goldPGOnBranch+` ORDER BY v.version DESC LIMIT 1`, []any{"n1", "main"})
+	check("pg LatestOn", pg, q, a, `SELECT `+goldPGNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = $1 AND v.version = (SELECT max(b.version) FROM (SELECT version FROM node_version WHERE node_id = $1 AND branch = $2 UNION ALL SELECT version FROM node_branch WHERE node_id = $1 AND branch = $2) b)`, []any{"n1", "main"})
 	q, a = lite.sqlLatestOn("n1", "")
-	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND `+goldSQLiteOnBranch+` ORDER BY v.version DESC LIMIT 1`, []any{"n1", "main"})
+	check("sqlite LatestOn", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? AND v.version = (SELECT max(b.version) FROM (SELECT version FROM node_version WHERE node_id = ? AND branch = ? UNION ALL SELECT version FROM node_branch WHERE node_id = ? AND branch = ?) b)`, []any{"n1", "main"})
 
 	// DerivedNodes (ADR 0077): the versions naming a node among their origins
 	q, a = pg.sqlDerivedNodes(ref)

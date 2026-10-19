@@ -61,6 +61,16 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    A merge locks the branch it lands on before it rebases (`mergeIn`): no other merge lands between the rebase and the
    fast-forward, which would make the merge a three-way one (a merge change, its own impacts and landed events). A
    landing rewrites the origin of a node only when it differs.
+   A rebase is a header too when what it puts over the head it brings its branch onto is every last version its
+   branch landed (no revert, no stored baseline on the branch): the state of a header whose base is on another branch
+   is the state of that base with every landing of its branch (`stateAt`), which for a fork is what it was already.
+   The event of a baseline outside main carries no diff (the index follows main), so a rebase reads no state for it.
+   `LatestOn` reads the greatest version of the node written on or joined to the branch through their indexes (it
+   scanned the joins of the branch).
+8. **The indexes follow the reads.** Every read of the log names a change (`change_log_change`, a type or a flow
+   filters that range); the engine reads by process and by action run, so those two indexes are partial and leave out
+   the graph's entries (migration 0008, both dialects). `change_impact` leaves a third of its pages free (fillfactor
+   70, PostgreSQL): its updates at checkout, review and landing change no indexed column and stay heap-only.
 
 ## Consequences
 
@@ -88,3 +98,6 @@ records the branch it was written on (`node_version.branch`). The versions a bra
 - Write rate of the same bench (4 writers, 5,000 versions): concurrent merges raced between the rebase and the
   fast-forward, and a third of them became three-way merges. The log went from 8.7 to 6.8 entries per version written
   (44,900 to 33,900), `node_version` is no longer updated after its insert, and every merge is a fast-forward.
+- With point 8 and the header rebase, the same bench: change_log indexes 12 MB to 5.5 MB, change_impact updates 67% to
+  91% heap-only, rebase entries 5,137 to 150, WAL 79 to 63 MB, MergeChange 200 to 145 ms (p50); `LatestOn` went from
+  0.5 ms (and growing with the joins of main) to out of the top statements.

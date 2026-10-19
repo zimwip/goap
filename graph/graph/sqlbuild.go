@@ -111,9 +111,13 @@ func (d dialect) sqlNode(ref domain.NodeRef) (string, []any) {
 	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE n.id = ` + d.ph(1) + ` AND v.version = ` + d.ph(2), []any{string(ref.ID), int(ref.Version)}
 }
 
-// sqlLatestOn reads the latest version of a node on a branch (the branch as domain.BranchOf names it).
+// sqlLatestOn reads the latest version of a node on a branch (the branch as domain.BranchOf names it): the greatest of
+// the versions written there (index node_version_branch) and the ones joined to it (node_branch_pkey), never a scan
+// of the joins of the branch (onBranchSQL would plan one).
 func (d dialect) sqlLatestOn(id domain.NodeID, branch string) (string, []any) {
-	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE n.id = ` + d.ph(1) + ` AND ` + onBranchSQL(d.ph(2)) + ` ORDER BY v.version DESC LIMIT 1`,
+	return `SELECT ` + d.nodeCols() + nodeFrom + ` WHERE n.id = ` + d.ph(1) + ` AND v.version = (SELECT max(b.version) FROM (` +
+			`SELECT version FROM node_version WHERE node_id = ` + d.ph(1) + ` AND branch = ` + d.ph(2) +
+			` UNION ALL SELECT version FROM node_branch WHERE node_id = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + `) b)`,
 		[]any{string(id), domain.BranchOf(branch)}
 }
 

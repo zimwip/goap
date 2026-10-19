@@ -46,7 +46,8 @@ type NodeEvent struct {
 }
 
 // BaselineEvent is published when a baseline is created: the diff with its parent
-// tells which node versions became the head of the branch.
+// tells which node versions became the head of the branch. Only a baseline of main
+// carries it (the index follows main); the baseline of another branch names itself.
 type BaselineEvent struct {
 	ID      BaselineID         `json:"id"`
 	Branch  string             `json:"branch"`
