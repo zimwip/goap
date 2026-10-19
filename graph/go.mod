@@ -13,8 +13,8 @@ require (
 	github.com/labstack/echo-opentelemetry v0.0.3 // indirect
 	github.com/labstack/echo/v5 v5.3.1 // indirect
 	github.com/nats-io/nats.go v1.54.0 // indirect
-	go.opentelemetry.io/otel v1.46.0 // indirect
-	go.opentelemetry.io/otel/metric v1.46.0 // indirect
+	go.opentelemetry.io/otel v1.46.0
+	go.opentelemetry.io/otel/metric v1.46.0
 	go.opentelemetry.io/otel/trace v1.46.0 // indirect
 	golang.org/x/text v0.42.0 // indirect
 	google.golang.org/protobuf v1.36.12

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 )
@@ -149,7 +150,13 @@ func (t *guardTx) header(ctx context.Context, id domain.BaselineID) (domain.Base
 // stateAt reads the versions of some nodes (nil: every node) in a baseline (ADR 0140), the nodes it does not hold left
 // out: down the chain of the baselines its state is stored over, each one gives the nodes not given yet, a stored
 // one its entries, one kept as a header the versions landed on its branch since the baseline it is stored over.
-func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domain.NodeID) (_ map[domain.NodeID]domain.Version, err error) {
+	read := stateRead{start: time.Now(), whole: ids == nil, source: stateFromLandings}
+	defer func() {
+		if err == nil {
+			read.record(ctx)
+		}
+	}()
 	decided := map[domain.NodeID]domain.Version{} // 0: the baseline does not hold the node
 	var pending map[domain.NodeID]bool            // nil: every node
 	if ids != nil {
@@ -176,12 +183,15 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 			want = slices.Sorted(maps.Keys(pending))
 			if s, ok := t.g.states.lookup(id, want); ok {
 				take(s)
+				read.source = stateFromCache
 				break
 			}
 		} else if s, ok := t.g.states.get(id); ok {
 			take(s)
+			read.source = stateFromCache
 			break
 		}
+		read.chain++
 		b, err := t.header(ctx, id)
 		if err != nil {
 			return nil, err
@@ -191,6 +201,7 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 			if got, id, err = t.Tx.StoredVersions(ctx, b.ID, want); err != nil {
 				return nil, err
 			}
+			read.source, read.stored = stateFromStored, read.stored+len(got)
 		} else {
 			var after int64
 			if b.BaseID != "" {
@@ -203,6 +214,7 @@ func (t *guardTx) stateAt(ctx context.Context, id domain.BaselineID, ids []domai
 			if got, err = t.Tx.LandedVersions(ctx, b.Namespace, b.Branch, after, b.Seq, want); err != nil {
 				return nil, err
 			}
+			read.landed += len(got)
 			id = b.BaseID
 		}
 		take(got)
@@ -518,11 +530,13 @@ func (t *guardTx) materialize(ctx context.Context, id domain.BaselineID) error {
 	if err != nil || b.Gap == 0 && b.BaseID == "" {
 		return err
 	}
+	start := time.Now()
 	nodes, err := t.nodesOf(ctx, id)
-	if err != nil {
-		return err
+	if err == nil {
+		err = t.Tx.MaterializeBaseline(ctx, id, nodes)
 	}
-	return t.Tx.MaterializeBaseline(ctx, id, nodes)
+	recordCheckpoint(ctx, start, len(nodes), err)
+	return err
 }
 
 // DefaultCheckpointEvery is the CheckpointEvery the compositions give the graph: a branch stores its whole state every
@@ -542,6 +556,7 @@ func (c *checkpointer) store(g *Graph, ids []domain.BaselineID) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.pending = append(c.pending, ids...)
+	stateMeter().cpPending.Add(context.Background(), int64(len(ids)))
 	if c.running {
 		return
 	}
@@ -559,6 +574,7 @@ func (c *checkpointer) store(g *Graph, ids []domain.BaselineID) {
 			id := c.pending[0]
 			c.pending = c.pending[1:]
 			c.mu.Unlock()
+			stateMeter().cpPending.Add(context.Background(), -1)
 			if err := g.Materialize(context.Background(), id); err != nil {
 				slog.Warn("checkpoint of a baseline", "baseline", id, "err", err)
 			}

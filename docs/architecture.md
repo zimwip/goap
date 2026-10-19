@@ -1242,6 +1242,14 @@ modifications adding a link to another node (a node links to another once, so th
 one row per operation and window, the totals at its end). Runs add to the same graph (`make perf-run`, keys prefixed by the
 run) until `make perf-reset`.
 
+The graph service measures what the states of its baselines cost (ADR 0140, `graph/graph/statemetrics.go`): every read of
+a state `graph.state.reads` (by `scope` whole / nodes and `source`, where the walk down its chain stopped: `cache`,
+`stored` (a checkpoint, a snapshot, a rebase, a revert) or `landings` down to the empty state), `graph.state.chain` (the
+baselines walked), `graph.state.entries` (by `source` stored / landed) and `graph.state.duration`; every checkpoint
+`graph.checkpoint.stored` (by `outcome`), `graph.checkpoint.duration`, `graph.checkpoint.entries` and the queue
+`graph.checkpoint.pending`. The row *Baseline states and checkpoints* of the dashboard draws them with the space of
+`baseline_entry`: how much of the reads a checkpoint serves, against what it takes.
+
 The gateway also exposes `GET /api/status` (availability and latency of each service), displayed in the
 IDE's status bar along with the user's running runs and their notifications.
 
