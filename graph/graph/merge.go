@@ -234,9 +234,18 @@ func (g *Graph) SetBranchDescription(ctx context.Context, namespace, name, descr
 }
 
 // BranchHead returns the latest baseline of a branch of a namespace; the head of main before any change landed is the
-// empty state (empty id, no nodes).
+// empty state (empty id, no nodes). The branch of a change holds no baseline (ADR 0140): its state is answered with no
+// id, its fork as parent and the order of its last landing.
 func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domain.Baseline, err error) {
-	err = g.repo.InTx(ctx, func(tx Tx) error { b, err = branchHead(ctx, tx, namespace, name); return err })
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		br, err := tx.Branch(ctx, domain.NamespaceOf(namespace), domain.BranchOf(name))
+		if err == nil && br.Ephemeral {
+			b, err = changeBranchHead(ctx, tx, br, true)
+			return err
+		}
+		b, err = branchHead(ctx, tx, namespace, name)
+		return err
+	})
 	return
 }
 
@@ -279,6 +288,9 @@ func branchOf(ctx context.Context, tx Tx, namespace, name string) (domain.Branch
 func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
 	namespace, name = domain.NamespaceOf(namespace), domain.BranchOf(name)
 	b, err := tx.Branch(ctx, namespace, name)
+	if err == nil && b.Ephemeral {
+		return domain.Baseline{}, errEphemeral(b)
+	}
 	if err == nil && b.Head != "" {
 		return tx.Baseline(ctx, b.Head)
 	}
@@ -297,6 +309,24 @@ func branchHead(ctx context.Context, tx Tx, namespace, name string) (domain.Base
 	}
 	// no change has landed in the namespace yet: its state is the empty one (ADR 0056), the empty baseline id
 	return domain.Baseline{Namespace: namespace, Branch: name, Nodes: map[domain.NodeID]domain.Version{}}, nil
+}
+
+// branchStates reads the whole state a branch was forked from and the one it holds: its fork and head baselines, or, for
+// the branch of a change, which holds none, its fork with what landed on it (ADR 0140).
+func branchStates(ctx context.Context, tx Tx, b domain.Branch) (fork, head map[domain.NodeID]domain.Version, err error) {
+	if b.Ephemeral {
+		if fork, err = forkVersions(ctx, tx, b, nil); err != nil {
+			return nil, nil, err
+		}
+		head, err = branchVersions(ctx, tx, b, nil)
+		return fork, head, err
+	}
+	f, err := tx.Baseline(ctx, b.ForkBaseline)
+	if err != nil {
+		return nil, nil, err
+	}
+	h, err := tx.Baseline(ctx, b.Head)
+	return f.Nodes, h.Nodes, err
 }
 
 // ---- Branch merge ------------------------------------------------------------
@@ -323,11 +353,7 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 	if fb.Status != domain.BranchOpen {
 		return MergePlan{}, fmt.Errorf("branch %s is %s: %w", from, fb.Status, ErrConflict)
 	}
-	fork, err := tx.Baseline(ctx, fb.ForkBaseline)
-	if err != nil {
-		return MergePlan{}, err
-	}
-	fromHead, err := tx.Baseline(ctx, fb.Head)
+	fork, fromHead, err := branchStates(ctx, tx, fb)
 	if err != nil {
 		return MergePlan{}, err
 	}
@@ -337,8 +363,8 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 	}
 	plan := MergePlan{From: from, Into: into, IntoHead: intoHead.ID}
 	var theirs []domain.Node
-	for id, v := range fromHead.Nodes {
-		if fork.Nodes[id] != v {
+	for id, v := range fromHead {
+		if fork[id] != v {
 			n, err := tx.Node(ctx, domain.NodeRef{ID: id, Version: v})
 			if err != nil {
 				return plan, err
@@ -346,8 +372,8 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 			theirs = append(theirs, n)
 		}
 	}
-	for id := range fork.Nodes {
-		if _, ok := fromHead.Nodes[id]; ok {
+	for id := range fork {
+		if _, ok := fromHead[id]; ok {
 			continue
 		}
 		n, err := tx.LatestOn(ctx, id, from)
@@ -365,7 +391,7 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 	for _, t := range theirs {
 		c := MergeCandidate{Node: t.ID, Key: t.Key, Type: t.Type, Theirs: t.Ref(), Deleted: t.Deleted, TheirsProps: t.Properties}
 		ov, inInto := intoHead.Nodes[t.ID]
-		_, inFork := fork.Nodes[t.ID]
+		_, inFork := fork[t.ID]
 		switch {
 		case !inInto && !inFork:
 			if t.Deleted {
@@ -377,7 +403,7 @@ func planMerge(ctx context.Context, tx Tx, namespace, from, into string) (MergeP
 			if t.Deleted {
 				continue
 			}
-			anc := domain.NodeRef{ID: t.ID, Version: fork.Nodes[t.ID]}
+			anc := domain.NodeRef{ID: t.ID, Version: fork[t.ID]}
 			c.Kind, c.Ancestor, c.Merged, c.Conflicts = MergeThreeWay, &anc, t.Properties, []string{DeletedKey}
 		default:
 			ours, err := tx.Node(ctx, domain.NodeRef{ID: t.ID, Version: ov})

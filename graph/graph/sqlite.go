@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -22,7 +23,13 @@ var SQLiteMigrations embed.FS
 
 // SQLite is a Repo on a SQLite database (database/sql, schema migrated from
 // SQLiteMigrations). The driver is registered by the caller.
-type SQLite struct{ db *sql.DB }
+type SQLite struct {
+	db *sql.DB
+	// landing is the greatest order of landing allocated (ADR 0140), read from the database at the first allocation:
+	// the order is global and the local mode has one process writing
+	mu      sync.Mutex
+	landing int64
+}
 
 // NewSQLite returns a repository on db.
 func NewSQLite(db *sql.DB) *SQLite { return &SQLite{db: db} }
@@ -33,7 +40,7 @@ func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
 	if err != nil {
 		return err
 	}
-	if err := fn(&sqliteTx{tx: tx}); err != nil {
+	if err := fn(&sqliteTx{tx: tx, repo: s}); err != nil {
 		tx.Rollback() //nolint:errcheck
 		return err
 	}
@@ -41,10 +48,8 @@ func (s *SQLite) InTx(ctx context.Context, fn func(tx Tx) error) error {
 }
 
 type sqliteTx struct {
-	tx *sql.Tx
-	// seq is the order of the last baseline the transaction allocated (ADR 0140): SQLite transactions are serialized,
-	// the next one is the greatest stored or allocated plus one
-	seq int64
+	tx   *sql.Tx
+	repo *SQLite
 }
 
 // AppendOutbox implements Tx.
@@ -200,7 +205,7 @@ func (t *sqliteTx) joinBranches(ctx context.Context, id domain.NodeID, vs []doma
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
@@ -238,10 +243,10 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description,
-			fork_baseline = excluded.fork_baseline, rebased_from = excluded.rebased_from, parent = excluded.parent`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
+			fork_baseline = excluded.fork_baseline, rebased_from = excluded.rebased_from, parent = excluded.parent, fork_seq = excluded.fork_seq`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
 	return sqliteErr(err, "branch "+b.Name)
 }
 
@@ -399,7 +404,16 @@ func (t *sqliteTx) StoredVersions(ctx context.Context, id domain.BaselineID, ids
 }
 
 func (t *sqliteTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	out := map[domain.NodeID]domain.Version{}
+	ls, err := t.landings(ctx, namespace, branch, after, upTo, ids)
+	return landedVersions(ls), err
+}
+
+func (t *sqliteTx) BranchLandings(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
+	return t.landings(ctx, namespace, branch, 0, upTo, ids)
+}
+
+func (t *sqliteTx) landings(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
+	out := map[domain.NodeID]Landing{}
 	if ids != nil && len(ids) == 0 {
 		return out, nil
 	}
@@ -410,16 +424,14 @@ func (t *sqliteTx) LandedVersions(ctx context.Context, namespace, branch string,
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var nid string
+		var nid, reason string
 		var v int
-		var deleted bool
-		if err := rows.Scan(&nid, &v, &deleted); err != nil {
+		var l Landing
+		if err := rows.Scan(&nid, &v, &l.Deleted, &reason); err != nil {
 			return nil, err
 		}
-		if deleted {
-			v = 0
-		}
-		out[domain.NodeID(nid)] = domain.Version(v)
+		l.Version, l.Revert = domain.Version(v), reason == domain.ReasonRevert
+		out[domain.NodeID(nid)] = l
 	}
 	return out, rows.Err()
 }
@@ -436,12 +448,17 @@ func (t *sqliteTx) LatestStored(ctx context.Context, namespace, branch string, a
 }
 
 func (t *sqliteTx) NextLanding(ctx context.Context) (int64, error) {
-	var stored int64
-	if err := t.tx.QueryRowContext(ctx, `SELECT coalesce(max(seq), 0) FROM baseline`).Scan(&stored); err != nil {
-		return 0, err
+	r := t.repo
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.landing == 0 {
+		if err := t.tx.QueryRowContext(ctx, `SELECT max((SELECT coalesce(max(seq), 0) FROM baseline), (SELECT coalesce(max(landed), 0) FROM node_version),
+			(SELECT coalesce(max(landed), 0) FROM node_branch))`).Scan(&r.landing); err != nil {
+			return 0, err
+		}
 	}
-	t.seq = max(t.seq, stored) + 1
-	return t.seq, nil
+	r.landing++
+	return r.landing, nil
 }
 
 func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
@@ -1061,4 +1078,11 @@ func (t *sqliteTx) ChangeBaselineHeaders(ctx context.Context, namespace string, 
 func (t *sqliteTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
 	q, args := dialectSQLite.sqlBaselineCounts(namespace)
 	return t.typeCounts(ctx, q, args)
+}
+
+func (t *sqliteTx) LastLanding(ctx context.Context, branch string) (int64, error) {
+	q, args := dialectSQLite.sqlLastLanding(branch)
+	var seq int64
+	err := t.tx.QueryRowContext(ctx, q, args...).Scan(&seq)
+	return seq, err
 }

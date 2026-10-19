@@ -137,13 +137,13 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlStoredTail("b1")
 	check("sqlite StoredTail", lite, q, a, chain("?")+` SELECT coalesce(base_id, '') FROM chain ORDER BY d DESC LIMIT 1`, []any{"b1"})
 	landed := func(id, inV, inJ, ns string) string {
-		return `SELECT ` + id + `, version, deleted FROM (
-		SELECT x.node_id, x.version, x.deleted, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
+		return `SELECT ` + id + `, version, deleted, reason FROM (
+		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
 		FROM (
-			SELECT v.node_id, v.version, v.deleted, v.landed FROM node_version v
+			SELECT v.node_id, v.version, v.deleted, v.reason, v.landed FROM node_version v
 			WHERE v.branch = $1 AND v.landed > $2 AND v.landed <= $3` + inV + `
 			UNION ALL
-			SELECT j.node_id, j.version, v.deleted, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+			SELECT j.node_id, j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
 			WHERE j.branch = $1 AND j.landed > $2 AND j.landed <= $3` + inJ + `
 		) x JOIN node n ON n.id = x.node_id WHERE n.namespace = ` + ns + `
 	) y WHERE rn = 1`
@@ -159,6 +159,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg BaselineHeader", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from::text, ''), seq, coalesce(base_id::text, ''), depth FROM baseline WHERE id = $1`, []any{"b1"})
 	q, a = lite.sqlBaselineHeader("b1")
 	check("sqlite BaselineHeader", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, namespace, gap, kind, coalesce(rebased_from, ''), seq, coalesce(base_id, ''), depth FROM baseline WHERE id = ?`, []any{"b1"})
+	q, a = pg.sqlLastLanding("change-1")
+	check("pg LastLanding", pg, q, a, `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = $1 UNION ALL SELECT max(landed) FROM node_branch WHERE branch = $1) l`, []any{"change-1"})
+	q, a = lite.sqlLastLanding("change-1")
+	check("sqlite LastLanding", lite, q, a, `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = ? UNION ALL SELECT max(landed) FROM node_branch WHERE branch = ?) l`, []any{"change-1"})
 	q, a = pg.sqlBranchNodeIDs("change-1")
 	check("pg BranchNodeIDs", pg, q, a, `SELECT node_id::text FROM node_version WHERE branch = $1 UNION SELECT node_id::text FROM node_branch WHERE branch = $1`, []any{"change-1"})
 	q, a = lite.sqlBranchNodeIDs("change-1")
@@ -211,8 +215,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite InLinks", lite, q, a, `SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE to_id = ? AND to_version = ? ORDER BY id`, []any{"n1", 3})
 
 	// Branches
-	const pgBranchCols = `namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral`
-	const liteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description, intent, coalesce(rebased_from, ''), ephemeral`
+	const pgBranchCols = `namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral, fork_seq`
+	const liteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description, intent, coalesce(rebased_from, ''), ephemeral, fork_seq`
 	q, a = pg.sqlBranch("", "b")
 	check("pg Branch", pg, q, a, `SELECT `+pgBranchCols+` FROM branch WHERE namespace = $1 AND name = $2`, []any{"default", "b"})
 	q, a = lite.sqlBranch("", "b")

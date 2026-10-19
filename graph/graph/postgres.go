@@ -35,8 +35,6 @@ func (p *Postgres) InTx(ctx context.Context, fn func(tx Tx) error) error {
 
 type pgTx struct {
 	tx pgx.Tx
-	// seq is the order of the last baseline the transaction allocated (ADR 0140)
-	seq int64
 }
 
 // AppendOutbox implements Tx.
@@ -358,7 +356,7 @@ func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branc
 	var b domain.Branch
 	q, args := dialectPG.sqlBranch(namespace, name)
 	err := t.tx.QueryRow(ctx, q, args...).
-		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
 	return b, mapErr(err, "branch "+name)
 }
 
@@ -370,17 +368,17 @@ func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch,
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral, &b.ForkSeq)
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral, fork_seq) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description,
-			fork_baseline = EXCLUDED.fork_baseline, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
+			fork_baseline = EXCLUDED.fork_baseline, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent, fork_seq = EXCLUDED.fork_seq`,
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral, b.ForkSeq)
 	return mapErr(err, "branch "+b.Name)
 }
 
@@ -526,7 +524,16 @@ func (t *pgTx) StoredVersions(ctx context.Context, id domain.BaselineID, ids []d
 }
 
 func (t *pgTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
-	out := map[domain.NodeID]domain.Version{}
+	ls, err := t.landings(ctx, namespace, branch, after, upTo, ids)
+	return landedVersions(ls), err
+}
+
+func (t *pgTx) BranchLandings(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
+	return t.landings(ctx, namespace, branch, 0, upTo, ids)
+}
+
+func (t *pgTx) landings(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
+	out := map[domain.NodeID]Landing{}
 	if ids != nil && len(ids) == 0 {
 		return out, nil
 	}
@@ -537,16 +544,14 @@ func (t *pgTx) LandedVersions(ctx context.Context, namespace, branch string, aft
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var nid string
+		var nid, reason string
 		var v int
-		var deleted bool
-		if err := rows.Scan(&nid, &v, &deleted); err != nil {
+		var l Landing
+		if err := rows.Scan(&nid, &v, &l.Deleted, &reason); err != nil {
 			return nil, err
 		}
-		if deleted {
-			v = 0
-		}
-		out[domain.NodeID(nid)] = domain.Version(v)
+		l.Version, l.Revert = domain.Version(v), reason == domain.ReasonRevert
+		out[domain.NodeID(nid)] = l
 	}
 	return out, rows.Err()
 }
@@ -566,12 +571,9 @@ func (t *pgTx) LatestStored(ctx context.Context, namespace, branch string, after
 }
 
 func (t *pgTx) NextLanding(ctx context.Context) (int64, error) {
-	var stored int64
-	if err := t.tx.QueryRow(ctx, `SELECT coalesce(max(seq), 0) FROM baseline`).Scan(&stored); err != nil {
-		return 0, err
-	}
-	t.seq = max(t.seq, stored) + 1
-	return t.seq, nil
+	var seq int64
+	err := t.tx.QueryRow(ctx, `SELECT nextval('landing_seq')`).Scan(&seq)
+	return seq, err
 }
 
 func (t *pgTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error) {
@@ -1179,4 +1181,11 @@ func (t *pgTx) ChangeBaselineHeaders(ctx context.Context, namespace string, chan
 func (t *pgTx) BaselineCounts(ctx context.Context, namespace string) (map[string]int, error) {
 	q, args := dialectPG.sqlBaselineCounts(namespace)
 	return t.typeCounts(ctx, q, args)
+}
+
+func (t *pgTx) LastLanding(ctx context.Context, branch string) (int64, error) {
+	q, args := dialectPG.sqlLastLanding(branch)
+	var seq int64
+	err := t.tx.QueryRow(ctx, q, args...).Scan(&seq)
+	return seq, err
 }

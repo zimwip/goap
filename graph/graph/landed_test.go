@@ -36,12 +36,12 @@ func testLanded(t *testing.T, repo Repo) {
 	if len(ev) != 2 {
 		t.Fatalf("a change with its own branch lands twice, got %d: %+v", len(ev), ev)
 	}
-	onBranch := must[domain.Baseline](t)(g.Baseline(ctx, ev[0].Baseline))
+	// the branch of a change holds no baseline (ADR 0140): the landing there names its branch only
 	onMain := must[domain.Baseline](t)(g.Baseline(ctx, ev[1].Baseline))
-	if onBranch.Branch == domain.MainBranch || onMain.Branch != domain.MainBranch || onMain.ID != res.Baseline.ID {
-		t.Fatalf("landed on %q, then on %q (result %s)", onBranch.Branch, onMain.Branch, res.Baseline.ID)
+	if ev[0].Baseline != "" || ev[0].Branch == domain.MainBranch || onMain.Branch != domain.MainBranch || onMain.ID != res.Baseline.ID {
+		t.Fatalf("landed on %q (%s), then on %q (result %s)", ev[0].Branch, ev[0].Baseline, onMain.Branch, res.Baseline.ID)
 	}
-	if !onBranch.Contains(*ev[0].Landed) || !onMain.Contains(*ev[1].Landed) {
+	if !onMain.Contains(*ev[0].Landed) || !onMain.Contains(*ev[1].Landed) {
 		t.Fatalf("a landing names a version its baseline does not hold: %+v", ev)
 	}
 	c := must[domain.Change](t)(g.Change(ctx, res.Change))

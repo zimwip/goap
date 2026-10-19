@@ -34,7 +34,7 @@ func (g *Graph) ChangeStack(ctx context.Context, q ChangeStackQuery) (s domain.C
 			if err != nil {
 				return err
 			}
-			s.Baselines, s.Truncated = domain.BaselineLineage(heads, b.ID, branchOfChange(ctx, tx), q.Limit)
+			s.Baselines, s.Truncated = domain.BaselineLineage(heads, b.ID, mergedInto(ctx, tx), q.Limit)
 		} else {
 			n, err := tx.Node(ctx, q.Node)
 			if err != nil {
@@ -126,19 +126,6 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 	if err := reach(to, sideTo); err != nil {
 		return g, err
 	}
-	branches := map[domain.ChangeID]string{}
-	ownBranch := func(id domain.ChangeID) (string, error) {
-		if br, ok := branches[id]; ok {
-			return br, nil
-		}
-		c, err := tx.ChangeHead(ctx, id)
-		if err != nil && !isNotFound(err) {
-			return "", err
-		}
-		branches[id] = c.Branch
-		return c.Branch, nil
-	}
-	onBranch := map[string][]domain.Baseline{}
 	var seen []walked
 	for len(todo) > 0 && slices.ContainsFunc(todo, func(id domain.BaselineID) bool { return paint[id] != both }) {
 		id := todo[len(todo)-1]
@@ -147,32 +134,6 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 		seen = append(seen, walked{b, side})
 		for _, next := range []domain.BaselineID{b.ParentID, b.MergedFrom} {
 			if err := reach(next, side); err != nil {
-				return g, err
-			}
-		}
-		// the work a change brought in matters only to a side alone: below a baseline both sides reach, all is both
-		if side == both || b.Kind != domain.BaselineFastForward && b.Kind != domain.BaselineMerge || b.ChangeID == "" {
-			continue
-		}
-		own, err := ownBranch(b.ChangeID)
-		if err != nil {
-			return g, err
-		}
-		if own == "" || domain.BranchOf(own) == domain.BranchOf(b.Branch) {
-			continue
-		}
-		hs, ok := onBranch[domain.BranchOf(own)]
-		if !ok {
-			if hs, err = tx.BranchBaselineHeaders(ctx, b.Namespace, own); err != nil {
-				return g, err
-			}
-			onBranch[domain.BranchOf(own)] = hs
-		}
-		for _, o := range hs {
-			if o.CreatedAt.After(b.CreatedAt) {
-				continue
-			}
-			if err := reach(o.ID, side); err != nil {
 				return g, err
 			}
 		}
@@ -203,6 +164,22 @@ func lineageGap(ctx context.Context, tx Tx, from, to domain.BaselineID) (g gap, 
 			g.removed = append(g.removed, c)
 		}
 	}
+	// the sub-changes merged into a change are in every stack it is in (ADR 0103): the branch of a change holds no
+	// baseline (ADR 0140), the stacks name them through their parent
+	merged := mergedInto(ctx, tx)
+	expand := func(ids []domain.ChangeID) []domain.ChangeID {
+		var out []domain.ChangeID
+		for _, id := range ids {
+			for _, m := range merged(id) {
+				if !slices.Contains(out, m) && !slices.Contains(ids, m) {
+					out = append(out, m)
+				}
+			}
+			out = append(out, id)
+		}
+		return out
+	}
+	g.added, g.removed, g.changes = expand(g.added), expand(g.removed), expand(g.changes)
 	return g, nil
 }
 
@@ -214,21 +191,32 @@ func cachedHeader(ctx context.Context, tx Tx, id domain.BaselineID) (domain.Base
 	return tx.BaselineHeader(ctx, id)
 }
 
-// branchOfChange names the own branch of a change ("" when it has none or the graph no longer holds it). The heads of
-// every change are read once, at the first call: a lineage asks it of every change of a namespace's history.
-func branchOfChange(ctx context.Context, tx Tx) func(domain.ChangeID) string {
-	var branches map[domain.ChangeID]string
-	return func(id domain.ChangeID) string {
-		if branches == nil {
-			branches = map[domain.ChangeID]string{}
-			if cs, err := tx.ChangeHeads(ctx); err == nil {
-				for _, c := range cs {
-					branches[c.ID] = c.Branch
-				}
-			}
+// mergedInto names the sub-changes merged into a change, recursively, oldest first (a change the graph no longer holds
+// has none).
+func mergedInto(ctx context.Context, tx Tx) func(domain.ChangeID) []domain.ChangeID {
+	cache := map[domain.ChangeID][]domain.ChangeID{}
+	var walk func(id domain.ChangeID, depth int) []domain.ChangeID
+	walk = func(id domain.ChangeID, depth int) []domain.ChangeID {
+		if out, ok := cache[id]; ok || depth > 64 {
+			return out
 		}
-		return branches[id]
+		subs, err := tx.SubChanges(ctx, id)
+		if err != nil {
+			return nil
+		}
+		slices.SortStableFunc(subs, func(a, b domain.Change) int { return a.CreatedAt.Compare(b.CreatedAt) })
+		var out []domain.ChangeID
+		for _, sc := range subs {
+			if sc.Status != domain.ChangeApplied {
+				continue
+			}
+			out = append(out, walk(sc.ID, depth+1)...)
+			out = append(out, sc.ID)
+		}
+		cache[id] = out
+		return out
 	}
+	return func(id domain.ChangeID) []domain.ChangeID { return walk(id, 0) }
 }
 
 // stackChanges names the changes of a stack; a change the graph no longer holds (purged) keeps its id alone.

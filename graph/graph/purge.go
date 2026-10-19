@@ -42,8 +42,12 @@ func (g *Graph) PurgeChange(ctx context.Context, id domain.ChangeID) (domain.Cha
 			return err
 		}
 		if isOwn {
-			if own.Head != own.ForkBaseline {
-				return fmt.Errorf("change %s: its branch received a merge: %w", id, ErrConflict)
+			// the branch of a change holds no baseline (ADR 0140): what it committed, or a sub-change merged into it, is a
+			// landing on it
+			if last, err := tx.LastLanding(ctx, own.Name); err != nil {
+				return err
+			} else if last > 0 {
+				return fmt.Errorf("change %s: its branch holds commits: %w", id, ErrConflict)
 			}
 			branch = own.Name
 		}

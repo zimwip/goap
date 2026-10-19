@@ -230,7 +230,8 @@ func (d dialect) sqlStoredTail(id domain.BaselineID) (string, []any) {
 
 // sqlLandedVersions reads the versions that landed on a branch of a namespace in the baselines after the order after,
 // up to upTo (Baseline.Seq, ADR 0140): written on the branch or joined to it, the last landing of each node, for some
-// nodes (nil: every node), with whether that version deletes the node.
+// nodes (nil: every node), with whether that version deletes the node and why it was written (a revert, on the branch
+// of a change).
 func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, ids []domain.NodeID) (string, []any) {
 	args := []any{domain.BranchOf(branch), after, upTo, domain.NamespaceOf(namespace)}
 	inV, inJ := "", ""
@@ -239,13 +240,13 @@ func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, 
 		inJ = ` AND ` + strings.Replace(in, "v.node_id", "j.node_id", 1)
 		inV, args = ` AND `+in, append(args, arg)
 	}
-	return `SELECT ` + d.id("node_id") + `, version, deleted FROM (
-		SELECT x.node_id, x.version, x.deleted, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
+	return `SELECT ` + d.id("node_id") + `, version, deleted, reason FROM (
+		SELECT x.node_id, x.version, x.deleted, x.reason, row_number() OVER (PARTITION BY x.node_id ORDER BY x.landed DESC, x.version DESC) AS rn
 		FROM (
-			SELECT v.node_id, v.version, v.deleted, v.landed FROM node_version v
+			SELECT v.node_id, v.version, v.deleted, v.reason, v.landed FROM node_version v
 			WHERE v.branch = ` + d.ph(1) + ` AND v.landed > ` + d.ph(2) + ` AND v.landed <= ` + d.ph(3) + inV + `
 			UNION ALL
-			SELECT j.node_id, j.version, v.deleted, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
+			SELECT j.node_id, j.version, v.deleted, v.reason, j.landed FROM node_branch j JOIN node_version v ON v.node_id = j.node_id AND v.version = j.version
 			WHERE j.branch = ` + d.ph(1) + ` AND j.landed > ` + d.ph(2) + ` AND j.landed <= ` + d.ph(3) + inJ + `
 		) x JOIN node n ON n.id = x.node_id WHERE n.namespace = ` + d.ph(4) + `
 	) y WHERE rn = 1`, args
@@ -255,6 +256,12 @@ func (d dialect) sqlLandedVersions(namespace, branch string, after, upTo int64, 
 func (d dialect) sqlLatestStored(namespace, branch string, after, upTo int64) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` AND gap = 0 AND seq > ` + d.ph(3) +
 		` AND seq <= ` + d.ph(4) + ` ORDER BY seq DESC LIMIT 1`, []any{domain.NamespaceOf(namespace), domain.BranchOf(branch), after, upTo}
+}
+
+// sqlLastLanding reads the order of the last landing on a branch (index node_version_landed, node_branch_landed).
+func (d dialect) sqlLastLanding(branch string) (string, []any) {
+	return `SELECT coalesce(max(landed), 0) FROM (SELECT max(landed) AS landed FROM node_version WHERE branch = ` + d.ph(1) +
+		` UNION ALL SELECT max(landed) FROM node_branch WHERE branch = ` + d.ph(1) + `) l`, []any{domain.BranchOf(branch)}
 }
 
 // sqlBranchNodeIDs reads the nodes a branch holds a version of: written on it or joined to it (ADR 0137).
@@ -283,7 +290,7 @@ func (d dialect) linkCols() string {
 	return d.cols(su("id"), sc("type"), su("from_id"), sc("from_version"), su("to_id"), sc("to_version"), sc("props"), su("change_id"))
 }
 
-const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s, ephemeral`
+const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s, ephemeral, fork_seq`
 
 // branchCols is the select list of a branch.
 func (d dialect) branchCols() string {

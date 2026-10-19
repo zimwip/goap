@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -65,7 +66,17 @@ func seen(t *testing.T, g *Graph, c domain.Change, key, prop string) any {
 
 func headOf(t *testing.T, g *Graph, c domain.Change) domain.BaselineID {
 	t.Helper()
-	return must[domain.Baseline](t)(g.BranchHead(context.Background(), c.Namespace, c.Branch)).ID
+	b := must[domain.Baseline](t)(g.BranchHead(context.Background(), c.Namespace, c.Branch))
+	if b.ID != "" {
+		return b.ID
+	}
+	// a change branch holds no baseline: its state is its fork and its landings
+	return domain.BaselineID(fmt.Sprintf("%s@%d", b.ParentID, b.Seq))
+}
+
+func forkOf(t *testing.T, g *Graph, c domain.Change) domain.Branch {
+	t.Helper()
+	return must[domain.Branch](t)(g.Branch(context.Background(), c.Namespace, c.Branch))
 }
 
 // A sub-sub-change forks from the branch of its parent as that branch is when it is created: it sees what its parent
@@ -79,13 +90,13 @@ func testSubSubChangeBranches(t *testing.T, repo Repo) {
 	root := must[domain.Change](t)(g.CreateChange(ctx, NewChange{ProjectID: "PROJ-ROOT", Title: "root", BaselineID: w.base.ID, OwnBranch: true}))
 	commitProps(t, g, root, w.cmp1, map[string]any{"title": "root's"})
 	mid := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "mid", ParentID: root.ID}))
-	if mid.BaselineID != headOf(t, g, root) {
-		t.Fatalf("the middle change starts from the head of the root's branch %s, not %s", headOf(t, g, root), mid.BaselineID)
+	if rb := forkOf(t, g, root); mid.BaselineID != rb.ForkBaseline {
+		t.Fatalf("the middle change starts from the fork of the root's branch %s, not %s", rb.ForkBaseline, mid.BaselineID)
 	}
 	// a draft of the middle change is its own: its sub-change, created now, does not see it
 	draftProps(t, g, mid, w.cmp2, map[string]any{"title": "mid's draft"})
 	leaf := must[domain.Change](t)(g.CreateChange(ctx, NewChange{Title: "leaf", ParentID: mid.ID}))
-	if b := must[domain.Branch](t)(g.Branch(ctx, leaf.Namespace, leaf.Branch)); b.Parent != mid.Branch || b.ForkBaseline != headOf(t, g, mid) {
+	if b := must[domain.Branch](t)(g.Branch(ctx, leaf.Namespace, leaf.Branch)); b.Parent != mid.Branch || b.ForkBaseline != forkOf(t, g, mid).ForkBaseline || b.ForkSeq == 0 {
 		t.Fatalf("the leaf forks from the head of its parent's branch %s: %+v", mid.Branch, b)
 	}
 	if got := seen(t, g, leaf, "CMP-1", "title"); got != "root's" {

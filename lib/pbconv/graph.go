@@ -201,7 +201,7 @@ func ChangeStackToPB(s domain.ChangeStack) *graphv1.ChangeStack {
 	}
 	for _, b := range s.Baselines {
 		out.Baselines = append(out.Baselines, &graphv1.BaselineStep{Id: string(b.ID), Name: b.Name, Branch: b.Branch, Kind: b.Kind, Change: string(b.Change),
-			Parent: string(b.Parent), MergedFrom: string(b.MergedFrom), RebasedFrom: string(b.RebasedFrom), CreatedAt: Time(b.CreatedAt)})
+			Parent: string(b.Parent), MergedFrom: string(b.MergedFrom), RebasedFrom: string(b.RebasedFrom), CreatedAt: Time(b.CreatedAt), Merged: changeIDs(b.Merged)})
 	}
 	return out
 }
@@ -533,6 +533,15 @@ func DependenciesFromPB(ds []*graphv1.Dependency) []domain.Dependency {
 	for _, d := range ds {
 		out = append(out, domain.Dependency{ID: domain.ChangeID(d.Id), Title: d.Title, Methodology: d.Methodology, Status: domain.ChangeStatus(d.Status),
 			State: d.State, ParentID: domain.ChangeID(d.ParentId), Satisfied: d.Satisfied, Reason: d.Reason})
+	}
+	return out
+}
+
+// changeIDs converts change ids.
+func changeIDs(ids []domain.ChangeID) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, string(id))
 	}
 	return out
 }

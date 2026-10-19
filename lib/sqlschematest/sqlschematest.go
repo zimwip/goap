@@ -126,8 +126,10 @@ var (
 func (s *Schema) apply(stmt string) error {
 	up := strings.ToUpper(stmt)
 	switch {
-	case strings.HasPrefix(up, "INSERT "), strings.HasPrefix(up, "UPDATE "), strings.HasPrefix(up, "DELETE "):
+	case strings.HasPrefix(up, "INSERT "), strings.HasPrefix(up, "UPDATE "), strings.HasPrefix(up, "DELETE "), strings.HasPrefix(up, "SELECT "):
 		return nil // data, not schema
+	case strings.HasPrefix(up, "CREATE SEQUENCE "):
+		return nil // a counter of one dialect (the other keeps it otherwise), not a table
 	}
 	if reStorage.MatchString(stmt) {
 		return nil // storage parameters, not schema

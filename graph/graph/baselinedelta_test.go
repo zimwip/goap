@@ -428,9 +428,9 @@ func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) 
 	for _, b := range bs {
 		byID[b.ID] = b
 	}
-	branchOf := branchOfChange(ctx, tx)
+	merged := mergedInto(ctx, tx)
 	stack := func(id domain.BaselineID) []domain.ChangeID {
-		l, _ := domain.BaselineLineage(heads, id, branchOf, len(heads))
+		l, _ := domain.BaselineLineage(heads, id, merged, len(heads))
 		return domain.StackChangeIDs(nil, l)
 	}
 	for _, b := range bs {

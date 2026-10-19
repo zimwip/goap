@@ -49,7 +49,7 @@
     'fast-forward': 'the target branch moved to the commit of a change (linear history)',
     merge: 'a three-way merge of a branch',
     rebase: 'the branch of a change moved onto the head of its target before its merge',
-    open: 'a branch forked from here, open, with no commit yet',
+    open: 'a branch forked from here, still open',
   };
   const badges = (b: Baseline) => badgesOf(b, baselines);
 
@@ -69,7 +69,7 @@
             {#if badges(h).rebased}<span class="kind rebased" title={badges(h).rebased}>rebased</span>{/if}
           </span>
           <span class="hline2">
-            {#if isOpen(h)}<span class="hnote">{h.branch}: open, no commit yet</span>{/if}
+            {#if isOpen(h)}<span class="hnote">{h.branch}: open</span>{/if}
             {#if h.changeId}<span class="hchange">change {h.changeId.slice(0, 8)}</span>{/if}
             {#if badges(h).rebased}<span class="hnote">{badges(h).rebased}</span>{/if}
             {#if badges(h).merged}<span class="hnote">{badges(h).merged}</span>{/if}

@@ -2,8 +2,8 @@
 // landed on it, the change's own branch as a lane of its own, from the baseline the change started on to the commit
 // the merge joined. Two changes started from the same baseline and applied one after the other read as two lanes
 // forking from the same dot, the second joining by a merge. The branches forked from the branch shown and still open
-// have a lane too (ADR 0102): their commits, or, before the first one, an open head drawn as a transparent dot on the
-// lane leaving the baseline it forked from.
+// have a lane too (ADR 0102): the branch of a change holds no baseline (ADR 0140), so it is its open head, drawn as a
+// transparent dot on the lane leaving the baseline it forked from; a lasting branch shows its own baselines.
 import { shortId, type Baseline, type Branch } from './api';
 import type { LaneEdge, LaneEntry } from './components/HistoryGraph.svelte';
 import { MAIN_BRANCH } from './namespace';
@@ -25,7 +25,7 @@ function commitsOf(baselines: Baseline[], branch: string): Map<string, Baseline>
 
 export type BaselineKind = 'commit' | 'fast-forward' | 'merge' | 'rebase' | 'open' | 'snapshot';
 
-/** The kind of the row standing for an open branch with no commit yet (not a baseline: a transparent dot). */
+/** The kind of the row standing for an open branch with no baseline of its own (not a baseline: a transparent dot). */
 export const OPEN_KIND = 'open';
 const OPEN_PREFIX = 'open:';
 /** Whether a row id is the open head of a branch without commit, not a baseline. */
@@ -122,7 +122,7 @@ export function historyEntries(
     const changeId = br.origin?.startsWith('change:') ? br.origin.slice('change:'.length) : undefined;
     rows.push({
       id,
-      parents: br.forkBaseline ? [{ id: br.forkBaseline, label: 'fork · no commit yet' }] : [],
+      parents: br.forkBaseline ? [{ id: br.forkBaseline, label: 'fork' }] : [],
       lane: name,
       ephemeral: isChangeLane(name),
       pending: true,

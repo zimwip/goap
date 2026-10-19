@@ -12,16 +12,35 @@ import (
 // node by node from the baseline (versionsAt: the chain its state is stored over, ADR 0140), what it changes is kept apart (the delta the next baseline is written with), and the whole state is read only
 // for a question about every node (all).
 type stateView struct {
-	ctx     context.Context
-	tx      Tx
-	at      domain.BaselineID
-	read    map[domain.NodeID]domain.Version // versions read from the baseline
-	absent  map[domain.NodeID]bool           // nodes read that the baseline does not hold
-	changed map[domain.NodeID]domain.Version // what the operation changed: a version, 0 for a node it removed
+	ctx context.Context
+	tx  Tx
+	// versions reads some nodes of the state (nil: every node): a baseline (versionsAt) or the branch of a change
+	// (branchVersions)
+	versions func(ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
+	read     map[domain.NodeID]domain.Version // versions read from the baseline
+	absent   map[domain.NodeID]bool           // nodes read that the baseline does not hold
+	changed  map[domain.NodeID]domain.Version // what the operation changed: a version, 0 for a node it removed
 }
 
 func newStateView(ctx context.Context, tx Tx, at domain.BaselineID) *stateView {
-	return &stateView{ctx: ctx, tx: tx, at: at, read: map[domain.NodeID]domain.Version{}, absent: map[domain.NodeID]bool{},
+	return newView(ctx, tx, func(ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+		if ids == nil {
+			b, err := tx.Baseline(ctx, at)
+			return b.Nodes, err
+		}
+		return versionsAt(ctx, tx, at, ids)
+	})
+}
+
+// newBranchView is the state of the branch of a change (ADR 0140): its fork with what landed on it.
+func newBranchView(ctx context.Context, tx Tx, b domain.Branch) *stateView {
+	return newView(ctx, tx, func(ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+		return branchVersions(ctx, tx, b, ids)
+	})
+}
+
+func newView(ctx context.Context, tx Tx, versions func([]domain.NodeID) (map[domain.NodeID]domain.Version, error)) *stateView {
+	return &stateView{ctx: ctx, tx: tx, versions: versions, read: map[domain.NodeID]domain.Version{}, absent: map[domain.NodeID]bool{},
 		changed: map[domain.NodeID]domain.Version{}}
 }
 
@@ -42,7 +61,7 @@ func (s *stateView) load(ids ...domain.NodeID) error {
 	}
 	slices.Sort(missing)
 	missing = slices.Compact(missing)
-	got, err := versionsAt(s.ctx, s.tx, s.at, missing)
+	got, err := s.versions(missing)
 	if err != nil {
 		return err
 	}
@@ -77,11 +96,11 @@ func (s *stateView) delta() map[domain.NodeID]domain.Version { return maps.Clone
 
 // all reads the whole state with the changes put in: for a question about every node of the state.
 func (s *stateView) all() (map[domain.NodeID]domain.Version, error) {
-	b, err := s.tx.Baseline(s.ctx, s.at)
+	out, err := s.versions(nil)
 	if err != nil {
 		return nil, err
 	}
-	out := b.Nodes
+	out = maps.Clone(out)
 	if out == nil {
 		out = map[domain.NodeID]domain.Version{}
 	}
@@ -116,6 +135,9 @@ func versionsAt(ctx context.Context, tx Tx, at domain.BaselineID, ids []domain.N
 func branchHeadHeader(ctx context.Context, tx Tx, namespace, name string) (domain.Baseline, error) {
 	ns, n := domain.NamespaceOf(namespace), domain.BranchOf(name)
 	b, err := tx.Branch(ctx, ns, n)
+	if err == nil && b.Ephemeral {
+		return domain.Baseline{}, errEphemeral(b)
+	}
 	if err == nil && b.Head != "" {
 		return tx.BaselineHeader(ctx, b.Head)
 	}

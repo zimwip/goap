@@ -926,6 +926,11 @@ func (g *Graph) transitionOf(ctx context.Context, tx Tx, id domain.ChangeID, in 
 // viewTarget is the state of the namespace as an operation on a flow sees it: the head of the change branch (else the
 // reference baseline). The nodes the change holds a draft of are read through their drafts (draftReader).
 func (g *Graph) viewTarget(ctx context.Context, tx Tx, w *work) (*stateView, error) {
+	if own, ok, err := ownBranch(ctx, tx, w.c); err != nil {
+		return nil, err
+	} else if ok {
+		return newBranchView(ctx, tx, own), nil
+	}
 	b, err := branchHeadHeader(ctx, tx, w.c.Namespace, domain.BranchOf(w.c.Branch))
 	if errors.Is(err, ErrNotFound) || (err == nil && b.ID == "") {
 		b, err = headerOf(ctx, tx, w.c.BaselineID)

@@ -73,9 +73,22 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    filters that range); the engine reads by process and by action run, so those two indexes are partial and leave out
    the graph's entries (migration 0008, both dialects). `change_impact` leaves a third of its pages free (fillfactor
    70, PostgreSQL): its updates at checkout, review and landing change no indexed column and stay heap-only.
-9. **The branch of a change is ephemeral** (`Branch.Ephemeral`, column `branch.ephemeral`, migration 0009, set on
-   every change branch): it lives until the change lands and its state is its fork with what it landed, so its
-   headers are never checkpointed; only the lasting branches (main, the named ones) store states.
+9. **The branch of a change is ephemeral and holds no baseline** (`Branch.Ephemeral`, column `branch.ephemeral`,
+   migration 0009, set on every change branch). Its state is its fork (`ForkBaseline`, a baseline of a lasting branch)
+   with what landed on it, the last landing of a node winning (`Tx.BranchLandings`, `branchVersions`,
+   `graph/graph/branchstate.go`); a commit writes its versions and closes their landing (`endLanding`) with no
+   baseline, so the cost of a commit is its own versions, never a header or a checkpoint of the change's branch. The
+   landings have one order across branches (PostgreSQL sequence `landing_seq`, migration 0011; SQLite a counter of the
+   repository; memory its own), and a sub-change, forked from the ephemeral branch of its parent, records the order it
+   forked at (`Branch.ForkSeq`): its fork is the lasting baseline under the chain with the landings of its ancestors up
+   to that order. A withdrawn committed node is reverted by a new version with reason `revert` (`domain.ReasonRevert`)
+   holding the fork's value (or deleted when the fork lacks the node): the branch reads it as the fork's version and
+   the merge carries nothing for it. `Graph.BranchHead` of a change branch answers its state with no id (parent its
+   fork, `Seq` its last landing); every other reader of a head baseline refuses one (`errEphemeral`). A sub-change
+   merged into its parent joins its versions to the parent's branch; the change-stack of a baseline names it in
+   `BaselineStep.Merged` (proto `merged`), the sub-changes merged into the change of the step. A merge into a lasting
+   branch from a change branch has no `MergedFrom`. `Change.ResultBaselineID` is set only by a landing on a lasting
+   branch. Only the lasting branches (main, the named ones) store states.
 10. **An answer follows its scope, not the size of the graph.** `ListBaselineNodes` takes a change
    (`change_id`, `NodeQuery.Change`): the nodes its impacts act on, read node by node at their version in the
    baseline; it and `ListBaselineLinks` answer the header of the baseline, not its nodes. `GetBranch` with
@@ -98,11 +111,11 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    (`versionsAt`), and the two sets are compared in memory (created, removed, modified). `DiffStacks` uses the same walk
    instead of reading every header of the namespace, the head of every change and the whole state of
    `from`. Migration 0010 indexes `change_impact (node_id, seq)` and `baseline (namespace, branch, seq)`.
-12. **A change leaves two baselines, not three.** At its merge, a root change whose committed nodes did not move on the
+12. **A change leaves one baseline, its landing.** (Since point 9, its commits leave none.) At its merge, a root change whose committed nodes did not move on the
    branch it lands on since its fork writes no rebase baseline: the rebase that brings nothing to merge is skipped
    (`rebaseCommittedTx(..., merging)`), and the fast-forward moves the fork of its branch onto the head
-   (`forkOnto`: the nodes it changed are read at the fork and at the head, `versionsAt`; equal, a header entry records
-   the move and `RebasedFrom` the old fork). A change thus writes its commit (its own branch) and one landing on main.
+   (`moveFork`: the nodes it changed are read at the fork and at the head; equal, a header entry records the move and
+   `RebasedFrom` the old fork). A change thus writes one baseline, its landing on main.
    `ListBaselines` is a page of a branch (`branch`, `before` the order `seq`, `limit` 100, `next`; `Tx.BaselinePage`)
    with `related`, the baselines of the page's changes and of the open branches forked from it, and the headers its
    lineage names (`Graph.BaselineHistory`), or the headers asked by `ids` (`Tx.BaselineHeadersOf`); `ListBranches`

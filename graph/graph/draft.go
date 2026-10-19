@@ -394,11 +394,11 @@ func (g *Graph) ChangeNodeViewByKey(ctx context.Context, id domain.ChangeID, flo
 			if own, ok, err := ownBranch(ctx, tx, c); err != nil {
 				return err
 			} else if ok {
-				head, err := branchHead(ctx, tx, c.Namespace, own.Name)
+				head, err := branchVersions(ctx, tx, own, []domain.NodeID{n.ID})
 				if err != nil {
 					return err
 				}
-				if at, ok := head.Nodes[n.ID]; ok {
+				if at, ok := head[n.ID]; ok {
 					ref.Version = at
 				}
 			}

@@ -511,7 +511,16 @@ func (t *memTx) StoredVersions(_ context.Context, id domain.BaselineID, ids []do
 	}
 }
 
-func (t *memTx) LandedVersions(_ context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+func (t *memTx) LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	ls, err := t.landings(namespace, branch, after, upTo, ids)
+	return landedVersions(ls), err
+}
+
+func (t *memTx) BranchLandings(_ context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
+	return t.landings(namespace, branch, 0, upTo, ids)
+}
+
+func (t *memTx) landings(namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error) {
 	namespace, branch = domain.NamespaceOf(namespace), domain.BranchOf(branch)
 	type landing struct {
 		landed int64
@@ -538,13 +547,9 @@ func (t *memTx) LandedVersions(_ context.Context, namespace, branch string, afte
 			put(j.landed, t.st.versions[k.ref.ID][k.ref.Version-1])
 		}
 	}
-	out := make(map[domain.NodeID]domain.Version, len(last))
+	out := make(map[domain.NodeID]Landing, len(last))
 	for id, l := range last {
-		if l.v.Deleted {
-			out[id] = 0
-		} else {
-			out[id] = l.v.Version
-		}
+		out[id] = Landing{Version: l.v.Version, Deleted: l.v.Deleted, Revert: l.v.Reason == domain.ReasonRevert}
 	}
 	return out, nil
 }
@@ -989,4 +994,22 @@ func (t *memTx) BaselineCounts(ctx context.Context, namespace string) (map[strin
 		out[domain.BranchOf(b.Branch)]++
 	}
 	return out, err
+}
+
+func (t *memTx) LastLanding(_ context.Context, branch string) (int64, error) {
+	branch = domain.BranchOf(branch)
+	var last int64
+	for _, vs := range t.st.versions {
+		for _, v := range vs {
+			if domain.BranchOf(v.Branch) == branch {
+				last = max(last, v.Landed)
+			}
+		}
+	}
+	for k, j := range t.st.joins {
+		if k.branch == branch {
+			last = max(last, j.landed)
+		}
+	}
+	return last, nil
 }

@@ -438,7 +438,7 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 		}
 		// a change naming no starting state starts from the head of its branch: the state the last change left, or
 		// the empty state while the namespace has none (ADR 0056)
-		if c.BaselineID == "" {
+		if c.BaselineID == "" && c.ParentID == "" {
 			head, err := branchHeadHeader(ctx, tx, c.Namespace, c.Branch)
 			if err != nil {
 				return err
@@ -468,8 +468,15 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 			if intent == "" {
 				intent = domain.IntentDerive
 			}
-			own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkBaseline: fork.ID, Head: fork.ID,
+			// the branch of a change holds no baseline (ADR 0140): its fork, a baseline of a lasting branch, or the point
+			// of the branch of its parent change it is forked at (ADR 0103)
+			own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkBaseline: fork.ID,
 				Origin: domain.ChangeBranchOrigin(c.ID), Intent: intent, Status: domain.BranchOpen, CreatedAt: g.now()}
+			if b.Ephemeral {
+				if own.ForkBaseline, own.ForkSeq, err = forkPoint(ctx, tx, b); err != nil {
+					return err
+				}
+			}
 			if err := tx.PutBranch(ctx, own); err != nil {
 				return err
 			}

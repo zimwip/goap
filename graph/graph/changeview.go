@@ -56,18 +56,19 @@ func changeViewTx(ctx context.Context, g *Graph, tx Tx, c domain.Change, flow, l
 		}
 		return tx.Baseline(ctx, from)
 	}
-	if _, own, err := ownBranch(ctx, tx, c); err != nil {
+	var base domain.Baseline
+	if b, own, err := ownBranch(ctx, tx, c); err != nil {
 		return domain.Baseline{}, err
 	} else if own {
-		// the head of the change branch (what it and its merged sub-changes committed, ADR 0103)
-		head, err := branchHead(ctx, tx, c.Namespace, c.Branch)
-		if err != nil {
-			return domain.Baseline{}, err
+		// the state of the change branch (what it and its merged sub-changes committed, ADR 0103), which no baseline
+		// holds (ADR 0140): the header of its fork with that state
+		if base, err = headerOf(ctx, tx, b.ForkBaseline); err != nil {
+			return base, err
 		}
-		from = head.ID
-	}
-	base, err := tx.Baseline(ctx, from)
-	if err != nil {
+		if base.Nodes, err = branchVersions(ctx, tx, b, nil); err != nil {
+			return base, err
+		}
+	} else if base, err = tx.Baseline(ctx, from); err != nil {
 		return base, err
 	}
 	nodes := maps.Clone(base.Nodes)

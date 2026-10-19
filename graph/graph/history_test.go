@@ -53,13 +53,10 @@ func testBaselineHistory(t *testing.T, repo Repo) {
 		t.Fatalf("pages = %d baselines, main has %d", len(got), len(main))
 	}
 	for _, c := range changes[:4] {
-		commit := baselineOfChange(t, g, c.ID, domain.BaselineCommit)
-		if !slices.ContainsFunc(related, func(b domain.Baseline) bool { return b.ID == commit.ID }) {
-			t.Fatalf("the commit of %s is not related to its page", c.Title)
-		}
+		// a change's branch holds no baseline: the change is on the page by the baseline it landed in
 		for _, b := range must[[]domain.Baseline](t)(g.Baselines(ctx, "")) {
-			if b.ChangeID == c.ID && b.Kind == domain.BaselineRebase {
-				t.Fatalf("%s rebased with nothing to merge: %+v", c.Title, b)
+			if b.ChangeID == c.ID && (b.Kind == domain.BaselineCommit || b.Kind == domain.BaselineRebase) {
+				t.Fatalf("%s left a baseline on its own branch: %+v", c.Title, b)
 			}
 		}
 	}

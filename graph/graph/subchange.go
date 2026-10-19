@@ -182,11 +182,8 @@ func (g *Graph) prepareSubChange(ctx context.Context, tx Tx, c *domain.Change, i
 	c.Branch = own.Name
 	in.OwnBranch = true
 	if c.BaselineID == "" {
-		head, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
-		if err != nil {
-			return err
-		}
-		c.BaselineID = head.ID
+		// the lasting baseline under the branch of the parent: the branch of a change holds none (ADR 0140)
+		c.BaselineID = own.ForkBaseline
 	}
 	if c.Methodology == "" {
 		c.Methodology = parent.Methodology

@@ -36,7 +36,11 @@ export function stackRows(stack: ChangeStack | undefined): StackRow[] {
     else add(v.change, `wrote v${v.version}${v.reason ? ` (${v.reason})` : ''} on ${on}`);
     for (const j of v.joined ?? []) add(j.change, `made v${v.version} join ${j.branch || 'main'}`);
   }
-  for (const b of stack?.baselines ?? []) add(b.change, `${b.kind || 'baseline'} on ${b.branch || 'main'}`);
+  for (const b of stack?.baselines ?? []) {
+    add(b.change, `${b.kind || 'baseline'} on ${b.branch || 'main'}`);
+    // a sub-change leaves no baseline of its own (ADR 0140): it came in merged into the change of the baseline
+    for (const m of b.merged ?? []) add(m, `merged into ${changeLabel(byId.get(b.change ?? ''), b.change ?? '')}`);
+  }
   const depthOf = (id: string, seen = new Set<string>()): number => {
     const p = byId.get(id)?.parent;
     if (!p || !byId.has(p) || seen.has(p)) return 0;

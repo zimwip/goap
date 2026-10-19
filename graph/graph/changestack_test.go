@@ -87,8 +87,11 @@ func testChangeStack(t *testing.T, repo Repo) {
 	if bs.Baselines[len(bs.Baselines)-1].ID != head.ID {
 		t.Fatalf("the lineage ends with the baseline asked: %+v", bs.Baselines)
 	}
-	if !slices.ContainsFunc(bs.Baselines, func(s domain.BaselineStep) bool { return s.Kind == domain.BaselineRebase && s.Change == b.ID }) {
-		t.Fatalf("B's rebase is part of main's head: %+v", bs.Baselines)
+	// the branch of a change holds no baseline (ADR 0140): the parent's landing names the sub-changes merged into it
+	if !slices.ContainsFunc(bs.Baselines, func(s domain.BaselineStep) bool {
+		return s.Change == parent.ID && slices.Equal(s.Merged, []domain.ChangeID{a.ID, b.ID})
+	}) {
+		t.Fatalf("A and B are merged into the parent's landing: %+v", bs.Baselines)
 	}
 
 	added, removed := mustStacks(t)(g.DiffStacks(ctx, before.ID, head.ID))

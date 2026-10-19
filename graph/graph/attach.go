@@ -242,7 +242,7 @@ func (g *Graph) rootTarget(ctx context.Context, tx Tx, c domain.Change) (string,
 // chain) already set: what it committed is rebased there, conflicts refusing the move; a change that committed
 // nothing is forked from that head; one without a branch of its own gets one.
 func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target string) (domain.Change, error) {
-	head, err := branchHead(ctx, tx, c.Namespace, target)
+	tb, err := branchOf(ctx, tx, c.Namespace, target)
 	if err != nil {
 		return c, err
 	}
@@ -254,10 +254,13 @@ func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target str
 		own = domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Origin: domain.ChangeBranchOrigin(c.ID),
 			Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
 	}
+	before := own // what it was forked from: the base of the rebase
 	own.Parent = target
 	if !hasCommits(c) {
-		own.ForkBaseline, own.Head = head.ID, head.ID
-		c.BaselineID = head.ID
+		if err := (onto{parent: tb}).forkOnHead(ctx, tx, &own); err != nil {
+			return c, err
+		}
+		c.BaselineID = own.ForkBaseline
 	}
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return c, err
@@ -269,7 +272,7 @@ func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target str
 	if !hasCommits(c) {
 		return c, nil
 	}
-	res, err := g.rebaseCommittedTx(ctx, tx, c, own, false)
+	res, err := g.rebaseOnto(ctx, tx, c, own, before, false)
 	if err != nil {
 		return c, err
 	}

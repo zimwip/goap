@@ -45,6 +45,8 @@ type BaselineStep struct {
 	MergedFrom  BaselineID `json:"mergedFrom,omitempty"`
 	RebasedFrom BaselineID `json:"rebasedFrom,omitempty"`
 	CreatedAt   time.Time  `json:"createdAt"`
+	// Merged are the sub-changes merged into Change (ADR 0103), oldest first: the work it brings is theirs too.
+	Merged []ChangeID `json:"merged,omitempty"`
 }
 
 // StackChange is a change of a stack, as its readers name it.
@@ -111,19 +113,16 @@ func VersionLineage(versions []Node, joins []VersionJoin, v Version, limit int) 
 }
 
 // BaselineLineage returns the lineage of baseline from, oldest first, read from the headers of the baselines of its
-// namespace (their nodes are not needed): the baselines it follows from (parent, merged head) and, for one taking a
-// change in, the baselines of that change's own branch (branchOf names it, "" for none) written before it: the
-// change's commits and rebases, the sub-changes merged into it. At most limit (the most recent kept; 0:
-// DefaultStackLimit).
-func BaselineLineage(headers []Baseline, from BaselineID, branchOf func(ChangeID) string, limit int) (out []BaselineStep, truncated bool) {
+// namespace (their nodes are not needed): the baselines it follows from (parent, merged head), each naming the
+// sub-changes merged into its change (merged names them, recursively; nil: none), whose work it brings (the branch of a
+// change holds no baseline, ADR 0140). At most limit (the most recent kept; 0: DefaultStackLimit).
+func BaselineLineage(headers []Baseline, from BaselineID, merged func(ChangeID) []ChangeID, limit int) (out []BaselineStep, truncated bool) {
 	if limit <= 0 {
 		limit = DefaultStackLimit
 	}
 	byID := make(map[BaselineID]Baseline, len(headers))
-	onBranch := map[string][]Baseline{}
 	for _, b := range headers {
 		byID[b.ID] = b
-		onBranch[BranchOf(b.Branch)] = append(onBranch[BranchOf(b.Branch)], b)
 	}
 	seen := map[BaselineID]bool{}
 	todo := []BaselineID{from}
@@ -135,19 +134,13 @@ func BaselineLineage(headers []Baseline, from BaselineID, branchOf func(ChangeID
 			continue
 		}
 		seen[id] = true
-		out = append(out, BaselineStep{ID: b.ID, Name: b.Name, Branch: BranchOf(b.Branch), Kind: b.Kind, Change: b.ChangeID, Parent: b.ParentID,
-			MergedFrom: b.MergedFrom, RebasedFrom: b.RebasedFrom, CreatedAt: b.CreatedAt})
-		todo = append(todo, b.ParentID, b.MergedFrom)
-		if b.Kind == BaselineFastForward || b.Kind == BaselineMerge {
-			// the change it took in worked on a branch of its own: its baselines there are the work it brought
-			if own := branchOf(b.ChangeID); own != "" && BranchOf(own) != BranchOf(b.Branch) {
-				for _, o := range onBranch[BranchOf(own)] {
-					if !o.CreatedAt.After(b.CreatedAt) {
-						todo = append(todo, o.ID)
-					}
-				}
-			}
+		step := BaselineStep{ID: b.ID, Name: b.Name, Branch: BranchOf(b.Branch), Kind: b.Kind, Change: b.ChangeID, Parent: b.ParentID,
+			MergedFrom: b.MergedFrom, RebasedFrom: b.RebasedFrom, CreatedAt: b.CreatedAt}
+		if merged != nil && b.ChangeID != "" && (b.Kind == BaselineFastForward || b.Kind == BaselineMerge) {
+			step.Merged = merged(b.ChangeID)
 		}
+		out = append(out, step)
+		todo = append(todo, b.ParentID, b.MergedFrom)
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
 	if len(out) > limit {
@@ -174,6 +167,9 @@ func StackChangeIDs(versions []VersionStep, baselines []BaselineStep) []ChangeID
 		}
 	}
 	for _, b := range baselines {
+		for _, m := range b.Merged {
+			add(m)
+		}
 		add(b.Change)
 	}
 	return out

@@ -217,39 +217,48 @@ func (g *Graph) NodeByKeyOn(ctx context.Context, namespace, branch, key string) 
 	return
 }
 
-// fastForward lands a change whose target branch has not moved since its
-// branch was forked: the versions of the branch join the target (ADR 0032),
-// no merge version is made, and each change impact lands as the version it wrote.
+// fastForward lands a change whose target has not moved, for the nodes its branch changed, since its branch was
+// forked: the versions of the branch join the target (ADR 0032), no merge version is made, and each change impact
+// lands as the version it wrote. The target is a lasting branch, which records the landing in a baseline, or the branch
+// of the parent change of a sub-change (ADR 0103), which holds no baseline (ADR 0140).
 func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own domain.Branch) (bool, error) {
-	into, err := branchHeadHeader(ctx, tx, c.Namespace, own.Parent)
+	to, err := ontoOf(ctx, tx, own)
 	if err != nil {
 		return false, err
 	}
-	from, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
-	if err != nil {
-		return false, err
-	}
-	// what the branch changed since its fork joins the target: the versions of its head baseline (a rejected or
-	// replaced version stays behind), and the tombstones of the nodes it retired; only a node the branch holds a version
-	// of can differ, the states are read for those (ADR 0137)
-	target := domain.BranchOf(own.Parent)
+	// what the branch changed since its fork joins the target: the versions the branch holds now (a rejected or
+	// replaced version stays behind, a revert gives the fork's), and the tombstones of the nodes it retired; only a node
+	// the branch holds a version of can differ, the states are read for those (ADR 0137)
+	target := to.parent.Name
 	ids, err := tx.BranchNodeIDs(ctx, own.Name)
 	if err != nil {
 		return false, err
 	}
 	slices.Sort(ids)
-	if into.ID != own.ForkBaseline {
-		// the target moved since the fork: still a fast-forward over its head when none of the nodes the branch changed
-		// moved there, the rebase that would only move the fork left out (ADR 0140)
-		if ok, err := g.forkOnto(ctx, tx, &c, &own, into.ID, ids); err != nil || !ok {
-			return false, err
-		}
-	}
-	fromNodes, err := versionsAt(ctx, tx, from.ID, ids)
+	forkNodes, err := forkVersions(ctx, tx, own, ids)
 	if err != nil {
 		return false, err
 	}
-	intoNodes, err := versionsAt(ctx, tx, into.ID, ids)
+	intoNodes, err := to.versions(ctx, tx, ids)
+	if err != nil {
+		return false, err
+	}
+	if !maps.Equal(forkNodes, intoNodes) {
+		return false, nil // the target moved on a node the branch changed: a merge, not a fast-forward
+	}
+	if moved, err := to.moved(ctx, tx, own); err != nil {
+		return false, err
+	} else if moved {
+		// the target moved since the fork, on other nodes: the work of the branch stands over it as it is, the rebase
+		// that would only move the fork left out (ADR 0140)
+		if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
+			return false, err
+		}
+		if c, err = tx.Change(ctx, c.ID); err != nil {
+			return false, err
+		}
+	}
+	fromNodes, err := branchVersions(ctx, tx, own, ids)
 	if err != nil {
 		return false, err
 	}
@@ -280,55 +289,34 @@ func (g *Graph) fastForward(ctx context.Context, tx Tx, c domain.Change, own dom
 			return false, err
 		}
 	}
-	// a fast-forward, not a merge (own.Parent did not move since the fork): name it after the change, not "merge …"
-	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: domain.BranchOf(own.Parent), ParentID: into.ID, ChangeID: c.ID,
-		Kind: domain.BaselineFastForward, CreatedAt: g.now()}
-	if err := putBaselineOver(ctx, tx, res, into.ID, delta); err != nil {
-		return false, err
-	}
-	if err := g.advanceBranch(ctx, tx, c.Namespace, domain.BranchOf(own.Parent), res); err != nil {
-		return false, err
-	}
 	own.Status = domain.BranchMerged
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return false, err
 	}
-	c.Status, c.ResultBaselineID = domain.ChangeApplied, res.ID
+	c.Status = domain.ChangeApplied
+	if to.parent.Ephemeral {
+		// the branch of the parent holds what the sub-change landed, its impacts landed there (recordInParent)
+		endLanding(tx, target)
+		if err := g.land(ctx, tx, c, own, c.ID, ""); err != nil {
+			return false, err
+		}
+		return true, tx.PutChange(ctx, c)
+	}
+	// a fast-forward, not a merge (the target did not move since the fork): name it after the change, not "merge …"
+	res := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: target, ParentID: to.head, ChangeID: c.ID,
+		Kind: domain.BaselineFastForward, CreatedAt: g.now()}
+	if err := putBaselineOver(ctx, tx, res, to.head, delta); err != nil {
+		return false, err
+	}
+	if err := g.advanceBranch(ctx, tx, c.Namespace, target, res); err != nil {
+		return false, err
+	}
+	c.ResultBaselineID = res.ID
 	if err := g.land(ctx, tx, c, own, c.ID, res.ID); err != nil {
 		return false, err
 	}
 	g.raiseApplied(ctx, tx, c, res)
 	return true, tx.PutChange(ctx, c)
-}
-
-// forkOnto moves the fork of a change's branch onto head when no node of ids changed between the fork and head: the
-// work of the branch then stands over head as it is. The move is journaled as a rebase is (HeaderBaselineID).
-func (g *Graph) forkOnto(ctx context.Context, tx Tx, c *domain.Change, own *domain.Branch, head domain.BaselineID, ids []domain.NodeID) (bool, error) {
-	at, err := versionsAt(ctx, tx, own.ForkBaseline, ids)
-	if err != nil {
-		return false, err
-	}
-	now, err := versionsAt(ctx, tx, head, ids)
-	if err != nil {
-		return false, err
-	}
-	if !maps.Equal(at, now) {
-		return false, nil
-	}
-	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(head)}}})
-	if err != nil {
-		return false, err
-	}
-	if _, err := tx.AppendLog(ctx, e); err != nil {
-		return false, err
-	}
-	if own.RebasedFrom == "" {
-		own.RebasedFrom = own.ForkBaseline
-	}
-	own.ForkBaseline = head
-	c.BaselineID = head
-	return true, nil
 }
 
 // ensureOwnBranch gives a change the branch of its own that the versions it writes live on
@@ -349,7 +337,7 @@ func (g *Graph) ensureOwnBranch(ctx context.Context, tx Tx, c domain.Change) (do
 	if err != nil {
 		return c, parent, err
 	}
-	own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: parent.Name, ForkBaseline: fork.ID, Head: fork.ID,
+	own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: parent.Name, ForkBaseline: fork.ID,
 		Origin: domain.ChangeBranchOrigin(c.ID), Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
 	if err := tx.PutBranch(ctx, own); err != nil {
 		return c, own, err

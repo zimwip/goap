@@ -112,16 +112,10 @@ func testRebaseRootDifferentNodes(t *testing.T, repo Repo) {
 	}
 	// ADR 0102, 0140: test2 committed on its branch from B; no node changed on both sides, so the merge moved the fork onto
 	// T1 and fast-forwarded over it, the branch keeping no rebase baseline: main is the one baseline a change adds
-	if got := baselineOfChange(t, g, t2.ID, domain.BaselineCommit); got.RebasedFrom != "" || got.ParentID != f.base.ID {
-		t.Fatalf("test2's commit: %+v", got)
-	}
 	for _, b := range must[[]domain.Baseline](t)(g.Baselines(ctx, "")) {
-		if b.ChangeID == t2.ID && b.Kind == domain.BaselineRebase {
-			t.Fatalf("a rebase baseline with nothing to merge: %+v", b)
+		if (b.ChangeID == t1.ID || b.ChangeID == t2.ID) && b.Kind != domain.BaselineFastForward {
+			t.Fatalf("a change's branch holds no baseline: %+v", b)
 		}
-	}
-	if got := baselineOfChange(t, g, t1.ID, domain.BaselineCommit); got.RebasedFrom != "" {
-		t.Fatalf("test1's commit was never rebased: %+v", got)
 	}
 	if br := must[domain.Branch](t)(g.Branch(ctx, "", t2.Branch)); br.RebasedFrom != f.base.ID || br.ForkBaseline != b1.ID || br.Status != domain.BranchMerged {
 		t.Fatalf("test2's branch: %+v", br)
@@ -293,8 +287,8 @@ func testRebaseRootCommittedRebasedAtMerge(t *testing.T, repo Repo) {
 	if n.Properties["a"] == nil || n.Properties["b"] == nil || len(n.Parents) != 2 || n.Reason != domain.ReasonRebase {
 		t.Fatalf("REQ-1 holds both changes, merged from both versions: %+v", n)
 	}
-	if rb := baselineOfChange(t, g, t2.ID, domain.BaselineRebase); rb.RebasedFrom != f.base.ID || rb.ParentID != c2.ID || rb.MergedFrom != b1.ID {
-		t.Fatalf("the rebase of the branch: %+v", rb)
+	if moves := rebaseMoves(t, g, t2.ID); len(moves) != 1 || moves[0].From != string(f.base.ID) || moves[0].To != string(b1.ID) {
+		t.Fatalf("the rebase moved test2's fork from B to T1: %+v", moves)
 	}
 }
 
@@ -335,10 +329,10 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 		t.Fatalf("resolution: %+v %v", ch, err)
 	}
 	res := must[domain.Baseline](t)(g.Baseline(ctx, ch.ResultBaselineID))
-	if res.Kind != domain.BaselineMerge || res.ParentID != b1.ID || res.MergedFrom == "" {
+	if res.Kind != domain.BaselineMerge || res.ParentID != b1.ID {
 		t.Fatalf("the race lands by a merge: %+v", res)
 	}
-	if got := baselineOfChange(t, g, t2.ID, domain.BaselineRebase); got.RebasedFrom != f.base.ID {
-		t.Fatalf("test2 was rebased onto test0 before: %+v", got)
+	if moves := rebaseMoves(t, g, t2.ID); len(moves) == 0 || moves[0].From != string(f.base.ID) {
+		t.Fatalf("test2 was rebased onto test0 before: %+v", moves)
 	}
 }

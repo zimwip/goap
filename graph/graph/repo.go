@@ -80,6 +80,11 @@ type Tx interface {
 	// in a baseline whose order is after `after`, up to upTo (Baseline.Seq, ADR 0140): written there or joined; 0 for a
 	// version that deletes its node.
 	LandedVersions(ctx context.Context, namespace, branch string, after, upTo int64, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
+	// BranchLandings reads the last landing of each node (nil ids: every node of the namespace) on a branch up to the
+	// order upTo (ADR 0140): what the branch of a change holds over its fork, a revert meaning the fork's version.
+	BranchLandings(ctx context.Context, namespace, branch string, upTo int64, ids []domain.NodeID) (map[domain.NodeID]Landing, error)
+	// LastLanding returns the order of the last landing on a branch (0: none, ADR 0140).
+	LastLanding(ctx context.Context, branch string) (int64, error)
 	// LatestStored returns the last baseline of a branch of a namespace storing its state (Gap 0) whose order is after
 	// `after`, up to upTo: the checkpoint a header is stored over (empty: none, ADR 0140).
 	LatestStored(ctx context.Context, namespace, branch string, after, upTo int64) (domain.BaselineID, error)
@@ -181,4 +186,25 @@ type Tx interface {
 type NodeChange struct {
 	Change domain.ChangeID
 	Seq    int64
+}
+
+// Landing is the last version of a node landed on a branch (Tx.BranchLandings): Deleted when that version deletes the
+// node, Revert when it puts back the version the branch of a change was forked from (ADR 0140).
+type Landing struct {
+	Version domain.Version
+	Deleted bool
+	Revert  bool
+}
+
+// landedVersions is the state landings give: a version, 0 for a node a version deletes.
+func landedVersions(ls map[domain.NodeID]Landing) map[domain.NodeID]domain.Version {
+	out := make(map[domain.NodeID]domain.Version, len(ls))
+	for id, l := range ls {
+		if l.Deleted {
+			out[id] = 0
+		} else {
+			out[id] = l.Version
+		}
+	}
+	return out
 }

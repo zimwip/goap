@@ -17,9 +17,18 @@ import (
 // settle otherwise; the merge is then a fast-forward. A sub-change, which has no branch of its own (ADR 0081), is merged
 // into its parent the same way: settled, rebased onto its parent, asked to the merge guards, then integrated.
 
-// hasCommits reports whether a root change committed versions on its own branch it has not merged yet.
+// hasCommits reports whether a change committed versions on its own branch it has not merged yet: an impact of it
+// landed there (its own commit, or the merge of a sub-change, ADR 0103).
 func hasCommits(c domain.Change) bool {
-	return c.ResultBaselineID != "" && (c.Status == domain.ChangeDraft || c.Status == domain.ChangeActive)
+	if c.Status != domain.ChangeDraft && c.Status != domain.ChangeActive {
+		return false
+	}
+	for _, cn := range mainImpactsOf(c) {
+		if cn.Landed != nil {
+			return true
+		}
+	}
+	return false
 }
 
 // uncommitted lists the change impacts whose draft holds a modification not committed yet (ADR 0102).
@@ -64,15 +73,11 @@ func (g *Graph) withdrawnSince(ctx context.Context, tx Tx, c domain.Change) ([]d
 	if len(ids) == 0 {
 		return nil, nil, nil
 	}
-	fork, err := versionsAt(ctx, tx, own.ForkBaseline, ids)
+	fork, err := forkVersions(ctx, tx, own, ids)
 	if err != nil {
 		return nil, nil, err
 	}
-	head, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
-	if err != nil {
-		return nil, nil, err
-	}
-	at, err := versionsAt(ctx, tx, head.ID, ids)
+	at, err := branchVersions(ctx, tx, own, ids)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -272,10 +277,6 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 	if err != nil {
 		return err
 	}
-	head, err := branchHead(ctx, tx, parent.Namespace, parent.Branch)
-	if err != nil {
-		return err
-	}
 	// the parent's acceptances are one review, recorded before them (ADR 0105)
 	type landedIn struct {
 		events []domain.ImpactEvent
@@ -331,47 +332,49 @@ func (g *Graph) recordInParent(ctx context.Context, tx Tx, c domain.Change) erro
 			ref := t.ref
 			events := append(t.events,
 				domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactReviewed, By: r.By, Review: &r, Causation: cause},
-				domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactLanded, Landed: &ref, Baseline: head.ID, Branch: domain.BranchOf(parent.Branch)})
+				domain.ImpactEvent{Change: parent.ID, Impact: t.id, Op: domain.ImpactLanded, Landed: &ref, Branch: domain.BranchOf(parent.Branch)})
 			if err := g.emit(ctx, tx, events...); err != nil {
 				return err
 			}
 		}
 	}
-	// the parent's branch now holds the sub-change's commits: the parent has committed work to merge
-	if parent, err = tx.Change(ctx, parent.ID); err != nil {
-		return err
-	}
-	parent.ResultBaselineID = head.ID
-	return tx.PutChange(ctx, parent)
+	// the parent's branch now holds the sub-change's commits, landed impacts of the parent: it has committed work to
+	// merge (hasCommits)
+	return nil
 }
 
-// rebaseCommittedTx rebases a root change that committed on its own branch onto the head of its target branch: a
-// baseline of kind rebase on its branch (the head of the target with the versions the change committed; its parent the
-// previous head of the branch, MergedFrom the head it was rebased onto, RebasedFrom the fork it left), the fork of the
-// branch and the change's reference baseline moved to that head, and, for each node changed on both sides since the
-// fork, a draft merging the two (base: the version at the fork; ours: the version the change committed; theirs: the
-// version on the target), its Base the committed version and MergedWith the target's. A rebase with no conflict keeps the
-// reviews and commits the merged drafts; a conflict sends its impact back to proposed, named as ADR 0101 does, to be
-// settled, accepted and committed.
+// rebaseCommittedTx rebases a change that committed on its own branch onto what that branch is forked from now (the
+// head of its target branch; for a sub-change, the state of its parent's branch, ADR 0103): the fork of the branch and
+// the change's reference baseline move there, and, for each node changed on both sides since the fork, a draft merges
+// the two (base: the version at the fork; ours: the version the change committed; theirs: the version on the target),
+// its Base the committed version and MergedWith the target's. The branch of a change holds no baseline (ADR 0140): the
+// move is its fork's, journaled, and what the change committed stays on it. A rebase with no conflict keeps the reviews
+// and commits the merged drafts; a conflict sends its impact back to proposed, named as ADR 0101 does, to be settled,
+// accepted and committed. merging: for the merge that follows, which moves the fork itself when nothing merges
+// (fastForward).
 func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, merging bool) (RebaseResult, error) {
+	return g.rebaseOnto(ctx, tx, c, own, own, merging)
+}
+
+// rebaseOnto is rebaseCommittedTx for a branch given another parent (reparent): forked bears the fork the branch had,
+// the base of the three-way merges; the rebase is then made whatever moved.
+func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, forked domain.Branch, merging bool) (RebaseResult, error) {
 	target := domain.BranchOf(own.Parent)
 	res := RebaseResult{Branch: target, From: own.ForkBaseline}
-	headB, err := branchHeadHeader(ctx, tx, c.Namespace, target)
+	to, err := ontoOf(ctx, tx, own)
 	if err != nil {
 		return res, err
 	}
-	res.Onto = headB.ID
-	if headB.ID == own.ForkBaseline {
-		return res, nil
+	res.Onto = to.head
+	if forked.Parent == own.Parent {
+		if moved, err := to.moved(ctx, tx, own); err != nil || !moved {
+			return res, err
+		}
 	}
 	if keys, err := g.uncommitted(ctx, tx, c); err != nil {
 		return res, err
 	} else if len(keys) > 0 {
 		return res, fmt.Errorf("change %s holds uncommitted modifications (%s): commit or cancel them before it is rebased: %w", c.ID, strings.Join(keys, ", "), ErrConflict)
-	}
-	mineB, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
-	if err != nil {
-		return res, err
 	}
 	impactOf := map[domain.NodeID]domain.ChangeImpact{}
 	for _, cn := range mainImpactsOf(c) {
@@ -390,12 +393,18 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 	}
 	slices.Sort(ids)
 	ids = slices.Compact(ids)
-	fork, err := states3(ctx, tx, ids, own.ForkBaseline, mineB.ID, headB.ID)
+	forkNodes, err := forkVersions(ctx, tx, forked, ids)
 	if err != nil {
 		return res, err
 	}
-	forkNodes, mineNodes, headNodes := fork[0], fork[1], fork[2]
-	delta := map[domain.NodeID]domain.Version{} // over the head of the target
+	mineNodes, err := branchVersions(ctx, tx, forked, ids)
+	if err != nil {
+		return res, err
+	}
+	headNodes, err := to.versions(ctx, tx, ids)
+	if err != nil {
+		return res, err
+	}
 	for _, id := range ids {
 		hv, inMine := mineNodes[id]
 		if !inMine {
@@ -405,7 +414,6 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 		if inFork && fv == hv {
 			continue // the change did not change it: the target's version stands
 		}
-		delta[id] = hv
 		tv, inHead := headNodes[id]
 		if inHead == inFork && tv == fv {
 			continue // changed by the change only
@@ -443,7 +451,7 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 		}
 		merged.Change, merged.Impact, merged.Flow = c.ID, cn.ID, ""
 		merged.Base, merged.MergedWith = &oursRef, &theirsRef
-		rebased := map[string]any{"branch": target, "baseline": string(headB.ID)}
+		rebased := map[string]any{"branch": target, "baseline": string(to.head)}
 		var pre *domain.NodeRef
 		if cn.Pre != nil && inHead {
 			pre = &theirsRef // the change now starts from the target's version
@@ -469,35 +477,11 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 		}
 	}
 	if merging && !moved {
-		// no node changed on both sides: the merge lands what the branch committed over the head of the target as it is,
-		// a fast-forward over that head, and the branch keeps no rebase of its own (fastForward, ADR 0140)
+		// no node changed on both sides: the merge lands what the branch committed over the target as it is, the fork
+		// moved by the fast-forward (ADR 0140)
 		return res, nil
 	}
-	rb := domain.Baseline{ID: domain.BaselineID(g.newID()), Name: c.Title, Namespace: c.Namespace, Branch: own.Name, ParentID: mineB.ID, ChangeID: c.ID,
-		Kind: domain.BaselineRebase, MergedFrom: headB.ID, RebasedFrom: own.ForkBaseline, CreatedAt: g.now()}
-	if err := putBaselineOver(ctx, tx, rb, headB.ID, delta); err != nil {
-		return res, err
-	}
-	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
-		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(headB.ID)}}})
-	if err != nil {
-		return res, err
-	}
-	if _, err := tx.AppendLog(ctx, e); err != nil {
-		return res, err
-	}
-	if own.RebasedFrom == "" {
-		own.RebasedFrom = own.ForkBaseline
-	}
-	own.ForkBaseline, own.Head = headB.ID, rb.ID
-	if err := tx.PutBranch(ctx, own); err != nil {
-		return res, err
-	}
-	if c, err = tx.Change(ctx, c.ID); err != nil {
-		return res, err
-	}
-	c.BaselineID = headB.ID
-	if err := tx.PutChange(ctx, c); err != nil {
+	if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
 		return res, err
 	}
 	// a rebase that met no conflict commits its merges: the branch holds the work brought up to date
@@ -509,28 +493,61 @@ func (g *Graph) rebaseCommittedTx(ctx context.Context, tx Tx, c domain.Change, o
 	return res, nil
 }
 
-// committedBehind fills the rebase state of a root change that committed on its branch: the head of its target when it
-// moved since the fork, and the impacts whose node changed on both sides.
-func (g *Graph) committedBehind(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, st *RebaseState) error {
-	target := domain.BranchOf(own.Parent)
-	head, err := branchHeadHeader(ctx, tx, c.Namespace, target)
-	if err != nil || head.ID == own.ForkBaseline {
-		return err
-	}
-	st.Branch, st.Onto = target, head.ID
-	mine, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
+// moveFork moves the fork of the branch of a change onto what it is forked from now, with the change's reference
+// baseline: a change.updated entry records the move (HeaderBaselineID, ADR 0101).
+func (g *Graph) moveFork(ctx context.Context, tx Tx, id domain.ChangeID, own *domain.Branch, to onto) error {
+	c, err := tx.Change(ctx, id)
 	if err != nil {
 		return err
 	}
+	if err := to.forkOn(ctx, tx, own); err != nil {
+		return err
+	}
+	e, err := domain.HeaderEntry(g.newID(), c.ID, g.caller(ctx), g.now(),
+		domain.HeaderEdit{Fields: map[string]domain.HeaderValue{HeaderBaselineID: {From: string(c.BaselineID), To: string(own.ForkBaseline)}}})
+	if err != nil {
+		return err
+	}
+	if _, err := tx.AppendLog(ctx, e); err != nil {
+		return err
+	}
+	if err := tx.PutBranch(ctx, *own); err != nil {
+		return err
+	}
+	if c, err = tx.Change(ctx, id); err != nil {
+		return err
+	}
+	c.BaselineID = own.ForkBaseline
+	return tx.PutChange(ctx, c)
+}
+
+// committedBehind fills the rebase state of a change that committed on its branch: what it is forked from when that
+// moved since the fork, and the impacts whose node changed on both sides.
+func (g *Graph) committedBehind(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, st *RebaseState) error {
+	to, err := ontoOf(ctx, tx, own)
+	if err != nil {
+		return err
+	}
+	if moved, err := to.moved(ctx, tx, own); err != nil || !moved {
+		return err
+	}
+	st.Branch, st.Onto = domain.BranchOf(own.Parent), to.head
 	var ids []domain.NodeID
 	for _, cn := range mainImpactsOf(c) {
 		ids = append(ids, nodeOf(cn))
 	}
-	s, err := states3(ctx, tx, ids, own.ForkBaseline, mine.ID, head.ID)
+	forkNodes, err := forkVersions(ctx, tx, own, ids)
 	if err != nil {
 		return err
 	}
-	forkNodes, mineNodes, headNodes := s[0], s[1], s[2]
+	mineNodes, err := branchVersions(ctx, tx, own, ids)
+	if err != nil {
+		return err
+	}
+	headNodes, err := to.versions(ctx, tx, ids)
+	if err != nil {
+		return err
+	}
 	for _, cn := range mainImpactsOf(c) {
 		id := nodeOf(cn)
 		hv, ok := mineNodes[id]
@@ -592,17 +609,4 @@ func (g *Graph) CommitState(ctx context.Context, id domain.ChangeID) (st CommitS
 		return nil
 	})
 	return
-}
-
-// states3 reads the versions of some nodes in three baselines (ADR 0137).
-func states3(ctx context.Context, tx Tx, ids []domain.NodeID, a, b, c domain.BaselineID) ([3]map[domain.NodeID]domain.Version, error) {
-	var out [3]map[domain.NodeID]domain.Version
-	for i, at := range []domain.BaselineID{a, b, c} {
-		v, err := versionsAt(ctx, tx, at, ids)
-		if err != nil {
-			return out, err
-		}
-		out[i] = v
-	}
-	return out, nil
 }

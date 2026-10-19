@@ -103,15 +103,11 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 	if own, ok, err := ownBranch(ctx, tx, c); err != nil {
 		return bb, nil, err
 	} else if ok {
-		h, err := branchHeadHeader(ctx, tx, c.Namespace, own.Name)
-		if err != nil {
-			return bb, nil, err
-		}
 		ids := make([]domain.NodeID, 0, len(impacts))
 		for _, cn := range impacts {
 			ids = append(ids, nodeOf(cn))
 		}
-		if head, err = versionsAt(ctx, tx, h.ID, ids); err != nil { // the nodes of the impacts only (ADR 0137)
+		if head, err = branchVersions(ctx, tx, own, ids); err != nil { // the nodes of the impacts only (ADR 0137)
 			return bb, nil, err
 		}
 	}

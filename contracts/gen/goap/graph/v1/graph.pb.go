@@ -8400,12 +8400,14 @@ type BaselineStep struct {
 	Name   string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	Branch string                 `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
 	// commit | fast-forward | merge | rebase | revert | snapshot
-	Kind          string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
-	Change        string                 `protobuf:"bytes,5,opt,name=change,proto3" json:"change,omitempty"`
-	Parent        string                 `protobuf:"bytes,6,opt,name=parent,proto3" json:"parent,omitempty"`
-	MergedFrom    string                 `protobuf:"bytes,7,opt,name=merged_from,json=mergedFrom,proto3" json:"merged_from,omitempty"`
-	RebasedFrom   string                 `protobuf:"bytes,8,opt,name=rebased_from,json=rebasedFrom,proto3" json:"rebased_from,omitempty"`
-	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Kind        string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	Change      string                 `protobuf:"bytes,5,opt,name=change,proto3" json:"change,omitempty"`
+	Parent      string                 `protobuf:"bytes,6,opt,name=parent,proto3" json:"parent,omitempty"`
+	MergedFrom  string                 `protobuf:"bytes,7,opt,name=merged_from,json=mergedFrom,proto3" json:"merged_from,omitempty"`
+	RebasedFrom string                 `protobuf:"bytes,8,opt,name=rebased_from,json=rebasedFrom,proto3" json:"rebased_from,omitempty"`
+	CreatedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	// the sub-changes merged into the change it takes in (ADR 0103), oldest first: the work it brings is theirs too
+	Merged        []string `protobuf:"bytes,10,rep,name=merged,proto3" json:"merged,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8499,6 +8501,13 @@ func (x *BaselineStep) GetRebasedFrom() string {
 func (x *BaselineStep) GetCreatedAt() *timestamppb.Timestamp {
 	if x != nil {
 		return x.CreatedAt
+	}
+	return nil
+}
+
+func (x *BaselineStep) GetMerged() []string {
+	if x != nil {
+		return x.Merged
 	}
 	return nil
 }
@@ -18279,7 +18288,7 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"created_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"=\n" +
 	"\vVersionJoin\x12\x16\n" +
 	"\x06branch\x18\x01 \x01(\tR\x06branch\x12\x16\n" +
-	"\x06change\x18\x02 \x01(\tR\x06change\"\x8d\x02\n" +
+	"\x06change\x18\x02 \x01(\tR\x06change\"\xa5\x02\n" +
 	"\fBaselineStep\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -18291,7 +18300,9 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"mergedFrom\x12!\n" +
 	"\frebased_from\x18\b \x01(\tR\vrebasedFrom\x129\n" +
 	"\n" +
-	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\"\xaa\x01\n" +
+	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x16\n" +
+	"\x06merged\x18\n" +
+	" \x03(\tR\x06merged\"\xaa\x01\n" +
 	"\fBaselineDiff\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +

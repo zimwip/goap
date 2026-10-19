@@ -76,6 +76,10 @@ const (
 	// merging into it the version of the branch it was forked from (its parent branch). Parents: the version the
 	// change had committed, then the parent branch's.
 	ReasonRebase = "rebase"
+	// ReasonRevert: the version the commit of a change writes on its branch for a node it changed and no longer does
+	// (its impact withdrawn): the properties of the version the branch was forked from. The branch reads it as the
+	// version of its fork (ADR 0140), and it never lands beyond the branch.
+	ReasonRevert = "revert"
 )
 
 // BranchOf returns the branch name, defaulting to main.
@@ -281,6 +285,11 @@ type Branch struct {
 	// Ephemeral marks the branch of a change (ADR 0140): it lives until the change lands, its state is its fork with
 	// what it landed, never a checkpoint; only the lasting branches (main, the named ones) store states.
 	Ephemeral bool `json:"ephemeral,omitempty"`
+	// ForkSeq is, for a branch forked from the branch of a change (a sub-change, ADR 0103), the order of landing up to
+	// which the versions landed on that branch, and on the branches it is forked from, are in its fork (ADR 0140): a
+	// change branch holds no baseline, so its fork is ForkBaseline, the lasting baseline under the chain, with those
+	// landings. 0 for a branch forked from a lasting one.
+	ForkSeq int64 `json:"forkSeq,omitempty"`
 }
 
 // AttributeCheck is what the graph needs of an attribute of a node type to judge the value of a property: its

@@ -1237,6 +1237,8 @@ message BaselineStep {
   string merged_from = 7;
   string rebased_from = 8;
   google.protobuf.Timestamp created_at = 9;
+  // the sub-changes merged into the change it takes in (ADR 0103), oldest first: the work it brings is theirs too
+  repeated string merged = 10;
 }
 message BaselineDiff {
   string node = 1;
