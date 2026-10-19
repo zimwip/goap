@@ -308,7 +308,7 @@ func (d dialect) heldLinks(n int) string {
 		),
 		h AS (SELECT l.id, l.type, l.from_id, c.rv, l.to_id, l.to_version, l.props, l.change_id, l.removes FROM c JOIN link l ON l.from_id = c.nid AND l.from_version = c.sv)
 		SELECT h.id, h.type, h.from_id, h.rv AS from_version, h.to_id, h.to_version, h.props, h.change_id FROM h
-		WHERE h.removes IS NULL AND NOT EXISTS (SELECT 1 FROM h x WHERE x.removes = h.id AND x.from_id = h.from_id AND x.rv = h.rv)`
+		WHERE h.removes IS NULL AND (h.id, h.from_id, h.rv) NOT IN (SELECT x.removes, x.from_id, x.rv FROM h x WHERE x.removes IS NOT NULL)`
 }
 
 // sqlLinksTo reads the links entering the version ref (any version of the node when ref.Version is 0), one per
