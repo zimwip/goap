@@ -7,10 +7,15 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strconv"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -26,6 +31,7 @@ import (
 //	GOAP_SCALE_VERSIONS  more versions per node after the seeding (default 0)
 //	GOAP_SCALE_EDITS     nodes each measured change touches (default 10)
 //	GOAP_SCALE_ROUNDS    measured changes of each kind, update and create (default 10)
+//	GOAP_SCALE_SQL       on PostgreSQL, list the statements of each operation (any value)
 //
 // Example: GOAP_SCALE_NODES=10000 go test ./graph/graph/ -run TestOperationCost -v -count=1 -timeout 0
 func TestOperationCost(t *testing.T) {
@@ -39,7 +45,7 @@ func TestOperationCost(t *testing.T) {
 	rounds := envInt("GOAP_SCALE_ROUNDS", 10)
 	ctx := context.Background()
 
-	repo, wal, size := costRepo(t)
+	repo, wal, size, queries := costRepo(t)
 	g := New(repo)
 	g.CheckpointEvery = DefaultCheckpointEvery
 
@@ -104,26 +110,38 @@ func TestOperationCost(t *testing.T) {
 	t.Logf("NodeByKey: %.2f ms", float64(time.Since(t0).Microseconds())/1000/100)
 
 	type stat struct {
-		n   int
-		d   time.Duration
-		wal int64
+		n, q int
+		d    time.Duration
+		wal  int64
+		sql  map[string]*sqlStat
 	}
 	var stats map[string]*stat
 	var order []string
 	op := func(name string, f func() error) {
-		w, t0 := wal(), time.Now()
+		w, q0 := wal(), queries.start()
+		t0 := time.Now()
 		if err := f(); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}
+		d := time.Since(t0)
+		n, by := queries.stop(q0)
 		s := stats[name]
 		if s == nil {
-			s = &stat{}
+			s = &stat{sql: map[string]*sqlStat{}}
 			stats[name] = s
 			order = append(order, name)
 		}
 		s.n++
-		s.d += time.Since(t0)
+		s.q += n
+		s.d += d
 		s.wal += wal() - w
+		for k, v := range by {
+			if s.sql[k] == nil {
+				s.sql[k] = &sqlStat{}
+			}
+			s.sql[k].n += v.n
+			s.sql[k].d += v.d
+		}
 	}
 	run := func(create bool, r int) {
 		var c domain.Change
@@ -185,8 +203,19 @@ func TestOperationCost(t *testing.T) {
 			s := stats[k]
 			total += s.d
 			w += s.wal
-			t.Logf("  %-22s calls/change %4.1f  %7.2f ms/call  %7.1f ms/change  %6.1f KB WAL/call", k, float64(s.n)/float64(rounds),
-				float64(s.d.Microseconds())/1000/float64(s.n), float64(s.d.Microseconds())/1000/float64(rounds), float64(s.wal)/1024/float64(s.n))
+			t.Logf("  %-22s calls/change %4.1f  %7.2f ms/call  %7.1f ms/change  %6.1f KB WAL/call  %5.1f statements/call", k, float64(s.n)/float64(rounds),
+				float64(s.d.Microseconds())/1000/float64(s.n), float64(s.d.Microseconds())/1000/float64(rounds), float64(s.wal)/1024/float64(s.n),
+				float64(s.q)/float64(s.n))
+			if os.Getenv("GOAP_SCALE_SQL") != "" {
+				keys := make([]string, 0, len(s.sql))
+				for q := range s.sql {
+					keys = append(keys, q)
+				}
+				sort.Slice(keys, func(i, j int) bool { return s.sql[keys[i]].d > s.sql[keys[j]].d })
+				for _, q := range keys[:min(len(keys), 12)] {
+					t.Logf("      %6.1f/call %7.2f ms/call  %s", float64(s.sql[q].n)/float64(s.n), float64(s.sql[q].d.Microseconds())/1000/float64(s.n), q)
+				}
+			}
 		}
 		t.Logf("  %-22s %7.1f ms/change, %6.1f KB WAL/change", "total", float64(total.Microseconds())/1000/float64(rounds), float64(w)/1024/float64(rounds))
 	}
@@ -200,7 +229,87 @@ func envInt(name string, def int) int {
 }
 
 // costRepo is the repository of TestOperationCost, with the WAL position (0 on SQLite) and the size of the database.
-func costRepo(t *testing.T) (Repo, func() int64, func() int64) {
+// sqlStat is how often a statement ran and how long it took.
+type sqlStat struct {
+	n int
+	d time.Duration
+}
+
+// queryCounter counts the statements a pool runs (a pgx tracer): the cost of an operation in round trips.
+type queryCounter struct {
+	mu  sync.Mutex
+	n   int
+	by  map[string]*sqlStat
+	key struct{}
+}
+
+func (q *queryCounter) TraceQueryStart(ctx context.Context, _ *pgx.Conn, data pgx.TraceQueryStartData) context.Context {
+	return context.WithValue(ctx, &q.key, [2]any{data.SQL, time.Now()})
+}
+
+func (q *queryCounter) TraceQueryEnd(ctx context.Context, _ *pgx.Conn, _ pgx.TraceQueryEndData) {
+	v, ok := ctx.Value(&q.key).([2]any)
+	if !ok {
+		return
+	}
+	sql := strings.Join(strings.Fields(v[0].(string)), " ")
+	if len(sql) > 110 {
+		sql = sql[:110]
+	}
+	if os.Getenv("GOAP_SCALE_SQL") == "callers" {
+		sql = callerOf() + " " + sql[:min(len(sql), 50)]
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.n++
+	if q.by == nil {
+		q.by = map[string]*sqlStat{}
+	}
+	s := q.by[sql]
+	if s == nil {
+		s = &sqlStat{}
+		q.by[sql] = s
+	}
+	s.n++
+	s.d += time.Since(v[1].(time.Time))
+}
+
+// callerOf names the functions of the graph that ran a statement: the first three frames outside the repository.
+func callerOf() string {
+	pcs := make([]uintptr, 40)
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(3, pcs)])
+	var out []string
+	for f, more := frames.Next(); more && len(out) < 3; f, more = frames.Next() {
+		if !strings.Contains(f.Function, "goap/graph/graph.") || strings.Contains(f.File, "postgres.go") ||
+			strings.Contains(f.File, "guard.go") || strings.Contains(f.File, "observe") || strings.Contains(f.File, "_test.go") {
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s:%d", f.Function[strings.LastIndex(f.Function, ".")+1:], f.Line))
+	}
+	return strings.Join(out, "<")
+}
+
+// start begins counting the statements of an operation; stop returns how many ran since and which.
+func (q *queryCounter) start() int {
+	if q == nil {
+		return 0
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.by = nil
+	return q.n
+}
+
+func (q *queryCounter) stop(from int) (int, map[string]*sqlStat) {
+	if q == nil {
+		return 0, nil
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.n - from, q.by
+}
+
+func costRepo(t *testing.T) (Repo, func() int64, func() int64, *queryCounter) {
 	ctx := context.Background()
 	dsn := os.Getenv("GOAP_TEST_PG_DSN")
 	if dsn == "" {
@@ -220,7 +329,7 @@ func costRepo(t *testing.T) (Repo, func() int64, func() int64) {
 			}
 			return fi.Size()
 		}
-		return NewSQLite(db), func() int64 { return 0 }, size
+		return NewSQLite(db), func() int64 { return 0 }, size, nil
 	}
 	schema := fmt.Sprintf("graph_cost_%d", time.Now().UnixNano())
 	admin, err := pgxpool.New(ctx, dsn)
@@ -237,6 +346,8 @@ func costRepo(t *testing.T) (Repo, func() int64, func() int64) {
 		t.Fatal(err)
 	}
 	cfg.ConnConfig.RuntimeParams["search_path"] = schema
+	queries := &queryCounter{}
+	cfg.ConnConfig.Tracer = queries
 	pool, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -255,5 +366,5 @@ func costRepo(t *testing.T) (Repo, func() int64, func() int64) {
 		_ = admin.QueryRow(ctx, "SELECT coalesce(sum(pg_total_relation_size(c.oid)), 0) FROM pg_class c JOIN pg_namespace s ON s.oid = c.relnamespace WHERE s.nspname = $1 AND c.relkind = 'r'", schema).Scan(&s)
 		return s
 	}
-	return NewPostgres(pool), wal, size
+	return NewPostgres(pool), wal, size, queries
 }

@@ -462,6 +462,62 @@ func (t *pgTx) OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link,
 	return t.LinksFrom(ctx, []domain.NodeRef{ref})
 }
 
+func (t *pgTx) LinksInto(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	q, args := dialectPG.sqlLinksInto(refs)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) LatestVersionsOn(ctx context.Context, ids []domain.NodeID, branch string) (map[domain.NodeID]domain.Version, error) {
+	out := make(map[domain.NodeID]domain.Version, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	q, args := dialectPG.sqlLatestVersionsOn(ids, branch)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "nodes")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id string
+			v  int
+		)
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
+		}
+		out[domain.NodeID(id)] = domain.Version(v)
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) LatestVersions(ctx context.Context, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	out := make(map[domain.NodeID]domain.Version, len(ids))
+	if len(ids) == 0 {
+		return out, nil
+	}
+	q, args := dialectPG.sqlLatestVersions(ids)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, mapErr(err, "nodes")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id string
+			v  int
+		)
+		if err := rows.Scan(&id, &v); err != nil {
+			return nil, err
+		}
+		out[domain.NodeID(id)] = domain.Version(v)
+	}
+	return out, rows.Err()
+}
+
 func (t *pgTx) InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error) {
 	q, args := dialectPG.sqlLinksTo(ref)
 	return t.queryLinks(ctx, q, args...)
@@ -866,6 +922,31 @@ func (t *pgTx) LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, erro
 	q, args := dialectPG.sqlLinkSetOf(ref)
 	err := t.tx.QueryRow(ctx, q, args...).Scan(&s.Of, &s.Base, &s.Depth)
 	return s, mapErr(err, "link set of "+ref.String())
+}
+
+func (t *pgTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domain.NodeRef]LinkSet, error) {
+	out := make(map[domain.NodeRef]LinkSet, len(refs))
+	if len(refs) == 0 {
+		return out, nil
+	}
+	q, args := dialectPG.sqlLinkSetsOf(refs)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			id string
+			v  int
+			s  LinkSet
+		)
+		if err := rows.Scan(&id, &v, &s.Of, &s.Base, &s.Depth); err != nil {
+			return nil, err
+		}
+		out[domain.NodeRef{ID: domain.NodeID(id), Version: domain.Version(v)}] = s
+	}
+	return out, rows.Err()
 }
 
 // PutBaseline stores the baseline as the graph says (ADR 0140): its header, and its entries when it has a Gap of 0.

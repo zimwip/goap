@@ -134,15 +134,6 @@ func (g *Graph) checkVersion(ctx context.Context, ix *typeIndex, n domain.Node, 
 	return nil
 }
 
-// checkWritten checks a version a landing wrote, with its links.
-func (g *Graph) checkWritten(ctx context.Context, tx Tx, ix *typeIndex, n domain.Node) error {
-	links, err := tx.OutLinks(ctx, n.Ref())
-	if err != nil {
-		return err
-	}
-	return g.checkVersion(ctx, ix, n, links, storedResolver(ctx, tx))
-}
-
 // checkDraft checks a draft as the version written from it will be.
 func (g *Graph) checkDraft(ctx context.Context, ix *typeIndex, c domain.Change, d domain.Draft, resolve nodeResolver) error {
 	return g.checkVersion(ctx, ix, draftNode(c, d), d.OutLinks(), resolve)

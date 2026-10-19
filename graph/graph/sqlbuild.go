@@ -321,7 +321,22 @@ func (d dialect) sqlLinksTo(ref domain.NodeRef) (string, []any) {
 	}
 	return `WITH RECURSIVE t AS (SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link
 			WHERE ` + target + ` AND removes IS NULL),
-		s(lid, nid, sv) AS (
+		` + d.linksToRest(), args
+}
+
+// sqlLinksInto is sqlLinksTo for the exact versions of refsArgs.
+func (d dialect) sqlLinksInto(refs []domain.NodeRef) (string, []any) {
+	args, _ := d.refsArgs(refs)
+	return `WITH RECURSIVE r(id, version) AS (` + d.refsRows(1) + `),
+		t AS (SELECT l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id FROM link l
+			JOIN r ON l.to_id = r.id AND l.to_version = r.version WHERE l.removes IS NULL),
+		` + d.linksToRest(), args
+}
+
+// linksToRest is what follows the rows t naming the targets in sqlLinksTo: the sets holding them, the versions holding
+// those sets.
+func (d dialect) linksToRest() string {
+	return `s(lid, nid, sv) AS (
 			SELECT id, from_id, from_version FROM t
 			UNION ALL
 			SELECT s.lid, v.node_id, v.version FROM s JOIN node_version v ON v.node_id = s.nid AND v.links_base = s.sv
@@ -329,13 +344,33 @@ func (d dialect) sqlLinksTo(ref domain.NodeRef) (string, []any) {
 		)
 		SELECT ` + d.cols(su("t.id"), sc("t.type"), su("t.from_id"), sc("v.version"), su("t.to_id"), sc("t.to_version"), sc("t.props"), su("t.change_id")) + ` FROM s
 		JOIN t ON t.id = s.lid JOIN node_version v ON v.node_id = s.nid AND (v.links = s.sv OR (v.links IS NULL AND v.version = s.sv))
-		ORDER BY t.id, v.version`, args
+		ORDER BY t.id, v.version`
+}
+
+// sqlLatestVersions reads the number of the latest version of several nodes: node, version.
+func (d dialect) sqlLatestVersions(ids []domain.NodeID) (string, []any) {
+	in, arg := d.nodeIDList("id", 1, ids)
+	return `SELECT ` + d.id("id") + `, latest FROM node WHERE ` + in, []any{arg}
+}
+
+// sqlLatestVersionsOn reads the version sqlLatestOn reads for several nodes: node, version.
+func (d dialect) sqlLatestVersionsOn(ids []domain.NodeID, branch string) (string, []any) {
+	inV, arg := d.nodeIDList("node_id", 1, ids)
+	return `SELECT ` + d.id("node_id") + `, max(version) FROM (SELECT node_id, version FROM node_version WHERE ` + inV + ` AND branch = ` + d.ph(2) +
+		` UNION ALL SELECT node_id, version FROM node_branch WHERE ` + inV + ` AND branch = ` + d.ph(2) + `) b GROUP BY node_id`, []any{arg, domain.BranchOf(branch)}
 }
 
 // sqlLinkSetOf reads how a version holds its links (ADR 0141).
 func (d dialect) sqlLinkSetOf(ref domain.NodeRef) (string, []any) {
 	return `SELECT coalesce(links, version), coalesce(links_base, 0), links_depth FROM node_version WHERE node_id = ` + d.ph(1) + ` AND version = ` + d.ph(2),
 		[]any{string(ref.ID), int(ref.Version)}
+}
+
+// sqlLinkSetsOf reads how the versions of refsArgs hold their links: node, version, then the columns of sqlLinkSetOf.
+func (d dialect) sqlLinkSetsOf(refs []domain.NodeRef) (string, []any) {
+	args, _ := d.refsArgs(refs)
+	return `SELECT ` + d.id("v.node_id") + `, v.version, coalesce(v.links, v.version), coalesce(v.links_base, 0), v.links_depth FROM node_version v` +
+		d.refsJoin("r", "v.node_id", "v.version", 1), args
 }
 
 // sqlPutLinkSet sets how a version holds its links: arguments node, version, links (nil: its own), base (nil: a whole

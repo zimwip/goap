@@ -411,6 +411,13 @@ func (g *Graph) reviewBatch(ctx context.Context, id domain.ChangeID, b domain.Re
 		}
 		it := it
 		it.Flow = c.ResolveFlow(b.Flow) // the verdicts are made on this flow (ADR 0032 §6)
+		impacts := make([]domain.ChangeImpactID, len(b.Verdicts))
+		for i, v := range b.Verdicts {
+			impacts[i] = v.Impact
+		}
+		if err := g.prefetchBases(ctx, tx, id, it.Flow, impacts); err != nil {
+			return err
+		}
 		if err := putItem(ctx, tx, id, it); err != nil {
 			return err
 		}

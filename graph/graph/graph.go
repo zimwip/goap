@@ -156,6 +156,11 @@ type Graph struct {
 
 	// DraftCacheSize is how many changes keep their folded drafts in memory (ADR 0079 §2). 0: DefaultDraftCacheSize.
 	DraftCacheSize int
+	// VersionCacheSize is the number of versions whose outgoing links are kept in memory (DefaultVersionCacheSize when
+	// 0): they never change once written (versioncache.go).
+	VersionCacheSize int
+	// versions caches the outgoing links of versions.
+	versions versionCache
 	// draftStates caches the drafts folded from the impact logs.
 	draftStates draftCache
 	// validations caches the validation of the impacts of a change on a flow, by the log position it was computed at.

@@ -58,6 +58,14 @@ type Tx interface {
 	// the links entering a version, one per version holding it.
 	OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
+	// LinksInto is InLinks for several exact versions, in one read (by id then version).
+	LinksInto(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error)
+	// LatestVersionsOn is the version LatestOn reads for several nodes, in one read: a node not on the branch has no
+	// entry.
+	LatestVersionsOn(ctx context.Context, ids []domain.NodeID, branch string) (map[domain.NodeID]domain.Version, error)
+	// LatestVersions is the number of the latest version of several nodes, whatever the branch (a node that does not
+	// exist has no entry).
+	LatestVersions(ctx context.Context, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error)
 	// LinksFrom reads the links leaving the versions refs in one query, by id; LinksTo the links entering any version
 	// of a node, one per version holding it, by id then version.
 	LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error)
@@ -135,6 +143,8 @@ type Tx interface {
 	PutLinkSet(ctx context.Context, from domain.NodeRef, set LinkSet) error
 	DropLink(ctx context.Context, from domain.NodeRef, row domain.LinkID, dropped domain.Link) error
 	LinkSetOf(ctx context.Context, ref domain.NodeRef) (LinkSet, error)
+	// LinkSetsOf is LinkSetOf for several versions, in one read: a version that does not exist has no entry.
+	LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domain.NodeRef]LinkSet, error)
 	// PutBaseline stores a baseline as the graph says (ADR 0140): only its header when b.Gap > 0, else its entries
 	// (b.Nodes: a version, or minus the version a node had in BaseID for a node the baseline removes), put in the state
 	// of b.BaseID when it names one.

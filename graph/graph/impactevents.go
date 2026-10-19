@@ -41,6 +41,9 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 		if err != nil {
 			return err
 		}
+		// a fold holding the whole log under the lock of the change: the event is folded into it once appended, so the
+		// next event of the operation reads no log
+		holds := currentDrafts(tx, e.Change) == st
 		// an event touches its own change impact, an adoption every one of them
 		cur := st.impacts
 		if e.Op != domain.ImpactAdopted {
@@ -82,6 +85,16 @@ func (g *Graph) emit(ctx context.Context, tx Tx, events ...domain.ImpactEvent) e
 					}
 				}
 			}
+		}
+		if holds && int64(e.Seq) > st.seq {
+			next := st
+			if own := ownDrafts(tx, e.Change); own != st || st.frozen {
+				next = st.copy()
+			}
+			next.apply(e)
+			next.seq = int64(e.Seq)
+			keepDrafts(tx, next)
+			readLog(tx, next)
 		}
 	}
 	return nil

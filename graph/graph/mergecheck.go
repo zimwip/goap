@@ -111,6 +111,19 @@ func (g *Graph) mergeBlackboard(ctx context.Context, tx Tx, c domain.Change) (do
 			return bb, nil, err
 		}
 	}
+	// the versions the blackboard shows, read in one batch
+	var refs []domain.NodeRef
+	for _, cn := range impacts {
+		if cn.Pre != nil {
+			refs = append(refs, *cn.Pre)
+		}
+		if at, ok := head[nodeOf(cn)]; ok && cn.Landed != nil {
+			refs = append(refs, domain.NodeRef{ID: nodeOf(cn), Version: at})
+		}
+	}
+	if err := r.prefetch(ctx, tx, refs); err != nil {
+		return bb, nil, err
+	}
 	view := func(ref domain.NodeRef) (domain.NodeView, error) {
 		v, err := viewIn(ctx, tx, r, ref)
 		if lc := ix.lifecycleOf(v.Type); err == nil && lc != nil && v.State != "" {

@@ -15,6 +15,8 @@ type cpost struct {
 	cn   domain.ChangeImpact
 	pre  *domain.Node
 	post domain.Node
+	// links are the outgoing links the commit wrote for post
+	links []domain.Link
 }
 
 // prepareChangeImpacts writes, from the drafts of the change impacts, the versions the commit produces (ADR 0079): a node
@@ -34,6 +36,23 @@ func (a *applier) prepareChangeImpacts() error {
 	}
 	var todo []landing
 	impacts := a.mainImpacts()
+	// the versions the drafts start from, read in one batch: what the drafts are compared with, and the links the new
+	// versions share or write a delta over (ADR 0141)
+	var bases []domain.NodeRef
+	for _, cn := range impacts {
+		if cn.Review != domain.ReviewAccepted {
+			continue
+		}
+		if d := ownDraft(rows, cn.ID, ""); d != nil && d.Base != nil {
+			bases = append(bases, *d.Base)
+		}
+		if cn.Pre != nil {
+			bases = append(bases, *cn.Pre)
+		}
+	}
+	if err := prefetchVersions(a.ctx, a.tx, bases); err != nil {
+		return err
+	}
 	for _, cn := range impacts {
 		if cn.Review != domain.ReviewAccepted {
 			continue
@@ -49,7 +68,20 @@ func (a *applier) prepareChangeImpacts() error {
 		}
 		todo = append(todo, landing{cn, *d})
 	}
-	// 1. the versions: the next version of each node, whatever the branch it was written on
+	// 1. the versions: the next version of each node, whatever the branch it was written on; the latest version of
+	// each node, and the latest on the change's branch, read in two statements
+	var ids []domain.NodeID
+	for _, l := range todo {
+		if l.d.Base != nil {
+			ids = append(ids, l.d.Node)
+		}
+	}
+	if a.latest, err = a.tx.LatestVersions(a.ctx, ids); err != nil {
+		return err
+	}
+	if a.latestOn, err = a.tx.LatestVersionsOn(a.ctx, ids, a.branch); err != nil {
+		return err
+	}
 	written := map[domain.NodeID]domain.Version{}
 	from := map[domain.NodeID]domain.Version{} // the version each draft was checked out from
 	nodes := make([]domain.Node, len(todo))
@@ -67,6 +99,7 @@ func (a *applier) prepareChangeImpacts() error {
 		}
 	}
 	// 2. their links, to the versions of the change
+	wrote := make([][]domain.Link, len(todo))
 	for i, l := range todo {
 		links := make([]domain.Link, 0, len(l.d.Links))
 		for _, dl := range l.d.Links {
@@ -87,10 +120,14 @@ func (a *applier) prepareChangeImpacts() error {
 		if err := a.g.putLinks(a.ctx, a.tx, nodes[i], links, like...); err != nil {
 			return err
 		}
+		for j := range links {
+			links[j].From, links[j].ChangeID = nodes[i].Ref(), nodes[i].ChangeID
+		}
+		wrote[i] = links
 	}
 	// 3. what the change leaves
 	for i, l := range todo {
-		cp := cpost{cn: l.cn, post: nodes[i]}
+		cp := cpost{cn: l.cn, post: nodes[i], links: wrote[i]}
 		if l.cn.Pre != nil {
 			pre, err := a.tx.Node(a.ctx, *l.cn.Pre)
 			if err != nil {
@@ -125,25 +162,22 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		n.Version, n.Reason = 1, domain.ReasonCreate
 		return n, a.tx.PutNode(a.ctx, n)
 	}
-	next, err := nextVersion(a.ctx, a.tx, d.Node)
-	if err != nil {
-		return n, err
+	last, ok := a.latest[d.Node]
+	if !ok {
+		return n, fmt.Errorf("node %s: %w", d.Node, ErrNotFound)
 	}
-	n.Version, n.Parents, n.Reason = next, []domain.Version{d.Base.Version}, domain.ReasonDerive
-	if on, err := onBranch(a.ctx, a.tx, *d.Base, a.branch); err != nil {
-		return n, err
-	} else if on {
+	n.Version, n.Parents, n.Reason = last+1, []domain.Version{d.Base.Version}, domain.ReasonDerive
+	// the version checked out from is the latest of the node on the branch, or the node is not on it (the latest being
+	// that version, it is on the branch)
+	if on, ok := a.latestOn[d.Node]; ok && on != d.Base.Version {
+		return n, fmt.Errorf("%s changed on the branch of change %s since it was checked out (v%d, checked out from v%d): %w", d.Key, a.change.ID, on, d.Base.Version, ErrConflict)
+	} else if ok {
 		n.Reason = domain.ReasonRevise
 	}
 	if d.MergedWith != nil && d.MergedWith.Version != d.Base.Version {
 		// a rebase merged the parent branch's version into the change's (ADR 0102): a merge written on the current
 		// branch, seen from it (ADR 0133)
 		n.Parents, n.Reason = append(n.Parents, d.MergedWith.Version), domain.ReasonRebase
-	}
-	if latest, err := a.tx.LatestOn(a.ctx, d.Node, a.branch); err == nil && latest.Version != d.Base.Version {
-		return n, fmt.Errorf("%s changed on the branch of change %s since it was checked out (v%d, checked out from v%d): %w", d.Key, a.change.ID, latest.Version, d.Base.Version, ErrConflict)
-	} else if err != nil && !errors.Is(err, ErrNotFound) {
-		return n, err
 	}
 	return n, a.tx.PutNode(a.ctx, n)
 }
@@ -159,7 +193,7 @@ func (a *applier) walkChangeImpacts() (stuck []string, err error) {
 		if n.Deleted {
 			continue
 		}
-		if err := a.g.checkWritten(a.ctx, a.tx, a.ix, n); err != nil {
+		if err := a.g.checkVersion(a.ctx, a.ix, n, cp.links, storedResolver(a.ctx, a.tx)); err != nil {
 			return nil, err
 		}
 		lc := a.ix.lifecycleOf(n.Type)
@@ -239,17 +273,43 @@ func joinSorted(s []string) string {
 // version of mergeChange. The other open changes on the same nodes are not read: each starts from the latest version
 // of its nodes when it is rebased, at its own merge (ADR 0101, 0140).
 func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Branch, mergeChange domain.ChangeID, result domain.BaselineID) error {
+	lands := func(cn domain.ChangeImpact) bool {
+		return cn.Post != nil && (cn.Review == domain.ReviewAccepted || cn.Landed != nil) && cn.Flow == "" && !cn.Superseded
+	}
+	// the latest version of each node on the target, read in two statements
+	var ids []domain.NodeID
 	for _, cn := range c.Nodes {
-		if cn.Post == nil || (cn.Review != domain.ReviewAccepted && cn.Landed == nil) || cn.Flow != "" || cn.Superseded {
+		if lands(cn) {
+			ids = append(ids, cn.Post.ID)
+		}
+	}
+	at, err := tx.LatestVersionsOn(ctx, ids, domain.BranchOf(own.Parent))
+	if err != nil {
+		return err
+	}
+	refs := make([]domain.NodeRef, 0, len(at))
+	for id, v := range at {
+		refs = append(refs, domain.NodeRef{ID: id, Version: v})
+	}
+	heads, err := tx.NodesAt(ctx, refs, "")
+	if err != nil {
+		return err
+	}
+	byID := make(map[domain.NodeID]domain.Node, len(heads))
+	for _, n := range heads {
+		byID[n.ID] = n
+	}
+	for _, cn := range c.Nodes {
+		if !lands(cn) {
 			continue
 		}
 		post := *cn.Post
 		if post.IsDraft() && cn.Landed != nil {
 			post = *cn.Landed // checked out again after its commit, left as it was (ADR 0102)
 		}
-		head, err := tx.LatestOn(ctx, post.ID, domain.BranchOf(own.Parent))
-		if err != nil {
-			return err
+		head, ok := byID[post.ID]
+		if !ok {
+			return fmt.Errorf("node %s on %s: %w", post.ID, domain.BranchOf(own.Parent), ErrNotFound)
 		}
 		if head.ChangeID != mergeChange && head.Ref() != post {
 			continue // left as is on the target: nothing of this change landed

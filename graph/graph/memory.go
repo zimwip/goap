@@ -383,6 +383,41 @@ func (t *memTx) entering(id domain.NodeID, keep func(domain.NodeRef) bool) []dom
 	return out
 }
 
+func (t *memTx) LinksInto(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
+	var out []domain.Link
+	for _, r := range refs {
+		ls, _ := t.InLinks(ctx, r)
+		out = append(out, ls...)
+	}
+	slices.SortStableFunc(out, func(a, b domain.Link) int {
+		if c := strings.Compare(string(a.ID), string(b.ID)); c != 0 {
+			return c
+		}
+		return int(a.From.Version) - int(b.From.Version)
+	})
+	return out, nil
+}
+
+func (t *memTx) LatestVersionsOn(ctx context.Context, ids []domain.NodeID, branch string) (map[domain.NodeID]domain.Version, error) {
+	out := make(map[domain.NodeID]domain.Version, len(ids))
+	for _, id := range ids {
+		if n, err := t.LatestOn(ctx, id, branch); err == nil {
+			out[id] = n.Version
+		}
+	}
+	return out, nil
+}
+
+func (t *memTx) LatestVersions(_ context.Context, ids []domain.NodeID) (map[domain.NodeID]domain.Version, error) {
+	out := make(map[domain.NodeID]domain.Version, len(ids))
+	for _, id := range ids {
+		if vs := t.st.versions[id]; len(vs) > 0 {
+			out[id] = vs[len(vs)-1].Version
+		}
+	}
+	return out, nil
+}
+
 func (t *memTx) InLinks(_ context.Context, ref domain.NodeRef) ([]domain.Link, error) {
 	return t.entering(ref.ID, func(to domain.NodeRef) bool { return to == ref }), nil
 }
@@ -532,6 +567,16 @@ func (t *memTx) LinkSetOf(_ context.Context, ref domain.NodeRef) (LinkSet, error
 		return LinkSet{}, fmt.Errorf("node %s: %w", ref, ErrNotFound)
 	}
 	return t.setOf(ref), nil
+}
+
+func (t *memTx) LinkSetsOf(ctx context.Context, refs []domain.NodeRef) (map[domain.NodeRef]LinkSet, error) {
+	out := make(map[domain.NodeRef]LinkSet, len(refs))
+	for _, r := range refs {
+		if s, err := t.LinkSetOf(ctx, r); err == nil {
+			out[r] = s
+		}
+	}
+	return out, nil
 }
 
 func (t *memTx) PutBaseline(_ context.Context, b domain.Baseline) error {

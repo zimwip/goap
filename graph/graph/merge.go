@@ -106,15 +106,6 @@ func MergeLinks(anc, ours, theirs []domain.Link) []domain.Link {
 	return out
 }
 
-// onBranch reports whether a node version is part of a branch: written there, or joined (ADR 0032).
-func onBranch(ctx context.Context, tx Tx, ref domain.NodeRef, branch string) (bool, error) {
-	vs, err := tx.VersionRange(ctx, ref.ID, ref.Version+1, 1)
-	if err != nil || len(vs) == 0 || vs[0].Version != ref.Version {
-		return false, err
-	}
-	return vs[0].On(branch), nil
-}
-
 // CommonAncestor returns the most recent common ancestor of two versions of
 // a node (a version is its own ancestor).
 func CommonAncestor(ctx context.Context, tx Tx, id domain.NodeID, a, b domain.Version) (domain.NodeRef, error) {

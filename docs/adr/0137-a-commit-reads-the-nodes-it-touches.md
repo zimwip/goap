@@ -49,3 +49,27 @@ new needs storing.
 - Still whole: the materialised baselines (rebase, revert, every 16th), the baseline event of a rebase, `Apply`'s answer
   and the three-way merge. A rebase could become a derived baseline too (the head it was rebased onto with the versions
   the change committed); left for later.
+
+## Addendum: a commit reads its nodes in batches
+
+Measured on PostgreSQL (`TestOperationCost`, 20 000 nodes, 50 per change), a commit or a merge was bound by its round
+trips, not by the data: one statement per node, several times over (974 statements for a commit of 50 nodes, 645 for
+its merge). What a version is never changes once written (ADR 0079, 0141), so:
+
+1. **The versions an operation starts from are read in one batch.** `guardTx.prefetch` (`graph/graph/versioncache.go`)
+   reads the versions, their link sets (`Tx.LinkSetsOf`) and their links (`Tx.LinksFrom`) in three statements: the commit
+   (the drafts' bases and the impacts' `Pre`), the review batch (`prefetchBases`) and the merge blackboard
+   (`draftReader.prefetch`, which also reads the links entering them, `Tx.LinksInto`, and their latest version on main,
+   `Tx.LatestVersionsOn`). A version read by a transaction is kept for that transaction (`guardTx.nodes`: its origin may
+   still be set, `SetNodeOrigin`); its links and link set are kept by the graph (`versionCache`, bounded by
+   `Graph.VersionCacheSize`): only a version the transaction did not write, an empty set only for a version known to
+   exist, emptied by a purge (the only delete of versions) before and after its transaction.
+2. **The commit reads the latest versions of its nodes in two statements** (`Tx.LatestVersions`, `Tx.LatestVersionsOn`
+   on the change's branch): the number of each version, the conflict check and `revise` / `derive` come from them; the
+   guard stamps the owner and project from the first parent (kept); the landed versions are checked with the links the
+   commit wrote; `land` reads the heads of the target in two statements.
+3. **An event folds into the transaction's state** (`emit`): an operation writing N events on a change reads its log
+   once, not N times.
+
+A commit of 50 nodes is 277 statements (80 ms), its merge 152 (45 ms), the review batch 161: what remains is per-node
+writes (the version, the latest, the link set, the log entry, the projection of the impact).

@@ -44,6 +44,9 @@ func (r *guardRepo) InTx(ctx context.Context, fn func(tx Tx) error) error {
 		}
 		return gt.verify(ctx)
 	})
+	if gt != nil && gt.purged {
+		r.g.versions.reset() // what the transaction deleted may have been read meanwhile
+	}
 	if err == nil && len(gt.checkpoints) > 0 {
 		r.g.checkpoints.store(r.g, gt.checkpoints)
 	}
@@ -75,6 +78,10 @@ type guardTx struct {
 	headers map[domain.ChangeID]domain.Change
 	// written are the versions the transaction wrote
 	written map[domain.NodeRef]bool
+	// nodes are the versions it read that it did not write (versioncache.go)
+	nodes map[domain.NodeRef]domain.Node
+	// purged: the transaction deleted a change, and versions with it (the version cache is emptied once it is over)
+	purged bool
 	// logged are the changes whose log the transaction appended to (the draft cache, ADR 0079, never publishes what a
 	// transaction that may roll back has seen of its own writes)
 	logged map[domain.ChangeID]bool
@@ -349,17 +356,22 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	var prev *domain.Node
 	if n.Version > 1 {
 		// the previous version alone, whatever the length of the history (ADR 0140): the project is the node's
-		vs, err := t.Tx.VersionRange(ctx, n.ID, 0, 1)
-		if err != nil {
-			return err
+		// (the first parent when it names one: read once per transaction, versioncache.go)
+		var vs []domain.Node
+		if len(n.Parents) > 0 && n.Parents[0] >= 1 && n.Parents[0] < n.Version {
+			p, err := t.Node(ctx, domain.NodeRef{ID: n.ID, Version: n.Parents[0]})
+			if err != nil {
+				return err
+			}
+			vs = []domain.Node{p}
+		} else {
+			var err error
+			if vs, err = t.Tx.VersionRange(ctx, n.ID, 0, 1); err != nil {
+				return err
+			}
 		}
 		if len(vs) > 0 {
 			p := vs[0]
-			if len(n.Parents) > 0 && n.Parents[0] >= 1 && n.Parents[0] < p.Version {
-				if p, err = t.Tx.Node(ctx, domain.NodeRef{ID: n.ID, Version: n.Parents[0]}); err != nil {
-					return err
-				}
-			}
 			prev = &p
 			if n.Project != "" && n.Project != p.Project {
 				return fmt.Errorf("%s: the project of a node never changes (%s, not %s): %w", what, p.Project, n.Project, ErrInvalid)
@@ -459,6 +471,7 @@ func (t *guardTx) SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change 
 	if err := t.needChange(change, "the origin of node "+ref.String()); err != nil {
 		return err
 	}
+	delete(t.nodes, ref)
 	return t.Tx.SetNodeOrigin(ctx, ref, change, cn, comment)
 }
 
@@ -507,6 +520,8 @@ func (t *guardTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespac
 	if err := t.LockChange(ctx, id); err != nil {
 		return err
 	}
+	t.purged, t.nodes = true, nil
+	t.g.versions.reset()
 	if err := t.Tx.DeleteChange(ctx, id, namespace, branch); err != nil {
 		return err
 	}

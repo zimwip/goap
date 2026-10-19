@@ -112,6 +112,54 @@ type draftReader struct {
 	// lazy finds the draft of a node, all gathers them (nil once byNode holds them all)
 	lazy func(domain.NodeID) (domain.Draft, bool)
 	all  func() map[domain.NodeID]domain.Draft
+	// in are the stored links entering versions, latest the latest version of nodes on main (0: none), read in one
+	// batch by prefetch
+	in     map[domain.NodeRef][]domain.Link
+	latest map[domain.NodeID]domain.Version
+}
+
+// prefetch reads in batches what viewIn reads of the stored versions refs: the versions and their links, the links
+// entering them, the latest version of their nodes on main.
+func (r *draftReader) prefetch(ctx context.Context, tx Tx, refs []domain.NodeRef) error {
+	if err := prefetchVersions(ctx, tx, refs); err != nil {
+		return err
+	}
+	var exact []domain.NodeRef
+	var ids []domain.NodeID
+	seen := map[domain.NodeID]bool{}
+	for _, ref := range refs {
+		if !ref.IsDraft() {
+			exact = append(exact, ref)
+		}
+		if !seen[ref.ID] {
+			seen[ref.ID] = true
+			ids = append(ids, ref.ID)
+		}
+	}
+	ls, err := tx.LinksInto(ctx, exact)
+	if err != nil {
+		return err
+	}
+	if r.in == nil {
+		r.in = map[domain.NodeRef][]domain.Link{}
+	}
+	for _, ref := range exact {
+		r.in[ref] = nil
+	}
+	for _, l := range ls {
+		r.in[l.To] = append(r.in[l.To], l)
+	}
+	latest, err := tx.LatestVersionsOn(ctx, ids, domain.MainBranch)
+	if err != nil {
+		return err
+	}
+	if r.latest == nil {
+		r.latest = map[domain.NodeID]domain.Version{}
+	}
+	for _, id := range ids {
+		r.latest[id] = latest[id]
+	}
+	return nil
 }
 
 // newDraftReader reads the drafts a flow sees, for the change impacts it sees (visible: stale or foreign impacts leave
@@ -260,9 +308,12 @@ func (r *draftReader) inLinks(ctx context.Context, tx Tx, ref domain.NodeRef) ([
 		from = *d.Base // the links of the version the draft was checked out from still enter the node
 	}
 	if !from.IsDraft() {
-		stored, err := tx.InLinks(ctx, from)
-		if err != nil {
-			return nil, err
+		stored, ok := r.in[from]
+		if !ok {
+			var err error
+			if stored, err = tx.InLinks(ctx, from); err != nil {
+				return nil, err
+			}
 		}
 		for _, l := range stored {
 			// a link of a version a draft of the flow replaces is the draft's now
@@ -421,12 +472,18 @@ func viewIn(ctx context.Context, tx Tx, r *draftReader, ref domain.NodeRef) (dom
 	if err != nil {
 		return domain.NodeView{}, err
 	}
-	latest, err := tx.Node(ctx, domain.NodeRef{ID: ref.ID})
-	if err != nil {
-		if !isNotFound(err) {
+	var latest domain.Version
+	if v, ok := r.latest[ref.ID]; ok {
+		latest = v
+	} else {
+		l, err := tx.Node(ctx, domain.NodeRef{ID: ref.ID})
+		if err != nil && !isNotFound(err) {
 			return domain.NodeView{}, err
 		}
-		latest = n // a node the change creates, not on main yet
+		latest = l.Version
+	}
+	if latest == 0 {
+		latest = n.Version // a node the change creates, not on main yet
 	}
 	out, err := r.outLinks(ctx, tx, ref)
 	if err != nil {
@@ -436,7 +493,7 @@ func viewIn(ctx context.Context, tx Tx, r *draftReader, ref domain.NodeRef) (dom
 	if err != nil {
 		return domain.NodeView{}, err
 	}
-	return domain.NodeView{Node: n, Latest: latest.Version, Out: out, In: in}, nil
+	return domain.NodeView{Node: n, Latest: latest, Out: out, In: in}, nil
 }
 
 func isNotFound(err error) bool { return errors.Is(err, ErrNotFound) }

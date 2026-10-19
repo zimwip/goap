@@ -25,6 +25,22 @@ func (g *Graph) draftModifies(ctx context.Context, tx Tx, d *domain.Draft) (bool
 	return domain.DraftChanged(&base, *d), nil
 }
 
+// prefetchBases reads in one batch the versions the drafts of impacts on a flow were checked out from, with their links:
+// what an operation over them compares the drafts with (draftModifies).
+func (g *Graph) prefetchBases(ctx context.Context, tx Tx, id domain.ChangeID, flow string, impacts []domain.ChangeImpactID) error {
+	st, err := g.draftState(ctx, tx, id)
+	if err != nil {
+		return err
+	}
+	var refs []domain.NodeRef
+	for _, impact := range impacts {
+		if d, ok := st.draft(impact, flow); ok && d.Base != nil {
+			refs = append(refs, *d.Base)
+		}
+	}
+	return prefetchVersions(ctx, tx, refs)
+}
+
 // ImpactModifies reports whether a change impact of the main flow holds a modification of its node (ADR 0102).
 func (g *Graph) ImpactModifies(ctx context.Context, id domain.ChangeID, impact domain.ChangeImpactID) (ok bool, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error {

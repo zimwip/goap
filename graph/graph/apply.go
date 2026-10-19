@@ -338,7 +338,9 @@ type applier struct {
 	change domain.Change
 	ix     *typeIndex
 	branch string
-	target *stateView
+	// latest is the latest version of the nodes the commit writes, latestOn their latest on branch
+	latest, latestOn map[domain.NodeID]domain.Version
+	target           *stateView
 	// cposts are the versions produced by the accepted change impacts (ADR 0024).
 	cposts []cpost
 	// impact is the change impact of the node a transition moves (ImpactNodeTransition): its guard sees it (ADR 0076),
