@@ -348,20 +348,23 @@ func (t *guardTx) PutNode(ctx context.Context, n domain.Node) error {
 	}
 	var prev *domain.Node
 	if n.Version > 1 {
-		vs, err := t.Tx.Versions(ctx, n.ID)
+		// the previous version alone, whatever the length of the history (ADR 0140): the project is the node's
+		vs, err := t.Tx.VersionRange(ctx, n.ID, 0, 1)
 		if err != nil {
 			return err
 		}
 		if len(vs) > 0 {
-			p := vs[len(vs)-1]
-			if len(n.Parents) > 0 && int(n.Parents[0]) >= 1 && int(n.Parents[0]) <= len(vs) {
-				p = vs[n.Parents[0]-1]
+			p := vs[0]
+			if len(n.Parents) > 0 && n.Parents[0] >= 1 && n.Parents[0] < p.Version {
+				if p, err = t.Tx.Node(ctx, domain.NodeRef{ID: n.ID, Version: n.Parents[0]}); err != nil {
+					return err
+				}
 			}
 			prev = &p
-			if n.Project != "" && n.Project != vs[0].Project {
-				return fmt.Errorf("%s: the project of a node never changes (%s, not %s): %w", what, vs[0].Project, n.Project, ErrInvalid)
+			if n.Project != "" && n.Project != p.Project {
+				return fmt.Errorf("%s: the project of a node never changes (%s, not %s): %w", what, p.Project, n.Project, ErrInvalid)
 			}
-			n.Project = vs[0].Project
+			n.Project = p.Project
 		}
 	}
 	if n.Owner == "" && prev != nil {
@@ -537,14 +540,14 @@ func (t *guardTx) verify(ctx context.Context) error {
 // inStructure checks that a node exists (on any branch) and belongs to the structure of a kind.
 func (t *guardTx) inStructure(ctx context.Context, kind string, id domain.NodeID, what string) error {
 	st := t.g.Structure(kind)
-	vs, err := t.Tx.Versions(ctx, id)
-	if errors.Is(err, ErrNotFound) || (err == nil && len(vs) == 0) {
+	vs, err := t.Tx.VersionRange(ctx, id, 0, 1)
+	if err == nil && len(vs) == 0 {
 		return fmt.Errorf("%s %s does not exist: %w", what, id, ErrInvalid)
 	}
 	if err != nil {
 		return err
 	}
-	if n := vs[len(vs)-1]; !t.g.inStructure(n, st) {
+	if n := vs[0]; !t.g.inStructure(n, st) {
 		return fmt.Errorf("%s %s is a %s of namespace %s, not a %s: %w", what, n.Key, n.Type, domain.NamespaceOf(n.Namespace), st.Type, ErrInvalid)
 	}
 	return nil

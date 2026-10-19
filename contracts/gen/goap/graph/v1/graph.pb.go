@@ -7398,9 +7398,15 @@ func (*SetBranchDescriptionResponse) Descriptor() ([]byte, []int) {
 	return file_goap_graph_v1_graph_proto_rawDescGZIP(), []int{113}
 }
 
+// A page of the history of a node, newest versions first in pages (ADR 0140): the answer follows the page, not the
+// length of the history.
 type ListNodeVersionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// the versions below this one (0: up to the latest)
+	Before int32 `protobuf:"varint,2,opt,name=before,proto3" json:"before,omitempty"`
+	// the most recent versions kept (0: 50, at most 500)
+	Limit         int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7442,9 +7448,26 @@ func (x *ListNodeVersionsRequest) GetId() string {
 	return ""
 }
 
+func (x *ListNodeVersionsRequest) GetBefore() int32 {
+	if x != nil {
+		return x.Before
+	}
+	return 0
+}
+
+func (x *ListNodeVersionsRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListNodeVersionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Versions      []*Node                `protobuf:"bytes,1,rep,name=versions,proto3" json:"versions,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// by version
+	Versions []*Node `protobuf:"bytes,1,rep,name=versions,proto3" json:"versions,omitempty"`
+	// the `before` of the next (older) page; 0: none
+	Next          int32 `protobuf:"varint,2,opt,name=next,proto3" json:"next,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7484,6 +7507,13 @@ func (x *ListNodeVersionsResponse) GetVersions() []*Node {
 		return x.Versions
 	}
 	return nil
+}
+
+func (x *ListNodeVersionsResponse) GetNext() int32 {
+	if x != nil {
+		return x.Next
+	}
+	return 0
 }
 
 type MergeCandidate struct {
@@ -13423,9 +13453,14 @@ func (x *GetChangeImpactsResponse) GetNodes() []*NodeRef {
 	return nil
 }
 
+// A page of the changes acting on a node, the most recent first in pages (ADR 0140).
 type ListNodeChangesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodeId        string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NodeId string                 `protobuf:"bytes,1,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// the changes that acted on the node before this cursor (0: up to the latest), a `next` of a previous answer
+	Before int64 `protobuf:"varint,2,opt,name=before,proto3" json:"before,omitempty"`
+	// the most recent changes kept (0: 50, at most 500)
+	Limit         int32 `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13467,10 +13502,26 @@ func (x *ListNodeChangesRequest) GetNodeId() string {
 	return ""
 }
 
+func (x *ListNodeChangesRequest) GetBefore() int64 {
+	if x != nil {
+		return x.Before
+	}
+	return 0
+}
+
+func (x *ListNodeChangesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
 type ListNodeChangesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// headers only (no items)
-	Changes       []*Change `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
+	// headers only (no items, no impacts), oldest first
+	Changes []*Change `protobuf:"bytes,1,rep,name=changes,proto3" json:"changes,omitempty"`
+	// the `before` of the next (older) page; 0: none
+	Next          int64 `protobuf:"varint,2,opt,name=next,proto3" json:"next,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13510,6 +13561,13 @@ func (x *ListNodeChangesResponse) GetChanges() []*Change {
 		return x.Changes
 	}
 	return nil
+}
+
+func (x *ListNodeChangesResponse) GetNext() int64 {
+	if x != nil {
+		return x.Next
+	}
+	return 0
 }
 
 type MergeChangeRequest struct {
@@ -18045,11 +18103,14 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
 	"\tnamespace\x18\x02 \x01(\tR\tnamespace\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\"\x1e\n" +
-	"\x1cSetBranchDescriptionResponse\")\n" +
+	"\x1cSetBranchDescriptionResponse\"W\n" +
 	"\x17ListNodeVersionsRequest\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\"K\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06before\x18\x02 \x01(\x05R\x06before\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"_\n" +
 	"\x18ListNodeVersionsResponse\x12/\n" +
-	"\bversions\x18\x01 \x03(\v2\x13.goap.graph.v1.NodeR\bversions\"\xf8\x03\n" +
+	"\bversions\x18\x01 \x03(\v2\x13.goap.graph.v1.NodeR\bversions\x12\x12\n" +
+	"\x04next\x18\x02 \x01(\x05R\x04next\"\xf8\x03\n" +
 	"\x0eMergeCandidate\x12\x12\n" +
 	"\x04node\x18\x01 \x01(\tR\x04node\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
@@ -18518,11 +18579,14 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x17GetChangeImpactsRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\"H\n" +
 	"\x18GetChangeImpactsResponse\x12,\n" +
-	"\x05nodes\x18\x01 \x03(\v2\x16.goap.graph.v1.NodeRefR\x05nodes\"1\n" +
+	"\x05nodes\x18\x01 \x03(\v2\x16.goap.graph.v1.NodeRefR\x05nodes\"_\n" +
 	"\x16ListNodeChangesRequest\x12\x17\n" +
-	"\anode_id\x18\x01 \x01(\tR\x06nodeId\"J\n" +
+	"\anode_id\x18\x01 \x01(\tR\x06nodeId\x12\x16\n" +
+	"\x06before\x18\x02 \x01(\x03R\x06before\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"^\n" +
 	"\x17ListNodeChangesResponse\x12/\n" +
-	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\"\xe2\x01\n" +
+	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\x12\x12\n" +
+	"\x04next\x18\x02 \x01(\x03R\x04next\"\xe2\x01\n" +
 	"\x12MergeChangeRequest\x12\x1b\n" +
 	"\tchange_id\x18\x01 \x01(\tR\bchangeId\x12T\n" +
 	"\vresolutions\x18\x02 \x03(\v22.goap.graph.v1.MergeChangeRequest.ResolutionsEntryR\vresolutions\x1aY\n" +

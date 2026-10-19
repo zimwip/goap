@@ -256,13 +256,16 @@ func (g *Graph) advanceBranch(ctx context.Context, tx Tx, namespace, name string
 	return tx.PutBranch(ctx, b)
 }
 
-// nextVersion returns the next version number of a node (numbered across branches).
+// nextVersion returns the next version number of a node (numbered across branches), reading its latest version only.
 func nextVersion(ctx context.Context, tx Tx, id domain.NodeID) (domain.Version, error) {
-	vs, err := tx.Versions(ctx, id)
+	vs, err := tx.VersionRange(ctx, id, 0, 1)
 	if err != nil {
 		return 0, err
 	}
-	return domain.Version(len(vs) + 1), nil
+	if len(vs) == 0 {
+		return 0, fmt.Errorf("node %s: %w", id, ErrNotFound)
+	}
+	return vs[0].Version + 1, nil
 }
 
 // applier checks and gathers what a change lands: the versions its accepted change impacts wrote.

@@ -188,7 +188,7 @@ func testLifecycleReopenEditAndApprove(t *testing.T, repo Repo) {
 	if refs, _ := w.g.ChangeImpacts(ctx, c.ID); len(refs) != 1 || refs[0] != w.req1.Ref() {
 		t.Fatalf("pre versions: %+v", refs)
 	}
-	if cs, _ := w.g.NodeChanges(ctx, w.req1.ID); len(cs) != 1 || cs[0].ID != c.ID {
+	if cs, _, _ := w.g.NodeChanges(ctx, w.req1.ID, 0, 0); len(cs) != 1 || cs[0].ID != c.ID {
 		t.Fatalf("node changes: %+v", cs)
 	}
 	// leaving the node in draft (not landable) is refused at Apply, the node listed with its state
@@ -283,7 +283,7 @@ func testLifecycleParallelChangesConflict(t *testing.T, repo Repo) {
 		w.accept(t, c)
 		cs = append(cs, c)
 	}
-	if att, _ := w.g.NodeChanges(ctx, w.req1.ID); len(att) != 2 {
+	if att, _, _ := w.g.NodeChanges(ctx, w.req1.ID, 0, 0); len(att) != 2 {
 		t.Fatalf("both changes act on the node: %+v", att)
 	}
 	if _, err := w.g.Apply(ctx, cs[0].ID, ""); err != nil {

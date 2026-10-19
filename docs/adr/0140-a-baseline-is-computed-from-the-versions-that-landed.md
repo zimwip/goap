@@ -80,7 +80,17 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    (`change_id`, `NodeQuery.Change`): the nodes its impacts act on, read node by node at their version in the
    baseline; it and `ListBaselineLinks` answer the header of the baseline, not its nodes. `GetBranch` with
    `header_only` answers the head's header (the web and the bench ask it so; the services that read the head's state
-   through `graphclient.BranchHead` still get it whole).
+   through `graphclient.BranchHead` still get it whole). `ListBaselines` answers headers only.
+11. **A history is read a page at a time, and from where it is asked.** `ListNodeVersions` and `ListNodeChanges` take
+   `before` and `limit` (default 50, at most 500) and answer `next`, the cursor of the older page (`Tx.VersionRange`,
+   `Tx.NodeChangePage`); the web loads older pages on demand. Landing a version no longer reads the history of its
+   node: the next number, its parent and whether it is on the branch come from its last version
+   (`Tx.VersionRange(id, 0, 1)`), and the open changes to rebase from `Tx.OpenNodeChanges` (one query, instead of
+   the head of every change that ever acted on the node). `DiffBaselines` between two baselines of one branch linked
+   by derived headers reads only the nodes landed between them (`landedBetween`, at most 256 headers apart), else both
+   states whole. `DiffStacks` walks the two lineages together, newest first by order, and stops where they meet
+   (`diffLineages`), instead of reading every header of the namespace, the head of every change and the whole state of
+   `from`. Migration 0010 indexes `change_impact (node_id, seq)` and `baseline (namespace, branch, seq)`.
 
 ## Consequences
 
@@ -111,3 +121,8 @@ records the branch it was written on (`node_version.branch`). The versions a bra
 - With point 8 and the header rebase, the same bench: change_log indexes 12 MB to 5.5 MB, change_impact updates 67% to
   91% heap-only, rebase entries 5,137 to 150, WAL 79 to 63 MB, MergeChange 200 to 145 ms (p50); `LatestOn` went from
   0.5 ms (and growing with the joins of main) to out of the top statements.
+- Point 11, same bench (4 writers, 20,000 versions, before → after): `DiffBaselines` p50 went from 35 ms growing to
+  47 ms (69 ms in the last window) to 14 to 18 ms. Its jumps came from reading both states whole, with the checkpoint
+  under them stored every 50 headers, plus every header of the namespace and the head of every change for the stack.
+  `MergeChange` went from 134 ms growing to 180 ms to a flat 139 to 147 ms. `ListNodeVersions` and `ListNodeChanges`
+  stop growing at 50 entries.

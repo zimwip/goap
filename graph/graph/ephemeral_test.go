@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"fmt"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -130,5 +131,168 @@ func testBaselineNodesOfAChange(t *testing.T, repo Repo) {
 	}
 	if fmt.Sprint(keys) != "[M-1@1 N-2@2]" || page.Total != 2 {
 		t.Fatalf("nodes of the change %v (total %d), want [M-1@1 N-2@2]", keys, page.Total)
+	}
+}
+
+func TestNodeHistoryPages(t *testing.T) { forEachRepo(t, testNodeHistoryPages) }
+
+// testNodeHistoryPages: the versions and the changes of a node are read a page at a time, newest first, whatever the
+// length of its history (ADR 0140).
+func testNodeHistoryPages(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	_, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: "c0", By: "t", Edits: []NodeEdit{{Key: "N-0", Type: "Need", Props: map[string]any{"n": 0}}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := g.NodeByKey(ctx, "", "N-0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := first.ID
+	for i := 1; i < 7; i++ {
+		n, err := g.Node(ctx, domain.NodeRef{ID: id})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref := n.Ref()
+		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("c%d", i), By: "t", Edits: []NodeEdit{{Pre: &ref, Props: map[string]any{"n": i}}}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var versions []domain.Version
+	pages := 0
+	for before := domain.Version(0); ; pages++ {
+		vs, next, err := g.VersionPage(ctx, id, before, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i := len(vs) - 1; i >= 0; i-- {
+			versions = append(versions, vs[i].Version)
+		}
+		if next == 0 {
+			break
+		}
+		before = next
+	}
+	if fmt.Sprint(versions) != "[7 6 5 4 3 2 1]" || pages != 2 {
+		t.Fatalf("versions by pages of 3: %v in %d pages", versions, pages+1)
+	}
+	var titles []string
+	for before := int64(0); ; {
+		cs, next, err := g.NodeChanges(ctx, id, before, 3)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cs) > 3 {
+			t.Fatalf("a page of 3 holds %d changes", len(cs))
+		}
+		for i := len(cs) - 1; i >= 0; i-- {
+			titles = append(titles, cs[i].Title)
+		}
+		if next == 0 {
+			break
+		}
+		before = next
+	}
+	if fmt.Sprint(titles) != "[c6 c5 c4 c3 c2 c1 c0]" {
+		t.Fatalf("changes by pages of 3: %v", titles)
+	}
+}
+
+func TestDiffBaselinesByLandings(t *testing.T) { forEachRepo(t, testDiffBaselinesByLandings) }
+
+// testDiffBaselinesByLandings: the difference of two baselines of a branch read from what landed between them is the
+// one of their whole states, whatever pair is asked (ADR 0140).
+func testDiffBaselinesByLandings(t *testing.T, repo Repo) {
+	ctx := context.Background()
+	g := New(repo)
+	var heads []domain.BaselineID
+	commit := func(edits ...NodeEdit) {
+		if _, err := g.Commit(ctx, Commit{ProjectID: "PROJ-ROOT", Title: fmt.Sprintf("c%d", len(heads)), By: "t", Edits: edits}); err != nil {
+			t.Fatal(err)
+		}
+		head, err := g.BranchHeadHeader(ctx, "", domain.MainBranch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		heads = append(heads, head.ID)
+	}
+	edit := func(key string, n int) NodeEdit {
+		cur, err := g.NodeByKey(ctx, "", key)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ref := cur.Ref()
+		return NodeEdit{Pre: &ref, Props: map[string]any{"n": n}}
+	}
+	commit(NodeEdit{Key: "A", Type: "Need"}, NodeEdit{Key: "B", Type: "Need"})
+	commit(NodeEdit{Key: "C", Type: "Need"})
+	commit(edit("A", 1))
+	commit(edit("B", 1), NodeEdit{Key: "D", Type: "Need"})
+	commit(edit("A", 2), edit("C", 1))
+	whole := func(from, to domain.BaselineID) string {
+		var a, b domain.Baseline
+		if err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+			if a, err = tx.Baseline(ctx, from); err != nil {
+				return err
+			}
+			b, err = tx.Baseline(ctx, to)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for id, v := range b.Nodes {
+			if a.Nodes[id] != v {
+				out = append(out, fmt.Sprintf("%s:%d>%d", id, a.Nodes[id], v))
+			}
+		}
+		for id, v := range a.Nodes {
+			if _, ok := b.Nodes[id]; !ok {
+				out = append(out, fmt.Sprintf("%s:%d>0", id, v))
+			}
+		}
+		slices.Sort(out)
+		return fmt.Sprint(out)
+	}
+	for i := range heads {
+		for j := range heads {
+			ds, err := g.DiffBaselines(ctx, heads[i], heads[j])
+			if err != nil {
+				t.Fatal(err)
+			}
+			var got []string
+			for _, d := range ds {
+				var fv, tv domain.Version
+				if d.From != nil {
+					fv = d.From.Version
+				}
+				if d.To != nil {
+					tv = d.To.Version
+				}
+				got = append(got, fmt.Sprintf("%s:%d>%d", d.Node, fv, tv))
+			}
+			slices.Sort(got)
+			if want := whole(heads[i], heads[j]); fmt.Sprint(got) != want {
+				t.Fatalf("diff c%d → c%d: %v, the whole states give %s", i, j, got, want)
+			}
+		}
+	}
+	if err := g.repo.InTx(ctx, func(tx Tx) error {
+		a, err := tx.BaselineHeader(ctx, heads[0])
+		if err != nil {
+			return err
+		}
+		b, err := tx.BaselineHeader(ctx, heads[len(heads)-1])
+		if err != nil {
+			return err
+		}
+		if _, ok, err := landedBetween(ctx, tx, a, b); err != nil || !ok {
+			t.Fatalf("the heads of main are not read from their landings (%v)", err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }

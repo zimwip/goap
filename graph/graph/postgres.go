@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -274,23 +275,42 @@ func (t *pgTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, e
 	if err != nil {
 		return out, err
 	}
-	q, args = dialectPG.sqlVersionBranches(id)
-	rows, err = t.tx.Query(ctx, q, args...)
+	return out, t.joinBranches(ctx, id, out)
+}
+
+func (t *pgTx) VersionRange(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, error) {
+	q, args := dialectPG.sqlVersionRange(id, before, limit)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
-		return out, err
+		return nil, err
+	}
+	out, err := collectNodes(rows)
+	if err != nil || len(out) == 0 {
+		return nil, err
+	}
+	slices.Reverse(out)
+	return out, t.joinBranches(ctx, id, out)
+}
+
+// joinBranches fills the branches the versions vs of a node (by version, consecutive) joined.
+func (t *pgTx) joinBranches(ctx context.Context, id domain.NodeID, vs []domain.Node) error {
+	q, args := dialectPG.sqlVersionBranches(id, vs[0].Version)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var v int
 		var b string
 		if err := rows.Scan(&v, &b); err != nil {
-			return out, err
+			return err
 		}
-		if v >= 1 && v <= len(out) {
-			out[v-1].Joined = append(out[v-1].Joined, b)
+		if i := v - int(vs[0].Version); i >= 0 && i < len(vs) {
+			vs[i].Joined = append(vs[i].Joined, b)
 		}
 	}
-	return out, rows.Err()
+	return rows.Err()
 }
 
 // LockChange implements Tx: a transaction-level advisory lock on the root of the change's tree. The root is read again
@@ -569,6 +589,15 @@ func (t *pgTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeI
 
 func (t *pgTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectPG.sqlNamespaceBaselineHeaders(namespace)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *pgTx) BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error) {
+	q, args := dialectPG.sqlBranchBaselineHeaders(namespace, branch)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *pgTx) baselineHeaders(ctx context.Context, namespace, q string, args []any) ([]domain.Baseline, error) {
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -942,8 +971,26 @@ func (t *pgTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]dom
 	return out, rows.Err()
 }
 
-func (t *pgTx) NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	q, args := dialectPG.sqlNodeChangeImpacts(node)
+func (t *pgTx) NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error) {
+	q, args := dialectPG.sqlNodeChangePage(node, before, limit)
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []NodeChange
+	for rows.Next() {
+		var c NodeChange
+		if err := rows.Scan((*string)(&c.Change), &c.Seq); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (t *pgTx) OpenNodeChanges(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	q, args := dialectPG.sqlOpenNodeChanges(node)
 	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err

@@ -32,6 +32,10 @@ type Tx interface {
 	LatestOn(ctx context.Context, id domain.NodeID, branch string) (domain.Node, error)
 	// Versions returns every version of a node, all branches, by version, with the branches each one joined.
 	Versions(ctx context.Context, id domain.NodeID) ([]domain.Node, error)
+	// VersionRange returns the last limit versions of a node below the version before (0: up to its latest), by version,
+	// with the branches each one joined; none when the node has no version there (ADR 0140: a page of a history,
+	// whatever its length).
+	VersionRange(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, error)
 	// DerivedNodes returns the versions that name ref among their origins (ADR 0077): the first versions of the
 	// successors of a merge or split; Version 0 matches any version of the node.
 	DerivedNodes(ctx context.Context, ref domain.NodeRef) ([]domain.Node, error)
@@ -76,6 +80,8 @@ type Tx interface {
 	BranchNodeIDs(ctx context.Context, branch string) ([]domain.NodeID, error)
 	// BaselineHeaders returns the header of every baseline of a namespace, oldest first, without their nodes (ADR 0133).
 	BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error)
+	// BranchBaselineHeaders returns the header of every baseline of a branch of a namespace, oldest first.
+	BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error)
 	// VersionJoins lists the branches the versions of a node joined, with the changes whose merge made them join.
 	VersionJoins(ctx context.Context, id domain.NodeID) ([]domain.VersionJoin, error)
 	Change(ctx context.Context, id domain.ChangeID) (domain.Change, error)
@@ -128,8 +134,12 @@ type Tx interface {
 	DeleteChangeImpact(ctx context.Context, change domain.ChangeID, id domain.ChangeImpactID) error
 	// ChangeImpacts lists the change impacts of a change, in creation order.
 	ChangeImpacts(ctx context.Context, change domain.ChangeID) ([]domain.ChangeImpact, error)
-	// NodeChangeImpacts lists the changes holding a change impact on a node, oldest first.
-	NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
+	// NodeChangePage lists the last limit changes holding a change impact on a node whose cursor is below before (0:
+	// any), newest first; the cursor of a change is the order of its first impact on the node (ADR 0140: a page of a
+	// history, whatever its length).
+	NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error)
+	// OpenNodeChanges lists the open changes (neither applied nor abandoned) holding a change impact on a node.
+	OpenNodeChanges(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error)
 	// SetNodeOrigin records on a node version the change and change impact that produced it and its comment.
 	SetNodeOrigin(ctx context.Context, ref domain.NodeRef, change domain.ChangeID, cn domain.ChangeImpactID, comment string) error
 
@@ -151,4 +161,10 @@ type Tx interface {
 	// head is read to be moved. A storage whose transactions are serialized already does nothing.
 	LockChange(ctx context.Context, id domain.ChangeID) error
 	LockBranch(ctx context.Context, namespace, name string) error
+}
+
+// NodeChange is a change acting on a node and its cursor in the node's history (Tx.NodeChangePage).
+type NodeChange struct {
+	Change domain.ChangeID
+	Seq    int64
 }

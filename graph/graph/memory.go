@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -177,6 +178,17 @@ func (t *memTx) Versions(_ context.Context, id domain.NodeID) ([]domain.Node, er
 		slices.Sort(vs[i].Joined)
 	}
 	return vs, nil
+}
+
+func (t *memTx) VersionRange(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, error) {
+	vs, err := t.Versions(ctx, id)
+	if errors.Is(err, ErrNotFound) {
+		return nil, nil
+	}
+	if before > 0 && int(before) <= len(vs) {
+		vs = vs[:before-1]
+	}
+	return vs[max(len(vs)-limit, 0):], err
 }
 
 func (t *memTx) DerivedNodes(_ context.Context, ref domain.NodeRef) ([]domain.Node, error) {
@@ -607,6 +619,11 @@ func (t *memTx) BaselineHeaders(_ context.Context, namespace string) ([]domain.B
 	return out, nil
 }
 
+func (t *memTx) BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error) {
+	all, err := t.BaselineHeaders(ctx, namespace)
+	return slices.DeleteFunc(all, func(b domain.Baseline) bool { return domain.BranchOf(b.Branch) != domain.BranchOf(branch) }), err
+}
+
 func (t *memTx) VersionJoins(_ context.Context, id domain.NodeID) ([]domain.VersionJoin, error) {
 	var out []domain.VersionJoin
 	for k, j := range t.st.joins {
@@ -719,7 +736,8 @@ func (t *memTx) ChangeImpacts(_ context.Context, change domain.ChangeID) ([]doma
 	return slices.Clone(t.st.nodes[change]), nil
 }
 
-func (t *memTx) NodeChangeImpacts(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+// nodeChanges lists the changes holding a change impact on a node, oldest first.
+func (t *memTx) nodeChanges(node domain.NodeID) []domain.ChangeID {
 	var out []domain.ChangeID
 	for id, list := range t.st.nodes {
 		for _, cn := range list {
@@ -730,6 +748,29 @@ func (t *memTx) NodeChangeImpacts(_ context.Context, node domain.NodeID) ([]doma
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return t.st.changes[out[i]].CreatedAt.Before(t.st.changes[out[j]].CreatedAt) })
+	return out
+}
+
+// NodeChangePage implements Tx: the cursor of a change is its rank among the node's, from 1.
+func (t *memTx) NodeChangePage(_ context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error) {
+	all := t.nodeChanges(node)
+	if before > 0 && int(before) <= len(all) {
+		all = all[:before-1]
+	}
+	var out []NodeChange
+	for i := len(all) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, NodeChange{Change: all[i], Seq: int64(i + 1)})
+	}
+	return out, nil
+}
+
+func (t *memTx) OpenNodeChanges(_ context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	var out []domain.ChangeID
+	for _, id := range t.nodeChanges(node) {
+		if st := t.st.changes[id].Status; st != domain.ChangeApplied && st != domain.ChangeAbandoned {
+			out = append(out, id)
+		}
+	}
 	return out, nil
 }
 

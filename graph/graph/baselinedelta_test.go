@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"slices"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -372,6 +373,9 @@ func checkStates(t *testing.T, repo Repo) {
 					t.Errorf("baseline %s (%s, %s): replayed %d nodes, %d read:%s", b.ID, b.Name, b.Kind, len(want), len(b.Nodes), diff)
 				}
 			}
+			if err := checkDiffs(ctx, t, tx, bs); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -409,4 +413,62 @@ func testFailedCommitLeavesNothing(t *testing.T, repo Repo) {
 	if _, err := g.NodeByKey(ctx, head.Namespace, "DES-3"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("a failed commit left its node: %v", err)
 	}
+}
+
+// checkDiffs checks the differences read from the distance between two baselines (ADR 0140) against the ones of their
+// whole states and whole lineages: each baseline against its parent, both ways, and against the first one.
+func checkDiffs(ctx context.Context, t *testing.T, tx Tx, bs []domain.Baseline) error {
+	if len(bs) == 0 {
+		return nil
+	}
+	heads, err := tx.BaselineHeaders(ctx, bs[0].Namespace)
+	if err != nil {
+		return err
+	}
+	byID := map[domain.BaselineID]domain.Baseline{}
+	for _, b := range bs {
+		byID[b.ID] = b
+	}
+	branchOf := branchOfChange(ctx, tx)
+	stack := func(id domain.BaselineID) []domain.ChangeID {
+		l, _ := domain.BaselineLineage(heads, id, branchOf, len(heads))
+		return domain.StackChangeIDs(nil, l)
+	}
+	for _, b := range bs {
+		for _, other := range []domain.BaselineID{b.ParentID, bs[0].ID} {
+			o, ok := byID[other]
+			if !ok {
+				continue
+			}
+			for _, pair := range [][2]domain.Baseline{{o, b}, {b, o}} {
+				from, to := pair[0], pair[1]
+				wantAdded, wantRemoved := domain.DiffStacks(stack(from.ID), stack(to.ID))
+				added, removed, err := diffLineages(ctx, tx, from.ID, to.ID)
+				if err != nil {
+					return err
+				}
+				if fmt.Sprint(added) != fmt.Sprint(wantAdded) || fmt.Sprint(removed) != fmt.Sprint(wantRemoved) {
+					t.Errorf("changes from %s (%s) to %s (%s): +%v -%v, the whole lineages give +%v -%v", from.ID, from.Kind, to.ID, to.Kind, added, removed, wantAdded, wantRemoved)
+				}
+				ids, ok, err := landedBetween(ctx, tx, from, to)
+				if err != nil || !ok {
+					if err != nil {
+						return err
+					}
+					continue
+				}
+				for id := range from.Nodes {
+					if to.Nodes[id] != from.Nodes[id] && !slices.Contains(ids, id) {
+						t.Errorf("from %s to %s: node %s moved (v%d to v%d) but did not land between them", from.ID, to.ID, id, from.Nodes[id], to.Nodes[id])
+					}
+				}
+				for id := range to.Nodes {
+					if to.Nodes[id] != from.Nodes[id] && !slices.Contains(ids, id) {
+						t.Errorf("from %s to %s: node %s moved (v%d to v%d) but did not land between them", from.ID, to.ID, id, from.Nodes[id], to.Nodes[id])
+					}
+				}
+			}
+		}
+	}
+	return nil
 }

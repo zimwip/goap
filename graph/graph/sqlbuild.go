@@ -140,9 +140,19 @@ func (d dialect) sqlDerivedNodes(ref domain.NodeRef) (string, []any) {
 		` AND (` + d.ph(2) + ` = 0 OR json_extract(o.value, '$.version') = ` + d.ph(2) + `)) ORDER BY n.key, v.version`, []any{string(ref.ID), int(ref.Version)}
 }
 
-// sqlVersionBranches reads the branches the versions of a node joined.
-func (d dialect) sqlVersionBranches(id domain.NodeID) (string, []any) {
-	return `SELECT version, branch FROM node_branch WHERE node_id = ` + d.ph(1) + ` ORDER BY branch`, []any{string(id)}
+// sqlVersionRange reads the last limit versions of a node below the version before (0: from its latest), newest first:
+// a page of its history, read through the primary key whatever its length (ADR 0140).
+func (d dialect) sqlVersionRange(id domain.NodeID, before domain.Version, limit int) (string, []any) {
+	q, args := `SELECT `+d.nodeCols()+nodeFrom+` WHERE n.id = `+d.ph(1), []any{string(id)}
+	if before > 0 {
+		q, args = q+` AND v.version < `+d.ph(2), append(args, int(before))
+	}
+	return q + ` ORDER BY v.version DESC LIMIT ` + d.ph(len(args)+1), append(args, limit)
+}
+
+// sqlVersionBranches reads the branches the versions of a node joined, from the version from up (0: every version).
+func (d dialect) sqlVersionBranches(id domain.NodeID, from domain.Version) (string, []any) {
+	return `SELECT version, branch FROM node_branch WHERE node_id = ` + d.ph(1) + ` AND version >= ` + d.ph(2) + ` ORDER BY branch`, []any{string(id), int(from)}
 }
 
 // sqlVersionJoins reads the branches the versions of a node joined and the changes whose merge made them join (ADR 0133).
@@ -296,6 +306,13 @@ func (d dialect) sqlNamespaceBaselineHeaders(namespace string) (string, []any) {
 		`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + ` FROM baseline WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ", id"), []any{domain.NamespaceOf(namespace)}
 }
 
+// sqlBranchBaselineHeaders reads the header of every baseline of a branch of a namespace, oldest first.
+func (d dialect) sqlBranchBaselineHeaders(namespace, branch string) (string, []any) {
+	return `SELECT ` + d.id("id") + `, name, ` + d.idOr("coalesce", "parent_id") + `, ` + d.idOr("coalesce", "merged_from") + `, ` + d.idOr("coalesce", "change_id") +
+			`, created_at, branch, kind, ` + d.idOr("coalesce", "rebased_from") + ` FROM baseline WHERE namespace = ` + d.ph(1) + ` AND branch = ` + d.ph(2) + ` ORDER BY seq`,
+		[]any{domain.NamespaceOf(namespace), domain.BranchOf(branch)}
+}
+
 // sqlBaselineIDs reads the ids of the baselines of a namespace, oldest first.
 func (d dialect) sqlBaselineIDs(namespace string) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM baseline WHERE namespace = ` + d.ph(1) + d.orderBy("created_at", ""), []any{domain.NamespaceOf(namespace)}
@@ -316,9 +333,20 @@ func (d dialect) sqlOpenChangeIDs() string {
 	return `SELECT ` + d.id("id") + ` FROM change WHERE status NOT IN ('applied', 'abandoned')` + d.orderBy("created_at", "")
 }
 
-// sqlNodeChangeImpacts reads the changes that have an impact on a node.
-func (d dialect) sqlNodeChangeImpacts(node domain.NodeID) (string, []any) {
-	return `SELECT ` + d.id("change_id") + ` FROM change_impact WHERE node_id = ` + d.ph(1) + ` ORDER BY seq`, []any{string(node)}
+// sqlNodeChangePage reads the last limit changes that have an impact on a node, each with the order of its first one,
+// whose order is below before (0: any), newest first.
+func (d dialect) sqlNodeChangePage(node domain.NodeID, before int64, limit int) (string, []any) {
+	q, args := `SELECT `+d.id("change_id")+`, min(seq) FROM change_impact WHERE node_id = `+d.ph(1)+` GROUP BY change_id`, []any{string(node)}
+	if before > 0 {
+		q, args = q+` HAVING min(seq) < `+d.ph(2), append(args, before)
+	}
+	return q + ` ORDER BY 2 DESC LIMIT ` + d.ph(len(args)+1), append(args, limit)
+}
+
+// sqlOpenNodeChanges reads the open changes (neither applied nor abandoned) that have an impact on a node.
+func (d dialect) sqlOpenNodeChanges(node domain.NodeID) (string, []any) {
+	return `SELECT ` + d.id("i.change_id") + ` FROM change_impact i JOIN change c ON c.id = i.change_id WHERE i.node_id = ` + d.ph(1) +
+		` AND c.status NOT IN ('applied', 'abandoned') GROUP BY i.change_id ORDER BY min(i.seq)`, []any{string(node)}
 }
 
 // changeImpactCols is the select list of a change impact (the order both repositories scan).

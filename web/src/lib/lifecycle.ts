@@ -51,10 +51,12 @@ export async function loadPosts(cns: ChangeImpact[], scoped = false, scope?: { c
   const out: PostVersions = new Map();
   const posts = cns.filter((c) => c.post?.id && live(c, scoped)).map((c) => c.post!);
   const drafts = posts.filter((p) => isDraft(p));
-  const ids = [...new Set(posts.filter((p) => !isDraft(p)).map((p) => p.id!))];
+  // each landed post is read by its version: a node's whole history is never needed here (ADR 0140)
+  const landed = [...new Map(posts.filter((p) => !isDraft(p)).map((p) => [postKey(p), p])).values()];
   await Promise.all([
-    ...ids.map(async (id) => {
-      for (const v of (await graph.listNodeVersions(id)).versions ?? []) out.set(`${id}@${v.version}`, v);
+    ...landed.map(async (p) => {
+      const n = (await graph.getNode({ id: p.id, version: p.version })).view?.node;
+      if (n) out.set(postKey(p), n);
     }),
     ...(scope
       ? [...new Map(drafts.map((d) => [d.id, d])).values()].map(async (d) => {

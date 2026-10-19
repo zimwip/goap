@@ -108,16 +108,11 @@ func MergeLinks(anc, ours, theirs []domain.Link) []domain.Link {
 
 // onBranch reports whether a node version is part of a branch: written there, or joined (ADR 0032).
 func onBranch(ctx context.Context, tx Tx, ref domain.NodeRef, branch string) (bool, error) {
-	vs, err := tx.Versions(ctx, ref.ID)
-	if err != nil {
+	vs, err := tx.VersionRange(ctx, ref.ID, ref.Version+1, 1)
+	if err != nil || len(vs) == 0 || vs[0].Version != ref.Version {
 		return false, err
 	}
-	for _, n := range vs {
-		if n.Version == ref.Version {
-			return n.On(branch), nil
-		}
-	}
-	return false, nil
+	return vs[0].On(branch), nil
 }
 
 // CommonAncestor returns the most recent common ancestor of two versions of
@@ -248,6 +243,22 @@ func (g *Graph) BranchHead(ctx context.Context, namespace, name string) (b domai
 // Versions returns every version of a node across branches (version graph).
 func (g *Graph) Versions(ctx context.Context, id domain.NodeID) (vs []domain.Node, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { vs, err = tx.Versions(ctx, id); return err })
+	return
+}
+
+// VersionPage returns a page of the history of a node (ADR 0140): its last limit versions (0: 50, at most 500) below
+// the version before (0: up to its latest), by version, and the before of the next older page (0: none).
+func (g *Graph) VersionPage(ctx context.Context, id domain.NodeID, before domain.Version, limit int) (vs []domain.Node, next domain.Version, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
+		vs, err = tx.VersionRange(ctx, id, before, pageLimit(limit))
+		if err == nil && len(vs) == 0 && before == 0 {
+			err = fmt.Errorf("node %s: %w", id, ErrNotFound)
+		}
+		return err
+	})
+	if len(vs) > 0 && vs[0].Version > 1 {
+		next = vs[0].Version
+	}
 	return
 }
 

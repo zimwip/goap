@@ -86,12 +86,17 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlVersions("n1")
 	check("sqlite Versions", lite, q, a, `SELECT `+goldSQLiteNodeCols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = ? ORDER BY v.version`, []any{"n1"})
 	for _, d := range []dialect{pg, lite} {
-		q, a = d.sqlVersionBranches("n1")
-		p := "?"
+		q, a = d.sqlVersionBranches("n1", 3)
+		p, p2, p3 := "?", "?", "?"
+		cols := goldSQLiteNodeCols
 		if d.pg {
-			p = "$1"
+			p, p2, p3, cols = "$1", "$2", "$3", goldPGNodeCols
 		}
-		check("VersionBranches", d, q, a, `SELECT version, branch FROM node_branch WHERE node_id = `+p+` ORDER BY branch`, []any{"n1"})
+		check("VersionBranches", d, q, a, `SELECT version, branch FROM node_branch WHERE node_id = `+p+` AND version >= `+p2+` ORDER BY branch`, []any{"n1", 3})
+		q, a = d.sqlVersionRange("n1", 0, 1)
+		check("VersionRange latest", d, q, a, `SELECT `+cols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = `+p+` ORDER BY v.version DESC LIMIT `+p2, []any{"n1", 1})
+		q, a = d.sqlVersionRange("n1", 7, 20)
+		check("VersionRange page", d, q, a, `SELECT `+cols+` FROM node n JOIN node_version v ON v.node_id = n.id WHERE n.id = `+p+` AND v.version < `+p2+` ORDER BY v.version DESC LIMIT `+p3, []any{"n1", 7, 20})
 		q, a = d.sqlVersionJoins("n1")
 		cid := "change_id"
 		if d.pg {
@@ -186,6 +191,10 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("pg NamespaceBaselineHeaders", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, '') FROM baseline WHERE namespace = $1 ORDER BY created_at, id`, []any{"default"})
 	q, a = lite.sqlNamespaceBaselineHeaders("")
 	check("sqlite NamespaceBaselineHeaders", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, '') FROM baseline WHERE namespace = ? ORDER BY created_at, rowid`, []any{"default"})
+	q, a = pg.sqlBranchBaselineHeaders("", "b1")
+	check("pg BranchBaselineHeaders", pg, q, a, `SELECT id::text, name, coalesce(parent_id::text, ''), coalesce(merged_from::text, ''), coalesce(change_id::text, ''), created_at, branch, kind, coalesce(rebased_from::text, '') FROM baseline WHERE namespace = $1 AND branch = $2 ORDER BY seq`, []any{"default", "b1"})
+	q, a = lite.sqlBranchBaselineHeaders("", "b1")
+	check("sqlite BranchBaselineHeaders", lite, q, a, `SELECT id, name, coalesce(parent_id, ''), coalesce(merged_from, ''), coalesce(change_id, ''), created_at, branch, kind, coalesce(rebased_from, '') FROM baseline WHERE namespace = ? AND branch = ? ORDER BY seq`, []any{"default", "b1"})
 	q, a = pg.sqlBaselineIDs("")
 	check("pg Baselines", pg, q, a, `SELECT id::text FROM baseline WHERE namespace = $1 ORDER BY created_at`, []any{"default"})
 	q, a = lite.sqlBaselineIDs("")
@@ -205,10 +214,14 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlChangeImpacts("c1")
 	check("sqlite ChangeImpacts", lite, q, a, `SELECT `+goldSQLiteImpact+`
 			FROM change_impact WHERE change_id = ? ORDER BY seq`, []any{"c1"})
-	q, a = pg.sqlNodeChangeImpacts("n1")
-	check("pg NodeChangeImpacts", pg, q, a, `SELECT change_id::text FROM change_impact WHERE node_id = $1 ORDER BY seq`, []any{"n1"})
-	q, a = lite.sqlNodeChangeImpacts("n1")
-	check("sqlite NodeChangeImpacts", lite, q, a, `SELECT change_id FROM change_impact WHERE node_id = ? ORDER BY seq`, []any{"n1"})
+	q, a = pg.sqlNodeChangePage("n1", 0, 3)
+	check("pg NodeChangePage", pg, q, a, `SELECT change_id::text, min(seq) FROM change_impact WHERE node_id = $1 GROUP BY change_id ORDER BY 2 DESC LIMIT $2`, []any{"n1", 3})
+	q, a = lite.sqlNodeChangePage("n1", 9, 3)
+	check("sqlite NodeChangePage", lite, q, a, `SELECT change_id, min(seq) FROM change_impact WHERE node_id = ? GROUP BY change_id HAVING min(seq) < ? ORDER BY 2 DESC LIMIT ?`, []any{"n1", int64(9), 3})
+	q, a = pg.sqlOpenNodeChanges("n1")
+	check("pg OpenNodeChanges", pg, q, a, `SELECT i.change_id::text FROM change_impact i JOIN change c ON c.id = i.change_id WHERE i.node_id = $1 AND c.status NOT IN ('applied', 'abandoned') GROUP BY i.change_id ORDER BY min(i.seq)`, []any{"n1"})
+	q, a = lite.sqlOpenNodeChanges("n1")
+	check("sqlite OpenNodeChanges", lite, q, a, `SELECT i.change_id FROM change_impact i JOIN change c ON c.id = i.change_id WHERE i.node_id = ? AND c.status NOT IN ('applied', 'abandoned') GROUP BY i.change_id ORDER BY min(i.seq)`, []any{"n1"})
 
 	// Log, LogCounts: the filter exercises every condition (the where builder is shared and unchanged)
 	f := domain.LogFilter{Change: "c1", Types: []string{"fact.", "journal.schedule"}, Flows: []string{"main"}, Processes: []string{"p1", "p2"}, Execution: "e1", AfterSeq: 7, Limit: 5}

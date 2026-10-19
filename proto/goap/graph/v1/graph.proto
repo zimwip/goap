@@ -1100,12 +1100,21 @@ message SetBranchDescriptionRequest {
 
 message SetBranchDescriptionResponse {}
 
+// A page of the history of a node, newest versions first in pages (ADR 0140): the answer follows the page, not the
+// length of the history.
 message ListNodeVersionsRequest {
   string id = 1;
+  // the versions below this one (0: up to the latest)
+  int32 before = 2;
+  // the most recent versions kept (0: 50, at most 500)
+  int32 limit = 3;
 }
 
 message ListNodeVersionsResponse {
+  // by version
   repeated Node versions = 1;
+  // the `before` of the next (older) page; 0: none
+  int32 next = 2;
 }
 
 message MergeCandidate {
@@ -1781,13 +1790,20 @@ message GetChangeImpactsResponse {
   repeated NodeRef nodes = 1;
 }
 
+// A page of the changes acting on a node, the most recent first in pages (ADR 0140).
 message ListNodeChangesRequest {
   string node_id = 1;
+  // the changes that acted on the node before this cursor (0: up to the latest), a `next` of a previous answer
+  int64 before = 2;
+  // the most recent changes kept (0: 50, at most 500)
+  int32 limit = 3;
 }
 
 message ListNodeChangesResponse {
-  // headers only (no items)
+  // headers only (no items, no impacts), oldest first
   repeated Change changes = 1;
+  // the `before` of the next (older) page; 0: none
+  int64 next = 2;
 }
 
 message MergeChangeRequest {

@@ -895,29 +895,34 @@ func (g *Graph) openChangeHolders(ctx context.Context, tx Tx) (map[domain.NodeID
 	return out, nil
 }
 
-// NodeChanges lists the changes acting on a node, oldest first.
-func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID) (out []domain.Change, err error) {
+// NodeChanges lists a page of the changes acting on a node (ADR 0140): the last limit (0: 50, at most 500) whose cursor
+// is below before (0: up to the latest), oldest first, headers only, and the before of the next older page (0: none).
+func (g *Graph) NodeChanges(ctx context.Context, node domain.NodeID, before int64, limit int) (out []domain.Change, next int64, err error) {
+	limit = pageLimit(limit)
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		stored, err := tx.NodeChangeImpacts(ctx, node)
+		page, err := tx.NodeChangePage(ctx, node, before, limit+1)
 		if err != nil {
 			return err
 		}
-		open, err := g.openChangeHolders(ctx, tx)
-		if err != nil {
-			return err
+		if len(page) > limit {
+			page, next = page[:limit], page[limit-1].Seq
 		}
-		for _, id := range slices.Concat(stored, open[node]) {
-			if slices.ContainsFunc(out, func(c domain.Change) bool { return c.ID == id }) {
-				continue
-			}
-			c, err := tx.ChangeHead(ctx, id)
+		for i := len(page) - 1; i >= 0; i-- {
+			c, err := tx.ChangeHead(ctx, page[i].Change)
 			if err != nil {
 				return err
 			}
 			out = append(out, c)
 		}
-		slices.SortStableFunc(out, func(a, b domain.Change) int { return a.CreatedAt.Compare(b.CreatedAt) })
 		return nil
 	})
 	return
+}
+
+// pageLimit is the size of a page of a history: 50 by default, at most 500.
+func pageLimit(limit int) int {
+	if limit <= 0 {
+		return 50
+	}
+	return min(limit, 500)
 }

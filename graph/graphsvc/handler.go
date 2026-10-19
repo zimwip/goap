@@ -533,8 +533,8 @@ func (h *Handler) GetChangeImpacts(ctx context.Context, r *connect.Request[graph
 
 func (h *Handler) ListNodeChanges(ctx context.Context, r *connect.Request[graphv1.ListNodeChangesRequest]) (*connect.Response[graphv1.ListNodeChangesResponse], error) {
 	ctx = h.Identity.Context(ctx, r.Header())
-	cs, err := h.Graph.NodeChanges(ctx, domain.NodeID(r.Msg.NodeId))
-	out := &graphv1.ListNodeChangesResponse{}
+	cs, next, err := h.Graph.NodeChanges(ctx, domain.NodeID(r.Msg.NodeId), r.Msg.Before, int(r.Msg.Limit))
+	out := &graphv1.ListNodeChangesResponse{Next: next}
 	for _, c := range cs {
 		if !h.mayRead(ctx, c) {
 			continue
@@ -1191,8 +1191,8 @@ func (h *Handler) SetBranchDescription(ctx context.Context, r *connect.Request[g
 }
 
 func (h *Handler) ListNodeVersions(ctx context.Context, r *connect.Request[graphv1.ListNodeVersionsRequest]) (*connect.Response[graphv1.ListNodeVersionsResponse], error) {
-	vs, err := h.Graph.Versions(ctx, domain.NodeID(r.Msg.Id))
-	return res(&graphv1.ListNodeVersionsResponse{Versions: pbconv.NodesToPB(vs)}, err)
+	vs, next, err := h.Graph.VersionPage(ctx, domain.NodeID(r.Msg.Id), domain.Version(r.Msg.Before), int(r.Msg.Limit))
+	return res(&graphv1.ListNodeVersionsResponse{Versions: pbconv.NodesToPB(vs), Next: int32(next)}, err)
 }
 
 func (h *Handler) PlanMerge(ctx context.Context, r *connect.Request[graphv1.PlanMergeRequest]) (*connect.Response[graphv1.PlanMergeResponse], error) {

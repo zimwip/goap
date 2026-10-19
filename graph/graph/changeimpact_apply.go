@@ -118,11 +118,11 @@ func (a *applier) writeVersion(cn domain.ChangeImpact, d domain.Draft) (domain.N
 		n.Version, n.Reason = 1, domain.ReasonCreate
 		return n, a.tx.PutNode(a.ctx, n)
 	}
-	vs, err := a.tx.Versions(a.ctx, d.Node)
+	next, err := nextVersion(a.ctx, a.tx, d.Node)
 	if err != nil {
 		return n, err
 	}
-	n.Version, n.Parents, n.Reason = domain.Version(len(vs)+1), []domain.Version{d.Base.Version}, domain.ReasonDerive
+	n.Version, n.Parents, n.Reason = next, []domain.Version{d.Base.Version}, domain.ReasonDerive
 	if on, err := onBranch(a.ctx, a.tx, *d.Base, a.branch); err != nil {
 		return n, err
 	} else if on {
@@ -262,20 +262,20 @@ func (g *Graph) land(ctx context.Context, tx Tx, c domain.Change, own domain.Bra
 		if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactLanded, Landed: &ref, Baseline: result, Branch: domain.BranchOf(own.Parent)}); err != nil {
 			return err
 		}
-		others, err := tx.NodeChangeImpacts(ctx, ref.ID)
+		// the open changes acting on the node only: the rest of its history is not read (ADR 0140)
+		others, err := tx.OpenNodeChanges(ctx, ref.ID)
 		if err != nil {
 			return err
 		}
-		for i, oid := range others {
-			if oid == c.ID || slices.Contains(others[:i], oid) {
+		for _, oid := range others {
+			if oid == c.ID {
 				continue
 			}
-			// the head tells the changes still open: the others of a node's history are not read
 			oh, err := tx.ChangeHead(ctx, oid)
 			if err != nil {
 				return err
 			}
-			if oh.Status == domain.ChangeApplied || oh.Status == domain.ChangeAbandoned || domain.BranchOf(oh.Branch) == domain.BranchOf(c.Branch) {
+			if domain.BranchOf(oh.Branch) == domain.BranchOf(c.Branch) {
 				continue
 			}
 			oc, err := tx.Change(ctx, oid)

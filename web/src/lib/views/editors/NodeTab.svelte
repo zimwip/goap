@@ -193,7 +193,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     { id: 'details', label: 'Details' },
     { id: 'relations', label: 'Relations', badge: head ? (head.in.get(id)?.length ?? 0) + (head.out.get(id)?.length ?? 0) : undefined },
     { id: 'lifecycle', label: 'Lifecycle', badge: nodeState || undefined, hidden: !lifecycle },
-    { id: 'history', label: 'History', badge: versions.length || undefined },
+    { id: 'history', label: 'History', badge: versions.at(-1)?.version || undefined },
   ]);
 
   // --- working change ---------------------------------------------------------------
@@ -251,6 +251,15 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   );
   let outLinks = $state<Link[]>([]);
   let nodeChanges = $state<Change[]>([]);
+  /** the cursor of the older page of the node's changes (ADR 0140: a page at a time); undefined: none */
+  let olderChanges = $state<string | undefined>();
+  async function loadOlderChanges() {
+    if (!olderChanges) return;
+    const r = await graph.listNodeChanges(id, undefined, { before: olderChanges }).catch(() => undefined);
+    if (!r) return;
+    nodeChanges = [...(r.changes ?? []), ...nodeChanges];
+    olderChanges = r.next && r.next !== '0' ? r.next : undefined;
+  }
   $effect(() => {
     const ref = shownRef;
     void reload;
@@ -270,8 +279,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     const ctrl = new AbortController();
     graph
       .listNodeChanges(id, ctrl.signal)
-      .then((r) => (nodeChanges = r.changes ?? []))
-      .catch(() => (nodeChanges = []));
+      .then((r) => ((nodeChanges = r.changes ?? []), (olderChanges = r.next && r.next !== '0' ? r.next : undefined)))
+      .catch(() => ((nodeChanges = []), (olderChanges = undefined)));
     return () => ctrl.abort();
   });
   const addLink = (type: string, to: NodeRef) => propose('link', { addLinks: [{ type, to }] }, `Link ${stored?.key} ${type} ${head?.nodes.get(to.id ?? '')?.key ?? ''}`.trim());
@@ -570,7 +579,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
           {/if}
         {:else if active === 'history'}
           <section class="card">
-            <h3>Changes <span class="count">{nodeChanges.length}</span></h3>
+            <h3>Changes <span class="count">{nodeChanges.length}{olderChanges ? '+' : ''}</span></h3>
             {#if nodeChanges.length}
               <ul class="changes">
                 {#each nodeChanges as c (c.id)}
@@ -581,6 +590,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
                   </li>
                 {/each}
               </ul>
+              {#if olderChanges}<button type="button" class="small" onclick={loadOlderChanges}>Older changes</button>{/if}
             {:else}
               <p class="empty">No change acted on this node.</p>
             {/if}

@@ -12,6 +12,8 @@
   let { id, reloadKey = 0 }: { id: string; /** bump to reload */ reloadKey?: number } = $props();
 
   let versions = $state<GraphNode[]>([]);
+  /** the `before` of the older page of the history (ADR 0140: a page at a time); undefined: none */
+  let next = $state<number | undefined>();
   let loading = $state(true);
   let error = $state('');
   let open = $state<number[]>([]);
@@ -29,12 +31,26 @@
     loading = true;
     error = '';
     try {
-      versions = ((await graph.listNodeVersions(id, signal)).versions ?? []).slice().sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
+      const r = await graph.listNodeVersions(id, signal);
+      versions = (r.versions ?? []).slice().sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
+      next = r.next || undefined;
       if (!changes.loaded) void refreshChanges();
     } catch (e) {
       if (!signal?.aborted) error = errorMessage(e);
     } finally {
       if (!signal?.aborted) loading = false;
+    }
+  }
+
+  /** loads the page of versions before the oldest one shown */
+  async function older() {
+    if (!next) return;
+    try {
+      const r = await graph.listNodeVersions(id, undefined, { before: next });
+      versions = [...(r.versions ?? []), ...versions].sort((a, b) => (a.version ?? 0) - (b.version ?? 0));
+      next = r.next || undefined;
+    } catch (e) {
+      error = errorMessage(e);
     }
   }
 
@@ -97,7 +113,7 @@
   {#if loading && !versions.length}
     <p class="empty">Loading…</p>
   {:else if versions.length}
-    <p class="hint">{versions.length} version{versions.length > 1 ? 's' : ''}{latest?.state ? ` · now ${latest.state}` : ''}{latest?.deleted ? ' · deleted' : ''}.</p>
+    <p class="hint">{latest?.version ?? versions.length} version{(latest?.version ?? versions.length) > 1 ? 's' : ''}{next ? ` · the last ${versions.length} shown` : ''}{latest?.state ? ` · now ${latest.state}` : ''}{latest?.deleted ? ' · deleted' : ''}.</p>
     {#if path.length > 1}
       <ol class="path" aria-label="States over time">
         {#each path as s, i (i)}<li><span class="state">{s}</span></li>{/each}
@@ -168,7 +184,7 @@
               <td>{formatDate(e.v.createdAt)}</td>
               <td>
                 <button type="button" class="link" aria-expanded={open.includes(e.v.version ?? 0)} onclick={() => toggle(e.v.version ?? 0)}>
-                  {e.diff.length ? `${e.diff.length} changed` : e.v.version === versions[0]?.version ? 'initial' : e.moved ? 'state only' : 'none'}
+                  {e.diff.length ? `${e.diff.length} changed` : e.v.version === 1 ? 'initial' : e.moved ? 'state only' : 'none'}
                 </button>
               </td>
             </tr>
@@ -182,6 +198,7 @@
       </table>
     </section>
     {/if}
+    {#if next}<button type="button" class="small" onclick={older}>Older versions</button>{/if}
   {:else}
     <p class="empty">No version found.</p>
   {/if}

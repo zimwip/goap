@@ -128,9 +128,10 @@ export const graph = {
   /** The change-stack of a node version (version 0: its latest on main) or of a baseline (ADR 0133). */
   getChangeStack: (q: { nodeId?: string; version?: number; baselineId?: string; limit?: number }, signal?: AbortSignal) =>
     rpc<{ nodeId?: string; version?: number; baselineId?: string; limit?: number }, { stack?: ChangeStack }>(GRAPH, 'GetChangeStack', q, signal),
-  /** The changes that acted on a node (headers only). */
-  listNodeChanges: (nodeId: string, signal?: AbortSignal) =>
-    rpc<{ nodeId: string }, { changes?: Change[] }>(GRAPH, 'ListNodeChanges', { nodeId }, signal),
+  /** A page of the changes that acted on a node (headers only, oldest first; ADR 0140): the latest `limit` (default
+   * 50) before the cursor `before`; `next` is the cursor of the older page (absent: none). */
+  listNodeChanges: (nodeId: string, signal?: AbortSignal, page: { before?: string; limit?: number } = {}) =>
+    rpc<{ nodeId: string; before?: string; limit?: number }, { changes?: Change[]; next?: string }>(GRAPH, 'ListNodeChanges', { nodeId, ...page }, signal),
   /**
    * Edits a change: title, intent, goal; status 'abandoned' abandons it (its sub-changes and its branch too); data is merged
    * into its free-form data (the criticality, ADR 0075 §3: raising it is free, lowering it asks a permission).
@@ -253,9 +254,10 @@ export const graph = {
       { key: string; namespace: string; changeId: string; flow: string },
       { view?: { node?: GraphNode; latest?: number; out?: Link[]; in?: Link[]; notLandable?: boolean } }
     >(GRAPH, 'GetNode', { key, namespace, changeId: scope.changeId, flow: scope.flow ?? '' }, signal),
-  /** Every version of a node, all branches. */
-  listNodeVersions: (id: string, signal?: AbortSignal) =>
-    rpc<{ id: string }, { versions?: GraphNode[] }>(GRAPH, 'ListNodeVersions', { id }, signal),
+  /** A page of the versions of a node, all branches, by version (ADR 0140): the latest `limit` (default 50) below the
+   * version `before`; `next` is the `before` of the older page (absent: none). */
+  listNodeVersions: (id: string, signal?: AbortSignal, page: { before?: number; limit?: number } = {}) =>
+    rpc<{ id: string; before?: number; limit?: number }, { versions?: GraphNode[]; next?: number }>(GRAPH, 'ListNodeVersions', { id, ...page }, signal),
   /** The versions the change starts from (the pre version of its change impacts). */
   getChangeImpacts: (changeId: string, signal?: AbortSignal) =>
     rpc<{ changeId: string }, { nodes?: NodeRef[] }>(GRAPH, 'GetChangeImpacts', { changeId }, signal),

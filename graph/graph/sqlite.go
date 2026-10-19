@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -162,23 +163,38 @@ func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Nod
 	if err != nil {
 		return out, err
 	}
-	q, args = dialectSQLite.sqlVersionBranches(id)
+	return out, t.joinBranches(ctx, id, out)
+}
+
+func (t *sqliteTx) VersionRange(ctx context.Context, id domain.NodeID, before domain.Version, limit int) ([]domain.Node, error) {
+	q, args := dialectSQLite.sqlVersionRange(id, before, limit)
+	out, err := t.nodes(ctx, q, args...)
+	if err != nil || len(out) == 0 {
+		return nil, err
+	}
+	slices.Reverse(out)
+	return out, t.joinBranches(ctx, id, out)
+}
+
+// joinBranches fills the branches the versions vs of a node (by version, consecutive) joined.
+func (t *sqliteTx) joinBranches(ctx context.Context, id domain.NodeID, vs []domain.Node) error {
+	q, args := dialectSQLite.sqlVersionBranches(id, vs[0].Version)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
-		return out, err
+		return err
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var v int
 		var b string
 		if err := rows.Scan(&v, &b); err != nil {
-			return out, err
+			return err
 		}
-		if v >= 1 && v <= len(out) {
-			out[v-1].Joined = append(out[v-1].Joined, b)
+		if i := v - int(vs[0].Version); i >= 0 && i < len(vs) {
+			vs[i].Joined = append(vs[i].Joined, b)
 		}
 	}
-	return out, rows.Err()
+	return rows.Err()
 }
 
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
@@ -440,6 +456,15 @@ func (t *sqliteTx) BranchNodeIDs(ctx context.Context, branch string) ([]domain.N
 
 func (t *sqliteTx) BaselineHeaders(ctx context.Context, namespace string) ([]domain.Baseline, error) {
 	q, args := dialectSQLite.sqlNamespaceBaselineHeaders(namespace)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *sqliteTx) BranchBaselineHeaders(ctx context.Context, namespace, branch string) ([]domain.Baseline, error) {
+	q, args := dialectSQLite.sqlBranchBaselineHeaders(namespace, branch)
+	return t.baselineHeaders(ctx, namespace, q, args)
+}
+
+func (t *sqliteTx) baselineHeaders(ctx context.Context, namespace, q string, args []any) ([]domain.Baseline, error) {
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
@@ -830,8 +855,26 @@ func (t *sqliteTx) ChangeImpacts(ctx context.Context, change domain.ChangeID) ([
 	return out, rows.Err()
 }
 
-func (t *sqliteTx) NodeChangeImpacts(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
-	q, args := dialectSQLite.sqlNodeChangeImpacts(node)
+func (t *sqliteTx) NodeChangePage(ctx context.Context, node domain.NodeID, before int64, limit int) ([]NodeChange, error) {
+	q, args := dialectSQLite.sqlNodeChangePage(node, before, limit)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []NodeChange
+	for rows.Next() {
+		var c NodeChange
+		if err := rows.Scan((*string)(&c.Change), &c.Seq); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+func (t *sqliteTx) OpenNodeChanges(ctx context.Context, node domain.NodeID) ([]domain.ChangeID, error) {
+	q, args := dialectSQLite.sqlOpenNodeChanges(node)
 	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
