@@ -300,18 +300,23 @@ func baselineGraphTx(ctx context.Context, tx Tx, id domain.BaselineID) ([]domain
 	return nodes, links, err
 }
 
-// linksWithin returns the outgoing links of the nodes whose target is in b.
+// linksWithin returns the outgoing links of the nodes whose target is in b, read in one query.
 func linksWithin(ctx context.Context, tx Tx, b domain.Baseline, nodes []domain.Node) ([]domain.Link, error) {
-	var links []domain.Link
-	for _, n := range nodes {
-		out, err := tx.OutLinks(ctx, n.Ref())
-		if err != nil {
-			return nil, err
-		}
-		for _, l := range out {
-			if b.Contains(l.To) {
-				links = append(links, l)
-			}
+	refs := make([]domain.NodeRef, len(nodes))
+	for i, n := range nodes {
+		refs[i] = n.Ref()
+	}
+	if len(refs) == 0 {
+		return nil, nil
+	}
+	out, err := tx.LinksFrom(ctx, refs)
+	if err != nil {
+		return nil, err
+	}
+	links := out[:0]
+	for _, l := range out {
+		if b.Contains(l.To) {
+			links = append(links, l)
 		}
 	}
 	return links, nil
@@ -326,15 +331,16 @@ func (g *Graph) SuspectLinks(ctx context.Context, id domain.BaselineID) (out []d
 		if err != nil {
 			return err
 		}
-		for nid, v := range b.Nodes {
-			links, err := tx.OutLinks(ctx, domain.NodeRef{ID: nid, Version: v})
-			if err != nil {
-				return err
-			}
-			for _, l := range links {
-				if tv, ok := b.Nodes[l.To.ID]; ok && tv != l.To.Version {
-					out = append(out, l)
-				}
+		if len(b.Nodes) == 0 {
+			return nil
+		}
+		links, err := tx.LinksFrom(ctx, refsOf(b.Nodes))
+		if err != nil {
+			return err
+		}
+		for _, l := range links {
+			if tv, ok := b.Nodes[l.To.ID]; ok && tv != l.To.Version {
+				out = append(out, l)
 			}
 		}
 		return nil
@@ -518,7 +524,7 @@ func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 
 // ListChanges lists the changes matching a filter, in no particular order (the caller sorts and caps).
 func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) (out []domain.Change, err error) {
-	// the filter reads the heads; only the changes it keeps are read whole
+	// the filter reads the heads; only the changes it keeps are read whole, unless the heads are asked for
 	err = g.repo.InTx(ctx, func(tx Tx) error {
 		heads, err := tx.ChangeHeads(ctx)
 		if err != nil {
@@ -526,6 +532,10 @@ func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) (out []domain.
 		}
 		for _, h := range heads {
 			if !f.Match(h) {
+				continue
+			}
+			if f.HeadersOnly {
+				out = append(out, h)
 				continue
 			}
 			c, err := tx.Change(ctx, h.ID)

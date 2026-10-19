@@ -44,7 +44,7 @@
     adding = true;
     error = '';
     try {
-      const r = await graph.listChanges();
+      const r = await graph.listChanges(undefined, { headerOnly: true });
       choices = dependencyChoices(change, r.changes ?? []);
       target = choices[0]?.id ?? '';
     } catch (e) {

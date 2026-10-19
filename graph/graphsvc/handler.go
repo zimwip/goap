@@ -506,7 +506,7 @@ func (h *Handler) GetChange(ctx context.Context, r *connect.Request[graphv1.GetC
 }
 
 func (h *Handler) ListChanges(ctx context.Context, r *connect.Request[graphv1.ListChangesRequest]) (*connect.Response[graphv1.ListChangesResponse], error) {
-	f := graph.ChangesFilter{Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg}
+	f := graph.ChangesFilter{Namespace: r.Msg.Namespace, OwnerOrg: r.Msg.OwnerOrg, HeadersOnly: r.Msg.HeaderOnly}
 	for _, s := range r.Msg.Status {
 		f.Status = append(f.Status, domain.ChangeStatus(s))
 	}

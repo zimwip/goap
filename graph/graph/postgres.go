@@ -1097,3 +1097,60 @@ func (t *pgTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespace, 
 	}
 	return nil
 }
+
+func (t *pgTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
+	q, args := dialectPG.sqlLinksFrom(refs)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {
+	q, args := dialectPG.sqlLinksTo(id)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *pgTx) NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (page NodePage, err error) {
+	cq, cargs := dialectPG.sqlNodeTypeCounts(refs, q)
+	counts, err := t.typeCounts(ctx, cq, cargs)
+	if err != nil {
+		return page, err
+	}
+	page.Types, page.Total = typeCounts(counts, q.Type)
+	pq, pargs := dialectPG.sqlNodePage(refs, q)
+	rows, err := t.tx.Query(ctx, pq, pargs...)
+	if err != nil {
+		return page, mapErr(err, "nodes")
+	}
+	page.Nodes, err = collectNodes(rows)
+	return page, err
+}
+
+func (t *pgTx) LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (page LinkPage, err error) {
+	cq, cargs := dialectPG.sqlLinkTypeCounts(refs, q)
+	counts, err := t.typeCounts(ctx, cq, cargs)
+	if err != nil {
+		return page, err
+	}
+	page.Types, page.Total = typeCounts(counts, q.Type)
+	pq, pargs := dialectPG.sqlLinkPage(refs, q)
+	page.Links, err = t.queryLinks(ctx, pq, pargs...)
+	return page, err
+}
+
+// typeCounts reads the (type, count) rows of a query.
+func (t *pgTx) typeCounts(ctx context.Context, q string, args []any) (map[string]int, error) {
+	rows, err := t.tx.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var typ string
+		var n int
+		if err := rows.Scan(&typ, &n); err != nil {
+			return nil, err
+		}
+		out[typ] = n
+	}
+	return out, rows.Err()
+}

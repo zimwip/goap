@@ -489,3 +489,120 @@ var (
 	baselineColumns    = []string{"id", "name", "parent_id", "merged_from", "change_id", "created_at", "branch", "namespace", "depth", "gap", "kind", "rebased_from", "seq", "base_id"}
 	changeLogColumns   = []string{"id", "change_id", "type", "flow", "process_id", "execution", "subject", "by_whom", "causation", "at", "payload"}
 )
+
+// refsJoin joins the versions refs as the alias a on the columns idCol / verCol: an array pair bound at n and n+1 for
+// PostgreSQL, a JSON list bound at n for SQLite. The join may be repeated with the same arguments.
+func (d dialect) refsJoin(a, idCol, verCol string, n int) string {
+	if d.pg {
+		return ` JOIN unnest(` + d.ph(n) + `::uuid[], ` + d.ph(n+1) + `::int[]) AS ` + a + `(id, version) ON ` + a + `.id = ` + idCol + ` AND ` + a + `.version = ` + verCol
+	}
+	return ` JOIN json_each(` + d.ph(n) + `) ` + a + ` ON json_extract(` + a + `.value, '$[0]') = ` + idCol + ` AND json_extract(` + a + `.value, '$[1]') = ` + verCol
+}
+
+// refsArgs are the arguments of refsJoin, and the number of the next placeholder after them.
+func (d dialect) refsArgs(refs []domain.NodeRef) ([]any, int) {
+	if d.pg {
+		ids, vs := make([]string, len(refs)), make([]int32, len(refs))
+		for i, r := range refs {
+			ids[i], vs[i] = string(r.ID), int32(r.Version)
+		}
+		return []any{ids, vs}, 3
+	}
+	pairs := make([][2]any, len(refs))
+	for i, r := range refs {
+		pairs[i] = [2]any{string(r.ID), int(r.Version)}
+	}
+	b, _ := json.Marshal(pairs)
+	return []any{string(b)}, 2
+}
+
+// likePattern is the LIKE pattern of the rows containing text (case-insensitive), "" for no text.
+func likePattern(text string) string {
+	text = strings.ToLower(strings.TrimSpace(text))
+	if text == "" {
+		return ""
+	}
+	return "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(text) + "%"
+}
+
+// textMatch holds when the pattern bound at n is empty, or one of cols or a string property of the JSON object props
+// matches it (lower case).
+func (d dialect) textMatch(n int, props string, cols ...string) string {
+	p := d.ph(n)
+	out := `(` + p + ` = ''`
+	for _, c := range cols {
+		out += ` OR lower(` + c + `) LIKE ` + p + ` ESCAPE '\'`
+	}
+	if d.pg {
+		return out + ` OR EXISTS (SELECT 1 FROM jsonb_each(` + props + `) p WHERE jsonb_typeof(p.value) = 'string' AND lower(p.value #>> '{}') LIKE ` + p + ` ESCAPE '\'))`
+	}
+	return out + ` OR EXISTS (SELECT 1 FROM json_each(` + props + `) p WHERE p.type = 'text' AND lower(p.value) LIKE ` + p + ` ESCAPE '\'))`
+}
+
+// byteOrder orders a text column by its bytes, as Go compares strings.
+func (d dialect) byteOrder(col string) string {
+	if d.pg {
+		return col + ` COLLATE "C"`
+	}
+	return col
+}
+
+// nodeRefsWhere selects the node versions refs matching the text and the deleted filter of q.
+func (d dialect) nodeRefsWhere(refs []domain.NodeRef, q NodeQuery) (string, []any, int) {
+	args, n := d.refsArgs(refs)
+	args = append(args, likePattern(q.Text), q.IncludeDeleted)
+	return nodeFrom + d.refsJoin("r", "v.node_id", "v.version", 1) + ` WHERE ` + d.textMatch(n, "v.props", "n.key", "n.type") +
+		` AND (` + d.ph(n+1) + ` OR NOT v.deleted)`, args, n + 2
+}
+
+// sqlNodePage reads the page of q of the node versions refs, ordered by key.
+func (d dialect) sqlNodePage(refs []domain.NodeRef, q NodeQuery) (string, []any) {
+	where, args, n := d.nodeRefsWhere(refs, q)
+	args = append(args, q.Type, q.Limit, q.Offset)
+	return `SELECT ` + d.nodeCols() + where + ` AND (` + d.ph(n) + ` = '' OR n.type = ` + d.ph(n) + `) ORDER BY ` + d.byteOrder("n.key") +
+		` LIMIT ` + d.ph(n+1) + ` OFFSET ` + d.ph(n+2), args
+}
+
+// sqlNodeTypeCounts counts the node versions refs matching the text and the deleted filter of q, by type.
+func (d dialect) sqlNodeTypeCounts(refs []domain.NodeRef, q NodeQuery) (string, []any) {
+	where, args, _ := d.nodeRefsWhere(refs, q)
+	return `SELECT n.type, count(*)` + where + ` GROUP BY n.type`, args
+}
+
+// qualifiedLinkCols is the select list of a link read as the alias l.
+func (d dialect) qualifiedLinkCols() string {
+	return d.cols(su("l.id"), sc("l.type"), su("l.from_id"), sc("l.from_version"), su("l.to_id"), sc("l.to_version"), sc("l.props"), su("l.change_id"))
+}
+
+// sqlLinksFrom reads the links leaving the versions refs, by id.
+func (d dialect) sqlLinksFrom(refs []domain.NodeRef) (string, []any) {
+	args, _ := d.refsArgs(refs)
+	return `SELECT ` + d.qualifiedLinkCols() + ` FROM link l` + d.refsJoin("f", "l.from_id", "l.from_version", 1) + ` ORDER BY l.id`, args
+}
+
+// sqlLinksTo reads the links entering any version of a node, by id.
+func (d dialect) sqlLinksTo(id domain.NodeID) (string, []any) {
+	return `SELECT ` + d.linkCols() + ` FROM link WHERE to_id = ` + d.ph(1) + ` ORDER BY id`, []any{string(id)}
+}
+
+// linkRefsWhere selects the links between two of the versions refs matching the text of q.
+func (d dialect) linkRefsWhere(refs []domain.NodeRef, q LinkQuery) (string, []any, int) {
+	args, n := d.refsArgs(refs)
+	args = append(args, likePattern(q.Text))
+	return ` FROM link l` + d.refsJoin("f", "l.from_id", "l.from_version", 1) + d.refsJoin("t", "l.to_id", "l.to_version", 1) +
+		` WHERE ` + d.textMatch(n, "l.props", "l.type"), args, n + 1
+}
+
+// sqlLinkPage reads the page of q of the links between two of the versions refs, by type then id.
+func (d dialect) sqlLinkPage(refs []domain.NodeRef, q LinkQuery) (string, []any) {
+	where, args, n := d.linkRefsWhere(refs, q)
+	args = append(args, q.Type, q.Limit, q.Offset)
+	return `SELECT ` + d.qualifiedLinkCols() + where + ` AND (` + d.ph(n) + ` = '' OR l.type = ` + d.ph(n) + `) ORDER BY ` + d.byteOrder("l.type") +
+		`, l.id LIMIT ` + d.ph(n+1) + ` OFFSET ` + d.ph(n+2), args
+}
+
+// sqlLinkTypeCounts counts the links between two of the versions refs matching the text of q, by type.
+func (d dialect) sqlLinkTypeCounts(refs []domain.NodeRef, q LinkQuery) (string, []any) {
+	where, args, _ := d.linkRefsWhere(refs, q)
+	return `SELECT l.type, count(*)` + where + ` GROUP BY l.type`, args
+}

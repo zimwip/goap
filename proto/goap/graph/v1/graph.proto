@@ -815,6 +815,8 @@ message ListChangesRequest {
   repeated string status = 2;
   // key of the responsible OrgUnit (empty: every unit)
   string owner_org = 3;
+  // the heads of the changes only, without their impacts and items: what a list shows (ADR 0140)
+  bool header_only = 4;
 }
 
 message ListChangesResponse {

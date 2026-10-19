@@ -91,8 +91,9 @@ export const graph = {
   listItemTypes: (signal?: AbortSignal) => rpc<Empty, { types?: ItemTypeInfo[] }>(GRAPH, 'ListItemTypes', {}, signal),
   /** The namespaces holding at least one node. */
   listNamespaces: (signal?: AbortSignal) => rpc<Empty, { namespaces?: string[] }>(GRAPH, 'ListNamespaces', {}, signal),
-  listChanges: (signal?: AbortSignal) =>
-    rpc<Empty, { changes?: Change[] }>(GRAPH, 'ListChanges', {}, signal),
+  /** The changes; `headerOnly`: their heads only, without impacts nor items (what a list shows, ADR 0140). */
+  listChanges: (signal?: AbortSignal, opts: { headerOnly?: boolean } = {}) =>
+    rpc<{ headerOnly?: boolean }, { changes?: Change[] }>(GRAPH, 'ListChanges', opts, signal),
   getChange: (id: string, signal?: AbortSignal) =>
     rpc<{ id: string }, { change?: Change }>(GRAPH, 'GetChange', { id }, signal),
   /** A branch and the header of its head (its nodes are not sent, ADR 0140). */

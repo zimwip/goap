@@ -164,6 +164,42 @@ func TestSQLBuildersGolden(t *testing.T) {
 	q, a = lite.sqlBranchNodeIDs("change-1")
 	check("sqlite BranchNodeIDs", lite, q, a, `SELECT node_id FROM node_version WHERE branch = ? UNION SELECT node_id FROM node_branch WHERE branch = ?`, []any{"change-1"})
 
+	// Pages of a state (ADR 0140): filtered, counted and paged by the store
+	pgRefs := []any{[]string{"n1", "n2"}, []int32{2, 1}}
+	const liteRefs = `[["n1",2],["n2",1]]`
+	const pgNodeWhere = ` FROM node n JOIN node_version v ON v.node_id = n.id JOIN unnest($1::uuid[], $2::int[]) AS r(id, version) ON r.id = v.node_id AND r.version = v.version WHERE ($3 = '' OR lower(n.key) LIKE $3 ESCAPE '\' OR lower(n.type) LIKE $3 ESCAPE '\' OR EXISTS (SELECT 1 FROM jsonb_each(v.props) p WHERE jsonb_typeof(p.value) = 'string' AND lower(p.value #>> '{}') LIKE $3 ESCAPE '\')) AND ($4 OR NOT v.deleted)`
+	const liteNodeWhere = ` FROM node n JOIN node_version v ON v.node_id = n.id JOIN json_each(?) r ON json_extract(r.value, '$[0]') = v.node_id AND json_extract(r.value, '$[1]') = v.version WHERE (? = '' OR lower(n.key) LIKE ? ESCAPE '\' OR lower(n.type) LIKE ? ESCAPE '\' OR EXISTS (SELECT 1 FROM json_each(v.props) p WHERE p.type = 'text' AND lower(p.value) LIKE ? ESCAPE '\')) AND (? OR NOT v.deleted)`
+	nq := NodeQuery{Type: "t", Text: " A%b ", Offset: 10, Limit: 5}
+	q, a = pg.sqlNodePage(refs, nq)
+	check("pg NodePage", pg, q, a, `SELECT `+goldPGNodeCols+pgNodeWhere+` AND ($5 = '' OR n.type = $5) ORDER BY n.key COLLATE "C" LIMIT $6 OFFSET $7`, append(pgRefs, `%a\%b%`, false, "t", 5, 10))
+	q, a = lite.sqlNodePage(refs, nq)
+	check("sqlite NodePage", lite, q, a, `SELECT `+goldSQLiteNodeCols+liteNodeWhere+` AND (? = '' OR n.type = ?) ORDER BY n.key LIMIT ? OFFSET ?`, []any{liteRefs, `%a\%b%`, false, "t", 5, 10})
+	q, a = pg.sqlNodeTypeCounts(refs, NodeQuery{IncludeDeleted: true})
+	check("pg NodeTypeCounts", pg, q, a, `SELECT n.type, count(*)`+pgNodeWhere+` GROUP BY n.type`, append(pgRefs, "", true))
+	q, a = lite.sqlNodeTypeCounts(refs, NodeQuery{IncludeDeleted: true})
+	check("sqlite NodeTypeCounts", lite, q, a, `SELECT n.type, count(*)`+liteNodeWhere+` GROUP BY n.type`, []any{liteRefs, "", true})
+	const pgLinkCols = `l.id::text, l.type, l.from_id::text, l.from_version, l.to_id::text, l.to_version, l.props, l.change_id::text`
+	const liteLinkCols = `l.id, l.type, l.from_id, l.from_version, l.to_id, l.to_version, l.props, l.change_id`
+	const pgLinkWhere = ` FROM link l JOIN unnest($1::uuid[], $2::int[]) AS f(id, version) ON f.id = l.from_id AND f.version = l.from_version JOIN unnest($1::uuid[], $2::int[]) AS t(id, version) ON t.id = l.to_id AND t.version = l.to_version WHERE ($3 = '' OR lower(l.type) LIKE $3 ESCAPE '\' OR EXISTS (SELECT 1 FROM jsonb_each(l.props) p WHERE jsonb_typeof(p.value) = 'string' AND lower(p.value #>> '{}') LIKE $3 ESCAPE '\'))`
+	const liteLinkWhere = ` FROM link l JOIN json_each(?) f ON json_extract(f.value, '$[0]') = l.from_id AND json_extract(f.value, '$[1]') = l.from_version JOIN json_each(?) t ON json_extract(t.value, '$[0]') = l.to_id AND json_extract(t.value, '$[1]') = l.to_version WHERE (? = '' OR lower(l.type) LIKE ? ESCAPE '\' OR EXISTS (SELECT 1 FROM json_each(l.props) p WHERE p.type = 'text' AND lower(p.value) LIKE ? ESCAPE '\'))`
+	lq := LinkQuery{Type: "t", Text: "x", Offset: 2, Limit: 3}
+	q, a = pg.sqlLinkPage(refs, lq)
+	check("pg LinkPage", pg, q, a, `SELECT `+pgLinkCols+pgLinkWhere+` AND ($4 = '' OR l.type = $4) ORDER BY l.type COLLATE "C", l.id LIMIT $5 OFFSET $6`, append(pgRefs, "%x%", "t", 3, 2))
+	q, a = lite.sqlLinkPage(refs, lq)
+	check("sqlite LinkPage", lite, q, a, `SELECT `+liteLinkCols+liteLinkWhere+` AND (? = '' OR l.type = ?) ORDER BY l.type, l.id LIMIT ? OFFSET ?`, []any{liteRefs, "%x%", "t", 3, 2})
+	q, a = pg.sqlLinkTypeCounts(refs, LinkQuery{})
+	check("pg LinkTypeCounts", pg, q, a, `SELECT l.type, count(*)`+pgLinkWhere+` GROUP BY l.type`, append(pgRefs, ""))
+	q, a = lite.sqlLinkTypeCounts(refs, LinkQuery{})
+	check("sqlite LinkTypeCounts", lite, q, a, `SELECT l.type, count(*)`+liteLinkWhere+` GROUP BY l.type`, []any{liteRefs, ""})
+	q, a = pg.sqlLinksFrom(refs)
+	check("pg LinksFrom", pg, q, a, `SELECT `+pgLinkCols+` FROM link l JOIN unnest($1::uuid[], $2::int[]) AS f(id, version) ON f.id = l.from_id AND f.version = l.from_version ORDER BY l.id`, pgRefs)
+	q, a = lite.sqlLinksFrom(refs)
+	check("sqlite LinksFrom", lite, q, a, `SELECT `+liteLinkCols+` FROM link l JOIN json_each(?) f ON json_extract(f.value, '$[0]') = l.from_id AND json_extract(f.value, '$[1]') = l.from_version ORDER BY l.id`, []any{liteRefs})
+	q, a = pg.sqlLinksTo("n1")
+	check("pg LinksTo", pg, q, a, `SELECT id::text, type, from_id::text, from_version, to_id::text, to_version, props, change_id::text FROM link WHERE to_id = $1 ORDER BY id`, []any{"n1"})
+	q, a = lite.sqlLinksTo("n1")
+	check("sqlite LinksTo", lite, q, a, `SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE to_id = ? ORDER BY id`, []any{"n1"})
+
 	// Links
 	q, a = pg.sqlLinks(true, ref)
 	check("pg OutLinks", pg, q, a, `SELECT id::text, type, from_id::text, from_version, to_id::text, to_version, props, change_id::text FROM link WHERE from_id = $1 AND from_version = $2 ORDER BY id`, []any{"n1", 3})

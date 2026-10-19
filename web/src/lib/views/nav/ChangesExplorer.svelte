@@ -146,7 +146,6 @@
         ['Goal', c.goal ?? ''],
         ['Starting baseline', c.baselineId ?? ''],
         ['Resulting baseline', c.resultBaselineId ?? ''],
-        ['Items', String(c.items?.length ?? 0)],
         ['Created', formatDate(c.createdAt)],
       ],
     });

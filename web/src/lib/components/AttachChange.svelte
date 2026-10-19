@@ -17,7 +17,7 @@
     const ch = change;
     void (async () => {
       try {
-        const r = await graph.listChanges();
+        const r = await graph.listChanges(undefined, { headerOnly: true });
         choices = parentChoices(ch, r.changes ?? []);
         if (!choices.some((c) => c.id === target)) target = choices[0]?.id ?? '';
       } catch (e) {

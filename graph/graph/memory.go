@@ -903,3 +903,56 @@ func (t *memTx) DeleteChange(_ context.Context, id domain.ChangeID, namespace, b
 	delete(t.st.changes, id)
 	return nil
 }
+
+func (t *memTx) LinksFrom(_ context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
+	from := map[domain.NodeRef]bool{}
+	for _, r := range refs {
+		from[r] = true
+	}
+	var out []domain.Link
+	for _, l := range t.st.links {
+		if from[l.From] {
+			out = append(out, l)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Link) int { return strings.Compare(string(a.ID), string(b.ID)) })
+	return out, nil
+}
+
+func (t *memTx) LinksTo(_ context.Context, id domain.NodeID) ([]domain.Link, error) {
+	var out []domain.Link
+	for _, l := range t.st.links {
+		if l.To.ID == id {
+			out = append(out, l)
+		}
+	}
+	slices.SortFunc(out, func(a, b domain.Link) int { return strings.Compare(string(a.ID), string(b.ID)) })
+	return out, nil
+}
+
+func (t *memTx) NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (NodePage, error) {
+	nodes, err := t.NodesAt(ctx, refs, "")
+	if err != nil {
+		return NodePage{}, err
+	}
+	slices.SortStableFunc(nodes, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
+	return pageNodes(nodes, q), nil
+}
+
+func (t *memTx) LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (LinkPage, error) {
+	in := map[domain.NodeRef]bool{}
+	for _, r := range refs {
+		in[r] = true
+	}
+	out, err := t.LinksFrom(ctx, refs)
+	if err != nil {
+		return LinkPage{}, err
+	}
+	links := out[:0]
+	for _, l := range out {
+		if in[l.To] {
+			links = append(links, l)
+		}
+	}
+	return pageLinks(links, q), nil
+}

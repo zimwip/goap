@@ -59,6 +59,8 @@ type ChangesFilter struct {
 	OwnerOrg  string
 	// Status: draft, active, committed, applied, abandoned (empty: every status).
 	Status []domain.ChangeStatus
+	// HeadersOnly answers the heads of the changes, without their impacts and items: what a list shows.
+	HeadersOnly bool
 }
 
 // ChangePatch updates mutable fields of a change header. Nil fields are kept. Title and Intent are

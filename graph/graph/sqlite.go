@@ -983,3 +983,56 @@ func (t *sqliteTx) DeleteChange(ctx context.Context, id domain.ChangeID, namespa
 	}
 	return nil
 }
+
+func (t *sqliteTx) LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error) {
+	q, args := dialectSQLite.sqlLinksFrom(refs)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *sqliteTx) LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error) {
+	q, args := dialectSQLite.sqlLinksTo(id)
+	return t.queryLinks(ctx, q, args...)
+}
+
+func (t *sqliteTx) NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (page NodePage, err error) {
+	cq, cargs := dialectSQLite.sqlNodeTypeCounts(refs, q)
+	counts, err := t.typeCounts(ctx, cq, cargs)
+	if err != nil {
+		return page, err
+	}
+	page.Types, page.Total = typeCounts(counts, q.Type)
+	pq, pargs := dialectSQLite.sqlNodePage(refs, q)
+	page.Nodes, err = t.nodes(ctx, pq, pargs...)
+	return page, err
+}
+
+func (t *sqliteTx) LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (page LinkPage, err error) {
+	cq, cargs := dialectSQLite.sqlLinkTypeCounts(refs, q)
+	counts, err := t.typeCounts(ctx, cq, cargs)
+	if err != nil {
+		return page, err
+	}
+	page.Types, page.Total = typeCounts(counts, q.Type)
+	pq, pargs := dialectSQLite.sqlLinkPage(refs, q)
+	page.Links, err = t.queryLinks(ctx, pq, pargs...)
+	return page, err
+}
+
+// typeCounts reads the (type, count) rows of a query.
+func (t *sqliteTx) typeCounts(ctx context.Context, q string, args []any) (map[string]int, error) {
+	rows, err := t.tx.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var typ string
+		var n int
+		if err := rows.Scan(&typ, &n); err != nil {
+			return nil, err
+		}
+		out[typ] = n
+	}
+	return out, rows.Err()
+}

@@ -56,6 +56,15 @@ type Tx interface {
 	Namespaces(ctx context.Context) ([]string, error)
 	OutLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
 	InLinks(ctx context.Context, ref domain.NodeRef) ([]domain.Link, error)
+	// LinksFrom reads the links leaving the versions refs in one query, by id; LinksTo the links entering any version
+	// of a node.
+	LinksFrom(ctx context.Context, refs []domain.NodeRef) ([]domain.Link, error)
+	LinksTo(ctx context.Context, id domain.NodeID) ([]domain.Link, error)
+	// NodePage reads the page q asks of the node versions refs (a state), ordered by key, and LinkPage the page of the
+	// links between two of them, by type then id: the filter, the counts and the page are the store's, only the page
+	// is read (ADR 0140). q.Limit is set; q.Change is the caller's.
+	NodePage(ctx context.Context, refs []domain.NodeRef, q NodeQuery) (NodePage, error)
+	LinkPage(ctx context.Context, refs []domain.NodeRef, q LinkQuery) (LinkPage, error)
 	// Baseline reads a baseline with its state and Baselines the baselines of a namespace, oldest first, with theirs:
 	// through the guard of the graph, which computes the state (ADR 0140); a store gives the entries it stores (none
 	// for a baseline kept as a header, the entries of the chain of stored ones down to a whole one or a header).

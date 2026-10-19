@@ -221,7 +221,7 @@ export interface AliasProposal {
 /** The alias impacts other people (or the platform) proposed and left open: shown with Accept / Decline. */
 export async function listAliasProposals(): Promise<AliasProposal[]> {
   const out: AliasProposal[] = [];
-  const open = (await graph.listChanges()).changes?.filter((c) => c.namespace === ns.platform && (c.status === 'draft' || c.status === 'active') && !isUserKey(c.ownerOrg)) ?? [];
+  const open = (await graph.listChanges(undefined, { headerOnly: true })).changes?.filter((c) => c.namespace === ns.platform && (c.status === 'draft' || c.status === 'active') && !isUserKey(c.ownerOrg)) ?? [];
   for (const ch of open) {
     if (!ch.id) continue;
     const board = (await graph.getBlackboard(ch.id, '')).change;

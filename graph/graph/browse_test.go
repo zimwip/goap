@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/zimwip/goap/contracts/domain"
@@ -97,9 +98,58 @@ func testBrowseBaseline(t *testing.T, repo Repo) {
 		t.Fatal("unknown node: no error")
 	}
 
+	// the store's pages are the pages the filter gives in memory over the whole state (ADR 0140)
+	if _, err := importNode(ctx, g, newNode{Key: "REQ-x_y", Type: "Req", Properties: map[string]any{"title": "50% off", "n": 7.0}}); err != nil {
+		t.Fatal(err)
+	}
+	if b, err = g.BranchHead(ctx, domain.DefaultNamespace, domain.MainBranch); err != nil {
+		t.Fatal(err)
+	}
+	var whole []domain.Node
+	var links []domain.Link
+	if err := g.repo.InTx(ctx, func(tx Tx) (err error) {
+		if whole, err = tx.NodesIn(ctx, b.ID, ""); err != nil {
+			return err
+		}
+		links, err = linksWithin(ctx, tx, b, whole)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	slices.SortStableFunc(whole, func(a, b domain.Node) int { return strings.Compare(a.Key, b.Key) })
+	for _, q := range []NodeQuery{{Limit: 500}, {Type: "Req", Offset: 3, Limit: 4}, {Text: "req 1", Limit: 50}, {Text: "%", Limit: 50}, {Text: "_", Limit: 50},
+		{Text: "x_y", Limit: 50}, {Text: "test", Limit: 1, Offset: 1}, {Text: "7", Limit: 50}, {Text: "nothing", Limit: 50}, {IncludeDeleted: true, Limit: 500}} {
+		got, err := g.BaselineNodes(ctx, b.ID, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := pageNodes(whole, q)
+		if got.Total != want.Total || !slices.Equal(got.Types, want.Types) || !slices.EqualFunc(got.Nodes, want.Nodes, func(a, b domain.Node) bool { return a.Ref() == b.Ref() }) {
+			t.Fatalf("nodes %+v: got %d %v %v, want %d %v %v", q, got.Total, got.Types, keysOf(got.Nodes), want.Total, want.Types, keysOf(want.Nodes))
+		}
+	}
+	for _, q := range []LinkQuery{{Limit: 500}, {Type: "depends", Limit: 50}, {Text: "VERIF", Limit: 50}, {Offset: 1, Limit: 1}, {Text: "%", Limit: 50}} {
+		got, err := g.BaselineLinks(ctx, b.ID, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := pageLinks(links, q)
+		if got.Total != want.Total || !slices.Equal(got.Types, want.Types) || !slices.EqualFunc(got.Links, want.Links, func(a, b domain.Link) bool { return a.ID == b.ID }) {
+			t.Fatalf("links %+v: got %+v, want %+v", q, got, want)
+		}
+	}
+
 	// the namespace of the test, and the one of the roots of the organisation and the projects (ADR 0054)
 	ns, err := g.Namespaces(ctx)
 	if err != nil || !slices.Equal(ns, []string{domain.DefaultNamespace, "organisation"}) {
 		t.Fatalf("namespaces = %v, %v", ns, err)
 	}
+}
+
+func keysOf(nodes []domain.Node) []string {
+	out := make([]string, len(nodes))
+	for i, n := range nodes {
+		out[i] = n.Key
+	}
+	return out
 }

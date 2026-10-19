@@ -80,7 +80,11 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    (`change_id`, `NodeQuery.Change`): the nodes its impacts act on, read node by node at their version in the
    baseline; it and `ListBaselineLinks` answer the header of the baseline, not its nodes. `GetBranch` with
    `header_only` answers the head's header (the web and the bench ask it so; the services that read the head's state
-   through `graphclient.BranchHead` still get it whole). `ListBaselines` answers headers only.
+   through `graphclient.BranchHead` still get it whole). `ListBaselines` answers headers only. Without a change, the
+   store filters, counts and pages the nodes and the links of the state (`Tx.NodePage`, `Tx.LinkPage`: the versions of
+   the state are joined in the query, only the page is read), the links of a set of versions are one query
+   (`Tx.LinksFrom`, and `Tx.LinksTo` for the incoming links of a neighbourhood), and `ListChanges` with `header_only`
+   answers the heads of the changes, without their impacts and items (the web's lists ask it so).
 11. **A history is read a page at a time, and from where it is asked.** `ListNodeVersions` and `ListNodeChanges` take
    `before` and `limit` (default 50, at most 500) and answer `next`, the cursor of the older page (`Tx.VersionRange`,
    `Tx.NodeChangePage`); the web loads older pages on demand. Landing a version no longer reads the history of its

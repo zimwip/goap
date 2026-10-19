@@ -408,7 +408,7 @@ func (c *Client) Change(ctx context.Context, id domain.ChangeID) (domain.Change,
 
 // ListChanges implements engine.GraphPort.
 func (c *Client) ListChanges(ctx context.Context, f graphapi.ChangesFilter) ([]domain.Change, error) {
-	req := &graphv1.ListChangesRequest{Namespace: f.Namespace, OwnerOrg: f.OwnerOrg}
+	req := &graphv1.ListChangesRequest{Namespace: f.Namespace, OwnerOrg: f.OwnerOrg, HeaderOnly: f.HeadersOnly}
 	for _, s := range f.Status {
 		req.Status = append(req.Status, string(s))
 	}

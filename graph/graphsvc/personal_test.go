@@ -102,6 +102,18 @@ func TestPersonalChange(t *testing.T) {
 	if l, err := cl.ListChanges(ctx, list); err != nil || notUsers(l.Msg.Changes) != seeded+1 {
 		t.Fatalf("alice ListChanges = %v, %v", l, err)
 	}
+	// the heads of the same changes, without what the changes hold (ADR 0140)
+	heads := connect.NewRequest(&graphv1.ListChangesRequest{HeaderOnly: true})
+	call("alice", heads)
+	if l, err := cl.ListChanges(ctx, heads); err != nil || notUsers(l.Msg.Changes) != seeded+1 {
+		t.Fatalf("alice ListChanges heads = %v, %v", l, err)
+	} else {
+		for _, c := range l.Msg.Changes {
+			if len(c.Nodes) != 0 || len(c.Items) != 0 || c.Id == "" || c.Title == "" {
+				t.Fatalf("a head: %v", c)
+			}
+		}
+	}
 	sub := connect.NewRequest(&graphv1.CreateChangeRequest{Title: "sub", ParentId: id, OwnerOrg: "@me"})
 	call("alice", sub)
 	if _, err := cl.CreateChange(ctx, sub); connect.CodeOf(err) != connect.CodeFailedPrecondition {

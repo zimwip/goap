@@ -68,7 +68,8 @@ export async function baselinesByNamespace(signal?: AbortSignal): Promise<{ name
 
 export function refreshChanges(): Promise<void> {
   return fill(changes, async () => {
-    const list = (await graph.listChanges()).changes ?? [];
+    // the heads only: the catalog names and filters the changes, a change tab reads its change whole
+    const list = (await graph.listChanges(undefined, { headerOnly: true })).changes ?? [];
     return list.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
   });
 }

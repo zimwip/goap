@@ -45,24 +45,32 @@ type NodePage struct {
 	Types []TypeCount
 }
 
-// BaselineNodes returns a page of the nodes of a baseline, ordered by key.
+// BaselineNodes returns a page of the nodes of a baseline, ordered by key: the store filters, counts and reads the page
+// over the versions of the state (ADR 0140); with q.Change, the nodes of that change only.
 func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQuery) (page NodePage, err error) {
 	if q.Limit <= 0 || q.Limit > MaxBrowseLimit {
 		q.Limit = MaxBrowseLimit
 	}
 	q.Offset = max(q.Offset, 0)
-	text := strings.ToLower(strings.TrimSpace(q.Text))
-	var nodes []domain.Node
-	if err = g.repo.InTx(ctx, func(tx Tx) (err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
 		if q.Change != "" {
-			nodes, err = changeNodesIn(ctx, tx, id, q.Change)
-		} else {
-			nodes, err = tx.NodesIn(ctx, id, "")
+			nodes, err := changeNodesIn(ctx, tx, id, q.Change)
+			page = pageNodes(nodes, q)
+			return err
 		}
-		return
-	}); err != nil {
-		return page, err
-	}
+		b, err := tx.Baseline(ctx, id)
+		if err != nil || len(b.Nodes) == 0 {
+			return err
+		}
+		page, err = tx.NodePage(ctx, refsOf(b.Nodes), q)
+		return err
+	})
+	return page, err
+}
+
+// pageNodes is the page q asks of nodes ordered by key, filtered and counted in memory.
+func pageNodes(nodes []domain.Node, q NodeQuery) (page NodePage) {
+	text := strings.ToLower(strings.TrimSpace(q.Text))
 	counts := map[string]int{}
 	var matched []domain.Node
 	for _, n := range nodes {
@@ -74,15 +82,23 @@ func (g *Graph) BaselineNodes(ctx context.Context, id domain.BaselineID, q NodeQ
 			matched = append(matched, n)
 		}
 	}
-	for t, c := range counts {
-		page.Types = append(page.Types, TypeCount{Type: t, Count: c})
-	}
-	sort.Slice(page.Types, func(i, j int) bool { return page.Types[i].Type < page.Types[j].Type })
-	page.Total = len(matched)
+	page.Types, page.Total = typeCounts(counts, q.Type)
 	if q.Offset < len(matched) {
 		page.Nodes = matched[q.Offset:min(q.Offset+q.Limit, len(matched))]
 	}
-	return page, nil
+	return page
+}
+
+// typeCounts sorts the counts by type, and the total of typ (every type when empty).
+func typeCounts(counts map[string]int, typ string) (types []TypeCount, total int) {
+	for t, c := range counts {
+		types = append(types, TypeCount{Type: t, Count: c})
+		if typ == "" || t == typ {
+			total += c
+		}
+	}
+	sort.Slice(types, func(i, j int) bool { return types[i].Type < types[j].Type })
+	return types, total
 }
 
 // changeNodesIn reads, at baseline id, the nodes the impacts of a change act on, ordered by key (ADR 0137): never the
@@ -136,34 +152,34 @@ type LinkPage struct {
 	Types []TypeCount
 }
 
-// BaselineLinks returns a page of the links of a baseline (both ends held by it), ordered by type then id.
+// BaselineLinks returns a page of the links of a baseline (both ends held by it), ordered by type then id: the store
+// filters, counts and reads the page over the versions of the state (ADR 0140).
 func (g *Graph) BaselineLinks(ctx context.Context, id domain.BaselineID, q LinkQuery) (page LinkPage, err error) {
 	if q.Limit <= 0 || q.Limit > MaxBrowseLimit {
 		q.Limit = MaxBrowseLimit
 	}
 	q.Offset = max(q.Offset, 0)
-	text := strings.ToLower(strings.TrimSpace(q.Text))
-	var links []domain.Link
-	if err = g.repo.InTx(ctx, func(tx Tx) (err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error {
 		b, err := tx.Baseline(ctx, id)
-		if err != nil {
+		if err != nil || len(b.Nodes) == 0 {
 			return err
 		}
-		nodes, err := tx.NodesIn(ctx, id, "")
-		if err != nil {
-			return err
-		}
-		links, err = linksWithin(ctx, tx, b, nodes)
+		page, err = tx.LinkPage(ctx, refsOf(b.Nodes), q)
 		return err
-	}); err != nil {
-		return page, err
-	}
+	})
+	return page, err
+}
+
+// pageLinks is the page q asks of links, filtered, ordered and counted in memory.
+func pageLinks(links []domain.Link, q LinkQuery) (page LinkPage) {
+	links = slices.Clone(links)
 	sort.Slice(links, func(i, j int) bool {
 		if links[i].Type != links[j].Type {
 			return links[i].Type < links[j].Type
 		}
 		return links[i].ID < links[j].ID
 	})
+	text := strings.ToLower(strings.TrimSpace(q.Text))
 	counts := map[string]int{}
 	var matched []domain.Link
 	for _, l := range links {
@@ -175,15 +191,11 @@ func (g *Graph) BaselineLinks(ctx context.Context, id domain.BaselineID, q LinkQ
 			matched = append(matched, l)
 		}
 	}
-	for t, c := range counts {
-		page.Types = append(page.Types, TypeCount{Type: t, Count: c})
-	}
-	sort.Slice(page.Types, func(i, j int) bool { return page.Types[i].Type < page.Types[j].Type })
-	page.Total = len(matched)
+	page.Types, page.Total = typeCounts(counts, q.Type)
 	if q.Offset < len(matched) {
 		page.Links = matched[q.Offset:min(q.Offset+q.Limit, len(matched))]
 	}
-	return page, nil
+	return page
 }
 
 // linkMatches reports whether the type or a string property of l contains text (lower case).
@@ -270,24 +282,23 @@ func (g *Graph) NodeNeighbourhood(ctx context.Context, id domain.BaselineID, nod
 			nb.Links = append(nb.Links, l)
 		}
 		// Incoming links may target any earlier version of the node (suspect links): keep those whose source is
-		// the baseline's version.
-		for ver := domain.Version(1); ver <= v; ver++ {
-			in, err := tx.InLinks(ctx, domain.NodeRef{ID: nodeID, Version: ver})
-			if err != nil {
+		// the baseline's version, read in one query.
+		in, err := tx.LinksTo(ctx, nodeID)
+		if err != nil {
+			return err
+		}
+		slices.SortStableFunc(in, func(a, b domain.Link) int { return int(a.To.Version) - int(b.To.Version) })
+		for _, l := range in {
+			if l.To.Version > v || l.From.ID == nodeID || !b.Contains(l.From) { // a self link is already among the outgoing ones
+				continue
+			}
+			if err := add(l.From); err != nil {
 				return err
 			}
-			for _, l := range in {
-				if l.From.ID == nodeID || !b.Contains(l.From) { // a self link is already among the outgoing ones
-					continue
-				}
-				if err := add(l.From); err != nil {
-					return err
-				}
-				if ver != v {
-					nb.Suspect = append(nb.Suspect, l.ID)
-				}
-				nb.Links = append(nb.Links, l)
+			if l.To.Version != v {
+				nb.Suspect = append(nb.Suspect, l.ID)
 			}
+			nb.Links = append(nb.Links, l)
 		}
 		return nil
 	})

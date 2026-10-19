@@ -4688,7 +4688,9 @@ type ListChangesRequest struct {
 	// draft | active | committed | applied | abandoned (empty: every status)
 	Status []string `protobuf:"bytes,2,rep,name=status,proto3" json:"status,omitempty"`
 	// key of the responsible OrgUnit (empty: every unit)
-	OwnerOrg      string `protobuf:"bytes,3,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	OwnerOrg string `protobuf:"bytes,3,opt,name=owner_org,json=ownerOrg,proto3" json:"owner_org,omitempty"`
+	// the heads of the changes only, without their impacts and items: what a list shows (ADR 0140)
+	HeaderOnly    bool `protobuf:"varint,4,opt,name=header_only,json=headerOnly,proto3" json:"header_only,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4742,6 +4744,13 @@ func (x *ListChangesRequest) GetOwnerOrg() string {
 		return x.OwnerOrg
 	}
 	return ""
+}
+
+func (x *ListChangesRequest) GetHeaderOnly() bool {
+	if x != nil {
+		return x.HeaderOnly
+	}
+	return false
 }
 
 type ListChangesResponse struct {
@@ -17928,11 +17937,13 @@ const file_goap_graph_v1_graph_proto_rawDesc = "" +
 	"\x10GetChangeRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"B\n" +
 	"\x11GetChangeResponse\x12-\n" +
-	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"g\n" +
+	"\x06change\x18\x01 \x01(\v2\x15.goap.graph.v1.ChangeR\x06change\"\x88\x01\n" +
 	"\x12ListChangesRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x16\n" +
 	"\x06status\x18\x02 \x03(\tR\x06status\x12\x1b\n" +
-	"\towner_org\x18\x03 \x01(\tR\bownerOrg\"F\n" +
+	"\towner_org\x18\x03 \x01(\tR\bownerOrg\x12\x1f\n" +
+	"\vheader_only\x18\x04 \x01(\bR\n" +
+	"headerOnly\"F\n" +
 	"\x13ListChangesResponse\x12/\n" +
 	"\achanges\x18\x01 \x03(\v2\x15.goap.graph.v1.ChangeR\achanges\"\xe9\x01\n" +
 	"\x13UpdateChangeRequest\x12\x0e\n" +
