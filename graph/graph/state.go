@@ -282,7 +282,41 @@ func (t *guardTx) BaselineVersions(ctx context.Context, id domain.BaselineID, id
 	if id == "" || len(ids) == 0 {
 		return map[domain.NodeID]domain.Version{}, nil
 	}
-	return t.stateAt(ctx, id, ids)
+	if t.newBaselines[id] {
+		return t.stateAt(ctx, id, ids)
+	}
+	// a baseline never changes: what the transaction read of it is not read again (a merge reads the fork and the
+	// branch of the change several times, for its rebase, its guardian and its fast-forward)
+	known := t.baselineReads[id]
+	var missing []domain.NodeID
+	for _, n := range ids {
+		if _, ok := known[n]; !ok {
+			missing = append(missing, n)
+		}
+	}
+	if len(missing) > 0 {
+		got, err := t.stateAt(ctx, id, missing)
+		if err != nil {
+			return nil, err
+		}
+		if known == nil {
+			if t.baselineReads == nil {
+				t.baselineReads = map[domain.BaselineID]map[domain.NodeID]domain.Version{}
+			}
+			known = map[domain.NodeID]domain.Version{}
+			t.baselineReads[id] = known
+		}
+		for _, n := range missing {
+			known[n] = got[n] // 0: the baseline does not hold it
+		}
+	}
+	out := make(map[domain.NodeID]domain.Version, len(ids))
+	for _, n := range ids {
+		if v := known[n]; v > 0 {
+			out[n] = v
+		}
+	}
+	return out, nil
 }
 
 // NodesIn lists the nodes of a baseline of a type, by key.
@@ -710,8 +744,26 @@ func (g *Graph) Materialize(ctx context.Context, id domain.BaselineID) error {
 	})
 	if err == nil {
 		g.headers.drop(id)
+		g.warmState(ctx, id)
 	}
 	return err
+}
+
+// warmState reads the whole state of a checkpoint just stored into the cache, outside the transactions of the commits:
+// the reads of some nodes in the baselines built on it (a node operation resolving its node, a commit, a merge) then
+// stop at it in memory, instead of reading its chain of stored baselines again for each (a cost that grew with the
+// overlays between two whole checkpoints, paid under the lock of the branch by the merges).
+func (g *Graph) warmState(ctx context.Context, id domain.BaselineID) {
+	err := g.repo.InTx(ctx, func(tx Tx) error {
+		if gt, ok := unwrapGuard(tx); ok {
+			_, err := gt.nodesOf(ctx, id)
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		slog.Warn("reading the state of a checkpoint", "baseline", id, "err", err)
+	}
 }
 
 // storeCheckpoint stores a checkpoint over the one before it (guardTx.checkpoint).
