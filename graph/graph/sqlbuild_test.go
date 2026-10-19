@@ -170,8 +170,8 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite InLinks", lite, q, a, `SELECT id, type, from_id, from_version, to_id, to_version, props, change_id FROM link WHERE to_id = ? AND to_version = ? ORDER BY id`, []any{"n1", 3})
 
 	// Branches
-	const pgBranchCols = `namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, '')`
-	const liteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description, intent, coalesce(rebased_from, '')`
+	const pgBranchCols = `namespace, name, parent, coalesce(fork_baseline::text, ''), coalesce(head_baseline::text, ''), origin, status, created_at, description, intent, coalesce(rebased_from::text, ''), ephemeral`
+	const liteBranchCols = `namespace, name, parent, coalesce(fork_baseline, ''), coalesce(head_baseline, ''), origin, status, created_at, description, intent, coalesce(rebased_from, ''), ephemeral`
 	q, a = pg.sqlBranch("", "b")
 	check("pg Branch", pg, q, a, `SELECT `+pgBranchCols+` FROM branch WHERE namespace = $1 AND name = $2`, []any{"default", "b"})
 	q, a = lite.sqlBranch("", "b")

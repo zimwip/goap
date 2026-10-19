@@ -338,7 +338,7 @@ func (t *pgTx) Branch(ctx context.Context, namespace, name string) (domain.Branc
 	var b domain.Branch
 	q, args := dialectPG.sqlBranch(namespace, name)
 	err := t.tx.QueryRow(ctx, q, args...).
-		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom))
+		Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 	return b, mapErr(err, "branch "+name)
 }
 
@@ -350,17 +350,17 @@ func (t *pgTx) Branches(ctx context.Context, namespace string) ([]domain.Branch,
 	}
 	return pgx.CollectRows(rows, func(r pgx.CollectableRow) (domain.Branch, error) {
 		var b domain.Branch
-		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom))
+		err := r.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &b.CreatedAt, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 		return b, err
 	})
 }
 
 func (t *pgTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+	_, err := t.tx.Exec(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = EXCLUDED.status, head_baseline = EXCLUDED.head_baseline, description = EXCLUDED.description,
 			fork_baseline = EXCLUDED.fork_baseline, rebased_from = EXCLUDED.rebased_from, parent = EXCLUDED.parent`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)))
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, b.CreatedAt, b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
 	return mapErr(err, "branch "+b.Name)
 }
 

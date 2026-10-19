@@ -273,7 +273,7 @@ func (d dialect) linkCols() string {
 	return d.cols(su("id"), sc("type"), su("from_id"), sc("from_version"), su("to_id"), sc("to_version"), sc("props"), su("change_id"))
 }
 
-const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s`
+const branchColsText = `namespace, name, parent, %s, %s, origin, status, created_at, description, intent, %s, ephemeral`
 
 // branchCols is the select list of a branch.
 func (d dialect) branchCols() string {

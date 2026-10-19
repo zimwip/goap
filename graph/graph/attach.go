@@ -251,7 +251,7 @@ func (g *Graph) reparent(ctx context.Context, tx Tx, c domain.Change, target str
 		return c, err
 	}
 	if !ok {
-		own = domain.Branch{Name: changeBranchName(c.ID), Namespace: c.Namespace, Origin: domain.ChangeBranchOrigin(c.ID),
+		own = domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Origin: domain.ChangeBranchOrigin(c.ID),
 			Intent: domain.IntentDerive, Status: domain.BranchOpen, CreatedAt: g.now()}
 	}
 	own.Parent = target

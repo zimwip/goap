@@ -345,7 +345,7 @@ func (g *Graph) SplitByOwner(ctx context.Context, id domain.ChangeID) (created [
 			if err != nil {
 				return err
 			}
-			own := domain.Branch{Name: changeBranchName(sub.ID), Parent: sub.Branch, ForkBaseline: fork.ID, Head: fork.ID,
+			own := domain.Branch{Ephemeral: true, Name: changeBranchName(sub.ID), Parent: sub.Branch, ForkBaseline: fork.ID, Head: fork.ID,
 				Origin: domain.ChangeBranchOrigin(sub.ID), Status: domain.BranchOpen, CreatedAt: g.now()}
 			if err := tx.PutBranch(ctx, own); err != nil {
 				return err

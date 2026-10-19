@@ -439,7 +439,7 @@ func (g *Graph) createChange(ctx context.Context, in NewChange) (domain.Change, 
 			if intent == "" {
 				intent = domain.IntentDerive
 			}
-			own := domain.Branch{Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkBaseline: fork.ID, Head: fork.ID,
+			own := domain.Branch{Ephemeral: true, Name: changeBranchName(c.ID), Namespace: c.Namespace, Parent: b.Name, ForkBaseline: fork.ID, Head: fork.ID,
 				Origin: domain.ChangeBranchOrigin(c.ID), Intent: intent, Status: domain.BranchOpen, CreatedAt: g.now()}
 			if err := tx.PutBranch(ctx, own); err != nil {
 				return err

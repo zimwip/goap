@@ -67,10 +67,15 @@ records the branch it was written on (`node_version.branch`). The versions a bra
    The event of a baseline outside main carries no diff (the index follows main), so a rebase reads no state for it.
    `LatestOn` reads the greatest version of the node written on or joined to the branch through their indexes (it
    scanned the joins of the branch).
+   Resolving the node an impact names (`resolve`: a creation, a checkout by key), the board's check of the impacts'
+   pre versions and a merge or split read the reference baseline for those nodes only (`versionsAt`), never whole.
 8. **The indexes follow the reads.** Every read of the log names a change (`change_log_change`, a type or a flow
    filters that range); the engine reads by process and by action run, so those two indexes are partial and leave out
    the graph's entries (migration 0008, both dialects). `change_impact` leaves a third of its pages free (fillfactor
    70, PostgreSQL): its updates at checkout, review and landing change no indexed column and stay heap-only.
+9. **The branch of a change is ephemeral** (`Branch.Ephemeral`, column `branch.ephemeral`, migration 0009, set on
+   every change branch): it lives until the change lands and its state is its fork with what it landed, so its
+   headers are never checkpointed; only the lasting branches (main, the named ones) store states.
 
 ## Consequences
 

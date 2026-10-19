@@ -184,7 +184,7 @@ func (t *sqliteTx) Versions(ctx context.Context, id domain.NodeID) ([]domain.Nod
 func sqliteScanBranch(row scanner) (domain.Branch, error) {
 	var b domain.Branch
 	var created string
-	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom))
+	err := row.Scan(&b.Namespace, &b.Name, &b.Parent, (*string)(&b.ForkBaseline), (*string)(&b.Head), &b.Origin, &b.Status, &created, &b.Description, (*string)(&b.Intent), (*string)(&b.RebasedFrom), &b.Ephemeral)
 	b.CreatedAt = tsParse(created)
 	return b, err
 }
@@ -222,10 +222,10 @@ func (t *sqliteTx) Branches(ctx context.Context, namespace string) ([]domain.Bra
 
 func (t *sqliteTx) PutBranch(ctx context.Context, b domain.Branch) error {
 	namespace := domain.NamespaceOf(b.Namespace)
-	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	_, err := t.tx.ExecContext(ctx, `INSERT INTO branch (namespace, name, parent, fork_baseline, head_baseline, origin, status, created_at, description, intent, rebased_from, ephemeral) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (namespace, name) DO UPDATE SET status = excluded.status, head_baseline = excluded.head_baseline, description = excluded.description,
 			fork_baseline = excluded.fork_baseline, rebased_from = excluded.rebased_from, parent = excluded.parent`,
-		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)))
+		namespace, b.Name, b.Parent, nullUUID(string(b.ForkBaseline)), nullUUID(string(b.Head)), b.Origin, b.Status, tsText(b.CreatedAt), b.Description, string(b.Intent), nullUUID(string(b.RebasedFrom)), b.Ephemeral)
 	return sqliteErr(err, "branch "+b.Name)
 }
 

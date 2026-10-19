@@ -33,7 +33,14 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		return nil, err
 	}
 	v := c.View(flow)
-	base, err := tx.Baseline(ctx, c.BaselineID)
+	// the reference baseline is read for the nodes the impacts start from only (ADR 0137)
+	var pres []domain.NodeID
+	for _, cn := range nodes {
+		if cn.Pre != nil {
+			pres = append(pres, cn.Pre.ID)
+		}
+	}
+	base, err := versionsAt(ctx, tx, c.BaselineID, pres)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +93,7 @@ func (g *Graph) validateBoard(ctx context.Context, tx Tx, c domain.Change, flow 
 		if err := cn.Validate(); err != nil {
 			add(id, "", "structure", err.Error())
 		}
-		if cn.Pre != nil && !base.Contains(*cn.Pre) && !cn.Recheck {
+		if cn.Pre != nil && base[cn.Pre.ID] != cn.Pre.Version && !cn.Recheck {
 			add(id, "", "reference", fmt.Sprintf("refers to %s which is not in the reference baseline", cn.Pre))
 		}
 		if cn.Recheck {

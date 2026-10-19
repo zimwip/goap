@@ -212,10 +212,6 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 		}
 		return w, g.impact(ctx, tx, w, found.ID)
 	}
-	b, err := tx.Baseline(ctx, w.c.BaselineID)
-	if err != nil {
-		return nil, err
-	}
 	nid := t.Node
 	if nid == "" {
 		if got, err := tx.NodeIDByKey(ctx, w.ns, t.Key); err == nil {
@@ -224,8 +220,16 @@ func (g *Graph) resolve(ctx context.Context, tx Tx, id domain.ChangeID, t target
 			return nil, err
 		}
 	}
-	v, inBase := b.Nodes[nid]
-	inBase = inBase && nid != ""
+	// the reference baseline is read for that node only, never whole (ADR 0137)
+	var v domain.Version
+	inBase := false
+	if nid != "" {
+		at, err := versionsAt(ctx, tx, w.c.BaselineID, []domain.NodeID{nid})
+		if err != nil {
+			return nil, err
+		}
+		v, inBase = at[nid]
+	}
 	var decl domain.ChangeImpact
 	switch {
 	case t.create && inBase:

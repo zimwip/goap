@@ -183,10 +183,6 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 
 	// 2. the nodes holding links to the sources, as the flow sees them: a node the flow holds a draft of through its draft,
 	// any other through the links of its stored version
-	b, err := tx.Baseline(ctx, w.c.BaselineID)
-	if err != nil {
-		return out, err
-	}
 	reader, err := g.newDraftReader(ctx, tx, w.c, w.flow, w.seen)
 	if err != nil {
 		return out, err
@@ -221,7 +217,7 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 				if _, drafted := reader.get(l.From.ID); drafted {
 					continue // read through its draft below
 				}
-				cur, err := g.currentOf(ctx, tx, w, b, l.From.ID)
+				cur, err := g.currentOf(ctx, tx, w, l.From.ID)
 				if err != nil {
 					return out, err
 				}
@@ -399,7 +395,7 @@ func (g *Graph) restructure(ctx context.Context, tx Tx, id domain.ChangeID, sour
 
 // currentOf is the stored version of a node the flow starts from (nil: none): its pre version when the change holds an
 // impact on it, else the version of the reference baseline. The draft the flow holds of it is read through draftReader.
-func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, b domain.Baseline, nid domain.NodeID) (*domain.Node, error) {
+func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, nid domain.NodeID) (*domain.Node, error) {
 	for _, i := range w.seen {
 		if nodeOf(i) != nid {
 			continue
@@ -410,7 +406,11 @@ func (g *Graph) currentOf(ctx context.Context, tx Tx, w *work, b domain.Baseline
 		}
 		return w2.base(ctx, tx)
 	}
-	v, ok := b.Nodes[nid]
+	at, err := versionsAt(ctx, tx, w.c.BaselineID, []domain.NodeID{nid}) // that node only, never the whole state
+	if err != nil {
+		return nil, err
+	}
+	v, ok := at[nid]
 	if !ok {
 		return nil, nil
 	}

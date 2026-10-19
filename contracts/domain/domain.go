@@ -278,6 +278,9 @@ type Branch struct {
 	Status      string       `json:"status"`
 	CreatedAt   time.Time    `json:"createdAt"`
 	Description string       `json:"description,omitempty"`
+	// Ephemeral marks the branch of a change (ADR 0140): it lives until the change lands, its state is its fork with
+	// what it landed, never a checkpoint; only the lasting branches (main, the named ones) store states.
+	Ephemeral bool `json:"ephemeral,omitempty"`
 }
 
 // AttributeCheck is what the graph needs of an attribute of a node type to judge the value of a property: its

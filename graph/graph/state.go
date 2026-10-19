@@ -2,6 +2,7 @@ package graph
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -379,7 +380,12 @@ func (t *guardTx) asHeader(ctx context.Context, b *domain.Baseline) (bool, error
 		}
 	}
 	if every := t.g.CheckpointEvery; every > 0 && gap%every == 0 {
-		t.checkpoints = append(t.checkpoints, b.ID)
+		// only a lasting branch stores checkpoints: the state of a change's branch is its fork with what it landed
+		if br, err := t.Tx.Branch(ctx, b.Namespace, b.Branch); err != nil && !errors.Is(err, ErrNotFound) {
+			return false, err
+		} else if err != nil || !br.Ephemeral {
+			t.checkpoints = append(t.checkpoints, b.ID)
+		}
 	}
 	return true, nil
 }
