@@ -51,6 +51,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	fs.Float64Var(&cfg.CreateRatio, "create", 0.3, "share of the edits that create a node, the others modify one (0..1)")
 	fs.IntVar(&cfg.Links, "links", 2, "links of a created node to earlier nodes")
 	fs.Float64Var(&cfg.AddLinks, "add-links", 0.3, "share of the modifications that also add a link to another node (0..1)")
+	fs.Float64Var(&cfg.Spread, "spread", 0.5, "variability of each change around -edits, -create, -links and -add-links: uniform within ±spread of the value, the mean staying it (0..1; 0: every change alike)")
 	fs.IntVar(&cfg.HotNodes, "hot", 20, "nodes per writer that take -hot-ratio of the modifications (deep histories)")
 	fs.Float64Var(&cfg.HotRatio, "hot-ratio", 0.2, "share of the modifications on the hot nodes")
 	fs.IntVar(&cfg.TextBytes, "text", 200, "bytes of the description of a created node")

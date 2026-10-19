@@ -42,10 +42,14 @@ type Config struct {
 	CreateRatio float64 // share of the edits of a change that create a node (the others modify one), 0..1
 	Links       int     // links of a created node to earlier nodes
 	AddLinks    float64 // share of the modifications that also add a link to another node, 0..1 (links keep growing)
-	HotNodes    int     // nodes per worker that take HotRatio of the modifications: deep histories
-	HotRatio    float64
-	TextBytes   int    // size of the description of a created node
-	Mode        string // ModeCommit or ModeLifecycle
+	// Spread varies each change around these averages: the nodes of a change, its share of creations, the links of a
+	// created node and the share of modifications adding a link are drawn uniformly within ±Spread of their value (0..1;
+	// 0: every change alike), the mean staying the value set.
+	Spread    float64
+	HotNodes  int // nodes per worker that take HotRatio of the modifications: deep histories
+	HotRatio  float64
+	TextBytes int    // size of the description of a created node
+	Mode      string // ModeCommit or ModeLifecycle
 	// The run stops at the first of: TargetVersions versions written, Duration elapsed, MaxChanges changes (0: no bound).
 	TargetVersions int64
 	Duration       time.Duration
@@ -65,6 +69,7 @@ func (c *Config) Defaults() {
 	}
 	c.Workers = max(c.Workers, 1)
 	c.Edits = max(c.Edits, 1)
+	c.Spread = min(max(c.Spread, 0), 1)
 	if c.Mode == "" {
 		c.Mode = ModeCommit
 	}
@@ -118,8 +123,8 @@ func (r *Runner) Run(ctx context.Context) error {
 		return fmt.Errorf("publish the bench domain: %w", err)
 	}
 	r.types = cfg.Domain.Types + r.step
-	r.logf("run %s: %d workers, %d edits per change (%.0f%% creations), mode %s, domain %s with %d types",
-		cfg.Run, cfg.Workers, cfg.Edits, 100*cfg.CreateRatio, cfg.Mode, DomainVersion(r.step), r.types)
+	r.logf("run %s: %d workers, %d edits per change on average (±%.0f%%, %.0f%% creations), mode %s, domain %s with %d types",
+		cfg.Run, cfg.Workers, cfg.Edits, 100*cfg.Spread, 100*cfg.CreateRatio, cfg.Mode, DomainVersion(r.step), r.types)
 
 	ctx, stop := context.WithCancelCause(ctx)
 	defer stop(nil)
@@ -280,8 +285,9 @@ func (r *Runner) plan(w *worker) []edit {
 	defer w.mu.Unlock()
 	picked := map[*node]bool{}
 	var edits []edit
-	for range cfg.Edits {
-		if len(w.all) == 0 || w.rnd.Float64() < cfg.CreateRatio {
+	create, addLinks := varyShare(w.rnd, cfg.CreateRatio, cfg.Spread), varyShare(w.rnd, cfg.AddLinks, cfg.Spread)
+	for range varyCount(w.rnd, cfg.Edits, 1, cfg.Spread) {
+		if len(w.all) == 0 || w.rnd.Float64() < create {
 			w.seq++
 			n := &node{key: fmt.Sprintf("%s-w%02d-%08d", cfg.Run, w.id, w.seq), typ: TypeName(w.rnd.IntN(r.types))}
 			props := map[string]any{"title": "Node " + n.key, "description": text(w.rnd, cfg.TextBytes), "value": w.rnd.Float64() * 1000, "rev": 0.0}
@@ -289,7 +295,7 @@ func (r *Runner) plan(w *worker) []edit {
 				props["a"+strconv.Itoa(a)] = "v" + strconv.Itoa(w.rnd.IntN(1000))
 			}
 			e := edit{n: n, create: true, props: props}
-			e.links = w.linkTargets(cfg.Links, nil)
+			e.links = w.linkTargets(varyCount(w.rnd, cfg.Links, 0, cfg.Spread), nil)
 			edits = append(edits, e)
 			continue
 		}
@@ -309,12 +315,36 @@ func (r *Runner) plan(w *worker) []edit {
 		}
 		picked[n] = true
 		e := edit{n: n, props: map[string]any{"value": w.rnd.Float64() * 1000, "rev": float64(n.version)}}
-		if w.rnd.Float64() < cfg.AddLinks {
+		if w.rnd.Float64() < addLinks {
 			e.links = w.linkTargets(1, n)
 		}
 		edits = append(edits, e)
 	}
 	return edits
+}
+
+// varyCount draws a count of mean n within ±spread·n, never below least: uniform over that interval (narrowed to stay
+// symmetric above least), rounded up with the probability of its fraction, so the mean stays n.
+func varyCount(rnd *rand.Rand, n, least int, spread float64) int {
+	if n <= least || spread <= 0 {
+		return max(n, least)
+	}
+	w := min(spread*float64(n), float64(n-least))
+	x := float64(n) + w*(2*rnd.Float64()-1)
+	k := int(x)
+	if rnd.Float64() < x-float64(k) {
+		k++
+	}
+	return k
+}
+
+// varyShare draws a share of mean p within ±spread·p, kept within 0..1 by narrowing the interval, so the mean stays p.
+func varyShare(rnd *rand.Rand, p, spread float64) float64 {
+	w := min(spread*p, p, 1-p)
+	if w <= 0 {
+		return p
+	}
+	return p + w*(2*rnd.Float64()-1)
 }
 
 // linkTargets picks up to n distinct earlier nodes of the worker to link to, from aside.

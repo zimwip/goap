@@ -1232,7 +1232,8 @@ would (identity headers of `system:bench`, admin; or `-token` through the gatewa
 a generated domain `bench`, `bench@T000...` extending `bench@Item`, link `bench@relates`, through `ImportDomain`, a new version
 at each run and every `-domain-every` versions written) and the **change** (`-workers` writers on their own nodes, each change
 of `-edits` nodes, `-create` of them created with `-links` links (2 by default), the others modified, `-add-links` of the
-modifications adding a link to another node (a node links to another once, so the links keep growing), `-hot` nodes taking
+modifications adding a link to another node (a node links to another once, so the links keep growing), each change drawn
+within `-spread` (0.5 by default) of these four values, their means staying the values set, `-hot` nodes taking
 `-hot-ratio` of the modifications for deep histories; `-mode commit`: one `CommitEdits`, `-mode lifecycle`: `CreateChange`,
 `ImpactNodeCreate` / `ImpactNodeCheckout` + `ImpactNodeUpdate` + `ImpactLinkCreate`, `ImpactNodeReview` by `system:bench-reviewer`, `CommitChange`, `MergeChange`), and every
 `-probe` it measures the reads (`GetBranch`, `GetNode`, `ListNodeVersions` of a hot node, `ListNodeChanges`,
@@ -1240,7 +1241,9 @@ modifications adding a link to another node (a node links to another once, so th
 (by `op`, `outcome` ok / conflict / error), `bench.response.size` and the gauges `bench.versions`, `nodes`, `links`,
 `changes`, `domain.versions`, `domain.types`, `errors` (Prometheus `goap_bench_*`), and a CSV per run (`.goap/perf/<run>.csv`:
 one row per operation and window, the totals at its end). Runs add to the same graph (`make perf-run`, keys prefixed by the
-run) until `make perf-reset`.
+run) until `make perf-reset`. The web looks at the data of the bench (http://localhost:5174): a `gateway` (:8381, `GOAP_AUTH_MODE=none`, the
+fixed development administrator) routing to the graph alone, and the `web` dev server; what needs another service answers
+an error.
 
 The graph service measures what the states of its baselines cost (ADR 0140, `graph/graph/statemetrics.go`): every read of
 a state `graph.state.reads` (by `scope` whole / nodes and `source`, where the walk down its chain stopped: `cache`,
