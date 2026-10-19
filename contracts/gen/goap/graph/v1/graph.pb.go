@@ -2064,8 +2064,9 @@ func (x *ListBaselinesRequest) GetNamespace() string {
 }
 
 type ListBaselinesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Baselines     []*Baseline            `protobuf:"bytes,1,rep,name=baselines,proto3" json:"baselines,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
+	Baselines     []*Baseline `protobuf:"bytes,1,rep,name=baselines,proto3" json:"baselines,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

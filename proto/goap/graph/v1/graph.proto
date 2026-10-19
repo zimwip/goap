@@ -481,6 +481,7 @@ message ListBaselinesRequest {
 }
 
 message ListBaselinesResponse {
+  // the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
   repeated Baseline baselines = 1;
 }
 

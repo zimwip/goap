@@ -2043,6 +2043,8 @@ export const ListBaselinesRequestSchema: GenMessage<ListBaselinesRequest, {jsonT
  */
 export type ListBaselinesResponse = Message<"goap.graph.v1.ListBaselinesResponse"> & {
   /**
+   * the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
+   *
    * @generated from field: repeated goap.graph.v1.Baseline baselines = 1;
    */
   baselines: Baseline[];
@@ -2053,6 +2055,8 @@ export type ListBaselinesResponse = Message<"goap.graph.v1.ListBaselinesResponse
  */
 export type ListBaselinesResponseJson = {
   /**
+   * the headers of the baselines, oldest first: their nodes are not sent (ADR 0140)
+   *
    * @generated from field: repeated goap.graph.v1.Baseline baselines = 1;
    */
   baselines?: BaselineJson[];

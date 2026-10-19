@@ -265,6 +265,16 @@ func (g *Graph) BranchHeadHeader(ctx context.Context, namespace, name string) (b
 	return
 }
 
+// BaselineHeaders lists the baselines of a namespace, by creation date, without their states: what names them, never
+// what they hold (a listing that does not grow with the graph, ADR 0140).
+func (g *Graph) BaselineHeaders(ctx context.Context, namespace string) (bs []domain.Baseline, err error) {
+	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.BaselineHeaders(ctx, namespace); return err })
+	for i := range bs {
+		bs[i].Nodes, bs[i].Namespace = nil, domain.NamespaceOf(namespace)
+	}
+	return
+}
+
 // Baselines lists the baselines of a namespace, by creation date.
 func (g *Graph) Baselines(ctx context.Context, namespace string) (bs []domain.Baseline, err error) {
 	err = g.repo.InTx(ctx, func(tx Tx) error { bs, err = tx.Baselines(ctx, namespace); return err })

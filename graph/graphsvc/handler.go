@@ -151,7 +151,7 @@ func (h *Handler) DeleteTag(ctx context.Context, r *connect.Request[graphv1.Dele
 }
 
 func (h *Handler) ListBaselines(ctx context.Context, r *connect.Request[graphv1.ListBaselinesRequest]) (*connect.Response[graphv1.ListBaselinesResponse], error) {
-	bs, err := h.Graph.Baselines(ctx, r.Msg.Namespace)
+	bs, err := h.Graph.BaselineHeaders(ctx, r.Msg.Namespace) // their headers: the states are read one at a time
 	out := &graphv1.ListBaselinesResponse{}
 	for _, b := range bs {
 		out.Baselines = append(out.Baselines, pbconv.BaselineToPB(b))
