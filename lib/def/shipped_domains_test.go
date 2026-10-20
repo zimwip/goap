@@ -7,7 +7,7 @@ import (
 
 // The domains shipped with the code parse and validate (attributes, enums, algorithms and their plugs).
 func TestShippedDomainsValidate(t *testing.T) {
-	for _, f := range []string{"../../domains/alm.yaml", "../domains/builtin/methodology.yaml", "../domains/builtin/organisation.yaml", "../domains/builtin/platform.yaml"} {
+	for _, f := range []string{"../../domains/alm.yaml", "../../domains/code.yaml", "../domains/builtin/methodology.yaml", "../domains/builtin/organisation.yaml", "../domains/builtin/platform.yaml"} {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

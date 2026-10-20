@@ -1,0 +1,58 @@
+name: code
+version: 1.0.0
+description: >
+  Source code held in git repositories (ADR 0146): a repository, its directories and its files as of the last commit
+  imported. The git importer (platform/gitimport, goap-gitimport) makes one change per commit; a directory or a file is a
+  node, a directory holds its entries by `contains` links, and a version of a directory is a git tree (its links follow
+  the versions of its entries, as a tree names the objects it holds).
+nodeTypes:
+  # an entry of a repository: what a directory holds
+  - name: Entry
+    description: An entry of a source tree, a directory or a file
+    attributes:
+      - {name: name, label: Name, description: Last element of the path, type: string, section: Identity, order: 1, asName: true}
+      - {name: path, label: Path, description: "Path from the root of the repository, with / separators (empty for the root)", type: string, section: Identity, order: 2}
+    lifecycle: presence
+    search: [{property: name, text: true}, {property: path, text: true}]
+  - name: Directory
+    description: A directory of a repository (a git tree)
+    extends: Entry
+    attributes:
+      - {name: tree, label: Tree, description: Object id of the git tree the directory is at, type: string, section: Git, order: 10}
+  - name: File
+    description: A file of a repository (a git blob, a symbolic link or a submodule)
+    extends: Entry
+    attributes:
+      - {name: blob, label: Object, description: "Object id of the content (a blob; the commit of a submodule)", type: string, section: Git, order: 10}
+      - {name: mode, label: Mode, description: "git mode of the entry (100644 file, 100755 executable, 120000 symbolic link, 160000 submodule)", type: string, section: Git, order: 11}
+      - {name: size, label: Size, description: Size of the content in bytes (none for a submodule), type: number, section: Git, order: 12}
+      - {name: extension, label: Extension, description: "Extension of the name, lower case, without the dot (c, h, go…)", type: string, section: Identity, order: 3}
+    search: [{property: extension, facet: true}]
+  # the root directory of a repository, the node that says where its import stands
+  - name: Repository
+    description: A git repository, its root directory
+    extends: Directory
+    attributes:
+      - {name: url, label: Source, description: Where the repository was imported from (a URL or a path), type: string, section: Origin, order: 20}
+      - {name: ref, label: Followed, description: "Revision followed by the import (HEAD, a branch, a tag)", type: string, section: Origin, order: 21}
+      - {name: commit, label: Commit, description: Object id of the last commit imported, type: string, section: Origin, order: 22}
+lifecycles:
+  # a node is never deleted: an entry the commit removes leaves its directory and is moved to removed; added again at
+  # the same path, it is the same node, present again
+  - name: presence
+    description: Whether an entry is in the source tree at the last commit imported
+    initial: present
+    states:
+      - {name: present, description: In the tree}
+      - {name: removed, description: Removed from the tree by a commit}
+    transitions:
+      - {name: remove, description: A commit removes the entry, from: present, to: removed}
+      - {name: restore, description: A commit adds the entry again, from: removed, to: present}
+linkTypes:
+  - name: contains
+    description: "A directory holds an entry (a git tree names it)"
+    from: Directory
+    to: Entry
+    compose: true
+    label: "contains"
+    inverseLabel: "contained in"
