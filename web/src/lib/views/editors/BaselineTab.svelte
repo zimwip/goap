@@ -20,16 +20,14 @@
   import { downloadGraphOkf } from '../../okfExport';
   import { notify } from '../../shell/workbench.svelte';
   import Icon from '../../shell/Icon.svelte';
-  import NodeGraph from '../../components/NodeGraph.svelte';
+  import NodeNeighbourhood, { emptyNeighbourhood, type Neighbourhood } from '../../components/NodeNeighbourhood.svelte';
   import BaselineCompare from '../../components/BaselineCompare.svelte';
-  import ChangeStackView from '../../components/ChangeStackView.svelte';
   import BaselineBranchGraph from '../../components/BaselineBranchGraph.svelte';
   import { isOpenHead } from '../../baselineHistory';
   import { stamp, keyOf } from '../../flux/signals.svelte';
   import Resizer from '../../shell/Resizer.svelte';
   import { openTab } from '../../shell/tabs.svelte';
   import { openNode } from '../../nodeEditors';
-  import { indexOf } from '../../graphIndex';
   import { splitType, typeCatalog } from '../../stores/types.svelte';
   import { MAIN_BRANCH } from '../../namespace';
   import { baselineTool, openBaseline } from '../../stores/baselineTool.svelte';
@@ -44,9 +42,6 @@
 
   const namespace = $derived(tab.params.namespace ?? '');
   const branchName = $derived(tab.params.branch || MAIN_BRANCH);
-
-  /** the node version whose change-stack is open (ADR 0133) */
-  let stackOf = $state('');
   let historyWidth = $state(typeof loadRaw(HW_KEY) === 'number' ? (loadRaw(HW_KEY) as number) : 320);
   function resizeHistory(v: number) {
     historyWidth = v;
@@ -322,45 +317,15 @@
   const linkPage = $derived(Math.floor(linkOffset / linkSize) + 1);
   const gotoLink = (p: number) => (linkOffset = (Math.min(Math.max(p, 1), linkPageCount) - 1) * linkSize);
 
-  // ---- neighbourhood of the selected node -------------------------------------------------------
+  // ---- neighbourhood of the selected node (read by NodeNeighbourhood, listed here too) -----------
 
-  let center = $state<GraphNode | undefined>();
-  let neighbours = $state<GraphNode[]>([]);
-  let links = $state<Link[]>([]);
-  let suspect = $state(new Set<string>());
-  let nbLoading = $state(false);
-  let nbError = $state('');
-
-  $effect(() => {
-    void reload;
-    const b = shownId;
-    const n = selectedNode;
-    center = undefined;
-    neighbours = [];
-    links = [];
-    suspect = new Set();
-    nbError = '';
-    if (!b || !n) return;
-    const ctrl = new AbortController();
-    nbLoading = true;
-    graph
-      .getNodeNeighbourhood(b, n, ctrl.signal)
-      .then((r) => {
-        center = r.node;
-        neighbours = r.nodes ?? [];
-        links = r.links ?? [];
-        suspect = new Set(r.suspectLinkIds ?? []);
-      })
-      .catch((e) => {
-        if (!ctrl.signal.aborted) nbError = errorMessage(e);
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) nbLoading = false;
-      });
-    return () => ctrl.abort();
-  });
-
-  const index = $derived(indexOf(shownId, center ? [center, ...neighbours] : [], links));
+  let hood = $state<Neighbourhood>(emptyNeighbourhood());
+  const center = $derived(hood.center);
+  const neighbours = $derived(hood.neighbours);
+  const links = $derived(hood.links);
+  const suspect = $derived(hood.suspect);
+  const nbLoading = $derived(hood.loading);
+  const nbError = $derived(hood.error);
 
   /** The neighbours with the links that reach them, incoming first. */
   const rows = $derived.by(() => {
@@ -393,82 +358,11 @@
     selectedLink = undefined;
   }
 
-  const byNodeId = (nid: string) => (nid === center?.id ? center : neighbours.find((n) => n.id === nid));
-
-  const propRows = (n: GraphNode | undefined | Link) =>
-    Object.entries(n?.props ?? {}).map(([k, v]): [string, string] => [k, typeof v === 'string' ? v : JSON.stringify(v)]);
-
-  // ---- link selection: its own view, centered on both endpoints and their neighbours ------------
-
   let selectedLink = $state<Link | undefined>();
-  let linkFromNode = $state<GraphNode | undefined>();
-  let linkToNode = $state<GraphNode | undefined>();
-  let linkFromNeighbours = $state<GraphNode[]>([]);
-  let linkToNeighbours = $state<GraphNode[]>([]);
-  let linkFromLinks = $state<Link[]>([]);
-  let linkToLinks = $state<Link[]>([]);
-  let linkSuspect = $state(new Set<string>());
-  let linkViewLoading = $state(false);
-  let linkViewError = $state('');
 
   function selectLink(l: Link | undefined) {
     if (!l?.id) return;
     selectedLink = l;
-  }
-
-  $effect(() => {
-    void reload;
-    const b = shownId;
-    const l = selectedLink;
-    linkFromNode = undefined;
-    linkToNode = undefined;
-    linkFromNeighbours = [];
-    linkToNeighbours = [];
-    linkFromLinks = [];
-    linkToLinks = [];
-    linkSuspect = new Set();
-    linkViewError = '';
-    const fromId = l?.from?.id;
-    const toId = l?.to?.id;
-    if (!b || !fromId || !toId) return;
-    const ctrl = new AbortController();
-    linkViewLoading = true;
-    Promise.all([graph.getNodeNeighbourhood(b, fromId, ctrl.signal), graph.getNodeNeighbourhood(b, toId, ctrl.signal)])
-      .then(([a, c]) => {
-        linkFromNode = a.node;
-        linkFromNeighbours = a.nodes ?? [];
-        linkFromLinks = a.links ?? [];
-        linkToNode = c.node;
-        linkToNeighbours = c.nodes ?? [];
-        linkToLinks = c.links ?? [];
-        linkSuspect = new Set([...(a.suspectLinkIds ?? []), ...(c.suspectLinkIds ?? [])]);
-      })
-      .catch((e) => {
-        if (!ctrl.signal.aborted) linkViewError = errorMessage(e);
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) linkViewLoading = false;
-      });
-    return () => ctrl.abort();
-  });
-
-  const linkViewIndex = $derived(
-    indexOf(
-      shownId,
-      [...(linkFromNode ? [linkFromNode] : []), ...(linkToNode ? [linkToNode] : []), ...linkFromNeighbours, ...linkToNeighbours],
-      [...linkFromLinks, ...linkToLinks],
-    ),
-  );
-
-  function recenterFromLink(nid: string) {
-    const n = linkViewIndex.nodes.get(nid);
-    selectedLink = undefined;
-    selectNode(n);
-  }
-
-  function openFromLink(nid: string) {
-    const n = linkViewIndex.nodes.get(nid);
-    if (n) void openNode(n, { pin: true });
   }
 </script>
 
@@ -698,71 +592,7 @@
       </div>
 
       <section class="card neighbours">
-        {#if selectedLink}
-          <div class="row head">
-            <h3 class="grow" title={selectedLink.type}>Link <span>{typeCatalog.cat.linkLabel(selectedLink.type, 'out')}</span></h3>
-            <button type="button" class="ghost small" title="Close" aria-label="Close link view" onclick={() => (selectedLink = undefined)}>×</button>
-          </div>
-          {#if linkViewError}
-            <div class="alert">{linkViewError}</div>
-          {:else if !linkFromNode || !linkToNode}
-            <p class="empty">Loading…</p>
-          {:else}
-            <p class="hint"><span class="mono">{linkFromNode.key}</span> → <span class="mono">{linkToNode.key}</span></p>
-            <NodeGraph
-              index={linkViewIndex}
-              center={linkFromNode.id ?? ''}
-              secondaryCenter={linkToNode.id}
-              maxDepth={1}
-              suspect={linkSuspect}
-              onrecenter={recenterFromLink}
-              onopen={openFromLink}
-              onLinkSelect={(id) => {
-                const l = [...linkFromLinks, ...linkToLinks].find((x) => x.id === id);
-                if (l) selectLink(l);
-              }}
-            />
-            {#if linkViewLoading}<p class="hint">Loading…</p>{/if}
-            <details class="props" open>
-              <summary>Link properties</summary>
-              {#if propRows(selectedLink).length}
-                <table>
-                  <tbody>
-                    {#each propRows(selectedLink) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}
-                  </tbody>
-                </table>
-              {:else}
-                <p class="empty small">No properties.</p>
-              {/if}
-            </details>
-          {/if}
-        {:else if !selectedNode}
-          <h3>Neighbours</h3>
-          <p class="empty">Select a node to see its neighbours.</p>
-        {:else if nbError}
-          <h3>Neighbours</h3>
-          <div class="alert">{nbError}</div>
-        {:else if !center}
-          <h3>Neighbours</h3>
-          <p class="empty">Loading…</p>
-        {:else}
-          <NodeGraph {index} center={center.id ?? ''} maxDepth={1} {suspect} onrecenter={(nid) => selectNode(byNodeId(nid))} onopen={(nid) => { const n = byNodeId(nid); if (n) void openNode(n, { pin: true }); }} onLinkSelect={(id) => { const l = links.find((x) => x.id === id); if (l) selectLink(l); }} />
-          {#if nbLoading}<p class="hint">Loading…</p>{/if}
-          <details class="props" ontoggle={(e) => (stackOf = (e.currentTarget as HTMLDetailsElement).open ? `${center?.id}@${center?.version}` : '')}>
-            <summary>Change-stack of v{center.version}</summary>
-            {#if stackOf === `${center.id}@${center.version}`}<ChangeStackView nodeId={center.id} version={center.version} />{/if}
-          </details>
-          {#if propRows(center).length}
-            <details class="props" open>
-              <summary>Properties</summary>
-              <table>
-                <tbody>
-                  {#each propRows(center) as [k, v] (k)}<tr><th>{k}</th><td>{v}</td></tr>{/each}
-                </tbody>
-              </table>
-            </details>
-          {/if}
-        {/if}
+        <NodeNeighbourhood baselineId={shownId} namespace={baseline?.namespace ?? namespace} bind:node={selectedNode} bind:link={selectedLink} bind:hood {reload} />
       </section>
     </div>
   </div>
@@ -990,18 +820,6 @@
     color: var(--warn);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-  }
-  .props {
-    margin-top: 0.6rem;
-  }
-  .props th {
-    text-align: left;
-    font-weight: 600;
-    white-space: nowrap;
-    vertical-align: top;
-  }
-  .props td {
-    word-break: break-word;
   }
   .nowrap {
     white-space: nowrap;
