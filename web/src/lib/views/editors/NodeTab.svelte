@@ -22,6 +22,7 @@
   import EditorPanes, { type Pane } from '../../components/EditorPanes.svelte';
   import NodeTree from '../../components/NodeTree.svelte';
   import NodeGraph from '../../components/NodeGraph.svelte';
+  import NodeNeighbourhood from '../../components/NodeNeighbourhood.svelte';
   import LifecycleDiagram from '../../components/LifecycleDiagram.svelte';
   import NodeHistory from '../../components/NodeHistory.svelte';
   import NodeTags from '../../components/NodeTags.svelte';
@@ -66,6 +67,9 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   let editing = $state(false);
   let reload = $state(0);
   let centerId = $state('');
+  /** the Graph pane: the node at its center and the link it shows, in the head baseline (as in the Baseline tab) */
+  let graphNode = $state('');
+  let graphLink = $state<Link | undefined>();
   /** the draft view of a node no version exists of yet (created by the working change, ADR 0079) */
   let draftNode = $state<GraphNode | undefined>();
 
@@ -147,6 +151,8 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
     void id;
     void stamp(keyOf.node(id)); // a new version of the node, by anyone
     centerId = id;
+    graphNode = id;
+    graphLink = undefined;
     const ctrl = new AbortController();
     void loadNode(ctrl.signal);
     return () => ctrl.abort();
@@ -193,6 +199,7 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
   const panes = $derived<Pane[]>([
     { id: 'details', label: 'Details' },
     { id: 'relations', label: 'Relations', badge: head ? (head.in.get(id)?.length ?? 0) + (head.out.get(id)?.length ?? 0) : undefined },
+    { id: 'graph', label: 'Graph' },
     { id: 'lifecycle', label: 'Lifecycle', badge: nodeState || undefined, hidden: !lifecycle },
     { id: 'history', label: 'History', badge: versions.at(-1)?.version || undefined },
   ]);
@@ -564,6 +571,17 @@ import { declaredProperties, lifecycleResolver, lifecycleRows, loadPosts, writeN
                 <NodeGraph index={head} center={centerId || id} onrecenter={(n) => (centerId = n)} onopen={(n) => openNeighbour(n)} />
               </section>
             </div>
+          {:else}
+            <p class="empty">This node is not in the current graph (deleted, or only created by a change).</p>
+          {/if}
+        {:else if active === 'graph'}
+          {#if head?.baselineId && head.nodes.has(id)}
+            <section class="card neighbourhood">
+              {#if graphNode !== id || graphLink}
+                <p><button type="button" class="small" onclick={() => ((graphNode = id), (graphLink = undefined))}>Back to {stored.key}</button></p>
+              {/if}
+              <NodeNeighbourhood baselineId={head.baselineId} namespace={stored.namespace ?? ''} bind:node={graphNode} bind:link={graphLink} reload={reload} />
+            </section>
           {:else}
             <p class="empty">This node is not in the current graph (deleted, or only created by a change).</p>
           {/if}

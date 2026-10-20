@@ -285,6 +285,11 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite ChangeHeads", lite, q, a, `SELECT id FROM change WHERE 1 = 1 AND namespace = ?1 AND owner_org = ?2 AND project_id = ?3 AND status IN (?4, ?5) ORDER BY created_at, rowid`, []any{"alm", "ORG-A", "PROJ-A", "draft", "active"})
 	q, a = pg.sqlChangeHeads("id", ChangesFilter{})
 	check("pg ChangeHeads all", pg, q, a, `SELECT id FROM change WHERE true ORDER BY created_at`, []any{})
+	df := ChangesFilter{Parent: "c1", DependsOn: "c2"}
+	q, a = pg.sqlChangeHeads("id", df)
+	check("pg ChangeHeads related", pg, q, a, `SELECT id FROM change WHERE true AND parent_id = $1 AND depends_on ? $2 ORDER BY created_at`, []any{"c1", "c2"})
+	q, a = lite.sqlChangeHeads("id", df)
+	check("sqlite ChangeHeads related", lite, q, a, `SELECT id FROM change WHERE 1 = 1 AND parent_id = ?1 AND EXISTS (SELECT 1 FROM json_each(change.depends_on) WHERE value = ?2) ORDER BY created_at, rowid`, []any{"c1", "c2"})
 	q, a = pg.sqlSubChangeIDs("c1")
 	check("pg SubChanges", pg, q, a, `SELECT id::text FROM change WHERE parent_id = $1 ORDER BY created_at`, []any{"c1"})
 	q, a = lite.sqlSubChangeIDs("c1")

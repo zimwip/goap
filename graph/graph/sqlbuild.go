@@ -473,8 +473,8 @@ func (d dialect) sqlChangeIDs() string {
 }
 
 // sqlChangeHeads reads the heads of the changes (cols: the select list of the dialect) matching the parts of f a column
-// answers, oldest first (indexes change_status, change_project): the namespace, the owner unit, the statuses and the
-// project. The text query is the caller's (ChangesFilter.Match).
+// answers, oldest first (indexes change_status, change_project, change_parent): the namespace, the owner unit, the
+// statuses, the project, the parent and a dependency. The text query is the caller's (ChangesFilter.Match).
 func (d dialect) sqlChangeHeads(cols string, f ChangesFilter) (string, []any) {
 	q, args := `SELECT `+cols+` FROM change`+d.where1(), []any{}
 	add := func(cond string, v any) {
@@ -497,6 +497,17 @@ func (d dialect) sqlChangeHeads(cols string, f ChangesFilter) (string, []any) {
 			ps[i] = d.ph(len(args))
 		}
 		q += " AND status IN (" + strings.Join(ps, ", ") + ")"
+	}
+	if f.Parent != "" {
+		add("parent_id", string(f.Parent))
+	}
+	if f.DependsOn != "" {
+		args = append(args, string(f.DependsOn))
+		if d.pg {
+			q += " AND depends_on ? " + d.ph(len(args))
+		} else {
+			q += " AND EXISTS (SELECT 1 FROM json_each(change.depends_on) WHERE value = " + d.ph(len(args)) + ")"
+		}
 	}
 	return q + d.orderBy("created_at", ""), args
 }
