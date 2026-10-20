@@ -225,6 +225,9 @@ func ApplyConflictEvent(pending []string, e ImpactEvent) []string {
 			settle(ConflictProp(k))
 		}
 	case ImpactUpdated:
+		if r, ok := e.Patch["rebased"]; ok && r != nil {
+			return stringsOf(e.Patch["conflicts"]) // the merge of a rebase (ADR 0144)
+		}
 		if done, _ := e.Patch["resolved"].(bool); done {
 			return nil
 		}

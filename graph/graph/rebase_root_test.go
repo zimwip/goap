@@ -76,7 +76,20 @@ func rebaseMoves(t *testing.T, g *Graph, id domain.ChangeID) []domain.HeaderValu
 func rebasedEvents(t *testing.T, g *Graph, id domain.ChangeID) []domain.ImpactEvent {
 	t.Helper()
 	events := must[[]domain.ImpactEvent](t)(impactEventsOf(context.Background(), g, id))
-	return slices.DeleteFunc(events, func(e domain.ImpactEvent) bool { return e.Op != domain.ImpactTransitioned || e.Patch["rebased"] == nil })
+	// the merge of a rebase is a checkout of the committed version, then an update with the difference (ADR 0144): the
+	// update, with the draft of the checkout it follows
+	var out []domain.ImpactEvent
+	drafts := map[domain.ChangeImpactID]*domain.Draft{}
+	for _, e := range events {
+		switch {
+		case e.Op == domain.ImpactCheckedOut:
+			drafts[e.Impact] = e.Draft
+		case e.Op == domain.ImpactUpdated && e.Patch["rebased"] != nil:
+			e.Draft = drafts[e.Impact]
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // test1 and test2 start from the same baseline and change different nodes: test2 moves onto test1's result, main reads
@@ -165,6 +178,23 @@ func testRebaseRootSameNodeLinear(t *testing.T, repo Repo) {
 	}
 	if n := len(rebaseMoves(t, g, t2.ID)); n != 1 {
 		t.Fatalf("one move in the log, got %d", n)
+	}
+	// the update carries the difference the merge makes: test1's property (ADR 0144)
+	if p, _ := ev[0].Patch["props"].(map[string]any); len(p) != 1 || p["a"] == nil {
+		t.Fatalf("the update carries the merge's difference: %+v", ev[0].Patch)
+	}
+	// the rebase in the log: the move, the node checked out and updated, the review of the merge, its landing
+	var order []string
+	for _, e := range must[[]domain.LogEntry](t)(logOf(g, t2.ID)) {
+		switch e.Type {
+		case "change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.reviewed", "impact.landed":
+			if len(order) == 0 || order[len(order)-1] != e.Type {
+				order = append(order, e.Type)
+			}
+		}
+	}
+	if i := slices.Index(order, "change.updated"); i < 0 || !slices.Equal(order[i:i+5], []string{"change.updated", "impact.checkedOut", "impact.updated", "fact.review", "impact.reviewed"}) {
+		t.Fatalf("the rebase in the log: %v", order)
 	}
 	// the review of the merged draft was kept, the version landed
 	if cn := must[domain.ChangeImpact](t)(g.seenImpact(ctx, t2.ID, i2, "")); cn.Review != domain.ReviewAccepted || cn.Landed == nil || *cn.Landed != n.Ref() {
@@ -335,4 +365,10 @@ func testRebaseRootRaceFallsBackToMerge(t *testing.T, repo Repo) {
 	if moves := rebaseMoves(t, g, t2.ID); len(moves) == 0 || moves[0].From != string(f.base.ID) {
 		t.Fatalf("test2 was rebased onto test0 before: %+v", moves)
 	}
+}
+
+// logOf is the whole log of a change.
+func logOf(g *Graph, id domain.ChangeID) ([]domain.LogEntry, error) {
+	entries, _, err := g.ChangeLog(context.Background(), domain.LogFilter{Change: id})
+	return entries, err
 }

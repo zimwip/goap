@@ -1,6 +1,6 @@
 # ADR 0144 — A review, a landing and a rebase are one entry each in the log of a change
 
-**Status**: accepted; reviews and landings implemented, the rebase to come · **Date**: 2026-10 · Builds on ADR 0029
+**Status**: accepted; implemented · **Date**: 2026-10 · Builds on ADR 0029
 (change impacts are event-sourced), 0030 (one log per change), 0080 / 0105 (every verdict is a submitted review), 0101 /
 0102 (rebase and merge), 0142 (impact events carry what they change)
 
@@ -46,11 +46,12 @@ most of the garbage the service collected.
 3. **A landing is one entry.** A commit logs the versions it wrote as one `impact.landed` entry, and so does the
    integration into the target; a merge of branches logs its creations, its review, its versions written and its
    landing by phase, one entry each.
-4. **A rebase is one entry, then the nodes it changes, then a review, then the commit** (to come). The rebase is a
+4. **A rebase is one entry, then the nodes it changes, then a review, then the commit**. The rebase is a
    `change.updated` entry naming the head it brings the branch onto (written first, before the nodes). Each node
    changed on both sides is checked out from the version the change committed (a `checkedOut` naming it, ADR 0142,
    with the version it is merged with) and updated with the difference the three-way merge makes (an `updated` patch:
-   what a reader shows as the diff), never a copy of the merged node. The merge is then validated by a review: a clean
+   what a reader shows as the diff, `domain.DraftDiff`; the link edits are the plural `addLinks` / `updateLinks` /
+   `removeLinks` of the patch), never a copy of the merged node (`Graph.installRebased`, `graph/graph/rebase.go`). The merge is then validated by a review: a clean
    rebase is a submitted review of `graph.merge` accepting the merged nodes, a conflict sends its impact back to
    proposed for a person to settle and review. The commit lands it (one entry).
 5. The bench reviews a change in one batch (`ImpactNodeReviewBatch`), as the web submits a review.

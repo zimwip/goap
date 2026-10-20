@@ -57,20 +57,71 @@ func (g *Graph) numberLinks(d *domain.Draft) {
 	}
 }
 
-// installRebased replaces the draft of a change impact by the merged one (a transitioned event carrying it, with the
-// rebase and its conflicts in the patch), moves its pre with it when pre is given, and sends its review back to
-// proposed when asked (the reason is the comment).
-func (g *Graph) installRebased(ctx context.Context, tx Tx, c domain.Change, cn domain.ChangeImpact, d, merged domain.Draft, pre *domain.NodeRef, rebased map[string]any, conflicts []string, backToProposed bool, why string) error {
-	ref := merged.Ref()
-	patch := map[string]any{"rebased": rebased, "conflicts": conflicts}
-	if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactTransitioned, Execution: d.Execution, Post: &ref, Draft: &merged, Pre: pre, Patch: patch}); err != nil {
-		return err
+// rebasedNode is a node a rebase merges three-way (ADR 0102): the version the change committed (ours, as a draft), the
+// merge, the pre it moves to and the conflicts it leaves.
+type rebasedNode struct {
+	cn        domain.ChangeImpact
+	ours      domain.Draft
+	merged    domain.Draft
+	pre       *domain.NodeRef
+	conflicts []string
+}
+
+// installRebased gives each merged node a draft (ADR 0144): checked out from the version the change committed (the
+// event names it, with the version it is merged with and the pre it moves to) and updated with the difference the merge
+// makes (DraftDiff, with the rebase and its conflicts), never a copy of the merge; then the merge is reviewed: the
+// clean ones accepted by a review of graph.merge, the conflicting ones sent back to proposed (why) for a person.
+func (g *Graph) installRebased(ctx context.Context, tx Tx, c domain.Change, nodes []rebasedNode, rebased map[string]any, why string) error {
+	var entries []domain.ReviewEntry
+	var accepted, reopened []domain.ImpactEvent
+	for _, n := range nodes {
+		event := g.newID()
+		base := *n.ours.Base
+		mergedWith := *n.merged.MergedWith
+		ref := domain.DraftRef(base.ID)
+		checkout := domain.ImpactEvent{ID: event, Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactCheckedOut, Execution: n.ours.Execution, Post: &ref, Pre: n.pre,
+			FromBase: &domain.BaseCopy{}}
+		// the draft the checkout makes: the committed version with the ids its links take in the copy
+		copied := n.ours.Clone()
+		copied.Change, copied.Impact, copied.Flow, copied.MergedWith = c.ID, n.cn.ID, "", &mergedWith
+		for i := range copied.Links {
+			copied.Links[i].ID = domain.BaseLinkID(event, copied.Links[i].ID)
+		}
+		checkout.Draft = &copied
+		merged := n.merged
+		for i := range merged.Links {
+			merged.Links[i].ID = domain.LinkID(g.newID()) // a link the merge adds is its own
+		}
+		patch := domain.DraftDiff(copied, merged)
+		if patch == nil {
+			patch = map[string]any{}
+		}
+		patch["rebased"], patch["conflicts"] = rebased, n.conflicts
+		if err := g.emit(ctx, tx, checkout, domain.ImpactEvent{Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactUpdated, Execution: n.ours.Execution, Post: &ref, Patch: patch}); err != nil {
+			return err
+		}
+		if len(n.conflicts) == 0 {
+			entries = append(entries, domain.ReviewEntry{Impact: string(n.cn.ID), Comment: why, Outcome: domain.ReviewOutcomeAccept})
+			accepted = append(accepted, domain.ImpactEvent{Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactReviewed})
+		} else if n.cn.Review != domain.ReviewProposed {
+			r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: why}
+			reopened = append(reopened, domain.ImpactEvent{Change: c.ID, Impact: n.cn.ID, Op: domain.ImpactReviewed, By: r.By, Review: &r})
+		}
 	}
-	if !backToProposed || cn.Review == domain.ReviewProposed {
-		return nil
+	if len(entries) > 0 {
+		key, cause, err := g.putReviewRecord(ctx, tx, c.ID, "graph.merge", why, entries)
+		if err != nil {
+			return err
+		}
+		for i := range accepted {
+			r := domain.Review{Status: domain.ReviewAccepted, By: "graph.merge", Comment: why, At: g.now(), ReviewID: key}
+			accepted[i].By, accepted[i].Review, accepted[i].Causation = "graph.merge", &r, cause
+		}
+		if err := g.emit(ctx, tx, accepted...); err != nil {
+			return err
+		}
 	}
-	r := domain.Review{Status: domain.ReviewProposed, By: g.caller(ctx), At: g.now(), Comment: why}
-	return g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactReviewed, By: r.By, Review: &r})
+	return g.emit(ctx, tx, reopened...)
 }
 
 // HeaderBaselineID is the field of a change.updated log entry that records the move of a rebase (ADR 0101).

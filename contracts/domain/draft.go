@@ -3,6 +3,7 @@ package domain
 import (
 	"encoding/json"
 	"maps"
+	"reflect"
 	"slices"
 )
 
@@ -128,20 +129,103 @@ type draftPatch struct {
 		From string `json:"from"`
 		To   string `json:"to"`
 	} `json:"state"`
-	AddLink *struct {
-		ID        LinkID         `json:"id"`
-		Type      string         `json:"type"`
-		ToID      NodeID         `json:"toId"`
-		ToVersion Version        `json:"toVersion"`
-		Props     map[string]any `json:"props"`
-	} `json:"addLink"`
-	UpdateLink *struct {
-		ID    LinkID         `json:"id"`
-		Props map[string]any `json:"props"`
-	} `json:"updateLink"`
-	RemoveLink *struct {
-		ID LinkID `json:"id"`
-	} `json:"removeLink"`
+	AddLink    *patchLink `json:"addLink"`
+	UpdateLink *patchLink `json:"updateLink"`
+	RemoveLink *patchLink `json:"removeLink"`
+	// the links a patch of several changes (DraftDiff: the merge of a rebase, ADR 0144) adds, updates and removes
+	AddLinks    []patchLink `json:"addLinks"`
+	UpdateLinks []patchLink `json:"updateLinks"`
+	RemoveLinks []patchLink `json:"removeLinks"`
+}
+
+// patchLink is a link a patch adds (id, type, target, properties), updates (id, properties) or removes (id).
+type patchLink struct {
+	ID        LinkID         `json:"id"`
+	Type      string         `json:"type,omitempty"`
+	ToID      NodeID         `json:"toId,omitempty"`
+	ToVersion Version        `json:"toVersion,omitempty"`
+	Props     map[string]any `json:"props,omitempty"`
+}
+
+// linksOf is the link of a patch of one change and the links of a patch of several.
+func linksOf(one *patchLink, many []patchLink) []patchLink {
+	if one == nil {
+		return many
+	}
+	return append([]patchLink{*one}, many...)
+}
+
+// DraftDiff is the patch of an updated event that turns a draft into another (props, unset, ownerId, state, and the
+// links as addLinks / updateLinks / removeLinks): the difference a rebase's merge makes to the version the change
+// committed (ADR 0144), what a reader shows. A link of to that from holds alike (type, target, properties) keeps the id
+// it has in from; nil when they hold the same.
+func DraftDiff(from, to Draft) map[string]any {
+	p := map[string]any{}
+	props := map[string]any{}
+	for k, v := range to.Properties {
+		if w, ok := from.Properties[k]; !ok || !reflect.DeepEqual(v, w) {
+			props[k] = v
+		}
+	}
+	if len(props) > 0 {
+		p["props"] = props
+	}
+	var unset []string
+	for k := range from.Properties {
+		if _, ok := to.Properties[k]; !ok {
+			unset = append(unset, k)
+		}
+	}
+	if len(unset) > 0 {
+		slices.Sort(unset)
+		p["unset"] = unset
+	}
+	if to.Owner != from.Owner {
+		p["ownerId"] = to.Owner
+	}
+	if to.State != from.State {
+		p["state"] = map[string]any{"from": from.State, "to": to.State}
+	}
+	var adds, updates, removes []any
+	used := make([]bool, len(to.Links))
+	match := func(l DraftLink, sameProps bool) int {
+		for i, m := range to.Links {
+			if !used[i] && m.Type == l.Type && m.To == l.To && (!sameProps || reflect.DeepEqual(m.Properties, l.Properties)) {
+				return i
+			}
+		}
+		return -1
+	}
+	var left []DraftLink
+	for _, l := range from.Links {
+		if i := match(l, true); i >= 0 {
+			used[i] = true
+		} else {
+			left = append(left, l)
+		}
+	}
+	for _, l := range left {
+		if i := match(l, false); i >= 0 {
+			used[i] = true
+			updates = append(updates, map[string]any{"id": l.ID, "props": to.Links[i].Properties})
+		} else {
+			removes = append(removes, map[string]any{"id": l.ID})
+		}
+	}
+	for i, l := range to.Links {
+		if !used[i] {
+			adds = append(adds, map[string]any{"id": l.ID, "type": l.Type, "toId": l.To.ID, "toVersion": l.To.Version, "props": l.Properties})
+		}
+	}
+	for k, v := range map[string][]any{"addLinks": adds, "updateLinks": updates, "removeLinks": removes} {
+		if len(v) > 0 {
+			p[k] = v
+		}
+	}
+	if len(p) == 0 {
+		return nil
+	}
+	return p
 }
 
 func patchOf(p map[string]any) (out draftPatch) {
@@ -192,17 +276,17 @@ func applyDraft(d *Draft, e ImpactEvent) *Draft {
 		if p.State != nil {
 			n.State = p.State.To
 		}
-		if a := p.AddLink; a != nil {
+		for _, a := range linksOf(p.AddLink, p.AddLinks) {
 			n.Links = append(n.Links, DraftLink{ID: a.ID, Type: a.Type, To: NodeRef{ID: a.ToID, Version: a.ToVersion}, Properties: a.Props})
 		}
-		if u := p.UpdateLink; u != nil {
+		for _, u := range linksOf(p.UpdateLink, p.UpdateLinks) {
 			for i := range n.Links {
 				if n.Links[i].ID == u.ID {
 					n.Links[i].Properties = u.Props
 				}
 			}
 		}
-		if r := p.RemoveLink; r != nil {
+		for _, r := range linksOf(p.RemoveLink, p.RemoveLinks) {
 			n.Links = slices.DeleteFunc(n.Links, func(l DraftLink) bool { return l.ID == r.ID })
 		}
 		return &n

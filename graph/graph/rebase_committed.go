@@ -409,6 +409,7 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	if err != nil {
 		return res, err
 	}
+	var merges []rebasedNode
 	for _, id := range ids {
 		hv, inMine := mineNodes[id]
 		if !inMine {
@@ -450,42 +451,42 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 		if len(conflicts) == 0 && !domain.DraftChanged(&ours, merged) {
 			continue // what the target changed, the change holds already
 		}
-		for i := range merged.Links {
-			merged.Links[i].ID = domain.LinkID(g.newID()) // the links of the version it lands as are its own
-		}
 		merged.Change, merged.Impact, merged.Flow = c.ID, cn.ID, ""
 		merged.Base, merged.MergedWith = &oursRef, &theirsRef
-		rebased := map[string]any{"branch": target, "baseline": string(to.head)}
 		var pre *domain.NodeRef
 		if cn.Pre != nil && inHead {
 			pre = &theirsRef // the change now starts from the target's version
 		}
-		if err := g.installRebased(ctx, tx, c, cn, ours, merged, pre, rebased, conflicts, len(conflicts) > 0, "rebased onto "+target); err != nil {
-			return res, err
-		}
+		merges = append(merges, rebasedNode{cn: cn, ours: ours, merged: merged, pre: pre, conflicts: conflicts})
 		res.Impacts = append(res.Impacts, RebasedImpact{Impact: cn.ID, Key: cn.Key, Changed: len(conflicts) > 0 && cn.Review != domain.ReviewProposed,
 			Merged: true, Conflicts: conflicts})
 	}
 	// the impacts that committed nothing start from the target's version of their node too (to check again, ADR 0101)
-	moved := len(res.Impacts) > 0
+	var repre []domain.ImpactEvent
 	for _, cn := range mainImpactsOf(c) {
 		if cn.Landed != nil || cn.Pre == nil {
 			continue
 		}
 		if v, ok := headNodes[cn.Pre.ID]; ok && v != cn.Pre.Version {
 			ref := domain.NodeRef{ID: cn.Pre.ID, Version: v}
-			if err := g.emit(ctx, tx, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactRebased, Pre: &ref}); err != nil {
-				return res, err
-			}
-			moved = true
+			repre = append(repre, domain.ImpactEvent{Change: c.ID, Impact: cn.ID, Op: domain.ImpactRebased, Pre: &ref})
 		}
 	}
-	if merging && !moved {
+	if merging && len(merges) == 0 && len(repre) == 0 {
 		// no node changed on both sides: the merge lands what the branch committed over the target as it is, the fork
 		// moved by the fast-forward (ADR 0140)
 		return res, nil
 	}
+	// the rebase is one entry naming what the branch is brought onto, then the nodes it changes, then the review of the
+	// merge, then its commit (ADR 0144)
 	if err := g.moveFork(ctx, tx, c.ID, &own, to); err != nil {
+		return res, err
+	}
+	rebased := map[string]any{"branch": target, "baseline": string(to.head)}
+	if err := g.installRebased(ctx, tx, c, merges, rebased, "rebased onto "+target); err != nil {
+		return res, err
+	}
+	if err := g.emit(ctx, tx, repre...); err != nil {
 		return res, err
 	}
 	// a rebase that met no conflict commits its merges: the branch holds the work brought up to date

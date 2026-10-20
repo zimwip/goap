@@ -91,7 +91,7 @@ type ImpactEvent struct {
 	Draft *Draft `json:"draft,omitempty"`
 	// FromBase marks, on checkedOut, a draft that copies its base version as is: the log stores the base only (ADR 0142).
 	FromBase *BaseCopy `json:"fromBase,omitempty"`
-	Pre      *NodeRef  `json:"pre,omitempty"` // rebased; transitioned: the rebase of a draft moved its pre (ADR 0101)
+	Pre      *NodeRef  `json:"pre,omitempty"` // rebased; checkedOut, transitioned: a rebase moved the pre (ADR 0101, 0144)
 	Landed   *NodeRef  `json:"landed,omitempty"`
 	// Baseline is, on landed, the baseline of the branch the version landed in (ADR 0032).
 	Baseline BaselineID `json:"baseline,omitempty"`
@@ -194,8 +194,8 @@ func ApplyImpactEventAt(out []ChangeImpact, at int, e ImpactEvent) []ChangeImpac
 		if e.Flow == "" || e.Flow == cn.Flow {
 			p := *e.Post
 			cn.Post = &p
-			if e.Pre != nil && e.Op == ImpactTransitioned {
-				pre := *e.Pre // a rebase moved the draft (and its pre) onto the head of the target (ADR 0101)
+			if e.Pre != nil {
+				pre := *e.Pre // a rebase moved the draft (and its pre) onto the head of the target (ADR 0101, 0144)
 				cn.Pre = &pre
 			}
 		}

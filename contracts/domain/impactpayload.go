@@ -38,6 +38,10 @@ func CopyDraft(e ImpactEvent, base Node, links []Link) Draft {
 		State: base.State, Owner: base.Owner, Properties: cloneProps(base.Properties), Base: &b}
 	if e.Draft != nil {
 		d.Execution = e.Draft.Execution
+		if m := e.Draft.MergedWith; m != nil {
+			mw := *m // the checkout of a rebase's merge (ADR 0144)
+			d.MergedWith = &mw
+		}
 	}
 	var drafted []NodeRef
 	if e.FromBase != nil {
@@ -107,7 +111,7 @@ func marshalImpact(e ImpactEvent) ([]byte, error) {
 	if d := e.Draft; d != nil {
 		if e.FromBase != nil {
 			// the copy of a version: the version says the rest
-			p.Draft = &draftPayload{Draft: Draft{Base: d.Base, Execution: d.Execution}}
+			p.Draft = &draftPayload{Draft: Draft{Base: d.Base, Execution: d.Execution, MergedWith: d.MergedWith}}
 		} else {
 			p.Draft = &draftPayload{Draft: *d}
 		}
