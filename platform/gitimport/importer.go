@@ -108,6 +108,15 @@ type Stats struct {
 
 // Run imports the commits not imported yet and returns what it did.
 func (im *Importer) Run(ctx context.Context) (Stats, error) {
+	st, err := im.run(ctx)
+	// a cancelled run says so, whatever its cancel broke first (a git process killed, a transaction refused)
+	if err != nil && ctx.Err() != nil && !errors.Is(err, ctx.Err()) {
+		err = fmt.Errorf("%w: %v", context.Cause(ctx), err)
+	}
+	return st, err
+}
+
+func (im *Importer) run(ctx context.Context) (Stats, error) {
 	if im.Name == "" || strings.ContainsAny(im.Name, ":/") {
 		return im.stats, fmt.Errorf("gitimport: the repository needs a name without : nor /, got %q", im.Name)
 	}
@@ -350,6 +359,9 @@ func Key(repo, p string, dir bool) string {
 	return repo + ":" + p
 }
 
+// abandonWait bounds the abandon of the change of a commit that failed or was cancelled.
+const abandonWait = 30 * time.Second
+
 func (im *Importer) commit(ctx context.Context, c Commit) error {
 	if im.OnBegin != nil {
 		im.OnBegin(im.stats, c)
@@ -357,6 +369,9 @@ func (im *Importer) commit(ctx context.Context, c Commit) error {
 	ops, err := im.plan(c)
 	if err != nil {
 		return fmt.Errorf("commit %s: %w", short(c.Hash), err)
+	}
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	ch, err := im.Graph.CreateChange(ctx, graphapi.NewChange{Namespace: Namespace, Title: title(c), Intent: capText(c.Message, maxIntent),
 		Data: changeData(im.Name, c), OwnBranch: true, ProjectID: im.ProjectID, OwnerOrg: im.OwnerOrg})
@@ -367,7 +382,10 @@ func (im *Importer) commit(ctx context.Context, c Commit) error {
 	if err != nil {
 		abandoned := domain.ChangeAbandoned
 		// abandoned even when the run is cancelled: an open change would hold the keys it committed
-		if _, aerr := im.Graph.UpdateChange(context.WithoutCancel(ctx), ch.ID, graphapi.ChangePatch{Status: &abandoned}); aerr != nil {
+		actx, cancel := context.WithTimeout(context.WithoutCancel(ctx), abandonWait)
+		_, aerr := im.Graph.UpdateChange(actx, ch.ID, graphapi.ChangePatch{Status: &abandoned})
+		cancel()
+		if aerr != nil {
 			err = errors.Join(err, aerr)
 		}
 		return fmt.Errorf("commit %s: %w", short(c.Hash), err)
@@ -605,6 +623,10 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 		return out
 	}
 	for _, o := range ops {
+		// a cancel stops the change between two writes, whether the graph refuses the next or not
+		if err := ctx.Err(); err != nil {
+			return domain.Baseline{}, err
+		}
 		switch {
 		case o.cur == nil:
 			cn, err := im.Graph.ImpactNodeCreate(ctx, id, graphapi.NodeCreate{Key: o.key, Type: o.typ, Properties: o.props, Links: linksTo(o), Rationale: why, ProducedBy: im.By})
@@ -661,7 +683,13 @@ func (im *Importer) write(ctx context.Context, id domain.ChangeID, c Commit, ops
 	for _, o := range ops {
 		accept.Verdicts = append(accept.Verdicts, domain.ImpactVerdict{Impact: o.impact, Status: domain.ReviewAccepted, Comment: why})
 	}
+	if err := ctx.Err(); err != nil {
+		return domain.Baseline{}, err
+	}
 	if _, err := im.Graph.ImpactNodeReviewBatch(ctx, id, accept); err != nil {
+		return domain.Baseline{}, err
+	}
+	if err := ctx.Err(); err != nil {
 		return domain.Baseline{}, err
 	}
 	return im.Graph.Apply(ctx, id, "")

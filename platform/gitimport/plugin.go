@@ -38,7 +38,7 @@ type Plugin struct {
 	Symbols func() (Extractor, error)
 
 	mu    sync.Mutex
-	locks map[string]*sync.Mutex
+	locks map[string]chan struct{}
 }
 
 var (
@@ -72,11 +72,14 @@ func (p *Plugin) Run(ctx context.Context, job *importerkit.Job) error {
 	if name == "" {
 		name = strings.TrimSuffix(filepath.Base(strings.TrimRight(strings.ReplaceAll(repo, ":", "/"), "/")), ".git")
 	}
-	// one run at a time per repository of the graph: two would race on the same nodes
-	unlock := p.lock(name)
+	// one run at a time per repository of the graph: two would race on the same nodes; a run cancelled while it
+	// waits for the other stops there
+	unlock, err := p.lock(ctx, name)
+	if err != nil {
+		return err
+	}
 	defer unlock()
 	var dir string
-	var err error
 	if url != "" {
 		dir, err = p.remote(ctx, job, url)
 	} else {
@@ -146,19 +149,23 @@ func record(job *importerkit.Job, st Stats) {
 	job.Set("symbols", int64(st.Symbols))
 }
 
-func (p *Plugin) lock(name string) func() {
+func (p *Plugin) lock(ctx context.Context, name string) (func(), error) {
 	p.mu.Lock()
 	if p.locks == nil {
-		p.locks = map[string]*sync.Mutex{}
+		p.locks = map[string]chan struct{}{}
 	}
 	m := p.locks[name]
 	if m == nil {
-		m = &sync.Mutex{}
+		m = make(chan struct{}, 1)
 		p.locks[name] = m
 	}
 	p.mu.Unlock()
-	m.Lock()
-	return m.Unlock
+	select {
+	case m <- struct{}{}:
+		return func() { <-m }, nil
+	case <-ctx.Done():
+		return nil, fmt.Errorf("waiting for the run importing %s: %w", name, context.Cause(ctx))
+	}
 }
 
 // remote is the clone of a URL, brought up to date.
