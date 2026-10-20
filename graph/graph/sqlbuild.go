@@ -451,6 +451,35 @@ func (d dialect) sqlChangeIDs() string {
 	return `SELECT ` + d.id("id") + ` FROM change` + d.orderBy("created_at", "")
 }
 
+// sqlChangeHeads reads the heads of the changes (cols: the select list of the dialect) matching the parts of f a column
+// answers, oldest first (indexes change_status, change_project): the namespace, the owner unit, the statuses and the
+// project. The text query is the caller's (ChangesFilter.Match).
+func (d dialect) sqlChangeHeads(cols string, f ChangesFilter) (string, []any) {
+	q, args := `SELECT `+cols+` FROM change`+d.where1(), []any{}
+	add := func(cond string, v any) {
+		args = append(args, v)
+		q += " AND " + cond + " = " + d.ph(len(args))
+	}
+	if f.Namespace != "" {
+		add("namespace", domain.NamespaceOf(f.Namespace))
+	}
+	if f.OwnerOrg != "" {
+		add("owner_org", f.OwnerOrg)
+	}
+	if f.Project != "" {
+		add("project_id", f.Project)
+	}
+	if len(f.Status) > 0 {
+		ps := make([]string, len(f.Status))
+		for i, st := range f.Status {
+			args = append(args, string(st))
+			ps[i] = d.ph(len(args))
+		}
+		q += " AND status IN (" + strings.Join(ps, ", ") + ")"
+	}
+	return q + d.orderBy("created_at", ""), args
+}
+
 // sqlSubChangeIDs reads the ids of the changes whose parent is a change, oldest first (index change_parent).
 func (d dialect) sqlSubChangeIDs(parent domain.ChangeID) (string, []any) {
 	return `SELECT ` + d.id("id") + ` FROM change WHERE parent_id = ` + d.ph(1) + d.orderBy("created_at", ""), []any{string(parent)}

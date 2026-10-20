@@ -475,11 +475,13 @@ func (t *memTx) ChangeHead(_ context.Context, id domain.ChangeID) (domain.Change
 }
 
 // ChangeHeads implements Tx.
-func (t *memTx) ChangeHeads(ctx context.Context) ([]domain.Change, error) {
-	out := make([]domain.Change, 0, len(t.st.changes))
+func (t *memTx) ChangeHeads(ctx context.Context, f ChangesFilter) ([]domain.Change, error) {
+	f.Query = ""
+	var out []domain.Change
 	for id := range t.st.changes {
-		c, _ := t.ChangeHead(ctx, id)
-		out = append(out, c)
+		if c, _ := t.ChangeHead(ctx, id); f.Match(c) {
+			out = append(out, c)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.Before(out[j].CreatedAt) })
 	return out, nil

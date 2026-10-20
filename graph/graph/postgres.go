@@ -730,8 +730,9 @@ func (t *pgTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Chang
 }
 
 // ChangeHeads implements Tx.
-func (t *pgTx) ChangeHeads(ctx context.Context) ([]domain.Change, error) {
-	rows, err := t.tx.Query(ctx, `SELECT `+pgChangeHead+` FROM change`+dialectPG.orderBy("created_at", ""))
+func (t *pgTx) ChangeHeads(ctx context.Context, f ChangesFilter) ([]domain.Change, error) {
+	q, args := dialectPG.sqlChangeHeads(pgChangeHead, f)
+	rows, err := t.tx.Query(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

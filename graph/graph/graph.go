@@ -528,7 +528,7 @@ func (g *Graph) Changes(ctx context.Context) (cs []domain.Change, err error) {
 func (g *Graph) ListChanges(ctx context.Context, f ChangesFilter) (out []domain.Change, err error) {
 	// the filter reads the heads; only the changes it keeps are read whole, unless the heads are asked for
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		heads, err := tx.ChangeHeads(ctx)
+		heads, err := tx.ChangeHeads(ctx, f)
 		if err != nil {
 			return err
 		}

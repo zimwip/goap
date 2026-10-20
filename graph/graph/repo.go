@@ -114,8 +114,9 @@ type Tx interface {
 	// ChangeHead reads the head of a change: neither its change impacts nor its items, what a reader asking for its
 	// status, branch or title needs without the cost of the change's log.
 	ChangeHead(ctx context.Context, id domain.ChangeID) (domain.Change, error)
-	// ChangeHeads reads the head of every change in one query, oldest first.
-	ChangeHeads(ctx context.Context) ([]domain.Change, error)
+	// ChangeHeads reads the heads of the changes in one query, oldest first: those matching the namespace, owner unit,
+	// statuses and project of f (its text query is the caller's; the zero filter: every change).
+	ChangeHeads(ctx context.Context, f ChangesFilter) ([]domain.Change, error)
 	// SubChanges returns the changes whose parent is a change, oldest first: what a merge, a purge or a move asks of a
 	// change, read by its parent rather than by a scan of every change.
 	SubChanges(ctx context.Context, parent domain.ChangeID) ([]domain.Change, error)

@@ -124,7 +124,7 @@ func (e *Engine) relay(ctx context.Context, ev TriggerEvent, act map[string]any,
 			targets, from = append(targets, p), append(from, methodology.FromIntegrated)
 		}
 	}
-	if subs, err := e.Graph.ListChanges(ctx, graphapi.ChangesFilter{Status: []domain.ChangeStatus{domain.ChangeDraft, domain.ChangeActive}}); err == nil {
+	if subs, err := e.Graph.ListChanges(ctx, graphapi.ChangesFilter{Status: []domain.ChangeStatus{domain.ChangeDraft, domain.ChangeActive}, HeadersOnly: true}); err == nil {
 		for _, s := range subs {
 			if s.ParentID == changeID {
 				targets, from = append(targets, s), append(from, methodology.FromIntegrator)

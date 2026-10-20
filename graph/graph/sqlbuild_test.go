@@ -276,6 +276,13 @@ func TestSQLBuildersGolden(t *testing.T) {
 	check("sqlite Baselines", lite, q, a, `SELECT id FROM baseline WHERE namespace = ? ORDER BY created_at, rowid`, []any{"default"})
 	check("pg Changes", pg, pg.sqlChangeIDs(), nil, `SELECT id::text FROM change ORDER BY created_at`, nil)
 	check("sqlite Changes", lite, lite.sqlChangeIDs(), nil, `SELECT id FROM change ORDER BY created_at, rowid`, nil)
+	hf := ChangesFilter{Namespace: "alm", OwnerOrg: "ORG-A", Project: "PROJ-A", Status: []domain.ChangeStatus{domain.ChangeDraft, domain.ChangeActive}, Query: "ignored"}
+	q, a = pg.sqlChangeHeads("id", hf)
+	check("pg ChangeHeads", pg, q, a, `SELECT id FROM change WHERE true AND namespace = $1 AND owner_org = $2 AND project_id = $3 AND status IN ($4, $5) ORDER BY created_at`, []any{"alm", "ORG-A", "PROJ-A", "draft", "active"})
+	q, a = lite.sqlChangeHeads("id", hf)
+	check("sqlite ChangeHeads", lite, q, a, `SELECT id FROM change WHERE 1 = 1 AND namespace = ?1 AND owner_org = ?2 AND project_id = ?3 AND status IN (?4, ?5) ORDER BY created_at, rowid`, []any{"alm", "ORG-A", "PROJ-A", "draft", "active"})
+	q, a = pg.sqlChangeHeads("id", ChangesFilter{})
+	check("pg ChangeHeads all", pg, q, a, `SELECT id FROM change WHERE true ORDER BY created_at`, []any{})
 	q, a = pg.sqlSubChangeIDs("c1")
 	check("pg SubChanges", pg, q, a, `SELECT id::text FROM change WHERE parent_id = $1 ORDER BY created_at`, []any{"c1"})
 	q, a = lite.sqlSubChangeIDs("c1")

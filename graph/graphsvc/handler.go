@@ -525,6 +525,22 @@ func (h *Handler) mayRead(ctx context.Context, c domain.Change) bool {
 	return h.worksOn(ctx, c.ProjectID)
 }
 
+// readable answers mayRead for the changes of one answer, asking once per project.
+func (h *Handler) readable(ctx context.Context) func(domain.Change) bool {
+	seen := map[string]bool{}
+	return func(c domain.Change) bool {
+		if access.IsPersonal(c) {
+			return access.IsPersonalTo(c, subjectOf(ctx))
+		}
+		ok, done := seen[c.ProjectID]
+		if !done {
+			ok = h.worksOn(ctx, c.ProjectID)
+			seen[c.ProjectID] = ok
+		}
+		return ok
+	}
+}
+
 // worksOn tells whether the caller works on a project: a platform service acting by itself does; a person when
 // Projects says so (a platform administrator or reader, a role or a flag of an Assignment on it or above it).
 func (h *Handler) worksOn(ctx context.Context, project string) bool {
@@ -554,9 +570,10 @@ func (h *Handler) ListChanges(ctx context.Context, r *connect.Request[graphv1.Li
 		f.Status = append(f.Status, domain.ChangeStatus(s))
 	}
 	ctx = h.Identity.Context(ctx, r.Header())
+	mayRead := h.readable(ctx)
 	if r.Msg.Limit > 0 {
 		// a page: what the caller may not read is left out before it is cut, so a page is full whenever more remain
-		p, err := h.Graph.ChangesPage(ctx, f, int(r.Msg.Limit), r.Msg.Cursor, func(c domain.Change) bool { return h.mayRead(ctx, c) })
+		p, err := h.Graph.ChangesPage(ctx, f, int(r.Msg.Limit), r.Msg.Cursor, mayRead)
 		out := &graphv1.ListChangesResponse{NextCursor: p.Next, Total: int32(p.Total)}
 		for _, c := range p.Changes {
 			out.Changes = append(out.Changes, pbconv.ChangeToPB(c))
@@ -566,7 +583,7 @@ func (h *Handler) ListChanges(ctx context.Context, r *connect.Request[graphv1.Li
 	cs, err := h.Graph.ListChanges(ctx, f)
 	out := &graphv1.ListChangesResponse{}
 	for _, c := range cs {
-		if !h.mayRead(ctx, c) {
+		if !mayRead(c) {
 			continue
 		}
 		out.Changes = append(out.Changes, pbconv.ChangeToPB(c))

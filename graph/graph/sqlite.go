@@ -607,8 +607,9 @@ func (t *sqliteTx) ChangeHead(ctx context.Context, id domain.ChangeID) (domain.C
 }
 
 // ChangeHeads implements Tx.
-func (t *sqliteTx) ChangeHeads(ctx context.Context) ([]domain.Change, error) {
-	rows, err := t.tx.QueryContext(ctx, `SELECT `+sqliteChangeHead+` FROM change`+dialectSQLite.orderBy("created_at", ""))
+func (t *sqliteTx) ChangeHeads(ctx context.Context, f ChangesFilter) ([]domain.Change, error) {
+	q, args := dialectSQLite.sqlChangeHeads(sqliteChangeHead, f)
+	rows, err := t.tx.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

@@ -615,7 +615,7 @@ func (r *Runner) probeOnce(ctx context.Context, rnd *rand.Rand) {
 		})
 	}
 	_, _ = timed(ctx, m, "ListChanges", func(ctx context.Context) (*connect.Response[graphv1.ListChangesResponse], error) {
-		return g.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{Namespace: Namespace, Status: []string{"active"}}))
+		return g.ListChanges(ctx, connect.NewRequest(&graphv1.ListChangesRequest{Namespace: Namespace, Status: []string{"active"}, HeaderOnly: true, Limit: 50}))
 	})
 }
 

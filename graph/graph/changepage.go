@@ -26,7 +26,7 @@ func (g *Graph) ChangesPage(ctx context.Context, f ChangesFilter, limit int, cur
 	limit = pageLimit(limit)
 	var heads []domain.Change
 	err = g.repo.InTx(ctx, func(tx Tx) error {
-		heads, err = tx.ChangeHeads(ctx)
+		heads, err = tx.ChangeHeads(ctx, f)
 		return err
 	})
 	if err != nil {
