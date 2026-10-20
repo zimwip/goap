@@ -4,3 +4,6 @@
 DROP TABLE IF EXISTS baseline_entry;
 DROP INDEX IF EXISTS baseline_stored;
 DROP INDEX IF EXISTS baseline_underived;
+-- The version of a node on a branch at an order of landing: one lookup, however long the history of the node.
+CREATE INDEX IF NOT EXISTS node_version_fold ON node_version (node_id, branch, landed);
+CREATE INDEX IF NOT EXISTS node_branch_fold ON node_branch (node_id, branch, landed);
