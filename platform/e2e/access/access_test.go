@@ -29,7 +29,7 @@ func setup(t *testing.T) (*graph.Graph, *access.Authorizer) {
 	}
 	g := graph.New(graph.NewMemory())
 	g.Types = func() graph.TypeCatalog { return cat }
-	a, err := access.NewAuthorizer(&access.Directory{Graph: g, TTL: 1})
+	a, err := access.NewAuthorizer(&access.Directory{Graph: g})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestAdminAssignmentAndUnitOfTheUserNode(t *testing.T) {
 	if !can(t, a, alice, "policy", "write") || !can(t, a.Floor(), alice, "policy", "write") {
 		t.Fatal("the platform admin assignment of the User node was not granted")
 	}
-	dir := &access.Directory{Graph: g, TTL: 1}
+	dir := &access.Directory{Graph: g}
 	if p := dir.Enrich(ctx, alice); p.Org != "team-a" || !slices.Equal(p.Global, []string{access.RoleAdmin}) || len(p.Roles) != 0 {
 		t.Fatalf("enriched principal: %+v", p)
 	}

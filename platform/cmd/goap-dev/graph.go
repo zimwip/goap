@@ -15,8 +15,8 @@ import (
 // graphPart is the graph and what judges who may do what on it.
 type graphPart struct {
 	g *graph.Graph
-	// heads is the one reader of the heads of the graph every view of the process shares (ADR 0145)
-	heads      *graphsnap.Heads
+	// reader is the one reader of the graph every view of the process shares (ADR 0145)
+	reader     *graphsnap.Reader
 	directory  *access.Directory
 	authorizer *access.Authorizer
 }
@@ -28,8 +28,8 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.EndUser = graphsvc.EndUser         // the person the events of the changes are for (ADR 0114)
 	g.DecisionPolicy = decision.Policy{} // confidence, rounds and deadline settle the decision points (ADR 0067)
 	g.ReviewPolicy = verify.Policy{}     // a verifier is not the producer (ADR 0075)
-	heads := graphsnap.NewHeads(g)
-	directory := &access.Directory{Graph: g, Heads: heads}
+	reader := graphsnap.NewReader(g)
+	directory := &access.Directory{Graph: g, Reader: reader}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		return nil, err
@@ -44,5 +44,5 @@ func buildGraph(e *env, st stores) (*graphPart, error) {
 	g.Facets = map[string]graph.BlackboardFacet{domain.FacetCriticalityPolicy: directory.CriticalityFacet()}
 	g.Validators = []graph.NodeValidator{access.AdminFloorValidator{}, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{},
 		llmcfg.ProtectedAliasValidator{}}
-	return &graphPart{g: g, heads: heads, directory: directory, authorizer: authorizer}, nil
+	return &graphPart{g: g, reader: reader, directory: directory, authorizer: authorizer}, nil
 }

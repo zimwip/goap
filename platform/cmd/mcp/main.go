@@ -45,13 +45,13 @@ func main() {
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
 	// the built-in connectors (ADR 0028) run in the hub; the others register over HTTP
 	connectors := map[string]connectorkit.Connector{}
-	// one reader of the heads for the hub's views and the access (ADR 0145)
+	// one reader of the graph for the hub's views and the access (ADR 0145)
 	graphClient := graphclient.NewClient(hc, graphURL)
-	heads := graphsnap.NewHeads(graphClient)
+	reader := graphsnap.NewReader(graphClient)
 	svc := &mcpsvc.Service{
 		Store: store,
 		// the MCPs, the adapter definitions, the adapters and the organisation hierarchy are nodes of the graph
-		Directory: &mcpsvc.Directory{Graph: graphClient, Heads: heads},
+		Directory: &mcpsvc.Directory{Graph: graphClient, Reader: reader},
 		Invoker:   mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: token}},
 		Secrets:   mcpsvc.ResolveSecret(platform.NewSecrets()),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),
@@ -61,7 +61,7 @@ func main() {
 	if secret, u := platform.Env("GOAP_MODEL_PROXY_SECRET", ""), platform.Env("GOAP_MODEL_PROXY_URL", ""); secret != "" && u != "" {
 		svc.Models = &mcpsvc.ModelEndpoint{URL: u, Secret: []byte(secret)}
 	}
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphClient, Heads: heads})
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphClient, Reader: reader})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}

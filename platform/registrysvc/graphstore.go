@@ -69,7 +69,7 @@ func MethodologyVersionKey(name, version string) string { return "MV:" + key(nam
 type GraphStore struct {
 	Graph StoreGraph
 
-	cache graphsnap.Cache[*defs]
+	view *graphsnap.View[*defs]
 }
 
 var _ Store = (*GraphStore)(nil)
@@ -81,14 +81,14 @@ func (s *GraphStore) aliasStubGraph() StoreGraph { return s.Graph }
 // NewGraphStore returns a store over a graph (the graph itself, or a client of the graph service).
 func NewGraphStore(g StoreGraph) *GraphStore {
 	s := &GraphStore{Graph: g}
-	s.cache = graphsnap.Cache[*defs]{Graph: g, Namespace: NamespaceMethodology, Suspects: true, Build: buildDefs}
+	s.view = graphsnap.One(graphsnap.NewReader(g), NamespaceMethodology, true, buildDefs)
 	return s
 }
 
-// ShareHeads makes the store read the head of the methodologies through the reader of the heads of the process (ADR
-// 0145), before its first read.
-func (s *GraphStore) ShareHeads(h *graphsnap.Heads) *GraphStore {
-	s.cache.Heads = h
+// ShareReader makes the store read the methodologies through the reader of the graph of the process (ADR 0145),
+// before its first read.
+func (s *GraphStore) ShareReader(r *graphsnap.Reader) *GraphStore {
+	s.view = graphsnap.One(r, NamespaceMethodology, true, buildDefs)
 	return s
 }
 
@@ -387,7 +387,7 @@ func versionEdits(hkey, hType string, eg elementGraph, old *domain.Node, oldChil
 
 // read returns the versions at the head of main, looked at now.
 func (s *GraphStore) read(ctx context.Context) (*defs, error) {
-	d, _, err := s.cache.Fresh(ctx)
+	d, _, err := s.view.Get(ctx)
 	if d == nil {
 		return nil, err
 	}

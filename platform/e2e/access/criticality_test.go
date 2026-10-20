@@ -75,7 +75,7 @@ func TestCriticalityPolicyResolution(t *testing.T) {
 func TestCriticalityPolicyFromTheGraph(t *testing.T) {
 	ctx := context.Background()
 	g, _ := setup(t)
-	dir := &access.Directory{Graph: g, TTL: 1}
+	dir := &access.Directory{Graph: g}
 	if p := dir.CriticalityFacet()(domain.Change{OwnerOrg: "TEAM"}, time.Time{}).(criticality.Policy); !p.Accepts("tool") {
 		t.Fatalf("before any snapshot: %+v", p)
 	}

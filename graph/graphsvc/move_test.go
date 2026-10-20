@@ -35,7 +35,7 @@ func moveWorld(t *testing.T) moveEnv {
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)
 	}
-	dir := &access.Directory{Graph: g, TTL: 1}
+	dir := &access.Directory{Graph: g}
 	a, err := access.NewAuthorizer(dir)
 	if err != nil {
 		t.Fatal(err)
@@ -156,7 +156,7 @@ func TestProjectMoveGateAsksChangeMoveOnBothProjects(t *testing.T) {
 		}
 		return true, nil
 	})
-	e.g.ProjectMoveGate = graphsvc.ProjectMoveGate(deny, &access.Directory{Graph: e.g, TTL: 1})
+	e.g.ProjectMoveGate = graphsvc.ProjectMoveGate(deny, &access.Directory{Graph: e.g})
 	dev := authz.With(context.Background(), authz.Principal{Subject: "dev", Org: "team-a"})
 	c := e.change(t, "PROJ-X", "m1")
 	if _, err := e.g.MoveChange(dev, c.ID, "PROJ-Y"); !errors.Is(err, authz.ErrForbidden) {

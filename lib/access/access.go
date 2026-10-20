@@ -13,7 +13,6 @@ import (
 	"slices"
 	"sort"
 	"sync"
-	"time"
 
 	"github.com/zimwip/goap/contracts/authz"
 	"github.com/zimwip/goap/contracts/domain"
@@ -176,7 +175,7 @@ func BuildSnapshot(st domain.Structures, id domain.BaselineID, nodes []domain.No
 	assignBuild := map[domain.NodeID]*assignment{}
 	for _, n := range nodes {
 		byID[n.ID] = n
-		// nodes is scoped to the namespace of the structures by the Directory's cache; this switch does not need to
+		// nodes is scoped to the namespace of the structures by the Directory's view; this switch does not need to
 		// filter it again.
 		if st.In(domain.StructureProject, n.Type) {
 			s.projectMethods[n.Key] = stringList(n.Properties["methodologies"])
@@ -491,16 +490,14 @@ func (s *Snapshot) MayAccessProject(p authz.Principal, project string) bool {
 	return len(s.PlatformRoles(chain)) > 0 || len(s.ProjectRoles(chain, projects)) > 0 || p.HasRole(RoleAdmin)
 }
 
-// Directory reads the snapshot of the head of the main branch (see graphsnap.Cache); TTL is how often the
-// head is looked at, one second by default.
+// Directory reads the snapshot of the head of the main branch (a graphsnap.View, ADR 0145).
 type Directory struct {
 	Graph Graph
-	TTL   time.Duration
-	// Heads is the reader of the heads of the process the directory shares (ADR 0145; nil: its own).
-	Heads *graphsnap.Heads
+	// Reader is the reader of the graph of the process the directory shares (nil: its own).
+	Reader *graphsnap.Reader
 
 	mu    sync.Mutex
-	cache *graphsnap.Cache[*Snapshot]
+	cache *graphsnap.View[*Snapshot]
 }
 
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one; when the graph
@@ -514,21 +511,17 @@ func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	return s, err
 }
 
-// Refresh reads the head now, past the TTL: after a write the next calls must see (a user just declared at
-// sign-in, ADR 0042).
+// Refresh reads the snapshot of the head after a write the next calls must see (a user just declared at sign-in, ADR
+// 0042): every read asks for the head, so it only tells whether the graph answers.
 func (d *Directory) Refresh(ctx context.Context) error {
-	c, err := d.snapshots(ctx)
-	if err != nil {
-		return err
-	}
-	_, _, err = c.Fresh(ctx)
+	_, err := d.Snapshot(ctx)
 	return err
 }
 
 // snapshots returns the cache of the head of the namespace of the structures, asking the graph for them first (ADR
 // 0054; asked again until the graph answers). The structures are tagged by a frozen built-in domain: they do not
 // change while the service runs.
-func (d *Directory) snapshots(ctx context.Context) (*graphsnap.Cache[*Snapshot], error) {
+func (d *Directory) snapshots(ctx context.Context) (*graphsnap.View[*Snapshot], error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if d.cache == nil {
@@ -537,10 +530,13 @@ func (d *Directory) snapshots(ctx context.Context) (*graphsnap.Cache[*Snapshot],
 			return nil, err
 		}
 		// the suspect links too: a sub-project keeps its parent, an Assignment its unit and project, once they are edited
-		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation().Namespace, TTL: d.TTL, Heads: d.Heads, Suspects: true,
-			Build: func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
-				return BuildSnapshot(st, id, nodes, links)
-			}}
+		r := d.Reader
+		if r == nil {
+			r = graphsnap.NewReader(d.Graph)
+		}
+		d.cache = graphsnap.One(r, st.Organisation().Namespace, true, func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
+			return BuildSnapshot(st, id, nodes, links)
+		})
 	}
 	return d.cache, nil
 }

@@ -221,9 +221,8 @@ func (d *Directory) Scopes(ctx context.Context) (map[string]string, error) {
 // of them moved.
 type Directory struct {
 	Graph Graph
-	// Heads is the reader of the heads of the process the directory shares (ADR 0145; nil: its own, looking at the
-	// heads at every read).
-	Heads *graphsnap.Heads
+	// Reader is the reader of the graph of the process the directory shares (ADR 0145; nil: its own).
+	Reader *graphsnap.Reader
 
 	mu   sync.Mutex
 	view *graphsnap.View[*Snapshot]
@@ -239,12 +238,12 @@ func (d *Directory) views(ctx context.Context) (*graphsnap.View[*Snapshot], erro
 		if err != nil {
 			return nil, err
 		}
-		heads := d.Heads
-		if heads == nil {
-			heads = &graphsnap.Heads{Graph: d.Graph, TTL: -1}
+		r := d.Reader
+		if r == nil {
+			r = graphsnap.NewReader(d.Graph)
 		}
 		// a unit edited keeps its sub-units: the suspect links are references too
-		d.view = &graphsnap.View[*Snapshot]{Heads: heads, Namespaces: []string{st.Organisation().Namespace, domain.NamespacePlatform}, Suspects: true,
+		d.view = &graphsnap.View[*Snapshot]{Reader: r, Namespaces: []string{st.Organisation().Namespace, domain.NamespacePlatform}, Suspects: true,
 			Build: func(s []graphsnap.State) *Snapshot {
 				return BuildSnapshot(st, Baselines{Organisation: s[0].ID, Platform: s[1].ID},
 					append(slices.Clip(s[0].Nodes), s[1].Nodes...), append(slices.Clip(s[0].Links), s[1].Links...))

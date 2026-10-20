@@ -43,7 +43,7 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	// file next to the SQLite database (platform.Secrets.Dir), the same convenience as the generated JWT/connector
 	// secrets (localSecret); ignored once a real Vault is configured (VAULT_ADDR).
 	e.secrets.Dir = st.dir
-	gw := modelgw.NewService(&llmcfg.Directory{Graph: g, Heads: gp.heads}, st.models, e.secrets.Resolve, e.log)
+	gw := modelgw.NewService(&llmcfg.Directory{Graph: g, Reader: gp.reader}, st.models, e.secrets.Resolve, e.log)
 	gw.Vault = e.secrets.Put
 	genai := telemetry.NewGenAI()
 	gw.Router.Instrument, gw.Router.InstrumentEmbed = genai.Instrument, genai.InstrumentEmbed
@@ -103,7 +103,7 @@ func buildPlatform(e *env, st stores, gp *graphPart, rp *registryPart) (*platfor
 	}
 	hub := &mcpsvc.Service{
 		Store:     st.mcp,
-		Directory: &mcpsvc.Directory{Graph: g, Heads: gp.heads},
+		Directory: &mcpsvc.Directory{Graph: g, Reader: gp.reader},
 		Invoker:   mcpsvc.InprocInvoker{Connectors: connectors, Remote: &mcpsvc.ConnectInvoker{Token: connectorToken}},
 		Secrets:   mcpsvc.ResolveSecret(e.secrets),
 		Lease:     platform.EnvDuration("GOAP_CONNECTOR_LEASE", mcpsvc.DefaultLease),

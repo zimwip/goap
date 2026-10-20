@@ -277,7 +277,6 @@ func TestCostRefreshOnInstructionModelAndTTL(t *testing.T) {
 			h.svc.WaitCosts()
 			// a new instruction text is another key: measured again, the old row is purged
 			change(t, h.g, updateNode(t, h.g, llmcfg.BehaviorKey("terse"), llmcfg.Behavior{Name: "terse", Instruction: "Shorter.", Enabled: true}.Props()))
-			h.svc.Config.TTL = 1
 			r := h.complete(t)
 			if !r.BehaviorsEstimated {
 				t.Fatalf("a new instruction priced as measured: %+v", r)

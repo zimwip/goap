@@ -19,7 +19,7 @@ import (
 func TestProjectOwnersAndAdministrators(t *testing.T) {
 	ctx := context.Background()
 	g := floorGraph(t)
-	dir := &access.Directory{Graph: g, TTL: 1}
+	dir := &access.Directory{Graph: g}
 	g.Validators = append(g.Validators, access.ProjectScopeValidator{}, access.ProjectOwnerValidator{})
 	if err := g.Bootstrap(ctx); err != nil {
 		t.Fatal(err)

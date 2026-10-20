@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/lib/graphsnap"
@@ -221,7 +220,7 @@ type Snapshot struct {
 func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *Snapshot {
 	s := &Snapshot{Baseline: id}
 	for _, n := range nodes {
-		// nodes is scoped to the platform namespace by the Directory's cache
+		// nodes is scoped to the platform namespace by the Directory's view
 		// (Namespace: NamespacePlatform); no need to filter it again here.
 		if n.State == StateRetired {
 			continue
@@ -302,32 +301,28 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *
 	return s
 }
 
-// Directory reads the snapshot of the head of the main branch (see graphsnap.Cache).
+// Directory reads the snapshot of the head of the main branch (a graphsnap.View, ADR 0145).
 type Directory struct {
 	Graph graphsnap.Graph
-	// TTL is how often the head is looked at (one second by default).
-	TTL time.Duration
-	// Heads is the reader of the heads of the process the directory shares (ADR 0145; nil: its own).
-	Heads *graphsnap.Heads
-	once  sync.Once
-	cache graphsnap.Cache[*Snapshot]
+	// Reader is the reader of the graph of the process the directory shares (nil: its own).
+	Reader *graphsnap.Reader
+	once   sync.Once
+	view   *graphsnap.View[*Snapshot]
 }
 
-// Snapshot returns the current snapshot; the last one keeps serving when the graph cannot be read.
+// Snapshot returns the snapshot of the head; the last one keeps serving when the graph cannot be read.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
 	s, _, err := d.init().Get(ctx)
 	return s, err
 }
 
-// Fresh is Snapshot looking at the head of the graph now, not once per TTL.
-func (d *Directory) Fresh(ctx context.Context) (*Snapshot, error) {
-	s, _, err := d.init().Fresh(ctx)
-	return s, err
-}
-
-func (d *Directory) init() *graphsnap.Cache[*Snapshot] {
+func (d *Directory) init() *graphsnap.View[*Snapshot] {
 	d.once.Do(func() {
-		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: NamespacePlatform, TTL: d.TTL, Heads: d.Heads, Build: BuildSnapshot}
+		r := d.Reader
+		if r == nil {
+			r = graphsnap.NewReader(d.Graph)
+		}
+		d.view = graphsnap.One(r, NamespacePlatform, false, BuildSnapshot)
 	})
-	return &d.cache
+	return d.view
 }

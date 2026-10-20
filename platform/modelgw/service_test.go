@@ -47,7 +47,7 @@ func newService(store Store) (*Service, *graph.Graph) {
 	g := graph.New(graph.NewMemory())
 	// the built-in domains: the configuration entries follow the lifecycle config of the platform domain (ADR 0076)
 	g.Types = func() graph.TypeCatalog { return typecat.Builtin() }
-	return NewService(&llmcfg.Directory{Graph: g, TTL: 1}, store, (&platform.Secrets{}).Resolve, nil), g
+	return NewService(&llmcfg.Directory{Graph: g}, store, (&platform.Secrets{}).Resolve, nil), g
 }
 
 func seed(t *testing.T, g *graph.Graph, provs []ProviderRecord, models []ModelEntry, aliases []AliasEntry) {

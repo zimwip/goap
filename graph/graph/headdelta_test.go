@@ -5,7 +5,6 @@ import (
 	"errors"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/lib/graphsnap"
@@ -93,18 +92,19 @@ func (c *countingGraph) BaselineDelta(ctx context.Context, from, to domain.Basel
 }
 
 // Views of the head share one reader (ADR 0145): the namespace is read whole once and moved once per landing whatever
-// the number of views, and each view holds what a whole read holds, with or without the suspect links.
-func TestSharedHeads(t *testing.T) { forEachRepo(t, testSharedHeads) }
+// the number of views, and each view holds what a whole read holds, with or without the suspect links; a view asks for
+// the head at every read, so it follows a landing at once.
+func TestSharedReader(t *testing.T) { forEachRepo(t, testSharedReader) }
 
-func testSharedHeads(t *testing.T, repo Repo) {
+func testSharedReader(t *testing.T, repo Repo) {
 	ctx := context.Background()
 	f := newFixture(t, repo)
 	g := &countingGraph{Graph: f.g}
-	heads := &graphsnap.Heads{Graph: g, TTL: -1}
+	r := graphsnap.NewReader(g)
 	first := func(s []graphsnap.State) graphsnap.State { return s[0] }
 	views := map[bool]*graphsnap.View[graphsnap.State]{
-		false: {Heads: heads, Namespaces: []string{""}, Build: first},
-		true:  {Heads: heads, Namespaces: []string{""}, Suspects: true, Build: first},
+		false: {Reader: r, Namespaces: []string{""}, Build: first},
+		true:  {Reader: r, Namespaces: []string{""}, Suspects: true, Build: first},
 	}
 	check := func(at domain.Baseline, whole, deltas int) {
 		t.Helper()
@@ -136,15 +136,12 @@ func testSharedHeads(t *testing.T, repo Repo) {
 	check(b2, 1, 2)
 	check(b2, 1, 2) // nothing moved: nothing read
 
-	// a reader looking once per TTL does not look again before it, unless told the head moved
-	lazy := &graphsnap.Heads{Graph: f.g, TTL: time.Hour}
-	at := must[domain.BaselineID](t)(lazy.Head(ctx, "", false))
-	b3 := commitOn(t, f.g, "", b2.ID, setEdit(f.test.Ref(), map[string]any{"title": "Pay by card"}))
-	if id := must[domain.BaselineID](t)(lazy.Head(ctx, "", false)); id != at {
-		t.Fatalf("looked again within the TTL: %s", id)
+	// any commit, not only the head: an earlier one is read whole (the delta backwards refused), a later one reached by
+	// its delta again
+	if st := must[graphsnap.State](t)(r.At(ctx, "", f.base.ID, false)); st.ID != f.base.ID || g.whole != 2 || g.deltas != 3 {
+		t.Fatalf("at the fixture: %s, %d whole reads", st.ID, g.whole)
 	}
-	lazy.Moved("")
-	if id := must[domain.BaselineID](t)(lazy.Head(ctx, "", false)); id != b3.ID {
-		t.Fatalf("told the head moved: at %s, want %s", id, b3.ID)
+	if _, err := r.At(ctx, "", b2.ID, false); err != nil || g.whole != 2 || g.deltas != 4 {
+		t.Fatalf("back to the head: %v, %d deltas", err, g.deltas)
 	}
 }

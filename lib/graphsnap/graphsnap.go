@@ -1,6 +1,5 @@
-// Package graphsnap reads a typed view of the graph at the head of the main branch, rebuilding it only
-// when the head moved. Services that keep configuration as graph nodes (access, models, ...) build their
-// snapshot with it.
+// Package graphsnap is the one way the services read the graph at a commit (Reader.At, ADR 0145) and the typed views
+// they build of the heads of the main branches (View): access, hub, models, methodologies.
 package graphsnap
 
 import (
@@ -10,7 +9,6 @@ import (
 	"maps"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/zimwip/goap/contracts/domain"
 	"github.com/zimwip/goap/contracts/graphapi"
@@ -22,107 +20,75 @@ type Graph interface {
 	BaselineGraph(ctx context.Context, id domain.BaselineID) ([]domain.Node, []domain.Link, error)
 }
 
-// Heads is the one reader of the heads of the main branches in a process (ADR 0145): one Head per namespace, read
-// whole once then moved by the nodes landed since, looked at most once per TTL, whatever the number of views built on
-// it. Every view of the head of a process (access, hub, models, methodologies) reads through the process's Heads, so a
-// process holds and moves each namespace once. A head is read with its suspect links; a view asks for them or not.
-type Heads struct {
+// Reader is the one way the services read the graph (ADR 0145): At gives the state of a namespace at a commit (a
+// baseline), Head names the commit at the head of its main branch. A commit never changes, so the state at one is a
+// pure function of it: the reader keeps the last state it gave per namespace and reaches the next commit asked from it
+// by the nodes landed in between (Graph.BaselineDelta), else by reading that commit whole. Nothing is kept about the
+// head: a reader asks the graph for it each time.
+type Reader struct {
 	Graph Graph
-	// TTL is how often a head is looked at: one second when zero, at every read when negative.
-	TTL time.Duration
 
 	mu sync.Mutex
-	ns map[string]*nsHead
+	ns map[string]*nsState
 }
 
-type nsHead struct {
-	mu      sync.Mutex
-	head    Head
-	looked  bool
-	checked time.Time
+type nsState struct {
+	mu   sync.Mutex
+	head Head
 }
 
-// State is the state of the head of a namespace's main as a view reads it.
+// State is the state of a namespace at a commit as a view reads it.
 type State struct {
 	Namespace string
-	// ID is the baseline of the head ("": the namespace holds none yet, Nodes and Links are empty).
+	// ID is the commit ("": the namespace holds none yet, Nodes and Links are empty).
 	ID    domain.BaselineID
 	Nodes []domain.Node
 	Links []domain.Link
 }
 
-// NewHeads is the reader of the heads of g.
-func NewHeads(g Graph) *Heads { return &Heads{Graph: g} }
+// NewReader is the reader of g.
+func NewReader(g Graph) *Reader { return &Reader{Graph: g} }
 
-func (h *Heads) of(namespace string) *nsHead {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if h.ns == nil {
-		h.ns = map[string]*nsHead{}
+func (r *Reader) of(namespace string) *nsState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.ns == nil {
+		r.ns = map[string]*nsState{}
 	}
-	n := h.ns[namespace]
+	n := r.ns[namespace]
 	if n == nil {
-		n = &nsHead{}
-		h.ns[namespace] = n
+		n = &nsState{}
+		r.ns[namespace] = n
 	}
 	return n
 }
 
-// Moved tells the reader the head of a namespace moved (an event of the graph): the next read looks at it, whatever
-// the TTL.
-func (h *Heads) Moved(namespace string) {
-	n := h.of(namespace)
-	n.mu.Lock()
-	n.checked = time.Time{}
-	n.mu.Unlock()
-}
-
-// look brings the head of namespace to the graph's (now when fresh, else once per TTL) and returns its baseline. When
-// the graph cannot be read the head stays where it was and the error is returned with its baseline.
-func (h *Heads) look(ctx context.Context, n *nsHead, namespace string, fresh bool) (domain.BaselineID, error) {
-	ttl := h.TTL
-	if ttl == 0 {
-		ttl = time.Second
-	}
-	if !fresh && n.looked && ttl > 0 && time.Since(n.checked) < ttl {
-		return n.head.ID, nil
-	}
-	b, err := h.Graph.BranchHead(ctx, namespace, domain.MainBranch)
+// Head returns the commit at the head of namespace's main ("": none yet).
+func (r *Reader) Head(ctx context.Context, namespace string) (domain.BaselineID, error) {
+	b, err := r.Graph.BranchHead(ctx, namespace, domain.MainBranch)
 	if errors.Is(err, graphapi.ErrNotFound) {
-		b, err = domain.Baseline{}, nil
+		return "", nil
 	}
-	if err != nil {
-		return n.head.ID, err
-	}
-	if err := n.head.Move(ctx, h.Graph, b.ID, true); err != nil {
-		return n.head.ID, err
-	}
-	n.looked, n.checked = true, time.Now()
-	return n.head.ID, nil
+	return b.ID, err
 }
 
-// Head returns the baseline of the head of namespace's main, looking at the graph now when fresh, else once per TTL.
-func (h *Heads) Head(ctx context.Context, namespace string, fresh bool) (domain.BaselineID, error) {
-	n := h.of(namespace)
+// At returns the state of namespace at the commit id, with its suspect links when suspects.
+func (r *Reader) At(ctx context.Context, namespace string, id domain.BaselineID, suspects bool) (State, error) {
+	n := r.of(namespace)
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	return h.look(ctx, n, namespace, fresh)
-}
-
-// State returns the state of the head of namespace's main, with its suspect links when suspects.
-func (h *Heads) State(ctx context.Context, namespace string, suspects, fresh bool) (State, error) {
-	n := h.of(namespace)
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	_, err := h.look(ctx, n, namespace, fresh)
+	if err := n.head.Move(ctx, r.Graph, id, true); err != nil {
+		return State{}, err
+	}
 	nodes, links := n.head.State(suspects)
-	return State{Namespace: namespace, ID: n.head.ID, Nodes: nodes, Links: links}, err
+	return State{Namespace: namespace, ID: id, Nodes: nodes, Links: links}, nil
 }
 
-// View is a typed view of the heads of some namespaces, built again only when one of them moved (ADR 0145). When the
-// graph cannot be read the last view keeps serving and the error is returned with it.
+// View is a typed view of the heads of some namespaces (ADR 0145): each Get asks the reader for the heads, and builds
+// the view again from their states only when one of them is another commit than the one it was built from. When the
+// graph cannot be read the last view is returned with the error.
 type View[T any] struct {
-	Heads      *Heads
+	Reader     *Reader
 	Namespaces []string
 	// Suspects gives the views the suspect links too (a view following references: a sub-project keeps its parent once
 	// the parent is edited).
@@ -136,25 +102,13 @@ type View[T any] struct {
 	ids  []domain.BaselineID
 }
 
-// Get returns the current view and the baselines it was built from, in the order of Namespaces.
-func (v *View[T]) Get(ctx context.Context) (T, []domain.BaselineID, error) { return v.get(ctx, false) }
-
-// Fresh is Get looking at the heads now, not once per TTL (before a write that builds on what it reads).
-func (v *View[T]) Fresh(ctx context.Context) (T, []domain.BaselineID, error) { return v.get(ctx, true) }
-
-// Peek returns the view last built, with no look at the graph: false before the first Get.
-func (v *View[T]) Peek() (T, bool) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	return v.cur, v.have
-}
-
-func (v *View[T]) get(ctx context.Context, fresh bool) (T, []domain.BaselineID, error) {
+// Get returns the view of the heads and the commits it was built from, in the order of Namespaces.
+func (v *View[T]) Get(ctx context.Context) (T, []domain.BaselineID, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	ids := make([]domain.BaselineID, len(v.Namespaces))
 	for i, ns := range v.Namespaces {
-		id, err := v.Heads.Head(ctx, ns, fresh)
+		id, err := v.Reader.Head(ctx, ns)
 		if err != nil {
 			return v.cur, v.ids, err
 		}
@@ -165,64 +119,35 @@ func (v *View[T]) get(ctx context.Context, fresh bool) (T, []domain.BaselineID, 
 	}
 	states := make([]State, len(v.Namespaces))
 	for i, ns := range v.Namespaces {
-		// no look again: the state of the head just looked at, or of a later one another view moved it to
-		st, err := v.Heads.State(ctx, ns, v.Suspects, false)
+		st, err := v.Reader.At(ctx, ns, ids[i], v.Suspects)
 		if err != nil {
 			return v.cur, v.ids, err
 		}
-		states[i], ids[i] = st, st.ID
+		states[i] = st
 	}
 	v.cur, v.ids, v.have = v.Build(states), ids, true
 	return v.cur, v.ids, nil
 }
 
-// Cache is a View of the head of one namespace (Heads: the process's reader; nil, a reader of its own over Graph
-// looking once per TTL).
-type Cache[T any] struct {
-	Graph     Graph
-	Namespace string
-	TTL       time.Duration
-	// Heads is the reader of the heads the cache shares (nil: its own over Graph).
-	Heads *Heads
-	// Build makes the view of a baseline; the graph without any baseline yields Build("", nil, nil).
-	Build func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) T
-	// Suspects reads the suspect links too: a view following references.
-	Suspects bool
-
-	once sync.Once
-	view View[T]
+// Peek returns the view last built, without asking the graph: false before the first Get.
+func (v *View[T]) Peek() (T, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.cur, v.have
 }
 
-func (c *Cache[T]) init() *View[T] {
-	c.once.Do(func() {
-		heads := c.Heads
-		if heads == nil {
-			heads = &Heads{Graph: c.Graph, TTL: c.TTL}
-		}
-		c.view = View[T]{Heads: heads, Namespaces: []string{c.Namespace}, Suspects: c.Suspects,
-			Build: func(s []State) T { return c.Build(s[0].ID, s[0].Nodes, s[0].Links) }}
-	})
-	return &c.view
+// One is the view of the head of one namespace: Build takes its commit, nodes and links.
+func One[T any](r *Reader, namespace string, suspects bool, build func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) T) *View[T] {
+	return &View[T]{Reader: r, Namespaces: []string{namespace}, Suspects: suspects,
+		Build: func(s []State) T { return build(s[0].ID, s[0].Nodes, s[0].Links) }}
 }
 
-// Get returns the current snapshot and the baseline it was built from.
-func (c *Cache[T]) Get(ctx context.Context) (T, domain.BaselineID, error) {
-	return first(c.init().Get(ctx))
-}
-
-// Fresh is Get without the TTL: the head is looked at now (before a write that builds on what it reads).
-func (c *Cache[T]) Fresh(ctx context.Context) (T, domain.BaselineID, error) {
-	return first(c.init().Fresh(ctx))
-}
-
-// Peek returns the snapshot last built, with no look at the graph: false before the first Get.
-func (c *Cache[T]) Peek() (T, bool) { return c.init().Peek() }
-
-func first[T any](v T, ids []domain.BaselineID, err error) (T, domain.BaselineID, error) {
+// First is the commit of a view of one namespace.
+func First(ids []domain.BaselineID) domain.BaselineID {
 	if len(ids) == 0 {
-		return v, "", err
+		return ""
 	}
-	return v, ids[0], err
+	return ids[0]
 }
 
 // SuspectReader is a graph that gives the suspect links of a baseline (*graph.Graph, the graph service client): the

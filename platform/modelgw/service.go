@@ -76,20 +76,9 @@ func (s *Service) now() time.Time {
 }
 
 // sync returns the configuration at the head of the graph, rebuilding the router when it moved. When the
-// graph cannot be read the last configuration keeps serving; without any, the error is returned. The head is looked
-// at once per llmcfg.Directory.TTL: the completions take it so.
+// graph cannot be read the last configuration keeps serving; without any, the error is returned.
 func (s *Service) sync(ctx context.Context) (*llmcfg.Snapshot, error) {
-	return s.syncWith(ctx, s.Config.Snapshot)
-}
-
-// syncNow is sync looking at the head now: what tells a caller what is available (Available, Providers) must follow a
-// change of the configuration at once, or a client that reads it on the change's event keeps the previous answer.
-func (s *Service) syncNow(ctx context.Context) (*llmcfg.Snapshot, error) {
-	return s.syncWith(ctx, s.Config.Fresh)
-}
-
-func (s *Service) syncWith(ctx context.Context, read func(context.Context) (*llmcfg.Snapshot, error)) (*llmcfg.Snapshot, error) {
-	snap, err := read(ctx)
+	snap, err := s.Config.Snapshot(ctx)
 	if snap == nil {
 		return nil, err
 	}
@@ -347,7 +336,7 @@ func findModel(snap *llmcfg.Snapshot, provider, model string) (ModelEntry, bool)
 // Available lists the models the caller may use (enabled catalog models of a
 // loaded provider, with the required role) and the aliases pointing to them.
 func (s *Service) Available(ctx context.Context) ([]ModelEntry, []AliasEntry, error) {
-	snap, err := s.syncNow(ctx)
+	snap, err := s.sync(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -384,7 +373,7 @@ type ProviderView struct {
 
 // Providers lists the configured providers.
 func (s *Service) Providers(ctx context.Context) ([]ProviderView, error) {
-	snap, err := s.syncNow(ctx)
+	snap, err := s.sync(ctx)
 	if err != nil {
 		return nil, err
 	}

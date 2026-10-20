@@ -37,8 +37,8 @@ func main() {
 	// providers, models and aliases are nodes of the graph; API keys are references resolved here; one reader of the
 	// heads for the models and the access (ADR 0145)
 	graphClient := graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...)
-	heads := graphsnap.NewHeads(graphClient)
-	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphClient, Heads: heads}, store, secrets.Resolve, log)
+	reader := graphsnap.NewReader(graphClient)
+	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphClient, Reader: reader}, store, secrets.Resolve, log)
 	svc.Vault = secrets.Put
 	genai := telemetry.NewGenAI()
 	svc.Router.Instrument, svc.Router.InstrumentEmbed = genai.Instrument, genai.InstrumentEmbed
@@ -54,7 +54,7 @@ func main() {
 	// administrator picks the models in the settings), once the graph has seeded the model configuration
 	go signOn(ctx, log, graphClient, svc)
 
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphClient, Heads: heads})
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphClient, Reader: reader})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
