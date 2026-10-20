@@ -409,6 +409,21 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 	if err != nil {
 		return res, err
 	}
+	// the link sets of the versions merged on both sides, read in one batch: a side whose set is the one the sides
+	// started from left its links alone, and its links are not read (ADR 0146)
+	var setRefs []domain.NodeRef
+	for _, id := range ids {
+		hv, inMine := mineNodes[id]
+		fv, inFork := forkNodes[id]
+		tv, inHead := headNodes[id]
+		if inMine && inFork && inHead && fv != hv && tv != fv {
+			setRefs = append(setRefs, domain.NodeRef{ID: id, Version: fv}, domain.NodeRef{ID: id, Version: hv}, domain.NodeRef{ID: id, Version: tv})
+		}
+	}
+	sets, err := tx.LinkSetsOf(ctx, setRefs)
+	if err != nil {
+		return res, err
+	}
 	var merges []rebasedNode
 	for _, id := range ids {
 		hv, inMine := mineNodes[id]
@@ -437,13 +452,26 @@ func (g *Graph) rebaseOnto(ctx context.Context, tx Tx, c domain.Change, own, for
 		if !inFork || !inHead {
 			merged, conflicts = ours.Clone(), []string{domain.ConflictNode}
 		} else {
-			base, err := g.storedDraft(ctx, tx, domain.NodeRef{ID: id, Version: fv})
+			baseRef := domain.NodeRef{ID: id, Version: fv}
+			setBase, okBase := sets[baseRef]
+			setOurs, okOurs := sets[oursRef]
+			setTheirs, okTheirs := sets[theirsRef]
+			known := okBase && okOurs && okTheirs
+			oursLinks := !known || setOurs.Of != setBase.Of
+			theirsLinks := !known || setTheirs.Of != setBase.Of
+			base, err := g.storedVersion(ctx, tx, baseRef, oursLinks && theirsLinks)
 			if err != nil {
 				return res, err
 			}
-			theirs, err := g.storedDraft(ctx, tx, theirsRef)
+			theirs, err := g.storedVersion(ctx, tx, theirsRef, theirsLinks)
 			if err != nil {
 				return res, err
+			}
+			switch {
+			case !theirsLinks: // the target left the links alone: the change's stand
+				base.Links, theirs.Links = ours.Links, ours.Links
+			case !oursLinks: // the change left them alone: the target's stand
+				base.Links = ours.Links
 			}
 			merged, conflicts = domain.MergeDrafts(base, ours, theirs)
 			g.numberLinks(&merged)

@@ -129,16 +129,25 @@ const HeaderBaselineID = "baselineId"
 
 // storedDraft is a stored version seen as a draft, with its outgoing links: what a three-way merge compares.
 func (g *Graph) storedDraft(ctx context.Context, tx Tx, ref domain.NodeRef) (domain.Draft, error) {
+	return g.storedVersion(ctx, tx, ref, true)
+}
+
+// storedVersion is storedDraft, its links read only when withLinks: a merge reads the links of a side only when its
+// link set differs from the one the sides started from (ADR 0146).
+func (g *Graph) storedVersion(ctx context.Context, tx Tx, ref domain.NodeRef, withLinks bool) (domain.Draft, error) {
 	n, err := tx.Node(ctx, ref)
-	if err != nil {
-		return domain.Draft{}, err
-	}
-	links, err := tx.OutLinks(ctx, n.Ref())
 	if err != nil {
 		return domain.Draft{}, err
 	}
 	b := n.Ref()
 	out := domain.Draft{Node: n.ID, Key: n.Key, Type: n.Type, State: n.State, Owner: n.Owner, Properties: cloneMap(n.Properties), Base: &b}
+	if !withLinks {
+		return out, nil
+	}
+	links, err := tx.OutLinks(ctx, n.Ref())
+	if err != nil {
+		return domain.Draft{}, err
+	}
 	for _, l := range links {
 		out.Links = append(out.Links, domain.DraftLink{ID: l.ID, Type: l.Type, To: l.To, Properties: cloneMap(l.Properties)})
 	}
