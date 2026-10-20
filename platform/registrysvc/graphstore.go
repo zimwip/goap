@@ -85,6 +85,13 @@ func NewGraphStore(g StoreGraph) *GraphStore {
 	return s
 }
 
+// ShareHeads makes the store read the head of the methodologies through the reader of the heads of the process (ADR
+// 0145), before its first read.
+func (s *GraphStore) ShareHeads(h *graphsnap.Heads) *GraphStore {
+	s.cache.Heads = h
+	return s
+}
+
 // withSuspects reads a baseline with its suspect links too: a link to an element is a link to the version the element
 // had when the reference was written (ADR 0003), and editing the element (a new version of its node) leaves the
 // references to it in place, suspect. They are references all the same (ADR 0120).

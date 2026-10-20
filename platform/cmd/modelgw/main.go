@@ -12,6 +12,7 @@ import (
 	"github.com/zimwip/goap/contracts/gen/goap/model/v1/modelv1connect"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/graphclient"
+	"github.com/zimwip/goap/lib/graphsnap"
 	"github.com/zimwip/goap/lib/llmcfg"
 	"github.com/zimwip/goap/lib/outbox"
 	"github.com/zimwip/goap/lib/platform"
@@ -33,8 +34,11 @@ func main() {
 	}
 	hc := platform.H2CClient()
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
-	// providers, models and aliases are nodes of the graph; API keys are references resolved here
-	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...)}, store, secrets.Resolve, log)
+	// providers, models and aliases are nodes of the graph; API keys are references resolved here; one reader of the
+	// heads for the models and the access (ADR 0145)
+	graphClient := graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...)
+	heads := graphsnap.NewHeads(graphClient)
+	svc := modelgw.NewService(&llmcfg.Directory{Graph: graphClient, Heads: heads}, store, secrets.Resolve, log)
 	svc.Vault = secrets.Put
 	genai := telemetry.NewGenAI()
 	svc.Router.Instrument, svc.Router.InstrumentEmbed = genai.Instrument, genai.InstrumentEmbed
@@ -48,9 +52,9 @@ func main() {
 	log.Info("providers", "providers", providers)
 	// the providers whose well-known API key variable is set (ANTHROPIC_API_KEY, ...) are signed on with no model (the
 	// administrator picks the models in the settings), once the graph has seeded the model configuration
-	go signOn(ctx, log, graphclient.NewClient(hc, graphURL, telemetry.ClientOptions()...), svc)
+	go signOn(ctx, log, graphClient, svc)
 
-	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphclient.NewClient(hc, graphURL)})
+	iam, err := access.NewAuthorizer(&access.Directory{Graph: graphClient, Heads: heads})
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}

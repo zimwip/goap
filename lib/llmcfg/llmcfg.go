@@ -306,7 +306,9 @@ func BuildSnapshot(id domain.BaselineID, nodes []domain.Node, _ []domain.Link) *
 type Directory struct {
 	Graph graphsnap.Graph
 	// TTL is how often the head is looked at (one second by default).
-	TTL   time.Duration
+	TTL time.Duration
+	// Heads is the reader of the heads of the process the directory shares (ADR 0145; nil: its own).
+	Heads *graphsnap.Heads
 	once  sync.Once
 	cache graphsnap.Cache[*Snapshot]
 }
@@ -325,7 +327,7 @@ func (d *Directory) Fresh(ctx context.Context) (*Snapshot, error) {
 
 func (d *Directory) init() *graphsnap.Cache[*Snapshot] {
 	d.once.Do(func() {
-		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: NamespacePlatform, TTL: d.TTL, Build: BuildSnapshot}
+		d.cache = graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: NamespacePlatform, TTL: d.TTL, Heads: d.Heads, Build: BuildSnapshot}
 	})
 	return &d.cache
 }

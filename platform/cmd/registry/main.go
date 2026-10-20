@@ -14,6 +14,7 @@ import (
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/domainclient"
 	"github.com/zimwip/goap/lib/graphclient"
+	"github.com/zimwip/goap/lib/graphsnap"
 	"github.com/zimwip/goap/lib/identity"
 	"github.com/zimwip/goap/lib/platform"
 	"github.com/zimwip/goap/lib/telemetry"
@@ -32,16 +33,18 @@ func main() {
 	// methodologies are nodes of the graph; the domains are the graph's (ADR 0125 §3), read from its domain registry
 	graphURL := platform.Env("GOAP_GRAPH_URL", "http://localhost:8081")
 	graphClient := graphclient.NewClient(platform.H2CClient(), graphURL, telemetry.ClientOptions()...)
-	store := registrysvc.NewGraphStore(graphClient)
+	// one reader of the heads for the methodologies, the access and the scopes of the MCPs (ADR 0145)
+	heads := graphsnap.NewHeads(graphClient)
+	store := registrysvc.NewGraphStore(graphClient).ShareHeads(heads)
 	domains := domainclient.NewClient(platform.H2CClient(), graphURL, telemetry.ClientOptions()...)
-	directory := &access.Directory{Graph: graphClient}
+	directory := &access.Directory{Graph: graphClient, Heads: heads}
 	authorizer, err := access.NewAuthorizer(directory)
 	if err != nil {
 		platform.Fatal(log, "authorizer", err)
 	}
 	svc := &registrysvc.Service{Store: store, Domains: domains, Authz: authorizer, Events: events,
-		MCPScopes:  (&mcpsvc.Directory{Graph: graphClient}).Scopes, // the scope of the MCPs (ADR 0028)
-		Applicable: applicable(directory)}                          // the integrators in force in a project (ADR 0106)
+		MCPScopes:  (&mcpsvc.Directory{Graph: graphClient, Heads: heads}).Scopes, // the scope of the MCPs (ADR 0028)
+		Applicable: applicable(directory)}                                        // the integrators in force in a project (ADR 0106)
 	if dir := platform.Env("GOAP_METHODOLOGIES_DIR", ""); dir != "" {
 		// bootstrap: import the YAML files of versions not stored yet, once the graph answers
 		go func() {

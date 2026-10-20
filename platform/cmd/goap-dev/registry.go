@@ -34,8 +34,8 @@ func buildRegistry(e *env, gp *graphPart, st stores) (*registryPart, error) {
 	// methodologies are nodes of the graph; the domains are kept in the local database (domainsvc)
 	// the scope of the MCPs (ADR 0028) is checked where methodologies declare them
 	domains := &domainsvc.Service{Store: st.domains, Authz: gp.authorizer}
-	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g), Domains: domains, Authz: gp.authorizer,
-		MCPScopes: (&mcpsvc.Directory{Graph: g}).Scopes, Applicable: applicable(gp.directory)}
+	reg := &registrysvc.Service{Store: registrysvc.NewGraphStore(g).ShareHeads(gp.heads), Domains: domains, Authz: gp.authorizer,
+		MCPScopes: (&mcpsvc.Directory{Graph: g, Heads: gp.heads}).Scopes, Applicable: applicable(gp.directory)}
 	// the graph judges nodes by the types of the published domains (ADR 0012): its catalogue follows the domain registry
 	types := typecat.NewLive(domains.Domains)
 	g.Types = func() graph.TypeCatalog { return types.Get() }

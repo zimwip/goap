@@ -496,6 +496,8 @@ func (s *Snapshot) MayAccessProject(p authz.Principal, project string) bool {
 type Directory struct {
 	Graph Graph
 	TTL   time.Duration
+	// Heads is the reader of the heads of the process the directory shares (ADR 0145; nil: its own).
+	Heads *graphsnap.Heads
 
 	mu    sync.Mutex
 	cache *graphsnap.Cache[*Snapshot]
@@ -535,7 +537,7 @@ func (d *Directory) snapshots(ctx context.Context) (*graphsnap.Cache[*Snapshot],
 			return nil, err
 		}
 		// the suspect links too: a sub-project keeps its parent, an Assignment its unit and project, once they are edited
-		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation().Namespace, TTL: d.TTL, Suspects: true,
+		d.cache = &graphsnap.Cache[*Snapshot]{Graph: d.Graph, Namespace: st.Organisation().Namespace, TTL: d.TTL, Heads: d.Heads, Suspects: true,
 			Build: func(id domain.BaselineID, nodes []domain.Node, links []domain.Link) *Snapshot {
 				return BuildSnapshot(st, id, nodes, links)
 			}}

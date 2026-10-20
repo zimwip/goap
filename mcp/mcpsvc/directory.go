@@ -2,13 +2,12 @@ package mcpsvc
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 
 	"github.com/zimwip/goap/contracts/domain"
-	"github.com/zimwip/goap/contracts/graphapi"
 	"github.com/zimwip/goap/contracts/mcp"
 	"github.com/zimwip/goap/lib/access"
 	"github.com/zimwip/goap/lib/adapter"
@@ -218,63 +217,51 @@ func (d *Directory) Scopes(ctx context.Context) (map[string]string, error) {
 	return out, nil
 }
 
-// Directory reads the snapshot of the head of the main branch, rebuilding it only when
-// the head moved.
+// Directory reads the snapshot of the heads of the organisation and platform namespaces, rebuilding it only when one
+// of them moved.
 type Directory struct {
 	Graph Graph
+	// Heads is the reader of the heads of the process the directory shares (ADR 0145; nil: its own, looking at the
+	// heads at every read).
+	Heads *graphsnap.Heads
 
-	mu  sync.Mutex
-	cur *Snapshot
-	// org and plat follow the heads of the two namespaces, by what moved (ADR 0143 §4)
-	org, plat graphsnap.Head
-	// st are the structures of the graph, asked once (ADR 0054: tagged by a frozen built-in domain)
-	st *domain.Structures
+	mu   sync.Mutex
+	view *graphsnap.View[*Snapshot]
 }
 
-// structures asks the graph for its structures, once it answers.
-func (d *Directory) structures(ctx context.Context) (domain.Structures, error) {
+// views makes the view of the two heads, asking the graph for its structures first (ADR 0054: tagged by a frozen
+// built-in domain, asked again until the graph answers).
+func (d *Directory) views(ctx context.Context) (*graphsnap.View[*Snapshot], error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if d.st == nil {
+	if d.view == nil {
 		st, err := d.Graph.Structures(ctx)
 		if err != nil {
-			return st, err
+			return nil, err
 		}
-		d.st = &st
+		heads := d.Heads
+		if heads == nil {
+			heads = &graphsnap.Heads{Graph: d.Graph, TTL: -1}
+		}
+		// a unit edited keeps its sub-units: the suspect links are references too
+		d.view = &graphsnap.View[*Snapshot]{Heads: heads, Namespaces: []string{st.Organisation().Namespace, domain.NamespacePlatform}, Suspects: true,
+			Build: func(s []graphsnap.State) *Snapshot {
+				return BuildSnapshot(st, Baselines{Organisation: s[0].ID, Platform: s[1].ID},
+					append(slices.Clip(s[0].Nodes), s[1].Nodes...), append(slices.Clip(s[0].Links), s[1].Links...))
+			}}
 	}
-	return *d.st, nil
+	return d.view, nil
 }
 
 // Snapshot returns the current snapshot. A graph without any baseline yields an empty one.
 func (d *Directory) Snapshot(ctx context.Context) (*Snapshot, error) {
-	st, err := d.structures(ctx)
+	v, err := d.views(ctx)
 	if err != nil {
 		return nil, err
 	}
-	orgHead, err := d.Graph.BranchHead(ctx, st.Organisation().Namespace, domain.MainBranch)
-	if err != nil && !errors.Is(err, graphapi.ErrNotFound) {
+	s, _, err := v.Get(ctx)
+	if err != nil {
 		return nil, err
 	}
-	platHead, err := d.Graph.BranchHead(ctx, domain.NamespacePlatform, domain.MainBranch)
-	if err != nil && !errors.Is(err, graphapi.ErrNotFound) {
-		return nil, err
-	}
-	baselines := Baselines{Organisation: orgHead.ID, Platform: platHead.ID}
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	if d.cur != nil && d.cur.Baselines == baselines {
-		return d.cur, nil
-	}
-	// a unit edited keeps its sub-units: the suspect links are references too
-	if err := d.org.Move(ctx, d.Graph, orgHead.ID, true); err != nil {
-		return nil, err
-	}
-	if err := d.plat.Move(ctx, d.Graph, platHead.ID, true); err != nil {
-		return nil, err
-	}
-	nodes, links := d.org.State()
-	pn, pl := d.plat.State()
-	nodes, links = append(nodes, pn...), append(links, pl...)
-	d.cur = BuildSnapshot(st, baselines, nodes, links)
-	return d.cur, nil
+	return s, nil
 }
